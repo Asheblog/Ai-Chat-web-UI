@@ -66,7 +66,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
     ]);
 
     return c.json<ApiResponse<{
-      messages: Message[];
+      messages: Array<{ id: number; sessionId: number; role: string; content: string; createdAt: Date }>;
       pagination: {
         page: number;
         limit: number;

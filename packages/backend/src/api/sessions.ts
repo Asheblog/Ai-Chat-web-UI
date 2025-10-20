@@ -51,7 +51,15 @@ sessions.get('/', authMiddleware, async (c) => {
     ]);
 
     return c.json<ApiResponse<{
-      sessions: ChatSession[];
+      sessions: Array<{
+        id: number;
+        userId: number;
+        modelConfigId: number;
+        title: string;
+        createdAt: Date;
+        modelConfig: { id: number; name: string };
+        _count: { messages: number };
+      }>;
       pagination: {
         page: number;
         limit: number;
@@ -126,7 +134,14 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       },
     });
 
-    return c.json<ApiResponse<ChatSession>>({
+    return c.json<ApiResponse<{
+      id: number;
+      userId: number;
+      modelConfigId: number;
+      title: string;
+      createdAt: Date;
+      modelConfig: { id: number; name: string };
+    }>>({
       success: true,
       data: session,
       message: 'Chat session created successfully',
@@ -191,7 +206,15 @@ sessions.get('/:id', authMiddleware, async (c) => {
       }, 404);
     }
 
-    return c.json<ApiResponse<ChatSession>>({
+    return c.json<ApiResponse<{
+      id: number;
+      userId: number;
+      modelConfigId: number;
+      title: string;
+      createdAt: Date;
+      modelConfig: { id: number; name: string };
+      messages: Array<{ id: number; sessionId: number; role: string; content: string; createdAt: Date }>;
+    }>>({
       success: true,
       data: session,
     });
@@ -255,7 +278,14 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
       },
     });
 
-    return c.json<ApiResponse<ChatSession>>({
+    return c.json<ApiResponse<{
+      id: number;
+      userId: number;
+      modelConfigId: number;
+      title: string;
+      createdAt: Date;
+      modelConfig: { id: number; name: string };
+    }>>({
       success: true,
       data: updatedSession,
       message: 'Session title updated successfully',
