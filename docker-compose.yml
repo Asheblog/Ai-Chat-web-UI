@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # 后端服务 (Hono API)
+  backend:
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: aichat-backend
+    ports:
+      - "8001:8001"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=8001
+      - DATABASE_URL=file:./data/app.db
+      - JWT_SECRET=${JWT_SECRET:-aichat-super-secret-jwt-key-2025-production-change-me}
+      - APP_MODE=${APP_MODE:-single}
+      - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-4000}
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin123456}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - aichat-network
+    # 资源限制，确保内存占用 < 500MB
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # 前端服务 (Next.js)
+  frontend:
+    build:
+      context: ./packages/frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8001/api}
+        - NODE_ENV=${NODE_ENV:-production}
+    container_name: aichat-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8001/api}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - aichat-network
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 64M
+          cpus: '0.05'
+
+volumes:
+  # SQLite数据库数据持久化
+  backend_data:
+    driver: local
+    name: aichat_db_data
+  # 应用日志持久化
+  backend_logs:
+    driver: local
+    name: aichat_logs
+
+networks:
+  aichat-network:
+    driver: bridge
+    name: aichat_network

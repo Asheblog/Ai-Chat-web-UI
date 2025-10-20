@@ -1,0 +1,46 @@
+{
+  "name": "aichat",
+  "version": "1.0.0",
+  "description": "AI Chat Platform - 轻量级AI聊天平台",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter backend dev",
+    "build": "pnpm --filter backend build",
+    "start": "pnpm --filter backend start",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "setup": "pnpm install && pnpm --filter backend db:generate && pnpm --filter backend db:push",
+    "setup:prod": "pnpm run docker:build && pnpm run docker:up",
+    "clean": "pnpm --filter backend clean && rm -rf node_modules",
+    "test": "pnpm --filter backend test",
+    "lint": "pnpm --filter backend lint",
+    "type-check": "pnpm --filter backend type-check"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "tsx": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "llm",
+    "hono",
+    "typescript",
+    "sqlite"
+  ],
+  "author": "AI Chat Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/aichat.git"
+  }
+}

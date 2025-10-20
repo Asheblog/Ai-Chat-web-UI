@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 1. 用户表
+model User {
+  id             Int      @id @default(autoincrement())
+  username       String   @unique
+  hashedPassword String
+  role           String   @default("USER") // 'ADMIN' or 'USER'
+  createdAt      DateTime @default(now())
+
+  modelConfigs  ModelConfig[]
+  chatSessions  ChatSession[]
+
+  @@map("users")
+}
+
+// 2. 模型配置表
+model ModelConfig {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     // 如果为 null，则为系统模型
+  name      String
+  apiUrl    String
+  apiKey    String   // 加密存储
+  createdAt DateTime @default(now())
+
+  user         User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatSessions ChatSession[]
+
+  @@map("model_configs")
+}
+
+// 3. 聊天会话表
+model ChatSession {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  modelConfigId Int
+  title         String    // 可由首条消息自动生成
+  createdAt     DateTime  @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modelConfig ModelConfig @relation(fields: [modelConfigId], references: [id])
+  messages    Message[]
+
+  @@map("chat_sessions")
+}
+
+// 4. 消息记录表
+model Message {
+  id        Int      @id @default(autoincrement())
+  sessionId Int
+  role      String   // 'user' or 'assistant'
+  content   String
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+// 5. 系统设置表
+model SystemSetting {
+  key   String @id
+  value String
+
+  @@map("system_settings")
+}

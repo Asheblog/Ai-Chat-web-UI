@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # 后端服务 (开发环境)
+  backend:
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: aichat-backend-dev
+    ports:
+      - "8001:8001"
+      - "9229:9229"  # Node.js调试端口
+    environment:
+      - NODE_ENV=development
+      - PORT=8001
+      - DATABASE_URL=file:./data/dev.db
+      - JWT_SECRET=dev-jwt-secret-key
+      - APP_MODE=single
+      - DEFAULT_CONTEXT_TOKEN_LIMIT=4000
+      - DEFAULT_ADMIN_USERNAME=admin
+      - DEFAULT_ADMIN_PASSWORD=admin123456
+      - CORS_ORIGIN=http://localhost:3000
+      - LOG_LEVEL=debug
+    volumes:
+      # 挂载源代码，支持热重载
+      - ./packages/backend:/app
+      - /app/node_modules
+      - backend_dev_data:/app/data
+      - backend_dev_logs:/app/logs
+    # 若 node_modules 为空，启动前自动安装依赖，避免首次挂载导致依赖缺失
+    command: ["sh", "-lc", "[ -d node_modules ] && [ \"$(ls -A node_modules 2>/dev/null)\" ] || npm install; npm run dev"]
+    restart: unless-stopped
+    networks:
+      - aichat-dev-network
+    # 开发环境资源限制较宽松
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.2'
+
+  # 前端服务 (开发环境)
+  frontend:
+    build:
+      context: ./packages/frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: aichat-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8001/api
+    volumes:
+      # 挂载源代码，支持热重载
+      - ./packages/frontend:/app
+      - /app/node_modules
+      - /app/.next
+    # 同步处理依赖安装
+    command: ["sh", "-lc", "[ -d node_modules ] && [ \"$(ls -A node_modules 2>/dev/null)\" ] || npm install; npm run dev"]
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - aichat-dev-network
+    # 开发环境资源限制较宽松
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # 数据库管理工具 (开发环境可选)
+  # 可通过 http://localhost:5555 访问
+  prisma-studio:
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: aichat-prisma-studio
+    ports:
+      - "5555:5555"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=file:./data/dev.db
+    volumes:
+      - ./packages/backend:/app
+      - /app/node_modules
+      - backend_dev_data:/app/data
+    command: ["npm", "run", "db:studio", "--", "--browser", "none"]
+    restart: unless-stopped
+    networks:
+      - aichat-dev-network
+
+volumes:
+  backend_dev_data:
+    driver: local
+    name: aichat_dev_db_data
+  backend_dev_logs:
+    driver: local
+    name: aichat_dev_logs
+
+networks:
+  aichat-dev-network:
+    driver: bridge
+    name: aichat_dev_network

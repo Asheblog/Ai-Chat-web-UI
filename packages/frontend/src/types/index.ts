@@ -1,0 +1,145 @@
+// 用户相关类型
+export interface User {
+  id: number;
+  username: string;
+  role: 'ADMIN' | 'USER';
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterRequest extends LoginRequest {
+  confirmPassword?: string;
+}
+
+// 模型配置类型
+export interface ModelConfig {
+  id: number;
+  userId?: number; // null 表示系统模型
+  name: string;
+  apiUrl: string;
+  apiKey: string; // 前端不会收到真实的apiKey
+  createdAt: string;
+}
+
+export interface CreateModelConfigRequest {
+  name: string;
+  apiUrl: string;
+  apiKey: string;
+}
+
+// 聊天会话类型
+export interface ChatSession {
+  id: number;
+  userId: number;
+  modelConfigId: number;
+  title: string;
+  createdAt: string;
+  modelConfig: ModelConfig;
+  messages?: Message[];
+  _count?: {
+    messages: number;
+  };
+}
+
+export interface CreateSessionRequest {
+  modelConfigId: number;
+  title?: string;
+}
+
+// 消息类型
+export interface Message {
+  id: number;
+  sessionId: number;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface CreateMessageRequest {
+  sessionId: number;
+  content: string;
+}
+
+// 系统设置类型
+export interface SystemSetting {
+  key: string;
+  value: string;
+}
+
+export interface SystemSettings {
+  allowRegistration: boolean;
+  systemModels: ModelConfig[];
+}
+
+// UI 状态类型
+export interface ChatState {
+  currentSession: ChatSession | null;
+  sessions: ChatSession[];
+  messages: Message[];
+  isLoading: boolean;
+  isStreaming: boolean;
+  error: string | null;
+}
+
+export interface AuthState {
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+export interface SettingsState {
+  theme: 'light' | 'dark' | 'system';
+  maxTokens: number;
+  personalModels: ModelConfig[];
+  systemSettings: SystemSettings | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+// API 响应类型
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// 流式响应类型
+export interface ChatStreamChunk {
+  content?: string;
+  done?: boolean;
+  error?: string;
+}
+
+// 组件 Props 类型
+export interface MessageProps {
+  message: Message;
+  isStreaming?: boolean;
+  onCopy?: (content: string) => void;
+  onRegenerate?: (messageId: number) => void;
+}
+
+export interface SessionItemProps {
+  session: ChatSession;
+  isActive: boolean;
+  onSelect: (sessionId: number) => void;
+  onDelete: (sessionId: number) => void;
+  onRename: (sessionId: number, newTitle: string) => void;
+}
+
+export interface ModelSelectorProps {
+  models: ModelConfig[];
+  selectedModelId: number;
+  onModelChange: (modelId: number) => void;
+  disabled?: boolean;
+}
