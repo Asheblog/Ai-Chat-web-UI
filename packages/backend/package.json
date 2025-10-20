@@ -17,7 +17,6 @@
     "hono": "^4.6.7",
     "@hono/node-server": "^1.13.5",
     "@hono/zod-validator": "^0.4.1",
-    "@hono/cors": "^2.0.0",
     "@hono/logger": "^0.4.2",
     "prisma": "^5.22.0",
     "@prisma/client": "^5.22.0",
