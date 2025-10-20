@@ -94,14 +94,11 @@ DEV_FRONTEND_PORT=3000       # 前端开发对外端口（默认 3000）
 ### 方式二：本地开发
 
 ```bash
-# 安装依赖
-pnpm install
+# 一键本地启动（自动安装依赖/初始化DB/并发启动前后端）
+npm start
 
-# 初始化数据库
-pnpm run setup
-
-# 启动开发服务器
-pnpm run dev
+# 或手动方式：
+pnpm install && pnpm run setup && pnpm --filter backend dev & pnpm --filter frontend dev
 ```
 
 ## 📚 API 文档
