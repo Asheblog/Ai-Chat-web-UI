@@ -57,12 +57,12 @@ models.get('/', authMiddleware, async (c) => {
     }>>({
       success: true,
       data: {
-        personal: personalModels.map(model => ({
+        personal: personalModels.map((model: { id: number; name: string; apiUrl: string; createdAt: Date }) => ({
           ...model,
           userId: user.id,
           apiKey: '', // 不返回API Key
         })),
-        system: systemModels.map(model => ({
+        system: systemModels.map((model: { id: number; name: string; apiUrl: string; createdAt: Date }) => ({
           ...model,
           userId: null,
           apiKey: '', // 不返回API Key
@@ -439,7 +439,7 @@ models.get('/system/list', authMiddleware, adminOnlyMiddleware, async (c) => {
 
     return c.json<ApiResponse<ModelConfig[]>>({
       success: true,
-      data: systemModels.map(model => ({
+      data: systemModels.map((model: { id: number; name: string; apiUrl: string; createdAt: Date; _count?: any }) => ({
         ...model,
         userId: null,
         apiKey: '', // 不返回API Key

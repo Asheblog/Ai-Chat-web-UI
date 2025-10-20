@@ -23,7 +23,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
     });
 
     // 转换为键值对对象
-    const settingsObj = systemSettings.reduce((acc, setting) => {
+    const settingsObj = systemSettings.reduce((acc: Record<string, string>, setting: { key: string; value: string }) => {
       acc[setting.key] = setting.value;
       return acc;
     }, {} as Record<string, string>);

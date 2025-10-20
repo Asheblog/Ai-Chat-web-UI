@@ -1,31 +1,19 @@
-import { Tiktoken } from 'js-tiktoken/lite';
-import { load } from 'js-tiktoken/load';
-
-let tokenizer: Tiktoken | null = null;
-
-// 初始化tokenizer
-async function initTokenizer(): Promise<Tiktoken> {
-  if (!tokenizer) {
-    const registry = await load('cl100k_base');
-    tokenizer = registry.getEncoder('cl100k_base');
-  }
-  return tokenizer;
-}
-
 export class Tokenizer {
   /**
    * 计算文本的token数量
    */
   static async countTokens(text: string): Promise<number> {
-    try {
-      const enc = await initTokenizer();
-      const tokens = enc.encode(text);
-      return tokens.length;
-    } catch (error) {
-      console.error('Token counting error:', error);
-      // 回退到简单的字符估算 (1 token ≈ 4 characters for English)
-      return Math.ceil(text.length / 4);
+    // 轻量估算：1 token ≈ 4 个字符（英文近似），中文按 1 字≈1 token 近似
+    if (!text) return 0;
+    // 简单启发：统计 ASCII 与非 ASCII 的比例做加权
+    let ascii = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) < 128) ascii++;
     }
+    const nonAscii = text.length - ascii;
+    const asciiTokens = Math.ceil(ascii / 4);
+    const nonAsciiTokens = nonAscii; // 非 ASCII 近似 1:1
+    return asciiTokens + nonAsciiTokens;
   }
 
   /**
@@ -85,15 +73,5 @@ export class Tokenizer {
     }
 
     return includedMessages;
-  }
-
-  /**
-   * 安全释放tokenizer资源（可选）
-   */
-  static dispose(): void {
-    if (tokenizer) {
-      tokenizer.free();
-      tokenizer = null;
-    }
   }
 }

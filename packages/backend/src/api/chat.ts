@@ -162,7 +162,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
     // 构建对话历史（不包括刚保存的用户消息）
     const conversationHistory = recentMessages
-      .filter(msg => msg.role !== 'user' || msg.content !== content)
+      .filter((msg: { role: string; content: string }) => msg.role !== 'user' || msg.content !== content)
       .reverse(); // 按时间正序
 
     // 添加当前用户消息
@@ -181,7 +181,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
 
     // 构建AI API请求
-    const messagesPayload = truncatedContext.map(msg => ({
+    const messagesPayload = truncatedContext.map((msg: { role: string; content: string }) => ({
       role: msg.role,
       content: msg.content,
     }));

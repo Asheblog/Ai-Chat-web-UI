@@ -31,16 +31,22 @@ export const errorHandler = (error: Error, c: Context) => {
     }
   }
 
-  return c.json({
-    success: false,
-    error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
-  }, status);
+  return c.json(
+    {
+      success: false,
+      error: message,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
+    },
+    { status }
+  );
 };
 
 export const notFoundHandler = (c: Context) => {
-  return c.json({
-    success: false,
-    error: `Route ${c.req.method} ${c.req.path} not found`,
-  }, 404);
+  return c.json(
+    {
+      success: false,
+      error: `Route ${c.req.method} ${c.req.path} not found`,
+    },
+    { status: 404 }
+  );
 };
