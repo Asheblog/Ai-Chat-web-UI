@@ -25,6 +25,8 @@ sessions.get('/', authMiddleware, async (c) => {
         where: { userId: user.id },
         select: {
           id: true,
+          userId: true,
+          modelConfigId: true,
           title: true,
           createdAt: true,
           modelConfig: {
@@ -111,6 +113,8 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       },
       select: {
         id: true,
+        userId: true,
+        modelConfigId: true,
         title: true,
         createdAt: true,
         modelConfig: {
@@ -157,6 +161,8 @@ sessions.get('/:id', authMiddleware, async (c) => {
       },
       select: {
         id: true,
+        userId: true,
+        modelConfigId: true,
         title: true,
         createdAt: true,
         modelConfig: {
@@ -168,6 +174,7 @@ sessions.get('/:id', authMiddleware, async (c) => {
         messages: {
           select: {
             id: true,
+            sessionId: true,
             role: true,
             content: true,
             createdAt: true,
@@ -235,6 +242,8 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
       data: { title },
       select: {
         id: true,
+        userId: true,
+        modelConfigId: true,
         title: true,
         createdAt: true,
         modelConfig: {

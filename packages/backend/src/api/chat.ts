@@ -51,6 +51,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
         where: { sessionId },
         select: {
           id: true,
+          sessionId: true,
           role: true,
           content: true,
           createdAt: true,

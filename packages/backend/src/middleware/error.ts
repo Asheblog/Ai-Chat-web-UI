@@ -1,4 +1,5 @@
 import { Context } from 'hono';
+import type { StatusCode } from 'hono/utils/http-status';
 
 export const errorHandler = (error: Error, c: Context) => {
   console.error('API Error:', error);
@@ -37,7 +38,7 @@ export const errorHandler = (error: Error, c: Context) => {
       error: message,
       ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
     },
-    { status }
+    status as StatusCode
   );
 };
 
@@ -47,6 +48,6 @@ export const notFoundHandler = (c: Context) => {
       success: false,
       error: `Route ${c.req.method} ${c.req.path} not found`,
     },
-    { status: 404 }
+    404
   );
 };
