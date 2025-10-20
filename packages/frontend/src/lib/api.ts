@@ -74,7 +74,10 @@ class ApiClient {
       password,
     })
     const { data } = response.data
-    if (data.token) {
+    if (!data) {
+      throw new Error('Invalid login response')
+    }
+    if ((data as any).token) {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
     }
@@ -87,7 +90,10 @@ class ApiClient {
       password,
     })
     const { data } = response.data
-    if (data.token) {
+    if (!data) {
+      throw new Error('Invalid register response')
+    }
+    if ((data as any).token) {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
     }

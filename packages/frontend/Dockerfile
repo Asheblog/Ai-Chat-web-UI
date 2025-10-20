@@ -22,15 +22,15 @@ RUN if [ -f pnpm-lock.yaml ]; then \
 # 依赖安装阶段
 FROM base AS deps
 
-# 设置环境变量优化Next.js构建
-ENV NODE_ENV=production
+# 设置环境变量优化Next.js构建（安装 devDependencies）
+ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # 安装依赖
 RUN if [ -f pnpm-lock.yaml ]; then \
         pnpm install --frozen-lockfile; \
     else \
-        if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
+        if [ -f package-lock.json ]; then npm ci --include=dev; else npm install; fi; \
     fi
 
 # 构建阶段

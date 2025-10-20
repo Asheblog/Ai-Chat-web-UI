@@ -31,7 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
-import { ModelConfig, User as UserType, SystemSettings } from '@/types'
+import type { ModelConfig, User as UserType, SystemSettings as SystemSettingsType } from '@/types'
 import { useSettingsStore } from '@/store/settings-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useToast } from '@/components/ui/use-toast'
@@ -174,7 +174,7 @@ export function SystemSettings() {
     }
   }
 
-  const handleUpdateGeneralSettings = async (updates: Partial<SystemSettings>) => {
+  const handleUpdateGeneralSettings = async (updates: Partial<SystemSettingsType>) => {
     try {
       await updateSystemSettings(updates)
       toast({

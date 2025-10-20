@@ -128,21 +128,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   sendMessage: async (sessionId: number, content: string) => {
-    set({ isLoading: true, error: null })
-    try {
-      const response = await apiClient.sendMessage(sessionId, content)
-      const newMessage = response.data
-
-      set((state) => ({
-        messages: [...state.messages, newMessage],
-        isLoading: false,
-      }))
-    } catch (error: any) {
-      set({
-        error: error.response?.data?.error || error.message || '发送消息失败',
-        isLoading: false,
-      })
-    }
+    // 统一走流式发送，保持 API 一致
+    await get().streamMessage(sessionId, content)
   },
 
   streamMessage: async (sessionId: number, content: string) => {
