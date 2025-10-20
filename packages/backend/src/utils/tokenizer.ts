@@ -1,5 +1,5 @@
-import { Tiktoken } from 'tiktoken/lite';
-import { load } from 'tiktoken/load';
+import { Tiktoken } from 'js-tiktoken/lite';
+import { load } from 'js-tiktoken/load';
 
 let tokenizer: Tiktoken | null = null;
 
