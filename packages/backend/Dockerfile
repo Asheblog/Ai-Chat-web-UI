@@ -73,8 +73,8 @@ RUN npm run build
 # 生产阶段 - 优化内存占用
 FROM node:20-alpine AS production
 
-# 优化Node.js运行时内存设置
-ENV NODE_OPTIONS="--max-old-space-size=256 --optimize-for-size"
+# 优化Node.js运行时内存设置（移除 --optimize-for-size，避免 NODE_OPTIONS 限制报错）
+ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV NODE_ENV=production
 
 # 只安装运行时必需的系统依赖
