@@ -19,14 +19,12 @@ const app = new Hono();
 
 // 基础中间件
 app.use('*', logger());
-// CORS 根据环境变量配置，支持逗号分隔多源
-const envOrigins = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean)
-const allowedOrigins = envOrigins.length > 0 ? envOrigins : ['http://localhost:3000', 'http://127.0.0.1:3000']
+// 放宽 CORS 限制：允许任意来源（不使用凭证）
 app.use('*', cors({
-  origin: allowedOrigins,
+  origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  allowHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
+  credentials: false,
 }));
 
 // 静态文件服务（可选）

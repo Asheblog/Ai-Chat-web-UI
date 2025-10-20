@@ -9,7 +9,7 @@ services:
       target: development
     container_name: aichat-backend-dev
     ports:
-      - "8001:8001"
+      - "${DEV_BACKEND_PORT:-8001}:8001"
       - "9229:9229"  # Node.js调试端口
     environment:
       - NODE_ENV=development
@@ -20,7 +20,7 @@ services:
       - DEFAULT_CONTEXT_TOKEN_LIMIT=4000
       - DEFAULT_ADMIN_USERNAME=admin
       - DEFAULT_ADMIN_PASSWORD=admin123456
-      - CORS_ORIGIN=http://localhost:3000
+      - CORS_ORIGIN=http://localhost:${DEV_FRONTEND_PORT:-3000}
       - LOG_LEVEL=debug
     volumes:
       # 挂载源代码，支持热重载
@@ -51,10 +51,10 @@ services:
       target: development
     container_name: aichat-frontend-dev
     ports:
-      - "3000:3000"
+      - "${DEV_FRONTEND_PORT:-3000}:3000"
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8001/api
+      - NEXT_PUBLIC_API_URL=http://localhost:${DEV_BACKEND_PORT:-8001}/api
     volumes:
       # 挂载源代码，支持热重载
       - ./packages/frontend:/app

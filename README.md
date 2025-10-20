@@ -59,6 +59,38 @@ docker-compose logs -f
 
 访问 `http://localhost:3001/api` 查看API文档
 
+### 可配置端口与环境变量（Compose）
+
+为便于在 1Panel 等编排平台自定义端口，compose 已支持通过环境变量覆盖端口和相关配置：
+
+生产环境（docker-compose.yml）
+
+```bash
+# 可在同目录 .env 文件或编排面板环境变量中设置
+BACKEND_PORT=8001            # 后端对外端口（默认 8001）
+FRONTEND_PORT=3000           # 前端对外端口（默认 3000）
+
+# 如使用自定义端口/域名，按需覆盖（默认会随端口联动）
+CORS_ORIGIN=http://localhost:${FRONTEND_PORT}
+NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT}/api
+```
+
+开发环境（docker-compose.dev.yml）
+
+```bash
+# 可在同目录 .env 文件中设置
+DEV_BACKEND_PORT=8001        # 后端开发对外端口（默认 8001）
+DEV_FRONTEND_PORT=3000       # 前端开发对外端口（默认 3000）
+```
+
+说明与注意事项：
+- 仅映射主机端口可变，容器内部仍为 `backend:8001`、`frontend:3000`。
+- `CORS_ORIGIN` 应与前端实际访问地址一致（含端口或域名），否则浏览器将被 CORS 拦截。
+- `NEXT_PUBLIC_API_URL` 会在前端构建期内嵌，修改该变量需“重建前端镜像”而非仅重启容器。
+- 使用反向代理/域名时：
+  - 将 `CORS_ORIGIN` 设置为前端外网地址（例 `https://web.example.com`）
+  - 将 `NEXT_PUBLIC_API_URL` 设置为后端外网地址（例 `https://api.example.com/api`）
+
 ### 方式二：本地开发
 
 ```bash
@@ -141,6 +173,8 @@ environment:
   - JWT_SECRET=your-secret-key         # JWT密钥
   - DEFAULT_ADMIN_USERNAME=admin       # 默认管理员
   - DEFAULT_ADMIN_PASSWORD=admin123456 # 默认密码
+  # 可配置端口（见上文）：
+  # BACKEND_PORT / FRONTEND_PORT / CORS_ORIGIN / NEXT_PUBLIC_API_URL
 ```
 
 ## 🔧 开发指南
