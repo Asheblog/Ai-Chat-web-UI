@@ -54,11 +54,14 @@ CMD ["dumb-init", "npm", "run", "dev"]
 # 生产构建阶段
 FROM base AS build
 
+# 构建阶段需要开发依赖（TypeScript 等）
+ENV NODE_ENV=development
+
 # 安装所有依赖（包括开发依赖用于构建）
 RUN if [ -f pnpm-lock.yaml ]; then \
         pnpm install --frozen-lockfile; \
     else \
-        if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
+        if [ -f package-lock.json ]; then npm ci --include=dev; else npm install; fi; \
     fi
 
 # 复制源代码
