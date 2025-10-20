@@ -94,7 +94,10 @@ RUN addgroup -g 1001 -S nodejs && \
 # 设置工作目录
 WORKDIR /app
 
-# 复制package文件并安装生产依赖（确保最小依赖）
+# 先复制 Prisma schema，确保 @prisma/client 在安装时能找到 schema 并生成客户端
+COPY --from=build /app/prisma ./prisma
+
+# 复制 package 文件并安装生产依赖（确保最小依赖）
 COPY package.json pnpm-lock.yaml* package-lock.json* ./
 
 RUN if [ -f pnpm-lock.yaml ]; then \
@@ -109,7 +112,7 @@ RUN if [ -f pnpm-lock.yaml ]; then \
 
 # 复制构建产物和必要文件
 COPY --from=build --chown=backend:nodejs /app/dist ./dist
-COPY --from=build --chown=backend:nodejs /app/prisma ./prisma
+# 可选复制 Prisma 引擎缓存（安装已生成时可省略）
 COPY --from=build --chown=backend:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 # 创建数据和日志目录
