@@ -48,7 +48,7 @@ services:
     build:
       context: ./packages/frontend
       dockerfile: Dockerfile
-      target: production
+      target: runner
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_PORT:-8001}/api}
         - NODE_ENV=${NODE_ENV:-production}
