@@ -404,6 +404,22 @@ async function main() {
     logWarn('继续启动服务，但数据库可能未就绪，请留意后端日志')
   }
 
+  // 使用 Prisma 官方 seed 流程（自动读取 .env/.env.example 并初始化默认管理员等）
+  try {
+    const { cmd, args } = workspaceScript(pm, '@aichat/backend', 'db:seed')
+    runSync(cmd, args, { cwd: process.cwd() })
+    logSuccess('数据库种子执行完成（若已有数据将跳过）')
+  } catch (e) {
+    // 向后兼容：尝试旧的 db:init 流程
+    try {
+      const { cmd, args } = workspaceScript(pm, '@aichat/backend', 'db:init')
+      runSync(cmd, args, { cwd: process.cwd() })
+      logSuccess('默认数据初始化完成（兼容路径）')
+    } catch (_) {
+      logWarn('数据库种子/初始化未完成，可稍后手动执行：npm run --workspace @aichat/backend db:seed')
+    }
+  }
+
   // 显式设置各自包的工作目录，确保 Next/Prisma 等工具在正确目录解析配置
   const backendCwd = path.join(process.cwd(), 'packages', 'backend')
   const frontendCwd = path.join(process.cwd(), 'packages', 'frontend')
