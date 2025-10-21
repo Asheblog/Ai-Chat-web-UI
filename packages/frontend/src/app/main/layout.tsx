@@ -33,7 +33,7 @@ export default function MainLayout({
 
   return (
     <AuthGuard>
-      <div className="flex h-screen bg-background">
+      <div className="flex h-screen min-h-0 bg-background">
         <Sidebar />
         <MainContent>
           {children}

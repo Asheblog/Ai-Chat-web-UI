@@ -6,6 +6,7 @@ import { AuthUtils } from '../utils/auth';
 import { Tokenizer } from '../utils/tokenizer';
 import { authMiddleware } from '../middleware/auth';
 import type { ApiResponse, Message } from '../types';
+import { BackendLogger as log } from '../utils/logger';
 
 const chat = new Hono();
 
@@ -180,6 +181,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
     // 解密API Key
     const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
+    log.debug('Chat stream request', { sessionId, userId: user.id, model: session.modelConfig.name, apiUrl: session.modelConfig.apiUrl })
 
     // 构建AI API请求
     const messagesPayload = truncatedContext.map((msg: { role: string; content: string }) => ({
@@ -225,6 +227,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             body: JSON.stringify(requestData),
           });
 
+          log.debug('AI provider response', { status: response.status, ok: response.ok })
           if (!response.ok) {
             throw new Error(`AI API request failed: ${response.status} ${response.statusText}`);
           }
@@ -249,6 +252,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             for (const line of lines) {
               if (line.startsWith('data: ')) {
                 const data = line.slice(6);
+                log.debug('SSE line', data?.slice(0, 120))
 
                 if (data === '[DONE]') {
                   // 流结束
@@ -300,6 +304,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
         } catch (error) {
           console.error('Streaming error:', error);
+          log.error('Streaming error detail', (error as Error)?.message, (error as Error)?.stack)
 
           // 发送错误事件
           const errorEvent = `data: ${JSON.stringify({
@@ -317,6 +322,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
   } catch (error) {
     console.error('Chat stream error:', error);
+    log.error('Chat stream error detail', (error as Error)?.message, (error as Error)?.stack)
     return c.json<ApiResponse>({
       success: false,
       error: 'Failed to process chat request',

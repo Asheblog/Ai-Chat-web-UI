@@ -18,7 +18,7 @@ export default function ChatPage() {
   }, [fetchSessions, fetchSystemSettings, fetchPersonalModels])
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex flex-col h-full min-h-0">
       {currentSession ? (
         <ChatInterface />
       ) : (

@@ -99,10 +99,20 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-      }),
+      partialize: (state) => {
+        let remember = true
+        try {
+          const prefRaw = typeof window !== 'undefined' ? localStorage.getItem('auth_pref') : null
+          if (prefRaw) {
+            const pref = JSON.parse(prefRaw) as { rememberLogin?: boolean }
+            if (pref.rememberLogin === false) remember = false
+          }
+        } catch {}
+        return {
+          user: state.user,
+          token: remember ? state.token : null,
+        }
+      },
     }
   )
 )

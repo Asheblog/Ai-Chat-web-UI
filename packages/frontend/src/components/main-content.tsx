@@ -8,7 +8,7 @@ interface MainContentProps {
 
 export function MainContent({ children, className }: MainContentProps) {
   return (
-    <main className={cn("flex-1 flex flex-col overflow-hidden", className)}>
+    <main className={cn("flex-1 flex flex-col overflow-hidden min-h-0", className)}>
       {children}
     </main>
   )

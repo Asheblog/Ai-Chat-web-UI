@@ -5,6 +5,7 @@ import axios, {
   InternalAxiosRequestConfig
 } from 'axios'
 import { AuthResponse, User, ApiResponse } from '@/types'
+import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
@@ -21,13 +22,18 @@ class ApiClient {
       },
     })
 
-    // 请求拦截器 - 添加认证token
+    // 请求拦截器 - 添加认证token & 记录日志
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
+        ;(config as any).metadata = { start: Date.now() }
         const token = this.getToken()
         if (token) {
           config.headers.Authorization = `Bearer ${token}`
         }
+        log.debug('HTTP Request', config.method?.toUpperCase(), config.baseURL + (config.url || ''), {
+          headers: config.headers,
+          params: config.params,
+        })
         return config
       },
       (error) => {
@@ -35,12 +41,25 @@ class ApiClient {
       }
     )
 
-    // 响应拦截器 - 处理错误
+    // 响应拦截器 - 处理错误 & 记录日志
     this.client.interceptors.response.use(
       (response: AxiosResponse) => {
+        const start = (response.config as any).metadata?.start || Date.now()
+        log.debug('HTTP Response', response.status, response.statusText, 'in', `${Date.now() - start}ms`, {
+          url: response.config.baseURL + (response.config.url || ''),
+        })
         return response
       },
       (error) => {
+        try {
+          const cfg = error.config || {}
+          const start = (cfg as any).metadata?.start || Date.now()
+          log.error('HTTP Error', error.message, 'in', `${Date.now() - start}ms`, {
+            url: (cfg.baseURL || '') + (cfg.url || ''),
+            status: error.response?.status,
+            data: error.response?.data,
+          })
+        } catch {}
         if (error.response?.status === 401) {
           // token过期，清除本地存储并跳转到登录页
           this.clearToken()
@@ -54,17 +73,36 @@ class ApiClient {
     )
   }
 
+  // 读取记住登录偏好，决定存储介质（localStorage / sessionStorage）
+  private getPreferredStorage(): Storage | null {
+    if (typeof window === 'undefined') return null
+    try {
+      const prefRaw = localStorage.getItem('auth_pref')
+      if (!prefRaw) return localStorage
+      const pref = JSON.parse(prefRaw) as { rememberLogin?: boolean }
+      return pref?.rememberLogin === false ? sessionStorage : localStorage
+    } catch {
+      return localStorage
+    }
+  }
+
   private getToken(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('token')
+      // 优先从 sessionStorage 读取（未勾选记住登录时）
+      return sessionStorage.getItem('token') || localStorage.getItem('token')
     }
     return null
   }
 
   private clearToken(): void {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+      try {
+        // 双存储清理，兼容切换
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('user')
+      } catch {}
     }
   }
 
@@ -79,8 +117,9 @@ class ApiClient {
       throw new Error('Invalid login response')
     }
     if ((data as any).token) {
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      const storage = this.getPreferredStorage() || localStorage
+      storage.setItem('token', data.token)
+      storage.setItem('user', JSON.stringify(data.user))
     }
     return data
   }
@@ -95,8 +134,9 @@ class ApiClient {
       throw new Error('Invalid register response')
     }
     if ((data as any).token) {
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      const storage = this.getPreferredStorage() || localStorage
+      storage.setItem('token', data.token)
+      storage.setItem('user', JSON.stringify(data.user))
     }
     return data
   }
@@ -191,6 +231,10 @@ class ApiClient {
 
         const chunk = decoder.decode(value, { stream: true })
         const lines = chunk.split('\n')
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.debug('[streamChat] chunk', chunk.slice(0, 120))
+        }
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -207,7 +251,11 @@ class ApiClient {
                 throw new Error(parsed.error)
               }
             } catch (e) {
-              // 忽略解析错误
+              // 忽略解析错误，但在开发模式打印
+              if (process.env.NODE_ENV !== 'production') {
+                // eslint-disable-next-line no-console
+                console.debug('[streamChat] JSON parse ignore:', e)
+              }
             }
           }
         }

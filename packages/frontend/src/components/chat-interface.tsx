@@ -9,6 +9,7 @@ import { MessageList } from '@/components/message-list'
 import { ModelSelector } from '@/components/model-selector'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 
 export function ChatInterface() {
@@ -23,10 +24,12 @@ export function ChatInterface() {
     isStreaming,
     streamMessage,
     stopStreaming,
-    clearError
+    clearError,
+    error,
   } = useChatStore()
 
   const { maxTokens } = useSettingsStore()
+  const { toast } = useToast()
 
   useEffect(() => {
     // 自动滚动到底部
@@ -56,6 +59,11 @@ export function ChatInterface() {
       await streamMessage(currentSession.id, message)
     } catch (error) {
       console.error('Failed to send message:', error)
+      toast({
+        title: '发送失败',
+        description: error instanceof Error ? error.message : '未知错误',
+        variant: 'destructive'
+      })
     }
   }
 
@@ -85,7 +93,7 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex flex-col h-full min-h-0">
       {/* 顶部工具栏 */}
       <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between">
@@ -104,6 +112,11 @@ export function ChatInterface() {
       {/* 消息列表 */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 px-4">
         <div className="py-4">
+          {error && (
+            <div className="mb-3 text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {String(error)}
+            </div>
+          )}
           <MessageList messages={messages} isStreaming={isStreaming} />
         </div>
       </ScrollArea>
