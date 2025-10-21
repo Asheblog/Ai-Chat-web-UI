@@ -71,8 +71,12 @@ BACKEND_PORT=8001            # 后端对外端口（默认 8001）
 FRONTEND_PORT=3000           # 前端对外端口（默认 3000）
 
 # 如使用自定义端口/域名，按需覆盖（默认会随端口联动）
+ENABLE_CORS=true                 # 是否启用CORS（默认true）
 CORS_ORIGIN=http://localhost:${FRONTEND_PORT}
-NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT}/api
+# 浏览器端 API 基址固定使用相对路径，避免跨设备 localhost 问题
+NEXT_PUBLIC_API_URL=/api      # 浏览器端固定相对路径
+BACKEND_HOST=backend
+BACKEND_PORT=${BACKEND_PORT}
 ```
 
 开发环境（docker-compose.dev.yml）
@@ -86,7 +90,14 @@ DEV_FRONTEND_PORT=3000       # 前端开发对外端口（默认 3000）
 说明与注意事项：
 - 仅映射主机端口可变，容器内部仍为 `backend:8001`、`frontend:3000`。
 - `CORS_ORIGIN` 应与前端实际访问地址一致（含端口或域名），否则浏览器将被 CORS 拦截。
-- `NEXT_PUBLIC_API_URL` 会在前端构建期内嵌，修改该变量需“重建前端镜像”而非仅重启容器。
+- `NEXT_PUBLIC_API_URL` 建议固定为 `/api`；后端真实地址由前端服务器使用 `BACKEND_HOST`/`BACKEND_PORT` 反向代理，无需在浏览器暴露绝对域名；修改反代目标需重建前端镜像（Next 构建时读取）。
+- 如需完全关闭 CORS（例如前端总是同源反代访问后端），可在 `.env` 中设置 `ENABLE_CORS=false`。
+
+### 环境变量集中管理
+
+- 统一在仓库根目录维护：`./.env.example`（模板） → `./.env`（实际值）。
+- docker-compose 与启动脚本会读取根 `.env`；前后端无需在各自包目录再维护独立 `.env`。
+- 如单独在 `packages/backend` 目录开发后端且不通过 compose 启动，可临时使用包内 `.env` 覆盖（可选）。前端 `.env.local` 仅用于本机覆盖，通常无需创建。
 - 使用反向代理/域名时：
   - 将 `CORS_ORIGIN` 设置为前端外网地址（例 `https://web.example.com`）
   - 将 `NEXT_PUBLIC_API_URL` 设置为后端外网地址（例 `https://api.example.com/api`）

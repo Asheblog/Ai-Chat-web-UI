@@ -19,13 +19,23 @@ const app = new Hono();
 
 // 基础中间件
 app.use('*', logger());
-// 放宽 CORS 限制：允许任意来源（不使用凭证）
-app.use('*', cors({
-  origin: '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
-  credentials: false,
-}));
+
+// CORS 开关与来源配置
+// ENABLE_CORS: 默认为 true；为 false 时不注册 CORS 中间件
+// CORS_ORIGIN: 允许的来源；未设置时默认为 "*"；当为 "*" 时将自动禁用 credentials
+const enableCors = (process.env.ENABLE_CORS ?? 'true').toLowerCase() === 'true'
+const corsOrigin = process.env.CORS_ORIGIN || '*'
+
+if (enableCors) {
+  app.use('*', cors({
+    origin: corsOrigin,
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
+    credentials: corsOrigin !== '*',
+  }));
+} else {
+  console.log('⚠️  CORS is disabled by ENABLE_CORS=false')
+}
 
 // 静态文件服务（可选）
 app.use('/static/*', serveStatic({ root: './public' }));
@@ -106,17 +116,21 @@ app.notFound(notFoundHandler);
 app.onError(errorHandler);
 
 // 启动服务器
-const port = parseInt(process.env.PORT || '3001');
+// 与生产环境保持一致，默认使用 8001 端口（可用 PORT 覆盖）
+const port = parseInt(process.env.PORT || '8001');
+const hostname = process.env.HOST || process.env.HOSTNAME || '0.0.0.0';
 
-console.log(`🚀 AI Chat Platform Backend starting on port ${port}`);
+console.log(`🚀 AI Chat Platform Backend starting on ${hostname}:${port}`);
 console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-console.log(`🔗 API Base URL: http://localhost:${port}/api`);
+console.log(`🔗 API Base URL (local): http://localhost:${port}/api`);
 
 serve({
   fetch: app.fetch,
   port,
+  hostname,
 }, (info) => {
-  console.log(`✅ Server is running on http://localhost:${info.port}`);
+  const displayedHost = hostname === '0.0.0.0' ? '0.0.0.0' : hostname;
+  console.log(`✅ Server is listening on http://${displayedHost}:${info.port} (bind all interfaces if 0.0.0.0)`);
   console.log(`📖 API Documentation: http://localhost:${info.port}/api`);
   console.log(`🏥 Health Check: http://localhost:${info.port}/api/settings/health`);
 });

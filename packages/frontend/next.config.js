@@ -11,19 +11,22 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
 
-  // 环境变量配置
+  // 环境变量配置（仅暴露给浏览器的前缀为 NEXT_PUBLIC_）
+  // 默认将浏览器可见的 API 基址设置为相对路径，避免跨设备访问时的 localhost 问题
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '/api',
   },
 
   // API代理配置（开发环境）
   async rewrites() {
-    // 直接将前端 /api/* 代理到后端的 NEXT_PUBLIC_API_URL（通常形如 http://host:8001/api）
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api'
+    // 服务端反向代理目标：仅服务端使用，不暴露给浏览器
+    const backendHost = process.env.BACKEND_HOST || 'localhost'
+    const backendPort = process.env.BACKEND_PORT || '8001'
+    const proxyOrigin = `http://${backendHost}:${backendPort}`
     return [
       {
         source: '/api/:path*',
-        destination: `${apiBase}/:path*`,
+        destination: `${proxyOrigin}/api/:path*`,
       },
     ]
   },

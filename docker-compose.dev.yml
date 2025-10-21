@@ -20,6 +20,7 @@ services:
       - DEFAULT_CONTEXT_TOKEN_LIMIT=4000
       - DEFAULT_ADMIN_USERNAME=admin
       - DEFAULT_ADMIN_PASSWORD=admin123456
+      - ENABLE_CORS=${ENABLE_CORS:-true}
       - CORS_ORIGIN=http://localhost:${DEV_FRONTEND_PORT:-3000}
       - LOG_LEVEL=debug
     volumes:
@@ -54,7 +55,9 @@ services:
       - "${DEV_FRONTEND_PORT:-3000}:3000"
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:${DEV_BACKEND_PORT:-8001}/api
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
+      - BACKEND_HOST=${BACKEND_HOST:-backend}
+      - BACKEND_PORT=${DEV_BACKEND_PORT:-8001}
     volumes:
       # 挂载源代码，支持热重载
       - ./packages/frontend:/app

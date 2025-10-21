@@ -47,9 +47,13 @@ COPY --from=deps /app/node_modules ./node_modules
 # 复制源代码
 COPY . .
 
-# 设置构建参数
-ARG NEXT_PUBLIC_API_URL=http://localhost:8001/api
+# 设置构建参数（浏览器端 API 基址默认相对路径；服务端反代目标用于 Next rewrites）
+ARG NEXT_PUBLIC_API_URL=/api
+ARG BACKEND_HOST=localhost
+ARG BACKEND_PORT=8001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV BACKEND_HOST=$BACKEND_HOST
+ENV BACKEND_PORT=$BACKEND_PORT
 
 # 生成Prisma客户端（如果需要）
 # RUN npm run db:generate

@@ -50,33 +50,18 @@
 npm install
 ```
 
-### 环境配置
+### 环境配置（集中化）
 
-复制环境变量模板：
+推荐使用仓库根目录的环境文件集中管理：
 
-```bash
-cp .env.example .env
-```
+- 复制根模板：`cp .env.example .env`（在仓库根目录）
+- 通过 `docker-compose.dev.yml` / `docker-compose.yml` 启动时会自动读取根 `.env`
 
-编辑 `.env` 文件：
-
-```env
-# Database
-DATABASE_URL="file:./dev.db"
-
-# JWT Secret (生产环境请使用强密码)
-JWT_SECRET="your-super-secret-jwt-key"
-
-# App Configuration
-NODE_ENV="development"
-PORT="3001"
-
-# App Mode: "single" or "multi"
-APP_MODE="single"
-
-# Default context token limit per user
-DEFAULT_CONTEXT_TOKEN_LIMIT="4000"
-```
+如需“单独在此目录开发后端且不通过 docker-compose 启动”，可以在本目录创建 `.env` 临时覆盖少量变量（可选）。
+与跨域相关的变量：
+- `ENABLE_CORS`（默认 `true`，设为 `false` 将完全关闭 CORS 中间件）
+- `CORS_ORIGIN`（允许的前端地址；为空时为 `*`，此时自动禁用 credentials）
+否则请不要在包内维护独立的 `.env`，以避免配置漂移。
 
 ### 数据库初始化
 

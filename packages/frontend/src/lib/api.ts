@@ -6,8 +6,8 @@ import axios, {
 } from 'axios'
 import { AuthResponse, User, ApiResponse } from '@/types'
 
-// API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认 http://localhost:8001/api）
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api'
+// API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 class ApiClient {
   private client: AxiosInstance
@@ -45,7 +45,8 @@ class ApiClient {
           // token过期，清除本地存储并跳转到登录页
           this.clearToken()
           if (typeof window !== 'undefined') {
-            window.location.href = '/login'
+            // 统一跳转到 Next.js 下的登录页路径
+            window.location.href = '/auth/login'
           }
         }
         return Promise.reject(error)
@@ -108,7 +109,8 @@ class ApiClient {
   logout(): void {
     this.clearToken()
     if (typeof window !== 'undefined') {
-      window.location.href = '/login'
+      // 统一跳转到 Next.js 下的登录页路径
+      window.location.href = '/auth/login'
     }
   }
 

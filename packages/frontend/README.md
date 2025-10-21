@@ -53,22 +53,12 @@ npm install
 pnpm install
 ```
 
-### 环境配置
+### 环境配置（集中化）
 
-复制环境变量示例文件：
+- 推荐使用仓库根目录的 `.env.example` → `.env` 统一管理所有环境变量。
+- 前端 `.env.local` 仅在确有需要时用于“本机覆盖”，通常无需创建。
 
-```bash
-cp .env.local.example .env.local
-```
-
-编辑 `.env.local` 文件：
-
-```env
-# API配置
-NEXT_PUBLIC_API_URL=http://localhost:8001/api
-
-NODE_ENV=development
-```
+默认配置下，前端已使用相对路径 `/api` 作为浏览器端 API 基址，并由 Next.js 在服务端反代到后端。
 
 ### 启动开发服务器
 
@@ -226,7 +216,7 @@ src/
 
 ### 常见问题
 
-1. **API连接失败**: 检查 `.env.local` 中的 `NEXT_PUBLIC_API_URL`
+1. **API连接失败**: 检查 `.env.local` 中的 `NEXT_PUBLIC_API_URL` 是否为 `/api`；若使用 Docker，确保前端容器具备 `BACKEND_HOST=backend` 与 `BACKEND_PORT=8001`
 2. **主题不生效**: 确保组件使用ThemeProvider包装
 3. **状态丢失**: 检查localStorage是否可用
 4. **样式问题**: 确保Tailwind CSS正确配置
