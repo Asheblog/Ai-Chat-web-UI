@@ -60,7 +60,16 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
           } ${isStreaming && !isUser ? 'typing-cursor' : ''}`}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <div className="text-left">
+              {message.images && message.images.length > 0 && (
+                <div className="mb-2 grid grid-cols-2 gap-2">
+                  {message.images.map((src, i) => (
+                    <img key={i} src={src} alt={`img-${i}`} className="max-h-40 rounded border object-contain" />
+                  ))}
+                </div>
+              )}
+              <p className="whitespace-pre-wrap text-right">{message.content}</p>
+            </div>
           ) : (
             <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
           )}

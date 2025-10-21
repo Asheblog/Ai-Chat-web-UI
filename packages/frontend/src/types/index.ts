@@ -62,6 +62,8 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  // 可选的图片（data URL，用于展示，不入库）
+  images?: string[];
 }
 
 export interface CreateMessageRequest {

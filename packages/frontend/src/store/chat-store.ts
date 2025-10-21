@@ -10,7 +10,7 @@ interface ChatStore extends ChatState {
   deleteSession: (sessionId: number) => Promise<void>
   updateSessionTitle: (sessionId: number, title: string) => Promise<void>
   sendMessage: (sessionId: number, content: string) => Promise<void>
-  streamMessage: (sessionId: number, content: string) => Promise<void>
+  streamMessage: (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>) => Promise<void>
   stopStreaming: () => void
   addMessage: (message: Message) => void
   clearError: () => void
@@ -132,7 +132,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     await get().streamMessage(sessionId, content)
   },
 
-  streamMessage: async (sessionId: number, content: string) => {
+  streamMessage: async (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>) => {
     // 首先添加用户消息
     const userMessage: Message = {
       id: Date.now(), // 临时ID
@@ -140,6 +140,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       role: 'user',
       content,
       createdAt: new Date().toISOString(),
+    }
+    if (images && images.length) {
+      userMessage.images = images.map(img => `data:${img.mime};base64,${img.data}`)
     }
 
     // 创建AI消息的占位符
@@ -160,7 +163,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       let accumulatedContent = ''
 
-      for await (const chunk of apiClient.streamChat(sessionId, content)) {
+      for await (const chunk of apiClient.streamChat(sessionId, content, images)) {
         accumulatedContent += chunk
 
         set((state) => ({

@@ -199,7 +199,7 @@ class ApiClient {
   }
 
   // 流式聊天API
-  async *streamChat(sessionId: number, content: string): AsyncGenerator<string, void, unknown> {
+  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>): AsyncGenerator<string, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
     const response = await fetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
@@ -210,6 +210,7 @@ class ApiClient {
       body: JSON.stringify({
         sessionId,
         content,
+        images,
       }),
     })
 

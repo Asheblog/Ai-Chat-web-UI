@@ -14,6 +14,8 @@ const chat = new Hono();
 const sendMessageSchema = z.object({
   sessionId: z.number().int().positive(),
   content: z.string().min(1).max(10000),
+  // 可选图片数据：前端传入 data(base64，不含前缀)、mime
+  images: z.array(z.object({ data: z.string().min(1), mime: z.string().min(1) })).max(4).optional(),
 });
 
 // 获取会话消息历史
@@ -100,7 +102,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
 chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), async (c) => {
   try {
     const user = c.get('user');
-    const { sessionId, content } = c.req.valid('json');
+    const { sessionId, content, images } = c.req.valid('json');
 
     // 验证会话是否存在且属于当前用户
     const session = await prisma.chatSession.findUnique({
@@ -184,10 +186,30 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     log.debug('Chat stream request', { sessionId, userId: user.id, model: session.modelConfig.name, apiUrl: session.modelConfig.apiUrl })
 
     // 构建AI API请求
-    const messagesPayload = truncatedContext.map((msg: { role: string; content: string }) => ({
+    // 先将历史消息（纯文本）放入
+    const messagesPayload: any[] = truncatedContext.map((msg: { role: string; content: string }) => ({
       role: msg.role,
       content: msg.content,
     }));
+
+    // 为当前用户消息构造多模态内容
+    const parts: any[] = []
+    if (content?.trim()) {
+      parts.push({ type: 'text', text: content })
+    }
+    if (images && images.length) {
+      for (const img of images) {
+        parts.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } })
+      }
+    }
+
+    // 如果最后一条就是当前用户消息，则替换为 parts；否则追加一条
+    const last = messagesPayload[messagesPayload.length - 1]
+    if (last && last.role === 'user' && last.content === content) {
+      messagesPayload[messagesPayload.length - 1] = { role: 'user', content: parts }
+    } else {
+      messagesPayload.push({ role: 'user', content: parts })
+    }
 
     const requestData = {
       model: session.modelConfig.name,
