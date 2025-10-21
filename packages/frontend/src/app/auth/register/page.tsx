@@ -22,7 +22,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (user) {
-      router.push('/')
+      router.replace('/main')
     }
   }, [user, router])
 
@@ -43,7 +43,7 @@ export default function RegisterPage() {
 
     try {
       await register(username, password)
-      router.push('/')
+      router.replace('/main')
     } catch (error) {
       console.error('Registration failed:', error)
     } finally {

@@ -13,17 +13,18 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const { user, token, getCurrentUser } = useAuthStore()
 
   useEffect(() => {
-    // 如果没有token，重定向到登录页面
-    if (!token) {
-      router.push('/auth/login')
+    // 先用 localStorage 的 token 做同步判断，避免持久化未水合导致的误跳转
+    const lsToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    if (!lsToken) {
+      router.replace('/auth/login')
       return
     }
 
-    // 如果有token但没有用户信息，尝试获取用户信息
-    if (token && !user) {
+    // 若存在 token 但缺少用户信息，补拉取当前用户
+    if (!user) {
       getCurrentUser()
     }
-  }, [token, user, router, getCurrentUser])
+  }, [user, router, getCurrentUser])
 
   // 如果没有用户信息，显示加载状态
   if (!user) {

@@ -21,7 +21,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      router.push('/')
+      router.replace('/main')
     }
   }, [user, router])
 
@@ -38,7 +38,7 @@ export default function LoginPage() {
 
     try {
       await login(username, password)
-      router.push('/')
+      router.replace('/main')
     } catch (error) {
       // 错误已经在store中处理
       console.error('Login failed:', error)

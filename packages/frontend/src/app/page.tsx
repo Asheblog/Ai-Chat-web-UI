@@ -3,21 +3,19 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuthStore } from '@/store/auth-store'
 
 export default function HomePage() {
   const router = useRouter()
-  const { user, token } = useAuthStore()
 
   useEffect(() => {
-    // 如果已登录，重定向到主页面
-    if (user && token) {
-      router.push('/main')
+    // 在客户端直接读取 localStorage，避免 Zustand 持久化未水合导致的误判
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    if (token) {
+      router.replace('/main')
     } else {
-      // 否则重定向到登录页面
-      router.push('/auth/login')
+      router.replace('/auth/login')
     }
-  }, [user, token, router])
+  }, [router])
 
   return (
     <div className="min-h-screen flex items-center justify-center">
