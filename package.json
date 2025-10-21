@@ -21,7 +21,8 @@
     "clean": "pnpm --filter backend clean && rm -rf node_modules",
     "test": "pnpm --filter backend test",
     "lint": "pnpm --filter backend lint",
-    "type-check": "pnpm --filter backend type-check"
+    "type-check": "pnpm --filter backend type-check",
+    "e2e:provider": "node -r tsx/register scripts/e2e-provider.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
