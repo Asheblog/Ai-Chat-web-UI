@@ -208,10 +208,6 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     // 解密API Key
     const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
 
-    // 读取系统设置以覆盖超时配置
-    const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
-    const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
-    const providerTimeoutMs = parseInt(sysMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
     log.debug('Chat stream request', { sessionId, userId: user.id, model: session.modelConfig.name, apiUrl: session.modelConfig.apiUrl })
 
     // 构建AI API请求
