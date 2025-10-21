@@ -51,6 +51,7 @@ model ChatSession {
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   modelConfig ModelConfig @relation(fields: [modelConfigId], references: [id])
   messages    Message[]
+  usageMetrics UsageMetric[]
 
   @@map("chat_sessions")
 }
@@ -64,6 +65,7 @@ model Message {
   createdAt DateTime @default(now())
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  usageMetrics UsageMetric[]
 
   @@map("messages")
 }
