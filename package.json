@@ -10,6 +10,8 @@
     "dev": "pnpm --filter backend dev",
     "build": "pnpm --filter backend build",
     "start": "node scripts/local-dev.js",
+    "start:dev": "node scripts/local-dev.js -- -development",
+    "start:prod": "node scripts/local-dev.js -- -production",
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",

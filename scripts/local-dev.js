@@ -270,8 +270,66 @@ function ensureDatabase(pm) {
   }
 }
 
+// ------------- CLI 参数与交互 -------------
+function parseArgs(argv) {
+  const args = new Set(argv.map((s) => String(s).toLowerCase()))
+  if (args.has('-h') || args.has('--help') || args.has('help')) {
+    return { action: 'help' }
+  }
+  const isDev = args.has('-d') || args.has('--development') || args.has('-development') || args.has('--dev') || args.has('-dev') || args.has('dev')
+  const isProd = args.has('-p') || args.has('--production') || args.has('-production') || args.has('--prod') || args.has('-prod') || args.has('prod')
+  if (isDev && isProd) return { action: 'error', message: '不能同时指定开发与生产模式' }
+  if (isDev) return { action: 'run', mode: 'dev' }
+  if (isProd) return { action: 'run', mode: 'prod' }
+  return { action: 'interactive' }
+}
+
+function printHelp() {
+  console.log(`AI Chat 一键启动脚本\n\n用法:\n  npm start                  # 交互选择 1=开发, 2=生产\n  npm start -- -development  # 指定开发模式（npm需使用 -- 转发参数）\n  npm start -- -production   # 指定生产模式（npm需使用 -- 转发参数）\n\n别名脚本（无需 -- 转发，推荐）:\n  npm run start:dev\n  npm run start:prod\n\n其他支持参数(等价写法):\n  开发:  -d  --dev  dev  --development  -development  -dev\n  生产:  -p  --prod prod --production   -production   -prod\n\n说明:\n  - Windows/Linux 通用。\n  - 生产模式会先构建再启动；开发模式并发拉起前后端 dev 服务。\n`)
+}
+
+async function askInteractive() {
+  return await new Promise((resolve) => {
+    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout })
+    console.log('\n请选择启动模式:')
+    console.log('  1) 开发模式 (dev)')
+    console.log('  2) 生产模式 (prod)')
+    rl.question('输入序号并回车 (默认 1): ', (answer) => {
+      rl.close()
+      const v = String(answer || '').trim()
+      if (v === '2') return resolve('prod')
+      return resolve('dev')
+    })
+  })
+}
+
 // ------------- 主流程 -------------
 async function main() {
+  // 解析 CLI 参数 / 交互选择
+  const parsed = parseArgs(process.argv.slice(2))
+  if (parsed.action === 'help') {
+    printHelp()
+    return
+  }
+  if (parsed.action === 'error') {
+    logError(parsed.message)
+    printHelp()
+    process.exit(1)
+  }
+  const mode = parsed.action === 'interactive' ? await askInteractive() : parsed.mode
+
+  // 根据模式设置 NODE_ENV
+  if (mode === 'dev') {
+    if (process.env.NODE_ENV !== 'development') {
+      logWarn(`开发模式下强制使用 NODE_ENV=development（当前: ${process.env.NODE_ENV || '未设置'}）`)
+      process.env.NODE_ENV = 'development'
+    }
+  } else {
+    if (process.env.NODE_ENV !== 'production') {
+      logWarn(`生产模式下强制使用 NODE_ENV=production（当前: ${process.env.NODE_ENV || '未设置'}）`)
+      process.env.NODE_ENV = 'production'
+    }
+  }
   // Node 版本检查
   const major = Number(process.versions.node.split('.')[0] || '0')
   if (isNaN(major) || major < 18) {
@@ -326,11 +384,16 @@ async function main() {
     logWarn('未找到根环境变量文件（.env/.env.example），将使用进程环境变量')
   }
 
-  // 兜底：若仍未提供 DATABASE_URL，则为开发场景设置默认 SQLite 路径
-  if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
-    // 相对路径将基于 packages/backend 目录生效（Prisma 运行时工作目录）
-    process.env.DATABASE_URL = 'file:./data/dev.db'
-    logWarn('未检测到 DATABASE_URL，已为开发环境注入默认值 file:./data/dev.db')
+  // 兜底：仅在开发模式设置默认 SQLite 路径
+  if (mode === 'dev') {
+    if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
+      process.env.DATABASE_URL = 'file:./data/dev.db'
+      logWarn('未检测到 DATABASE_URL，已为开发环境注入默认值 file:./data/dev.db')
+    }
+  } else {
+    if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
+      logWarn('生产模式未检测到 DATABASE_URL，请确认数据库配置，否则可能影响服务运行')
+    }
   }
 
   // 后端环境与数据库
@@ -341,27 +404,49 @@ async function main() {
     logWarn('继续启动服务，但数据库可能未就绪，请留意后端日志')
   }
 
-  // 并发启动前后端
-  logInfo('并发启动前端与后端（开发模式）...')
-  const be = workspaceScript(pm, '@aichat/backend', 'dev')
-  const fe = workspaceScript(pm, '@aichat/frontend', 'dev')
-
   // 显式设置各自包的工作目录，确保 Next/Prisma 等工具在正确目录解析配置
   const backendCwd = path.join(process.cwd(), 'packages', 'backend')
   const frontendCwd = path.join(process.cwd(), 'packages', 'frontend')
 
-  const backend = runAsync('backend', be.cmd, be.args, { cwd: backendCwd })
-  const frontend = runAsync('frontend', fe.cmd, fe.args, { cwd: frontendCwd })
-
-  const shutdown = () => {
-    logInfo('收到退出信号，正在关闭子进程...')
-    if (backend.pid) killProcessTree(backend.pid)
-    if (frontend.pid) killProcessTree(frontend.pid)
-    process.exit(0)
+  if (mode === 'dev') {
+    // 并发启动前后端（开发）
+    logInfo('并发启动前端与后端（开发模式）...')
+    const be = workspaceScript(pm, '@aichat/backend', 'dev')
+    const fe = workspaceScript(pm, '@aichat/frontend', 'dev')
+    const backend = runAsync('backend', be.cmd, be.args, { cwd: backendCwd })
+    const frontend = runAsync('frontend', fe.cmd, fe.args, { cwd: frontendCwd })
+    const shutdown = () => {
+      logInfo('收到退出信号，正在关闭子进程...')
+      if (backend.pid) killProcessTree(backend.pid)
+      if (frontend.pid) killProcessTree(frontend.pid)
+      process.exit(0)
+    }
+    process.on('SIGINT', shutdown)
+    process.on('SIGTERM', shutdown)
+  } else {
+    // 生产：先构建再启动
+    logInfo('生产模式：开始构建后端与前端...')
+    try {
+      runSync(...workspaceRun(pm, '@aichat/backend', 'build'))
+      runSync(...workspaceRun(pm, '@aichat/frontend', 'build'))
+      logSuccess('构建完成，启动服务...')
+    } catch (e) {
+      logError('构建失败，请检查日志')
+      process.exit(1)
+    }
+    const be = workspaceScript(pm, '@aichat/backend', 'start')
+    const fe = workspaceScript(pm, '@aichat/frontend', 'start')
+    const backend = runAsync('backend', be.cmd, be.args, { cwd: backendCwd })
+    const frontend = runAsync('frontend', fe.cmd, fe.args, { cwd: frontendCwd })
+    const shutdown = () => {
+      logInfo('收到退出信号，正在关闭生产服务...')
+      if (backend.pid) killProcessTree(backend.pid)
+      if (frontend.pid) killProcessTree(frontend.pid)
+      process.exit(0)
+    }
+    process.on('SIGINT', shutdown)
+    process.on('SIGTERM', shutdown)
   }
-
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
 }
 
 main().catch((err) => {
