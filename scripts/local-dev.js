@@ -172,6 +172,12 @@ function ensureBackendEnv() {
   const envFile = path.join(backendDir, '.env')
   const envExample = path.join(backendDir, '.env.example')
 
+  // 若已从根 .env/.env.example 加载并具备关键变量（如 DATABASE_URL），则不需要包内 .env
+  if (process.env.DATABASE_URL && String(process.env.DATABASE_URL).trim()) {
+    logInfo('已从根环境变量加载配置，跳过 packages/backend/.env 检查')
+    return
+  }
+
   if (!fs.existsSync(envFile)) {
     if (fs.existsSync(envExample)) {
       fs.copyFileSync(envExample, envFile)
