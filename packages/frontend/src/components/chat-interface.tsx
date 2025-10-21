@@ -217,12 +217,12 @@ export function ChatInterface() {
             )}
             {usageLastRound && (
               <div className="px-2 py-1 bg-muted rounded">
-                本轮: p{usageLastRound.prompt_tokens ?? '-'} / c{usageLastRound.completion_tokens ?? '-'} / t{usageLastRound.total_tokens ?? '-'}
+                本轮: 提示{usageLastRound.prompt_tokens ?? '-'} / 补全{usageLastRound.completion_tokens ?? '-'} / 总计{usageLastRound.total_tokens ?? '-'}
               </div>
             )}
             {usageTotals && (
               <div className="px-2 py-1 bg-muted rounded">
-                累计: p{usageTotals.prompt_tokens} / c{usageTotals.completion_tokens} / t{usageTotals.total_tokens}
+                累计: 提示{usageTotals.prompt_tokens} / 补全{usageTotals.completion_tokens} / 总计{usageTotals.total_tokens}
               </div>
             )}
             <Button size="sm" variant="outline" className="ml-2" onClick={handleExportCSV}>

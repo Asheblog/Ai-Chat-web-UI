@@ -126,7 +126,7 @@ export function Sidebar() {
                   </p>
                   {sessionUsageTotalsMap?.[session.id] && (
                     <p className="text-[10px] text-muted-foreground whitespace-nowrap">
-                      t{sessionUsageTotalsMap[session.id].total_tokens}
+                      总计{sessionUsageTotalsMap[session.id].total_tokens}
                     </p>
                   )}
                 </div>
