@@ -189,6 +189,11 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       contextTokenLimit
     );
 
+    // 统计上下文使用量（估算）
+    const promptTokens = await Tokenizer.countConversationTokens(truncatedContext);
+    const contextLimit = contextTokenLimit;
+    const contextRemaining = Math.max(0, contextLimit - promptTokens);
+
     // 解密API Key
     const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
     log.debug('Chat stream request', { sessionId, userId: user.id, model: session.modelConfig.name, apiUrl: session.modelConfig.apiUrl })
@@ -236,6 +241,15 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     c.header('Access-Control-Allow-Headers', 'Cache-Control');
 
     let aiResponseContent = '';
+    // 环境开关：usage 透出与透传
+    const USAGE_EMIT = (process.env.USAGE_EMIT ?? 'true').toString().toLowerCase() !== 'false';
+    const USAGE_PROVIDER_ONLY = (process.env.USAGE_PROVIDER_ONLY ?? 'false').toString().toLowerCase() === 'true';
+
+    // 提前记录是否已收到厂商 usage（优先使用）
+    let providerUsageSeen = false as boolean;
+    let providerUsageSnapshot: any = null;
+    // 兜底：在结束前可统计 completion_tokens
+    let completionTokensFallback = 0 as number;
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -246,6 +260,21 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             messageId: userMessage.id,
           })}\n\n`;
           controller.enqueue(encoder.encode(startEvent));
+
+          // 在开始后透出一次 usage（prompt 部分）
+          if (USAGE_EMIT && !USAGE_PROVIDER_ONLY) {
+            const usageEvent = `data: ${JSON.stringify({
+              type: 'usage',
+              usage: {
+                prompt_tokens: promptTokens,
+                // 初值 total 以 prompt 为主，completion 将在结束前补齐
+                total_tokens: promptTokens,
+                context_limit: contextLimit,
+                context_remaining: contextRemaining,
+              },
+            })}\n\n`;
+            controller.enqueue(encoder.encode(usageEvent));
+          }
 
           // 调用第三方AI API
           const response = await fetch(session.modelConfig.apiUrl, {
@@ -308,6 +337,17 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                     })}\n\n`;
                     controller.enqueue(encoder.encode(contentEvent));
                   }
+
+                  // 厂商 usage 透传（优先级更高）
+                  if (USAGE_EMIT && parsed.usage) {
+                    providerUsageSeen = true;
+                    providerUsageSnapshot = parsed.usage;
+                    const providerUsageEvent = `data: ${JSON.stringify({
+                      type: 'usage',
+                      usage: parsed.usage,
+                    })}\n\n`;
+                    controller.enqueue(encoder.encode(providerUsageEvent));
+                  }
                 } catch (parseError) {
                   console.warn('Failed to parse SSE data:', data, parseError);
                 }
@@ -315,15 +355,26 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             }
           }
 
-          // 保存AI完整回复
-          if (aiResponseContent.trim()) {
-            await prisma.message.create({
-              data: {
-                sessionId,
-                role: 'assistant',
-                content: aiResponseContent.trim(),
+          // 保存AI完整回复延后到完成阶段，以便与 usage 绑定
+
+          // 在完成前透出兜底 usage（若未收到厂商 usage，或未设置仅透传）
+          if (USAGE_EMIT && (!USAGE_PROVIDER_ONLY || !providerUsageSeen)) {
+            try {
+              completionTokensFallback = await Tokenizer.countTokens(aiResponseContent);
+            } catch (_) {
+              completionTokensFallback = 0;
+            }
+            const finalUsageEvent = `data: ${JSON.stringify({
+              type: 'usage',
+              usage: {
+                prompt_tokens: promptTokens,
+                completion_tokens: completionTokensFallback,
+                total_tokens: promptTokens + completionTokensFallback,
+                context_limit: contextLimit,
+                context_remaining: Math.max(0, contextLimit - promptTokens),
               },
-            });
+            })}\n\n`;
+            controller.enqueue(encoder.encode(finalUsageEvent));
           }
 
           // 发送完成事件
@@ -331,6 +382,54 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             type: 'complete',
           })}\n\n`;
           controller.enqueue(encoder.encode(completeEvent));
+
+          // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
+          try {
+            const extractNumbers = (u: any): { prompt: number; completion: number; total: number } => {
+              try {
+                const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0;
+                const completion = Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0;
+                const total = Number(u?.total_tokens ?? (prompt + completion)) || (prompt + completion);
+                return { prompt, completion, total };
+              } catch {
+                return { prompt: 0, completion: 0, total: 0 };
+              }
+            };
+
+            const finalUsage = providerUsageSeen
+              ? extractNumbers(providerUsageSnapshot)
+              : { prompt: promptTokens, completion: completionTokensFallback, total: promptTokens + completionTokensFallback };
+
+            // 保存AI完整回复（若尚未保存）并记录 messageId
+            let assistantMessageId: number | null = null;
+            if (aiResponseContent.trim()) {
+              try {
+                const saved = await prisma.message.create({
+                  data: { sessionId, role: 'assistant', content: aiResponseContent.trim() },
+                });
+                assistantMessageId = saved?.id ?? null;
+              } catch (e) {
+                // 若已保存过则忽略错误
+              }
+            }
+
+            if (USAGE_EMIT) {
+              await (prisma as any).usageMetric.create({
+                data: {
+                  sessionId,
+                  messageId: assistantMessageId ?? undefined,
+                  model: session.modelConfig.name,
+                  provider: (() => { try { const u = new URL(session.modelConfig.apiUrl); return u.hostname; } catch { return null; } })() ?? undefined,
+                  promptTokens: finalUsage.prompt,
+                  completionTokens: finalUsage.completion,
+                  totalTokens: finalUsage.total,
+                  contextLimit: contextLimit,
+                },
+              });
+            }
+          } catch (persistErr) {
+            console.warn('Persist usage failed:', persistErr);
+          }
 
         } catch (error) {
           console.error('Streaming error:', error);
@@ -456,3 +555,171 @@ chat.post('/regenerate', authMiddleware, zValidator('json', z.object({
 });
 
 export default chat;
+
+// 用量聚合查询
+chat.get('/usage', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const sessionId = parseInt(c.req.query('sessionId') || '0');
+    if (!sessionId || Number.isNaN(sessionId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid sessionId' }, 400);
+    }
+
+    // 验证归属
+    const session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.userId !== user.id) {
+      return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
+    }
+
+    // 聚合
+    const [metrics, last] = await Promise.all([
+      (prisma as any).usageMetric.findMany({ where: { sessionId } }),
+      (prisma as any).usageMetric.findFirst({ where: { sessionId }, orderBy: { createdAt: 'desc' } }),
+    ]);
+
+    const totals = metrics.reduce((acc, m: any) => {
+      acc.prompt_tokens += Number(m.promptTokens || 0);
+      acc.completion_tokens += Number(m.completionTokens || 0);
+      acc.total_tokens += Number(m.totalTokens || 0);
+      return acc;
+    }, { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+
+    // 即时上下文占用（估算）
+    const defaultLimit = parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000');
+    const recentMessages = await prisma.message.findMany({
+      where: { sessionId },
+      select: { role: true, content: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    const conversation = [...recentMessages].reverse();
+    const used = await Tokenizer.countConversationTokens(conversation as Array<{ role: string; content: string }>);
+    const current = {
+      prompt_tokens: used,
+      context_limit: defaultLimit,
+      context_remaining: Math.max(0, defaultLimit - used),
+    };
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        totals,
+        last_round: last ? {
+          prompt_tokens: Number((last as any).promptTokens || 0),
+          completion_tokens: Number((last as any).completionTokens || 0),
+          total_tokens: Number((last as any).totalTokens || 0),
+          context_limit: (last as any).contextLimit ?? null,
+          createdAt: (last as any).createdAt,
+          model: (last as any).model,
+          provider: (last as any).provider,
+        } : null,
+        current,
+      },
+    });
+  } catch (error) {
+    console.error('Get usage error:', error);
+    return c.json<ApiResponse>({ success: false, error: 'Failed to fetch usage' }, 500);
+  }
+});
+
+// 所有会话的用量聚合（当前用户）
+chat.get('/sessions/usage', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    // 获取当前用户的会话列表
+    const sessions = await prisma.chatSession.findMany({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+    const sessionIds = sessions.map(s => s.id);
+    if (!sessionIds.length) {
+      return c.json<ApiResponse>({ success: true, data: [] });
+    }
+
+    // groupBy 汇总每个 session 的 totals
+    const grouped = await (prisma as any).usageMetric.groupBy({
+      by: ['sessionId'],
+      where: { sessionId: { in: sessionIds } },
+      _sum: {
+        promptTokens: true,
+        completionTokens: true,
+        totalTokens: true,
+      },
+    });
+
+    const result = grouped.map((g: any) => ({
+      sessionId: g.sessionId,
+      totals: {
+        prompt_tokens: Number(g._sum?.promptTokens || 0),
+        completion_tokens: Number(g._sum?.completionTokens || 0),
+        total_tokens: Number(g._sum?.totalTokens || 0),
+      },
+    }));
+
+    return c.json<ApiResponse>({ success: true, data: result });
+  } catch (error) {
+    console.error('Get sessions usage error:', error);
+    return c.json<ApiResponse>({ success: false, error: 'Failed to fetch sessions usage' }, 500);
+  }
+});
+
+// 按日统计导出（JSON）: /api/chat/usage/daily?from=YYYY-MM-DD&to=YYYY-MM-DD&sessionId=optional
+chat.get('/usage/daily', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const from = c.req.query('from');
+    const to = c.req.query('to');
+    const sessionIdStr = c.req.query('sessionId');
+
+    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const toDate = to ? new Date(to) : new Date();
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid date range' }, 400);
+    }
+
+    let sessionFilter: any = {};
+    if (sessionIdStr) {
+      const sessionId = parseInt(sessionIdStr);
+      if (!sessionId || Number.isNaN(sessionId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid sessionId' }, 400);
+      }
+      const session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
+      if (!session || session.userId !== user.id) {
+        return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
+      }
+      sessionFilter.sessionId = sessionId;
+    } else {
+      // 限定为当前用户的所有会话
+      const sessions = await prisma.chatSession.findMany({ where: { userId: user.id }, select: { id: true } });
+      sessionFilter.sessionId = { in: sessions.map(s => s.id) };
+    }
+
+    const metrics = await (prisma as any).usageMetric.findMany({
+      where: {
+        ...sessionFilter,
+        createdAt: { gte: fromDate, lte: toDate },
+      },
+      select: { createdAt: true, promptTokens: true, completionTokens: true, totalTokens: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const pad2 = (n: number) => n < 10 ? `0${n}` : `${n}`;
+    const dayKey = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+
+    const byDay = new Map<string, { prompt_tokens: number; completion_tokens: number; total_tokens: number }>();
+    for (const m of metrics) {
+      const k = dayKey(new Date(m.createdAt));
+      const cur = byDay.get(k) || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      cur.prompt_tokens += Number(m.promptTokens || 0);
+      cur.completion_tokens += Number(m.completionTokens || 0);
+      cur.total_tokens += Number(m.totalTokens || 0);
+      byDay.set(k, cur);
+    }
+
+    const result = Array.from(byDay.entries()).map(([date, v]) => ({ date, ...v }));
+    return c.json<ApiResponse>({ success: true, data: { from: fromDate.toISOString(), to: toDate.toISOString(), rows: result } });
+  } catch (error) {
+    console.error('Get daily usage error:', error);
+    return c.json<ApiResponse>({ success: false, error: 'Failed to fetch daily usage' }, 500);
+  }
+});

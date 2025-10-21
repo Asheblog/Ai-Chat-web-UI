@@ -1,18 +1,46 @@
 export class Tokenizer {
+  // 精确分词开关（环境变量 TOKENIZER_MODE=precise|heuristic）
+  private static get preciseEnabled(): boolean {
+    const mode = (process.env.TOKENIZER_MODE ?? 'precise').toLowerCase();
+    return mode !== 'heuristic';
+  }
+
+  // 缓存 gpt-tokenizer 的 encode
+  private static _encode: ((text: string) => number[]) | null = null;
+  private static async getEncoder(): Promise<((text: string) => number[]) | null> {
+    if (!this.preciseEnabled) return null;
+    if (this._encode) return this._encode;
+    try {
+      const mod: any = await import('gpt-tokenizer');
+      if (typeof mod.encode === 'function') {
+        this._encode = mod.encode as (t: string) => number[];
+        return this._encode;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
   /**
    * 计算文本的token数量
    */
   static async countTokens(text: string): Promise<number> {
-    // 轻量估算：1 token ≈ 4 个字符（英文近似），中文按 1 字≈1 token 近似
     if (!text) return 0;
-    // 简单启发：统计 ASCII 与非 ASCII 的比例做加权
+    // 优先使用精确分词
+    try {
+      const enc = await this.getEncoder();
+      if (enc) {
+        return enc(text).length;
+      }
+    } catch {}
+    // 启发式估算兜底：1 token ≈ 4 英文字符，中文≈1字1 token
     let ascii = 0;
     for (let i = 0; i < text.length; i++) {
       if (text.charCodeAt(i) < 128) ascii++;
     }
     const nonAscii = text.length - ascii;
     const asciiTokens = Math.ceil(ascii / 4);
-    const nonAsciiTokens = nonAscii; // 非 ASCII 近似 1:1
+    const nonAsciiTokens = nonAscii;
     return asciiTokens + nonAsciiTokens;
   }
 

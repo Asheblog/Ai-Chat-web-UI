@@ -4,7 +4,9 @@ import { apiClient } from '@/lib/api'
 
 interface ChatStore extends ChatState {
   fetchSessions: () => Promise<void>
+  fetchSessionsUsage: () => Promise<void>
   fetchMessages: (sessionId: number) => Promise<void>
+  fetchUsage: (sessionId: number) => Promise<void>
   createSession: (modelConfigId: number, title?: string) => Promise<void>
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>
@@ -23,6 +25,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isLoading: false,
   isStreaming: false,
   error: null,
+  usageCurrent: null,
+  usageLastRound: null,
+  usageTotals: null,
+  // sessionId -> totals
+  sessionUsageTotalsMap: {} as Record<number, import('@/types').UsageTotals>,
 
   fetchSessions: async () => {
     set({ isLoading: true, error: null })
@@ -32,11 +39,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         sessions: response.data || [],
         isLoading: false,
       })
+      // 同步拉取会话用量（聚合）
+      get().fetchSessionsUsage().catch(() => {})
     } catch (error: any) {
       set({
         error: error.response?.data?.error || error.message || '获取会话列表失败',
         isLoading: false,
       })
+    }
+  },
+
+  fetchSessionsUsage: async () => {
+    try {
+      const res = await apiClient.getSessionsUsage()
+      const arr = res.data as Array<{ sessionId: number; totals: import('@/types').UsageTotals }>
+      const map: Record<number, import('@/types').UsageTotals> = {}
+      ;(arr || []).forEach(item => { map[item.sessionId] = item.totals })
+      set({ sessionUsageTotalsMap: map })
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.debug('[fetchSessionsUsage] error', (error as any)?.message || error)
+      }
     }
   },
 
@@ -53,6 +77,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         error: error.response?.data?.error || error.message || '获取消息列表失败',
         isLoading: false,
       })
+    }
+  },
+
+  fetchUsage: async (sessionId: number) => {
+    try {
+      const res = await apiClient.getUsage(sessionId)
+      const data = res.data || {}
+      set({
+        usageTotals: data.totals || null,
+        usageLastRound: data.last_round || null,
+        usageCurrent: data.current || null,
+      })
+    } catch (error: any) {
+      // 忽略错误，但在调试输出
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.debug('[fetchUsage] error', error?.message || error)
+      }
     }
   },
 
@@ -83,9 +125,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set({
         currentSession: session,
         messages: [],
+        usageCurrent: null,
+        usageLastRound: null,
+        usageTotals: null,
       })
       // 自动加载该会话的消息
       get().fetchMessages(sessionId)
+      // 预取 usage 聚合
+      get().fetchUsage(sessionId)
     }
   },
 
@@ -163,22 +210,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       let accumulatedContent = ''
 
-      for await (const chunk of apiClient.streamChat(sessionId, content, images)) {
-        accumulatedContent += chunk
-
-        set((state) => ({
-          messages: state.messages.map((msg, index) =>
-            index === state.messages.length - 1
-              ? { ...msg, content: accumulatedContent }
-              : msg
-          ),
-        }))
+      for await (const evt of apiClient.streamChat(sessionId, content, images)) {
+        if (evt?.type === 'content' && evt.content) {
+          accumulatedContent += evt.content
+          set((state) => ({
+            messages: state.messages.map((msg, index) =>
+              index === state.messages.length - 1
+                ? { ...msg, content: accumulatedContent }
+                : msg
+            ),
+          }))
+        } else if (evt?.type === 'usage' && evt.usage) {
+          // 实时更新当前 usage；若包含 completion/total 则可同步作为 lastRound
+          set((state) => ({
+            usageCurrent: {
+              prompt_tokens: evt.usage.prompt_tokens,
+              context_limit: evt.usage.context_limit ?? state.usageCurrent?.context_limit ?? undefined,
+              context_remaining: evt.usage.context_remaining ?? state.usageCurrent?.context_remaining ?? undefined,
+            },
+            usageLastRound: (evt.usage.completion_tokens != null || evt.usage.total_tokens != null) ? evt.usage : state.usageLastRound,
+          }))
+        }
       }
 
       set({ isStreaming: false })
 
-      // 重新获取消息列表以获取真实的消息ID
-      get().fetchMessages(sessionId)
+      // 重新获取消息列表与 usage 聚合
+      await Promise.all([
+        get().fetchMessages(sessionId),
+        get().fetchUsage(sessionId),
+      ])
 
     } catch (error: any) {
       set({

@@ -92,6 +92,9 @@ app.get('/api', (c) => {
         'POST /api/chat/stream': '发送消息（流式响应）',
         'POST /api/chat/stop': '停止生成',
         'POST /api/chat/regenerate': '重新生成回复',
+        'GET /api/chat/usage?sessionId={id}': '查询会话用量聚合',
+        'GET /api/chat/sessions/usage': '查询当前用户所有会话用量聚合',
+        'GET /api/chat/usage/daily?from&to&sessionId': '按日统计用量（导出报表）',
       },
       settings: {
         'GET /api/settings/system': '获取系统设置（管理员）',

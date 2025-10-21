@@ -29,7 +29,8 @@
     "jsonwebtoken": "^9.0.2",
     "crypto-js": "^4.2.0",
     "zod": "^3.23.8",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "gpt-tokenizer": "^3.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

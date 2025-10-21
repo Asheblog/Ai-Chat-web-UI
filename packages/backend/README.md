@@ -116,6 +116,39 @@ npm run dev
 - `POST /api/chat/stop` - 停止生成
 - `POST /api/chat/regenerate` - 重新生成回复
 
+#### 用量聚合查询
+
+- `GET /api/chat/usage?sessionId={id}` - 返回会话维度的用量统计：
+  - `totals`: 累计 `prompt_tokens/completion_tokens/total_tokens`
+  - `last_round`: 最近一轮用量（若存在），含 `prompt_tokens/completion_tokens/total_tokens/context_limit/createdAt/model/provider`
+  - `current`: 即时上下文占用（估算）`prompt_tokens/context_limit/context_remaining`
+
+#### 流式响应（SSE）事件类型
+
+服务端通过 `text/event-stream` 推送以下事件：
+
+- `start`：开始生成，包含 `messageId`
+- `content`：增量内容片段（delta）
+- `usage`：用量统计事件（OpenAI 兼容字段）。示例：
+  - `{ "type": "usage", "usage": { "prompt_tokens": 123, "completion_tokens": 45, "total_tokens": 168, "context_limit": 4000, "context_remaining": 3877 } }`
+  - 若上游厂商在流中返回 `usage` 字段，会被原样透出；否则在开始时发送一次基于上下文估算的 `usage`，在结束前补齐 `completion_tokens` 与 `total_tokens`（估算）。
+- `end`：上游流结束（如收到 `[DONE]`）
+- `complete`：服务端完成收尾
+
+#### Usage 统计与环境变量
+
+- 统计逻辑
+  - `prompt_tokens`：基于 `Tokenizer.countConversationTokens` 对本轮上下文（历史+当前）进行估算；
+  - `completion_tokens`：基于 `Tokenizer.countTokens` 对生成结果进行估算；
+  - 当上游厂商在流式数据中提供 `usage` 字段时，服务端会优先透传厂商统计结果。
+
+- 环境变量
+  - `USAGE_EMIT`（默认 `true`）：是否发送 `usage` 事件；
+  - `USAGE_PROVIDER_ONLY`（默认 `false`）：是否仅透传厂商 `usage`（不发送本地估算）。
+  - `TOKENIZER_MODE`（`precise`|`heuristic`，默认 `precise`）：是否启用精确分词（依赖 `gpt-tokenizer`），失败或关闭时回退启发式估算。
+
+> 注意：估算方法为启发式，中文/多模态存在偏差；需高精度可接入模型对应分词器并替换 `Tokenizer` 实现。
+
 ### 系统设置
 
 - `GET /api/settings/system` - 获取系统设置 (管理员)

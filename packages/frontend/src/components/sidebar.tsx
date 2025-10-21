@@ -25,7 +25,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
-  const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession } = useChatStore()
+  const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap } = useChatStore()
   const { theme, setTheme, systemSettings } = useSettingsStore()
 
   useEffect(() => {
@@ -120,9 +120,16 @@ export function Sidebar() {
                 <p className="truncate text-sm font-medium">
                   {session.title}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatDate(session.createdAt)}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(session.createdAt)}
+                  </p>
+                  {sessionUsageTotalsMap?.[session.id] && (
+                    <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      t{sessionUsageTotalsMap[session.id].total_tokens}
+                    </p>
+                  )}
+                </div>
               </div>
               <Button
                 size="icon"

@@ -199,7 +199,7 @@ class ApiClient {
   }
 
   // 流式聊天API
-  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>): AsyncGenerator<string, void, unknown> {
+  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
     const response = await fetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
@@ -245,10 +245,18 @@ class ApiClient {
             }
             try {
               const parsed = JSON.parse(data)
-              if (parsed.content) {
-                yield parsed.content
-              }
-              if (parsed.error) {
+              // 标准化事件
+              if (parsed.type === 'content' && parsed.content) {
+                yield { type: 'content', content: parsed.content }
+              } else if (parsed.type === 'usage' && parsed.usage) {
+                yield { type: 'usage', usage: parsed.usage }
+              } else if (parsed.type === 'start') {
+                yield { type: 'start' }
+              } else if (parsed.type === 'end') {
+                yield { type: 'end' }
+              } else if (parsed.type === 'complete') {
+                yield { type: 'complete' }
+              } else if (parsed.error) {
                 throw new Error(parsed.error)
               }
             } catch (e) {
@@ -264,6 +272,23 @@ class ApiClient {
     } finally {
       reader.releaseLock()
     }
+  }
+
+  async getUsage(sessionId: number) {
+    const response = await this.client.get<import('@/types').ApiResponse<any>>(`/chat/usage`, { params: { sessionId } })
+    return response.data
+  }
+
+  async getSessionsUsage() {
+    const response = await this.client.get<import('@/types').ApiResponse<import('@/types').SessionUsageTotalsItem[]>>(`/chat/sessions/usage`)
+    return response.data
+  }
+
+  async getDailyUsage(params: { from?: string; to?: string; sessionId?: number }) {
+    const response = await this.client.get<import('@/types').ApiResponse<{ from: string; to: string; rows: Array<{ date: string; prompt_tokens: number; completion_tokens: number; total_tokens: number }> }>>(`/chat/usage/daily`, {
+      params,
+    })
+    return response.data
   }
 
   // 模型配置相关API

@@ -68,6 +68,27 @@ model Message {
   @@map("messages")
 }
 
+// 6. 用量统计表（每轮生成一条，关联到 assistant 消息）
+model UsageMetric {
+  id               Int       @id @default(autoincrement())
+  sessionId        Int
+  messageId        Int?
+  model            String
+  provider         String?
+  promptTokens     Int       @default(0)
+  completionTokens Int       @default(0)
+  totalTokens      Int       @default(0)
+  contextLimit     Int?
+  createdAt        DateTime  @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  message Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([messageId])
+  @@map("usage_metrics")
+}
+
 // 5. 系统设置表
 model SystemSetting {
   key   String @id

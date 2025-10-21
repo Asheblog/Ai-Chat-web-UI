@@ -11,6 +11,7 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
+import { apiClient } from '@/lib/api'
 
 export function ChatInterface() {
   const [input, setInput] = useState('')
@@ -28,6 +29,9 @@ export function ChatInterface() {
     stopStreaming,
     clearError,
     error,
+    usageCurrent,
+    usageLastRound,
+    usageTotals,
   } = useChatStore()
 
   const { maxTokens } = useSettingsStore()
@@ -97,6 +101,32 @@ export function ChatInterface() {
 
   const handleStop = () => {
     stopStreaming()
+  }
+
+  const handleExportCSV = async () => {
+    try {
+      if (!currentSession) return
+      const now = new Date()
+      const from = new Date(now.getTime() - 30 * 24 * 3600 * 1000)
+      const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+      const fmt = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`
+      const res = await apiClient.getDailyUsage({ from: fmt(from), to: fmt(now), sessionId: currentSession.id })
+      const rows = res.data?.rows || []
+      const header = ['date','prompt_tokens','completion_tokens','total_tokens']
+      const csv = [header.join(',')].concat(rows.map((r: any) => [r.date, r.prompt_tokens, r.completion_tokens, r.total_tokens].join(','))).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `usage_${currentSession.id}_${fmt(from)}_${fmt(now)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      URL.revokeObjectURL(url)
+      a.remove()
+    } catch (err) {
+      console.error('Export CSV failed:', err)
+      toast({ title: '导出失败', description: err instanceof Error ? err.message : '未知错误', variant: 'destructive' })
+    }
   }
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -172,10 +202,33 @@ export function ChatInterface() {
     <div className="flex-1 flex flex-col h-full min-h-0">
       {/* 顶部工具栏 */}
       <div className="border-b px-4 py-3">
-        <div className="flex items-center">
+        <div className="flex items-center justify-between gap-4">
           <h2 className="text-lg font-semibold truncate">
             {currentSession.title}
           </h2>
+          <div className="text-xs text-muted-foreground flex items-center gap-2">
+            {usageCurrent && (
+              <div className="px-2 py-1 bg-muted rounded">
+                上下文: {usageCurrent.prompt_tokens ?? '-'} / {usageCurrent.context_limit ?? '-'}
+                {typeof usageCurrent.context_remaining === 'number' && (
+                  <span className="ml-1">(剩余 {usageCurrent.context_remaining})</span>
+                )}
+              </div>
+            )}
+            {usageLastRound && (
+              <div className="px-2 py-1 bg-muted rounded">
+                本轮: p{usageLastRound.prompt_tokens ?? '-'} / c{usageLastRound.completion_tokens ?? '-'} / t{usageLastRound.total_tokens ?? '-'}
+              </div>
+            )}
+            {usageTotals && (
+              <div className="px-2 py-1 bg-muted rounded">
+                累计: p{usageTotals.prompt_tokens} / c{usageTotals.completion_tokens} / t{usageTotals.total_tokens}
+              </div>
+            )}
+            <Button size="sm" variant="outline" className="ml-2" onClick={handleExportCSV}>
+              导出CSV
+            </Button>
+          </div>
         </div>
       </div>
 

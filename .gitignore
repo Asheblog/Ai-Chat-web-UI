@@ -50,4 +50,4 @@ packages/backend/prisma/*.sqlite
 # --- Docker ---
 **/docker-volume/**
 
-123.jpg
+*.jpg

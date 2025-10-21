@@ -92,6 +92,10 @@ export interface ChatState {
   isLoading: boolean;
   isStreaming: boolean;
   error: string | null;
+  // usage 展示状态
+  usageCurrent?: UsageStats | null;
+  usageLastRound?: UsageStats | null;
+  usageTotals?: UsageTotals | null;
 }
 
 export interface AuthState {
@@ -120,10 +124,35 @@ export interface ApiResponse<T = any> {
 
 // 流式响应类型
 export interface ChatStreamChunk {
+  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error';
   content?: string;
+  usage?: UsageStats;
   done?: boolean;
   error?: string;
 }
+
+// Usage 统计类型（OpenAI 兼容字段为主）
+export interface UsageStats {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  context_limit?: number | null;
+  context_remaining?: number | null;
+}
+
+export interface UsageTotals {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface SessionUsageTotalsItem {
+  sessionId: number;
+  totals: UsageTotals;
+}
+
+// 扩展聊天状态的 usage 字段
+// （保留空）
 
 // 组件 Props 类型
 export interface MessageProps {
