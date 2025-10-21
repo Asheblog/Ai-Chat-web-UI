@@ -41,6 +41,7 @@ interface ModelFormData {
   name: string
   apiUrl: string
   apiKey: string
+  supportsImages: boolean
 }
 
 export function SystemSettings() {
@@ -51,6 +52,7 @@ export function SystemSettings() {
     name: '',
     apiUrl: '',
     apiKey: '',
+    supportsImages: false,
   })
 
   const {
@@ -62,8 +64,8 @@ export function SystemSettings() {
     fetchPersonalModels,
     updateSystemSettings,
     createSystemModel,
-    updatePersonalModel,
-    deletePersonalModel,
+    updateSystemModel,
+    deleteSystemModel,
     clearError,
   } = useSettingsStore()
 
@@ -79,6 +81,7 @@ export function SystemSettings() {
       name: '',
       apiUrl: '',
       apiKey: '',
+      supportsImages: false,
     })
     setEditingModel(null)
   }
@@ -95,7 +98,7 @@ export function SystemSettings() {
 
     try {
       // 使用系统模型创建接口（管理员）
-      await createSystemModel(formData.name, formData.apiUrl, formData.apiKey)
+      await createSystemModel(formData.name, formData.apiUrl, formData.apiKey, formData.supportsImages)
 
       // 更新系统设置以包含新模型
       if (systemSettings) {
@@ -136,13 +139,14 @@ export function SystemSettings() {
       const updates: Partial<ModelFormData> = {
         name: formData.name,
         apiUrl: formData.apiUrl,
+        supportsImages: formData.supportsImages,
       }
 
       if (formData.apiKey !== '••••••••••••••••') {
         updates.apiKey = formData.apiKey
       }
 
-      await updatePersonalModel(editingModel.id, updates)
+      await updateSystemModel(editingModel.id, updates)
       setEditingModel(null)
       resetForm()
       toast({
@@ -160,7 +164,7 @@ export function SystemSettings() {
 
   const handleDeleteSystemModel = async (modelId: number) => {
     try {
-      await deletePersonalModel(modelId)
+      await deleteSystemModel(modelId)
       toast({
         title: "删除成功",
         description: "系统模型已删除",
@@ -196,6 +200,7 @@ export function SystemSettings() {
       name: model.name,
       apiUrl: model.apiUrl,
       apiKey: '••••••••••••••••',
+      supportsImages: !!model.supportsImages,
     })
   }
 
@@ -334,6 +339,13 @@ export function SystemSettings() {
                           onChange={(e) => setFormData(prev => ({ ...prev, apiKey: e.target.value }))}
                         />
                       </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label htmlFor="supportsImages">支持图片输入（Vision）</Label>
+                          <p className="text-xs text-muted-foreground">开启后，聊天框可上传图片传给该模型</p>
+                        </div>
+                        <Switch id="supportsImages" checked={formData.supportsImages} onCheckedChange={(v) => setFormData(prev => ({ ...prev, supportsImages: !!v }))} />
+                      </div>
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                           取消
@@ -376,6 +388,13 @@ export function SystemSettings() {
                             value={formData.apiKey}
                             onChange={(e) => setFormData(prev => ({ ...prev, apiKey: e.target.value }))}
                           />
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label htmlFor="sysSupportsImagesEdit">支持图片输入（Vision）</Label>
+                              <p className="text-xs text-muted-foreground">不开启则聊天时无法上传图片给该模型</p>
+                            </div>
+                            <Switch id="sysSupportsImagesEdit" checked={formData.supportsImages} onCheckedChange={(v) => setFormData(prev => ({ ...prev, supportsImages: !!v }))} />
+                          </div>
                           <div className="flex gap-2">
                             <Button size="sm" onClick={handleUpdateSystemModel} disabled={isLoading}>
                               <Save className="h-4 w-4 mr-2" />

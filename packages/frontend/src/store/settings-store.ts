@@ -9,7 +9,9 @@ interface SettingsStore extends SettingsState {
   createPersonalModel: (name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) => Promise<void>
   createSystemModel: (name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) => Promise<void>
   updatePersonalModel: (modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) => Promise<void>
+  updateSystemModel: (modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) => Promise<void>
   deletePersonalModel: (modelId: number) => Promise<void>
+  deleteSystemModel: (modelId: number) => Promise<void>
   updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setMaxTokens: (maxTokens: number) => void
@@ -79,7 +81,7 @@ export const useSettingsStore = create<SettingsStore>()(
       createSystemModel: async (name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) => {
         set({ isLoading: true, error: null })
         try {
-          const response = await apiClient.createSystemModel(name, apiUrl, apiKey)
+          const response = await apiClient.createSystemModel(name, apiUrl, apiKey, supportsImages)
           const newModel = response.data
 
           set((state) => ({
@@ -117,6 +119,26 @@ export const useSettingsStore = create<SettingsStore>()(
         }
       },
 
+      updateSystemModel: async (modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await apiClient.updateSystemModel(modelId, updates)
+          const updatedModel = response.data
+
+          set((state) => ({
+            systemSettings: state.systemSettings
+              ? { ...state.systemSettings, systemModels: (state.systemSettings.systemModels || []).map(m => m.id === modelId ? updatedModel : m) }
+              : state.systemSettings,
+            isLoading: false,
+          }))
+        } catch (error: any) {
+          set({
+            error: error.response?.data?.error || error.message || '更新系统模型失败',
+            isLoading: false,
+          })
+        }
+      },
+
       deletePersonalModel: async (modelId: number) => {
         set({ isLoading: true, error: null })
         try {
@@ -129,6 +151,24 @@ export const useSettingsStore = create<SettingsStore>()(
         } catch (error: any) {
           set({
             error: error.response?.data?.error || error.message || '删除模型配置失败',
+            isLoading: false,
+          })
+        }
+      },
+
+      deleteSystemModel: async (modelId: number) => {
+        set({ isLoading: true, error: null })
+        try {
+          await apiClient.deleteSystemModel(modelId)
+          set((state) => ({
+            systemSettings: state.systemSettings
+              ? { ...state.systemSettings, systemModels: (state.systemSettings.systemModels || []).filter(m => m.id !== modelId) }
+              : state.systemSettings,
+            isLoading: false,
+          }))
+        } catch (error: any) {
+          set({
+            error: error.response?.data?.error || error.message || '删除系统模型失败',
             isLoading: false,
           })
         }

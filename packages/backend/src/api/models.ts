@@ -429,6 +429,86 @@ models.post('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', c
   }
 });
 
+// 更新系统模型配置（仅管理员）
+models.put('/system/:id', authMiddleware, adminOnlyMiddleware, zValidator('json', updateModelSchema), async (c) => {
+  try {
+    const modelId = parseInt(c.req.param('id'));
+    const updateData = c.req.valid('json');
+
+    if (isNaN(modelId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid model ID' }, 400);
+    }
+
+    // 验证模型是否存在且为系统模型
+    const existingModel = await prisma.modelConfig.findFirst({ where: { id: modelId, userId: null } });
+    if (!existingModel) {
+      return c.json<ApiResponse>({ success: false, error: 'System model configuration not found or cannot be modified' }, 404);
+    }
+
+    // 验证URL格式（如果提供）
+    if (updateData.apiUrl && !AuthUtils.validateUrl(updateData.apiUrl)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid API URL format' }, 400);
+    }
+
+    // 检查名称是否重复（如果更新名称）
+    if (updateData.name) {
+      const duplicateModel = await prisma.modelConfig.findFirst({
+        where: { userId: null, name: updateData.name, id: { not: modelId } },
+      });
+      if (duplicateModel) {
+        return c.json<ApiResponse>({ success: false, error: 'System model name already exists' }, 409);
+      }
+    }
+
+    const data: any = {};
+    if (updateData.name) data.name = updateData.name;
+    if (updateData.apiUrl) data.apiUrl = updateData.apiUrl;
+    if (updateData.apiKey) data.apiKey = AuthUtils.encryptApiKey(updateData.apiKey);
+    if (typeof (updateData as any).supportsImages === 'boolean') data.supportsImages = (updateData as any).supportsImages;
+
+    const updatedModel = await prisma.modelConfig.update({
+      where: { id: modelId },
+      data,
+      select: { id: true, name: true, apiUrl: true, supportsImages: true, createdAt: true },
+    });
+
+    return c.json<ApiResponse<ModelConfig>>({
+      success: true,
+      data: { ...updatedModel, userId: null, apiKey: '' },
+      message: 'System model configuration updated successfully',
+    });
+  } catch (error) {
+    console.error('Update system model error:', error);
+    return c.json<ApiResponse>({ success: false, error: 'Failed to update system model configuration' }, 500);
+  }
+});
+
+// 删除系统模型配置（仅管理员）
+models.delete('/system/:id', authMiddleware, adminOnlyMiddleware, async (c) => {
+  try {
+    const modelId = parseInt(c.req.param('id'));
+    if (isNaN(modelId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid model ID' }, 400);
+    }
+
+    const existingModel = await prisma.modelConfig.findFirst({ where: { id: modelId, userId: null } });
+    if (!existingModel) {
+      return c.json<ApiResponse>({ success: false, error: 'System model configuration not found or cannot be deleted' }, 404);
+    }
+
+    const sessionCount = await prisma.chatSession.count({ where: { modelConfigId: modelId } });
+    if (sessionCount > 0) {
+      return c.json<ApiResponse>({ success: false, error: `Cannot delete model: ${sessionCount} chat sessions are using this model` }, 400);
+    }
+
+    await prisma.modelConfig.delete({ where: { id: modelId } });
+    return c.json<ApiResponse>({ success: true, message: 'System model configuration deleted successfully' });
+  } catch (error) {
+    console.error('Delete system model error:', error);
+    return c.json<ApiResponse>({ success: false, error: 'Failed to delete system model configuration' }, 500);
+  }
+});
+
 // 获取所有系统模型配置
 models.get('/system/list', authMiddleware, adminOnlyMiddleware, async (c) => {
   try {

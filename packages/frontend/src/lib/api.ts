@@ -340,14 +340,23 @@ class ApiClient {
   }
 
   // 系统模型（管理员）
-  async createSystemModel(name: string, apiUrl: string, apiKey: string) {
-    const response = await this.client.post('/models/system', { name, apiUrl, apiKey })
+  async createSystemModel(name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) {
+    const response = await this.client.post('/models/system', { name, apiUrl, apiKey, supportsImages: !!supportsImages })
     return response.data
   }
 
   async getSystemModelList() {
     const response = await this.client.get('/models/system/list')
     return response.data
+  }
+
+  async updateSystemModel(modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) {
+    const response = await this.client.put(`/models/system/${modelId}`, updates)
+    return response.data
+  }
+
+  async deleteSystemModel(modelId: number) {
+    await this.client.delete(`/models/system/${modelId}`)
   }
 }
 
