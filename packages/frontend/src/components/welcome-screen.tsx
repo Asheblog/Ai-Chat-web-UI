@@ -2,7 +2,7 @@
 
 // 全新欢迎页：模仿 ChatGPT 着陆面板（大标题 + 大输入框），并保持响应式
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Mic, Settings2 } from 'lucide-react'
+import { Plus, Mic } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ModelSelector } from '@/components/model-selector'
@@ -63,14 +63,6 @@ export function WelcomeScreen() {
 
   return (
     <div className="relative flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8">
-      {/* 顶部模型切换，类似 ChatGPT 头部的模型选择器 */}
-      <div className="absolute top-4 left-0 right-0 flex justify-center px-4">
-        <ModelSelector
-          selectedModelId={selectedModelId ?? 0}
-          onModelChange={(id) => setSelectedModelId(id)}
-          disabled={!canCreate}
-        />
-      </div>
 
       {/* 中心标题 */}
       <h1 className="text-center text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight mb-8">
@@ -112,16 +104,13 @@ export function WelcomeScreen() {
             >
               <Mic className="h-5 w-5" />
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-full text-muted-foreground"
-              disabled
-              aria-label="更多设置（占位）"
-            >
-              <Settings2 className="h-5 w-5" />
-            </Button>
+            {/* 将模型选择器放到输入框右侧（ChatGPT 风格） */}
+            <ModelSelector
+              variant="inline"
+              selectedModelId={selectedModelId ?? 0}
+              onModelChange={(id) => setSelectedModelId(id)}
+              disabled={!canCreate || isCreating}
+            />
           </div>
         </div>
       </div>

@@ -172,16 +172,10 @@ export function ChatInterface() {
     <div className="flex-1 flex flex-col h-full min-h-0">
       {/* 顶部工具栏 */}
       <div className="border-b px-4 py-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center">
           <h2 className="text-lg font-semibold truncate">
             {currentSession.title}
           </h2>
-          <ModelSelector
-            selectedModelId={currentSession.modelConfigId}
-            onModelChange={() => {}} // 这里可以实现模型切换逻辑
-            disabled={isStreaming}
-            className="ml-4"
-          />
         </div>
       </div>
 
@@ -199,26 +193,35 @@ export function ChatInterface() {
 
       {/* 输入区域 */}
       <div className="border-t px-4 py-4">
-        <div className="flex items-end gap-2">
-          <div className="flex-1 relative">
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              placeholder={isStreaming ? "AI正在思考中..." : "输入消息... (Shift+Enter 换行)"}
-              disabled={isStreaming}
-              className="min-h-[60px] max-h-[200px] resize-none pr-12"
-              rows={1}
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-end gap-2">
+            <div className="flex-1 relative">
+              <Textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+                placeholder={isStreaming ? "AI正在思考中..." : "输入消息... (Shift+Enter 换行)"}
+                disabled={isStreaming}
+                className="min-h-[60px] max-h-[200px] resize-none pr-12"
+                rows={1}
+              />
 
-            {/* 字符计数 */}
-            <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
-              {input.length}
+              {/* 字符计数 */}
+              <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
+                {input.length}
+              </div>
             </div>
-          </div>
+
+          {/* 模型选择（紧凑按钮，放在输入框右侧） */}
+          <ModelSelector
+            variant="inline"
+            selectedModelId={currentSession.modelConfigId}
+            onModelChange={() => { /* TODO: 支持会话内切换模型 */ }}
+            disabled={isStreaming}
+          />
 
           {/* 选择图片 */}
           <Button type="button" variant="outline" size="icon" onClick={pickImages} disabled={isStreaming || !isVisionEnabled} title={isVisionEnabled ? "添加图片" : "当前模型不支持图片"}>
@@ -267,5 +270,6 @@ export function ChatInterface() {
         <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} disabled={!isVisionEnabled} />
       </div>
     </div>
+  </div>
   )
 }
