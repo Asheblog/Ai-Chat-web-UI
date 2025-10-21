@@ -285,6 +285,48 @@ async function main() {
     logSuccess('检测到依赖已安装，跳过安装')
   }
 
+  // 统一加载根环境变量（集中化配置）
+  // 优先根 .env，其次根 .env.example；不覆盖已有进程变量
+  const rootEnv = path.join(process.cwd(), '.env')
+  const rootEnvExample = path.join(process.cwd(), '.env.example')
+  const loadEnvFile = (file) => {
+    if (!fs.existsSync(file)) return false
+    try {
+      const raw = fs.readFileSync(file, 'utf8')
+      for (const line of raw.split(/\r?\n/)) {
+        if (!line || /^\s*#/.test(line)) continue
+        const idx = line.indexOf('=')
+        if (idx <= 0) continue
+        const key = line.slice(0, idx).trim()
+        let val = line.slice(idx + 1).trim()
+        // 去掉首尾引号
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1)
+        }
+        if (!(key in process.env)) {
+          process.env[key] = val
+        }
+      }
+      return true
+    } catch (e) {
+      return false
+    }
+  }
+
+  const loadedEnv = loadEnvFile(rootEnv) || loadEnvFile(rootEnvExample)
+  if (loadedEnv) {
+    logInfo('已加载根环境变量文件（.env/.env.example）')
+  } else {
+    logWarn('未找到根环境变量文件（.env/.env.example），将使用进程环境变量')
+  }
+
+  // 兜底：若仍未提供 DATABASE_URL，则为开发场景设置默认 SQLite 路径
+  if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
+    // 相对路径将基于 packages/backend 目录生效（Prisma 运行时工作目录）
+    process.env.DATABASE_URL = 'file:./data/dev.db'
+    logWarn('未检测到 DATABASE_URL，已为开发环境注入默认值 file:./data/dev.db')
+  }
+
   // 后端环境与数据库
   ensureBackendEnv()
   try {
