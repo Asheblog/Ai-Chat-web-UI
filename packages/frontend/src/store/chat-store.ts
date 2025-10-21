@@ -242,8 +242,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ])
 
     } catch (error: any) {
+      // 流式失败，降级尝试非流式一次
+      try {
+        const resp = await apiClient.chatCompletion(sessionId, content, images)
+        const finalText = resp?.data?.content || ''
+        if (finalText) {
+          set((state) => ({
+            messages: state.messages.map((msg, index) =>
+              index === state.messages.length - 1 ? { ...msg, content: finalText } : msg
+            ),
+            isStreaming: false,
+          }))
+          // 同步用量（若返回带有 usage 可另行处理，这里触发一次聚合刷新）
+          await get().fetchUsage(sessionId)
+          return
+        }
+      } catch (_) {
+        // ignore
+      }
+
       set({
-        error: error.response?.data?.error || error.message || '发送消息失败',
+        error: error?.response?.data?.error || error?.message || '发送消息失败',
         isStreaming: false,
       })
 
@@ -257,6 +276,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   stopStreaming: () => {
+    try { apiClient.cancelStream() } catch {}
     set({ isStreaming: false })
   },
 

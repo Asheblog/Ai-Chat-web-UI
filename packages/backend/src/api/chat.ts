@@ -10,6 +10,17 @@ import { BackendLogger as log } from '../utils/logger';
 
 const chat = new Hono();
 
+// ---- 流式/网络稳定性相关可调参数（环境变量控制） ----
+// SSE 心跳间隔（毫秒），用于穿透代理连接空闲关闭，默认 15s
+const HEARTBEAT_INTERVAL_MS = parseInt(process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000');
+// 厂商流式连接最大空闲时长（毫秒），超过则中止并按退避策略重试，默认 60s
+const PROVIDER_MAX_IDLE_MS = parseInt(process.env.PROVIDER_MAX_IDLE_MS || '60000');
+// 厂商请求总体超时（毫秒），默认 5 分钟
+const PROVIDER_TIMEOUT_MS = parseInt(process.env.PROVIDER_TIMEOUT_MS || '300000');
+// 429 退避（毫秒）与 5xx/超时 退避（毫秒）
+const BACKOFF_429_MS = 15000;
+const BACKOFF_5XX_MS = 2000;
+
 // 发送消息schema
 const sendMessageSchema = z.object({
   sessionId: z.number().int().positive(),
@@ -251,6 +262,42 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     // 兜底：在结束前可统计 completion_tokens
     let completionTokensFallback = 0 as number;
     const encoder = new TextEncoder();
+
+    // 单次厂商请求（支持 429/5xx 退避一次）
+    const providerRequestOnce = async (signal: AbortSignal): Promise<Response> => {
+      const response = await fetch(session.modelConfig.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${decryptedApiKey}`,
+        },
+        body: JSON.stringify(requestData),
+        signal,
+      });
+      return response;
+    };
+
+    const providerRequestWithBackoff = async (): Promise<Response> => {
+      // 控制超时与空闲的 AbortController
+      const ac = new AbortController();
+      const timeout = setTimeout(() => ac.abort(new Error('provider request timeout')), PROVIDER_TIMEOUT_MS);
+      try {
+        let response = await providerRequestOnce(ac.signal);
+        if (response.status === 429) {
+          log.warn('Provider rate limited (429), backing off...', { backoffMs: BACKOFF_429_MS });
+          await new Promise(r => setTimeout(r, BACKOFF_429_MS));
+          response = await providerRequestOnce(ac.signal);
+        } else if (response.status >= 500) {
+          log.warn('Provider 5xx, backing off...', { status: response.status, backoffMs: BACKOFF_5XX_MS });
+          await new Promise(r => setTimeout(r, BACKOFF_5XX_MS));
+          response = await providerRequestOnce(ac.signal);
+        }
+        return response;
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -276,15 +323,8 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             controller.enqueue(encoder.encode(usageEvent));
           }
 
-          // 调用第三方AI API
-          const response = await fetch(session.modelConfig.apiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${decryptedApiKey}`,
-            },
-            body: JSON.stringify(requestData),
-          });
+          // 调用第三方AI API（带退避）
+          const response = await providerRequestWithBackoff();
 
           log.debug('AI provider response', { status: response.status, ok: response.ok })
           if (!response.ok) {
@@ -300,17 +340,32 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
           const decoder = new TextDecoder();
           let buffer = '';
 
+          // 心跳&空闲监控
+          let lastChunkAt = Date.now();
+          const heartbeat = setInterval(() => {
+            try {
+              // SSE 注释心跳（客户端忽略），同时也可用 data: keepalive
+              controller.enqueue(encoder.encode(': ping\n\n'));
+            } catch {}
+            if (PROVIDER_MAX_IDLE_MS > 0 && Date.now() - lastChunkAt > PROVIDER_MAX_IDLE_MS) {
+              // 厂商连接空闲过久，主动中止
+              try { (response as any)?.body?.cancel?.(); } catch {}
+            }
+          }, Math.max(1000, HEARTBEAT_INTERVAL_MS));
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
+            lastChunkAt = Date.now();
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
             for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
+              const l = line.replace(/\r$/, '');
+              if (l.startsWith('data: ')) {
+                const data = l.slice(6);
                 log.debug('SSE line', data?.slice(0, 120))
 
                 if (data === '[DONE]') {
@@ -338,6 +393,16 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                     controller.enqueue(encoder.encode(contentEvent));
                   }
 
+                  // 结束原因（如果可用）
+                  const fr = parsed.choices?.[0]?.finish_reason;
+                  if (fr) {
+                    const stopEvent = `data: ${JSON.stringify({
+                      type: 'stop',
+                      reason: fr,
+                    })}\n\n`;
+                    controller.enqueue(encoder.encode(stopEvent));
+                  }
+
                   // 厂商 usage 透传（优先级更高）
                   if (USAGE_EMIT && parsed.usage) {
                     providerUsageSeen = true;
@@ -354,6 +419,8 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
               }
             }
           }
+
+          clearInterval(heartbeat);
 
           // 保存AI完整回复延后到完成阶段，以便与 usage 绑定
 
@@ -435,6 +502,37 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
           console.error('Streaming error:', error);
           log.error('Streaming error detail', (error as Error)?.message, (error as Error)?.stack)
 
+          // 若尚未输出内容，尝试降级为非流式一次
+          if (!aiResponseContent) {
+            try {
+              const nonStreamData = { ...requestData, stream: false } as any;
+              const ac = new AbortController();
+              const timeout = setTimeout(() => ac.abort(new Error('provider non-stream timeout')), PROVIDER_TIMEOUT_MS);
+              const resp = await fetch(session.modelConfig.apiUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${decryptedApiKey}`,
+                },
+                body: JSON.stringify(nonStreamData),
+                signal: ac.signal,
+              });
+              clearTimeout(timeout);
+              if (resp.ok) {
+                const j = await resp.json();
+                const text = j?.choices?.[0]?.message?.content || '';
+                if (text) {
+                  aiResponseContent = text;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content', content: text })}\n\n`));
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete' })}\n\n`));
+                  return;
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+
           // 发送错误事件
           const errorEvent = `data: ${JSON.stringify({
             type: 'error',
@@ -456,6 +554,109 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       success: false,
       error: 'Failed to process chat request',
     }, 500);
+  }
+});
+
+// 非流式：同步返回完整回复
+chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), async (c) => {
+  try {
+    const user = c.get('user');
+    const { sessionId, content, images } = c.req.valid('json');
+
+    const session = await prisma.chatSession.findUnique({
+      where: { id: sessionId },
+      include: { modelConfig: true },
+    });
+    if (!session) {
+      return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
+    }
+    if (session.userId !== user.id) {
+      return c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403);
+    }
+    if (images && images.length && !session.modelConfig.supportsImages) {
+      return c.json<ApiResponse>({ success: false, error: '当前模型不支持图片输入' }, 400);
+    }
+
+    // 保存用户消息
+    await prisma.message.create({ data: { sessionId, role: 'user', content } });
+
+    // 构建历史上下文
+    const defaultLimit = parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000');
+    const recent = await prisma.message.findMany({
+      where: { sessionId },
+      select: { role: true, content: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    const conversation = recent.reverse();
+    const truncated = await Tokenizer.truncateMessages(conversation.concat([{ role: 'user', content }]), defaultLimit);
+    const promptTokens = await Tokenizer.countConversationTokens(truncated);
+
+    const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
+
+    const messagesPayload: any[] = truncated.map((m: any) => ({ role: m.role, content: m.content }));
+    const parts: any[] = [];
+    if (content?.trim()) parts.push({ type: 'text', text: content });
+    if (images && images.length) {
+      for (const img of images) parts.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } });
+    }
+    const last = messagesPayload[messagesPayload.length - 1];
+    if (last && last.role === 'user' && last.content === content) messagesPayload[messagesPayload.length - 1] = { role: 'user', content: parts };
+    else messagesPayload.push({ role: 'user', content: parts });
+
+    const body = { model: session.modelConfig.name, messages: messagesPayload, stream: false, temperature: 0.7 };
+
+    const doOnce = async (signal: AbortSignal) => fetch(session.modelConfig.apiUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${decryptedApiKey}` }, body: JSON.stringify(body), signal,
+    });
+    const requestWithBackoff = async () => {
+      const ac = new AbortController();
+      const tout = setTimeout(() => ac.abort(new Error('provider timeout')), PROVIDER_TIMEOUT_MS);
+      try {
+        let r = await doOnce(ac.signal);
+        if (r.status === 429) { await new Promise(rz => setTimeout(rz, BACKOFF_429_MS)); r = await doOnce(ac.signal); }
+        else if (r.status >= 500) { await new Promise(rz => setTimeout(rz, BACKOFF_5XX_MS)); r = await doOnce(ac.signal); }
+        return r;
+      } finally { clearTimeout(tout); }
+    };
+
+    const resp = await requestWithBackoff();
+    if (!resp.ok) {
+      return c.json<ApiResponse>({ success: false, error: `AI API request failed: ${resp.status} ${resp.statusText}` }, 502);
+    }
+    const json = await resp.json();
+    const text = json?.choices?.[0]?.message?.content || '';
+    const u = json?.usage || {};
+    const usage = {
+      prompt_tokens: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? promptTokens) || promptTokens,
+      completion_tokens: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
+      total_tokens: Number(u?.total_tokens ?? 0) || (promptTokens + (Number(u?.completion_tokens ?? 0) || 0)),
+      context_limit: defaultLimit,
+      context_remaining: Math.max(0, defaultLimit - promptTokens),
+    };
+
+    let assistantMsgId: number | null = null;
+    if (text) {
+      const saved = await prisma.message.create({ data: { sessionId, role: 'assistant', content: text } });
+      assistantMsgId = saved.id;
+    }
+    await (prisma as any).usageMetric.create({
+      data: {
+        sessionId,
+        messageId: assistantMsgId ?? undefined,
+        model: session.modelConfig.name,
+        provider: (() => { try { const u = new URL(session.modelConfig.apiUrl); return u.hostname; } catch { return null; } })() ?? undefined,
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+        contextLimit: defaultLimit,
+      },
+    });
+
+    return c.json<ApiResponse<{ content: string; usage: typeof usage }>>({ success: true, data: { content: text, usage } });
+  } catch (error) {
+    console.error('Chat completion error:', error);
+    return c.json<ApiResponse>({ success: false, error: 'Failed to process non-stream completion' }, 500);
   }
 });
 

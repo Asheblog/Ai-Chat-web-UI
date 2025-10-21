@@ -90,6 +90,7 @@ app.get('/api', (c) => {
       chat: {
         'GET /api/chat/sessions/:sessionId/messages': '获取会话消息',
         'POST /api/chat/stream': '发送消息（流式响应）',
+        'POST /api/chat/completion': '发送消息（非流式响应）',
         'POST /api/chat/stop': '停止生成',
         'POST /api/chat/regenerate': '重新生成回复',
         'GET /api/chat/usage?sessionId={id}': '查询会话用量聚合',

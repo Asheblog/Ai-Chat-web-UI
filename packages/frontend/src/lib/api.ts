@@ -12,6 +12,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 class ApiClient {
   private client: AxiosInstance
+  private currentStreamController: AbortController | null = null
 
   constructor() {
     this.client = axios.create({
@@ -199,20 +200,30 @@ class ApiClient {
   }
 
   // 流式聊天API
+  // 流式聊天（带退避+可取消）。429 退避 15s、5xx/超时 退避 2s，最多重试 1 次
   async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
-    const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+    const doOnce = async (signal: AbortSignal) => fetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.getToken()}`,
       },
-      body: JSON.stringify({
-        sessionId,
-        content,
-        images,
-      }),
+      body: JSON.stringify({ sessionId, content, images }),
+      signal,
     })
+
+    // 建立带退避的请求
+    this.currentStreamController?.abort();
+    this.currentStreamController = new AbortController();
+    let response = await doOnce(this.currentStreamController.signal)
+    if (response.status === 429) {
+      await new Promise(r => setTimeout(r, 15000))
+      response = await doOnce(this.currentStreamController.signal)
+    } else if (response.status >= 500) {
+      await new Promise(r => setTimeout(r, 2000))
+      response = await doOnce(this.currentStreamController.signal)
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -254,6 +265,8 @@ class ApiClient {
                 yield { type: 'start' }
               } else if (parsed.type === 'end') {
                 yield { type: 'end' }
+              } else if (parsed.type === 'stop') {
+                // 可用于前端识别结束原因，不强制处理
               } else if (parsed.type === 'complete') {
                 yield { type: 'complete' }
               } else if (parsed.error) {
@@ -271,6 +284,31 @@ class ApiClient {
       }
     } finally {
       reader.releaseLock()
+      // 释放当前控制器
+      this.currentStreamController = null
+    }
+  }
+
+  cancelStream() {
+    try { this.currentStreamController?.abort(); } catch {}
+    this.currentStreamController = null
+  }
+
+  // 非流式接口：失败退避策略同上
+  async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>) {
+    const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any }>>('/chat/completion', { sessionId, content, images })
+    try {
+      let res = await doOnce()
+      if (res.status === 429) {
+        await new Promise(r => setTimeout(r, 15000))
+        res = await doOnce()
+      } else if (res.status >= 500) {
+        await new Promise(r => setTimeout(r, 2000))
+        res = await doOnce()
+      }
+      return res.data
+    } catch (e) {
+      throw e
     }
   }
 

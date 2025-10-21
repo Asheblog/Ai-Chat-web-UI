@@ -51,3 +51,6 @@ packages/backend/prisma/*.sqlite
 **/docker-volume/**
 
 *.jpg
+ 
+# --- Third-party reference source (ignored) ---
+vendor/open-webui/
