@@ -10,8 +10,9 @@
 
 /* UTF-8, no BOM */
 
-import fs from 'fs'
-import path from 'path'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { initDatabase } from '../scripts/init-db'
 
 function loadEnvFile(file: string): boolean {
@@ -39,6 +40,8 @@ function loadEnvFile(file: string): boolean {
 
 function loadEnvCascade() {
   // 当前文件位于 packages/backend/prisma
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
   const backendDir = path.resolve(__dirname, '..')
   const repoRoot = path.resolve(__dirname, '..', '..', '..')
 
@@ -69,4 +72,3 @@ main().catch((err) => {
   console.error('[seed] 失败：', err?.message || String(err))
   process.exit(1)
 })
-

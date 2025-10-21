@@ -7,6 +7,8 @@
 
 import { PrismaClient } from '@prisma/client';
 import { AuthUtils } from '../src/utils/auth';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const prisma = new PrismaClient();
 
@@ -134,9 +136,13 @@ async function createExampleSystemModel() {
   }
 }
 
-// 如果直接运行此脚本
-if (require.main === module) {
-  initDatabase();
+// 如果直接运行此脚本（ESM 兼容）
+// 兼容 Linux/Windows：使用规范化绝对路径进行比较
+const __filename = fileURLToPath(import.meta.url);
+const isDirectRun = path.normalize(__filename) === path.normalize(process.argv[1] || '');
+if (isDirectRun) {
+  // 避免未处理的 Promise 警告
+  void initDatabase();
 }
 
 export { initDatabase };
