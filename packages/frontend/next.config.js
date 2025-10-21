@@ -21,7 +21,8 @@ const nextConfig = {
   async rewrites() {
     // 服务端反向代理目标：仅服务端使用，不暴露给浏览器
     const backendHost = process.env.BACKEND_HOST || 'localhost'
-    const backendPort = process.env.BACKEND_PORT || '8001'
+    // 优先使用容器内端口（Docker 场景），回退到 BACKEND_PORT 或默认 8001
+    const backendPort = process.env.BACKEND_INTERNAL_PORT || process.env.BACKEND_PORT || '8001'
     const proxyOrigin = `http://${backendHost}:${backendPort}`
     return [
       {

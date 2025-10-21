@@ -76,7 +76,7 @@ CORS_ORIGIN=http://localhost:${FRONTEND_PORT}
 # 浏览器端 API 基址固定使用相对路径，避免跨设备 localhost 问题
 NEXT_PUBLIC_API_URL=/api      # 浏览器端固定相对路径
 BACKEND_HOST=backend
-BACKEND_PORT=${BACKEND_PORT}
+BACKEND_INTERNAL_PORT=8001    # 容器内后端端口，固定 8001（不要改为宿主机映射端口）
 ```
 
 开发环境（docker-compose.dev.yml）

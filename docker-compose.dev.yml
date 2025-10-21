@@ -57,7 +57,7 @@ services:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
       - BACKEND_HOST=${BACKEND_HOST:-backend}
-      - BACKEND_PORT=${DEV_BACKEND_PORT:-8001}
+      - BACKEND_INTERNAL_PORT=8001
     volumes:
       # 挂载源代码，支持热重载
       - ./packages/frontend:/app
