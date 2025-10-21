@@ -346,8 +346,12 @@ async function main() {
   const be = workspaceScript(pm, '@aichat/backend', 'dev')
   const fe = workspaceScript(pm, '@aichat/frontend', 'dev')
 
-  const backend = runAsync('backend', be.cmd, be.args)
-  const frontend = runAsync('frontend', fe.cmd, fe.args)
+  // 显式设置各自包的工作目录，确保 Next/Prisma 等工具在正确目录解析配置
+  const backendCwd = path.join(process.cwd(), 'packages', 'backend')
+  const frontendCwd = path.join(process.cwd(), 'packages', 'frontend')
+
+  const backend = runAsync('backend', be.cmd, be.args, { cwd: backendCwd })
+  const frontend = runAsync('frontend', fe.cmd, fe.args, { cwd: frontendCwd })
 
   const shutdown = () => {
     logInfo('收到退出信号，正在关闭子进程...')

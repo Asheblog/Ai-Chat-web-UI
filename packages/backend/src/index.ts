@@ -116,8 +116,8 @@ app.notFound(notFoundHandler);
 app.onError(errorHandler);
 
 // 启动服务器
-// 与生产环境保持一致，默认使用 8001 端口（可用 PORT 覆盖）
-const port = parseInt(process.env.PORT || '8001');
+// 端口解析：优先 PORT，其次兼容 BACKEND_PORT，最后回退 8001（统一本地/容器内行为）
+const port = parseInt(process.env.PORT || process.env.BACKEND_PORT || '8001');
 const hostname = process.env.HOST || process.env.HOSTNAME || '0.0.0.0';
 
 console.log(`🚀 AI Chat Platform Backend starting on ${hostname}:${port}`);
