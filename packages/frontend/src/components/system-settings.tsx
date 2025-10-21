@@ -71,10 +71,20 @@ export function SystemSettings() {
 
   const { user: currentUser } = useAuthStore()
   const { toast } = useToast()
+  // 文字LOGO本地草稿，避免每键保存以及中文输入法被打断
+  const [brandTextDraft, setBrandTextDraft] = useState('')
+  const [isIMEComposing, setIsIMEComposing] = useState(false)
 
   useEffect(() => {
     fetchSystemSettings()
   }, [fetchSystemSettings])
+
+  // 当系统设置变化时，同步草稿
+  useEffect(() => {
+    if (systemSettings) {
+      setBrandTextDraft(systemSettings.brandText || '')
+    }
+  }, [systemSettings?.brandText])
 
   const resetForm = () => {
     setFormData({
@@ -238,7 +248,7 @@ export function SystemSettings() {
                 管理系统的基本设置
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="allowRegistration">允许用户注册</Label>
@@ -253,6 +263,36 @@ export function SystemSettings() {
                     handleUpdateGeneralSettings({ allowRegistration: checked })
                   }
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="brandText">文字LOGO</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="brandText"
+                    maxLength={40}
+                    placeholder="例如：AIChat 或公司名"
+                    value={brandTextDraft}
+                    onChange={(e) => setBrandTextDraft(e.target.value)}
+                    onCompositionStart={() => setIsIMEComposing(true)}
+                    onCompositionEnd={() => setIsIMEComposing(false)}
+                    onBlur={() => {
+                      if (!isIMEComposing && brandTextDraft !== (systemSettings.brandText || '')) {
+                        handleUpdateGeneralSettings({ brandText: brandTextDraft })
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUpdateGeneralSettings({ brandText: brandTextDraft })}
+                    disabled={brandTextDraft === (systemSettings.brandText || '')}
+                  >
+                    保存
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">显示在左上角（类似 ChatGPT）。最多 40 个字符。输入中文不会被打断。</p>
               </div>
             </CardContent>
           </Card>

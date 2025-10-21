@@ -65,8 +65,17 @@ export function Sidebar() {
 
   const sidebarContent = (
     <div className="flex h-full w-64 flex-col bg-card border-r">
+      {/* 顶部文字LOGO */}
+      <div className="px-4 pt-4 pb-2 flex items-center justify-center">
+        <Link href="/main" className="block select-none text-center">
+          <span className="text-lg font-semibold tracking-tight">
+            {systemSettings?.brandText || 'AIChat'}
+          </span>
+        </Link>
+      </div>
+
       {/* 顶部新建聊天按钮 */}
-      <div className="p-4">
+      <div className="px-4 pb-4">
         <Button
           onClick={handleNewChat}
           className="w-full justify-start"

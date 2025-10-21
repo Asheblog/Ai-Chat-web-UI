@@ -7,9 +7,11 @@ import type { ApiResponse } from '../types';
 
 const settings = new Hono();
 
-// 系统设置schema
+// 系统设置schema（允许部分字段更新）
 const systemSettingSchema = z.object({
-  registration_enabled: z.boolean(),
+  registration_enabled: z.boolean().optional(),
+  // 文字LOGO，最多40字符
+  brand_text: z.string().min(1).max(40).optional(),
 });
 
 // 获取系统设置（仅管理员）
@@ -33,6 +35,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
       registration_enabled: settingsObj.registration_enabled === 'true',
       app_mode: settingsObj.app_mode || 'single',
       max_context_tokens: parseInt(settingsObj.max_context_tokens || '4000'),
+      brand_text: settingsObj.brand_text || 'AIChat',
     };
 
     return c.json<ApiResponse>({
@@ -52,17 +55,24 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled } = c.req.valid('json');
+    const { registration_enabled, brand_text } = c.req.valid('json');
 
-    // 更新设置
-    await prisma.systemSetting.upsert({
-      where: { key: 'registration_enabled' },
-      update: { value: registration_enabled.toString() },
-      create: {
-        key: 'registration_enabled',
-        value: registration_enabled.toString(),
-      },
-    });
+    // 条件更新：仅对传入的字段做 upsert
+    if (typeof registration_enabled === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'registration_enabled' },
+        update: { value: registration_enabled.toString() },
+        create: { key: 'registration_enabled', value: registration_enabled.toString() },
+      });
+    }
+
+    if (typeof brand_text === 'string') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'brand_text' },
+        update: { value: brand_text },
+        create: { key: 'brand_text', value: brand_text },
+      });
+    }
 
     return c.json<ApiResponse>({
       success: true,

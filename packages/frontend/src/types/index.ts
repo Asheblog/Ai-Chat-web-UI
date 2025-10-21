@@ -80,6 +80,7 @@ export interface SystemSetting {
 
 export interface SystemSettings {
   allowRegistration: boolean;
+  brandText?: string;
   systemModels: ModelConfig[];
 }
 

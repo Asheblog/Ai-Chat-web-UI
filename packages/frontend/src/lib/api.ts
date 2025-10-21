@@ -308,17 +308,20 @@ class ApiClient {
   async getSystemSettings() {
     // 聚合系统设置与系统模型列表，返回前端期望的形状
     const [settingsRes, modelsRes] = await Promise.all([
-      this.client.get<ApiResponse<{ registration_enabled: boolean }>>('/settings/system'),
+      this.client.get<ApiResponse<{ registration_enabled?: boolean; brand_text?: string }>>('/settings/system'),
       this.client.get<ApiResponse<{ personal: any[]; system: any[] }>>('/models'),
     ])
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
+    const brandText = settingsRes.data.data?.brand_text || 'AIChat'
     const systemModels = modelsRes.data.data?.system || []
-    return { data: { allowRegistration, systemModels } }
+    return { data: { allowRegistration, brandText, systemModels } }
   }
 
   async updateSystemSettings(settings: any) {
-    // 仅支持 registration_enabled 更新
-    const payload = { registration_enabled: !!settings.allowRegistration }
+    // 支持 allowRegistration 与 brandText
+    const payload: any = {}
+    if (typeof settings.allowRegistration === 'boolean') payload.registration_enabled = !!settings.allowRegistration
+    if (typeof settings.brandText === 'string') payload.brand_text = settings.brandText
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()
