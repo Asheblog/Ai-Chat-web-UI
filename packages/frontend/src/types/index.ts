@@ -27,6 +27,7 @@ export interface ModelConfig {
   name: string;
   apiUrl: string;
   apiKey: string; // 前端不会收到真实的apiKey
+  supportsImages?: boolean; // 是否支持图片输入（Vision）
   createdAt: string;
 }
 

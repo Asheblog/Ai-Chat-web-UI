@@ -126,6 +126,14 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       }, 403);
     }
 
+    // 校验模型是否支持图片输入
+    if (images && images.length && !session.modelConfig.supportsImages) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: '当前模型不支持图片输入',
+      }, 400);
+    }
+
     // 验证模型配置访问权限
     const hasModelAccess = session.modelConfig.userId === user.id ||
                           session.modelConfig.userId === null;

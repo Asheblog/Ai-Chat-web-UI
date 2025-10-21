@@ -32,6 +32,7 @@ export function ChatInterface() {
 
   const { maxTokens } = useSettingsStore()
   const { toast } = useToast()
+  const isVisionEnabled = !!currentSession?.modelConfig?.supportsImages
 
   // 图片限制常量
   const MAX_IMAGE_COUNT = 4
@@ -55,6 +56,15 @@ export function ChatInterface() {
     }
   }, [isStreaming])
 
+  // 切换到不支持图片的模型时，清空已选图片
+  useEffect(() => {
+    if (!isVisionEnabled && selectedImages.length > 0) {
+      setSelectedImages([])
+      toast({ title: '已清空图片', description: '当前模型不支持图片输入', variant: 'destructive' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisionEnabled])
+
   const handleSend = async () => {
     if (!input.trim() || isStreaming || !currentSession) return
 
@@ -63,7 +73,7 @@ export function ChatInterface() {
     clearError()
 
     try {
-      const imagesPayload = selectedImages.length
+      const imagesPayload = isVisionEnabled && selectedImages.length
         ? selectedImages.map(img => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
         : undefined
       await streamMessage(currentSession.id, message, imagesPayload)
@@ -99,7 +109,13 @@ export function ChatInterface() {
     }
   }
 
-  const pickImages = () => fileInputRef.current?.click()
+  const pickImages = () => {
+    if (!isVisionEnabled) {
+      toast({ title: '当前模型不支持图片', description: '请在模型配置中开启“支持图片输入（Vision）”', variant: 'destructive' })
+      return
+    }
+    fileInputRef.current?.click()
+  }
 
   const validateImage = (file: File): Promise<{ ok: boolean; reason?: string; dataUrl?: string; mime?: string; size?: number }> => {
     return new Promise((resolve) => {
@@ -205,7 +221,7 @@ export function ChatInterface() {
           </div>
 
           {/* 选择图片 */}
-          <Button type="button" variant="outline" size="icon" onClick={pickImages} disabled={isStreaming} title="添加图片">
+          <Button type="button" variant="outline" size="icon" onClick={pickImages} disabled={isStreaming || !isVisionEnabled} title={isVisionEnabled ? "添加图片" : "当前模型不支持图片"}>
             <ImagePlus className="h-5 w-5" />
           </Button>
 
@@ -248,7 +264,7 @@ export function ChatInterface() {
         </div>
 
         {/* 隐藏文件选择 */}
-        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} />
+        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} disabled={!isVisionEnabled} />
       </div>
     </div>
   )

@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ModelConfig } from '@/types'
+import { Switch } from '@/components/ui/switch'
 import { useSettingsStore } from '@/store/settings-store'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,7 @@ interface ModelFormData {
   name: string
   apiUrl: string
   apiKey: string
+  supportsImages: boolean
 }
 
 export function PersonalSettings() {
@@ -41,6 +43,7 @@ export function PersonalSettings() {
     name: '',
     apiUrl: '',
     apiKey: '',
+    supportsImages: false,
   })
 
   const {
@@ -69,6 +72,7 @@ export function PersonalSettings() {
       name: '',
       apiUrl: '',
       apiKey: '',
+      supportsImages: false,
     })
     setEditingModel(null)
   }
@@ -84,7 +88,7 @@ export function PersonalSettings() {
     }
 
     try {
-      await createPersonalModel(formData.name, formData.apiUrl, formData.apiKey)
+      await createPersonalModel(formData.name, formData.apiUrl, formData.apiKey, formData.supportsImages)
       setIsCreateDialogOpen(false)
       resetForm()
       toast({
@@ -114,6 +118,7 @@ export function PersonalSettings() {
       const updates: Partial<ModelFormData> = {
         name: formData.name,
         apiUrl: formData.apiUrl,
+        supportsImages: formData.supportsImages,
       }
 
       // 只有当API密钥被修改时才包含它
@@ -159,6 +164,7 @@ export function PersonalSettings() {
       name: model.name,
       apiUrl: model.apiUrl,
       apiKey: '••••••••••••••••', // 隐藏真实API密钥
+      supportsImages: !!model.supportsImages,
     })
   }
 
@@ -229,6 +235,13 @@ export function PersonalSettings() {
                           onChange={(e) => setFormData(prev => ({ ...prev, apiKey: e.target.value }))}
                         />
                       </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label htmlFor="supportsImages">支持图片输入（Vision）</Label>
+                          <p className="text-xs text-muted-foreground">开启后，聊天框可上传图片传给该模型</p>
+                        </div>
+                        <Switch id="supportsImages" checked={formData.supportsImages} onCheckedChange={(v) => setFormData(prev => ({ ...prev, supportsImages: !!v }))} />
+                      </div>
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                           取消
@@ -271,6 +284,13 @@ export function PersonalSettings() {
                             value={formData.apiKey}
                             onChange={(e) => setFormData(prev => ({ ...prev, apiKey: e.target.value }))}
                           />
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label htmlFor="supportsImagesEdit">支持图片输入（Vision）</Label>
+                              <p className="text-xs text-muted-foreground">不支持图片的模型将禁用图片上传</p>
+                            </div>
+                            <Switch id="supportsImagesEdit" checked={formData.supportsImages} onCheckedChange={(v) => setFormData(prev => ({ ...prev, supportsImages: !!v }))} />
+                          </div>
                           <div className="flex gap-2">
                             <Button size="sm" onClick={handleUpdateModel} disabled={isLoading}>
                               <Save className="h-4 w-4 mr-2" />

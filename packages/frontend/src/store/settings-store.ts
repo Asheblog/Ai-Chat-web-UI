@@ -6,9 +6,9 @@ import { apiClient } from '@/lib/api'
 interface SettingsStore extends SettingsState {
   fetchPersonalModels: () => Promise<void>
   fetchSystemSettings: () => Promise<void>
-  createPersonalModel: (name: string, apiUrl: string, apiKey: string) => Promise<void>
-  createSystemModel: (name: string, apiUrl: string, apiKey: string) => Promise<void>
-  updatePersonalModel: (modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string }>) => Promise<void>
+  createPersonalModel: (name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) => Promise<void>
+  createSystemModel: (name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) => Promise<void>
+  updatePersonalModel: (modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) => Promise<void>
   deletePersonalModel: (modelId: number) => Promise<void>
   updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>
   setTheme: (theme: 'light' | 'dark' | 'system') => void
@@ -58,10 +58,10 @@ export const useSettingsStore = create<SettingsStore>()(
         }
       },
 
-      createPersonalModel: async (name: string, apiUrl: string, apiKey: string) => {
+      createPersonalModel: async (name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) => {
         set({ isLoading: true, error: null })
         try {
-          const response = await apiClient.createModelConfig(name, apiUrl, apiKey)
+          const response = await apiClient.createModelConfig(name, apiUrl, apiKey, supportsImages)
           const newModel = response.data
 
           set((state) => ({
@@ -76,7 +76,7 @@ export const useSettingsStore = create<SettingsStore>()(
         }
       },
 
-      createSystemModel: async (name: string, apiUrl: string, apiKey: string) => {
+      createSystemModel: async (name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) => {
         set({ isLoading: true, error: null })
         try {
           const response = await apiClient.createSystemModel(name, apiUrl, apiKey)
@@ -97,7 +97,7 @@ export const useSettingsStore = create<SettingsStore>()(
         }
       },
 
-      updatePersonalModel: async (modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string }>) => {
+      updatePersonalModel: async (modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) => {
         set({ isLoading: true, error: null })
         try {
           const response = await apiClient.updateModelConfig(modelId, updates)

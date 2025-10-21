@@ -124,6 +124,7 @@ async function createExampleSystemModel() {
           name: 'GPT-3.5-Turbo',
           apiUrl: exampleApiUrl,
           apiKey: encryptedApiKey,
+          supportsImages: false,
         },
       });
 

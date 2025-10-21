@@ -33,6 +33,7 @@ sessions.get('/', authMiddleware, async (c) => {
             select: {
               id: true,
               name: true,
+              supportsImages: true,
             },
           },
           _count: {
@@ -57,7 +58,7 @@ sessions.get('/', authMiddleware, async (c) => {
         modelConfigId: number;
         title: string;
         createdAt: Date;
-        modelConfig: { id: number; name: string };
+        modelConfig: { id: number; name: string; supportsImages: boolean };
         _count: { messages: number };
       }>;
       pagination: {
@@ -129,6 +130,7 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
           select: {
             id: true,
             name: true,
+            supportsImages: true,
           },
         },
       },
@@ -184,6 +186,7 @@ sessions.get('/:id', authMiddleware, async (c) => {
           select: {
             id: true,
             name: true,
+            supportsImages: true,
           },
         },
         messages: {
@@ -212,7 +215,7 @@ sessions.get('/:id', authMiddleware, async (c) => {
       modelConfigId: number;
       title: string;
       createdAt: Date;
-      modelConfig: { id: number; name: string };
+      modelConfig: { id: number; name: string; supportsImages: boolean };
       messages: Array<{ id: number; sessionId: number; role: string; content: string; createdAt: Date }>;
     }>>({
       success: true,
@@ -273,6 +276,7 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
           select: {
             id: true,
             name: true,
+            supportsImages: true,
           },
         },
       },
@@ -284,7 +288,7 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
       modelConfigId: number;
       title: string;
       createdAt: Date;
-      modelConfig: { id: number; name: string };
+      modelConfig: { id: number; name: string; supportsImages: boolean };
     }>>({
       success: true,
       data: updatedSession,

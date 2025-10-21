@@ -25,6 +25,7 @@ export interface ModelConfig {
   name: string;
   apiUrl: string;
   apiKey: string; // 加密存储
+  supportsImages?: boolean; // 是否支持图片输入（Vision）
   createdAt: Date;
 }
 

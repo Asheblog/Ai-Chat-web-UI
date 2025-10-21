@@ -13,6 +13,7 @@ const createModelSchema = z.object({
   name: z.string().min(1).max(100),
   apiUrl: z.string().url(),
   apiKey: z.string().min(1),
+  supportsImages: z.boolean().optional().default(false),
 });
 
 // 更新模型配置schema
@@ -20,6 +21,7 @@ const updateModelSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   apiUrl: z.string().url().optional(),
   apiKey: z.string().min(1).optional(),
+  supportsImages: z.boolean().optional(),
 });
 
 // 获取所有可用的模型配置（个人+系统）
@@ -35,6 +37,7 @@ models.get('/', authMiddleware, async (c) => {
           id: true,
           name: true,
           apiUrl: true,
+          supportsImages: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -45,6 +48,7 @@ models.get('/', authMiddleware, async (c) => {
           id: true,
           name: true,
           apiUrl: true,
+          supportsImages: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -57,12 +61,12 @@ models.get('/', authMiddleware, async (c) => {
     }>>({
       success: true,
       data: {
-        personal: personalModels.map((model: { id: number; name: string; apiUrl: string; createdAt: Date }) => ({
+        personal: personalModels.map((model: { id: number; name: string; apiUrl: string; supportsImages: boolean; createdAt: Date }) => ({
           ...model,
           userId: user.id,
           apiKey: '', // 不返回API Key
         })),
-        system: systemModels.map((model: { id: number; name: string; apiUrl: string; createdAt: Date }) => ({
+        system: systemModels.map((model: { id: number; name: string; apiUrl: string; supportsImages: boolean; createdAt: Date }) => ({
           ...model,
           userId: null,
           apiKey: '', // 不返回API Key
@@ -83,7 +87,7 @@ models.get('/', authMiddleware, async (c) => {
 models.post('/', authMiddleware, zValidator('json', createModelSchema), async (c) => {
   try {
     const user = c.get('user');
-    const { name, apiUrl, apiKey } = c.req.valid('json');
+    const { name, apiUrl, apiKey, supportsImages } = c.req.valid('json');
 
     // 验证URL格式
     if (!AuthUtils.validateUrl(apiUrl)) {
@@ -118,11 +122,13 @@ models.post('/', authMiddleware, zValidator('json', createModelSchema), async (c
         name,
         apiUrl,
         apiKey: encryptedApiKey,
+        supportsImages: !!supportsImages,
       },
       select: {
         id: true,
         name: true,
         apiUrl: true,
+        supportsImages: true,
         createdAt: true,
       },
     });
@@ -171,6 +177,7 @@ models.get('/:id', authMiddleware, async (c) => {
         id: true,
         name: true,
         apiUrl: true,
+        supportsImages: true,
         userId: true,
         createdAt: true,
       },
@@ -260,6 +267,7 @@ models.put('/:id', authMiddleware, zValidator('json', updateModelSchema), async 
     if (updateData.name) data.name = updateData.name;
     if (updateData.apiUrl) data.apiUrl = updateData.apiUrl;
     if (updateData.apiKey) data.apiKey = AuthUtils.encryptApiKey(updateData.apiKey);
+    if (typeof (updateData as any).supportsImages === 'boolean') data.supportsImages = (updateData as any).supportsImages;
 
     const updatedModel = await prisma.modelConfig.update({
       where: { id: modelId },
@@ -268,6 +276,7 @@ models.put('/:id', authMiddleware, zValidator('json', updateModelSchema), async 
         id: true,
         name: true,
         apiUrl: true,
+        supportsImages: true,
         createdAt: true,
       },
     });
@@ -355,7 +364,7 @@ models.delete('/:id', authMiddleware, async (c) => {
 // 创建系统模型配置
 models.post('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', createModelSchema), async (c) => {
   try {
-    const { name, apiUrl, apiKey } = c.req.valid('json');
+    const { name, apiUrl, apiKey, supportsImages } = c.req.valid('json');
 
     // 验证URL格式
     if (!AuthUtils.validateUrl(apiUrl)) {
@@ -390,11 +399,13 @@ models.post('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', c
         name,
         apiUrl,
         apiKey: encryptedApiKey,
+        supportsImages: !!supportsImages,
       },
       select: {
         id: true,
         name: true,
         apiUrl: true,
+        supportsImages: true,
         createdAt: true,
       },
     });
@@ -427,6 +438,7 @@ models.get('/system/list', authMiddleware, adminOnlyMiddleware, async (c) => {
         id: true,
         name: true,
         apiUrl: true,
+        supportsImages: true,
         createdAt: true,
         _count: {
           select: {
@@ -439,7 +451,7 @@ models.get('/system/list', authMiddleware, adminOnlyMiddleware, async (c) => {
 
     return c.json<ApiResponse<ModelConfig[]>>({
       success: true,
-      data: systemModels.map((model: { id: number; name: string; apiUrl: string; createdAt: Date; _count?: any }) => ({
+      data: systemModels.map((model: { id: number; name: string; apiUrl: string; supportsImages: boolean; createdAt: Date; _count?: any }) => ({
         ...model,
         userId: null,
         apiKey: '', // 不返回API Key

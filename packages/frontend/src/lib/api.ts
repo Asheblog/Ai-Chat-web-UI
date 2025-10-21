@@ -285,16 +285,17 @@ class ApiClient {
     return response.data
   }
 
-  async createModelConfig(name: string, apiUrl: string, apiKey: string) {
+  async createModelConfig(name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) {
     const response = await this.client.post('/models', {
       name,
       apiUrl,
       apiKey,
+      supportsImages: !!supportsImages,
     })
     return response.data
   }
 
-  async updateModelConfig(modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string }>) {
+  async updateModelConfig(modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) {
     const response = await this.client.put(`/models/${modelId}`, updates)
     return response.data
   }
