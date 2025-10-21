@@ -12,6 +12,12 @@ const systemSettingSchema = z.object({
   registration_enabled: z.boolean().optional(),
   // 文字LOGO，最多40字符
   brand_text: z.string().min(1).max(40).optional(),
+  // 流式/稳定性相关配置
+  sse_heartbeat_interval_ms: z.number().int().min(1000).max(600000).optional(),
+  provider_max_idle_ms: z.number().int().min(0).max(3600000).optional(),
+  provider_timeout_ms: z.number().int().min(10000).max(3600000).optional(),
+  usage_emit: z.boolean().optional(),
+  usage_provider_only: z.boolean().optional(),
 });
 
 // 获取系统设置（仅管理员）
@@ -36,6 +42,12 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
       app_mode: settingsObj.app_mode || 'single',
       max_context_tokens: parseInt(settingsObj.max_context_tokens || '4000'),
       brand_text: settingsObj.brand_text || 'AIChat',
+      // 流式/稳定性（若DB无配置，则回退到环境变量或默认值）
+      sse_heartbeat_interval_ms: parseInt(settingsObj.sse_heartbeat_interval_ms || process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000'),
+      provider_max_idle_ms: parseInt(settingsObj.provider_max_idle_ms || process.env.PROVIDER_MAX_IDLE_MS || '60000'),
+      provider_timeout_ms: parseInt(settingsObj.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000'),
+      usage_emit: (settingsObj.usage_emit ?? (process.env.USAGE_EMIT ?? 'true')).toString().toLowerCase() !== 'false',
+      usage_provider_only: (settingsObj.usage_provider_only ?? (process.env.USAGE_PROVIDER_ONLY ?? 'false')).toString().toLowerCase() === 'true',
     };
 
     return c.json<ApiResponse>({
@@ -55,7 +67,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, usage_emit, usage_provider_only } = c.req.valid('json');
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -71,6 +83,47 @@ settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', 
         where: { key: 'brand_text' },
         update: { value: brand_text },
         create: { key: 'brand_text', value: brand_text },
+      });
+    }
+
+    // 以下为流式/稳定性配置（仅对传入字段进行 upsert）
+    if (typeof sse_heartbeat_interval_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'sse_heartbeat_interval_ms' },
+        update: { value: String(sse_heartbeat_interval_ms) },
+        create: { key: 'sse_heartbeat_interval_ms', value: String(sse_heartbeat_interval_ms) },
+      });
+    }
+
+    if (typeof provider_max_idle_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'provider_max_idle_ms' },
+        update: { value: String(provider_max_idle_ms) },
+        create: { key: 'provider_max_idle_ms', value: String(provider_max_idle_ms) },
+      });
+    }
+
+    if (typeof provider_timeout_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'provider_timeout_ms' },
+        update: { value: String(provider_timeout_ms) },
+        create: { key: 'provider_timeout_ms', value: String(provider_timeout_ms) },
+      });
+    }
+
+    if (typeof usage_emit === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'usage_emit' },
+        update: { value: usage_emit.toString() },
+        create: { key: 'usage_emit', value: usage_emit.toString() },
+      });
+    }
+
+    if (typeof usage_provider_only === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'usage_provider_only' },
+        update: { value: usage_provider_only.toString() },
+        create: { key: 'usage_provider_only', value: usage_provider_only.toString() },
       });
     }
 

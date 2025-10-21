@@ -75,6 +75,13 @@ export function SystemSettings() {
   const [brandTextDraft, setBrandTextDraft] = useState('')
   const [isIMEComposing, setIsIMEComposing] = useState(false)
 
+  // —— 流式/稳定性设置草稿 ——
+  const [hbMs, setHbMs] = useState<number>(15000)
+  const [idleMs, setIdleMs] = useState<number>(60000)
+  const [timeoutMs, setTimeoutMs] = useState<number>(300000)
+  const [usageEmit, setUsageEmit] = useState<boolean>(true)
+  const [usageProviderOnly, setUsageProviderOnly] = useState<boolean>(false)
+
   useEffect(() => {
     fetchSystemSettings()
   }, [fetchSystemSettings])
@@ -83,8 +90,65 @@ export function SystemSettings() {
   useEffect(() => {
     if (systemSettings) {
       setBrandTextDraft(systemSettings.brandText || '')
+      // 同步流式/稳定性设置
+      setHbMs(Number(systemSettings.sseHeartbeatIntervalMs ?? 15000))
+      setIdleMs(Number(systemSettings.providerMaxIdleMs ?? 60000))
+      setTimeoutMs(Number(systemSettings.providerTimeoutMs ?? 300000))
+      setUsageEmit(Boolean(systemSettings.usageEmit ?? true))
+      setUsageProviderOnly(Boolean(systemSettings.usageProviderOnly ?? false))
     }
   }, [systemSettings?.brandText])
+
+  // 同步依赖更多字段时也触发
+  useEffect(() => {
+    if (systemSettings) {
+      setHbMs(Number(systemSettings.sseHeartbeatIntervalMs ?? 15000))
+      setIdleMs(Number(systemSettings.providerMaxIdleMs ?? 60000))
+      setTimeoutMs(Number(systemSettings.providerTimeoutMs ?? 300000))
+      setUsageEmit(Boolean(systemSettings.usageEmit ?? true))
+      setUsageProviderOnly(Boolean(systemSettings.usageProviderOnly ?? false))
+    }
+  }, [systemSettings?.sseHeartbeatIntervalMs, systemSettings?.providerMaxIdleMs, systemSettings?.providerTimeoutMs, systemSettings?.usageEmit, systemSettings?.usageProviderOnly])
+
+  const msToSec = (v: number) => `${Math.round(v / 1000)} 秒`
+  const within = (v: number, min: number, max: number) => v >= min && v <= max
+
+  const hbRange = { min: 1000, max: 600000 }
+  const idleRange = { min: 0, max: 3600000 }
+  const toutRange = { min: 10000, max: 3600000 }
+
+  const hbValid = within(hbMs, hbRange.min, hbRange.max)
+  const idleValid = within(idleMs, idleRange.min, idleRange.max)
+  const toutValid = within(timeoutMs, toutRange.min, toutRange.max)
+
+  const crossWarnings: string[] = []
+  if (idleMs > 0 && hbMs > idleMs) {
+    crossWarnings.push('心跳间隔大于“上游最大空闲”，心跳可能无法保活连接。')
+  }
+  if (timeoutMs < Math.max(30000, idleMs)) {
+    crossWarnings.push('“总体超时”小于建议值，建议 ≥ max(30s, 上游最大空闲)。')
+  }
+
+  const changed = (
+    hbMs !== Number(systemSettings?.sseHeartbeatIntervalMs ?? 15000) ||
+    idleMs !== Number(systemSettings?.providerMaxIdleMs ?? 60000) ||
+    timeoutMs !== Number(systemSettings?.providerTimeoutMs ?? 300000) ||
+    usageEmit !== Boolean(systemSettings?.usageEmit ?? true) ||
+    usageProviderOnly !== Boolean(systemSettings?.usageProviderOnly ?? false)
+  )
+
+  const canSaveStreaming = hbValid && idleValid && toutValid && changed && !isLoading
+
+  const handleSaveStreamingSettings = async () => {
+    if (!hbValid || !idleValid || !toutValid) return
+    await handleUpdateGeneralSettings({
+      sseHeartbeatIntervalMs: hbMs,
+      providerMaxIdleMs: idleMs,
+      providerTimeoutMs: timeoutMs,
+      usageEmit,
+      usageProviderOnly,
+    })
+  }
 
   const resetForm = () => {
     setFormData({
@@ -293,6 +357,115 @@ export function SystemSettings() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">显示在左上角（类似 ChatGPT）。最多 40 个字符。输入中文不会被打断。</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>流式与网络稳定性</CardTitle>
+              <CardDescription>
+                配置 SSE 心跳、上游空闲与超时、usage 推送策略；弱网推荐较短心跳。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* 心跳间隔 */}
+              <div className="grid gap-2">
+                <Label htmlFor="sseHeartbeat">SSE 心跳间隔（毫秒）</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="sseHeartbeat"
+                    type="number"
+                    min={hbRange.min}
+                    max={hbRange.max}
+                    step={500}
+                    value={hbMs}
+                    onChange={(e) => setHbMs(Number(e.target.value || 0))}
+                  />
+                  <span className="text-sm text-muted-foreground w-24">≈ {msToSec(hbMs)}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setHbMs(15000)}>重置为 15000</Button>
+                </div>
+                {!hbValid && (
+                  <p className="text-xs text-destructive">范围 {hbRange.min}–{hbRange.max}（推荐 10000–20000，弱网倾向 10000–15000）</p>
+                )}
+                {hbValid && (
+                  <p className="text-xs text-muted-foreground">推荐 10–15 秒。过长可能被代理判空闲断开。</p>
+                )}
+              </div>
+
+              {/* 上游最大空闲 */}
+              <div className="grid gap-2">
+                <Label htmlFor="providerMaxIdle">上游最大空闲（毫秒）</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="providerMaxIdle"
+                    type="number"
+                    min={idleRange.min}
+                    max={idleRange.max}
+                    step={1000}
+                    value={idleMs}
+                    onChange={(e) => setIdleMs(Number(e.target.value || 0))}
+                  />
+                  <span className="text-sm text-muted-foreground w-24">≈ {msToSec(idleMs)}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setIdleMs(60000)}>重置为 60000</Button>
+                </div>
+                {!idleValid && (
+                  <p className="text-xs text-destructive">范围 {idleRange.min}–{idleRange.max}（建议 ≥ 心跳间隔，弱网可适当放宽）</p>
+                )}
+                {idleValid && (
+                  <p className="text-xs text-muted-foreground">建议 ≥ 心跳间隔，典型值 30–90 秒。</p>
+                )}
+              </div>
+
+              {/* 上游总体超时 */}
+              <div className="grid gap-2">
+                <Label htmlFor="providerTimeout">上游总体超时（毫秒）</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="providerTimeout"
+                    type="number"
+                    min={toutRange.min}
+                    max={toutRange.max}
+                    step={5000}
+                    value={timeoutMs}
+                    onChange={(e) => setTimeoutMs(Number(e.target.value || 0))}
+                  />
+                  <span className="text-sm text-muted-foreground w-24">≈ {msToSec(timeoutMs)}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setTimeoutMs(300000)}>重置为 300000</Button>
+                </div>
+                {!toutValid && (
+                  <p className="text-xs text-destructive">范围 {toutRange.min}–{toutRange.max}（建议 ≥ 上游最大空闲；常见 120000–300000）</p>
+                )}
+                {toutValid && (
+                  <p className="text-xs text-muted-foreground">建议 ≥ 上游最大空闲；长回答/弱网建议 180–300 秒。</p>
+                )}
+              </div>
+
+              {/* usage 开关 */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="usageEmit">推送用量（usage）</Label>
+                  <p className="text-sm text-muted-foreground">开启后在流式过程中向前端发送 usage 事件；关闭则不发送。</p>
+                </div>
+                <Switch id="usageEmit" checked={usageEmit} onCheckedChange={(v) => setUsageEmit(!!v)} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="usageProviderOnly">仅透传厂商 usage</Label>
+                  <p className="text-sm text-muted-foreground">开启时仅透传上游 usage；关闭时会在结束前基于生成内容估算 completion/total。</p>
+                </div>
+                <Switch id="usageProviderOnly" checked={usageProviderOnly} onCheckedChange={(v) => setUsageProviderOnly(!!v)} disabled={!usageEmit} />
+              </div>
+
+              {crossWarnings.length > 0 && (
+                <div className="text-xs text-amber-600">{crossWarnings.map((w, i) => (<div key={i}>{w}</div>))}</div>
+              )}
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveStreamingSettings} disabled={!canSaveStreaming}>
+                  保存
+                </Button>
               </div>
             </CardContent>
           </Card>

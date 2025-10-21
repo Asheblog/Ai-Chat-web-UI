@@ -113,6 +113,7 @@ npm run dev
 ### 聊天功能
 
 - `POST /api/chat/stream` - 发送消息 (流式响应)
+- `POST /api/chat/completion` - 发送消息 (非流式响应)
 - `POST /api/chat/stop` - 停止生成
 - `POST /api/chat/regenerate` - 重新生成回复
 
@@ -134,6 +135,22 @@ npm run dev
   - 若上游厂商在流中返回 `usage` 字段，会被原样透出；否则在开始时发送一次基于上下文估算的 `usage`，在结束前补齐 `completion_tokens` 与 `total_tokens`（估算）。
 - `end`：上游流结束（如收到 `[DONE]`）
 - `complete`：服务端完成收尾
+- `stop`：可选的结束原因（如 `finish_reason`）
+
+#### 网络稳定性与降级
+
+- 心跳保活：服务端每隔固定时间（默认 15s）推送 `: ping` 注释帧，避免代理空闲断开。
+- 上游退避：
+  - 429 → 退避 15s 后重试 1 次
+  - 5xx/超时 → 退避 2s 后重试 1 次
+- 最大空闲：若上游流在阈值（默认 60s）内无数据，主动中止本次连接。
+- 自动降级：流式失败且尚未输出内容时，会自动改走一次非流式请求并返回完整文本。
+
+可配置环境变量：
+
+- `SSE_HEARTBEAT_INTERVAL_MS`（默认 15000）SSE 心跳间隔（毫秒）
+- `PROVIDER_MAX_IDLE_MS`（默认 60000）上游最大空闲时长（毫秒）
+- `PROVIDER_TIMEOUT_MS`（默认 300000）上游请求总体超时（毫秒）
 
 #### Usage 统计与环境变量
 

@@ -82,6 +82,12 @@ export interface SystemSettings {
   allowRegistration: boolean;
   brandText?: string;
   systemModels: ModelConfig[];
+  // 流式/稳定性相关（系统级）
+  sseHeartbeatIntervalMs?: number;
+  providerMaxIdleMs?: number;
+  providerTimeoutMs?: number;
+  usageEmit?: boolean;
+  usageProviderOnly?: boolean;
 }
 
 // UI 状态类型

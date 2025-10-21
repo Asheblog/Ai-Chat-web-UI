@@ -207,6 +207,11 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
     // 解密API Key
     const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
+
+    // 读取系统设置以覆盖超时配置
+    const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
+    const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+    const providerTimeoutMs = parseInt(sysMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
     log.debug('Chat stream request', { sessionId, userId: user.id, model: session.modelConfig.name, apiUrl: session.modelConfig.apiUrl })
 
     // 构建AI API请求
@@ -252,9 +257,17 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     c.header('Access-Control-Allow-Headers', 'Cache-Control');
 
     let aiResponseContent = '';
-    // 环境开关：usage 透出与透传
-    const USAGE_EMIT = (process.env.USAGE_EMIT ?? 'true').toString().toLowerCase() !== 'false';
-    const USAGE_PROVIDER_ONLY = (process.env.USAGE_PROVIDER_ONLY ?? 'false').toString().toLowerCase() === 'true';
+    // 读取系统设置（若存在则覆盖环境变量），用于网络稳定性与 usage 行为
+    const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
+    const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+
+    // usage 透出与透传
+    let USAGE_EMIT = (sysMap.usage_emit ?? (process.env.USAGE_EMIT ?? 'true')).toString().toLowerCase() !== 'false';
+    let USAGE_PROVIDER_ONLY = (sysMap.usage_provider_only ?? (process.env.USAGE_PROVIDER_ONLY ?? 'false')).toString().toLowerCase() === 'true';
+    // 心跳与超时参数
+    const heartbeatIntervalMs = parseInt(sysMap.sse_heartbeat_interval_ms || process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000');
+    const providerMaxIdleMs = parseInt(sysMap.provider_max_idle_ms || process.env.PROVIDER_MAX_IDLE_MS || '60000');
+    const providerTimeoutMs = parseInt(sysMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
 
     // 提前记录是否已收到厂商 usage（优先使用）
     let providerUsageSeen = false as boolean;
@@ -280,7 +293,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     const providerRequestWithBackoff = async (): Promise<Response> => {
       // 控制超时与空闲的 AbortController
       const ac = new AbortController();
-      const timeout = setTimeout(() => ac.abort(new Error('provider request timeout')), PROVIDER_TIMEOUT_MS);
+      const timeout = setTimeout(() => ac.abort(new Error('provider request timeout')), providerTimeoutMs);
       try {
         let response = await providerRequestOnce(ac.signal);
         if (response.status === 429) {
@@ -347,11 +360,11 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
               // SSE 注释心跳（客户端忽略），同时也可用 data: keepalive
               controller.enqueue(encoder.encode(': ping\n\n'));
             } catch {}
-            if (PROVIDER_MAX_IDLE_MS > 0 && Date.now() - lastChunkAt > PROVIDER_MAX_IDLE_MS) {
+            if (providerMaxIdleMs > 0 && Date.now() - lastChunkAt > providerMaxIdleMs) {
               // 厂商连接空闲过久，主动中止
               try { (response as any)?.body?.cancel?.(); } catch {}
             }
-          }, Math.max(1000, HEARTBEAT_INTERVAL_MS));
+          }, Math.max(1000, heartbeatIntervalMs));
 
           while (true) {
             const { done, value } = await reader.read();
@@ -507,7 +520,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             try {
               const nonStreamData = { ...requestData, stream: false } as any;
               const ac = new AbortController();
-              const timeout = setTimeout(() => ac.abort(new Error('provider non-stream timeout')), PROVIDER_TIMEOUT_MS);
+              const timeout = setTimeout(() => ac.abort(new Error('provider non-stream timeout')), providerTimeoutMs);
               const resp = await fetch(session.modelConfig.apiUrl, {
                 method: 'POST',
                 headers: {
@@ -611,7 +624,7 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     });
     const requestWithBackoff = async () => {
       const ac = new AbortController();
-      const tout = setTimeout(() => ac.abort(new Error('provider timeout')), PROVIDER_TIMEOUT_MS);
+      const tout = setTimeout(() => ac.abort(new Error('provider timeout')), providerTimeoutMs);
       try {
         let r = await doOnce(ac.signal);
         if (r.status === 429) { await new Promise(rz => setTimeout(rz, BACKOFF_429_MS)); r = await doOnce(ac.signal); }

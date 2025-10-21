@@ -371,20 +371,38 @@ class ApiClient {
   async getSystemSettings() {
     // 聚合系统设置与系统模型列表，返回前端期望的形状
     const [settingsRes, modelsRes] = await Promise.all([
-      this.client.get<ApiResponse<{ registration_enabled?: boolean; brand_text?: string }>>('/settings/system'),
+      this.client.get<ApiResponse<{ 
+        registration_enabled?: boolean;
+        brand_text?: string;
+        sse_heartbeat_interval_ms?: number;
+        provider_max_idle_ms?: number;
+        provider_timeout_ms?: number;
+        usage_emit?: boolean;
+        usage_provider_only?: boolean;
+      }>>('/settings/system'),
       this.client.get<ApiResponse<{ personal: any[]; system: any[] }>>('/models'),
     ])
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
     const brandText = settingsRes.data.data?.brand_text || 'AIChat'
     const systemModels = modelsRes.data.data?.system || []
-    return { data: { allowRegistration, brandText, systemModels } }
+    const sseHeartbeatIntervalMs = Number(settingsRes.data.data?.sse_heartbeat_interval_ms ?? 15000)
+    const providerMaxIdleMs = Number(settingsRes.data.data?.provider_max_idle_ms ?? 60000)
+    const providerTimeoutMs = Number(settingsRes.data.data?.provider_timeout_ms ?? 300000)
+    const usageEmit = (settingsRes.data.data?.usage_emit ?? true) as boolean
+    const usageProviderOnly = (settingsRes.data.data?.usage_provider_only ?? false) as boolean
+    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, usageEmit, usageProviderOnly } }
   }
 
   async updateSystemSettings(settings: any) {
-    // 支持 allowRegistration 与 brandText
+    // 支持 allowRegistration/brandText 以及流式稳定性设置
     const payload: any = {}
     if (typeof settings.allowRegistration === 'boolean') payload.registration_enabled = !!settings.allowRegistration
     if (typeof settings.brandText === 'string') payload.brand_text = settings.brandText
+    if (typeof settings.sseHeartbeatIntervalMs === 'number') payload.sse_heartbeat_interval_ms = settings.sseHeartbeatIntervalMs
+    if (typeof settings.providerMaxIdleMs === 'number') payload.provider_max_idle_ms = settings.providerMaxIdleMs
+    if (typeof settings.providerTimeoutMs === 'number') payload.provider_timeout_ms = settings.providerTimeoutMs
+    if (typeof settings.usageEmit === 'boolean') payload.usage_emit = !!settings.usageEmit
+    if (typeof settings.usageProviderOnly === 'boolean') payload.usage_provider_only = !!settings.usageProviderOnly
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()
