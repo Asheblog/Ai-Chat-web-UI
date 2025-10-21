@@ -25,7 +25,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
-  const { sessions, currentSession, fetchSessions, selectSession, deleteSession, createSession } = useChatStore()
+  const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession } = useChatStore()
   const { theme, setTheme, systemSettings } = useSettingsStore()
 
   useEffect(() => {
@@ -38,6 +38,24 @@ export function Sidebar() {
     }
 
     try {
+      // 若当前会话“完全空白”，则不创建新会话（与 ChatGPT 等产品一致）
+      // 判断标准：
+      // 1) 当前会话存在；
+      // 2) 本地消息列表为空；
+      // 3) 标题为空或默认；
+      // 4)（可选）服务端统计为 0 条消息时更可信。
+      const cur = currentSession
+      const isDefaultTitle = !!cur && (
+        !cur.title || cur.title.trim() === '' || cur.title === '新的对话' || cur.title === 'New Chat'
+      )
+      const serverCount = cur ? (sessions.find(s => s.id === cur.id)?._count?.messages ?? null) : null
+      const definitelyEmpty = cur && isDefaultTitle && messages.length === 0 && (serverCount === null || serverCount === 0)
+      if (definitelyEmpty) {
+        // 直接返回，复用当前空白会话
+        setIsMobileMenuOpen(false)
+        return
+      }
+
       await createSession(systemSettings.systemModels[0].id, '新的对话')
       setIsMobileMenuOpen(false)
     } catch (error) {
