@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
+import ConsoleSilencer from '@/components/console-silencer'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,6 +20,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body className={inter.className}>
+        {/* 生产环境禁用前端控制台输出 */}
+        <ConsoleSilencer />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
