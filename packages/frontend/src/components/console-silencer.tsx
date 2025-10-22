@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 /**
  * 在生产环境禁用浏览器端 console 输出。
@@ -6,7 +6,7 @@
  * - 生产环境（process.env.NODE_ENV === 'production'）时，将常见输出方法指向空函数
  * - 不影响服务端（Node）的日志输出
  */
-(() => {
+;(() => {
   if (typeof window === 'undefined') return
   const isProd = process.env.NODE_ENV === 'production'
   if (!isProd) return
@@ -26,4 +26,3 @@
 export default function ConsoleSilencer() {
   return null
 }
-
