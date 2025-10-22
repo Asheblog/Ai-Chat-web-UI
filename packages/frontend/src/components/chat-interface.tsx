@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MessageList } from '@/components/message-list'
 import { ModelSelector } from '@/components/model-selector'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useToast } from '@/components/ui/use-toast'
@@ -37,6 +39,11 @@ export function ChatInterface() {
   const { maxTokens } = useSettingsStore()
   const { toast } = useToast()
   const isVisionEnabled = !!currentSession?.modelConfig?.supportsImages
+  // 思考模式与本轮不保存
+  const [thinkingEnabled, setThinkingEnabled] = useState<boolean>(false)
+  const [effort, setEffort] = useState<'low'|'medium'|'high'|'unset'>('unset')
+  const [ollamaThink, setOllamaThink] = useState<boolean>(false)
+  const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
 
   // 图片限制常量
   const MAX_IMAGE_COUNT = 4
@@ -60,6 +67,16 @@ export function ChatInterface() {
     }
   }, [isStreaming])
 
+  // 进入会话时，从会话级默认加载
+  useEffect(() => {
+    if (currentSession) {
+      setThinkingEnabled(Boolean(currentSession.reasoningEnabled ?? false))
+      const eff = (currentSession.reasoningEffort as any) || 'unset'
+      setEffort(eff)
+      setOllamaThink(Boolean(currentSession.ollamaThink ?? false))
+    }
+  }, [currentSession?.id])
+
   // 切换到不支持图片的模型时，清空已选图片
   useEffect(() => {
     if (!isVisionEnabled && selectedImages.length > 0) {
@@ -80,8 +97,15 @@ export function ChatInterface() {
       const imagesPayload = isVisionEnabled && selectedImages.length
         ? selectedImages.map(img => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
         : undefined
-      await streamMessage(currentSession.id, message, imagesPayload)
+      const options = {
+        reasoningEnabled: thinkingEnabled,
+        reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
+        ollamaThink: thinkingEnabled ? ollamaThink : undefined,
+        saveReasoning: !noSaveThisRound,
+      }
+      await streamMessage(currentSession.id, message, imagesPayload, options)
       setSelectedImages([])
+      setNoSaveThisRound(false)
     } catch (error) {
       console.error('Failed to send message:', error)
       toast({
@@ -247,6 +271,55 @@ export function ChatInterface() {
       {/* 输入区域 */}
       <div className="border-t px-4 py-4">
         <div className="flex flex-col gap-3">
+          {/* 思考模式行 */}
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Switch checked={thinkingEnabled} onCheckedChange={(v)=>{
+                setThinkingEnabled(!!v)
+                if (currentSession) {
+                  // 立即持久化会话偏好
+                  useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEnabled: !!v })
+                }
+              }} />
+              <span>思考模式</span>
+            </div>
+            {thinkingEnabled && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">力度</span>
+                  <Select value={effort} onValueChange={(v)=>{
+                    setEffort(v as any)
+                    if (currentSession) {
+                      useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEffort: v === 'unset' ? undefined as any : (v as any) })
+                    }
+                  }}>
+                    <SelectTrigger className="h-8 w-36"><SelectValue placeholder="不设置" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unset">不设置</SelectItem>
+                      <SelectItem value="low">low</SelectItem>
+                      <SelectItem value="medium">medium</SelectItem>
+                      <SelectItem value="high">high</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Switch checked={ollamaThink} onCheckedChange={(v)=>{
+                    setOllamaThink(!!v)
+                    if (currentSession) {
+                      useChatStore.getState().updateSessionPrefs(currentSession.id, { ollamaThink: !!v })
+                    }
+                  }} />
+                  <span>Ollama think</span>
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center gap-2 ml-auto">
+              <Switch checked={noSaveThisRound} onCheckedChange={(v)=>setNoSaveThisRound(!!v)} />
+              <span className="text-muted-foreground">本轮不保存</span>
+            </div>
+          </div>
           <div className="flex items-end gap-2">
             <div className="flex-1 relative">
               <Textarea

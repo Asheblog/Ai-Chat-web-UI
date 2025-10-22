@@ -45,6 +45,9 @@ export interface ChatSession {
   title: string;
   createdAt: string;
   modelConfig: ModelConfig;
+  reasoningEnabled?: boolean | null;
+  reasoningEffort?: 'low' | 'medium' | 'high' | null;
+  ollamaThink?: boolean | null;
   messages?: Message[];
   _count?: {
     messages: number;
@@ -140,10 +143,11 @@ export interface ApiResponse<T = any> {
 
 // 流式响应类型
 export interface ChatStreamChunk {
-  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error';
+  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning';
   content?: string;
   usage?: UsageStats;
   done?: boolean;
+  duration?: number;
   error?: string;
 }
 

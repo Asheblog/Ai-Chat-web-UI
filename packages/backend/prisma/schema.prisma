@@ -47,6 +47,10 @@ model ChatSession {
   modelConfigId Int
   title         String    // 可由首条消息自动生成
   createdAt     DateTime  @default(now())
+  // 会话级推理默认：为空表示遵循系统设置
+  reasoningEnabled Boolean?
+  reasoningEffort  String?   // 'low' | 'medium' | 'high'
+  ollamaThink      Boolean?
 
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   modelConfig ModelConfig @relation(fields: [modelConfigId], references: [id])

@@ -11,8 +11,9 @@ interface ChatStore extends ChatState {
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>
   updateSessionTitle: (sessionId: number, title: string) => Promise<void>
+  updateSessionPrefs: (sessionId: number, prefs: Partial<{ reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean }>) => Promise<void>
   sendMessage: (sessionId: number, content: string) => Promise<void>
-  streamMessage: (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>) => Promise<void>
+  streamMessage: (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) => Promise<void>
   stopStreaming: () => void
   addMessage: (message: Message) => void
   clearError: () => void
@@ -158,7 +159,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   updateSessionTitle: async (sessionId: number, title: string) => {
     try {
-      await apiClient.updateSession(sessionId, title)
+      await apiClient.updateSession(sessionId, { title })
       set((state) => ({
         sessions: state.sessions.map(session =>
           session.id === sessionId ? { ...session, title } : session
@@ -174,12 +175,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  updateSessionPrefs: async (sessionId, prefs) => {
+    try {
+      await apiClient.updateSession(sessionId, prefs as any)
+      set((state) => ({
+        sessions: state.sessions.map(s => s.id === sessionId ? { ...s, ...prefs } as any : s),
+        currentSession: state.currentSession?.id === sessionId ? { ...(state.currentSession as any), ...prefs } : state.currentSession,
+      }))
+    } catch (error: any) {
+      set({ error: error.response?.data?.error || error.message || '更新会话偏好失败' })
+    }
+  },
+
   sendMessage: async (sessionId: number, content: string) => {
     // 统一走流式发送，保持 API 一致
     await get().streamMessage(sessionId, content)
   },
 
-  streamMessage: async (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>) => {
+  streamMessage: async (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) => {
     // 首先添加用户消息
     const userMessage: Message = {
       id: Date.now(), // 临时ID
@@ -211,7 +224,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       let accumulatedContent = ''
       let accumulatedReasoning = ''
 
-      for await (const evt of apiClient.streamChat(sessionId, content, images)) {
+      for await (const evt of apiClient.streamChat(sessionId, content, images, options)) {
         if (evt?.type === 'content' && evt.content) {
           accumulatedContent += evt.content
           set((state) => ({
@@ -265,7 +278,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (error: any) {
       // 流式失败，降级尝试非流式一次
       try {
-        const resp = await apiClient.chatCompletion(sessionId, content, images)
+        const resp = await apiClient.chatCompletion(sessionId, content, images, options)
         const finalText = resp?.data?.content || ''
         if (finalText) {
           set((state) => ({

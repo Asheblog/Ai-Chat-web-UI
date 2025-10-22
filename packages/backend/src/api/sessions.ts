@@ -11,6 +11,10 @@ const sessions = new Hono();
 const createSessionSchema = z.object({
   modelConfigId: z.number().int().positive(),
   title: z.string().min(1).max(200).optional(),
+  // 会话级推理默认（可选）
+  reasoningEnabled: z.boolean().optional(),
+  reasoningEffort: z.enum(['low','medium','high']).optional(),
+  ollamaThink: z.boolean().optional(),
 });
 
 // 获取用户的聊天会话列表
@@ -29,6 +33,9 @@ sessions.get('/', authMiddleware, async (c) => {
           modelConfigId: true,
           title: true,
           createdAt: true,
+          reasoningEnabled: true,
+          reasoningEffort: true,
+          ollamaThink: true,
           modelConfig: {
             select: {
               id: true,
@@ -58,6 +65,9 @@ sessions.get('/', authMiddleware, async (c) => {
         modelConfigId: number;
         title: string;
         createdAt: Date;
+        reasoningEnabled: boolean | null;
+        reasoningEffort: 'low'|'medium'|'high' | null;
+        ollamaThink: boolean | null;
         modelConfig: { id: number; name: string; supportsImages: boolean };
         _count: { messages: number };
       }>;
@@ -93,7 +103,7 @@ sessions.get('/', authMiddleware, async (c) => {
 sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), async (c) => {
   try {
     const user = c.get('user');
-    const { modelConfigId, title } = c.req.valid('json');
+    const { modelConfigId, title, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
 
     // 验证模型配置是否存在且用户有权限访问
     const modelConfig = await prisma.modelConfig.findFirst({
@@ -119,6 +129,9 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
         userId: user.id,
         modelConfigId,
         title: title || 'New Chat',
+        reasoningEnabled,
+        reasoningEffort,
+        ollamaThink,
       },
       select: {
         id: true,
@@ -126,6 +139,9 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
         modelConfigId: true,
         title: true,
         createdAt: true,
+        reasoningEnabled: true,
+        reasoningEffort: true,
+        ollamaThink: true,
         modelConfig: {
           select: {
             id: true,
@@ -142,6 +158,9 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       modelConfigId: number;
       title: string;
       createdAt: Date;
+      reasoningEnabled: boolean | null;
+      reasoningEffort: 'low' | 'medium' | 'high' | null;
+      ollamaThink: boolean | null;
       modelConfig: { id: number; name: string };
     }>>({
       success: true,
@@ -182,6 +201,9 @@ sessions.get('/:id', authMiddleware, async (c) => {
         modelConfigId: true,
         title: true,
         createdAt: true,
+        reasoningEnabled: true,
+        reasoningEffort: true,
+        ollamaThink: true,
         modelConfig: {
           select: {
             id: true,
@@ -215,6 +237,9 @@ sessions.get('/:id', authMiddleware, async (c) => {
       modelConfigId: number;
       title: string;
       createdAt: Date;
+      reasoningEnabled: boolean | null;
+      reasoningEffort: 'low'|'medium'|'high' | null;
+      ollamaThink: boolean | null;
       modelConfig: { id: number; name: string; supportsImages: boolean };
       messages: Array<{ id: number; sessionId: number; role: string; content: string; createdAt: Date }>;
     }>>({
@@ -233,12 +258,15 @@ sessions.get('/:id', authMiddleware, async (c) => {
 
 // 更新会话标题
 sessions.put('/:id', authMiddleware, zValidator('json', z.object({
-  title: z.string().min(1).max(200),
+  title: z.string().min(1).max(200).optional(),
+  reasoningEnabled: z.boolean().optional(),
+  reasoningEffort: z.enum(['low','medium','high']).optional(),
+  ollamaThink: z.boolean().optional(),
 })), async (c) => {
   try {
     const user = c.get('user');
     const sessionId = parseInt(c.req.param('id'));
-    const { title } = c.req.valid('json');
+    const { title, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
 
     if (isNaN(sessionId)) {
       return c.json<ApiResponse>({
@@ -262,16 +290,24 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
       }, 404);
     }
 
-    // 更新会话标题
+    // 更新会话字段
     const updatedSession = await prisma.chatSession.update({
       where: { id: sessionId },
-      data: { title },
+      data: {
+        ...(typeof title === 'string' ? { title } : {}),
+        ...(typeof reasoningEnabled === 'boolean' ? { reasoningEnabled } : {}),
+        ...(typeof reasoningEffort === 'string' ? { reasoningEffort } : {}),
+        ...(typeof ollamaThink === 'boolean' ? { ollamaThink } : {}),
+      },
       select: {
         id: true,
         userId: true,
         modelConfigId: true,
         title: true,
         createdAt: true,
+        reasoningEnabled: true,
+        reasoningEffort: true,
+        ollamaThink: true,
         modelConfig: {
           select: {
             id: true,
@@ -288,11 +324,14 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
       modelConfigId: number;
       title: string;
       createdAt: Date;
+      reasoningEnabled: boolean | null;
+      reasoningEffort: 'low'|'medium'|'high' | null;
+      ollamaThink: boolean | null;
       modelConfig: { id: number; name: string; supportsImages: boolean };
     }>>({
       success: true,
       data: updatedSession,
-      message: 'Session title updated successfully',
+      message: 'Session updated successfully',
     });
 
   } catch (error) {

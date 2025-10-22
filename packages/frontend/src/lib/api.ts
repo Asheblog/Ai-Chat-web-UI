@@ -193,10 +193,8 @@ class ApiClient {
     await this.client.delete(`/sessions/${sessionId}`)
   }
 
-  async updateSession(sessionId: number, title: string) {
-    const response = await this.client.put(`/sessions/${sessionId}`, {
-      title,
-    })
+  async updateSession(sessionId: number, updates: Partial<{ title: string; reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean }>) {
+    const response = await this.client.put(`/sessions/${sessionId}`, updates)
     return response.data
   }
 
@@ -215,7 +213,7 @@ class ApiClient {
 
   // 流式聊天API
   // 流式聊天（带退避+可取消）。429 退避 15s、5xx/超时 退避 2s，最多重试 1 次
-  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
+  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
     const doOnce = async (signal: AbortSignal) => fetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
@@ -223,7 +221,7 @@ class ApiClient {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.getToken()}`,
       },
-      body: JSON.stringify({ sessionId, content, images }),
+      body: JSON.stringify({ sessionId, content, images, ...(options||{}) }),
       signal,
     })
 
@@ -328,8 +326,8 @@ class ApiClient {
   }
 
   // 非流式接口：失败退避策略同上
-  async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>) {
-    const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any }>>('/chat/completion', { sessionId, content, images })
+  async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) {
+    const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any }>>('/chat/completion', { sessionId, content, images, ...(options||{}) })
     try {
       let res = await doOnce()
       if (res.status === 429) {

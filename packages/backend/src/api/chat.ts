@@ -28,6 +28,11 @@ const sendMessageSchema = z.object({
   content: z.string().min(1).max(10000),
   // 可选图片数据：前端传入 data(base64，不含前缀)、mime
   images: z.array(z.object({ data: z.string().min(1), mime: z.string().min(1) })).max(4).optional(),
+  // 即时开关（覆盖系统/会话默认）
+  reasoningEnabled: z.boolean().optional(),
+  reasoningEffort: z.enum(['low','medium','high']).optional(),
+  ollamaThink: z.boolean().optional(),
+  saveReasoning: z.boolean().optional(),
 });
 
 // 获取会话消息历史
@@ -247,13 +252,27 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     };
 
     // 供应商参数透传（系统设置控制）
-    const openaiReasoningEffort = (sysMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '').toString();
-    if (openaiReasoningEffort) {
-      requestData.reasoning_effort = openaiReasoningEffort;
+    // 即时与会话/系统优先级：request > session > system/env
+    const sessionDefaults = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })
+    const reqReasoningEnabled = (c.req.valid('json') as any).reasoningEnabled
+    const reqReasoningEffort = (c.req.valid('json') as any).reasoningEffort
+    const reqOllamaThink = (c.req.valid('json') as any).ollamaThink
+
+    const effectiveReasoningEnabled = typeof reqReasoningEnabled === 'boolean'
+      ? reqReasoningEnabled
+      : (sessionDefaults?.reasoningEnabled ?? ((sysMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false'))
+
+    const effectiveReasoningEffort = (reqReasoningEffort || sessionDefaults?.reasoningEffort || (sysMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '')).toString()
+
+    const effectiveOllamaThink = typeof reqOllamaThink === 'boolean'
+      ? reqOllamaThink
+      : ((sessionDefaults?.ollamaThink ?? ((sysMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean)
+
+    if (effectiveReasoningEnabled && effectiveReasoningEffort) {
+      requestData.reasoning_effort = effectiveReasoningEffort
     }
-    const ollamaThink = (sysMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true';
-    if (ollamaThink) {
-      requestData.think = true;
+    if (effectiveReasoningEnabled && effectiveOllamaThink) {
+      requestData.think = true
     }
 
     console.log('Starting AI stream request to:', session.modelConfig.apiUrl);
@@ -548,7 +567,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                     sessionId,
                     role: 'assistant',
                     content: aiResponseContent.trim(),
-                    ...(REASONING_ENABLED && REASONING_SAVE_TO_DB && reasoningBuffer.trim()
+                    ...(REASONING_ENABLED && (typeof (c.req.valid('json') as any)?.saveReasoning === 'boolean' ? (c.req.valid('json') as any).saveReasoning : REASONING_SAVE_TO_DB) && reasoningBuffer.trim()
                       ? { reasoning: reasoningBuffer.trim(), reasoningDurationSeconds }
                       : {}),
                   },
@@ -686,10 +705,13 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     const body: any = { model: session.modelConfig.name, messages: messagesPayload, stream: false, temperature: 0.7 };
     const settingsRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const settingsMap = settingsRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
-    const openaiReasoningEffort2 = (settingsMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '').toString();
-    if (openaiReasoningEffort2) body.reasoning_effort = openaiReasoningEffort2;
-    const ollamaThink2 = (settingsMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true';
-    if (ollamaThink2) body.think = true;
+    const sess = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })
+    const reqJson = c.req.valid('json') as any
+    const ren = typeof reqJson?.reasoningEnabled === 'boolean' ? reqJson.reasoningEnabled : (sess?.reasoningEnabled ?? ((settingsMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false'))
+    const ref = (reqJson?.reasoningEffort || sess?.reasoningEffort || (settingsMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '')).toString()
+    const otk = typeof reqJson?.ollamaThink === 'boolean' ? reqJson.ollamaThink : ((sess?.ollamaThink ?? ((settingsMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean)
+    if (ren && ref) body.reasoning_effort = ref
+    if (ren && otk) body.think = true
 
     const doOnce = async (signal: AbortSignal) => fetch(session.modelConfig.apiUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${decryptedApiKey}` }, body: JSON.stringify(body), signal,
@@ -723,12 +745,17 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
 
     let assistantMsgId: number | null = null;
     if (text) {
+      const saveFlag = (() => {
+        const reqJson = c.req.valid('json') as any
+        if (typeof reqJson?.saveReasoning === 'boolean') return reqJson.saveReasoning
+        return true
+      })()
       const saved = await prisma.message.create({
         data: {
           sessionId,
           role: 'assistant',
           content: text,
-          ...(fallbackReasoning ? { reasoning: String(fallbackReasoning) } : {}),
+          ...((fallbackReasoning && saveFlag) ? { reasoning: String(fallbackReasoning) } : {}),
         },
       });
       assistantMsgId = saved.id;
