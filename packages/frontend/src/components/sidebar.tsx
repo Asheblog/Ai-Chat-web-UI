@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -29,10 +29,18 @@ export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap } = useChatStore()
   const { theme, setTheme, systemSettings } = useSettingsStore()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     fetchSessions()
   }, [fetchSessions])
+
+  // 深链：URL 带 settings=1 时自动打开
+  useEffect(() => {
+    if (searchParams?.get('settings') === '1') {
+      setIsSettingsOpen(true)
+    }
+  }, [searchParams])
 
   const handleNewChat = async () => {
     if (!systemSettings?.systemModels || systemSettings.systemModels.length === 0) {
