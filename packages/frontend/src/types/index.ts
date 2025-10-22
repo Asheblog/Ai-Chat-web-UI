@@ -96,7 +96,7 @@ export interface SystemSettings {
   reasoningCustomTags?: string;
   streamDeltaChunkSize?: number;
   // 供应商参数（可选）
-  openaiReasoningEffort?: 'low' | 'medium' | 'high' | '';
+  openaiReasoningEffort?: 'low' | 'medium' | 'high' | '' | 'unset';
   ollamaThink?: boolean;
 }
 

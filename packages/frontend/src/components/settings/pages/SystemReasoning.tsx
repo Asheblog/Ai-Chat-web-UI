@@ -28,7 +28,7 @@ export function SystemReasoningPage() {
     setReasoningTagsMode((systemSettings.reasoningTagsMode as any) || 'default')
     setReasoningCustomTags(systemSettings.reasoningCustomTags || '')
     setStreamDeltaChunkSize(Number(systemSettings.streamDeltaChunkSize ?? 1))
-    setOpenaiReasoningEffort((((systemSettings as any).openaiReasoningEffort ?? 'unset')) as any)
+    setOpenaiReasoningEffort((((systemSettings as any).openaiReasoningEffort || 'unset')) as any)
     setOllamaThink(Boolean((systemSettings as any).ollamaThink ?? false))
   }, [systemSettings])
 
@@ -51,7 +51,7 @@ export function SystemReasoningPage() {
       reasoningTagsMode,
       reasoningCustomTags,
       streamDeltaChunkSize,
-      openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : undefined,
+      openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : '',
       ollamaThink,
     } as any)
   }
