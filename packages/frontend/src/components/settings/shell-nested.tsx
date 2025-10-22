@@ -36,7 +36,7 @@ export function SettingsShellNested({
   })()
 
   return (
-    <div className="mx-auto w-full max-w-5xl bg-background h-full">
+    <div className="mx-auto w-full max-w-5xl bg-background flex-1 min-h-0">
       <div className="flex h-full min-h-0">
         {/* 左侧：单列菜单 + 下拉式二级 */}
         <aside className="w-60 shrink-0 border-r bg-muted/10 flex flex-col min-h-0">
@@ -90,4 +90,3 @@ export function SettingsShellNested({
     </div>
   )
 }
-
