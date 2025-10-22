@@ -16,6 +16,8 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
     )
   }
 
+  const last = messages[messages.length - 1]
+
   return (
     <div className="space-y-4">
       {messages.map((message, index) => (
@@ -26,7 +28,8 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
         />
       ))}
 
-      {isStreaming && (
+      {/* 当末尾还没有 assistant 占位消息时，才额外显示思考中指示器，避免出现两条气泡 */}
+      {isStreaming && (!last || last.role !== 'assistant') && (
         <TypingIndicator />
       )}
     </div>

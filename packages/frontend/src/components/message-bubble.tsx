@@ -71,7 +71,19 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
               <p className="whitespace-pre-wrap text-right">{message.content}</p>
             </div>
           ) : (
-            <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
+            // 助手消息：当处于流式且内容为空时，直接在该气泡内显示“思考中”占位，避免再额外渲染一条提示气泡
+            (isStreaming && (!message.content || message.content.trim() === '')) ? (
+              <div className="flex items-center gap-1">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
+              </div>
+            ) : (
+              <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
+            )
           )}
         </div>
 
