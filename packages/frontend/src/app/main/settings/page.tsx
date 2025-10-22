@@ -24,9 +24,11 @@ export default function SettingsPage() {
   }, [user])
 
   return (
-    <div className="flex-1 flex flex-col">
+    // 主容器：最小高度为0，避免子项溢出时丢失滚动条
+    <div className="flex-1 flex flex-col min-h-0">
       {/* 顶部导航栏 */}
-      <div className="border-b px-4 py-3">
+      {/* 取消吸顶，保持普通顶部栏 */}
+      <div className="border-b bg-background px-4 py-3">
         <div className="flex items-center gap-4">
           <Link href="/main">
             <Button variant="ghost" size="icon">
@@ -38,14 +40,18 @@ export default function SettingsPage() {
       </div>
 
       {/* 设置内容 */}
-      <div className="flex-1 p-6 overflow-auto">
+      {/* 可滚动区域：确保在列布局中可收缩 */}
+      <div className="flex-1 p-6 overflow-auto min-h-0">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="max-w-4xl mx-auto">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="personal">个人设置</TabsTrigger>
-            {user?.role === 'ADMIN' && (
-              <TabsTrigger value="system">系统设置</TabsTrigger>
-            )}
-          </TabsList>
+          {/* 取消吸顶，仅保留常规间距 */}
+          <div className="pb-3">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="personal">个人设置</TabsTrigger>
+              {user?.role === 'ADMIN' && (
+                <TabsTrigger value="system">系统设置</TabsTrigger>
+              )}
+            </TabsList>
+          </div>
 
           <TabsContent value="personal" className="mt-6">
             <PersonalSettings />

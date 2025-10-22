@@ -297,11 +297,14 @@ export function SystemSettings() {
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        {/* 取消二级吸顶，保留分隔与间距 */}
+        <div className="pt-1 pb-2 mb-3 border-b">
+          <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="general">通用设置</TabsTrigger>
           <TabsTrigger value="models">系统模型</TabsTrigger>
           <TabsTrigger value="users">用户管理</TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         {/* 通用设置 */}
         <TabsContent value="general" className="space-y-4">
