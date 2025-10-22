@@ -54,3 +54,4 @@ packages/backend/prisma/*.sqlite
  
 # --- Third-party reference source (ignored) ---
 vendor/open-webui/
+packages/frontend/previews

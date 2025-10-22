@@ -19,9 +19,11 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { SettingsDialog } from '@/components/settings/settings-dialog'
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
@@ -159,11 +161,9 @@ export function Sidebar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem asChild>
-              <Link href="/main/settings" className="flex items-center">
-                <Settings className="mr-2 h-4 w-4" />
-                设置
-              </Link>
+            <DropdownMenuItem onClick={() => setIsSettingsOpen(true)} className="flex items-center">
+              <Settings className="mr-2 h-4 w-4" />
+              设置
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => handleThemeChange('light')}>
@@ -191,6 +191,9 @@ export function Sidebar() {
 
   return (
     <>
+      {/* 全局设置弹框 */}
+      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+
       {/* 移动端菜单按钮 */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <Button
@@ -223,4 +226,9 @@ export function Sidebar() {
       )}
     </>
   )
+}
+
+export function SidebarSettingsDialogBridge() {
+  // 保留一个便于测试的导出（若需要在其他地方打开设置）
+  return null
 }

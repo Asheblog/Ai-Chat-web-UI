@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SettingsShell, SettingsSection } from '@/components/settings/shell'
 import { PersonalSettings } from '@/components/personal-settings'
 import { SystemSettings } from '@/components/system-settings'
 import { useAuthStore } from '@/store/auth-store'
@@ -23,11 +23,15 @@ export default function SettingsPage() {
     }
   }, [user])
 
+  const sections: SettingsSection[] = [
+    { key: 'personal', label: '个人设置' },
+    ...(user?.role === 'ADMIN' ? [{ key: 'system', label: '系统设置' }] as SettingsSection[] : []),
+  ]
+
   return (
     // 主容器：最小高度为0，避免子项溢出时丢失滚动条
     <div className="flex-1 flex flex-col min-h-0">
-      {/* 顶部导航栏 */}
-      {/* 取消吸顶，保持普通顶部栏 */}
+      {/* 顶部导航栏（非吸顶） */}
       <div className="border-b bg-background px-4 py-3">
         <div className="flex items-center gap-4">
           <Link href="/main">
@@ -39,30 +43,20 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 设置内容 */}
-      {/* 可滚动区域：确保在列布局中可收缩 */}
-      <div className="flex-1 p-6 overflow-auto min-h-0">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="max-w-4xl mx-auto">
-          {/* 取消吸顶，仅保留常规间距 */}
-          <div className="pb-3">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="personal">个人设置</TabsTrigger>
-              {user?.role === 'ADMIN' && (
-                <TabsTrigger value="system">系统设置</TabsTrigger>
-              )}
-            </TabsList>
-          </div>
-
-          <TabsContent value="personal" className="mt-6">
+      {/* 内容区域：侧栏+右侧内容 */}
+      <div className="flex-1 overflow-auto p-6 min-h-0">
+        <SettingsShell
+          title="设置"
+          sections={sections}
+          active={activeTab}
+          onChange={setActiveTab}
+        >
+          {activeTab === 'system' && user?.role === 'ADMIN' ? (
+            <SystemSettings />
+          ) : (
             <PersonalSettings />
-          </TabsContent>
-
-          {user?.role === 'ADMIN' && (
-            <TabsContent value="system" className="mt-6">
-              <SystemSettings />
-            </TabsContent>
           )}
-        </Tabs>
+        </SettingsShell>
       </div>
     </div>
   )

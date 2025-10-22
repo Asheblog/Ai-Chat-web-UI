@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+// 已移除二级标签，改为分段列表行风格
 import {
   Dialog,
   DialogContent,
@@ -296,18 +296,10 @@ export function SystemSettings() {
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        {/* 取消二级吸顶，保留分隔与间距 */}
-        <div className="pt-1 pb-2 mb-3 border-b">
-          <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="general">通用设置</TabsTrigger>
-          <TabsTrigger value="models">系统模型</TabsTrigger>
-          <TabsTrigger value="users">用户管理</TabsTrigger>
-          </TabsList>
-        </div>
+      <div>
 
         {/* 通用设置 */}
-        <TabsContent value="general" className="space-y-4">
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>系统配置</CardTitle>
@@ -499,10 +491,10 @@ export function SystemSettings() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
 
         {/* 系统模型 */}
-        <TabsContent value="models" className="space-y-4">
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -657,10 +649,10 @@ export function SystemSettings() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
 
         {/* 用户管理 */}
-        <TabsContent value="users" className="space-y-4">
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>用户管理</CardTitle>
@@ -676,8 +668,8 @@ export function SystemSettings() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
     </div>
   )
 }
