@@ -62,6 +62,9 @@ model Message {
   sessionId Int
   role      String   // 'user' or 'assistant'
   content   String
+  // 可选：保存推理(思维链)内容与持续时长（秒）。默认不启用保存，受系统设置控制。
+  reasoning               String?
+  reasoningDurationSeconds Int?
   createdAt DateTime @default(now())
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

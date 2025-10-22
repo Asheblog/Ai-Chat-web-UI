@@ -7,6 +7,7 @@ import { Tokenizer } from '../utils/tokenizer';
 import { authMiddleware } from '../middleware/auth';
 import type { ApiResponse, Message } from '../types';
 import { BackendLogger as log } from '../utils/logger';
+import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../utils/reasoning-tags';
 
 const chat = new Hono();
 
@@ -68,6 +69,8 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
           sessionId: true,
           role: true,
           content: true,
+          reasoning: true,
+          reasoningDurationSeconds: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'asc' },
@@ -236,12 +239,22 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       messagesPayload.push({ role: 'user', content: parts })
     }
 
-    const requestData = {
+    const requestData: any = {
       model: session.modelConfig.name,
       messages: messagesPayload,
       stream: true,
       temperature: 0.7,
     };
+
+    // 供应商参数透传（系统设置控制）
+    const openaiReasoningEffort = (sysMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '').toString();
+    if (openaiReasoningEffort) {
+      requestData.reasoning_effort = openaiReasoningEffort;
+    }
+    const ollamaThink = (sysMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true';
+    if (ollamaThink) {
+      requestData.think = true;
+    }
 
     console.log('Starting AI stream request to:', session.modelConfig.apiUrl);
 
@@ -253,6 +266,11 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     c.header('Access-Control-Allow-Headers', 'Cache-Control');
 
     let aiResponseContent = '';
+    // 推理相关累积
+    let reasoningBuffer = '';
+    const reasoningState = createReasoningState();
+    let reasoningDoneEmitted = false;
+    let reasoningDurationSeconds = 0;
     // 读取系统设置（若存在则覆盖环境变量），用于网络稳定性与 usage 行为
     const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
@@ -264,6 +282,20 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     const heartbeatIntervalMs = parseInt(sysMap.sse_heartbeat_interval_ms || process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000');
     const providerMaxIdleMs = parseInt(sysMap.provider_max_idle_ms || process.env.PROVIDER_MAX_IDLE_MS || '60000');
     const providerTimeoutMs = parseInt(sysMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
+
+    // 推理链（CoT）配置
+    const REASONING_ENABLED = (sysMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false';
+    const REASONING_SAVE_TO_DB = (sysMap.reasoning_save_to_db ?? (process.env.REASONING_SAVE_TO_DB ?? 'true')).toString().toLowerCase() === 'true';
+    const REASONING_TAGS_MODE = (sysMap.reasoning_tags_mode ?? (process.env.REASONING_TAGS_MODE ?? 'default')).toString();
+    const REASONING_CUSTOM_TAGS = (() => {
+      try {
+        const raw = sysMap.reasoning_custom_tags || process.env.REASONING_CUSTOM_TAGS || '';
+        const arr = raw ? JSON.parse(raw) : null;
+        if (Array.isArray(arr) && arr.length === 2 && typeof arr[0] === 'string' && typeof arr[1] === 'string') return [[arr[0], arr[1]] as [string, string]];
+      } catch {}
+      return null;
+    })();
+    const STREAM_DELTA_CHUNK_SIZE = parseInt(sysMap.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1');
 
     // 提前记录是否已收到厂商 usage（优先使用）
     let providerUsageSeen = false as boolean;
@@ -390,16 +422,36 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                   const parsed = JSON.parse(data);
 
                   // 提取AI响应内容
-                  if (parsed.choices?.[0]?.delta?.content) {
-                    const content = parsed.choices[0].delta.content;
-                    aiResponseContent += content;
+                  const deltaContent: string | undefined = parsed.choices?.[0]?.delta?.content;
+                  const deltaReasoning: string | undefined = parsed.choices?.[0]?.delta?.reasoning_content;
 
-                    // 转发内容到客户端
-                    const contentEvent = `data: ${JSON.stringify({
-                      type: 'content',
-                      content,
-                    })}\n\n`;
-                    controller.enqueue(encoder.encode(contentEvent));
+                  // 供应商原生 reasoning_content（OpenAI 等）
+                  if (REASONING_ENABLED && deltaReasoning) {
+                    if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
+                    reasoningBuffer += deltaReasoning;
+                    const reasoningEvent = `data: ${JSON.stringify({ type: 'reasoning', content: deltaReasoning })}\n\n`;
+                    controller.enqueue(encoder.encode(reasoningEvent));
+                  }
+
+                  if (deltaContent) {
+                    let visible = deltaContent;
+                    if (REASONING_ENABLED && REASONING_TAGS_MODE !== 'off') {
+                      const tags = REASONING_TAGS_MODE === 'custom' && REASONING_CUSTOM_TAGS ? REASONING_CUSTOM_TAGS : DEFAULT_REASONING_TAGS;
+                      const { visibleDelta, reasoningDelta } = extractByTags(deltaContent, tags, reasoningState);
+                      visible = visibleDelta;
+                      if (reasoningDelta) {
+                        if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
+                        reasoningBuffer += reasoningDelta;
+                        const reasoningEvent = `data: ${JSON.stringify({ type: 'reasoning', content: reasoningDelta })}\n\n`;
+                        controller.enqueue(encoder.encode(reasoningEvent));
+                      }
+                    }
+
+                    if (visible) {
+                      aiResponseContent += visible;
+                      const contentEvent = `data: ${JSON.stringify({ type: 'content', content: visible })}\n\n`;
+                      controller.enqueue(encoder.encode(contentEvent));
+                    }
                   }
 
                   // 结束原因（如果可用）
@@ -430,6 +482,17 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
           }
 
           clearInterval(heartbeat);
+
+          // 推理结束事件（若产生过推理）
+          if (REASONING_ENABLED && !reasoningDoneEmitted && reasoningBuffer.trim()) {
+            const endedAt = Date.now();
+            if (reasoningState.startedAt) {
+              reasoningDurationSeconds = Math.max(0, Math.round((endedAt - reasoningState.startedAt) / 1000));
+            }
+            const reasoningDoneEvent = `data: ${JSON.stringify({ type: 'reasoning', done: true, duration: reasoningDurationSeconds })}\n\n`;
+            controller.enqueue(encoder.encode(reasoningDoneEvent));
+            reasoningDoneEmitted = true;
+          }
 
           // 保存AI完整回复延后到完成阶段，以便与 usage 绑定
 
@@ -481,7 +544,14 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             if (aiResponseContent.trim()) {
               try {
                 const saved = await prisma.message.create({
-                  data: { sessionId, role: 'assistant', content: aiResponseContent.trim() },
+                  data: {
+                    sessionId,
+                    role: 'assistant',
+                    content: aiResponseContent.trim(),
+                    ...(REASONING_ENABLED && REASONING_SAVE_TO_DB && reasoningBuffer.trim()
+                      ? { reasoning: reasoningBuffer.trim(), reasoningDurationSeconds }
+                      : {}),
+                  },
                 });
                 assistantMessageId = saved?.id ?? null;
               } catch (e) {
@@ -613,7 +683,13 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     if (last && last.role === 'user' && last.content === content) messagesPayload[messagesPayload.length - 1] = { role: 'user', content: parts };
     else messagesPayload.push({ role: 'user', content: parts });
 
-    const body = { model: session.modelConfig.name, messages: messagesPayload, stream: false, temperature: 0.7 };
+    const body: any = { model: session.modelConfig.name, messages: messagesPayload, stream: false, temperature: 0.7 };
+    const settingsRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
+    const settingsMap = settingsRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+    const openaiReasoningEffort2 = (settingsMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '').toString();
+    if (openaiReasoningEffort2) body.reasoning_effort = openaiReasoningEffort2;
+    const ollamaThink2 = (settingsMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true';
+    if (ollamaThink2) body.think = true;
 
     const doOnce = async (signal: AbortSignal) => fetch(session.modelConfig.apiUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${decryptedApiKey}` }, body: JSON.stringify(body), signal,
@@ -635,6 +711,7 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     }
     const json = await resp.json();
     const text = json?.choices?.[0]?.message?.content || '';
+    const fallbackReasoning: string | undefined = json?.choices?.[0]?.message?.reasoning_content || json?.message?.thinking || undefined;
     const u = json?.usage || {};
     const usage = {
       prompt_tokens: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? promptTokens) || promptTokens,
@@ -646,7 +723,14 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
 
     let assistantMsgId: number | null = null;
     if (text) {
-      const saved = await prisma.message.create({ data: { sessionId, role: 'assistant', content: text } });
+      const saved = await prisma.message.create({
+        data: {
+          sessionId,
+          role: 'assistant',
+          content: text,
+          ...(fallbackReasoning ? { reasoning: String(fallbackReasoning) } : {}),
+        },
+      });
       assistantMsgId = saved.id;
     }
     await (prisma as any).usageMetric.create({

@@ -81,6 +81,15 @@ export function SystemSettings() {
   const [timeoutMs, setTimeoutMs] = useState<number>(300000)
   const [usageEmit, setUsageEmit] = useState<boolean>(true)
   const [usageProviderOnly, setUsageProviderOnly] = useState<boolean>(false)
+  // —— 推理链设置草稿 ——
+  const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(true)
+  const [reasoningDefaultExpand, setReasoningDefaultExpand] = useState<boolean>(false)
+  const [reasoningSaveToDb, setReasoningSaveToDb] = useState<boolean>(true)
+  const [reasoningTagsMode, setReasoningTagsMode] = useState<'default'|'custom'|'off'>('default')
+  const [reasoningCustomTags, setReasoningCustomTags] = useState<string>('')
+  const [streamDeltaChunkSize, setStreamDeltaChunkSize] = useState<number>(1)
+  const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<''|'low'|'medium'|'high'>('' as any)
+  const [ollamaThink, setOllamaThink] = useState<boolean>(false)
 
   useEffect(() => {
     fetchSystemSettings()
@@ -96,6 +105,15 @@ export function SystemSettings() {
       setTimeoutMs(Number(systemSettings.providerTimeoutMs ?? 300000))
       setUsageEmit(Boolean(systemSettings.usageEmit ?? true))
       setUsageProviderOnly(Boolean(systemSettings.usageProviderOnly ?? false))
+      // 同步推理链设置
+      setReasoningEnabled(Boolean(systemSettings.reasoningEnabled ?? true))
+      setReasoningDefaultExpand(Boolean(systemSettings.reasoningDefaultExpand ?? false))
+      setReasoningSaveToDb(Boolean(systemSettings.reasoningSaveToDb ?? true))
+      setReasoningTagsMode((systemSettings.reasoningTagsMode as any) || 'default')
+      setReasoningCustomTags(systemSettings.reasoningCustomTags || '')
+      setStreamDeltaChunkSize(Number(systemSettings.streamDeltaChunkSize ?? 1))
+      setOpenaiReasoningEffort(((systemSettings as any).openaiReasoningEffort || '') as any)
+      setOllamaThink(Boolean((systemSettings as any).ollamaThink ?? false))
     }
   }, [systemSettings?.brandText])
 
@@ -109,6 +127,33 @@ export function SystemSettings() {
       setUsageProviderOnly(Boolean(systemSettings.usageProviderOnly ?? false))
     }
   }, [systemSettings?.sseHeartbeatIntervalMs, systemSettings?.providerMaxIdleMs, systemSettings?.providerTimeoutMs, systemSettings?.usageEmit, systemSettings?.usageProviderOnly])
+
+  const canSaveReasoning = !isLoading
+  const handleSaveReasoningSettings = async () => {
+    // 简单校验：custom 模式下必须为有效JSON数组
+    if (reasoningTagsMode === 'custom') {
+      try {
+        const arr = JSON.parse(reasoningCustomTags)
+        if (!Array.isArray(arr) || arr.length !== 2 || typeof arr[0] !== 'string' || typeof arr[1] !== 'string') {
+          throw new Error('自定义标签需为 [startTag, endTag]')
+        }
+      } catch (e) {
+        toast({ title: '自定义标签无效', description: '必须是形如 ["<think>","</think>"] 的 JSON', variant: 'destructive' })
+        return
+      }
+    }
+    await handleUpdateGeneralSettings({
+      reasoningEnabled,
+      reasoningDefaultExpand,
+      reasoningSaveToDb,
+      reasoningTagsMode,
+      reasoningCustomTags: reasoningCustomTags,
+      streamDeltaChunkSize,
+      // 供应商参数
+      openaiReasoningEffort: openaiReasoningEffort || undefined,
+      ollamaThink,
+    } as any)
+  }
 
   const msToSec = (v: number) => `${Math.round(v / 1000)} 秒`
   const within = (v: number, min: number, max: number) => v >= min && v <= max
@@ -301,6 +346,92 @@ export function SystemSettings() {
         {/* 通用设置 */}
         <div className="space-y-4">
           <Card>
+            <CardHeader>
+              <CardTitle>推理链（CoT）</CardTitle>
+              <CardDescription>
+                启用/配置思维链识别与展示，可选择是否持久化保存。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="reasoningEnabled">启用推理链</Label>
+                  <p className="text-sm text-muted-foreground">识别供应商原生 reasoning_content 与文本中的 CoT 标签，并在 UI 折叠显示。</p>
+                </div>
+                <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v)=>setReasoningEnabled(!!v)} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="reasoningDefaultExpand">默认展开思维链</Label>
+                  <p className="text-sm text-muted-foreground">仅影响前端默认行为，用户可手动折叠/展开。</p>
+                </div>
+                <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v)=>setReasoningDefaultExpand(!!v)} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="reasoningSaveToDb">保存到数据库</Label>
+                  <p className="text-sm text-muted-foreground">保存 CoT 内容用于复看；可能包含敏感上下文，请按需开启。</p>
+                </div>
+                <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v)=>setReasoningSaveToDb(!!v)} />
+              </div>
+
+              <div className="grid gap-2">
+                <Label>标签模式</Label>
+                <div className="flex items-center gap-2">
+                  <Select value={reasoningTagsMode} onValueChange={(v)=>setReasoningTagsMode(v as any)}>
+                    <SelectTrigger className="w-48"><SelectValue placeholder="选择模式" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">默认</SelectItem>
+                      <SelectItem value="custom">自定义</SelectItem>
+                      <SelectItem value="off">关闭</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {reasoningTagsMode === 'custom' && (
+                    <Input placeholder='["<think>","</think>"]' value={reasoningCustomTags} onChange={(e)=>setReasoningCustomTags(e.target.value)} className="flex-1" />
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">默认包含 &lt;think&gt; / &lt;|begin_of_thought|&gt; 等常见标签。</p>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="deltaSize">流式增量聚合（分片大小）</Label>
+                <div className="flex items-center gap-2">
+                  <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-36" />
+                  <span className="text-sm text-muted-foreground">越大则前端刷新越平滑但延迟稍增</span>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label>OpenAI reasoning effort</Label>
+                <div className="flex items-center gap-2">
+                  <Select value={openaiReasoningEffort || ''} onValueChange={(v)=>setOpenaiReasoningEffort(v as any)}>
+                    <SelectTrigger className="w-48"><SelectValue placeholder="不设置" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">不设置</SelectItem>
+                      <SelectItem value="low">low</SelectItem>
+                      <SelectItem value="medium">medium</SelectItem>
+                      <SelectItem value="high">high</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">仅对支持 reasoning_effort 的模型生效</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="ollamaThink">Ollama think</Label>
+                  <p className="text-sm text-muted-foreground">仅在上游为 Ollama 时按需启用</p>
+                </div>
+                <Switch id="ollamaThink" checked={ollamaThink} onCheckedChange={(v)=>setOllamaThink(!!v)} />
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveReasoningSettings} disabled={!canSaveReasoning}>保存</Button>
+              </div>
+            </CardContent>
+          </Card>
             <CardHeader>
               <CardTitle>系统配置</CardTitle>
               <CardDescription>

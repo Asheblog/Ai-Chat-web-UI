@@ -88,6 +88,16 @@ export interface SystemSettings {
   providerTimeoutMs?: number;
   usageEmit?: boolean;
   usageProviderOnly?: boolean;
+  // 推理链相关（可选）
+  reasoningEnabled?: boolean;
+  reasoningDefaultExpand?: boolean;
+  reasoningSaveToDb?: boolean;
+  reasoningTagsMode?: 'default' | 'custom' | 'off';
+  reasoningCustomTags?: string;
+  streamDeltaChunkSize?: number;
+  // 供应商参数（可选）
+  openaiReasoningEffort?: 'low' | 'medium' | 'high' | '';
+  ollamaThink?: boolean;
 }
 
 // UI 状态类型

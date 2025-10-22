@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { Copy, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -8,6 +7,7 @@ import { Message } from '@/types'
 import { MarkdownRenderer } from './markdown-renderer'
 import { formatDate, copyToClipboard } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
+import { useState } from 'react'
 
 interface MessageBubbleProps {
   message: Message
@@ -16,6 +16,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const [isCopied, setIsCopied] = useState(false)
+  const [showReasoning, setShowReasoning] = useState(false)
   const { toast } = useToast()
 
   const handleCopy = async () => {
@@ -82,7 +83,36 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
                 <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
               </div>
             ) : (
-              <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
+              <div className="space-y-2">
+                {/* 思维过程折叠块（存在推理内容或处于流式中，且为助手消息时显示） */}
+                {(message.reasoning || (isStreaming && message.role === 'assistant')) && (
+                  <div className="border rounded bg-background/60">
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-muted-foreground flex items-center justify-between"
+                      onClick={() => setShowReasoning((v) => !v)}
+                      title="思维过程（可折叠）"
+                    >
+                      <span>
+                        {message.reasoningDurationSeconds && !isStreaming
+                          ? `思维过程 · 用时 ${message.reasoningDurationSeconds}s`
+                          : '思维过程'}
+                      </span>
+                      <span className="ml-2">{showReasoning ? '▼' : '▶'}</span>
+                    </button>
+                    {showReasoning && (
+                      <div className="px-3 pb-2">
+                        {message.reasoning ? (
+                          <pre className="whitespace-pre-wrap text-xs text-muted-foreground">{message.reasoning.split('\n').map(l => l.startsWith('>') ? l : `> ${l}`).join('\n')}</pre>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">正在思考中…</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
+              </div>
             )
           )}
         </div>

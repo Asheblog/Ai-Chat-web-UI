@@ -18,6 +18,18 @@ const systemSettingSchema = z.object({
   provider_timeout_ms: z.number().int().min(10000).max(3600000).optional(),
   usage_emit: z.boolean().optional(),
   usage_provider_only: z.boolean().optional(),
+  // 推理链（思维链）相关
+  reasoning_enabled: z.boolean().optional(),
+  reasoning_default_expand: z.boolean().optional(),
+  reasoning_save_to_db: z.boolean().optional(),
+  reasoning_tags_mode: z.enum(['default', 'custom', 'off']).optional(),
+  // JSON 字符串，如 ["<think>", "</think>"]
+  reasoning_custom_tags: z.string().optional(),
+  // 服务端流分片大小（可选）
+  stream_delta_chunk_size: z.number().int().min(1).max(100).optional(),
+  // 供应商参数（可选）
+  openai_reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
+  ollama_think: z.boolean().optional(),
 });
 
 // 获取系统设置（仅管理员）
@@ -48,6 +60,16 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
       provider_timeout_ms: parseInt(settingsObj.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000'),
       usage_emit: (settingsObj.usage_emit ?? (process.env.USAGE_EMIT ?? 'true')).toString().toLowerCase() !== 'false',
       usage_provider_only: (settingsObj.usage_provider_only ?? (process.env.USAGE_PROVIDER_ONLY ?? 'false')).toString().toLowerCase() === 'true',
+      // 推理链
+      reasoning_enabled: (settingsObj.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false',
+      reasoning_default_expand: (settingsObj.reasoning_default_expand ?? (process.env.REASONING_DEFAULT_EXPAND ?? 'false')).toString().toLowerCase() === 'true',
+      // 默认 true（按你的要求）
+      reasoning_save_to_db: (settingsObj.reasoning_save_to_db ?? (process.env.REASONING_SAVE_TO_DB ?? 'true')).toString().toLowerCase() === 'true',
+      reasoning_tags_mode: (settingsObj.reasoning_tags_mode ?? (process.env.REASONING_TAGS_MODE ?? 'default')).toString(),
+      reasoning_custom_tags: settingsObj.reasoning_custom_tags || process.env.REASONING_CUSTOM_TAGS || '',
+      stream_delta_chunk_size: parseInt(settingsObj.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'),
+      openai_reasoning_effort: (settingsObj.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || ''),
+      ollama_think: (settingsObj.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true',
     };
 
     return c.json<ApiResponse>({
@@ -67,7 +89,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, usage_emit, usage_provider_only } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think } = c.req.valid('json');
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -124,6 +146,71 @@ settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', 
         where: { key: 'usage_provider_only' },
         update: { value: usage_provider_only.toString() },
         create: { key: 'usage_provider_only', value: usage_provider_only.toString() },
+      });
+    }
+
+    // 推理链相关
+    if (typeof reasoning_enabled === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'reasoning_enabled' },
+        update: { value: reasoning_enabled.toString() },
+        create: { key: 'reasoning_enabled', value: reasoning_enabled.toString() },
+      });
+    }
+
+    if (typeof reasoning_default_expand === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'reasoning_default_expand' },
+        update: { value: reasoning_default_expand.toString() },
+        create: { key: 'reasoning_default_expand', value: reasoning_default_expand.toString() },
+      });
+    }
+
+    if (typeof reasoning_save_to_db === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'reasoning_save_to_db' },
+        update: { value: reasoning_save_to_db.toString() },
+        create: { key: 'reasoning_save_to_db', value: reasoning_save_to_db.toString() },
+      });
+    }
+
+    if (typeof reasoning_tags_mode === 'string') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'reasoning_tags_mode' },
+        update: { value: reasoning_tags_mode },
+        create: { key: 'reasoning_tags_mode', value: reasoning_tags_mode },
+      });
+    }
+
+    if (typeof reasoning_custom_tags === 'string') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'reasoning_custom_tags' },
+        update: { value: reasoning_custom_tags },
+        create: { key: 'reasoning_custom_tags', value: reasoning_custom_tags },
+      });
+    }
+
+    if (typeof stream_delta_chunk_size === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'stream_delta_chunk_size' },
+        update: { value: String(stream_delta_chunk_size) },
+        create: { key: 'stream_delta_chunk_size', value: String(stream_delta_chunk_size) },
+      });
+    }
+
+    if (typeof openai_reasoning_effort === 'string') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'openai_reasoning_effort' },
+        update: { value: openai_reasoning_effort },
+        create: { key: 'openai_reasoning_effort', value: openai_reasoning_effort },
+      });
+    }
+
+    if (typeof ollama_think === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'ollama_think' },
+        update: { value: ollama_think.toString() },
+        create: { key: 'ollama_think', value: ollama_think.toString() },
       });
     }
 

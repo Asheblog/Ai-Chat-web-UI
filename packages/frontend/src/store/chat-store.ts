@@ -209,6 +209,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       let accumulatedContent = ''
+      let accumulatedReasoning = ''
 
       for await (const evt of apiClient.streamChat(sessionId, content, images)) {
         if (evt?.type === 'content' && evt.content) {
@@ -220,6 +221,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 : msg
             ),
           }))
+        } else if (evt?.type === 'reasoning') {
+          if (evt.content) {
+            accumulatedReasoning += evt.content
+            set((state) => ({
+              messages: state.messages.map((msg, index) =>
+                index === state.messages.length - 1
+                  ? { ...msg, reasoning: accumulatedReasoning }
+                  : msg
+              ),
+            }))
+          }
+          if (evt.done) {
+            set((state) => ({
+              messages: state.messages.map((msg, index) =>
+                index === state.messages.length - 1
+                  ? { ...msg, reasoningDurationSeconds: evt.duration }
+                  : msg
+              ),
+            }))
+          }
         } else if (evt?.type === 'usage' && evt.usage) {
           // 实时更新当前 usage；若包含 completion/total 则可同步作为 lastRound
           set((state) => ({
