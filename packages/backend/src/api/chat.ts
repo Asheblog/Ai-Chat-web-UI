@@ -881,10 +881,31 @@ chat.get('/usage/daily', authMiddleware, async (c) => {
     const to = c.req.query('to');
     const sessionIdStr = c.req.query('sessionId');
 
-    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
-    const toDate = to ? new Date(to) : new Date();
+    // 解析日期：如果只传入 YYYY-MM-DD，则按本地时区解析
+    const parseYMD = (s: string, endOfDay = false): Date | null => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+      if (!m) return null;
+      const y = Number(m[1]);
+      const mo = Number(m[2]) - 1; // 0-based month
+      const d = Number(m[3]);
+      if (endOfDay) {
+        // 当天 23:59:59.999（本地时区），确保包含整天数据
+        return new Date(y, mo, d, 23, 59, 59, 999);
+      }
+      // 当天 00:00:00.000（本地时区）
+      return new Date(y, mo, d, 0, 0, 0, 0);
+    };
+
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+    let fromDate = from ? (parseYMD(from, false) || new Date(from)) : defaultFrom;
+    let toDate = to ? (parseYMD(to, true) || new Date(to)) : now;
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid date range' }, 400);
+    }
+    // 兜底：如果范围颠倒，交换
+    if (fromDate > toDate) {
+      const tmp = fromDate; fromDate = toDate; toDate = tmp;
     }
 
     let sessionFilter: any = {};
