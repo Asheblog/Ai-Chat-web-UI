@@ -10,6 +10,7 @@ import { PersonalPreferencesPage } from "./pages/PersonalPreferences"
 import { AboutPage } from "./pages/About"
 import { SystemGeneralPage } from "./pages/SystemGeneral"
 import { SystemNetworkPage } from "./pages/SystemNetwork"
+import { SystemReasoningPage } from "./pages/SystemReasoning"
 import { SystemModelsPage } from "./pages/SystemModels"
 import { SystemUsersPage } from "./pages/SystemUsers"
 
@@ -79,6 +80,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
               case 'personal.about': return <AboutPage />
               case 'system.general': return <SystemGeneralPage />
               case 'system.network': return <SystemNetworkPage />
+              case 'system.reasoning': return <SystemReasoningPage />
               case 'system.models': return <SystemModelsPage />
               case 'system.users': return <SystemUsersPage />
               default: return null

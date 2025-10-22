@@ -21,10 +21,10 @@ export const settingsNav: SettingsNavItem[] = [
     adminOnly: true,
     children: [
       { key: 'system.general', label: '通用' },
+      { key: 'system.reasoning', label: '推理链（CoT）' },
       { key: 'system.network', label: '网络与流式' },
       { key: 'system.models', label: '系统模型' },
       { key: 'system.users', label: '用户管理' },
     ],
   },
 ]
-

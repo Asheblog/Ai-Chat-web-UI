@@ -88,7 +88,7 @@ export function SystemSettings() {
   const [reasoningTagsMode, setReasoningTagsMode] = useState<'default'|'custom'|'off'>('default')
   const [reasoningCustomTags, setReasoningCustomTags] = useState<string>('')
   const [streamDeltaChunkSize, setStreamDeltaChunkSize] = useState<number>(1)
-  const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<''|'low'|'medium'|'high'>('' as any)
+  const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<'unset'|'low'|'medium'|'high'>('unset')
   const [ollamaThink, setOllamaThink] = useState<boolean>(false)
 
   useEffect(() => {
@@ -112,7 +112,7 @@ export function SystemSettings() {
       setReasoningTagsMode((systemSettings.reasoningTagsMode as any) || 'default')
       setReasoningCustomTags(systemSettings.reasoningCustomTags || '')
       setStreamDeltaChunkSize(Number(systemSettings.streamDeltaChunkSize ?? 1))
-      setOpenaiReasoningEffort(((systemSettings as any).openaiReasoningEffort || '') as any)
+      setOpenaiReasoningEffort((((systemSettings as any).openaiReasoningEffort ?? 'unset')) as any)
       setOllamaThink(Boolean((systemSettings as any).ollamaThink ?? false))
     }
   }, [systemSettings?.brandText])
@@ -150,7 +150,7 @@ export function SystemSettings() {
       reasoningCustomTags: reasoningCustomTags,
       streamDeltaChunkSize,
       // 供应商参数
-      openaiReasoningEffort: openaiReasoningEffort || undefined,
+      openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : undefined,
       ollamaThink,
     } as any)
   }
@@ -406,10 +406,10 @@ export function SystemSettings() {
               <div className="grid gap-2">
                 <Label>OpenAI reasoning effort</Label>
                 <div className="flex items-center gap-2">
-                  <Select value={openaiReasoningEffort || ''} onValueChange={(v)=>setOpenaiReasoningEffort(v as any)}>
+                  <Select value={openaiReasoningEffort} onValueChange={(v)=>setOpenaiReasoningEffort(v as any)}>
                     <SelectTrigger className="w-48"><SelectValue placeholder="不设置" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">不设置</SelectItem>
+                      <SelectItem value="unset">不设置</SelectItem>
                       <SelectItem value="low">low</SelectItem>
                       <SelectItem value="medium">medium</SelectItem>
                       <SelectItem value="high">high</SelectItem>
