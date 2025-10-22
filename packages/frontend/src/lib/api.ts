@@ -13,6 +13,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 class ApiClient {
   private client: AxiosInstance
   private currentStreamController: AbortController | null = null
+  // 标记避免重复重定向
+  private isRedirecting = false
 
   constructor() {
     this.client = axios.create({
@@ -61,17 +63,29 @@ class ApiClient {
             data: error.response?.data,
           })
         } catch {}
-        if (error.response?.status === 401) {
-          // token过期，清除本地存储并跳转到登录页
-          this.clearToken()
-          if (typeof window !== 'undefined') {
-            // 统一跳转到 Next.js 下的登录页路径
-            window.location.href = '/auth/login'
-          }
-        }
+        if (error.response?.status === 401) this.handleUnauthorized()
         return Promise.reject(error)
       }
     )
+  }
+
+  // 统一处理 401：清理凭证与持久化，并跳转登录
+  private handleUnauthorized() {
+    try {
+      this.clearToken()
+      if (typeof window !== 'undefined') {
+        // 同步清理 zustand 的持久化存储，防止旧 user/token 复水
+        try {
+          window.localStorage.removeItem('auth-storage')
+        } catch {}
+        if (!this.isRedirecting) {
+          this.isRedirecting = true
+          window.location.href = '/auth/login'
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
 
   // 读取记住登录偏好，决定存储介质（localStorage / sessionStorage）
@@ -217,12 +231,24 @@ class ApiClient {
     this.currentStreamController?.abort();
     this.currentStreamController = new AbortController();
     let response = await doOnce(this.currentStreamController.signal)
+    if (response.status === 401) {
+      this.handleUnauthorized()
+      throw new Error('Unauthorized')
+    }
     if (response.status === 429) {
       await new Promise(r => setTimeout(r, 15000))
       response = await doOnce(this.currentStreamController.signal)
+      if (response.status === 401) {
+        this.handleUnauthorized()
+        throw new Error('Unauthorized')
+      }
     } else if (response.status >= 500) {
       await new Promise(r => setTimeout(r, 2000))
       response = await doOnce(this.currentStreamController.signal)
+      if (response.status === 401) {
+        this.handleUnauthorized()
+        throw new Error('Unauthorized')
+      }
     }
 
     if (!response.ok) {
