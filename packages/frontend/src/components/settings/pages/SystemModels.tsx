@@ -44,9 +44,9 @@ export function SystemModelsPage(){
   }
 
   return (
-    <section className="rounded-xl border overflow-hidden">
-      <div className="px-4 py-3 font-medium border-b flex items-center justify-between">
-        <span>系统模型</span>
+    <div className="p-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="text-base font-medium">系统模型</div>
         <Dialog open={isCreateOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="h-4 w-4 mr-2"/>新增</Button>
@@ -88,9 +88,9 @@ export function SystemModelsPage(){
         {!systemSettings?.systemModels || systemSettings.systemModels.length===0 ? (
           <div className="text-center py-8 text-muted-foreground">暂无系统模型</div>
         ) : (
-          <div className="divide-y">
+          <div className="space-y-3">
             {systemSettings.systemModels.map(model => (
-              <div key={model.id} className="flex items-center justify-between px-4 py-3">
+              <div key={model.id} className="flex items-center justify-between p-4 border rounded-lg">
                 {editingModel?.id === model.id ? (
                   <div className="flex-1 space-y-3">
                     <Input value={formData.name} onChange={e=>setFormData(p=>({...p,name:e.target.value}))} placeholder="模型名称" />
@@ -122,6 +122,6 @@ export function SystemModelsPage(){
           </div>
         )}
       </div>
-    </section>
+    </div>
   )
 }

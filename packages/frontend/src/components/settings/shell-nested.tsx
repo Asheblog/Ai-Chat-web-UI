@@ -30,10 +30,7 @@ export function SettingsShellNested({
     setOpenKey(activeMain)
   }, [activeMain])
 
-  const activeLabel = (() => {
-    const main = tree.find(m => m.key === activeMain)
-    return main?.children?.find(s => s.key === activeSub)?.label || ''
-  })()
+  // 右侧内容标题由各具体页面自身渲染，此处无需计算 activeLabel
 
   return (
     <div className="mx-auto w-full max-w-5xl bg-background flex-1 min-h-0">
@@ -81,9 +78,8 @@ export function SettingsShellNested({
           </nav>
         </aside>
 
-        {/* 右侧内容 */}
+        {/* 右侧内容：标题由各页面自行渲染，避免重复 */}
         <section className="flex-1 min-h-0 flex flex-col">
-          <div className="border-b px-4 py-3 font-medium">{activeLabel}</div>
           <div className="flex-1 min-h-0 overflow-auto p-4">{children}</div>
         </section>
       </div>

@@ -44,9 +44,9 @@ export function PersonalModelsPage(){
   }
 
   return (
-    <section className="rounded-xl border overflow-hidden">
-      <div className="px-4 py-3 font-medium border-b flex items-center justify-between">
-        <span>个人模型</span>
+    <div className="p-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="text-base font-medium">个人模型</div>
         <Dialog open={isCreateOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="h-4 w-4 mr-2"/>添加模型</Button>
@@ -88,9 +88,9 @@ export function PersonalModelsPage(){
         {personalModels.length===0 ? (
           <div className="text-center py-8 text-muted-foreground">暂无个人模型</div>
         ) : (
-          <div className="divide-y">
+          <div className="space-y-3">
             {personalModels.map(model => (
-              <div key={model.id} className="flex items-center justify-between px-4 py-3">
+              <div key={model.id} className="flex items-center justify-between p-4 border rounded-lg">
                 {editingModel?.id === model.id ? (
                   <div className="flex-1 space-y-3">
                     <Input value={formData.name} onChange={e=>setFormData(p=>({...p,name:e.target.value}))} placeholder="模型名称" />
@@ -122,6 +122,6 @@ export function PersonalModelsPage(){
           </div>
         )}
       </div>
-    </section>
+    </div>
   )
 }

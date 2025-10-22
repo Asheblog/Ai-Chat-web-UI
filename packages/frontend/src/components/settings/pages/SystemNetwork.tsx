@@ -58,10 +58,10 @@ export function SystemNetworkPage() {
   }
 
   return (
-    <section className="rounded-xl border overflow-hidden">
-      <div className="px-4 py-3 font-medium border-b">网络与流式</div>
-      <div className="divide-y">
-        <div className="px-4 py-3">
+    <div className="p-4 space-y-6">
+      <div className="text-base font-medium">网络与流式</div>
+      <div className="space-y-4">
+        <div>
           <Label htmlFor="sseHeartbeat" className="font-medium">SSE 心跳间隔（毫秒）</Label>
           <div className="mt-2 flex items-center gap-2">
             <Input id="sseHeartbeat" type="number" value={hbMs} onChange={(e)=>setHbMs(Number(e.target.value||0))} />
@@ -71,7 +71,7 @@ export function SystemNetworkPage() {
           {!hbValid ? <p className="text-xs text-destructive mt-1">范围 {hbRange.min}–{hbRange.max}</p> : <p className="text-xs text-muted-foreground mt-1">推荐 10–15 秒</p>}
         </div>
 
-        <div className="px-4 py-3">
+        <div>
           <Label htmlFor="providerMaxIdle" className="font-medium">上游最大空闲（毫秒）</Label>
           <div className="mt-2 flex items-center gap-2">
             <Input id="providerMaxIdle" type="number" value={idleMs} onChange={(e)=>setIdleMs(Number(e.target.value||0))} />
@@ -81,7 +81,7 @@ export function SystemNetworkPage() {
           {!idleValid ? <p className="text-xs text-destructive mt-1">范围 {idleRange.min}–{idleRange.max}</p> : <p className="text-xs text-muted-foreground mt-1">建议 ≥ 心跳间隔</p>}
         </div>
 
-        <div className="px-4 py-3">
+        <div>
           <Label htmlFor="providerTimeout" className="font-medium">上游总体超时（毫秒）</Label>
           <div className="mt-2 flex items-center gap-2">
             <Input id="providerTimeout" type="number" value={timeoutMs} onChange={(e)=>setTimeoutMs(Number(e.target.value||0))} />
@@ -90,8 +90,7 @@ export function SystemNetworkPage() {
           </div>
           {!toutValid ? <p className="text-xs text-destructive mt-1">范围 {toutRange.min}–{toutRange.max}</p> : null}
         </div>
-
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between">
           <div>
             <div className="font-medium">推送用量（usage）</div>
             <p className="text-sm text-muted-foreground">开启后在流式过程中向前端发送 usage 事件</p>
@@ -99,7 +98,7 @@ export function SystemNetworkPage() {
           <Switch checked={usageEmit} onCheckedChange={(v)=>setUsageEmit(!!v)} />
         </div>
 
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between">
           <div>
             <div className="font-medium">仅透传厂商 usage</div>
             <p className="text-sm text-muted-foreground">关闭时会在结束前估算 completion/total</p>
@@ -107,11 +106,10 @@ export function SystemNetworkPage() {
           <Switch checked={usageProviderOnly} onCheckedChange={(v)=>setUsageProviderOnly(!!v)} disabled={!usageEmit} />
         </div>
 
-        <div className="px-4 py-3 flex justify-end">
+        <div className="flex justify-end">
           <Button onClick={save} disabled={!hbValid||!idleValid||!toutValid||!changed}>保存更改</Button>
         </div>
       </div>
-    </section>
+    </div>
   )
 }
-

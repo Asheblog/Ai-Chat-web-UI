@@ -7,10 +7,10 @@ import { useSettingsStore } from "@/store/settings-store"
 export function PersonalPreferencesPage(){
   const { theme, setTheme, maxTokens, setMaxTokens } = useSettingsStore()
   return (
-    <section className="rounded-xl border overflow-hidden">
-      <div className="px-4 py-3 font-medium border-b">偏好设置</div>
-      <div className="divide-y">
-        <div className="px-4 py-3">
+    <div className="p-4 space-y-6">
+      <div className="text-base font-medium">偏好设置</div>
+      <div className="space-y-4">
+        <div>
           <Label htmlFor="theme" className="font-medium">主题</Label>
           <div className="mt-2">
             <Select value={theme} onValueChange={(v:any)=>setTheme(v)}>
@@ -23,7 +23,7 @@ export function PersonalPreferencesPage(){
             </Select>
           </div>
         </div>
-        <div className="px-4 py-3">
+        <div>
           <Label htmlFor="maxTokens" className="font-medium">上下文限制 (Tokens)</Label>
           <div className="mt-2">
             <Input id="maxTokens" className="w-48" type="number" min="1000" max="32000" step="1000" value={maxTokens} onChange={e=>setMaxTokens(parseInt(e.target.value)||4000)} />
@@ -31,6 +31,6 @@ export function PersonalPreferencesPage(){
           </div>
         </div>
       </div>
-    </section>
+    </div>
   )
 }

@@ -19,10 +19,10 @@ export function SystemGeneralPage() {
   if (!systemSettings) return null
 
   return (
-    <section className="rounded-xl border overflow-hidden">
-      <div className="px-4 py-3 font-medium border-b">通用</div>
-      <div className="divide-y">
-        <div className="flex items-center justify-between px-4 py-3">
+    <div className="p-4 space-y-6">
+      <div className="text-base font-medium">通用</div>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
           <div>
             <div className="font-medium">允许用户注册</div>
             <p className="text-sm text-muted-foreground">关闭后将禁止新用户注册，仅管理员可创建用户</p>
@@ -36,7 +36,7 @@ export function SystemGeneralPage() {
             }}
           />
         </div>
-        <div className="px-4 py-3">
+        <div>
           <Label htmlFor="brandText" className="font-medium">文字LOGO</Label>
           <div className="mt-2 flex items-center gap-2">
             <Input id="brandText" maxLength={40} value={brandTextDraft}
@@ -53,7 +53,6 @@ export function SystemGeneralPage() {
           <p className="text-xs text-muted-foreground mt-1">显示在左上角（类似 ChatGPT），最多 40 个字符。</p>
         </div>
       </div>
-    </section>
+    </div>
   )
 }
-
