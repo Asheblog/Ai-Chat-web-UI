@@ -52,6 +52,8 @@ model Message {
   sessionId Int
   role      String   // 'user' or 'assistant'
   content   String
+  // 客户端生成的幂等ID（可选）。与 sessionId 组成唯一键，用于避免重复写入
+  clientMessageId String?
   // 可选：保存推理(思维链)内容与持续时长（秒）。默认不启用保存，受系统设置控制。
   reasoning               String?
   reasoningDurationSeconds Int?
@@ -60,6 +62,9 @@ model Message {
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   usageMetrics UsageMetric[]
 
+  // 若提供了 clientMessageId，则 (sessionId, clientMessageId) 必须唯一；
+  // clientMessageId 为空时不受限（SQLite 下 NULL 不参与唯一比较）。
+  @@unique([sessionId, clientMessageId])
   @@map("messages")
 }
 

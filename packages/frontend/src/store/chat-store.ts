@@ -270,7 +270,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       let accumulatedContent = ''
       let accumulatedReasoning = ''
 
-      for await (const evt of apiClient.streamChat(sessionId, content, images, options)) {
+      // 生成幂等ID（跨重试/降级复用）
+      const clientMessageId = (() => {
+        try { return (crypto as any)?.randomUUID?.() ?? '' } catch { return '' }
+      })() || (Math.random().toString(36).slice(2) + Date.now().toString(36))
+
+      for await (const evt of apiClient.streamChat(sessionId, content, images, { ...(options||{}), clientMessageId })) {
         if (evt?.type === 'content' && evt.content) {
           accumulatedContent += evt.content
           set((state) => ({
@@ -324,7 +329,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (error: any) {
       // 流式失败，降级尝试非流式一次
       try {
-        const resp = await apiClient.chatCompletion(sessionId, content, images, options)
+        const resp = await apiClient.chatCompletion(sessionId, content, images, { ...(options||{}), clientMessageId })
         const finalText = resp?.data?.content || ''
         if (finalText) {
           set((state) => ({

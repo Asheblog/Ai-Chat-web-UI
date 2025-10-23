@@ -22,6 +22,8 @@ const PROVIDER_TIMEOUT_MS = parseInt(process.env.PROVIDER_TIMEOUT_MS || '300000'
 // 429 退避（毫秒）与 5xx/超时 退避（毫秒）
 const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
+// 前端出现失败重试/降级时，避免同一条用户消息被重复写入数据库
+const MESSAGE_DEDUPE_WINDOW_MS = parseInt(process.env.MESSAGE_DEDUPE_WINDOW_MS || '30000');
 
 // 发送消息schema
 const sendMessageSchema = z.object({
@@ -34,6 +36,8 @@ const sendMessageSchema = z.object({
   reasoningEffort: z.enum(['low','medium','high']).optional(),
   ollamaThink: z.boolean().optional(),
   saveReasoning: z.boolean().optional(),
+  // 幂等ID：前端生成的 nonce，用于去重
+  clientMessageId: z.string().min(1).max(128).optional(),
 });
 
 // 获取会话消息历史
@@ -151,14 +155,24 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400)
     }
 
-    // 保存用户消息
-    const userMessage = await prisma.message.create({
-      data: {
-        sessionId,
-        role: 'user',
-        content,
-      },
-    });
+    // 保存用户消息（优先使用 clientMessageId 幂等；无ID时使用时间窗去重）
+    const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
+    let userMessage: any
+    if (clientMessageId && clientMessageId.trim()) {
+      userMessage = await prisma.message.upsert({
+        where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
+        update: {},
+        create: { sessionId, role: 'user', content, clientMessageId },
+      });
+    } else {
+      userMessage = await prisma.message.findFirst({
+        where: { sessionId, role: 'user', content },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!userMessage || (Date.now() - new Date(userMessage.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
+        userMessage = await prisma.message.create({ data: { sessionId, role: 'user', content } });
+      }
+    }
 
     // 获取用户上下文token限制
     const defaultLimit = parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000');
@@ -727,8 +741,25 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
       return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400);
     }
 
-    // 保存用户消息
-    await prisma.message.create({ data: { sessionId, role: 'user', content } });
+    // 保存用户消息（优先使用 clientMessageId 幂等；无ID时使用时间窗去重）
+    {
+      const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
+      if (clientMessageId && clientMessageId.trim()) {
+        await prisma.message.upsert({
+          where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
+          update: {},
+          create: { sessionId, role: 'user', content, clientMessageId },
+        });
+      } else {
+        const existing = await prisma.message.findFirst({
+          where: { sessionId, role: 'user', content },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (!existing || (Date.now() - new Date(existing.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
+          await prisma.message.create({ data: { sessionId, role: 'user', content } });
+        }
+      }
+    }
 
     // 构建历史上下文
     const defaultLimit = parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000');
