@@ -1,4 +1,5 @@
 import { Context, Next } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { AuthUtils } from '../utils/auth';
 import { prisma } from '../db';
 import type { JWTPayload } from '../types';
@@ -16,7 +17,11 @@ declare module 'hono' {
 
 export const authMiddleware = async (c: Context, next: Next) => {
   const authHeader = c.req.header('Authorization');
-  const token = AuthUtils.extractTokenFromHeader(authHeader);
+  let token = AuthUtils.extractTokenFromHeader(authHeader);
+  // 兼容基于 Cookie 的会话：优先 Header，其次 Cookie
+  if (!token) {
+    try { token = getCookie(c, 'token') || null } catch { token = null }
+  }
 
   if (!token) {
     return c.json({
@@ -69,7 +74,10 @@ export const adminOnlyMiddleware = async (c: Context, next: Next) => {
 // 可选认证中间件（某些接口可以选择性认证）
 export const optionalAuthMiddleware = async (c: Context, next: Next) => {
   const authHeader = c.req.header('Authorization');
-  const token = AuthUtils.extractTokenFromHeader(authHeader);
+  let token = AuthUtils.extractTokenFromHeader(authHeader);
+  if (!token) {
+    try { token = getCookie(c, 'token') || null } catch { token = null }
+  }
 
   if (token) {
     const payload = AuthUtils.verifyToken(token);

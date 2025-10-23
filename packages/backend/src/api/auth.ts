@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { setCookie, deleteCookie } from 'hono/cookie';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { prisma } from '../db';
@@ -92,12 +93,12 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       },
     });
 
-    // 生成JWT
-    const token = AuthUtils.generateToken({
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-    });
+  // 生成JWT
+  const token = AuthUtils.generateToken({
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+  });
 
     const response: AuthResponse = {
       user: {
@@ -108,11 +109,23 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       token,
     };
 
-    return c.json<ApiResponse<AuthResponse>>({
-      success: true,
-      data: response,
-      message: 'Registration successful',
+  // 设置 HttpOnly Cookie，便于前端同域请求时由浏览器自动携带
+  try {
+    const secure = (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || (process.env.NODE_ENV === 'production');
+    setCookie(c, 'token', token, {
+      httpOnly: true,
+      secure,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: 24 * 60 * 60, // 与 JWT 过期一致（24h）
     });
+  } catch {}
+
+  return c.json<ApiResponse<AuthResponse>>({
+    success: true,
+    data: response,
+    message: 'Registration successful',
+  });
 
   } catch (error) {
     console.error('Registration error:', error);
@@ -149,12 +162,12 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
       }, 401);
     }
 
-    // 生成JWT
-    const token = AuthUtils.generateToken({
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-    });
+  // 生成JWT
+  const token = AuthUtils.generateToken({
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+  });
 
     const response: AuthResponse = {
       user: {
@@ -165,11 +178,23 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
       token,
     };
 
-    return c.json<ApiResponse<AuthResponse>>({
-      success: true,
-      data: response,
-      message: 'Login successful',
+  // 设置 HttpOnly Cookie
+  try {
+    const secure = (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || (process.env.NODE_ENV === 'production');
+    setCookie(c, 'token', token, {
+      httpOnly: true,
+      secure,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: 24 * 60 * 60,
     });
+  } catch {}
+
+  return c.json<ApiResponse<AuthResponse>>({
+    success: true,
+    data: response,
+    message: 'Login successful',
+  });
 
   } catch (error) {
     console.error('Login error:', error);
@@ -250,3 +275,11 @@ auth.put('/password', authMiddleware, zValidator('json', z.object({
 });
 
 export default auth;
+
+// 新增：登出接口（清除 Cookie）
+auth.post('/logout', async (c) => {
+  try {
+    deleteCookie(c, 'token', { path: '/' });
+  } catch {}
+  return c.json<ApiResponse>({ success: true, message: 'Logged out' });
+});

@@ -23,16 +23,15 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
+      // 允许跨域时携带 Cookie（当 NEXT_PUBLIC_API_URL 为绝对地址且后端已开启 credentials）
+      withCredentials: true,
     })
 
     // 请求拦截器 - 添加认证token & 记录日志
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
         ;(config as any).metadata = { start: Date.now() }
-        const token = this.getToken()
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`
-        }
+        // 基于 Cookie 的会话：不再附加 Authorization 头
         log.debug('HTTP Request', config.method?.toUpperCase(), config.baseURL + (config.url || ''), {
           headers: config.headers,
           params: config.params,
@@ -72,12 +71,9 @@ class ApiClient {
   // 统一处理 401：清理凭证与持久化，并跳转登录
   private handleUnauthorized() {
     try {
-      this.clearToken()
       if (typeof window !== 'undefined') {
-        // 同步清理 zustand 的持久化存储，防止旧 user/token 复水
-        try {
-          window.localStorage.removeItem('auth-storage')
-        } catch {}
+        // 清理 zustand 的持久化存储（仅用户信息）
+        try { window.localStorage.removeItem('auth-storage') } catch {}
         if (!this.isRedirecting) {
           this.isRedirecting = true
           window.location.href = '/auth/login'
@@ -89,37 +85,10 @@ class ApiClient {
   }
 
   // 读取记住登录偏好，决定存储介质（localStorage / sessionStorage）
-  private getPreferredStorage(): Storage | null {
-    if (typeof window === 'undefined') return null
-    try {
-      const prefRaw = localStorage.getItem('auth_pref')
-      if (!prefRaw) return localStorage
-      const pref = JSON.parse(prefRaw) as { rememberLogin?: boolean }
-      return pref?.rememberLogin === false ? sessionStorage : localStorage
-    } catch {
-      return localStorage
-    }
-  }
-
-  private getToken(): string | null {
-    if (typeof window !== 'undefined') {
-      // 优先从 sessionStorage 读取（未勾选记住登录时）
-      return sessionStorage.getItem('token') || localStorage.getItem('token')
-    }
-    return null
-  }
-
-  private clearToken(): void {
-    if (typeof window !== 'undefined') {
-      try {
-        // 双存储清理，兼容切换
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        sessionStorage.removeItem('token')
-        sessionStorage.removeItem('user')
-      } catch {}
-    }
-  }
+  // Cookie 会话下无需本地存储 token
+  private getPreferredStorage(): Storage | null { return null }
+  private getToken(): string | null { return null }
+  private clearToken(): void { /* no-op */ }
 
   // 认证相关API
   async login(username: string, password: string): Promise<AuthResponse> {
@@ -131,11 +100,7 @@ class ApiClient {
     if (!data) {
       throw new Error('Invalid login response')
     }
-    if ((data as any).token) {
-      const storage = this.getPreferredStorage() || localStorage
-      storage.setItem('token', data.token)
-      storage.setItem('user', JSON.stringify(data.user))
-    }
+    // token 已通过 Set-Cookie 下发，无需前端存储
     return data
   }
 
@@ -148,11 +113,7 @@ class ApiClient {
     if (!data) {
       throw new Error('Invalid register response')
     }
-    if ((data as any).token) {
-      const storage = this.getPreferredStorage() || localStorage
-      storage.setItem('token', data.token)
-      storage.setItem('user', JSON.stringify(data.user))
-    }
+    // token 已通过 Set-Cookie 下发
     return data
   }
 
@@ -161,10 +122,9 @@ class ApiClient {
     return response.data.data!
   }
 
-  logout(): void {
-    this.clearToken()
+  async logout(): Promise<void> {
+    try { await this.client.post('/auth/logout') } catch {}
     if (typeof window !== 'undefined') {
-      // 统一跳转到 Next.js 下的登录页路径
       window.location.href = '/auth/login'
     }
   }
@@ -219,10 +179,10 @@ class ApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.getToken()}`,
       },
       body: JSON.stringify({ sessionId, content, images, ...(options||{}) }),
       signal,
+      credentials: 'include',
     })
 
     // 建立带退避的请求

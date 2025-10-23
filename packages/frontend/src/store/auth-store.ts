@@ -26,7 +26,7 @@ export const useAuthStore = create<AuthStore>()(
           const response = await apiClient.login(username, password)
           set({
             user: response.user,
-            token: response.token,
+            token: null, // Cookie 会话下不保存在客户端
             isLoading: false,
           })
         } catch (error: any) {
@@ -45,7 +45,7 @@ export const useAuthStore = create<AuthStore>()(
           const response = await apiClient.register(username, password)
           set({
             user: response.user,
-            token: response.token,
+            token: null,
             isLoading: false,
           })
         } catch (error: any) {
@@ -68,9 +68,6 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       getCurrentUser: async () => {
-        const { token } = get()
-        if (!token) return
-
         set({ isLoading: true })
         try {
           const user = await apiClient.getCurrentUser()
@@ -99,20 +96,8 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => {
-        let remember = true
-        try {
-          const prefRaw = typeof window !== 'undefined' ? localStorage.getItem('auth_pref') : null
-          if (prefRaw) {
-            const pref = JSON.parse(prefRaw) as { rememberLogin?: boolean }
-            if (pref.rememberLogin === false) remember = false
-          }
-        } catch {}
-        return {
-          user: state.user,
-          token: remember ? state.token : null,
-        }
-      },
+      // 仅持久化用户信息，token 不存储
+      partialize: (state) => ({ user: state.user }),
     }
   )
 )
