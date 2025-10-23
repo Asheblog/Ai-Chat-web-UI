@@ -29,7 +29,7 @@ users.get('/', authMiddleware, adminOnlyMiddleware, async (c) => {
           _count: {
             select: {
               chatSessions: true,
-              modelConfigs: true,
+              connections: true,
             },
           },
         },
@@ -84,7 +84,7 @@ users.get('/:id', authMiddleware, adminOnlyMiddleware, async (c) => {
         _count: {
           select: {
             chatSessions: true,
-            modelConfigs: true,
+            connections: true,
           },
         },
       },

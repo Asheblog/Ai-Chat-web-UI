@@ -259,7 +259,7 @@ export function ChatInterface() {
             </button>
 
             <ModelSelector
-              selectedModelId={currentSession.modelConfigId}
+              selectedModelId={currentSession.modelLabel || currentSession.modelRawId || null}
               onModelChange={() => { /* TODO: 支持会话内切换模型 */ }}
             />
           </div>

@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { ModelConfig } from '@/types'
-import { useSettingsStore } from '@/store/settings-store'
+import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ModelSelectorProps {
-  selectedModelId: number
-  onModelChange: (modelId: number) => void
+  selectedModelId: string | null
+  onModelChange: (modelId: string) => void
   disabled?: boolean
   className?: string
   /**
@@ -21,31 +20,26 @@ interface ModelSelectorProps {
 
 export function ModelSelector({ selectedModelId, onModelChange, disabled, className, variant = 'default' }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const { systemSettings, personalModels, fetchSystemSettings, fetchPersonalModels } = useSettingsStore()
-  const [allModels, setAllModels] = useState<ModelConfig[]>([])
+  const [allModels, setAllModels] = useState<Array<{ id: string; name: string; provider: string; connectionId: number }>>([])
 
   useEffect(() => {
-    fetchSystemSettings()
-    fetchPersonalModels()
-  }, [fetchSystemSettings, fetchPersonalModels])
+    ;(async () => {
+      try {
+        const res = await apiClient.getAggregatedModels()
+        setAllModels(res.data || [])
+      } catch (e) {
+        setAllModels([])
+      }
+    })()
+  }, [])
 
   useEffect(() => {
-    const models: ModelConfig[] = []
-
-    // 添加系统模型
-    if (systemSettings?.systemModels) {
-      models.push(...systemSettings.systemModels)
-    }
-
-    // 添加个人模型
-    models.push(...personalModels)
-
-    setAllModels(models)
-  }, [systemSettings, personalModels])
+    // no-op for aggregated models
+  }, [])
 
   const selectedModel = allModels.find(model => model.id === selectedModelId)
 
-  const handleModelSelect = (modelId: number) => {
+  const handleModelSelect = (modelId: string) => {
     onModelChange(modelId)
     setIsOpen(false)
   }
@@ -104,49 +98,20 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
               </div>
             ) : (
               <>
-                {/* 系统模型 */}
-                {systemSettings?.systemModels && systemSettings.systemModels.length > 0 && (
-                  <div>
-                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
-                      系统模型
-                    </div>
-                    {systemSettings.systemModels.map((model) => (
-                      <button
-                        key={model.id}
-                        type="button"
-                        onClick={() => handleModelSelect(model.id)}
-                        className={cn(
-                          "w-full px-3 py-2 text-sm text-left hover:bg-muted transition-colors",
-                          selectedModelId === model.id && "bg-muted"
-                        )}
-                      >
-                        <div className="font-medium">{model.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* 个人模型 */}
-                {personalModels.length > 0 && (
-                  <div>
-                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
-                      个人模型
-                    </div>
-                    {personalModels.map((model) => (
-                      <button
-                        key={model.id}
-                        type="button"
-                        onClick={() => handleModelSelect(model.id)}
-                        className={cn(
-                          "w-full px-3 py-2 text-sm text-left hover:bg-muted transition-colors",
-                          selectedModelId === model.id && "bg-muted"
-                        )}
-                      >
-                        <div className="font-medium">{model.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {allModels.map((model) => (
+                  <button
+                    key={model.id}
+                    type="button"
+                    onClick={() => handleModelSelect(model.id)}
+                    className={cn(
+                      "w-full px-3 py-2 text-sm text-left hover:bg-muted transition-colors",
+                      selectedModelId === model.id && "bg-muted"
+                    )}
+                  >
+                    <div className="font-medium">{model.name}</div>
+                    <div className="text-xs text-muted-foreground">{model.id}</div>
+                  </button>
+                ))}
               </>
             )}
           </div>

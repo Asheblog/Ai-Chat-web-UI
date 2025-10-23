@@ -41,10 +41,13 @@ export interface CreateModelConfigRequest {
 export interface ChatSession {
   id: number;
   userId: number;
-  modelConfigId: number;
+  modelConfigId?: number | null;
+  connectionId?: number | null;
+  modelRawId?: string | null;
+  modelLabel?: string | null;
   title: string;
   createdAt: string;
-  modelConfig: ModelConfig;
+  modelConfig?: ModelConfig | null;
   reasoningEnabled?: boolean | null;
   reasoningEffort?: 'low' | 'medium' | 'high' | null;
   ollamaThink?: boolean | null;
@@ -55,7 +58,7 @@ export interface ChatSession {
 }
 
 export interface CreateSessionRequest {
-  modelConfigId: number;
+  modelId: string;
   title?: string;
 }
 
@@ -84,7 +87,7 @@ export interface SystemSetting {
 export interface SystemSettings {
   allowRegistration: boolean;
   brandText?: string;
-  systemModels: ModelConfig[];
+  systemModels: any[]; // 已废弃：保留字段占位，改用聚合模型
   // 流式/稳定性相关（系统级）
   sseHeartbeatIntervalMs?: number;
   providerMaxIdleMs?: number;
@@ -127,7 +130,6 @@ export interface AuthState {
 export interface SettingsState {
   theme: 'light' | 'dark' | 'system';
   maxTokens: number;
-  personalModels: ModelConfig[];
   systemSettings: SystemSettings | null;
   isLoading: boolean;
   error: string | null;
@@ -191,8 +193,7 @@ export interface SessionItemProps {
 }
 
 export interface ModelSelectorProps {
-  models: ModelConfig[];
-  selectedModelId: number;
-  onModelChange: (modelId: number) => void;
+  selectedModelId: string | null;
+  onModelChange: (modelId: string) => void;
   disabled?: boolean;
 }

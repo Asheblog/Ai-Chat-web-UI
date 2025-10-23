@@ -9,13 +9,12 @@ import { useSettingsStore } from '@/store/settings-store'
 
 export default function ChatPage() {
   const { currentSession, fetchSessions } = useChatStore()
-  const { fetchSystemSettings, fetchPersonalModels } = useSettingsStore()
+  const { fetchSystemSettings } = useSettingsStore()
 
   useEffect(() => {
     fetchSessions()
     fetchSystemSettings()
-    fetchPersonalModels()
-  }, [fetchSessions, fetchSystemSettings, fetchPersonalModels])
+  }, [fetchSessions, fetchSystemSettings])
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0">

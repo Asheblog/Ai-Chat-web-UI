@@ -7,7 +7,7 @@ interface ChatStore extends ChatState {
   fetchSessionsUsage: () => Promise<void>
   fetchMessages: (sessionId: number) => Promise<void>
   fetchUsage: (sessionId: number) => Promise<void>
-  createSession: (modelConfigId: number, title?: string) => Promise<void>
+  createSession: (modelId: string, title?: string) => Promise<void>
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>
   updateSessionTitle: (sessionId: number, title: string) => Promise<void>
@@ -99,10 +99,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  createSession: async (modelConfigId: number, title?: string) => {
+  createSession: async (modelId: string, title?: string) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await apiClient.createSession(modelConfigId, title)
+      const response = await apiClient.createSessionByModelId(modelId, title)
       const newSession = response.data
 
       set((state) => ({

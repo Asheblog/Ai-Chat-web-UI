@@ -17,6 +17,7 @@ import {
 import { useAuthStore } from '@/store/auth-store'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { apiClient } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
@@ -43,9 +44,12 @@ export function Sidebar() {
   }, [searchParams])
 
   const handleNewChat = async () => {
-    if (!systemSettings?.systemModels || systemSettings.systemModels.length === 0) {
-      return
-    }
+    let defaultModelId: string | null = null
+    try {
+      const res = await apiClient.getAggregatedModels()
+      defaultModelId = (res?.data?.[0]?.id as string) || null
+    } catch {}
+    if (!defaultModelId) return
 
     try {
       // 若当前会话“完全空白”，则不创建新会话（与 ChatGPT 等产品一致）
@@ -66,7 +70,7 @@ export function Sidebar() {
         return
       }
 
-      await createSession(systemSettings.systemModels[0].id, '新的对话')
+      await createSession(defaultModelId, '新的对话')
       setIsMobileMenuOpen(false)
     } catch (error) {
       console.error('Failed to create session:', error)

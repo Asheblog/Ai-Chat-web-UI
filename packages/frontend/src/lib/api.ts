@@ -141,11 +141,61 @@ class ApiClient {
     return response.data
   }
 
-  async createSession(modelConfigId: number, title?: string) {
+  async createSessionByModelId(modelId: string, title?: string) {
     const response = await this.client.post<ApiResponse<any>>('/sessions', {
-      modelConfigId,
+      modelId,
       title,
     })
+    return response.data
+  }
+
+  async getAggregatedModels() {
+    const response = await this.client.get<ApiResponse<any[]>>('/catalog/models')
+    return response.data
+  }
+
+  async getSystemConnections() {
+    const response = await this.client.get<ApiResponse<any[]>>('/connections')
+    return response.data
+  }
+
+  async getUserConnections() {
+    const response = await this.client.get<ApiResponse<any[]>>('/connections/user')
+    return response.data
+  }
+
+  async createSystemConnection(data: any) {
+    const response = await this.client.post<ApiResponse<any>>('/connections', data)
+    return response.data
+  }
+
+  async updateSystemConnection(id: number, data: any) {
+    const response = await this.client.put<ApiResponse<any>>(`/connections/${id}`, data)
+    return response.data
+  }
+
+  async deleteSystemConnection(id: number) {
+    const response = await this.client.delete<ApiResponse<any>>(`/connections/${id}`)
+    return response.data
+  }
+
+  async verifySystemConnection(data: any) {
+    const response = await this.client.post<ApiResponse<any>>('/connections/verify', data)
+    return response.data
+  }
+
+  async createUserConnection(data: any) {
+    const response = await this.client.post<ApiResponse<any>>('/connections/user', data)
+    return response.data
+  }
+
+  async updateUserConnection(id: number, data: any) {
+    const response = await this.client.put<ApiResponse<any>>(`/connections/user/${id}`, data)
+    return response.data
+  }
+
+  async deleteUserConnection(id: number) {
+    const response = await this.client.delete<ApiResponse<any>>(`/connections/user/${id}`)
     return response.data
   }
 
@@ -320,49 +370,12 @@ class ApiClient {
     return response.data
   }
 
-  // 模型配置相关API
-  async getPersonalModels() {
-    // 后端提供 /api/models 返回 { personal, system }
-    const response = await this.client.get<ApiResponse<{ personal: any[]; system: any[] }>>('/models')
-    const { data } = response.data
-    return { data: data?.personal || [] }
-  }
-
-  async getSystemModels() {
-    const response = await this.client.get<ApiResponse<{ personal: any[]; system: any[] }>>('/models')
-    const { data } = response.data
-    return { data: data?.system || [] }
-  }
-
-  async getAllModels() {
-    const response = await this.client.get<ApiResponse<{ personal: any[]; system: any[] }>>('/models')
-    return response.data
-  }
-
-  async createModelConfig(name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) {
-    const response = await this.client.post('/models', {
-      name,
-      apiUrl,
-      apiKey,
-      supportsImages: !!supportsImages,
-    })
-    return response.data
-  }
-
-  async updateModelConfig(modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) {
-    const response = await this.client.put(`/models/${modelId}`, updates)
-    return response.data
-  }
-
-  async deleteModelConfig(modelId: number) {
-    await this.client.delete(`/models/${modelId}`)
-  }
+  // 旧的模型配置接口已移除：请改用连接 + 聚合模型
 
   // 系统设置相关API (仅管理员)
   async getSystemSettings() {
-    // 聚合系统设置与系统模型列表，返回前端期望的形状
-    const [settingsRes, modelsRes] = await Promise.all([
-      this.client.get<ApiResponse<{ 
+    // 仅获取系统设置；系统模型改用聚合模型（/catalog/models）
+    const settingsRes = await this.client.get<ApiResponse<{ 
         registration_enabled?: boolean;
         brand_text?: string;
         sse_heartbeat_interval_ms?: number;
@@ -378,12 +391,10 @@ class ApiClient {
         stream_delta_chunk_size?: number;
         openai_reasoning_effort?: 'low' | 'medium' | 'high',
         ollama_think?: boolean,
-      }>>('/settings/system'),
-      this.client.get<ApiResponse<{ personal: any[]; system: any[] }>>('/models'),
-    ])
+      }>>('/settings/system')
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
     const brandText = settingsRes.data.data?.brand_text || 'AIChat'
-    const systemModels = modelsRes.data.data?.system || []
+    const systemModels: any[] = []
     const sseHeartbeatIntervalMs = Number(settingsRes.data.data?.sse_heartbeat_interval_ms ?? 15000)
     const providerMaxIdleMs = Number(settingsRes.data.data?.provider_max_idle_ms ?? 60000)
     const providerTimeoutMs = Number(settingsRes.data.data?.provider_timeout_ms ?? 300000)
@@ -438,25 +449,7 @@ class ApiClient {
     await this.client.delete(`/users/${userId}`)
   }
 
-  // 系统模型（管理员）
-  async createSystemModel(name: string, apiUrl: string, apiKey: string, supportsImages?: boolean) {
-    const response = await this.client.post('/models/system', { name, apiUrl, apiKey, supportsImages: !!supportsImages })
-    return response.data
-  }
-
-  async getSystemModelList() {
-    const response = await this.client.get('/models/system/list')
-    return response.data
-  }
-
-  async updateSystemModel(modelId: number, updates: Partial<{ name: string; apiUrl: string; apiKey: string; supportsImages: boolean }>) {
-    const response = await this.client.put(`/models/system/${modelId}`, updates)
-    return response.data
-  }
-
-  async deleteSystemModel(modelId: number) {
-    await this.client.delete(`/models/system/${modelId}`)
-  }
+  // 旧系统模型接口已移除
 }
 
 export const apiClient = new ApiClient()

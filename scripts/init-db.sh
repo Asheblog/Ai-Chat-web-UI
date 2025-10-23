@@ -169,22 +169,23 @@ async function main() {
             }
         }
 
-        // 创建示例系统模型配置（可选）
-        const existingSystemModel = await prisma.modelConfig.findFirst({
-            where: { userId: null }
+        // 创建示例系统连接（可选）
+        const existingConn = await prisma.connection.findFirst({
+            where: { ownerUserId: null }
         });
 
-        if (!existingSystemModel) {
-            // 创建一个示例系统模型配置
-            await prisma.modelConfig.create({
+        if (!existingConn) {
+            // 创建一个示例系统连接
+            await prisma.connection.create({
                 data: {
-                    name: '示例模型',
-                    apiUrl: 'https://api.openai.com/v1/chat/completions',
-                    apiKey: 'sk-your-api-key-here',  // 用户需要替换
-                    userId: null  // null表示系统级模型
+                    provider: 'openai',
+                    baseUrl: 'https://api.openai.com/v1',
+                    enable: true,
+                    authType: 'none',
+                    connectionType: 'external',
                 }
             });
-            console.log('✅ 创建示例系统模型配置');
+            console.log('✅ 创建示例系统连接');
         }
 
         console.log('✅ 初始数据创建完成！');

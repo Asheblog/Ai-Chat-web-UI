@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { prisma } from '../db';
 import { AuthUtils } from '../utils/auth';
+import { convertOpenAIReasoningPayload } from '../utils/providers'
 import { Tokenizer } from '../utils/tokenizer';
 import { authMiddleware } from '../middleware/auth';
 import type { ApiResponse, Message } from '../types';
@@ -127,7 +128,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     const session = await prisma.chatSession.findUnique({
       where: { id: sessionId },
       include: {
-        modelConfig: true,
+        connection: true,
       },
     });
 
@@ -145,23 +146,9 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       }, 403);
     }
 
-    // 校验模型是否支持图片输入
-    if (images && images.length && !session.modelConfig.supportsImages) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: '当前模型不支持图片输入',
-      }, 400);
-    }
-
-    // 验证模型配置访问权限
-    const hasModelAccess = session.modelConfig.userId === user.id ||
-                          session.modelConfig.userId === null;
-
-    if (!hasModelAccess) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Model configuration access denied',
-      }, 403);
+    // 新模型选择：要求存在 connection + modelRawId
+    if (!session.connectionId || !session.connection || !session.modelRawId) {
+      return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400)
     }
 
     // 保存用户消息
@@ -213,10 +200,38 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     const contextLimit = contextTokenLimit;
     const contextRemaining = Math.max(0, contextLimit - promptTokens);
 
-    // 解密API Key
-    const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
+    // 解密API Key（仅 bearer 时需要）
+    const decryptedApiKey = session.connection.authType === 'bearer' && session.connection.apiKey
+      ? AuthUtils.decryptApiKey(session.connection.apiKey)
+      : ''
 
-    log.debug('Chat stream request', { sessionId, userId: user.id, model: session.modelConfig.name, apiUrl: session.modelConfig.apiUrl })
+    const provider = session.connection.provider as 'openai' | 'azure_openai' | 'ollama'
+    const baseUrl = session.connection.baseUrl.replace(/\/$/, '')
+    const extraHeaders = session.connection.headersJson ? JSON.parse(session.connection.headersJson) : {}
+    const authHeader: Record<string,string> = {}
+    if (session.connection.authType === 'bearer' && decryptedApiKey) {
+      authHeader['Authorization'] = `Bearer ${decryptedApiKey}`
+    } else if (session.connection.authType === 'system_oauth') {
+      const token = process.env.SYSTEM_OAUTH_TOKEN
+      if (token) authHeader['Authorization'] = `Bearer ${token}`
+    } else if (session.connection.authType === 'microsoft_entra_id' && provider === 'azure_openai') {
+      try {
+        const envToken = process.env.AZURE_ACCESS_TOKEN
+        if (envToken) authHeader['Authorization'] = `Bearer ${envToken}`
+        else {
+          // 动态获取 Azure 访问令牌
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { DefaultAzureCredential } = require('@azure/identity')
+          const cred = new DefaultAzureCredential()
+          const token = await cred.getToken('https://cognitiveservices.azure.com/.default')
+          if (token?.token) authHeader['Authorization'] = `Bearer ${token.token}`
+        }
+      } catch (e) {
+        // 忽略失败：缺少依赖或凭据时不设置 Authorization
+      }
+    }
+
+    log.debug('Chat stream request', { sessionId, userId: user.id, provider, baseUrl, model: session.modelRawId })
 
     // 构建AI API请求
     // 先将历史消息（纯文本）放入
@@ -245,7 +260,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     }
 
     const requestData: any = {
-      model: session.modelConfig.name,
+      model: session.modelRawId,
       messages: messagesPayload,
       stream: true,
       temperature: 0.7,
@@ -275,7 +290,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       requestData.think = true
     }
 
-    console.log('Starting AI stream request to:', session.modelConfig.apiUrl);
+    console.log('Starting AI stream request to:', baseUrl);
 
     // 设置SSE响应头
     c.header('Content-Type', 'text/event-stream');
@@ -325,16 +340,34 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
     // 单次厂商请求（支持 429/5xx 退避一次）
     const providerRequestOnce = async (signal: AbortSignal): Promise<Response> => {
-      const response = await fetch(session.modelConfig.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${decryptedApiKey}`,
-        },
-        body: JSON.stringify(requestData),
-        signal,
-      });
-      return response;
+      let url = ''
+      let body: any = { ...requestData }
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...authHeader,
+        ...extraHeaders,
+      }
+      if (provider === 'openai') {
+        body = convertOpenAIReasoningPayload(body)
+        url = `${baseUrl}/chat/completions`
+      } else if (provider === 'azure_openai') {
+        const v = session.connection?.azureApiVersion || '2024-02-15-preview'
+        // Azure 使用 deployments/{model}/chat/completions
+        body = convertOpenAIReasoningPayload(body)
+        url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`
+      } else if (provider === 'ollama') {
+        // 适配 Ollama chat 接口
+        url = `${baseUrl}/api/chat`
+        body = {
+          model: session.modelRawId,
+          messages: messagesPayload.map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : m.content?.map((p: any) => p.text).filter(Boolean).join('\n') })),
+          stream: true,
+        }
+      } else {
+        url = `${baseUrl}`
+      }
+
+      return fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
     };
 
     const providerRequestWithBackoff = async (): Promise<Response> => {
@@ -583,8 +616,8 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                 data: {
                   sessionId,
                   messageId: assistantMessageId ?? undefined,
-                  model: session.modelConfig.name,
-                  provider: (() => { try { const u = new URL(session.modelConfig.apiUrl); return u.hostname; } catch { return null; } })() ?? undefined,
+                  model: session.modelRawId || 'unknown',
+                  provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
                   promptTokens: finalUsage.prompt,
                   completionTokens: finalUsage.completion,
                   totalTokens: finalUsage.total,
@@ -606,13 +639,31 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
               const nonStreamData = { ...requestData, stream: false } as any;
               const ac = new AbortController();
               const timeout = setTimeout(() => ac.abort(new Error('provider non-stream timeout')), providerTimeoutMs);
-              const resp = await fetch(session.modelConfig.apiUrl, {
+              // 构造非流式请求 URL/Body 与上面一致
+              let url = ''
+              let body: any = { ...nonStreamData }
+              let headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                ...authHeader,
+                ...extraHeaders,
+              }
+              if (provider === 'openai') {
+                url = `${baseUrl}/chat/completions`
+              } else if (provider === 'azure_openai') {
+                const v = session.connection?.azureApiVersion || '2024-02-15-preview'
+                url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`
+              } else if (provider === 'ollama') {
+                url = `${baseUrl}/api/chat`
+                body = {
+                  model: session.modelRawId,
+                  messages: messagesPayload.map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : m.content?.map((p: any) => p.text).filter(Boolean).join('\n') })),
+                  stream: false,
+                }
+              }
+              const resp = await fetch(url, {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${decryptedApiKey}`,
-                },
-                body: JSON.stringify(nonStreamData),
+                headers,
+                body: JSON.stringify(body),
                 signal: ac.signal,
               });
               clearTimeout(timeout);
@@ -663,7 +714,7 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
 
     const session = await prisma.chatSession.findUnique({
       where: { id: sessionId },
-      include: { modelConfig: true },
+      include: { connection: true },
     });
     if (!session) {
       return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
@@ -671,8 +722,8 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     if (session.userId !== user.id) {
       return c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403);
     }
-    if (images && images.length && !session.modelConfig.supportsImages) {
-      return c.json<ApiResponse>({ success: false, error: '当前模型不支持图片输入' }, 400);
+    if (!session.connectionId || !session.connection || !session.modelRawId) {
+      return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400);
     }
 
     // 保存用户消息
@@ -690,7 +741,9 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     const truncated = await Tokenizer.truncateMessages(conversation.concat([{ role: 'user', content }]), defaultLimit);
     const promptTokens = await Tokenizer.countConversationTokens(truncated);
 
-    const decryptedApiKey = AuthUtils.decryptApiKey(session.modelConfig.apiKey);
+    const decryptedApiKey = session.connection.authType === 'bearer' && session.connection.apiKey
+      ? AuthUtils.decryptApiKey(session.connection.apiKey)
+      : ''
 
     const messagesPayload: any[] = truncated.map((m: any) => ({ role: m.role, content: m.content }));
     const parts: any[] = [];
@@ -702,7 +755,10 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     if (last && last.role === 'user' && last.content === content) messagesPayload[messagesPayload.length - 1] = { role: 'user', content: parts };
     else messagesPayload.push({ role: 'user', content: parts });
 
-    const body: any = { model: session.modelConfig.name, messages: messagesPayload, stream: false, temperature: 0.7 };
+    const provider = session.connection.provider as 'openai'|'azure_openai'|'ollama'
+    const baseUrl = session.connection.baseUrl.replace(/\/$/, '')
+    const extraHeaders = session.connection.headersJson ? JSON.parse(session.connection.headersJson) : {}
+    let body: any = { model: session.modelRawId, messages: messagesPayload, stream: false, temperature: 0.7 };
     const settingsRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const settingsMap = settingsRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
     const sess = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })
@@ -713,9 +769,26 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     if (ren && ref) body.reasoning_effort = ref
     if (ren && otk) body.think = true
 
-    const doOnce = async (signal: AbortSignal) => fetch(session.modelConfig.apiUrl, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${decryptedApiKey}` }, body: JSON.stringify(body), signal,
-    });
+    let url = ''
+    if (provider === 'openai') {
+      url = `${baseUrl}/chat/completions`
+    } else if (provider === 'azure_openai') {
+      const v = session.connection.azureApiVersion || '2024-02-15-preview'
+      url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`
+    } else if (provider === 'ollama') {
+      url = `${baseUrl}/api/chat`
+      body = {
+        model: session.modelRawId,
+        messages: messagesPayload.map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : m.content?.map((p: any) => p.text).filter(Boolean).join('\n') })),
+        stream: false,
+      }
+    }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(session.connection.authType === 'bearer' && decryptedApiKey ? { 'Authorization': `Bearer ${decryptedApiKey}` } : {}),
+      ...extraHeaders,
+    }
+    const doOnce = async (signal: AbortSignal) => fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
     const requestWithBackoff = async () => {
       const ac = new AbortController();
       const tout = setTimeout(() => ac.abort(new Error('provider timeout')), providerTimeoutMs);
@@ -764,8 +837,8 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
       data: {
         sessionId,
         messageId: assistantMsgId ?? undefined,
-        model: session.modelConfig.name,
-        provider: (() => { try { const u = new URL(session.modelConfig.apiUrl); return u.hostname; } catch { return null; } })() ?? undefined,
+        model: session.modelRawId || 'unknown',
+        provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
         promptTokens: usage.prompt_tokens,
         completionTokens: usage.completion_tokens,
         totalTokens: usage.total_tokens,
@@ -805,7 +878,7 @@ chat.post('/regenerate', authMiddleware, zValidator('json', z.object({
     const [session, message] = await Promise.all([
       prisma.chatSession.findUnique({
         where: { id: sessionId },
-        include: { modelConfig: true },
+        include: { connection: true },
       }),
       prisma.message.findUnique({
         where: { id: messageId },
@@ -874,6 +947,69 @@ chat.post('/regenerate', authMiddleware, zValidator('json', z.object({
     }, 500);
   }
 });
+
+// 统一生成接口（非会话态），按 provider 映射到相应 generate API
+// 入参：{ connectionId?: number, modelId?: string, prompt: string, stream?: boolean }
+chat.post('/generate', authMiddleware, zValidator('json', z.object({
+  connectionId: z.number().int().positive().optional(),
+  modelId: z.string().min(1).optional(),
+  prompt: z.string().min(1),
+  stream: z.boolean().optional(),
+})), async (c) => {
+  try {
+    const user = c.get('user')
+    const body = c.req.valid('json') as any
+    let conn = null as any
+    let rawId: string | null = null
+
+    if (body.connectionId) {
+      conn = await prisma.connection.findFirst({ where: { id: body.connectionId, OR: [ { ownerUserId: null }, { ownerUserId: user.id } ] } })
+      if (!conn) return c.json<ApiResponse>({ success: false, error: 'Connection not found' }, 404)
+      rawId = body.modelId || null
+    } else if (body.modelId) {
+      const cached = await prisma.modelCatalog.findFirst({ where: { modelId: body.modelId } })
+      if (!cached) return c.json<ApiResponse>({ success: false, error: 'Model not found' }, 404)
+      conn = await prisma.connection.findUnique({ where: { id: cached.connectionId } })
+      rawId = cached.rawId
+    } else {
+      return c.json<ApiResponse>({ success: false, error: 'connectionId or modelId required' }, 400)
+    }
+
+    const baseUrl = conn.baseUrl.replace(/\/$/, '')
+    const provider = conn.provider as 'openai'|'azure_openai'|'ollama'
+    const decryptedApiKey = conn.authType === 'bearer' && conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : ''
+    const extraHeaders = conn.headersJson ? JSON.parse(conn.headersJson) : {}
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(conn.authType === 'bearer' && decryptedApiKey ? { 'Authorization': `Bearer ${decryptedApiKey}` } : {}),
+      ...extraHeaders,
+    }
+
+    if (provider === 'ollama') {
+      const res = await fetch(`${baseUrl}/api/generate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ model: rawId, prompt: body.prompt, stream: !!body.stream }),
+      })
+      const text = await res.text()
+      return c.text(text, res.status)
+    } else if (provider === 'openai' || provider === 'azure_openai') {
+      const messages = [{ role: 'user', content: body.prompt }]
+      let url = ''
+      if (provider === 'openai') url = `${baseUrl}/chat/completions`
+      else {
+        const v = conn.azureApiVersion || '2024-02-15-preview'
+        url = `${baseUrl}/openai/deployments/${encodeURIComponent(rawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`
+      }
+      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ model: rawId, messages, stream: !!body.stream }) })
+      const json = await res.json()
+      return c.json(json, res.status)
+    }
+    return c.json<ApiResponse>({ success: false, error: 'Unsupported provider' }, 400)
+  } catch (e: any) {
+    return c.json<ApiResponse>({ success: false, error: e?.message || 'Generate failed' }, 500)
+  }
+})
 
 export default chat;
 

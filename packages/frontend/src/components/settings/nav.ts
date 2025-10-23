@@ -10,7 +10,7 @@ export const settingsNav: SettingsNavItem[] = [
     key: 'personal',
     label: '个人设置',
     children: [
-      { key: 'personal.models', label: '模型配置' },
+      { key: 'personal.connections', label: '直连连接' },
       { key: 'personal.preferences', label: '偏好设置' },
       { key: 'personal.about', label: '关于' },
     ],
@@ -23,7 +23,7 @@ export const settingsNav: SettingsNavItem[] = [
       { key: 'system.general', label: '通用' },
       { key: 'system.reasoning', label: '推理链（CoT）' },
       { key: 'system.network', label: '网络与流式' },
-      { key: 'system.models', label: '系统模型' },
+      { key: 'system.connections', label: '连接管理' },
       { key: 'system.users', label: '用户管理' },
     ],
   },

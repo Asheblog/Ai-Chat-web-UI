@@ -9,7 +9,7 @@ const sessions = new Hono();
 
 // 创建会话schema
 const createSessionSchema = z.object({
-  modelConfigId: z.number().int().positive(),
+  modelId: z.string().min(1), // 聚合模型ID（含前缀）
   title: z.string().min(1).max(200).optional(),
   // 会话级推理默认（可选）
   reasoningEnabled: z.boolean().optional(),
@@ -30,18 +30,15 @@ sessions.get('/', authMiddleware, async (c) => {
         select: {
           id: true,
           userId: true,
-          modelConfigId: true,
+          connectionId: true,
+          modelRawId: true,
           title: true,
           createdAt: true,
           reasoningEnabled: true,
           reasoningEffort: true,
           ollamaThink: true,
-          modelConfig: {
-            select: {
-              id: true,
-              name: true,
-              supportsImages: true,
-            },
+          connection: {
+            select: { id: true, provider: true, baseUrl: true, prefixId: true }
           },
           _count: {
             select: {
@@ -62,13 +59,11 @@ sessions.get('/', authMiddleware, async (c) => {
       sessions: Array<{
         id: number;
         userId: number;
-        modelConfigId: number;
         title: string;
         createdAt: Date;
         reasoningEnabled: boolean | null;
         reasoningEffort: 'low'|'medium'|'high' | null;
         ollamaThink: boolean | null;
-        modelConfig: { id: number; name: string; supportsImages: boolean };
         _count: { messages: number };
       }>;
       pagination: {
@@ -80,7 +75,11 @@ sessions.get('/', authMiddleware, async (c) => {
     }>>({
       success: true,
       data: {
-        sessions: sessionsList,
+        sessions: sessionsList.map((s) => ({
+          ...s,
+          // 附加一个模型标签，供前端展示
+          modelLabel: s.modelRawId || undefined,
+        })),
         pagination: {
           page,
           limit,
@@ -103,31 +102,45 @@ sessions.get('/', authMiddleware, async (c) => {
 sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), async (c) => {
   try {
     const user = c.get('user');
-    const { modelConfigId, title, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
+    const { modelId, title, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
 
-    // 验证模型配置是否存在且用户有权限访问
-    const modelConfig = await prisma.modelConfig.findFirst({
-      where: {
-        id: modelConfigId,
-        OR: [
-          { userId: user.id },    // 个人模型
-          { userId: null },       // 系统模型
-        ],
-      },
-    });
+    // 解析 modelId -> (connectionId, rawId)
+    // 先查缓存表
+    let connectionId: number | null = null
+    let rawId: string | null = null
+    const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
+    if (cached) {
+      connectionId = cached.connectionId
+      rawId = cached.rawId
+    } else {
+      // 回退：尝试匹配 prefix 到连接
+      const conns = await prisma.connection.findMany({ where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true } })
+      for (const conn of conns) {
+        const px = (conn.prefixId || '')
+        if (px && modelId.startsWith(px + '.')) {
+          connectionId = conn.id
+          rawId = modelId.substring(px.length + 1)
+          break
+        }
+        if (!px) {
+          // 无前缀连接，尝试直接匹配
+          connectionId = conn.id
+          rawId = modelId
+          break
+        }
+      }
+    }
 
-    if (!modelConfig) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Model configuration not found or access denied',
-      }, 404);
+    if (!connectionId || !rawId) {
+      return c.json<ApiResponse>({ success: false, error: 'Model not found in connections' }, 400)
     }
 
     // 创建会话
     const session = await prisma.chatSession.create({
       data: {
         userId: user.id,
-        modelConfigId,
+        connectionId,
+        modelRawId: rawId,
         title: title || 'New Chat',
         reasoningEnabled,
         reasoningEffort,
@@ -136,35 +149,28 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       select: {
         id: true,
         userId: true,
-        modelConfigId: true,
+        connectionId: true,
+        modelRawId: true,
         title: true,
         createdAt: true,
         reasoningEnabled: true,
         reasoningEffort: true,
         ollamaThink: true,
-        modelConfig: {
-          select: {
-            id: true,
-            name: true,
-            supportsImages: true,
-          },
-        },
+        connection: { select: { id: true, provider: true, baseUrl: true, prefixId: true } },
       },
     });
 
     return c.json<ApiResponse<{
       id: number;
       userId: number;
-      modelConfigId: number;
       title: string;
       createdAt: Date;
       reasoningEnabled: boolean | null;
       reasoningEffort: 'low' | 'medium' | 'high' | null;
       ollamaThink: boolean | null;
-      modelConfig: { id: number; name: string };
     }>>({
       success: true,
-      data: session,
+      data: { ...session, modelLabel: session.modelRawId },
       message: 'Chat session created successfully',
     });
 
@@ -198,19 +204,14 @@ sessions.get('/:id', authMiddleware, async (c) => {
       select: {
         id: true,
         userId: true,
-        modelConfigId: true,
+        connectionId: true,
+        modelRawId: true,
         title: true,
         createdAt: true,
         reasoningEnabled: true,
         reasoningEffort: true,
         ollamaThink: true,
-        modelConfig: {
-          select: {
-            id: true,
-            name: true,
-            supportsImages: true,
-          },
-        },
+        connection: { select: { id: true, provider: true, baseUrl: true, prefixId: true } },
         messages: {
           select: {
             id: true,
@@ -231,20 +232,9 @@ sessions.get('/:id', authMiddleware, async (c) => {
       }, 404);
     }
 
-    return c.json<ApiResponse<{
-      id: number;
-      userId: number;
-      modelConfigId: number;
-      title: string;
-      createdAt: Date;
-      reasoningEnabled: boolean | null;
-      reasoningEffort: 'low'|'medium'|'high' | null;
-      ollamaThink: boolean | null;
-      modelConfig: { id: number; name: string; supportsImages: boolean };
-      messages: Array<{ id: number; sessionId: number; role: string; content: string; createdAt: Date }>;
-    }>>({
+    return c.json<ApiResponse<any>>({
       success: true,
-      data: session,
+      data: { ...session, modelLabel: session?.modelRawId },
     });
 
   } catch (error) {
@@ -302,32 +292,22 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
       select: {
         id: true,
         userId: true,
-        modelConfigId: true,
         title: true,
         createdAt: true,
         reasoningEnabled: true,
         reasoningEffort: true,
         ollamaThink: true,
-        modelConfig: {
-          select: {
-            id: true,
-            name: true,
-            supportsImages: true,
-          },
-        },
       },
     });
 
     return c.json<ApiResponse<{
       id: number;
       userId: number;
-      modelConfigId: number;
       title: string;
       createdAt: Date;
       reasoningEnabled: boolean | null;
       reasoningEffort: 'low'|'medium'|'high' | null;
       ollamaThink: boolean | null;
-      modelConfig: { id: number; name: string; supportsImages: boolean };
     }>>({
       success: true,
       data: updatedSession,

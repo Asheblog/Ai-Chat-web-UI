@@ -32,10 +32,12 @@ export interface ModelConfig {
 export interface ChatSession {
   id: number;
   userId: number;
-  modelConfigId: number;
+  modelConfigId?: number | null;
+  connectionId?: number | null;
+  modelRawId?: string | null;
   title: string;
   createdAt: Date;
-  modelConfig?: ModelConfig;
+  modelConfig?: ModelConfig | null;
   messages?: Message[];
   _count?: {
     messages: number;
@@ -61,7 +63,7 @@ export interface ChatRequest {
 }
 
 export interface CreateSessionRequest {
-  modelConfigId: number;
+  modelId: string;
   title?: string;
 }
 

@@ -7,10 +7,11 @@ import { serveStatic } from '@hono/node-server/serve-static';
 // 导入路由
 import auth from './api/auth';
 import users from './api/users';
-import models from './api/models';
 import sessions from './api/sessions';
 import chat from './api/chat';
 import settings from './api/settings';
+import connections from './api/connections';
+import catalog from './api/catalog';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -43,7 +44,8 @@ app.use('/static/*', serveStatic({ root: './public' }));
 // API路由
 app.route('/api/auth', auth);
 app.route('/api/users', users);
-app.route('/api/models', models);
+app.route('/api/connections', connections);
+app.route('/api/catalog', catalog);
 app.route('/api/sessions', sessions);
 app.route('/api/chat', chat);
 app.route('/api/settings', settings);
@@ -71,13 +73,19 @@ app.get('/api', (c) => {
         'PUT /api/auth/password': '修改密码',
       },
       models: {
-        'GET /api/models': '获取模型配置列表',
-        'POST /api/models': '创建个人模型配置',
-        'GET /api/models/:id': '获取模型配置详情',
-        'PUT /api/models/:id': '更新模型配置',
-        'DELETE /api/models/:id': '删除模型配置',
-        'POST /api/models/system': '创建系统模型配置（管理员）',
-        'GET /api/models/system/list': '获取系统模型列表（管理员）',
+        'GET /api/catalog/models': '聚合模型列表（连接）',
+        'POST /api/catalog/models/refresh': '刷新聚合模型缓存（管理员）',
+      },
+      connections: {
+        'GET /api/connections': '系统连接列表（管理员）',
+        'POST /api/connections': '新增系统连接（管理员）',
+        'PUT /api/connections/:id': '更新系统连接（管理员）',
+        'DELETE /api/connections/:id': '删除系统连接（管理员）',
+        'POST /api/connections/verify': '验证连接',
+        'GET /api/connections/user': '个人直连列表',
+        'POST /api/connections/user': '新增个人直连',
+        'PUT /api/connections/user/:id': '更新个人直连',
+        'DELETE /api/connections/user/:id': '删除个人直连',
       },
       sessions: {
         'GET /api/sessions': '获取会话列表',
@@ -92,6 +100,7 @@ app.get('/api', (c) => {
         'POST /api/chat/stream': '发送消息（流式响应）',
         'POST /api/chat/completion': '发送消息（非流式响应）',
         'POST /api/chat/stop': '停止生成',
+        'POST /api/chat/generate': '统一生成接口（非会话态）',
         'POST /api/chat/regenerate': '重新生成回复',
         'GET /api/chat/usage?sessionId={id}': '查询会话用量聚合',
         'GET /api/chat/sessions/usage': '查询当前用户所有会话用量聚合',

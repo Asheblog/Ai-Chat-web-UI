@@ -26,8 +26,8 @@ async function initDatabase() {
     // 3. 检查是否需要创建默认管理员
     await createDefaultAdmin();
 
-    // 4. 创建示例系统模型（可选）
-    await createExampleSystemModel();
+    // 4. 创建示例系统连接（可选）
+    await createExampleSystemConnection();
 
     console.log('🎉 数据库初始化完成！');
 
@@ -105,35 +105,30 @@ async function createDefaultAdmin() {
   }
 }
 
-async function createExampleSystemModel() {
-  const modelCount = await prisma.modelConfig.count({
-    where: { userId: null },
-  });
-
-  if (modelCount === 0) {
-    // 只有在提供了示例API配置时才创建
+async function createExampleSystemConnection() {
+  const connCount = await prisma.connection.count({ where: { ownerUserId: null } })
+  if (connCount === 0) {
     const exampleApiKey = process.env.EXAMPLE_SYSTEM_API_KEY;
-    const exampleApiUrl = process.env.EXAMPLE_SYSTEM_API_URL;
-
-    if (exampleApiKey && exampleApiUrl) {
-      const encryptedApiKey = AuthUtils.encryptApiKey(exampleApiKey);
-
-      await prisma.modelConfig.create({
+    const exampleBaseUrl = process.env.EXAMPLE_SYSTEM_API_URL;
+    if (exampleBaseUrl) {
+      await prisma.connection.create({
         data: {
-          userId: null, // 系统模型
-          name: 'GPT-3.5-Turbo',
-          apiUrl: exampleApiUrl,
-          apiKey: encryptedApiKey,
-          supportsImages: false,
+          ownerUserId: null,
+          provider: 'openai',
+          baseUrl: exampleBaseUrl.replace(/\/$/, ''),
+          enable: true,
+          authType: exampleApiKey ? 'bearer' : 'none',
+          apiKey: exampleApiKey ? AuthUtils.encryptApiKey(exampleApiKey) : '',
+          prefixId: 'example',
+          connectionType: 'external',
         },
-      });
-
-      console.log('✅ 示例系统模型创建完成');
+      })
+      console.log('✅ 示例系统连接创建完成')
     } else {
-      console.log('ℹ️ 未提供示例API配置，跳过示例系统模型创建');
+      console.log('ℹ️ 未提供示例连接配置，跳过示例系统连接创建')
     }
   } else {
-    console.log('✅ 已存在系统模型，跳过示例创建');
+    console.log('✅ 已存在系统连接，跳过示例创建')
   }
 }
 

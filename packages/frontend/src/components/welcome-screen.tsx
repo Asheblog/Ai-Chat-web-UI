@@ -7,25 +7,25 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ModelSelector } from '@/components/model-selector'
 import { useChatStore } from '@/store/chat-store'
-import { useSettingsStore } from '@/store/settings-store'
+import { apiClient } from '@/lib/api'
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
-  const { systemSettings, personalModels } = useSettingsStore()
 
   const [query, setQuery] = useState('')
   const [isCreating, setIsCreating] = useState(false)
-  const [selectedModelId, setSelectedModelId] = useState<number | null>(null)
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
 
-  // 选择一个默认模型（系统模型优先，否则取个人模型）
+  // 选择一个默认模型（取聚合列表的第一个）
   useEffect(() => {
-    if (!selectedModelId) {
-      const sysId = systemSettings?.systemModels?.[0]?.id
-      const perId = personalModels?.[0]?.id
-      if (sysId) setSelectedModelId(sysId)
-      else if (perId) setSelectedModelId(perId)
-    }
-  }, [systemSettings, personalModels, selectedModelId])
+    (async () => {
+      try {
+        const res = await apiClient.getAggregatedModels()
+        const first = res?.data?.[0]?.id as string | undefined
+        if (first) setSelectedModelId(first)
+      } catch {}
+    })()
+  }, [])
 
   const canCreate = useMemo(() => !!selectedModelId, [selectedModelId])
 
@@ -107,7 +107,7 @@ export function WelcomeScreen() {
             {/* 将模型选择器放到输入框右侧（ChatGPT 风格） */}
             <ModelSelector
               variant="inline"
-              selectedModelId={selectedModelId ?? 0}
+              selectedModelId={selectedModelId}
               onModelChange={(id) => setSelectedModelId(id)}
               disabled={!canCreate || isCreating}
             />

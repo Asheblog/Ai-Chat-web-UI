@@ -5,14 +5,16 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { settingsNav } from "./nav"
 import { SettingsShellNested } from "./shell-nested"
 import { useAuthStore } from "@/store/auth-store"
-import { PersonalModelsPage } from "./pages/PersonalModels"
+// import { PersonalModelsPage } from "./pages/PersonalModels"
 import { PersonalPreferencesPage } from "./pages/PersonalPreferences"
 import { AboutPage } from "./pages/About"
 import { SystemGeneralPage } from "./pages/SystemGeneral"
 import { SystemNetworkPage } from "./pages/SystemNetwork"
 import { SystemReasoningPage } from "./pages/SystemReasoning"
-import { SystemModelsPage } from "./pages/SystemModels"
+// import { SystemModelsPage } from "./pages/SystemModels"
 import { SystemUsersPage } from "./pages/SystemUsers"
+import { SystemConnectionsPage } from "./pages/SystemConnections"
+import { UserConnectionsPage } from "./pages/UserConnections"
 
 interface SettingsDialogProps {
   open: boolean
@@ -26,7 +28,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [activeMain, setActiveMain] = useState<string>(defaultTab)
-  const [activeSub, setActiveSub] = useState<string>("personal.models")
+  const [activeSub, setActiveSub] = useState<string>("personal.connections")
 
   // 初始化：来自 URL > localStorage > 角色默认
   useEffect(() => {
@@ -36,7 +38,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     const memSub = typeof window !== 'undefined' ? localStorage.getItem('settings:lastSub') || undefined : undefined
     const isAdmin = user?.role === 'ADMIN'
     const defMain = isAdmin ? (defaultTab || 'system') : 'personal'
-    const defSub = isAdmin ? (defMain === 'system' ? 'system.general' : 'personal.models') : 'personal.models'
+    const defSub = isAdmin ? (defMain === 'system' ? 'system.general' : 'personal.connections') : 'personal.connections'
     setActiveMain((urlMain || memMain || defMain) as string)
     setActiveSub((urlSub || memSub || defSub) as string)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,13 +77,15 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
           const subs = (tree.find(m => m.key === activeMain)?.children || []).map(s => ({ key: s.key, label: s.label }))
           const render = () => {
             switch (activeSub) {
-              case 'personal.models': return <PersonalModelsPage />
+              case 'personal.connections': return <UserConnectionsPage />
+              // case 'personal.models': return <PersonalModelsPage />
               case 'personal.preferences': return <PersonalPreferencesPage />
               case 'personal.about': return <AboutPage />
               case 'system.general': return <SystemGeneralPage />
               case 'system.network': return <SystemNetworkPage />
               case 'system.reasoning': return <SystemReasoningPage />
-              case 'system.models': return <SystemModelsPage />
+              case 'system.connections': return <SystemConnectionsPage />
+              // case 'system.models': return <SystemModelsPage />
               case 'system.users': return <SystemUsersPage />
               default: return null
             }
