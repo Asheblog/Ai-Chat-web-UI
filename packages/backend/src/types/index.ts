@@ -19,25 +19,15 @@ export interface JWTPayload {
   exp?: number;
 }
 
-export interface ModelConfig {
-  id: number;
-  userId?: number | null;
-  name: string;
-  apiUrl: string;
-  apiKey: string; // 加密存储
-  supportsImages?: boolean; // 是否支持图片输入（Vision）
-  createdAt: Date;
-}
+// 旧版模型配置（系统模型）已废弃，聚合模型能力由 /api/catalog/models 提供
 
 export interface ChatSession {
   id: number;
   userId: number;
-  modelConfigId?: number | null;
   connectionId?: number | null;
   modelRawId?: string | null;
   title: string;
   createdAt: Date;
-  modelConfig?: ModelConfig | null;
   messages?: Message[];
   _count?: {
     messages: number;
@@ -67,17 +57,7 @@ export interface CreateSessionRequest {
   title?: string;
 }
 
-export interface CreateModelConfigRequest {
-  name: string;
-  apiUrl: string;
-  apiKey: string;
-}
-
-export interface UpdateModelConfigRequest {
-  name?: string;
-  apiUrl?: string;
-  apiKey?: string;
-}
+// 移除 Create/UpdateModelConfig 系列类型
 
 export interface RegisterRequest {
   username: string;

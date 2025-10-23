@@ -38,7 +38,31 @@ export function ChatInterface() {
 
   const { sidebarCollapsed, setSidebarCollapsed, systemSettings } = useSettingsStore()
   const { toast } = useToast()
-  const isVisionEnabled = !!currentSession?.modelConfig?.supportsImages
+  // 拉取聚合模型列表（含 capabilities）并基于能力判定图片支持
+  const [allModels, setAllModels] = useState<Array<any>>([])
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await apiClient.getAggregatedModels()
+        if (mounted) setAllModels(res.data || [])
+      } catch {
+        if (mounted) setAllModels([])
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+  const isVisionEnabled = (() => {
+    if (!currentSession) return true
+    const cid = currentSession.connectionId ?? null
+    const rid = currentSession.modelRawId ?? currentSession.modelLabel ?? null
+    const match = allModels.find((m) => (
+      (cid != null ? m.connectionId === cid : true) &&
+      (rid ? (m.rawId === rid || m.id === rid) : false)
+    ))
+    const cap = match?.capabilities?.vision
+    return typeof cap === 'boolean' ? cap : true
+  })()
   // 思考模式与本轮不保存
   const [thinkingEnabled, setThinkingEnabled] = useState<boolean>(false)
   const [effort, setEffort] = useState<'low'|'medium'|'high'|'unset'>('unset')

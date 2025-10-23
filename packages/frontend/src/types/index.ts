@@ -20,34 +20,17 @@ export interface RegisterRequest extends LoginRequest {
   confirmPassword?: string;
 }
 
-// 模型配置类型
-export interface ModelConfig {
-  id: number;
-  userId?: number; // null 表示系统模型
-  name: string;
-  apiUrl: string;
-  apiKey: string; // 前端不会收到真实的apiKey
-  supportsImages?: boolean; // 是否支持图片输入（Vision）
-  createdAt: string;
-}
-
-export interface CreateModelConfigRequest {
-  name: string;
-  apiUrl: string;
-  apiKey: string;
-}
+// 旧版模型配置已移除，统一由聚合模型目录（/catalog/models）提供能力元数据
 
 // 聊天会话类型
 export interface ChatSession {
   id: number;
   userId: number;
-  modelConfigId?: number | null;
   connectionId?: number | null;
   modelRawId?: string | null;
   modelLabel?: string | null;
   title: string;
   createdAt: string;
-  modelConfig?: ModelConfig | null;
   reasoningEnabled?: boolean | null;
   reasoningEffort?: 'low' | 'medium' | 'high' | null;
   ollamaThink?: boolean | null;
