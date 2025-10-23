@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Send, Square, ImagePlus, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Send, Square, ImagePlus, X, PanelLeftClose, PanelLeftOpen, Plus, Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -16,6 +16,8 @@ import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
 import { useModelsStore } from '@/store/models-store'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 export function ChatInterface() {
   const [input, setInput] = useState('')
@@ -24,6 +26,9 @@ export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedImages, setSelectedImages] = useState<Array<{ dataUrl: string; mime: string; size: number }>>([])
+  const [showExpand, setShowExpand] = useState(false)
+  const [expandOpen, setExpandOpen] = useState(false)
+  const [expandDraft, setExpandDraft] = useState('')
 
   const {
     currentSession,
@@ -63,6 +68,7 @@ export function ChatInterface() {
   const MAX_IMAGE_COUNT = 4
   const MAX_IMAGE_MB = 5
   const MAX_IMAGE_EDGE = 4096 // 像素
+  const MAX_AUTO_HEIGHT = 200
 
   useEffect(() => {
     // 自动滚动到底部
@@ -190,7 +196,9 @@ export function ChatInterface() {
     // 自动调整高度
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`
+      const h = Math.min(textareaRef.current.scrollHeight, MAX_AUTO_HEIGHT)
+      textareaRef.current.style.height = `${h}px`
+      setShowExpand(textareaRef.current.scrollHeight > MAX_AUTO_HEIGHT)
     }
   }
 
@@ -318,60 +326,68 @@ export function ChatInterface() {
         </div>
       </ScrollArea>
 
-      {/* 输入区域 */}
-      <div className="border-t px-4 py-4">
-        <div className="flex flex-col gap-3">
-          {/* 思考模式行 */}
-          <div className="flex items-center gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <Switch checked={thinkingEnabled} onCheckedChange={(v)=>{
-                setThinkingEnabled(!!v)
-                if (currentSession) {
-                  // 立即持久化会话偏好
-                  useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEnabled: !!v })
-                }
-              }} />
-              <span>思考模式</span>
-            </div>
-            {thinkingEnabled && (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">力度</span>
-                  <Select value={effort} onValueChange={(v)=>{
-                    setEffort(v as any)
-                    if (currentSession) {
-                      useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEffort: v === 'unset' ? undefined as any : (v as any) })
-                    }
-                  }}>
-                    <SelectTrigger className="h-8 w-36"><SelectValue placeholder="不设置" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unset">不设置</SelectItem>
-                      <SelectItem value="low">low</SelectItem>
-                      <SelectItem value="medium">medium</SelectItem>
-                      <SelectItem value="high">high</SelectItem>
-                    </SelectContent>
-                  </Select>
+      {/* Dock 输入区（与首页一致的尺寸与结构） */}
+      <div className="sticky bottom-0 w-full">
+        <div className="mx-auto max-w-3xl px-4 md:px-6 pb-6">
+          {/* 预览选中图片 */}
+          {selectedImages.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {selectedImages.map((img, idx) => (
+                <div key={idx} className="relative border rounded p-1">
+                  <img src={img.dataUrl} className="h-20 w-20 object-contain rounded" />
+                  <button type="button" className="absolute -top-2 -right-2 bg-background border rounded-full p-1" onClick={() => removeImage(idx)}>
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Switch checked={ollamaThink} onCheckedChange={(v)=>{
-                    setOllamaThink(!!v)
-                    if (currentSession) {
-                      useChatStore.getState().updateSessionPrefs(currentSession.id, { ollamaThink: !!v })
-                    }
-                  }} />
-                  <span>Ollama think</span>
-                </div>
-              </>
-            )}
-
-            <div className="flex items-center gap-2 ml-auto">
-              <Switch checked={noSaveThisRound} onCheckedChange={(v)=>setNoSaveThisRound(!!v)} />
-              <span className="text-muted-foreground">本轮不保存</span>
+              ))}
             </div>
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="flex-1 relative">
+          )}
+
+          <div className="rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 flex items-center min-h-14 sm:min-h-16 focus-within:ring-2 focus-within:ring-ring transition">
+            {/* '+' 下拉：与首页一致，只保留思考设置 */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="h-10 w-10 inline-flex items-center justify-center rounded-full text-muted-foreground"
+                  aria-label="更多操作"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <div className="px-3 py-3 space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">思考模式</span>
+                    <Switch checked={thinkingEnabled} onCheckedChange={(v)=>{
+                      setThinkingEnabled(!!v)
+                      if (currentSession) {
+                        useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEnabled: !!v })
+                      }
+                    }} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">思考深度</span>
+                    <Select value={effort} onValueChange={(v)=>{
+                      setEffort(v as any)
+                      if (currentSession) {
+                        useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEffort: (v as any) === 'unset' ? undefined as any : (v as any) })
+                      }
+                    }}>
+                      <SelectTrigger className="h-8 w-32"><SelectValue placeholder="不设置" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unset">不设置</SelectItem>
+                        <SelectItem value="low">low</SelectItem>
+                        <SelectItem value="medium">medium</SelectItem>
+                        <SelectItem value="high">high</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* 输入框（与首页一致的尺寸与对齐） */}
+            <div className="flex-1">
               <Textarea
                 ref={textareaRef}
                 value={input}
@@ -379,89 +395,97 @@ export function ChatInterface() {
                 onKeyDown={handleKeyDown}
                 onCompositionStart={() => setIsComposing(true)}
                 onCompositionEnd={() => setIsComposing(false)}
-                placeholder={isStreaming ? "AI正在思考中..." : "输入消息... (Shift+Enter 换行)"}
+                placeholder={isStreaming ? 'AI正在思考中...' : '输入消息（Shift+Enter 换行）'}
                 disabled={isStreaming}
-                className="min-h-[60px] max-h-[200px] resize-none pr-12"
+                className="h-auto min-h-[40px] sm:min-h-[48px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-0 leading-6 sm:leading-7 text-left placeholder:text-muted-foreground"
                 rows={1}
               />
-
-              {/* 字符计数 */}
-              <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
-                {input.length}
-              </div>
             </div>
 
-          {/* 模型选择（紧凑按钮，放在输入框右侧） */}
-          {/* 原输入区右侧的紧凑型模型选择器已移至顶部栏，故移除 */}
+            {/* 展开编辑（内容超出自动高度时显示） */}
+            {showExpand && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="h-10 w-10 inline-flex items-center justify-center rounded-full border hover:bg-muted"
+                      onClick={() => { setExpandDraft(input); setExpandOpen(true) }}
+                      aria-label="全屏编辑"
+                      title="全屏编辑"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>全屏编辑</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
 
-          {/* 选择图片 */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={pickImages}
-                  disabled={isStreaming || !isVisionEnabled}
-                  aria-label="添加图片"
-                >
-                  <ImagePlus className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isVisionEnabled
-                  ? `添加图片（限制：最多 ${MAX_IMAGE_COUNT} 张，单张 ≤ ${MAX_IMAGE_MB}MB，最大边长 ≤ ${MAX_IMAGE_EDGE}px）`
-                  : '当前模型不支持图片'}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+            {/* 添加图片（与首页一致的图标样式） */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="h-10 w-10 inline-flex items-center justify-center rounded-full border hover:bg-muted"
+                    onClick={pickImages}
+                    disabled={isStreaming || !isVisionEnabled}
+                    aria-label="添加图片"
+                    title="添加图片"
+                  >
+                    <ImagePlus className="h-5 w-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isVisionEnabled
+                    ? `添加图片（限制：最多 ${MAX_IMAGE_COUNT} 张，单张 ≤ ${MAX_IMAGE_MB}MB，最大边长 ≤ ${MAX_IMAGE_EDGE}px）`
+                    : '当前模型不支持图片'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={isStreaming ? handleStop : handleSend}
-                  disabled={(!input.trim() && selectedImages.length === 0) && !isStreaming}
-                  size="icon"
-                  aria-label={isStreaming ? '停止生成' : '发送'}
-                  className={cn(
-                    "h-[60px] w-[60px]",
-                    isStreaming && "bg-destructive hover:bg-destructive/90"
-                  )}
-                >
-                  {isStreaming ? (
-                    <Square className="h-5 w-5" />
-                  ) : (
-                    <Send className="h-5 w-5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{isStreaming ? '停止生成' : '发送'}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+            {/* 发送/停止 */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={isStreaming ? handleStop : handleSend}
+                    disabled={(!input.trim() && selectedImages.length === 0) && !isStreaming}
+                    aria-label={isStreaming ? '停止生成' : '发送'}
+                    className={`h-10 px-4 inline-flex items-center justify-center rounded-full ${isStreaming ? 'bg-destructive text-destructive-foreground hover:opacity-90' : 'bg-primary text-primary-foreground hover:opacity-90'}`}
+                  >
+                    {isStreaming ? (<Square className="h-5 w-5" />) : (<Send className="h-5 w-5" />)}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{isStreaming ? '停止生成' : '发送'}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {/* 说明文字 */}
+          <div className="mt-3 text-center text-[11px] text-muted-foreground">图片 ≤ 4 张 / 单张 5MB · 内容可能不准确，请核实关键信息。</div>
+
+          {/* 隐藏文件选择 */}
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} disabled={!isVisionEnabled} />
         </div>
 
-        {/* 图片预览 */}
-        {selectedImages.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {selectedImages.map((img, idx) => (
-              <div key={idx} className="relative border rounded p-1">
-                <img src={img.dataUrl} className="h-20 w-20 object-contain rounded" />
-                <button type="button" className="absolute -top-2 -right-2 bg-background border rounded-full p-1" onClick={() => removeImage(idx)}>
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 删除输入区下的上下文/图片限制说明，提示改为上传按钮悬浮提示 */}
-
-        {/* 隐藏文件选择 */}
-        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} disabled={!isVisionEnabled} />
+        {/* 全屏编辑弹框 */}
+        <Dialog open={expandOpen} onOpenChange={setExpandOpen}>
+          <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 sm:rounded-2xl overflow-hidden flex flex-col">
+            <div className="p-4 border-b text-sm text-muted-foreground">编辑消息</div>
+            <div className="flex-1 min-h-0 p-4">
+              <Textarea
+                value={expandDraft}
+                onChange={(e)=>setExpandDraft(e.target.value)}
+                className="h-full w-full resize-none border rounded-md p-3"
+              />
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <Button variant="outline" onClick={()=>setExpandOpen(false)}>取消</Button>
+              <Button onClick={()=>{ setInput(expandDraft); setExpandOpen(false); if (textareaRef.current) { (textareaRef.current as any).value = expandDraft; textareaRef.current.style.height = 'auto'; const h = Math.min(textareaRef.current.scrollHeight, MAX_AUTO_HEIGHT); textareaRef.current.style.height = `${h}px`; setShowExpand(textareaRef.current.scrollHeight > MAX_AUTO_HEIGHT); } }}>应用</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
-  </div>
   )
 }

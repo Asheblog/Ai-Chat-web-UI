@@ -117,3 +117,10 @@
 .welcome-content {
   @apply text-center max-w-2xl mx-auto p-8;
 }
+
+/* 玻璃态容器（用于 Dock 输入） */
+.glass {
+  background: hsl(var(--card) / 0.7);
+  -webkit-backdrop-filter: saturate(150%) blur(8px);
+  backdrop-filter: saturate(150%) blur(8px);
+}

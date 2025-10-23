@@ -156,7 +156,6 @@ export function Sidebar() {
           {!isLoading && sessions.length === 0 && (
             <div className="text-center text-muted-foreground py-6">
               <p>暂无会话</p>
-              <Button className="mt-3" variant="outline" onClick={handleNewChat}>新建聊天</Button>
             </div>
           )}
 

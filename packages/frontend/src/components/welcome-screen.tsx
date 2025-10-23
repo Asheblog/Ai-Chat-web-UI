@@ -3,7 +3,7 @@
 // 全新欢迎页：模仿 ChatGPT 着陆面板（大标题 + 大输入框），并保持响应式
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, ImagePlus, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { ModelSelector } from '@/components/model-selector'
 import { useChatStore } from '@/store/chat-store'
@@ -12,6 +12,8 @@ import { useModelsStore } from '@/store/models-store'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { useSettingsStore } from '@/store/settings-store'
@@ -23,6 +25,7 @@ export function WelcomeScreen() {
   const { toast } = useToast()
 
   const [query, setQuery] = useState('')
+  const [isComposing, setIsComposing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   // 首页：思考模式 & 深度（放在“+”的下拉中）
@@ -34,10 +37,15 @@ export function WelcomeScreen() {
 
   // 图片上传（与聊天页保持一致的限制）
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [selectedImages, setSelectedImages] = useState<Array<{ dataUrl: string; mime: string; size: number }>>([])
   const MAX_IMAGE_COUNT = 4
   const MAX_IMAGE_MB = 5
   const MAX_IMAGE_EDGE = 4096
+  const MAX_AUTO_HEIGHT = 200
+  const [showExpand, setShowExpand] = useState(false)
+  const [expandOpen, setExpandOpen] = useState(false)
+  const [expandDraft, setExpandDraft] = useState('')
 
   // 选择一个默认模型（取聚合列表的第一个）
   const { models, fetchAll } = useModelsStore()
@@ -175,10 +183,20 @@ export function WelcomeScreen() {
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault()
       handleCreate()
+    }
+  }
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setQuery(e.target.value)
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      const h = Math.min(textareaRef.current.scrollHeight, MAX_AUTO_HEIGHT)
+      textareaRef.current.style.height = `${h}px`
+      setShowExpand(textareaRef.current.scrollHeight > MAX_AUTO_HEIGHT)
     }
   }
 
@@ -203,7 +221,7 @@ export function WelcomeScreen() {
 
         {/* 大输入框区域（移除内联模型选择器） */}
         <div className="w-full max-w-3xl">
-          <div className="flex items-center h-14 sm:h-16 rounded-full border bg-background shadow-sm px-3 sm:px-4 focus-within:ring-2 focus-within:ring-ring transition">
+          <div className="flex items-center rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 focus-within:ring-2 focus-within:ring-ring transition min-h-14 sm:min-h-16">
             {/* '+' 下拉：思考模式开关 + 深度选择 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -246,16 +264,36 @@ export function WelcomeScreen() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="询问任何问题"
-              disabled={!canCreate || isCreating}
-              className="flex-1 h-10 sm:h-12 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent px-3 sm:px-4"
-            />
+            <div className="flex-1">
+              <Textarea
+                ref={textareaRef}
+                value={query}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+                placeholder="输入消息（Shift+Enter 换行）"
+                disabled={!canCreate || isCreating}
+                className="h-auto min-h-[40px] sm:min-h-[48px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-0 leading-6 sm:leading-7 text-left placeholder:text-muted-foreground"
+                rows={1}
+              />
+            </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
+              {showExpand && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 rounded-full"
+                  onClick={() => { setExpandDraft(query); setExpandOpen(true) }}
+                  aria-label="全屏编辑"
+                  title="全屏编辑"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+              )}
+
               <Button
                 type="button"
                 variant="outline"
@@ -286,6 +324,24 @@ export function WelcomeScreen() {
           {/* 隐藏文件选择 */}
           <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} />
         </div>
+
+        {/* 全屏编辑弹框 */}
+        <Dialog open={expandOpen} onOpenChange={setExpandOpen}>
+          <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 sm:rounded-2xl overflow-hidden flex flex-col">
+            <div className="p-4 border-b text-sm text-muted-foreground">编辑消息</div>
+            <div className="flex-1 min-h-0 p-4">
+              <Textarea
+                value={expandDraft}
+                onChange={(e)=>setExpandDraft(e.target.value)}
+                className="h-full w-full resize-none border rounded-md p-3"
+              />
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <Button variant="outline" onClick={()=>setExpandOpen(false)}>取消</Button>
+              <Button onClick={()=>{ setQuery(expandDraft); setExpandOpen(false); if (textareaRef.current) { textareaRef.current.value = expandDraft as any; textareaRef.current.style.height = 'auto'; const h = Math.min(textareaRef.current.scrollHeight, MAX_AUTO_HEIGHT); textareaRef.current.style.height = `${h}px`; setShowExpand(textareaRef.current.scrollHeight > MAX_AUTO_HEIGHT); } }}>应用</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* 页脚提示信息 */}
         <p className="mt-8 text-xs sm:text-[13px] text-muted-foreground text-center px-4">
