@@ -32,11 +32,9 @@ export function ChatInterface() {
     clearError,
     error,
     usageCurrent,
-    usageLastRound,
-    usageTotals,
   } = useChatStore()
 
-  const { maxTokens, sidebarCollapsed, setSidebarCollapsed, systemSettings } = useSettingsStore()
+  const { sidebarCollapsed, setSidebarCollapsed, systemSettings } = useSettingsStore()
   const { toast } = useToast()
   const isVisionEnabled = !!currentSession?.modelConfig?.supportsImages
   // 思考模式与本轮不保存
@@ -274,16 +272,6 @@ export function ChatInterface() {
                 )}
               </div>
             )}
-            {usageLastRound && (
-              <div className="px-2 py-1 bg-muted rounded">
-                本轮: 提示{usageLastRound.prompt_tokens ?? '-'} / 补全{usageLastRound.completion_tokens ?? '-'} / 总计{usageLastRound.total_tokens ?? '-'}
-              </div>
-            )}
-            {usageTotals && (
-              <div className="px-2 py-1 bg-muted rounded">
-                累计: 提示{usageTotals.prompt_tokens} / 补全{usageTotals.completion_tokens} / 总计{usageTotals.total_tokens}
-              </div>
-            )}
             <Button size="sm" variant="outline" className="ml-2" onClick={handleExportCSV}>
               导出CSV
             </Button>
@@ -380,7 +368,18 @@ export function ChatInterface() {
           {/* 原输入区右侧的紧凑型模型选择器已移至顶部栏，故移除 */}
 
           {/* 选择图片 */}
-          <Button type="button" variant="outline" size="icon" onClick={pickImages} disabled={isStreaming || !isVisionEnabled} title={isVisionEnabled ? "添加图片" : "当前模型不支持图片"}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={pickImages}
+            disabled={isStreaming || !isVisionEnabled}
+            title={
+              isVisionEnabled
+                ? `添加图片（限制：最多 ${MAX_IMAGE_COUNT} 张，单张 ≤ ${MAX_IMAGE_MB}MB，最大边长 ≤ ${MAX_IMAGE_EDGE}px）`
+                : "当前模型不支持图片"
+            }
+          >
             <ImagePlus className="h-5 w-5" />
           </Button>
 
@@ -415,12 +414,7 @@ export function ChatInterface() {
           </div>
         )}
 
-        {/* 提示信息 */}
-        <div className="mt-2 text-xs text-muted-foreground">
-          上下文限制: {maxTokens} tokens
-          <br />
-          图片限制: 最多 {MAX_IMAGE_COUNT} 张，单张 ≤ {MAX_IMAGE_MB}MB，最大边长 ≤ {MAX_IMAGE_EDGE}px
-        </div>
+        {/* 删除输入区下的上下文/图片限制说明，提示改为上传按钮悬浮提示 */}
 
         {/* 隐藏文件选择 */}
         <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} disabled={!isVisionEnabled} />
