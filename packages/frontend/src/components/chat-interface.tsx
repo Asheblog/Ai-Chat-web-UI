@@ -36,7 +36,7 @@ export function ChatInterface() {
     usageTotals,
   } = useChatStore()
 
-  const { maxTokens, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
+  const { maxTokens, sidebarCollapsed, setSidebarCollapsed, systemSettings } = useSettingsStore()
   const { toast } = useToast()
   const isVisionEnabled = !!currentSession?.modelConfig?.supportsImages
   // 思考模式与本轮不保存
@@ -67,15 +67,32 @@ export function ChatInterface() {
     }
   }, [isStreaming])
 
-  // 进入会话时，从会话级默认加载
+  // 进入会话时，从会话级默认加载；若会话未设置，则回退到系统设置
   useEffect(() => {
     if (currentSession) {
-      setThinkingEnabled(Boolean(currentSession.reasoningEnabled ?? false))
-      const eff = (currentSession.reasoningEffort as any) || 'unset'
-      setEffort(eff)
-      setOllamaThink(Boolean(currentSession.ollamaThink ?? false))
+      const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
+      const sysEffortRaw = (systemSettings?.openaiReasoningEffort ?? '') as any
+      const sysEffort: 'low'|'medium'|'high'|'unset' = (sysEffortRaw && sysEffortRaw !== '') ? sysEffortRaw : 'unset'
+      const sysOllamaThink = Boolean(systemSettings?.ollamaThink ?? false)
+
+      // 会话级优先，其次系统级
+      setThinkingEnabled(
+        typeof currentSession.reasoningEnabled === 'boolean'
+          ? Boolean(currentSession.reasoningEnabled)
+          : sysEnabled
+      )
+
+      setEffort(
+        (currentSession.reasoningEffort as any) || sysEffort
+      )
+
+      setOllamaThink(
+        typeof currentSession.ollamaThink === 'boolean'
+          ? Boolean(currentSession.ollamaThink)
+          : sysOllamaThink
+      )
     }
-  }, [currentSession?.id])
+  }, [currentSession?.id, systemSettings?.reasoningEnabled, systemSettings?.openaiReasoningEffort, systemSettings?.ollamaThink])
 
   // 切换到不支持图片的模型时，清空已选图片
   useEffect(() => {
