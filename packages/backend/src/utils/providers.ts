@@ -36,6 +36,31 @@ export interface CatalogItem {
   }
 }
 
+// 公共工具：根据 tags 与 rawId 推导模型能力（标签优先，启发式其次）
+export function computeCapabilities(rawId: string, tags?: Array<{ name: string }>): CatalogItem['capabilities'] {
+  const caps: CatalogItem['capabilities'] = {}
+  const tnames = (tags || []).map((t) => (t?.name || '').toLowerCase())
+  const hasTag = (k: string) => tnames.includes(k)
+
+  if (hasTag('vision')) caps.vision = true
+  if (hasTag('file_upload') || hasTag('file')) caps.file_upload = true
+  if (hasTag('web_search')) caps.web_search = true
+  if (hasTag('image_generation')) caps.image_generation = true
+  if (hasTag('code_interpreter')) caps.code_interpreter = true
+
+  const id = (rawId || '').toLowerCase()
+  if (caps.vision !== true) {
+    const visionHints = [
+      'gpt-4o', 'gpt-4.1', 'gpt4o', 'o4', 'omni', 'vision', 'vl',
+      'phi-3', 'phi-3.5', 'phi-4', 'minicpm', 'qwen-vl', 'qwen2-vl', 'qwen2.5-vl',
+      'llava', 'llama-3.2', 'llama3.2', 'llama-vision', 'llama3-vision', 'moondream', 'bakllava', 'pixtral',
+      'deepseek-vl', 'kling-v', 'grok-vision'
+    ]
+    if (visionHints.some((p) => id.includes(p))) caps.vision = true
+  }
+  return caps
+}
+
 async function getAzureAccessToken(): Promise<string | null> {
   try {
     if (process.env.AZURE_ACCESS_TOKEN) return process.env.AZURE_ACCESS_TOKEN
@@ -103,34 +128,6 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const prefix = cfg.prefixId || ''
   const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
 
-  const inferCapabilities = (rawId: string): CatalogItem['capabilities'] => {
-    const caps: CatalogItem['capabilities'] = {}
-    const tnames = (tags || []).map((t) => (t?.name || '').toLowerCase())
-    const hasTag = (k: string) => tnames.includes(k)
-
-    // 标签优先（明确声明）
-    if (hasTag('vision')) caps.vision = true
-    if (hasTag('file_upload') || hasTag('file')) caps.file_upload = true
-    if (hasTag('web_search')) caps.web_search = true
-    if (hasTag('image_generation')) caps.image_generation = true
-    if (hasTag('code_interpreter')) caps.code_interpreter = true
-
-    // 启发式：常见多模态/视觉模型名
-    const id = rawId.toLowerCase()
-    const visionHints = [
-      'gpt-4o', 'gpt-4.1', 'gpt4o', 'o4', 'omni', 'vision', 'vl',
-      'phi-3', 'phi-3.5', 'phi-4', 'minicpm', 'qwen-vl', 'qwen2-vl', 'qwen2.5-vl',
-      'llava', 'llama-3.2', 'llama3.2', 'llama-vision', 'llama3-vision', 'moondream', 'bakllava', 'pixtral',
-      'deepseek-vl', 'kling-v', 'grok-vision'
-    ]
-    if (caps.vision !== true) {
-      if (visionHints.some((p) => id.includes(p))) caps.vision = true
-    }
-
-    // 文件上传能力默认不做硬性判定（前端当前未用到），维持 undefined
-    return caps
-  }
-
   const apply = (id: string, name?: string): CatalogItem => ({
     id: prefix ? `${prefix}.${id}` : id,
     rawId: id,
@@ -138,7 +135,7 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
     provider: cfg.provider,
     connectionType,
     tags,
-    capabilities: inferCapabilities(id),
+    capabilities: computeCapabilities(id, tags),
   })
 
   if (cfg.modelIds && cfg.modelIds.length) {

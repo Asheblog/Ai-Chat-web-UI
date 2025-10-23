@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { prisma } from '../db'
 import type { ApiResponse } from '../types'
 import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth'
-import { fetchModelsForConnection, type CatalogItem } from '../utils/providers'
+import { fetchModelsForConnection, type CatalogItem, computeCapabilities } from '../utils/providers'
 import { AuthUtils } from '../utils/auth'
 
 const catalog = new Hono()
@@ -41,10 +41,24 @@ catalog.get('/models', authMiddleware, async (c) => {
     }
   }
 
-  // 扁平化
-  const flat = results.flatMap(({ connectionId, items }) =>
-    items.map((m) => ({ ...m, connectionId }))
-  )
+  // 读取覆盖标签（管理员可在模型管理中编辑）；若存在则覆盖动态抓取的 tags
+  const overrides = await prisma.modelCatalog.findMany({ select: { connectionId: true, modelId: true, tagsJson: true } })
+  const overrideMap = new Map<string, Array<{ name: string }>>()
+  for (const r of overrides) {
+    try {
+      const key = `${r.connectionId}:${r.modelId}`
+      overrideMap.set(key, JSON.parse(r.tagsJson || '[]') || [])
+    } catch {}
+  }
+
+  // 扁平化并覆盖 tags/capabilities
+  const flat = results.flatMap(({ connectionId, items }) => {
+    return items.map((m) => {
+      const key = `${connectionId}:${m.id}`
+      const tags = overrideMap.get(key) || m.tags || []
+      return { ...m, connectionId, tags, capabilities: computeCapabilities(m.rawId, tags), overridden: overrideMap.has(key) }
+    })
+  })
 
   return c.json<ApiResponse>({ success: true, data: flat })
 })
@@ -98,3 +112,84 @@ catalog.post('/models/refresh', authMiddleware, adminOnlyMiddleware, async (c) =
 
 export default catalog
 
+// 管理端：为某个聚合模型（连接+原始ID）设置标签（覆盖）
+catalog.put('/models/tags', authMiddleware, adminOnlyMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const connectionId = parseInt(String(body.connectionId || '0'))
+    const rawId = String(body.rawId || '')
+    const tags: Array<{ name: string }> = Array.isArray(body.tags) ? body.tags : []
+    if (!connectionId || !rawId) return c.json<ApiResponse>({ success: false, error: 'connectionId/rawId required' }, 400)
+
+    const conn = await prisma.connection.findUnique({ where: { id: connectionId } })
+    if (!conn) return c.json<ApiResponse>({ success: false, error: 'Connection not found' }, 404)
+    const modelId = (conn.prefixId ? `${conn.prefixId}.` : '') + rawId
+
+    const now = new Date()
+    const ttlSec = parseInt(process.env.MODELS_TTL_S || '120')
+    const exists = await prisma.modelCatalog.findFirst({ where: { connectionId, modelId } })
+    if (!exists) {
+      await prisma.modelCatalog.create({
+        data: {
+          connectionId,
+          modelId,
+          rawId,
+          name: rawId,
+          provider: conn.provider,
+          connectionType: (conn.connectionType as any) || 'external',
+          tagsJson: JSON.stringify(tags || []),
+          lastFetchedAt: now,
+          expiresAt: new Date(now.getTime() + ttlSec * 1000),
+        },
+      })
+    } else {
+      await prisma.modelCatalog.update({ where: { id: exists.id }, data: { tagsJson: JSON.stringify(tags || []), lastFetchedAt: now } })
+    }
+
+    return c.json<ApiResponse>({ success: true, message: 'Saved' })
+  } catch (e) {
+    return c.json<ApiResponse>({ success: false, error: 'Failed to save tags' }, 500)
+  }
+})
+
+// 管理端：批量或全部删除模型覆写（model_catalog 中的条目）
+catalog.delete('/models/tags', authMiddleware, adminOnlyMiddleware, async (c) => {
+  try {
+    let body: any = {}
+    try { body = await c.req.json() } catch {}
+    const all = Boolean(body?.all)
+    if (all) {
+      const r = await prisma.modelCatalog.deleteMany({})
+      return c.json<ApiResponse>({ success: true, message: `Deleted ${r.count} overrides` })
+    }
+    const items = Array.isArray(body?.items) ? body.items : []
+    if (!items.length) return c.json<ApiResponse>({ success: false, error: 'items required' }, 400)
+
+    const connectionIds = Array.from(new Set(items.map((i: any) => Number(i.connectionId)).filter(Boolean)))
+    const conns = await prisma.connection.findMany({ where: { id: { in: connectionIds } }, select: { id: true, prefixId: true } })
+    const pxMap = new Map<number, string | null>()
+    conns.forEach((c2) => pxMap.set(c2.id, c2.prefixId))
+    const orKeys = items.map((i: any) => {
+      const cid = Number(i.connectionId)
+      const raw = String(i.rawId || '')
+      const px = (pxMap.get(cid) || '') || ''
+      const modelId = (px ? `${px}.` : '') + raw
+      return { connectionId: cid, modelId }
+    })
+    const r = await prisma.modelCatalog.deleteMany({ where: { OR: orKeys } })
+    return c.json<ApiResponse>({ success: true, message: `Deleted ${r.count} overrides` })
+  } catch (e) {
+    return c.json<ApiResponse>({ success: false, error: 'Failed to delete overrides' }, 500)
+  }
+})
+
+// 管理端：导出当前覆写（覆盖记录）
+catalog.get('/models/overrides', authMiddleware, adminOnlyMiddleware, async (c) => {
+  try {
+    const rows = await prisma.modelCatalog.findMany({ select: { connectionId: true, rawId: true, modelId: true, tagsJson: true } })
+    const items = rows.map((r) => ({ connectionId: r.connectionId, rawId: r.rawId, modelId: r.modelId, tags: JSON.parse(r.tagsJson || '[]') }))
+    return c.json<ApiResponse>({ success: true, data: items })
+  } catch (e) {
+    return c.json<ApiResponse>({ success: false, error: 'Failed to export overrides' }, 500)
+  }
+})

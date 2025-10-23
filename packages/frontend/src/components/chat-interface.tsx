@@ -14,6 +14,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
+import { useModelsStore } from '@/store/models-store'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 export function ChatInterface() {
@@ -38,20 +39,9 @@ export function ChatInterface() {
 
   const { sidebarCollapsed, setSidebarCollapsed, systemSettings } = useSettingsStore()
   const { toast } = useToast()
-  // 拉取聚合模型列表（含 capabilities）并基于能力判定图片支持
-  const [allModels, setAllModels] = useState<Array<any>>([])
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const res = await apiClient.getAggregatedModels()
-        if (mounted) setAllModels(res.data || [])
-      } catch {
-        if (mounted) setAllModels([])
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
+  // 统一从 models-store 读取聚合模型
+  const { models: allModels, fetchAll: fetchModels } = useModelsStore()
+  useEffect(() => { if (!allModels || allModels.length === 0) fetchModels().catch(()=>{}) }, [allModels?.length])
   const isVisionEnabled = (() => {
     if (!currentSession) return true
     const cid = currentSession.connectionId ?? null
@@ -206,7 +196,7 @@ export function ChatInterface() {
 
   const pickImages = () => {
     if (!isVisionEnabled) {
-      toast({ title: '当前模型不支持图片', description: '请在模型配置中开启“支持图片输入（Vision）”', variant: 'destructive' })
+      toast({ title: '当前模型不支持图片', description: '请在模型能力中开启 Vision（连接/模型管理可配置）', variant: 'destructive' })
       return
     }
     fileInputRef.current?.click()

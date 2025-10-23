@@ -12,6 +12,7 @@ export function SystemConnectionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<any | null>(null)
   const [form, setForm] = useState<any>({ provider: 'openai', baseUrl: '', authType: 'bearer', apiKey: '', azureApiVersion: '', enable: true, prefixId: '', tags: '', modelIds: '', connectionType: 'external' })
+  const [cap, setCap] = useState<{ vision: boolean; file_upload: boolean; web_search: boolean; image_generation: boolean; code_interpreter: boolean }>({ vision: false, file_upload: false, web_search: false, image_generation: false, code_interpreter: false })
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -25,7 +26,7 @@ export function SystemConnectionsPage() {
 
   useEffect(() => { load() }, [])
 
-  const resetForm = () => setForm({ provider: 'openai', baseUrl: '', authType: 'bearer', apiKey: '', azureApiVersion: '', enable: true, prefixId: '', tags: '', modelIds: '', connectionType: 'external' })
+  const resetForm = () => { setForm({ provider: 'openai', baseUrl: '', authType: 'bearer', apiKey: '', azureApiVersion: '', enable: true, prefixId: '', tags: '', modelIds: '', connectionType: 'external' }); setCap({ vision: false, file_upload: false, web_search: false, image_generation: false, code_interpreter: false }) }
 
   const onEdit = (row: any) => {
     setEditing(row)
@@ -37,15 +38,32 @@ export function SystemConnectionsPage() {
       azureApiVersion: row.azureApiVersion || '',
       enable: !!row.enable,
       prefixId: row.prefixId || '',
-      tags: (() => { try { return (JSON.parse(row.tagsJson||'[]')||[]).map((t:any)=>t.name).join(',') } catch { return '' } })(),
+      tags: (() => { try { return (JSON.parse(row.tagsJson||'[]')||[]).map((t:any)=>t.name).filter((n:string)=>!['vision','file_upload','web_search','image_generation','code_interpreter'].includes(n)).join(',') } catch { return '' } })(),
       modelIds: (() => { try { return (JSON.parse(row.modelIdsJson||'[]')||[]).join(',') } catch { return '' } })(),
       connectionType: row.connectionType || 'external',
     })
+    try {
+      const arr = JSON.parse(row.tagsJson||'[]') || []
+      const names = new Set(arr.map((t:any)=>String(t?.name||'')))
+      setCap({
+        vision: names.has('vision'),
+        file_upload: names.has('file_upload'),
+        web_search: names.has('web_search'),
+        image_generation: names.has('image_generation'),
+        code_interpreter: names.has('code_interpreter'),
+      })
+    } catch { setCap({ vision:false, file_upload:false, web_search:false, image_generation:false, code_interpreter:false }) }
   }
 
   const onDelete = async (id: number) => {
     await apiClient.deleteSystemConnection(id)
     await load()
+  }
+
+  const buildTags = () => {
+    const free = form.tags ? form.tags.split(',').map((s:string)=>({name:s.trim()})).filter((s:any)=>s.name && !['vision','file_upload','web_search','image_generation','code_interpreter'].includes(s.name)) : []
+    const caps = Object.entries(cap).filter(([,v])=>v).map(([k])=>({ name: k }))
+    return [...free, ...caps]
   }
 
   const onVerify = async () => {
@@ -57,7 +75,7 @@ export function SystemConnectionsPage() {
       azureApiVersion: form.azureApiVersion || undefined,
       enable: !!form.enable,
       prefixId: form.prefixId || undefined,
-      tags: form.tags ? form.tags.split(',').map((s:string)=>({name:s.trim()})).filter((s:any)=>s.name) : [],
+      tags: buildTags(),
       modelIds: form.modelIds ? form.modelIds.split(',').map((s:string)=>s.trim()).filter(Boolean) : [],
       connectionType: form.connectionType,
     }
@@ -74,7 +92,7 @@ export function SystemConnectionsPage() {
       azureApiVersion: form.azureApiVersion || undefined,
       enable: !!form.enable,
       prefixId: form.prefixId || undefined,
-      tags: form.tags ? form.tags.split(',').map((s:string)=>({name:s.trim()})).filter((s:any)=>s.name) : [],
+      tags: buildTags(),
       modelIds: form.modelIds ? form.modelIds.split(',').map((s:string)=>s.trim()).filter(Boolean) : [],
       connectionType: form.connectionType,
     }
@@ -151,6 +169,17 @@ export function SystemConnectionsPage() {
           <div className="col-span-2">
             <Label>Tags（逗号分隔）</Label>
             <Input value={form.tags} onChange={(e)=>setForm((f:any)=>({...f, tags:e.target.value }))} placeholder="prod,team-a" />
+          </div>
+          <div className="col-span-2">
+            <Label>能力标签（勾选即添加 vision/file_upload 等标签）</Label>
+            <div className="flex gap-4 text-sm mt-1">
+              {['vision','file_upload','web_search','image_generation','code_interpreter'].map((k) => (
+                <label key={k} className="flex items-center gap-1">
+                  <input type="checkbox" checked={(cap as any)[k]} onChange={(e)=>setCap((c:any)=>({ ...c, [k]: e.target.checked }))} />
+                  <span>{k}</span>
+                </label>
+              ))}
+            </div>
           </div>
           <div className="col-span-2">
             <Label>Model IDs（逗号分隔，留空自动枚举）</Label>

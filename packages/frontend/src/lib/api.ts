@@ -154,6 +154,26 @@ class ApiClient {
     return response.data
   }
 
+  async updateModelTags(connectionId: number, rawId: string, tags: Array<{ name: string }>) {
+    const response = await this.client.put<ApiResponse<any>>('/catalog/models/tags', { connectionId, rawId, tags })
+    return response.data
+  }
+
+  async deleteModelOverrides(items: Array<{ connectionId: number; rawId: string }>) {
+    const response = await this.client.delete<ApiResponse<any>>('/catalog/models/tags', { data: { items } })
+    return response.data
+  }
+
+  async deleteAllModelOverrides() {
+    const response = await this.client.delete<ApiResponse<any>>('/catalog/models/tags', { data: { all: true } })
+    return response.data
+  }
+
+  async getOverrideItems() {
+    const response = await this.client.get<ApiResponse<any[]>>('/catalog/models/overrides')
+    return response.data
+  }
+
   async getSystemConnections() {
     const response = await this.client.get<ApiResponse<any[]>>('/connections')
     return response.data

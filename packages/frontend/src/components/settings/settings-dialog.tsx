@@ -11,6 +11,7 @@ import { AboutPage } from "./pages/About"
 import { SystemGeneralPage } from "./pages/SystemGeneral"
 import { SystemNetworkPage } from "./pages/SystemNetwork"
 import { SystemReasoningPage } from "./pages/SystemReasoning"
+import { SystemModelsPage } from "./pages/SystemModels"
 // import { SystemModelsPage } from "./pages/SystemModels"
 import { SystemUsersPage } from "./pages/SystemUsers"
 import { SystemConnectionsPage } from "./pages/SystemConnections"
@@ -85,7 +86,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
               case 'system.network': return <SystemNetworkPage />
               case 'system.reasoning': return <SystemReasoningPage />
               case 'system.connections': return <SystemConnectionsPage />
-              // case 'system.models': return <SystemModelsPage />
+              case 'system.models': return <SystemModelsPage />
               case 'system.users': return <SystemUsersPage />
               default: return null
             }

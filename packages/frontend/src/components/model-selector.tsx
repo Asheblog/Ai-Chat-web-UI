@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import { useModelsStore } from "@/store/models-store"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -19,22 +20,8 @@ interface ModelSelectorProps {
 
 export function ModelSelector({ selectedModelId, onModelChange, disabled, className, variant = "default" }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
-  const [allModels, setAllModels] = useState<Array<{ id: string; name: string; provider: string; connectionId: number }>>([])
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    ;(async () => {
-      setLoading(true)
-      try {
-        const res = await apiClient.getAggregatedModels()
-        setAllModels(res.data || [])
-      } catch {
-        setAllModels([])
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const { models: allModels, isLoading: loading, fetchAll } = useModelsStore()
+  useEffect(() => { if (!allModels || allModels.length === 0) fetchAll().catch(()=>{}) }, [])
 
   const selected = allModels.find((m) => m.id === selectedModelId)
 

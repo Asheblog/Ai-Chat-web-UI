@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ModelSelector } from '@/components/model-selector'
 import { useChatStore } from '@/store/chat-store'
 import { apiClient } from '@/lib/api'
+import { useModelsStore } from '@/store/models-store'
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
@@ -17,15 +18,12 @@ export function WelcomeScreen() {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
 
   // 选择一个默认模型（取聚合列表的第一个）
+  const { models, fetchAll } = useModelsStore()
+  useEffect(() => { if (!models || models.length===0) fetchAll().catch(()=>{}) }, [models?.length])
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiClient.getAggregatedModels()
-        const first = res?.data?.[0]?.id as string | undefined
-        if (first) setSelectedModelId(first)
-      } catch {}
-    })()
-  }, [])
+    const first = models?.[0]?.id as string | undefined
+    if (first) setSelectedModelId(first)
+  }, [models])
 
   const canCreate = useMemo(() => !!selectedModelId, [selectedModelId])
 

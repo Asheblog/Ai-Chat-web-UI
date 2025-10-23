@@ -73,8 +73,11 @@ app.get('/api', (c) => {
         'PUT /api/auth/password': '修改密码',
       },
       models: {
-        'GET /api/catalog/models': '聚合模型列表（连接）',
+        'GET /api/catalog/models': '聚合模型列表（连接，含capabilities）',
         'POST /api/catalog/models/refresh': '刷新聚合模型缓存（管理员）',
+        'PUT /api/catalog/models/tags': '设置模型标签（管理员，覆盖）',
+        'DELETE /api/catalog/models/tags': '批量/全部清除模型覆写（管理员）',
+        'GET /api/catalog/models/overrides': '导出所有覆写记录（管理员）',
       },
       connections: {
         'GET /api/connections': '系统连接列表（管理员）',
