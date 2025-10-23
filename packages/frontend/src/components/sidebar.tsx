@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, X } from 'lucide-react'
+import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -14,6 +14,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useAuthStore } from '@/store/auth-store'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -24,11 +35,12 @@ import { SettingsDialog } from '@/components/settings/settings-dialog'
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
-  const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap } = useChatStore()
+  const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
   const { theme, setTheme, systemSettings } = useSettingsStore()
   const searchParams = useSearchParams()
 
@@ -82,13 +94,9 @@ export function Sidebar() {
     setIsMobileMenuOpen(false)
   }
 
-  const handleDeleteSession = async (sessionId: number, e: React.MouseEvent) => {
+  const requestDeleteSession = (sessionId: number, e: React.MouseEvent) => {
     e.stopPropagation()
-    try {
-      await deleteSession(sessionId)
-    } catch (error) {
-      console.error('Failed to delete session:', error)
-    }
+    setDeleteTargetId(sessionId)
   }
 
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
@@ -129,6 +137,29 @@ export function Sidebar() {
       {/* 会话列表 */}
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-2">
+          {/* 加载骨架 */}
+          {isLoading && sessions.length === 0 && (
+            <>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="border rounded-lg p-3">
+                  <div className="h-4 w-28 bg-muted animate-pulse rounded" />
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-10 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* 空态 */}
+          {!isLoading && sessions.length === 0 && (
+            <div className="text-center text-muted-foreground py-6">
+              <p>暂无会话</p>
+              <Button className="mt-3" variant="outline" onClick={handleNewChat}>新建聊天</Button>
+            </div>
+          )}
+
           {sessions.map((session) => (
             <div
               key={session.id}
@@ -153,14 +184,23 @@ export function Sidebar() {
                   )}
                 </div>
               </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => handleDeleteSession(session.id, e)}
-              >
-                <X className="h-3 w-3" />
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => requestDeleteSession(session.id, e)}
+                      aria-label="删除会话"
+                    >
+                      {/* simple dot icon via CSS to avoid extra icon dependency */}
+                      <span className="block h-3 w-3 rounded-full bg-foreground/70" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>删除会话</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           ))}
         </div>
@@ -214,36 +254,61 @@ export function Sidebar() {
       {/* 全局设置弹框 */}
       <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
 
-      {/* 移动端菜单按钮 */}
+      {/* 移动端菜单按钮（配合 Sheet 使用） */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        >
-          {isMobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsMobileMenuOpen(true)}
+                aria-label="打开侧边栏"
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>打开菜单</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
-
-      {/* 移动端侧边栏覆盖层 */}
-      {isMobileMenuOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
 
       {/* 桌面端侧边栏 */}
       <div className="hidden lg:flex">
         {sidebarContent}
       </div>
 
-      {/* 移动端侧边栏 */}
-      {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-y-0 left-0 z-50">
+      {/* 移动端侧边栏：Sheet */}
+      <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+        <SheetContent side="left" className="p-0 w-72">
           {sidebarContent}
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
+
+      {/* 删除确认弹框 */}
+      <AlertDialog open={deleteTargetId !== null} onOpenChange={(open)=>!open && setDeleteTargetId(null)}>
+        <AlertDialogContent>
+          <AlertDialogTitle>删除会话</AlertDialogTitle>
+          <AlertDialogDescription>此操作不可撤销，确定要删除该会话吗？</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button variant="outline">取消</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                variant="destructive"
+                onClick={async ()=>{
+                  const id = deleteTargetId
+                  setDeleteTargetId(null)
+                  if (typeof id === 'number') {
+                    try { await deleteSession(id) } catch (e) { console.error(e) }
+                  }
+                }}
+              >确定</Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

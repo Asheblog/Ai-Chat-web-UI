@@ -5,10 +5,11 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { useSettingsStore } from "@/store/settings-store"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 
 export function SystemNetworkPage() {
-  const { systemSettings, fetchSystemSettings, updateSystemSettings } = useSettingsStore()
+  const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading, error } = useSettingsStore()
   const { toast } = useToast()
   const [hbMs, setHbMs] = useState(15000)
   const [idleMs, setIdleMs] = useState(60000)
@@ -27,7 +28,36 @@ export function SystemNetworkPage() {
     }
   }, [systemSettings?.sseHeartbeatIntervalMs, systemSettings?.providerMaxIdleMs, systemSettings?.providerTimeoutMs, systemSettings?.usageEmit, systemSettings?.usageProviderOnly])
 
-  if (!systemSettings) return null
+  if (isLoading && !systemSettings) {
+    return (
+      <div className="p-4 space-y-6">
+        <div className="h-5 w-16 bg-muted rounded" />
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <div>
+                <div className="h-4 w-40 bg-muted rounded" />
+                <div className="mt-2 h-3 w-72 bg-muted/70 rounded" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-9 w-28" />
+                <div className="h-4 w-20 bg-muted rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (!systemSettings) {
+    return (
+      <div className="p-6 text-center text-muted-foreground">
+        <p>{error || '无法加载系统设置'}</p>
+        <button className="mt-3 px-3 py-2 border rounded" onClick={()=>fetchSystemSettings()}>重试</button>
+      </div>
+    )
+  }
   const msToSec = (v:number)=>`${Math.round(v/1000)} 秒`
   const within = (v:number,min:number,max:number)=>v>=min&&v<=max
   const hbRange={min:1000,max:600000}

@@ -5,9 +5,26 @@ import { TypingIndicator } from './typing-indicator'
 interface MessageListProps {
   messages: Message[]
   isStreaming: boolean
+  isLoading?: boolean
 }
 
-export function MessageList({ messages, isStreaming }: MessageListProps) {
+export function MessageList({ messages, isStreaming, isLoading }: MessageListProps) {
+  if (isLoading && messages.length === 0) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex gap-3">
+            <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+            <div className="flex-1">
+              <div className="h-4 w-40 bg-muted animate-pulse rounded" />
+              <div className="mt-3 h-20 bg-muted/70 animate-pulse rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   if (messages.length === 0 && !isStreaming) {
     return (
       <div className="text-center text-muted-foreground py-8">

@@ -14,6 +14,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 export function ChatInterface() {
   const [input, setInput] = useState('')
@@ -26,6 +27,7 @@ export function ChatInterface() {
   const {
     currentSession,
     messages,
+    isLoading,
     isStreaming,
     streamMessage,
     stopStreaming,
@@ -244,19 +246,26 @@ export function ChatInterface() {
         <div className="flex items-center justify-between gap-4">
           {/* 左侧：收起/展开侧边栏 + 模型选择器 */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="h-9 w-9 flex items-center justify-center rounded-md border hover:bg-muted"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-              aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-            >
-              {sidebarCollapsed ? (
-                <PanelLeftOpen className="h-4 w-4" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4" />
-              )}
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-9 w-9 flex items-center justify-center rounded-md border hover:bg-muted"
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+                    aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+                  >
+                    {sidebarCollapsed ? (
+                      <PanelLeftOpen className="h-4 w-4" />
+                    ) : (
+                      <PanelLeftClose className="h-4 w-4" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             <ModelSelector
               selectedModelId={currentSession.modelLabel || currentSession.modelRawId || null}
@@ -291,7 +300,7 @@ export function ChatInterface() {
               {String(error)}
             </div>
           )}
-          <MessageList messages={messages} isStreaming={isStreaming} />
+          <MessageList messages={messages} isStreaming={isStreaming} isLoading={isLoading} />
         </div>
       </ScrollArea>
 
@@ -372,36 +381,51 @@ export function ChatInterface() {
           {/* 原输入区右侧的紧凑型模型选择器已移至顶部栏，故移除 */}
 
           {/* 选择图片 */}
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={pickImages}
-            disabled={isStreaming || !isVisionEnabled}
-            title={
-              isVisionEnabled
-                ? `添加图片（限制：最多 ${MAX_IMAGE_COUNT} 张，单张 ≤ ${MAX_IMAGE_MB}MB，最大边长 ≤ ${MAX_IMAGE_EDGE}px）`
-                : "当前模型不支持图片"
-            }
-          >
-            <ImagePlus className="h-5 w-5" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={pickImages}
+                  disabled={isStreaming || !isVisionEnabled}
+                  aria-label="添加图片"
+                >
+                  <ImagePlus className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isVisionEnabled
+                  ? `添加图片（限制：最多 ${MAX_IMAGE_COUNT} 张，单张 ≤ ${MAX_IMAGE_MB}MB，最大边长 ≤ ${MAX_IMAGE_EDGE}px）`
+                  : '当前模型不支持图片'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
-          <Button
-            onClick={isStreaming ? handleStop : handleSend}
-            disabled={(!input.trim() && selectedImages.length === 0) && !isStreaming}
-            size="icon"
-            className={cn(
-              "h-[60px] w-[60px]",
-              isStreaming && "bg-destructive hover:bg-destructive/90"
-            )}
-          >
-            {isStreaming ? (
-              <Square className="h-5 w-5" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={isStreaming ? handleStop : handleSend}
+                  disabled={(!input.trim() && selectedImages.length === 0) && !isStreaming}
+                  size="icon"
+                  aria-label={isStreaming ? '停止生成' : '发送'}
+                  className={cn(
+                    "h-[60px] w-[60px]",
+                    isStreaming && "bg-destructive hover:bg-destructive/90"
+                  )}
+                >
+                  {isStreaming ? (
+                    <Square className="h-5 w-5" />
+                  ) : (
+                    <Send className="h-5 w-5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isStreaming ? '停止生成' : '发送'}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {/* 图片预览 */}

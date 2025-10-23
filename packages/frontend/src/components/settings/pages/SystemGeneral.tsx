@@ -5,10 +5,11 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { useSettingsStore } from "@/store/settings-store"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 
 export function SystemGeneralPage() {
-  const { systemSettings, fetchSystemSettings, updateSystemSettings } = useSettingsStore()
+  const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading, error } = useSettingsStore()
   const { toast } = useToast()
   const [brandTextDraft, setBrandTextDraft] = useState("")
   const [isIMEComposing, setIsIMEComposing] = useState(false)
@@ -16,7 +17,39 @@ export function SystemGeneralPage() {
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => { if(systemSettings) setBrandTextDraft(systemSettings.brandText || '') }, [systemSettings?.brandText])
 
-  if (!systemSettings) return null
+  if (isLoading && !systemSettings) {
+    return (
+      <div className="p-4 space-y-6">
+        <div className="h-5 w-16 bg-muted rounded" />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="h-4 w-28 bg-muted rounded" />
+              <div className="mt-2 h-3 w-64 bg-muted/70 rounded" />
+            </div>
+            <div className="h-6 w-10 bg-muted rounded" />
+          </div>
+          <div>
+            <div className="h-4 w-16 bg-muted rounded" />
+            <div className="mt-2 flex items-center gap-2">
+              <Skeleton className="h-9 w-64" />
+              <Skeleton className="h-8 w-16" />
+            </div>
+            <div className="mt-2 h-3 w-72 bg-muted/70 rounded" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!systemSettings) {
+    return (
+      <div className="p-6 text-center text-muted-foreground">
+        <p>{error || '无法加载系统设置'}</p>
+        <button className="mt-3 px-3 py-2 border rounded" onClick={()=>fetchSystemSettings()}>重试</button>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 space-y-6">

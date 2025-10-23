@@ -1,122 +1,104 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
-import { ChevronDown } from 'lucide-react'
-import { apiClient } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { useState, useEffect } from "react"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { apiClient } from "@/lib/api"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface ModelSelectorProps {
   selectedModelId: string | null
   onModelChange: (modelId: string) => void
   disabled?: boolean
   className?: string
-  /**
-   * 展示形态：
-   * - default：按钮+文案（当前使用位置保持不变）
-   * - inline：紧凑触发（仅图标按钮，适合放到输入框右侧）
-   */
-  variant?: 'default' | 'inline'
+  variant?: "default" | "inline"
 }
 
-export function ModelSelector({ selectedModelId, onModelChange, disabled, className, variant = 'default' }: ModelSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false)
+export function ModelSelector({ selectedModelId, onModelChange, disabled, className, variant = "default" }: ModelSelectorProps) {
+  const [open, setOpen] = useState(false)
   const [allModels, setAllModels] = useState<Array<{ id: string; name: string; provider: string; connectionId: number }>>([])
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     ;(async () => {
+      setLoading(true)
       try {
         const res = await apiClient.getAggregatedModels()
         setAllModels(res.data || [])
-      } catch (e) {
+      } catch {
         setAllModels([])
+      } finally {
+        setLoading(false)
       }
     })()
   }, [])
 
-  useEffect(() => {
-    // no-op for aggregated models
-  }, [])
+  const selected = allModels.find((m) => m.id === selectedModelId)
 
-  const selectedModel = allModels.find(model => model.id === selectedModelId)
-
-  const handleModelSelect = (modelId: string) => {
-    onModelChange(modelId)
-    setIsOpen(false)
-  }
+  const trigger = (
+    <Button
+      type="button"
+      variant="outline"
+      role="combobox"
+      aria-expanded={open}
+      aria-label="选择模型"
+      disabled={disabled}
+      className={cn("justify-between", variant === "inline" ? "h-10 w-10 px-0" : "min-w-[220px]", className)}
+    >
+      {variant === "inline" ? (
+        <ChevronsUpDown className="h-4 w-4" />
+      ) : (
+        <span className="truncate mr-2">{selected ? selected.name : "选择模型"}</span>
+      )}
+      {variant !== "inline" && <ChevronsUpDown className="ml-auto h-4 w-4 opacity-50" />}
+    </Button>
+  )
 
   return (
-    <div className={cn("relative", className)}>
-      {variant === 'default' ? (
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          disabled={disabled}
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 text-sm border rounded-md bg-background hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring",
-            disabled && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          <span className="truncate max-w-[200px]">
-            {selectedModel ? selectedModel.name : '选择模型'}
-          </span>
-          <ChevronDown className="h-4 w-4 flex-shrink-0" />
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          disabled={disabled}
-          title={selectedModel ? `当前模型：${selectedModel.name}` : '选择模型'}
-          className={cn(
-            // 圆形“行内”触发器，适合放到输入框右侧工具区
-            "h-10 w-10 flex items-center justify-center rounded-full border bg-background text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring",
-            disabled && "opacity-50 cursor-not-allowed"
-          )}
-          aria-label="选择模型"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </button>
-      )}
-
-      {isOpen && (
-        <>
-          {/* 覆盖层 */}
-          <div
-            className="fixed inset-0 z-10"
-            onClick={() => setIsOpen(false)}
-          />
-
-          {/* 下拉菜单 */}
-          <div className={cn(
-            "absolute mt-1 w-64 bg-popover border rounded-md shadow-lg z-20 max-h-64 overflow-y-auto",
-            // inline 形态更可能放在容器右侧，菜单对齐到右边更自然
-            variant === 'inline' ? 'top-full right-0' : 'top-full left-0'
-          )}>
-            {allModels.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                暂无可用模型
-              </div>
-            ) : (
-              <>
-                {allModels.map((model) => (
-                  <button
-                    key={model.id}
-                    type="button"
-                    onClick={() => handleModelSelect(model.id)}
-                    className={cn(
-                      "w-full px-3 py-2 text-sm text-left hover:bg-muted transition-colors",
-                      selectedModelId === model.id && "bg-muted"
-                    )}
-                  >
-                    <div className="font-medium">{model.name}</div>
-                    <div className="text-xs text-muted-foreground">{model.id}</div>
-                  </button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent className="p-0 w-72">
+        <Command>
+          <CommandInput placeholder="搜索模型..." />
+          <CommandList>
+            {loading && (
+              <div className="p-2 space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <div className="flex-1">
+                      <Skeleton className="h-3 w-40" />
+                      <Skeleton className="mt-1 h-3 w-24" />
+                    </div>
+                  </div>
                 ))}
-              </>
+              </div>
             )}
-          </div>
-        </>
-      )}
-    </div>
+            {!loading && <CommandEmpty>暂无可用模型</CommandEmpty>}
+            <CommandGroup heading="全部模型">
+              {allModels.map((model) => (
+                <CommandItem
+                  key={model.id}
+                  value={`${model.name} ${model.id}`}
+                  onSelect={() => {
+                    onModelChange(model.id)
+                    setOpen(false)
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", selectedModelId === model.id ? "opacity-100" : "opacity-0")} />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium leading-none">{model.name}</span>
+                    <span className="text-xs text-muted-foreground">{model.id}</span>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }

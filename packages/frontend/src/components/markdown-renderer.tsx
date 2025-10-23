@@ -32,6 +32,8 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
   }
 
   return (
+    <div className={cn("prose prose-zinc dark:prose-invert max-w-none", isStreaming && "typing-cursor")}
+    >
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeHighlight]}
@@ -278,5 +280,6 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
     >
       {content}
     </ReactMarkdown>
+    </div>
   )
 }

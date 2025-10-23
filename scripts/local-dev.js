@@ -118,6 +118,40 @@ function detectPackageManager() {
   return 'npm'
 }
 
+function readRootPackageJson() {
+  try {
+    const raw = fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')
+    return JSON.parse(raw)
+  } catch (_) {
+    return {}
+  }
+}
+
+function ensurePnpmWorkspaceFile() {
+  // 若使用 pnpm 且 package.json 存在 workspaces 字段，但缺少 pnpm-workspace.yaml，则自动生成
+  const wsFile = path.join(process.cwd(), 'pnpm-workspace.yaml')
+  if (fs.existsSync(wsFile)) return
+  const pkg = readRootPackageJson()
+  const workspaces = pkg && pkg.workspaces
+  if (!workspaces) return
+  try {
+    const lines = []
+    if (Array.isArray(workspaces)) {
+      lines.push('packages:')
+      for (const pat of workspaces) lines.push(`  - "${pat}"`)
+    } else if (workspaces && Array.isArray(workspaces.packages)) {
+      lines.push('packages:')
+      for (const pat of workspaces.packages) lines.push(`  - "${pat}"`)
+    }
+    if (lines.length) {
+      fs.writeFileSync(wsFile, lines.join('\n') + '\n', 'utf8')
+      logWarn('检测到使用 pnpm workspace 但缺少 pnpm-workspace.yaml，已自动生成')
+    }
+  } catch (e) {
+    // 忽略写入失败，后续 pnpm 仍可工作但会有警告
+  }
+}
+
 function installDeps(pm) {
   logInfo(`准备安装依赖（包管理器: ${pm}）...`)
   try {
@@ -147,6 +181,56 @@ function installDeps(pm) {
       }
     }
     throw e
+  }
+}
+
+function ensureDepsInstalled(pm) {
+  // 更稳健的依赖安装判断：
+  // - 无 root node_modules
+  // - 或关键 CLI 不可用（backend: prisma；frontend: next）
+  const rootNodeModules = path.join(process.cwd(), 'node_modules')
+  const backendCwd = path.join(process.cwd(), 'packages', 'backend')
+  const frontendCwd = path.join(process.cwd(), 'packages', 'frontend')
+
+  let shouldInstall = !fs.existsSync(rootNodeModules)
+
+  function tryCheck(cmd, args, opts) {
+    try {
+      const res = spawnSync(cmd, args, { stdio: 'ignore', shell: true, ...opts })
+      return res.status === 0
+    } catch (_) {
+      return false
+    }
+  }
+
+  if (!shouldInstall) {
+    if (pm === 'pnpm') {
+      // 检查 workspace 关键二进制
+      const prismaOk = tryCheck('pnpm', ['exec', 'prisma', '--version'], { cwd: backendCwd })
+      const nextOk = tryCheck('pnpm', ['exec', 'next', '--version'], { cwd: frontendCwd })
+      if (!prismaOk || !nextOk) {
+        logWarn(`检测到关键 CLI 未就绪 (prisma=${String(prismaOk)}, next=${String(nextOk)}), 将执行依赖安装`)
+        shouldInstall = true
+      }
+    } else if (pm === 'yarn') {
+      const prismaOk = tryCheck('yarn', ['node', '-e', 'require.resolve("prisma")'], { cwd: backendCwd })
+      const nextOk = tryCheck('yarn', ['node', '-e', 'require.resolve("next")'], { cwd: frontendCwd })
+      if (!prismaOk || !nextOk) shouldInstall = true
+    } else {
+      // npm
+      const prismaOk = tryCheck('npx', ['--yes', 'prisma', '--version'], { cwd: backendCwd })
+      const nextOk = tryCheck('npx', ['--yes', 'next', '--version'], { cwd: frontendCwd })
+      if (!prismaOk || !nextOk) shouldInstall = true
+    }
+  }
+
+  if (pm === 'pnpm') ensurePnpmWorkspaceFile()
+
+  if (shouldInstall) {
+    return installDeps(pm)
+  } else {
+    logSuccess('检测到依赖已安装且关键 CLI 可用，跳过安装')
+    return pm
   }
 }
 
@@ -340,14 +424,7 @@ async function main() {
   logInfo(`使用包管理器: ${pm}`)
 
   // 依赖检查：根 node_modules 以及子包
-  const rootNodeModules = path.join(process.cwd(), 'node_modules')
-  const needInstall = !fs.existsSync(rootNodeModules)
-
-  if (needInstall) {
-    pm = installDeps(pm)
-  } else {
-    logSuccess('检测到依赖已安装，跳过安装')
-  }
+  pm = ensureDepsInstalled(pm)
 
   // 统一加载根环境变量（集中化配置）
   // 优先根 .env，其次根 .env.example；不覆盖已有进程变量

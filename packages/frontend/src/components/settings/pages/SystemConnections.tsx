@@ -164,6 +164,23 @@ export function SystemConnectionsPage() {
         </div>
       </div>
       <div className="space-y-2">
+        {/* 骨架屏 */}
+        {loading && rows.length === 0 && (
+          <>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="p-3 border rounded">
+                <div className="h-4 w-52 bg-muted rounded" />
+                <div className="mt-2 h-3 w-64 bg-muted/70 rounded" />
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* 空态 */}
+        {!loading && rows.length === 0 && (
+          <div className="text-sm text-muted-foreground text-center py-6">暂无连接，填写上方表单后新增</div>
+        )}
+
         {rows.map((r:any) => (
           <div key={r.id} className="p-3 border rounded flex items-center justify-between">
             <div>
