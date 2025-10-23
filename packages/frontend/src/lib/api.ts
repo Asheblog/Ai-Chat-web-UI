@@ -208,6 +208,11 @@ class ApiClient {
     return response.data
   }
 
+  async updateSessionModel(sessionId: number, modelId: string) {
+    const response = await this.client.put<ApiResponse<any>>(`/sessions/${sessionId}/model`, { modelId })
+    return response.data
+  }
+
   // 消息相关API
   async getMessages(sessionId: number) {
     // 与后端路由对齐：GET /api/chat/sessions/:sessionId/messages

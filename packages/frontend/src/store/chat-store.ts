@@ -11,6 +11,7 @@ interface ChatStore extends ChatState {
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>
   updateSessionTitle: (sessionId: number, title: string) => Promise<void>
+  switchSessionModel: (sessionId: number, modelId: string) => Promise<void>
   updateSessionPrefs: (sessionId: number, prefs: Partial<{ reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean }>) => Promise<void>
   sendMessage: (sessionId: number, content: string) => Promise<void>
   streamMessage: (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) => Promise<void>
@@ -172,6 +173,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set({
         error: error.response?.data?.error || error.message || '更新会话标题失败',
       })
+    }
+  },
+
+  switchSessionModel: async (sessionId: number, modelId: string) => {
+    try {
+      const resp = await apiClient.updateSessionModel(sessionId, modelId)
+      const updated = resp.data
+      set((state) => ({
+        sessions: state.sessions.map(s => s.id === sessionId ? { ...s, connectionId: updated.connectionId, modelRawId: updated.modelRawId, modelLabel: updated.modelRawId } : s),
+        currentSession: state.currentSession?.id === sessionId ? { ...(state.currentSession as any), connectionId: updated.connectionId, modelRawId: updated.modelRawId, modelLabel: updated.modelRawId } : state.currentSession,
+      }))
+    } catch (error: any) {
+      set({ error: error.response?.data?.error || error.message || '切换模型失败' })
     }
   },
 

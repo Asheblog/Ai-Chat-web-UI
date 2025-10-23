@@ -323,6 +323,82 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
   }
 });
 
+// 切换会话的模型（聚合模型ID -> 连接ID + 原始模型ID）
+sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
+  modelId: z.string().min(1),
+})), async (c) => {
+  try {
+    const user = c.get('user')
+    const sessionId = parseInt(c.req.param('id'))
+    const { modelId } = c.req.valid('json')
+
+    if (isNaN(sessionId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
+    }
+
+    // 验证会话归属
+    const existing = await prisma.chatSession.findFirst({ where: { id: sessionId, userId: user.id } })
+    if (!existing) {
+      return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404)
+    }
+
+    // 解析 modelId -> (connectionId, rawId)
+    let connectionId: number | null = null
+    let rawId: string | null = null
+
+    // 优先命中缓存目录
+    const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
+    if (cached) {
+      connectionId = cached.connectionId
+      rawId = cached.rawId
+    } else {
+      // 回退：从可见连接中匹配（系统级 + 用户级）
+      const conns = await prisma.connection.findMany({
+        where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true },
+      })
+      for (const conn of conns) {
+        const px = (conn.prefixId || '')
+        if (px && modelId.startsWith(px + '.')) {
+          connectionId = conn.id
+          rawId = modelId.substring(px.length + 1)
+          break
+        }
+        if (!px) {
+          connectionId = conn.id
+          rawId = modelId
+          break
+        }
+      }
+    }
+
+    if (!connectionId || !rawId) {
+      return c.json<ApiResponse>({ success: false, error: 'Model not found in connections' }, 400)
+    }
+
+    // 更新会话的连接与模型
+    const updated = await prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { connectionId, modelRawId: rawId },
+      select: {
+        id: true,
+        userId: true,
+        connectionId: true,
+        modelRawId: true,
+        title: true,
+        createdAt: true,
+        reasoningEnabled: true,
+        reasoningEffort: true,
+        ollamaThink: true,
+      },
+    })
+
+    return c.json<ApiResponse<any>>({ success: true, data: { ...updated, modelLabel: updated.modelRawId } })
+  } catch (error) {
+    console.error('Switch session model error:', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to switch session model' }, 500)
+  }
+})
+
 // 删除聊天会话
 sessions.delete('/:id', authMiddleware, async (c) => {
   try {

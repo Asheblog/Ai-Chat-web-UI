@@ -260,7 +260,11 @@ export function ChatInterface() {
 
             <ModelSelector
               selectedModelId={currentSession.modelLabel || currentSession.modelRawId || null}
-              onModelChange={() => { /* TODO: 支持会话内切换模型 */ }}
+              onModelChange={(modelId) => {
+                if (!currentSession) return
+                // 前端调用切换接口并更新会话
+                useChatStore.getState().switchSessionModel(currentSession.id, modelId)
+              }}
             />
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-2">
