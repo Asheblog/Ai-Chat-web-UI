@@ -227,9 +227,11 @@ export function ChatInterface() {
       {/* 顶部工具栏 */}
       <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold truncate">
-            {currentSession.title}
-          </h2>
+          {/* 顶部左侧：模型选择器（替换原会话标题） */}
+          <ModelSelector
+            selectedModelId={currentSession.modelConfigId}
+            onModelChange={() => { /* TODO: 支持会话内切换模型 */ }}
+          />
           <div className="text-xs text-muted-foreground flex items-center gap-2">
             {usageCurrent && (
               <div className="px-2 py-1 bg-muted rounded">
@@ -342,12 +344,7 @@ export function ChatInterface() {
             </div>
 
           {/* 模型选择（紧凑按钮，放在输入框右侧） */}
-          <ModelSelector
-            variant="inline"
-            selectedModelId={currentSession.modelConfigId}
-            onModelChange={() => { /* TODO: 支持会话内切换模型 */ }}
-            disabled={isStreaming}
-          />
+          {/* 原输入区右侧的紧凑型模型选择器已移至顶部栏，故移除 */}
 
           {/* 选择图片 */}
           <Button type="button" variant="outline" size="icon" onClick={pickImages} disabled={isStreaming || !isVisionEnabled} title={isVisionEnabled ? "添加图片" : "当前模型不支持图片"}>
