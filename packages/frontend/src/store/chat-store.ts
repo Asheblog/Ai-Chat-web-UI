@@ -194,6 +194,52 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   streamMessage: async (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) => {
     // 首先添加用户消息
+    // 在发送前尝试基于首条用户输入为“新的对话”自动改名（与常见产品一致）
+    try {
+      const state = get()
+      const cur = state.currentSession
+      const isTarget = !!cur && cur.id === sessionId
+      const isDefaultTitle = isTarget && (
+        !cur!.title || cur!.title.trim() === '' || cur!.title === '新的对话' || cur!.title === 'New Chat'
+      )
+      const noUserMessagesYet = state.messages.filter(m => m.sessionId === sessionId && m.role === 'user').length === 0
+
+      if (isTarget && isDefaultTitle && noUserMessagesYet) {
+        const deriveTitleFrom = (text: string) => {
+          if (!text) return ''
+          let s = String(text)
+          // 去除代码块/图片/多余空白/标题符号
+          s = s.replace(/```[\s\S]*?```/g, ' ')
+               .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
+               .replace(/^[#>\-\*\s]+/gm, '')
+               .replace(/\n+/g, ' ')
+               .trim()
+          // 取前 30 个字符作为标题
+          const limit = 30
+          return s.length > limit ? s.slice(0, limit) : s
+        }
+
+        const newTitle = deriveTitleFrom(content)
+        if (newTitle) {
+          const prevTitle = cur!.title
+          // 本地乐观更新，提升侧边栏即时性
+          set((st) => ({
+            sessions: st.sessions.map(s => s.id === sessionId ? { ...s, title: newTitle } : s),
+            currentSession: st.currentSession?.id === sessionId ? { ...st.currentSession!, title: newTitle } : st.currentSession,
+          }))
+          // 后台持久化；失败则回滚
+          get().updateSessionTitle(sessionId, newTitle).catch(() => {
+            set((st) => ({
+              sessions: st.sessions.map(s => s.id === sessionId ? { ...s, title: prevTitle } : s),
+              currentSession: st.currentSession?.id === sessionId ? { ...st.currentSession!, title: prevTitle } : st.currentSession,
+            }))
+          })
+        }
+      }
+    } catch (e) {
+      // 忽略改名失败，不影响消息发送
+    }
+
     const userMessage: Message = {
       id: Date.now(), // 临时ID
       sessionId,

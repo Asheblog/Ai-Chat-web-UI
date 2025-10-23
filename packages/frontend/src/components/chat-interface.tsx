@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Send, Square, ImagePlus, X } from 'lucide-react'
+import { Send, Square, ImagePlus, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -36,7 +36,7 @@ export function ChatInterface() {
     usageTotals,
   } = useChatStore()
 
-  const { maxTokens } = useSettingsStore()
+  const { maxTokens, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const { toast } = useToast()
   const isVisionEnabled = !!currentSession?.modelConfig?.supportsImages
   // 思考模式与本轮不保存
@@ -227,11 +227,27 @@ export function ChatInterface() {
       {/* 顶部工具栏 */}
       <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          {/* 顶部左侧：模型选择器（替换原会话标题） */}
-          <ModelSelector
-            selectedModelId={currentSession.modelConfigId}
-            onModelChange={() => { /* TODO: 支持会话内切换模型 */ }}
-          />
+          {/* 左侧：收起/展开侧边栏 + 模型选择器 */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="h-9 w-9 flex items-center justify-center rounded-md border hover:bg-muted"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" />
+              )}
+            </button>
+
+            <ModelSelector
+              selectedModelId={currentSession.modelConfigId}
+              onModelChange={() => { /* TODO: 支持会话内切换模型 */ }}
+            />
+          </div>
           <div className="text-xs text-muted-foreground flex items-center gap-2">
             {usageCurrent && (
               <div className="px-2 py-1 bg-muted rounded">

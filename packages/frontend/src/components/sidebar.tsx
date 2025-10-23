@@ -91,6 +91,14 @@ export function Sidebar() {
     setTheme(newTheme)
   }
 
+  // 将标题限制在 10 个字符以内（按 Unicode 码点计数），超出添加省略号
+  const clipTitle = (s: string, max = 10) => {
+    try {
+      const arr = Array.from(s || '')
+      return arr.length > max ? arr.slice(0, max).join('') + '…' : s
+    } catch { return s }
+  }
+
   const sidebarContent = (
     <div className="flex h-full w-64 flex-col bg-card border-r">
       {/* 顶部文字LOGO */}
@@ -127,8 +135,8 @@ export function Sidebar() {
               onClick={() => handleSessionClick(session.id)}
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {session.title}
+                <p className="truncate text-sm font-medium" title={session.title}>
+                  {clipTitle(session.title, 10)}
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">

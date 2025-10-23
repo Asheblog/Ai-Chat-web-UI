@@ -15,6 +15,9 @@ interface SettingsStore extends SettingsState {
   updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setMaxTokens: (maxTokens: number) => void
+  // UI：侧边栏折叠
+  sidebarCollapsed: boolean
+  setSidebarCollapsed: (v: boolean) => void
   clearError: () => void
 }
 
@@ -23,6 +26,7 @@ export const useSettingsStore = create<SettingsStore>()(
     (set, get) => ({
       theme: 'system',
       maxTokens: 4000,
+      sidebarCollapsed: false,
       personalModels: [],
       systemSettings: null,
       isLoading: false,
@@ -214,6 +218,8 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ maxTokens })
       },
 
+      setSidebarCollapsed: (v: boolean) => { set({ sidebarCollapsed: !!v }) },
+
       clearError: () => {
         set({ error: null })
       },
@@ -223,6 +229,7 @@ export const useSettingsStore = create<SettingsStore>()(
       partialize: (state) => ({
         theme: state.theme,
         maxTokens: state.maxTokens,
+        sidebarCollapsed: state.sidebarCollapsed,
       }),
     }
   )

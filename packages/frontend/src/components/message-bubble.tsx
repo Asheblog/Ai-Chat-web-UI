@@ -44,9 +44,9 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       {/* 头像 */}
-      <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-primary' : 'bg-muted'}`}>
+      <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
         <AvatarImage src={undefined} />
-        <AvatarFallback className={isUser ? 'text-primary-foreground' : 'text-muted-foreground'}>
+        <AvatarFallback className={isUser ? 'text-muted-foreground' : 'text-muted-foreground'}>
           {isUser ? 'U' : 'A'}
         </AvatarFallback>
       </Avatar>
@@ -56,8 +56,8 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
         <div
           className={`inline-block rounded-lg px-4 py-3 ${
             isUser
-              ? 'bg-primary text-primary-foreground ml-auto'
-              : 'bg-muted text-foreground'
+              ? 'bg-muted text-foreground ml-auto'
+              : 'bg-background border text-foreground'
           } ${isStreaming && !isUser ? 'typing-cursor' : ''}`}
         >
           {isUser ? (
@@ -69,7 +69,7 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
                   ))}
                 </div>
               )}
-              <p className="whitespace-pre-wrap text-right">{message.content}</p>
+              <p className="whitespace-pre-wrap text-left">{message.content}</p>
             </div>
           ) : (
             // 助手消息：当处于流式且内容为空时，直接在该气泡内显示“思考中”占位，避免再额外渲染一条提示气泡
