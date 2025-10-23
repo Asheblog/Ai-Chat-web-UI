@@ -38,36 +38,68 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
       components={{
         // 自定义代码块渲染
         code({ node, inline, className, children, ...props }: any) {
-          const match = /language-(\w+)/.exec(className || '')
-          const language = match ? match[1] : ''
+          const match = /language-([\w+-]+)/.exec(className || '')
+          const rawLang = match ? match[1] : ''
+          const language = (rawLang || '').toLowerCase()
+          const isPlain = !language || ['plaintext','text','txt','nohighlight'].includes(language)
           const codeContent = String(children).replace(/\n$/, '')
 
           if (!inline && codeContent) {
+            // 将短小的纯文本代码块（如仅一行 URL/变量名）自动降级为“行内样式”，
+            // 避免生成一整块卡片导致段落被强制换行，贴近 ChatGPT 的排版体验。
+            const isSingleLine = !codeContent.includes('\n')
+            const isShortPlain = isPlain && isSingleLine && codeContent.trim().length <= 80
+            if (isShortPlain) {
+              return (
+                <code
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30",
+                    isStreaming && "typing-cursor"
+                  )}
+                  {...props}
+                >
+                  {codeContent}
+                </code>
+              )
+            }
             return (
-              <div className="relative group">
-                <div className="flex items-center justify-between bg-muted px-4 py-2 text-sm text-muted-foreground border-b">
-                  <span>{language || 'plaintext'}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => handleCopyCode(codeContent)}
-                  >
-                    {copiedCode === codeContent ? (
-                      <div className="h-3 w-3 bg-green-500 rounded" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
-                </div>
+              <div
+                className={cn(
+                  "relative group rounded-xl border border-border/50 bg-muted/30 my-2",
+                  !isPlain && "pt-7"
+                )}
+              >
+                {/* 语言标签（纯文本时隐藏） */}
+                {!isPlain && (
+                  <span className="absolute left-2 top-1.5 text-[11px] px-2 py-0.5 rounded bg-foreground/5 text-muted-foreground/80">
+                    {language}
+                  </span>
+                )}
+
+                {/* 复制按钮：悬浮显示 */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
+                  onClick={() => handleCopyCode(codeContent)}
+                  title="复制代码"
+                >
+                  {copiedCode === codeContent ? (
+                    <div className="h-3 w-3 bg-green-500 rounded" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </Button>
+
                 <SyntaxHighlighter
                   style={isDark ? oneDark : oneLight}
-                  language={language}
+                  language={isPlain ? undefined as any : language}
                   PreTag="div"
                   customStyle={{
                     margin: 0,
                     borderRadius: 0,
-                    background: isDark ? 'hsl(var(--muted))' : 'hsl(var(--muted))',
+                    background: 'transparent',
+                    padding: '12px 14px 14px 14px',
                   }}
                   className={cn(
                     "text-sm",
@@ -84,7 +116,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
           return (
             <code
               className={cn(
-                "px-1.5 py-0.5 rounded text-sm font-mono bg-muted",
+                "px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30",
                 isStreaming && "typing-cursor"
               )}
               {...props}
@@ -139,7 +171,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
         // 自定义列表渲染
         ul({ children }) {
           return (
-            <ul className="list-disc list-inside mb-4 space-y-1">
+            <ul className="list-disc pl-6 my-3 space-y-1">
               {children}
             </ul>
           )
@@ -147,7 +179,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
 
         ol({ children }) {
           return (
-            <ol className="list-decimal list-inside mb-4 space-y-1">
+            <ol className="list-decimal pl-6 my-3 space-y-1">
               {children}
             </ol>
           )
