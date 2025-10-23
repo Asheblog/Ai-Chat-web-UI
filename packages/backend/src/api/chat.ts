@@ -269,6 +269,9 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     // 供应商参数透传（系统设置控制）
     // 即时与会话/系统优先级：request > session > system/env
     const sessionDefaults = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })
+    // 读取系统设置以支持推理/思考等开关的默认值（需在使用 sysMap 前初始化）
+    const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
+    const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
     const reqReasoningEnabled = (c.req.valid('json') as any).reasoningEnabled
     const reqReasoningEffort = (c.req.valid('json') as any).reasoningEffort
     const reqOllamaThink = (c.req.valid('json') as any).ollamaThink
@@ -306,8 +309,6 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     let reasoningDoneEmitted = false;
     let reasoningDurationSeconds = 0;
     // 读取系统设置（若存在则覆盖环境变量），用于网络稳定性与 usage 行为
-    const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
-    const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
 
     // usage 透出与透传
     let USAGE_EMIT = (sysMap.usage_emit ?? (process.env.USAGE_EMIT ?? 'true')).toString().toLowerCase() !== 'false';
@@ -761,6 +762,8 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     let body: any = { model: session.modelRawId, messages: messagesPayload, stream: false, temperature: 0.7 };
     const settingsRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const settingsMap = settingsRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+    // 非流式补全请求的超时（毫秒），优先系统设置，其次环境变量，默认 5 分钟
+    const providerTimeoutMs = parseInt(settingsMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
     const sess = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })
     const reqJson = c.req.valid('json') as any
     const ren = typeof reqJson?.reasoningEnabled === 'boolean' ? reqJson.reasoningEnabled : (sess?.reasoningEnabled ?? ((settingsMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false'))
