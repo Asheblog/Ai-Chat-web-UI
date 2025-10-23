@@ -161,3 +161,15 @@ process.on('SIGTERM', async () => {
   console.log('\n🔄 Gracefully shutting down...');
   process.exit(0);
 });
+
+// 兜底：捕获未处理错误，避免静默失败
+process.on('unhandledRejection', (reason: any, p) => {
+  try {
+    console.error('[UnhandledRejection]', reason)
+  } catch (_) {}
+})
+process.on('uncaughtException', (err) => {
+  try {
+    console.error('[UncaughtException]', err)
+  } catch (_) {}
+})

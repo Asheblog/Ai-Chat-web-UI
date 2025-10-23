@@ -2,7 +2,14 @@ import { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 export const errorHandler = (error: Error, c: Context) => {
-  console.error('API Error:', error);
+  try {
+    const method = c?.req?.method || '-'
+    const path = c?.req?.path || '-'
+    const now = new Date().toISOString()
+    console.error(`[${now}] API Error ${method} ${path}:`, error)
+  } catch (_) {
+    console.error('API Error:', error)
+  }
 
   // 默认错误响应
   let status = 500;

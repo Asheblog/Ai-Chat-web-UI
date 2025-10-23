@@ -152,28 +152,40 @@ function ensurePnpmWorkspaceFile() {
   }
 }
 
+// 安装依赖：显式包含 devDependencies，确保构建期工具（如 tsc）可用（Linux/Windows 兼容）
 function installDeps(pm) {
-  logInfo(`准备安装依赖（包管理器: ${pm}）...`)
-  try {
-    if (pm === 'pnpm') {
-      runSync('pnpm', ['install'])
-    } else if (pm === 'yarn') {
-      runSync('yarn', ['install'])
+  logInfo(`准备安装依赖（包管理器: ${pm}，包含 devDependencies）...`)
+  const tryInstall = (manager) => {
+    if (manager === 'pnpm') {
+      // --prod=false 显式包含 dev（避免受 NODE_ENV 影响）
+      runSync('pnpm', ['install', '--prod=false'])
+    } else if (manager === 'yarn') {
+      // Yarn classic：--production=false
+      runSync('yarn', ['install', '--production=false'])
     } else {
-      runSync('npm', ['install'])
+      // npm >= 9 支持 --include=dev；旧版可回退使用 env 变量
+      try {
+        runSync('npm', ['install', '--include=dev'])
+      } catch (_) {
+        // 回退方案：强制关闭 production 模式
+        runSync('npm', ['install'], { env: { ...process.env, npm_config_production: 'false' } })
+      }
     }
+  }
+
+  try {
+    tryInstall(pm)
     logSuccess('依赖安装完成')
     return pm
   } catch (e) {
     logError('依赖安装失败。可检查网络或尝试手动执行安装命令。')
-    // 退避与降级：尝试切换到其他包管理器
+    // 退避与降级：尝试切换到其他包管理器（保持包含 dev 的策略）
     const order = pm === 'pnpm' ? ['npm', 'yarn'] : pm === 'yarn' ? ['npm'] : []
     for (const next of order) {
       if (!commandExists(next)) continue
       try {
         logWarn(`尝试使用 ${next} 安装依赖...`)
-        if (next === 'npm') runSync('npm', ['install'])
-        else if (next === 'yarn') runSync('yarn', ['install'])
+        tryInstall(next)
         logSuccess(`依赖安装完成（已切换为 ${next}）`)
         return next
       } catch (_) {
@@ -205,22 +217,25 @@ function ensureDepsInstalled(pm) {
 
   if (!shouldInstall) {
     if (pm === 'pnpm') {
-      // 检查 workspace 关键二进制
+      // 检查 workspace 关键二进制（含 TypeScript/tsc）
       const prismaOk = tryCheck('pnpm', ['exec', 'prisma', '--version'], { cwd: backendCwd })
       const nextOk = tryCheck('pnpm', ['exec', 'next', '--version'], { cwd: frontendCwd })
-      if (!prismaOk || !nextOk) {
-        logWarn(`检测到关键 CLI 未就绪 (prisma=${String(prismaOk)}, next=${String(nextOk)}), 将执行依赖安装`)
+      const tscOk = tryCheck('pnpm', ['exec', 'tsc', '--version'], { cwd: backendCwd })
+      if (!prismaOk || !nextOk || !tscOk) {
+        logWarn(`检测到关键 CLI 未就绪 (prisma=${String(prismaOk)}, next=${String(nextOk)}, tsc=${String(tscOk)}), 将执行依赖安装`)
         shouldInstall = true
       }
     } else if (pm === 'yarn') {
       const prismaOk = tryCheck('yarn', ['node', '-e', 'require.resolve("prisma")'], { cwd: backendCwd })
       const nextOk = tryCheck('yarn', ['node', '-e', 'require.resolve("next")'], { cwd: frontendCwd })
-      if (!prismaOk || !nextOk) shouldInstall = true
+      const tsOk = tryCheck('yarn', ['node', '-e', 'require.resolve("typescript")'], { cwd: backendCwd })
+      if (!prismaOk || !nextOk || !tsOk) shouldInstall = true
     } else {
-      // npm
-      const prismaOk = tryCheck('npx', ['--yes', 'prisma', '--version'], { cwd: backendCwd })
-      const nextOk = tryCheck('npx', ['--yes', 'next', '--version'], { cwd: frontendCwd })
-      if (!prismaOk || !nextOk) shouldInstall = true
+      // npm：避免使用 npx 以免临时下载，直接判断是否可解析依赖
+      const prismaOk = tryCheck('node', ['-e', 'require.resolve("prisma")'], { cwd: backendCwd })
+      const nextOk = tryCheck('node', ['-e', 'require.resolve("next")'], { cwd: frontendCwd })
+      const tsOk = tryCheck('node', ['-e', 'require.resolve("typescript")'], { cwd: backendCwd })
+      if (!prismaOk || !nextOk || !tsOk) shouldInstall = true
     }
   }
 
