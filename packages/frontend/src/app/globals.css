@@ -78,7 +78,8 @@
 
 /* 代码块样式 */
 .prose pre {
-  @apply bg-muted rounded-lg p-4 overflow-x-auto;
+  /* 背景交由外层容器控制，避免灰底与内容不一致 */
+  @apply rounded-lg p-4 overflow-x-auto;
 }
 
 .prose code {

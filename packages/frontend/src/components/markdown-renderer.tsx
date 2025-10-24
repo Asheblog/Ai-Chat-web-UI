@@ -2,7 +2,6 @@
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useTheme } from 'next-themes'
@@ -22,8 +21,22 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
   const isDark = resolvedTheme === 'dark'
 
   const handleCopyCode = async (code: string) => {
+    // 复制兼容：优先 Clipboard API；失败时降级到隐藏 textarea
     try {
-      await navigator.clipboard.writeText(code)
+      if (typeof window !== 'undefined' && navigator?.clipboard && (window.isSecureContext ?? true)) {
+        await navigator.clipboard.writeText(code)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = code
+        ta.style.position = 'fixed'
+        ta.style.left = '-9999px'
+        ta.style.top = '0'
+        document.body.appendChild(ta)
+        ta.focus()
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
       setCopiedCode(code)
       setTimeout(() => setCopiedCode(null), 2000)
     } catch (error) {
@@ -36,7 +49,9 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
     >
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
+      // 注意：不再使用 rehype-highlight，避免与 react-syntax-highlighter 重复高亮，
+      // 同时防止 children 变为 React 元素导致 String(children) => "[object Object]"。
+      rehypePlugins={[]}
       components={{
         // 自定义代码块渲染
         code({ node, inline, className, children, ...props }: any) {
@@ -47,6 +62,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
           const codeContent = String(children).replace(/\n$/, '')
 
           if (!inline && codeContent) {
+            const tooLargeForHL = isStreaming || codeContent.length > 20000 || codeContent.split('\n').length > 400
             // 将短小的纯文本代码块（如仅一行 URL/变量名）自动降级为“行内样式”，
             // 避免生成一整块卡片导致段落被强制换行，贴近 ChatGPT 的排版体验。
             const isSingleLine = !codeContent.includes('\n')
@@ -64,10 +80,41 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                 </code>
               )
             }
+            if (tooLargeForHL) {
+              return (
+                <div className={cn(
+                  "relative group rounded-xl border border-border bg-background my-2 overflow-hidden",
+                  !isPlain && "pt-7"
+                )}>
+                  {!isPlain && (
+                    <span className="absolute left-2 top-1.5 text-[11px] px-2 py-0.5 rounded bg-foreground/5 text-muted-foreground/80">
+                      {language}
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 absolute right-1.5 top-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
+                    onClick={() => handleCopyCode(codeContent)}
+                    title="复制代码"
+                    aria-label="复制代码"
+                  >
+                    {copiedCode === codeContent ? (
+                      <div className="h-3 w-3 bg-green-500 rounded" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </Button>
+                  <pre className={cn("m-0 text-sm overflow-x-auto px-3 py-3 bg-transparent", isStreaming && "typing-cursor")}> 
+                    <code>{codeContent}</code>
+                  </pre>
+                </div>
+              )
+            }
             return (
               <div
                 className={cn(
-                  "relative group rounded-xl border border-border/50 bg-muted/30 my-2",
+                  "relative group rounded-xl border border-border bg-background my-2 overflow-hidden",
                   !isPlain && "pt-7"
                 )}
               >
@@ -82,9 +129,10 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
+                  className="h-6 w-6 absolute right-1.5 top-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
                   onClick={() => handleCopyCode(codeContent)}
                   title="复制代码"
+                  aria-label="复制代码"
                 >
                   {copiedCode === codeContent ? (
                     <div className="h-3 w-3 bg-green-500 rounded" />
