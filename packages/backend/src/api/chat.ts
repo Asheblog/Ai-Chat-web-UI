@@ -309,12 +309,19 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
     console.log('Starting AI stream request to:', baseUrl);
 
-    // 设置SSE响应头
-    c.header('Content-Type', 'text/event-stream');
-    c.header('Cache-Control', 'no-cache');
-    c.header('Connection', 'keep-alive');
-    c.header('Access-Control-Allow-Origin', '*');
-    c.header('Access-Control-Allow-Headers', 'Cache-Control');
+    // 设置 SSE 响应头（直接随返回的 Response 带回，避免丢失）
+    // 说明：此前通过 c.header() 设置，但最终 `new Response(stream)` 未继承这些头，
+    // 在某些代理/运行环境下会导致缓冲，无法逐块渲染。
+    const sseHeaders: Record<string, string> = {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      // 禁用 Nginx 缓冲，提升流式实时性
+      'X-Accel-Buffering': 'no',
+      // 兼容旧行为；实际 CORS 由全局中间件控制
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control',
+    };
 
     let aiResponseContent = '';
     // 推理相关累积
@@ -709,7 +716,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       },
     });
 
-    return new Response(stream);
+    return c.newResponse(stream as any, 200, sseHeaders);
 
   } catch (error) {
     console.error('Chat stream error:', error);

@@ -257,6 +257,8 @@ class ApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // 明确声明期望 SSE，有助于代理/中间层正确处理为流式
+        'Accept': 'text/event-stream',
       },
       body: JSON.stringify({ sessionId, content, images, ...(options||{}) }),
       signal,

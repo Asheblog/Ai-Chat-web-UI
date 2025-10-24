@@ -343,7 +343,7 @@ export function ChatInterface() {
             </div>
           )}
 
-          <div className="rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 flex items-center min-h-14 sm:min-h-16 focus-within:ring-2 focus-within:ring-ring transition">
+          <div className="rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 flex items-center min-h-14 sm:min-h-16 focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition">
             {/* '+' 下拉：与首页一致，只保留思考设置 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

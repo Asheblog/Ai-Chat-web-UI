@@ -223,7 +223,7 @@ export function WelcomeScreen() {
 
         {/* 大输入框区域（移除内联模型选择器） */}
         <div className="w-full max-w-3xl">
-          <div className="flex items-center rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 focus-within:ring-2 focus-within:ring-ring transition min-h-14 sm:min-h-16">
+          <div className="flex items-center rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition min-h-14 sm:min-h-16">
             {/* '+' 下拉：思考模式开关 + 深度选择 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
