@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import type { ApiResponse, ChatSession } from '../types';
+import { fetchModelsForConnection } from '../utils/providers'
+import { AuthUtils } from '../utils/auth'
 
 const sessions = new Hono();
 
@@ -113,8 +115,10 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       connectionId = cached.connectionId
       rawId = cached.rawId
     } else {
-      // 回退：尝试匹配 prefix 到连接
+      // 无缓存命中：基于前缀与“实际可用模型列表”精确解析，避免误选到其他连接
       const conns = await prisma.connection.findMany({ where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true } })
+
+      // 1) 若 modelId 含前缀，优先用前缀锁定连接
       for (const conn of conns) {
         const px = (conn.prefixId || '')
         if (px && modelId.startsWith(px + '.')) {
@@ -122,11 +126,40 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
           rawId = modelId.substring(px.length + 1)
           break
         }
-        if (!px) {
-          // 无前缀连接，尝试直接匹配
-          connectionId = conn.id
-          rawId = modelId
-          break
+      }
+
+      // 2) 若依然未命中：动态拉取每个连接的模型目录（与 /catalog/models 一致）做精确匹配
+      if (!connectionId || !rawId) {
+        const candidates: Array<{ connectionId: number; rawId: string }> = []
+        for (const conn of conns) {
+          const cfg = {
+            provider: conn.provider as any,
+            baseUrl: conn.baseUrl,
+            enable: conn.enable,
+            authType: conn.authType as any,
+            apiKey: conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : undefined,
+            headers: conn.headersJson ? JSON.parse(conn.headersJson) : undefined,
+            azureApiVersion: conn.azureApiVersion || undefined,
+            prefixId: conn.prefixId || undefined,
+            tags: conn.tagsJson ? JSON.parse(conn.tagsJson) : [],
+            modelIds: conn.modelIdsJson ? JSON.parse(conn.modelIdsJson) : [],
+            connectionType: (conn.connectionType as any) || 'external',
+          }
+          try {
+            const items = await fetchModelsForConnection(cfg)
+            const hit = items.find((it) => it.id === modelId)
+            if (hit) candidates.push({ connectionId: conn.id, rawId: hit.rawId })
+          } catch {
+            // 单个连接失败不影响整体解析
+          }
+        }
+
+        if (candidates.length === 1) {
+          connectionId = candidates[0].connectionId
+          rawId = candidates[0].rawId
+        } else if (candidates.length > 1) {
+          // 同名模型在多个连接中存在且均无前缀：返回歧义，要求使用带前缀的 modelId
+          return c.json<ApiResponse>({ success: false, error: 'Ambiguous modelId across multiple connections. Please set a unique prefix for connections or use a prefixed modelId.' }, 400)
         }
       }
     }
