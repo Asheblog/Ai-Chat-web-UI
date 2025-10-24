@@ -57,9 +57,14 @@ export function Sidebar() {
 
   const handleNewChat = async () => {
     let defaultModelId: string | null = null
+    let defaultConnectionId: number | null = null
+    let defaultRawId: string | null = null
     try {
       const res = await apiClient.getAggregatedModels()
-      defaultModelId = (res?.data?.[0]?.id as string) || null
+      const first = res?.data?.[0]
+      defaultModelId = (first?.id as string) || null
+      defaultConnectionId = (first?.connectionId as number) || null
+      defaultRawId = (first?.rawId as string) || null
     } catch {}
     if (!defaultModelId) return
 
@@ -82,7 +87,7 @@ export function Sidebar() {
         return
       }
 
-      await createSession(defaultModelId, '新的对话')
+      await createSession(defaultModelId, '新的对话', defaultConnectionId ?? undefined, defaultRawId ?? undefined)
       setIsMobileMenuOpen(false)
     } catch (error) {
       console.error('Failed to create session:', error)

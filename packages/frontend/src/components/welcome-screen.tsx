@@ -145,7 +145,9 @@ export function WelcomeScreen() {
     try {
       // 以输入作为标题（截断）以便会话列表更清晰
       const title = text ? text.slice(0, 50) : '新的对话'
-      await createSession(selectedModelId, title)
+      // 携带 connectionId/rawId 以避免后端解析歧义
+      const m = (models || []).find(mm => mm.id === selectedModelId)
+      await createSession(selectedModelId, title, m?.connectionId, m?.rawId)
 
       // 仅当用户改动过时，才写入会话偏好
       try {

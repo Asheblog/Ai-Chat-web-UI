@@ -4,15 +4,18 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import type { ApiResponse, ChatSession } from '../types';
-import { fetchModelsForConnection } from '../utils/providers'
-import { AuthUtils } from '../utils/auth'
+// 保留原有创建会话解析逻辑；前端可传 connectionId/rawId 以避免歧义
 
 const sessions = new Hono();
 
 // 创建会话schema
+// 支持同时传入 connectionId + rawId 以绕开字符串解析歧义
 const createSessionSchema = z.object({
   modelId: z.string().min(1), // 聚合模型ID（含前缀）
   title: z.string().min(1).max(200).optional(),
+  // 直接指定连接与原始模型ID（推荐，避免歧义）
+  connectionId: z.number().int().positive().optional(),
+  rawId: z.string().min(1).optional(),
   // 会话级推理默认（可选）
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low','medium','high']).optional(),
@@ -102,64 +105,44 @@ sessions.get('/', authMiddleware, async (c) => {
 
 // 创建新的聊天会话
 sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), async (c) => {
-  try {
+  return (async () => {
     const user = c.get('user');
-    const { modelId, title, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
+    const { modelId, title, connectionId: reqConnectionId, rawId: reqRawId, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
 
     // 解析 modelId -> (connectionId, rawId)
-    // 先查缓存表
+    // 优先使用客户端直传（更可靠）
     let connectionId: number | null = null
     let rawId: string | null = null
-    const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
-    if (cached) {
-      connectionId = cached.connectionId
-      rawId = cached.rawId
-    } else {
-      // 无缓存命中：基于前缀与“实际可用模型列表”精确解析，避免误选到其他连接
-      const conns = await prisma.connection.findMany({ where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true } })
-
-      // 1) 若 modelId 含前缀，优先用前缀锁定连接
-      for (const conn of conns) {
-        const px = (conn.prefixId || '')
-        if (px && modelId.startsWith(px + '.')) {
-          connectionId = conn.id
-          rawId = modelId.substring(px.length + 1)
-          break
-        }
+    if (reqConnectionId && reqRawId) {
+      // 校验连接对当前用户可见且启用
+      const conn = await prisma.connection.findFirst({ where: { id: reqConnectionId, enable: true, OR: [ { ownerUserId: null }, { ownerUserId: user.id } ] } })
+      if (!conn) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid connectionId for current user' }, 400)
       }
-
-      // 2) 若依然未命中：动态拉取每个连接的模型目录（与 /catalog/models 一致）做精确匹配
-      if (!connectionId || !rawId) {
-        const candidates: Array<{ connectionId: number; rawId: string }> = []
+      connectionId = reqConnectionId
+      rawId = reqRawId
+    } else {
+      // 先查缓存表
+      const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
+      if (cached) {
+        connectionId = cached.connectionId
+        rawId = cached.rawId
+      } else {
+        // 回退：尝试匹配 prefix 到连接（旧逻辑留作兼容；优先使用前端直传 connectionId/rawId）
+        const conns = await prisma.connection.findMany({ where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true } })
         for (const conn of conns) {
-          const cfg = {
-            provider: conn.provider as any,
-            baseUrl: conn.baseUrl,
-            enable: conn.enable,
-            authType: conn.authType as any,
-            apiKey: conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : undefined,
-            headers: conn.headersJson ? JSON.parse(conn.headersJson) : undefined,
-            azureApiVersion: conn.azureApiVersion || undefined,
-            prefixId: conn.prefixId || undefined,
-            tags: conn.tagsJson ? JSON.parse(conn.tagsJson) : [],
-            modelIds: conn.modelIdsJson ? JSON.parse(conn.modelIdsJson) : [],
-            connectionType: (conn.connectionType as any) || 'external',
+          const px = (conn.prefixId || '')
+          if (px && modelId.startsWith(px + '.')) {
+            connectionId = conn.id
+            rawId = modelId.substring(px.length + 1)
+            break
           }
-          try {
-            const items = await fetchModelsForConnection(cfg)
-            const hit = items.find((it) => it.id === modelId)
-            if (hit) candidates.push({ connectionId: conn.id, rawId: hit.rawId })
-          } catch {
-            // 单个连接失败不影响整体解析
+          if (!px) {
+            // 无前缀连接，尝试直接匹配
+            connectionId = conn.id
+            rawId = modelId
+            break
           }
-        }
-
-        if (candidates.length === 1) {
-          connectionId = candidates[0].connectionId
-          rawId = candidates[0].rawId
-        } else if (candidates.length > 1) {
-          // 同名模型在多个连接中存在且均无前缀：返回歧义，要求使用带前缀的 modelId
-          return c.json<ApiResponse>({ success: false, error: 'Ambiguous modelId across multiple connections. Please set a unique prefix for connections or use a prefixed modelId.' }, 400)
         }
       }
     }
@@ -206,14 +189,10 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       data: { ...session, modelLabel: session.modelRawId },
       message: 'Chat session created successfully',
     });
-
-  } catch (error) {
-    console.error('Create session error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to create chat session',
-    }, 500);
-  }
+  } )().catch((error) => {
+    console.error('Create session error:', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to create chat session' }, 500)
+  })
 });
 
 // 获取单个聊天会话详情

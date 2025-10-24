@@ -141,11 +141,14 @@ class ApiClient {
     return response.data
   }
 
-  async createSessionByModelId(modelId: string, title?: string) {
-    const response = await this.client.post<ApiResponse<any>>('/sessions', {
-      modelId,
-      title,
-    })
+  async createSessionByModelId(modelId: string, title?: string, connectionId?: number, rawId?: string) {
+    const payload: any = { modelId }
+    if (title) payload.title = title
+    if (connectionId && rawId) {
+      payload.connectionId = connectionId
+      payload.rawId = rawId
+    }
+    const response = await this.client.post<ApiResponse<any>>('/sessions', payload)
     return response.data
   }
 
