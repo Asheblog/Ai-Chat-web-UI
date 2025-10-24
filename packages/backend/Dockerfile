@@ -1,8 +1,7 @@
 # 使用超轻量级的Node.js镜像，优化内存占用
 FROM node:20-alpine AS base
 
-# 设置环境变量优化Node.js内存使用
-ENV NODE_OPTIONS="--max-old-space-size=256"
+# 基础镜像阶段仅做系统依赖与依赖安装，不限制 Node 堆内存，避免安装阶段内存不足
 ENV NODE_ENV=production
 
 # 安装必要的系统依赖（最小化安装）
@@ -19,12 +18,12 @@ COPY package.json pnpm-lock.yaml* package-lock.json* ./
 
 # 检测使用pnpm还是npm
 RUN if [ -f pnpm-lock.yaml ]; then \
-        # 使用pnpm（更节省内存和空间）
+        # 使用 pnpm 安装运行时依赖；安装阶段不限制 Node 堆，避免 OOM (exit 134)
         npm install -g pnpm && \
-        pnpm install --frozen-lockfile --prod && \
+        PNPM_HOME="/root/.local/share/pnpm" pnpm install --frozen-lockfile --prod && \
         pnpm store prune; \
     else \
-        # 使用npm（无锁文件时回退到 npm install）
+        # 使用 npm 安装（无锁文件时回退到 npm install）
         if [ -f package-lock.json ]; then npm ci --only=production; else npm install --only=production; fi && \
         npm cache clean --force; \
     fi
