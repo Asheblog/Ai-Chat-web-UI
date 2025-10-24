@@ -87,19 +87,7 @@ RUN addgroup -g 1001 -S nextjs && \
 # 设置工作目录
 WORKDIR /app
 
-# 复制package文件
-COPY package.json pnpm-lock.yaml* package-lock.json* ./
-
-# 只安装生产依赖
-RUN if [ -f pnpm-lock.yaml ]; then \
-        npm install -g pnpm && \
-        pnpm install --frozen-lockfile --prod && \
-        pnpm store prune; \
-    else \
-        if [ -f package-lock.json ]; then npm ci --only=production; else npm install --only=production; fi && \
-        npm cache clean --force && \
-        rm -rf ~/.npm; \
-    fi
+# 不在运行阶段再次安装依赖：Next.js standalone 已包含所需 node_modules，避免 CI 内存不足（exit 134）
 
 # 复制构建产物
 COPY --from=builder --chown=nextjs:nextjs /app/public ./public
