@@ -7,6 +7,7 @@ import { SettingsShellNested } from "./shell-nested"
 import { useAuthStore } from "@/store/auth-store"
 // import { PersonalModelsPage } from "./pages/PersonalModels"
 import { PersonalPreferencesPage } from "./pages/PersonalPreferences"
+import { PersonalSecurityPage } from "./pages/PersonalSecurity"
 import { AboutPage } from "./pages/About"
 import { SystemGeneralPage } from "./pages/SystemGeneral"
 import { SystemNetworkPage } from "./pages/SystemNetwork"
@@ -81,6 +82,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
               case 'personal.connections': return <UserConnectionsPage />
               // case 'personal.models': return <PersonalModelsPage />
               case 'personal.preferences': return <PersonalPreferencesPage />
+              case 'personal.security': return <PersonalSecurityPage />
               case 'personal.about': return <AboutPage />
               case 'system.general': return <SystemGeneralPage />
               case 'system.network': return <SystemNetworkPage />

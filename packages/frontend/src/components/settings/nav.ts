@@ -12,6 +12,7 @@ export const settingsNav: SettingsNavItem[] = [
     children: [
       { key: 'personal.connections', label: '直连连接' },
       { key: 'personal.preferences', label: '偏好设置' },
+      { key: 'personal.security', label: '账号安全' },
       { key: 'personal.about', label: '关于' },
     ],
   },

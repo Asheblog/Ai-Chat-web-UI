@@ -465,8 +465,8 @@ class ApiClient {
     return current
   }
 
-  async getUsers() {
-    const response = await this.client.get('/users')
+  async getUsers(params?: { page?: number; limit?: number; search?: string }) {
+    const response = await this.client.get<ApiResponse<{ users: Array<{ id: number; username: string; role: 'ADMIN'|'USER'; createdAt: string; _count?: { chatSessions: number; connections: number } }>; pagination: { page: number; limit: number; total: number; totalPages: number } }>>('/users', { params })
     return response.data
   }
 
@@ -477,6 +477,12 @@ class ApiClient {
 
   async deleteUser(userId: number) {
     await this.client.delete(`/users/${userId}`)
+  }
+
+  // 修改密码
+  async changePassword(currentPassword: string, newPassword: string) {
+    const response = await this.client.put<ApiResponse<any>>('/auth/password', { currentPassword, newPassword })
+    return response.data
   }
 
   // 旧系统模型接口已移除
