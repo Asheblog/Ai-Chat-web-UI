@@ -32,7 +32,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
   }
 
   return (
-    <div className={cn("prose prose-zinc dark:prose-invert max-w-none", isStreaming && "typing-cursor")}
+    <div className={cn("prose prose-zinc dark:prose-invert max-w-none")}
     >
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}

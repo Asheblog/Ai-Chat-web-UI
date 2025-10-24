@@ -58,7 +58,7 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
             isUser
               ? 'bg-muted text-foreground ml-auto'
               : 'bg-background border text-foreground'
-          } ${isStreaming && !isUser ? 'typing-cursor' : ''}`}
+          }`}
         >
           {isUser ? (
             <div className="text-left">
