@@ -82,7 +82,8 @@
   @apply rounded-lg p-4 overflow-x-auto;
 }
 
-.prose code {
+/* 仅行内代码添加底色；代码块中的 <pre><code> 不受影响 */
+.prose :not(pre) > code {
   @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
 }
 

@@ -40,6 +40,10 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   }
 
   const isUser = message.role === 'user'
+  // 若助手消息仅包含代码块（一个或多个）而无其它文本，则去除外层气泡的底色与边框，避免出现“双层黑底”。
+  const content = (message.content || '').trim()
+  const outsideText = content.replace(/```[\s\S]*?```/g, '').trim()
+  const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -54,10 +58,10 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
       {/* 消息内容 */}
       <div className={`flex-1 max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
         <div
-          className={`inline-block rounded-lg px-4 py-3 ${
+          className={`inline-block rounded-lg ${isUser ? 'px-4 py-3' : (isCodeOnly ? 'p-0' : 'px-4 py-3')} ${
             isUser
               ? 'bg-muted text-foreground ml-auto'
-              : 'bg-background border text-foreground'
+              : (isCodeOnly ? 'bg-transparent border-0 text-foreground' : 'bg-background border text-foreground')
           }`}
         >
           {isUser ? (

@@ -33,7 +33,7 @@
 - **样式**: Tailwind CSS + Shadcn/ui
 - **状态管理**: Zustand
 - **HTTP客户端**: Axios
-- **Markdown**: react-markdown + remark-gfm + react-syntax-highlighter（避免与 rehype-highlight 重复高亮）
+- **Markdown**: 终端风代码块（统一暗色 oneDark） + react-markdown + remark-gfm + react-syntax-highlighter（不再使用 rehype-highlight）
 - **主题**: next-themes
 - **图标**: Lucide React
 

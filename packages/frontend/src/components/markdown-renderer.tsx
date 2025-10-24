@@ -18,7 +18,7 @@ interface MarkdownRendererProps {
 export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === 'dark'
+  const isDark = true // 终端风：统一使用暗色代码主题
 
   const handleCopyCode = async (code: string) => {
     // 复制兼容：优先 Clipboard API；失败时降级到隐藏 textarea
@@ -53,11 +53,17 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
       // 同时防止 children 变为 React 元素导致 String(children) => "[object Object]"。
       rehypePlugins={[]}
       components={{
+        // 重要：去掉 ReactMarkdown 默认给代码块包裹的外层 <pre> 的盒模型
+        // 使用 display: contents 让它不参与布局，避免出现 “pre(外层) + 我们的容器(内层)” 的双层效果
+        pre({ children }: any) {
+          return <pre style={{ display: 'contents' }}>{children}</pre>
+        },
         // 自定义代码块渲染
         code({ node, inline, className, children, ...props }: any) {
           const match = /language-([\w+-]+)/.exec(className || '')
           const rawLang = match ? match[1] : ''
-          const language = (rawLang || '').toLowerCase()
+          const lang0 = (rawLang || '').toLowerCase()
+          const language = ['bash','sh','shell','zsh','console'].includes(lang0) ? 'bash' : lang0
           const isPlain = !language || ['plaintext','text','txt','nohighlight'].includes(language)
           const codeContent = String(children).replace(/\n$/, '')
 
@@ -83,18 +89,55 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
             if (tooLargeForHL) {
               return (
                 <div className={cn(
-                  "relative group rounded-xl border border-border bg-background my-2 overflow-hidden",
-                  !isPlain && "pt-7"
+                  "relative group rounded-xl my-2 overflow-hidden bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal",
+                  !isPlain && "pt-8"
                 )}>
+                  <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
+                    <span className="w-3 h-3 rounded-full bg-[#ff5f56]"/>
+                    <span className="w-3 h-3 rounded-full bg-[#ffbd2e]"/>
+                    <span className="w-3 h-3 rounded-full bg-[#27c93f]"/>
+                    {!isPlain && (
+                      <span className="ml-2 text-[11px] text-slate-400">{language}</span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
+                      onClick={() => handleCopyCode(codeContent)}
+                      title="复制代码"
+                      aria-label="复制代码"
+                    >
+                      {copiedCode === codeContent ? (
+                        <div className="h-3 w-3 bg-green-500 rounded" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </div>
+                  <pre className={cn("m-0 text-sm overflow-x-auto px-3 py-3", isStreaming && "typing-cursor")} style={{ background: 'transparent', color: '#e6edf3', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                    <code style={{ background: 'transparent' }}>{codeContent}</code>
+                  </pre>
+                </div>
+              )
+            }
+            return (
+              <div
+                className={cn(
+                  "relative group rounded-xl my-2 overflow-hidden bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal",
+                  !isPlain && "pt-8"
+                )}
+              >
+                <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
+                  <span className="w-3 h-3 rounded-full bg-[#ff5f56]"/>
+                  <span className="w-3 h-3 rounded-full bg-[#ffbd2e]"/>
+                  <span className="w-3 h-3 rounded-full bg-[#27c93f]"/>
                   {!isPlain && (
-                    <span className="absolute left-2 top-1.5 text-[11px] px-2 py-0.5 rounded bg-foreground/5 text-muted-foreground/80">
-                      {language}
-                    </span>
+                    <span className="ml-2 text-[11px] text-slate-400">{language}</span>
                   )}
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 absolute right-1.5 top-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
+                    className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
                     onClick={() => handleCopyCode(codeContent)}
                     title="复制代码"
                     aria-label="复制代码"
@@ -105,52 +148,22 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                       <Copy className="h-3 w-3" />
                     )}
                   </Button>
-                  <pre className={cn("m-0 text-sm overflow-x-auto px-3 py-3 bg-transparent", isStreaming && "typing-cursor")}> 
-                    <code>{codeContent}</code>
-                  </pre>
                 </div>
-              )
-            }
-            return (
-              <div
-                className={cn(
-                  "relative group rounded-xl border border-border bg-background my-2 overflow-hidden",
-                  !isPlain && "pt-7"
-                )}
-              >
-                {/* 语言标签（纯文本时隐藏） */}
-                {!isPlain && (
-                  <span className="absolute left-2 top-1.5 text-[11px] px-2 py-0.5 rounded bg-foreground/5 text-muted-foreground/80">
-                    {language}
-                  </span>
-                )}
-
-                {/* 复制按钮：悬浮显示 */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 absolute right-1.5 top-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
-                  onClick={() => handleCopyCode(codeContent)}
-                  title="复制代码"
-                  aria-label="复制代码"
-                >
-                  {copiedCode === codeContent ? (
-                    <div className="h-3 w-3 bg-green-500 rounded" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                </Button>
 
                 <SyntaxHighlighter
-                  style={isDark ? oneDark : oneLight}
+                  style={oneDark}
                   language={isPlain ? undefined as any : language}
-                  PreTag="div"
+                  PreTag="pre"
                   customStyle={{
                     margin: 0,
                     borderRadius: 0,
                     background: 'transparent',
                     padding: '12px 14px 14px 14px',
                   }}
+                  codeTagProps={{ style: { background: 'transparent' } }}
+                  showLineNumbers
+                  wrapLongLines
+                  lineNumberStyle={{ minWidth: '2.5em', paddingRight: '12px', color: '#64748b', opacity: 0.9 }}
                   className={cn(
                     "text-sm",
                     isStreaming && "typing-cursor"
