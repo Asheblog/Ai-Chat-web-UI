@@ -114,6 +114,7 @@ RUN if [ -f pnpm-lock.yaml ]; then \
 # 复制构建产物和必要文件
 COPY --from=build --chown=backend:nodejs /app/dist ./dist
 COPY --from=build --chown=backend:nodejs /app/scripts ./scripts
+COPY --from=build --chown=backend:nodejs /app/src ./src
 COPY --from=build --chown=backend:nodejs /app/tsconfig.json ./tsconfig.json
 # 可选复制 Prisma 引擎缓存（安装已生成时可省略）
 COPY --from=build --chown=backend:nodejs /app/node_modules/.prisma ./node_modules/.prisma
