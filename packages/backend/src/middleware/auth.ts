@@ -1,5 +1,5 @@
 import { Context, Next } from 'hono';
-import { getCookie } from 'hono/cookie';
+import { getCookie, deleteCookie } from 'hono/cookie';
 import { AuthUtils } from '../utils/auth';
 import { prisma } from '../db';
 import type { JWTPayload } from '../types';
@@ -24,6 +24,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
   }
 
   if (!token) {
+    try { deleteCookie(c, 'token', { path: '/' }) } catch {}
     return c.json({
       success: false,
       error: 'Missing or invalid authorization header',
@@ -32,6 +33,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
 
   const payload = AuthUtils.verifyToken(token);
   if (!payload) {
+    try { deleteCookie(c, 'token', { path: '/' }) } catch {}
     return c.json({
       success: false,
       error: 'Invalid or expired token',
