@@ -9,7 +9,8 @@ RUN apk add --no-cache \
     sqlite \
     curl \
     dumb-init \
-    openssl
+    openssl \
+    openssl1.1-compat
 
 # 设置工作目录
 WORKDIR /app
@@ -75,6 +76,7 @@ RUN apk add --no-cache \
     sqlite \
     curl \
     dumb-init \
+    openssl1.1-compat \
     su-exec \
     && rm -rf /var/cache/apk/*
 
