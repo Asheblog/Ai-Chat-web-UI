@@ -35,6 +35,8 @@ import { SettingsDialog } from '@/components/settings/settings-dialog'
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  // 修复：新建会话并发点击导致重复创建与延迟弹出（添加本地创建中锁）
+  const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const pathname = usePathname()
@@ -56,6 +58,8 @@ export function Sidebar() {
   }, [searchParams])
 
   const handleNewChat = async () => {
+    if (isCreating) return
+    setIsCreating(true)
     let defaultModelId: string | null = null
     let defaultConnectionId: number | null = null
     let defaultRawId: string | null = null
@@ -66,7 +70,7 @@ export function Sidebar() {
       defaultConnectionId = (first?.connectionId as number) || null
       defaultRawId = (first?.rawId as string) || null
     } catch {}
-    if (!defaultModelId) return
+    if (!defaultModelId) { setIsCreating(false); return }
 
     try {
       // 若当前会话“完全空白”，则不创建新会话（与 ChatGPT 等产品一致）
@@ -91,6 +95,8 @@ export function Sidebar() {
       setIsMobileMenuOpen(false)
     } catch (error) {
       console.error('Failed to create session:', error)
+    } finally {
+      setIsCreating(false)
     }
   }
 
@@ -133,8 +139,15 @@ export function Sidebar() {
           onClick={handleNewChat}
           className="w-full justify-start"
           variant="outline"
+          disabled={isCreating}
+          aria-busy={isCreating}
         >
-          <Plus className="mr-2 h-4 w-4" />
+          {isCreating ? (
+            // 微型 loading，兼容浅/深色
+            <span className="mr-2 h-4 w-4 inline-block animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
+          ) : (
+            <Plus className="mr-2 h-4 w-4" />
+          )}
           新建聊天
         </Button>
       </div>
