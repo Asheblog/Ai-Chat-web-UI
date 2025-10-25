@@ -20,6 +20,8 @@ COPY package.json pnpm-lock.yaml* package-lock.json* ./
 # 开发阶段
 FROM base AS development
 
+RUN apk add --no-cache openssl1.1-compat
+
 # 安装所有依赖
 RUN if [ -f pnpm-lock.yaml ]; then \
         pnpm install --frozen-lockfile; \

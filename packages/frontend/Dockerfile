@@ -14,6 +14,8 @@ WORKDIR /app
 # 复制package文件
 COPY package.json pnpm-lock.yaml* package-lock.json* ./
 
+RUN apk add --no-cache openssl1.1-compat
+
 # 检测使用pnpm还是npm
 RUN if [ -f pnpm-lock.yaml ]; then \
         npm install -g pnpm; \
