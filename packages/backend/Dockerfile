@@ -72,6 +72,7 @@ RUN apk add --no-cache \
     sqlite \
     curl \
     dumb-init \
+    su-exec \
     && rm -rf /var/cache/apk/*
 
 # 创建非root用户（安全性）
@@ -106,8 +107,12 @@ COPY --from=build --chown=backend:nodejs /app/node_modules/.prisma ./node_module
 RUN mkdir -p /app/data /app/logs && \
     chown -R backend:nodejs /app/data /app/logs
 
-# 切换到非root用户
-USER backend
+# 复制启动脚本（以 root 运行修复权限，随后降权运行）
+COPY --chown=backend:nodejs docker/start-backend.sh /usr/local/bin/start-backend.sh
+RUN chmod +x /usr/local/bin/start-backend.sh
+
+# 运行期以 root 进入，entrypoint 内会降权到 backend 用户
+USER root
 
 # 暴露端口
 EXPOSE 8001
@@ -120,5 +125,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # 使用dumb-init作为PID 1，优化信号处理和内存
 ENTRYPOINT ["dumb-init", "--"]
 
-# 启动应用
-CMD ["node", "dist/index.js"]
+# 启动应用（入口脚本会做权限修复与DB初始化，然后降权）
+CMD ["/usr/local/bin/start-backend.sh"]

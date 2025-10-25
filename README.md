@@ -88,8 +88,9 @@ networks:
 ```
 
 首次初始化
-- 在 1Panel 进入 `ai-chat-web-ui-backend` 容器终端，执行：`npm run db:push`（创建/同步 SQLite 表结构）。
-- 访问前端 `http://你的IP或域名:3555`，注册第一个账号（single 模式下为管理员）。
+- 新镜像已内置自动初始化：若容器启动时未发现 `/app/data/app.db`，会自动执行 `prisma db push` 初始化数据库，并修复卷权限；通常无需手动建表。
+- 如需手动：在 1Panel 进入 `ai-chat-web-ui-backend` 容器终端，执行：`npm run db:push`。
+- 初始化完成后，访问前端 `http://你的IP或域名:3555`，注册第一个账号（single 模式下为管理员）。
 
 关键配置要点
 - `JWT_SECRET`：务必改为 32 位以上强密码。
