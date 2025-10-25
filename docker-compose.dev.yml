@@ -7,7 +7,7 @@ services:
       context: ./packages/backend
       dockerfile: Dockerfile
       target: development
-    container_name: aichat-backend-dev
+    container_name: ai-chat-web-ui-backend-dev
     ports:
       - "${DEV_BACKEND_PORT:-8001}:8001"
       - "9229:9229"  # Node.js调试端口
@@ -33,7 +33,7 @@ services:
     command: ["sh", "-lc", "[ -d node_modules ] && [ \"$(ls -A node_modules 2>/dev/null)\" ] || npm install; npm run dev"]
     restart: unless-stopped
     networks:
-      - aichat-dev-network
+      - ai-chat-web-ui-dev-network
     # 开发环境资源限制较宽松
     deploy:
       resources:
@@ -50,7 +50,7 @@ services:
       context: ./packages/frontend
       dockerfile: Dockerfile
       target: development
-    container_name: aichat-frontend-dev
+    container_name: ai-chat-web-ui-frontend-dev
     ports:
       - "${DEV_FRONTEND_PORT:-3000}:3000"
     environment:
@@ -69,7 +69,7 @@ services:
     depends_on:
       - backend
     networks:
-      - aichat-dev-network
+      - ai-chat-web-ui-dev-network
     # 开发环境资源限制较宽松
     deploy:
       resources:
@@ -87,7 +87,7 @@ services:
       context: ./packages/backend
       dockerfile: Dockerfile
       target: development
-    container_name: aichat-prisma-studio
+    container_name: ai-chat-web-ui-prisma-studio
     ports:
       - "5555:5555"
     environment:
@@ -100,17 +100,17 @@ services:
     command: ["npm", "run", "db:studio", "--", "--browser", "none"]
     restart: unless-stopped
     networks:
-      - aichat-dev-network
+      - ai-chat-web-ui-dev-network
 
 volumes:
   backend_dev_data:
     driver: local
-    name: aichat_dev_db_data
+    name: ai_chat_web_ui_dev_db_data
   backend_dev_logs:
     driver: local
-    name: aichat_dev_logs
+    name: ai_chat_web_ui_dev_logs
 
 networks:
-  aichat-dev-network:
+  ai-chat-web-ui-dev-network:
     driver: bridge
-    name: aichat_dev_network
+    name: ai_chat_web_ui_dev_network

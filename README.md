@@ -23,7 +23,7 @@ version: '3.8'
 services:
   backend:
     image: ghcr.io/asheblog/aichat-backend:latest
-    container_name: aichat-backend
+    container_name: ai-chat-web-ui-backend
     environment:
       - NODE_ENV=production
       - PORT=8001
@@ -42,17 +42,17 @@ services:
       - "3556:8001" #后端端口可以改 
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/health', (r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/settings/health', (r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
-      - aichat-network
+      - ai-chat-web-ui-network
 
   frontend:
     image: ghcr.io/asheblog/aichat-frontend:latest
-    container_name: aichat-frontend
+    container_name: ai-chat-web-ui-frontend
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=/api
@@ -71,24 +71,24 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - aichat-network
+      - ai-chat-web-ui-network
 
 volumes:
   backend_data:
     driver: local
-    name: aichat_db_data
+    name: ai_chat_web_ui_db_data
   backend_logs:
     driver: local
-    name: aichat_logs
+    name: ai_chat_web_ui_logs
 
 networks:
-  aichat-network:
+  ai-chat-web-ui-network:
     driver: bridge
-    name: aichat_network
+    name: ai_chat_web_ui_network
 ```
 
 首次初始化
-- 在 1Panel 进入 `aichat-backend` 容器终端，执行：`npm run db:push`（创建/同步 SQLite 表结构）。
+- 在 1Panel 进入 `ai-chat-web-ui-backend` 容器终端，执行：`npm run db:push`（创建/同步 SQLite 表结构）。
 - 访问前端 `http://你的IP或域名:3555`，注册第一个账号（single 模式下为管理员）。
 
 关键配置要点
@@ -99,7 +99,7 @@ networks:
 
 健康检查
 - 前端：`http://你的IP或域名:3555/api/health`
-- 后端：`http://你的IP或域名:3556/api/health`
+- 后端：`http://你的IP或域名:3556/api/settings/health`
 
 ---
 

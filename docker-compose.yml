@@ -7,7 +7,7 @@ services:
       context: ./packages/backend
       dockerfile: Dockerfile
       target: production
-    container_name: aichat-backend
+    container_name: ai-chat-web-ui-backend
     ports:
       - "${BACKEND_PORT:-8001}:8001"
     environment:
@@ -27,13 +27,13 @@ services:
       - backend_logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/settings/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
-      - aichat-network
+      - ai-chat-web-ui-network
     # 资源限制，确保内存占用 < 500MB
     deploy:
       resources:
@@ -55,7 +55,7 @@ services:
         - BACKEND_HOST=${BACKEND_HOST:-backend}
         - BACKEND_INTERNAL_PORT=${BACKEND_INTERNAL_PORT:-8001}
         - NODE_ENV=${NODE_ENV:-production}
-    container_name: aichat-frontend
+    container_name: ai-chat-web-ui-frontend
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
@@ -74,7 +74,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - aichat-network
+      - ai-chat-web-ui-network
     # 资源限制
     deploy:
       resources:
@@ -89,13 +89,13 @@ volumes:
   # SQLite数据库数据持久化
   backend_data:
     driver: local
-    name: aichat_db_data
+    name: ai_chat_web_ui_db_data
   # 应用日志持久化
   backend_logs:
     driver: local
-    name: aichat_logs
+    name: ai_chat_web_ui_logs
 
 networks:
-  aichat-network:
+  ai-chat-web-ui-network:
     driver: bridge
-    name: aichat_network
+    name: ai_chat_web_ui_network
