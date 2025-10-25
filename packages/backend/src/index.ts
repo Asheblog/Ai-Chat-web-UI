@@ -134,19 +134,22 @@ app.onError(errorHandler);
 // 启动服务器
 // 端口解析：优先 PORT，其次兼容 BACKEND_PORT，最后回退 8001（统一本地/容器内行为）
 const port = parseInt(process.env.PORT || process.env.BACKEND_PORT || '8001');
-const hostname = process.env.HOST || process.env.HOSTNAME || '0.0.0.0';
+// 容器内 HOSTNAME 会被设置为容器ID，若直接绑定会导致仅监听在容器IP，健康检查访问 localhost 失败。
+// 因此仅当显式配置 HOST 时才使用，否则回退到 0.0.0.0 （监听全部接口）。
+const bindHost = process.env.HOST || '0.0.0.0';
+const displayHost = process.env.HOST || process.env.HOSTNAME || bindHost;
 
-console.log(`🚀 AI Chat Platform Backend starting on ${hostname}:${port}`);
+console.log(`🚀 AI Chat Platform Backend starting on ${displayHost}:${port}`);
 console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
 console.log(`🔗 API Base URL (local): http://localhost:${port}/api`);
 
 serve({
   fetch: app.fetch,
   port,
-  hostname,
+  hostname: bindHost,
 }, (info) => {
-  const displayedHost = hostname === '0.0.0.0' ? '0.0.0.0' : hostname;
-  console.log(`✅ Server is listening on http://${displayedHost}:${info.port} (bind all interfaces if 0.0.0.0)`);
+  const loggingHost = bindHost === '0.0.0.0' ? '0.0.0.0' : displayHost;
+  console.log(`✅ Server is listening on http://${loggingHost}:${info.port}`);
   console.log(`📖 API Documentation: http://localhost:${info.port}/api`);
   console.log(`🏥 Health Check: http://localhost:${info.port}/api/settings/health`);
 });
