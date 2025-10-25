@@ -284,7 +284,7 @@ settings.get('/app-info', async (c) => {
   try {
     const appInfo = {
       name: 'AI Chat Platform',
-      version: '1.0.0',
+      version: 'v1.1.0',
       mode: process.env.APP_MODE || 'single',
       features: {
         registration: process.env.APP_MODE === 'multi',
@@ -317,7 +317,7 @@ settings.get('/health', async (c) => {
     const healthInfo = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      version: '1.0.0',
+      version: 'v1.1.0',
       database: 'connected',
       memory: process.memoryUsage(),
     };

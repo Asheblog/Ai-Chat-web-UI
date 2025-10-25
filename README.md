@@ -1,299 +1,176 @@
 # AI Chat Platform
 
-🚀 **轻量级AI聊天平台** - 基于Hono框架和SQLite数据库的现代化AI聊天解决方案
+轻量级 AI 聊天平台（后端 Hono + SQLite，前端 Next.js）。本文档仅保留两种最简部署方式：
 
-## 📋 项目概述
-
-本项目旨在开发一款以 **低资源占用、高效性能、易于部署** 为核心目标的现代化AI聊天网页应用，支持接入用户自定义的第三方模型API。
-
-### ✨ 核心特性
-
-- 🏗️ **极轻量架构**: Hono + SQLite，内存占用 < 500MB
-- 🔐 **完整认证系统**: JWT认证，支持单用户/多用户模式
-- 🤖 **灵活模型接入**: 支持个人和系统级AI模型配置
-- 💬 **智能聊天体验**: 基于Token的上下文管理，流式响应
-- 🛡️ **安全可靠**: API Key加密存储，权限控制
-- 🐳 **一键部署**: Docker Compose，零配置启动
-
-## 🏛️ 技术架构
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   前端 (Next.js) │    │  后端 (Hono)    │    │  数据库 (SQLite) │
-│                 │    │                 │    │                 │
-│  • 用户界面      │◄──►│  • RESTful API  │◄──►│  • 用户数据      │
-│  • 状态管理      │    │  • JWT认证      │    │  • 聊天记录      │
-│  • API客户端     │    │  • 流式响应     │    │  • 系统设置      │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │
-         │              ┌─────────────────┐
-         └──────────────►│  第三方AI模型   │
-                        │                 │
-                        │  • OpenAI       │
-                        │  • Claude       │
-                        │  • 自定义模型    │
-                        └─────────────────┘
-```
-
-## 🚀 快速开始
-
-### 环境要求
-
-- Node.js 18+
-- pnpm 8+
-- Docker & Docker Compose (推荐)
-
-### 方式一：Docker 部署 (推荐)
-
-```bash
-# 克隆项目
-git clone https://github.com/your-username/aichat.git
-cd aichat
-
-# 一键启动
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-```
-
-访问 `http://localhost:3001/api` 查看API文档
-
-### 可配置端口与环境变量（Compose）
-
-为便于在 1Panel 等编排平台自定义端口，compose 已支持通过环境变量覆盖端口和相关配置：
-
-生产环境（docker-compose.yml）
-
-```bash
-# 可在同目录 .env 文件或编排面板环境变量中设置
-BACKEND_PORT=8001            # 后端对外端口（默认 8001）
-FRONTEND_PORT=3000           # 前端对外端口（默认 3000）
-
-# 如使用自定义端口/域名，按需覆盖（默认会随端口联动）
-ENABLE_CORS=true                 # 是否启用CORS（默认true）
-CORS_ORIGIN=http://localhost:${FRONTEND_PORT}
-# 浏览器端 API 基址固定使用相对路径，避免跨设备 localhost 问题
-NEXT_PUBLIC_API_URL=/api      # 浏览器端固定相对路径
-BACKEND_HOST=backend
-BACKEND_INTERNAL_PORT=8001    # 容器内后端端口，固定 8001（不要改为宿主机映射端口）
-```
-
-开发环境（docker-compose.dev.yml）
-
-```bash
-# 可在同目录 .env 文件中设置
-DEV_BACKEND_PORT=8001        # 后端开发对外端口（默认 8001）
-DEV_FRONTEND_PORT=3000       # 前端开发对外端口（默认 3000）
-```
-
-说明与注意事项：
-- 仅映射主机端口可变，容器内部仍为 `backend:8001`、`frontend:3000`。
-- `CORS_ORIGIN` 应与前端实际访问地址一致（含端口或域名），否则浏览器将被 CORS 拦截。
-- `NEXT_PUBLIC_API_URL` 建议固定为 `/api`；后端真实地址由前端服务器使用 `BACKEND_HOST`/`BACKEND_PORT` 反向代理，无需在浏览器暴露绝对域名；修改反代目标需重建前端镜像（Next 构建时读取）。
-- 如需完全关闭 CORS（例如前端总是同源反代访问后端），可在 `.env` 中设置 `ENABLE_CORS=false`。
-
-### 环境变量集中管理
-
-- 统一在仓库根目录维护：`./.env.example`（模板） → `./.env`（实际值）。
-- docker-compose 与启动脚本会读取根 `.env`；前后端无需在各自包目录再维护独立 `.env`。
-- 如单独在 `packages/backend` 目录开发后端且不通过 compose 启动，可临时使用包内 `.env` 覆盖（可选）。前端 `.env.local` 仅用于本机覆盖，通常无需创建。
-- 使用反向代理/域名时：
-  - 将 `CORS_ORIGIN` 设置为前端外网地址（例 `https://web.example.com`）
-  - 将 `NEXT_PUBLIC_API_URL` 设置为后端外网地址（例 `https://api.example.com/api`）
-
-### 方式二：本地开发
-
-```bash
-# 一键本地启动（自动安装依赖/初始化DB/并发启动前后端）
-npm start
-
-# 或手动方式：
-pnpm install && pnpm run setup && pnpm --filter backend dev & pnpm --filter frontend dev
-```
-
-## 📚 API 文档
-
-### 认证相关
-- `POST /api/auth/register` - 用户注册
-- `POST /api/auth/login` - 用户登录
-- `GET /api/auth/me` - 获取当前用户信息
-
-### 模型管理
-- `GET /api/models` - 获取模型列表
-- `POST /api/models` - 创建个人模型
-- `POST /api/models/system` - 创建系统模型 (管理员)
-
-### 聊天功能
-- `GET /api/sessions` - 获取会话列表
-- `POST /api/sessions` - 创建新会话
-- `POST /api/chat/stream` - 发送消息 (流式响应)
-
-详细API文档: [Backend README](./packages/backend/README.md)
-
-## 🗂️ 项目结构
-
-```
-aichat/
-├── docs/                    # 项目文档
-│   ├── prd.md              # 产品需求文档
-│   └── Architecture.md     # 架构设计文档
-├── packages/               # 应用包
-│   └── backend/            # 后端服务
-│       ├── src/            # 源代码
-│       ├── prisma/         # 数据库配置
-│       ├── Dockerfile      # Docker配置
-│       └── package.json    # 依赖配置
-├── docker-compose.yml      # Docker编排
-├── package.json           # 项目配置
-└── README.md              # 项目说明
-```
-
-## ⚙️ 配置说明
-
-### 环境变量
-
-主要配置文件: `packages/backend/.env`
-
-```env
-# 数据库
-DATABASE_URL="file:./dev.db"
-
-# JWT密钥 (生产环境请使用强密码)
-JWT_SECRET="your-super-secret-jwt-key"
-
-# 应用模式: single (单用户) / multi (多用户)
-APP_MODE="single"
-
-# 上下文Token限制
-DEFAULT_CONTEXT_TOKEN_LIMIT="4000"
-
-# 默认管理员 (仅在无用户时创建)
-DEFAULT_ADMIN_USERNAME="admin"
-DEFAULT_ADMIN_PASSWORD="admin123456"
-```
-
-### Docker Compose 配置
-
-```yaml
-environment:
-  - APP_MODE=single                    # 单用户模式
-  - JWT_SECRET=your-secret-key         # JWT密钥
-  - DEFAULT_ADMIN_USERNAME=admin       # 默认管理员
-  - DEFAULT_ADMIN_PASSWORD=admin123456 # 默认密码
-  # 可配置端口（见上文）：
-  # BACKEND_PORT / FRONTEND_PORT / CORS_ORIGIN / NEXT_PUBLIC_API_URL
-```
-
-## 🔧 开发指南
-
-### 本地开发环境
-
-```bash
-# 安装依赖
-pnpm install
-
-# 数据库初始化
-cd packages/backend
-pnpm run db:generate
-pnpm run db:push
-
-# 启动开发服务器
-pnpm run dev
-```
-
-### 数据库管理
-
-```bash
-# 查看数据库
-pnpm run db:studio
-
-# 重置数据库
-rm packages/backend/prisma/dev.db
-pnpm run db:push
-```
-
-### 添加新功能
-
-1. 修改 `packages/backend/prisma/schema.prisma` (如需要)
-2. 在 `packages/backend/src/api/` 添加路由
-3. 在 `packages/backend/src/types/` 添加类型
-4. 运行 `pnpm run db:generate` 更新客户端
-
-## 🐳 Docker 部署
-
-### 生产环境部署
-
-```bash
-# 构建并启动
-docker-compose -f docker-compose.yml up -d
-
-# 查看状态
-docker-compose ps
-
-# 查看日志
-docker-compose logs -f backend
-```
-
-### 多用户模式配置
-
-修改 `docker-compose.yml` 中的环境变量:
-
-```yaml
-environment:
-  - APP_MODE=multi  # 多用户模式
-  - JWT_SECRET=your-secure-secret-key
-```
-
-## 🔒 安全特性
-
-- **认证授权**: JWT Token认证，角色权限控制
-- **密码安全**: bcrypt哈希存储
-- **API密钥加密**: AES加密存储第三方API密钥
-- **输入验证**: Zod schema验证
-- **CORS保护**: 跨域请求控制
-
-## 📊 性能指标
-
-| 指标 | 目标值 | 说明 |
-|------|--------|------|
-| 内存占用 | < 500MB | 后端服务峰值内存使用 |
-| API响应时间 | < 100ms | 应用自身API处理耗时 |
-| 数据库查询 | < 50ms | SQLite查询性能 |
-| 并发支持 | 100+ | 同时在线用户数 |
-
-## 🛣️ 发展路线
-
-### v1.1 (计划中)
-- [ ] 前端界面开发
-- [ ] 文件上传支持
-- [ ] 聊天导出功能
-- [ ] 多主题支持
-
-### v2.0 (未来规划)
-- [ ] 长期记忆功能 (向量数据库)
-- [ ] 多模态支持 (图片输入)
-- [ ] 插件系统
-- [ ] 分布式部署支持
-
-## 🤝 贡献指南
-
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-## 📄 许可证
-
-本项目基于 MIT 许可证开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-## 📞 支持
-
-- 📧 邮箱: support@aichat.com
-- 🐛 问题反馈: [GitHub Issues](https://github.com/your-username/aichat/issues)
-- 📖 文档: [项目Wiki](https://github.com/your-username/aichat/wiki)
+- CI 镜像 + 1Panel（推荐）
+- 本地运行（开发 / 非 Docker 生产）
 
 ---
 
-⭐ 如果这个项目对你有帮助，请给它一个星标！
+## 一、CI 镜像 + 1Panel 部署（推荐）
+
+前提
+- 镜像已由 GitHub Actions 推送到 GHCR：
+  - 后端：`ghcr.io/asheblog/aichat-backend:latest`
+  - 前端：`ghcr.io/asheblog/aichat-frontend:latest`
+- 若包是私有，需先在服务器执行 `docker login ghcr.io -u asheblog -p <PAT>`（PAT 至少具备 `read:packages`）。
+
+在 1Panel 的“编排 → 新建 → 编辑”中粘贴以下 Compose（示例端口：前端 3555，后端 3556，可按需修改左侧宿主端口）：
+
+```
+version: '3.8'
+
+services:
+  backend:
+    image: ghcr.io/asheblog/aichat-backend:latest
+    container_name: aichat-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=8001
+      - DATABASE_URL=file:./data/app.db
+      - JWT_SECRET=请改成强随机密码 #这里要改
+      - APP_MODE=single
+      - DEFAULT_CONTEXT_TOKEN_LIMIT=120000 #这里后面大概率就要废弃的
+      - ENABLE_CORS=true #不要cors就关了
+      - CORS_ORIGIN=http://你的IP或域名:3555
+      - LOG_LEVEL=info
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/app/logs
+      - 你服务器数据库目录地址/app.db:/app/data/app.db #常态化数据库，这里要改成你服务器数据库目录地址
+    ports:
+      - "3556:8001" #后端端口可以改 
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/health', (r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - aichat-network
+
+  frontend:
+    image: ghcr.io/asheblog/aichat-frontend:latest
+    container_name: aichat-frontend
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=/api
+      - BACKEND_HOST=backend
+      - BACKEND_INTERNAL_PORT=8001
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3555:3000" #前端端口可以改
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - aichat-network
+
+volumes:
+  backend_data:
+    driver: local
+    name: aichat_db_data
+  backend_logs:
+    driver: local
+    name: aichat_logs
+
+networks:
+  aichat-network:
+    driver: bridge
+    name: aichat_network
+```
+
+首次初始化
+- 在 1Panel 进入 `aichat-backend` 容器终端，执行：`npm run db:push`（创建/同步 SQLite 表结构）。
+- 访问前端 `http://你的IP或域名:3555`，注册第一个账号（single 模式下为管理员）。
+
+关键配置要点
+- `JWT_SECRET`：务必改为 32 位以上强密码。
+- `CORS_ORIGIN`：填写前端实际访问地址（含协议+端口）。
+- 端口：`"宿主机端口:容器端口"`，容器内固定后端 8001、前端 3000。
+- 升级/回滚：把镜像标签从 `latest` 改为某次构建的 commit SHA 标签，更新/重建即可；回滚就是切回旧标签。
+
+健康检查
+- 前端：`http://你的IP或域名:3555/api/health`
+- 后端：`http://你的IP或域名:3556/api/health`
+
+---
+
+## 二、本地运行（不使用 Docker）
+
+前提
+- Node.js ≥ 18；首次运行建议复制根目录 `.env.example` 为 `.env` 并按需修改（`JWT_SECRET`、`CORS_ORIGIN` 等）。
+
+命令
+- 开发环境（热更新）：`npm run start:dev`
+- 非 Docker 的生产运行：`npm run start:prod`
+
+数据库初始化（首次）
+- 进入 `packages/backend`，执行一次：`npm run db:push`
+
+---
+
+## 项目结构
+
+```
+aichat/
+├── .github/
+│   └── workflows/
+│       └── docker-images.yml       # GH Actions：构建并推送前后端镜像
+├── packages/
+│   ├── backend/                    # 后端（Hono + Prisma + SQLite）
+│   │   ├── src/                    # API、路由、中间件
+│   │   ├── prisma/                 # Prisma schema 与 seed/迁移脚本
+│   │   └── Dockerfile              # 后端镜像
+│   └── frontend/                   # 前端（Next.js 14）
+│       ├── src/
+│       └── Dockerfile              # 前端镜像（standalone 运行）
+├── scripts/                        # 辅助脚本（本地/调试）
+├── README.md
+└── docs/                           # 文档（可选）
+```
+
+数据持久化
+- SQLite 数据文件位于容器内 `/app/data/app.db`，通过 compose 中的 `backend_data` 卷（或你自定义的宿主机路径）持久化。
+
+---
+
+## 业务流程图
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as 用户浏览器
+  participant FE as 前端 Next.js (3000)
+  participant BE as 后端 Hono (8001)
+  participant DB as SQLite (/app/data/app.db)
+  participant Prov as 第三方模型提供方
+
+  U->>FE: 输入消息
+  FE->>BE: POST /api/chat/stream (JWT)
+  BE->>DB: 读取会话/系统设置
+  BE->>Prov: 转发请求（带鉴权）
+  Prov-->>BE: 流式SSE/分片
+  BE-->>FE: 转发SSE；统计用量
+  BE->>DB: 持久化消息/用量
+  FE-->>U: 渲染模型回复
+```
+
+---
+
+## 常见问题（简）
+
+- 无法拉取镜像：GHCR 包设为 Public，或在服务器 `docker login ghcr.io -u asheblog -p <PAT>`。
+- 跨域报错：确认 `CORS_ORIGIN` 与前端访问地址一致（协议+端口）。
+- 首次注册失败：`APP_MODE=single` 下仅首个用户可注册；多用户改为 `multi` 并在系统设置开启注册。
+
+---
+
+许可证：MIT（见 LICENSE）。
