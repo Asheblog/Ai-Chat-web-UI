@@ -3,8 +3,8 @@
 
 generator client {
   provider      = "prisma-client-js"
-  // 指定 Alpine (musl) + OpenSSL 3 的二进制，以避免运行期缺少 libssl1.1
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  // 生产镜像基于 Debian slim，显式生成 OpenSSL 3.0 版本的二进制，避免回退到 1.1
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

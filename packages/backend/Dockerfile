@@ -1,17 +1,23 @@
-# 使用超轻量级的Node.js镜像，优化内存占用
-FROM node:20-alpine AS base
+# 使用稳定的 Debian Slim Node.js 镜像，避免 musl + OpenSSL 兼容问题
+FROM node:20-slim AS base
 
 # 基础镜像阶段仅做系统依赖与依赖安装，不限制 Node 堆内存，避免安装阶段内存不足
 ENV NODE_ENV=production
-# 强制 Prisma CLI 在构建期下载 linux-musl + OpenSSL 3.0 的查询引擎，避免默认回退到 1.1 版本导致运行时报缺少 libssl1.1
-ENV PRISMA_CLI_BINARY_TARGETS="linux-musl-openssl-3.0.x"
+ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 
 # 安装必要的系统依赖（最小化安装）
-RUN apk add --no-cache \
-    sqlite \
-    curl \
-    dumb-init \
-    openssl
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        sqlite3 \
+        curl \
+        dumb-init \
+        openssl \
+        ca-certificates \
+        gosu \
+    && rm -rf /var/lib/apt/lists/*
+
+# 启用 corepack，确保 pnpm 在各阶段可用
+RUN corepack enable
 
 # 设置工作目录
 WORKDIR /app
@@ -64,24 +70,27 @@ RUN npm run db:generate
 RUN npm run build
 
 # 生产阶段 - 优化内存占用
-FROM node:20-alpine AS production
+FROM node:20-slim AS production
 
 # 优化Node.js运行时内存设置（移除 --optimize-for-size，避免 NODE_OPTIONS 限制报错）
 ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV NODE_ENV=production
-ENV PRISMA_CLI_BINARY_TARGETS="linux-musl-openssl-3.0.x"
+ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 
 # 只安装运行时必需的系统依赖
-RUN apk add --no-cache \
-    sqlite \
-    curl \
-    dumb-init \
-    su-exec \
-    && rm -rf /var/cache/apk/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        sqlite3 \
+        curl \
+        dumb-init \
+        gosu \
+        openssl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # 创建非root用户（安全性）
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S backend -u 1001
+RUN groupadd --gid 1001 nodejs && \
+    useradd --uid 1001 --gid nodejs --system --no-create-home backend
 
 # 设置工作目录
 WORKDIR /app

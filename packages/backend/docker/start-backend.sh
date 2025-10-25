@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
 
 # 说明：
@@ -28,4 +28,11 @@ if [ ! -f "$DB_FILE" ]; then
 fi
 
 echo "[entrypoint] Starting backend service..."
-exec su-exec backend:nodejs node dist/index.js
+if command -v su-exec >/dev/null 2>&1; then
+  exec su-exec backend:nodejs node dist/index.js
+elif command -v gosu >/dev/null 2>&1; then
+  exec gosu backend:nodejs node dist/index.js
+else
+  echo "[entrypoint] WARN: su-exec/gosu not found, running as root" >&2
+  exec node dist/index.js
+fi
