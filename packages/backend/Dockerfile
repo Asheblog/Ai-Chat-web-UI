@@ -8,7 +8,8 @@ ENV NODE_ENV=production
 RUN apk add --no-cache \
     sqlite \
     curl \
-    dumb-init
+    dumb-init \
+    openssl
 
 # 设置工作目录
 WORKDIR /app

@@ -17,15 +17,15 @@ chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" || true
 
 if [ ! -f "$DB_FILE" ]; then
   echo "[entrypoint] Database not found. Running prisma db push to initialize schema..."
-  # 使用 npx 调用 Prisma CLI（prisma 放在 dependencies，可在生产镜像中使用）
-  # 以 backend 用户运行，确保 DB 文件属主正确
+  # 以 root 运行以避免写 @prisma/engines 权限问题，随后再修正卷属主
   if command -v npx >/dev/null 2>&1; then
-    su-exec backend:nodejs npx prisma db push || su-exec backend:nodejs npm run db:push || true
+    npx prisma generate || true
+    npx prisma db push || npm run db:push || true
   else
-    su-exec backend:nodejs npm run db:push || true
+    npm run db:push || true
   fi
+  chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" || true
 fi
 
 echo "[entrypoint] Starting backend service..."
 exec su-exec backend:nodejs node dist/index.js
-

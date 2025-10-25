@@ -2,7 +2,9 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // 指定 Alpine (musl) + OpenSSL 3 的二进制，以避免运行期缺少 libssl1.1
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
