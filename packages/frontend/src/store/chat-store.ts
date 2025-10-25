@@ -339,6 +339,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         get().fetchMessages(sessionId),
         get().fetchUsage(sessionId),
       ])
+      // 同步刷新侧边栏汇总用量，避免需要手动刷新
+      get().fetchSessionsUsage().catch(() => {})
 
     } catch (error: any) {
       // 流式失败，降级尝试非流式一次

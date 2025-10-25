@@ -538,16 +538,26 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                     controller.enqueue(encoder.encode(stopEvent));
                   }
 
-                  // 厂商 usage 透传（优先级更高）
-                  if (USAGE_EMIT && parsed.usage) {
-                    providerUsageSeen = true;
-                    providerUsageSnapshot = parsed.usage;
-                    const providerUsageEvent = `data: ${JSON.stringify({
-                      type: 'usage',
-                      usage: parsed.usage,
-                    })}\n\n`;
-                    controller.enqueue(encoder.encode(providerUsageEvent));
-                  }
+          // 厂商 usage 透传（优先级更高）
+          if (USAGE_EMIT && parsed.usage) {
+            // 仅当厂商 usage 含有效数值时，才标记为已接收，避免空对象/全0 覆盖本地估算
+            const n = (u: any) => ({
+              prompt: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0,
+              completion: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
+              total: Number(u?.total_tokens ?? 0) || 0,
+            })
+            const nn = n(parsed.usage)
+            const valid = (nn.prompt > 0) || (nn.completion > 0) || (nn.total > 0)
+            if (valid) {
+              providerUsageSeen = true;
+              providerUsageSnapshot = parsed.usage;
+            }
+            const providerUsageEvent = `data: ${JSON.stringify({
+              type: 'usage',
+              usage: parsed.usage,
+            })}\n\n`;
+            controller.enqueue(encoder.encode(providerUsageEvent));
+          }
                 } catch (parseError) {
                   console.warn('Failed to parse SSE data:', data, parseError);
                 }
@@ -609,8 +619,11 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
               }
             };
 
-            const finalUsage = providerUsageSeen
-              ? extractNumbers(providerUsageSnapshot)
+            // 若厂商 usage 无效（全0/空），则回退到本地估算
+            const providerNums = providerUsageSeen ? extractNumbers(providerUsageSnapshot) : { prompt: 0, completion: 0, total: 0 }
+            const providerValid = (providerNums.prompt > 0) || (providerNums.completion > 0) || (providerNums.total > 0)
+            const finalUsage = providerValid
+              ? providerNums
               : { prompt: promptTokens, completion: completionTokensFallback, total: promptTokens + completionTokensFallback };
 
             // 保存AI完整回复（若尚未保存）并记录 messageId
