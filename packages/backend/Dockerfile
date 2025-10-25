@@ -112,9 +112,10 @@ USER backend
 # 暴露端口
 EXPOSE 8001
 
-# 健康检查（轻量级）
+# 健康检查（轻量级）——与服务端实际路由保持一致
+# 注意：后端健康检查路由为 /api/settings/health
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8001/api/health || exit 1
+    CMD curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1
 
 # 使用dumb-init作为PID 1，优化信号处理和内存
 ENTRYPOINT ["dumb-init", "--"]

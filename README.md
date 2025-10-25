@@ -42,7 +42,7 @@ services:
       - "3556:8001" #后端端口可以改 
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/settings/health', (r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
