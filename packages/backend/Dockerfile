@@ -3,14 +3,15 @@ FROM node:20-alpine AS base
 
 # 基础镜像阶段仅做系统依赖与依赖安装，不限制 Node 堆内存，避免安装阶段内存不足
 ENV NODE_ENV=production
+# 强制 Prisma CLI 在构建期下载 linux-musl + OpenSSL 3.0 的查询引擎，避免默认回退到 1.1 版本导致运行时报缺少 libssl1.1
+ENV PRISMA_CLI_BINARY_TARGETS="linux-musl-openssl-3.0.x"
 
 # 安装必要的系统依赖（最小化安装）
 RUN apk add --no-cache \
     sqlite \
     curl \
     dumb-init \
-    openssl \
-    openssl1.1-compat
+    openssl
 
 # 设置工作目录
 WORKDIR /app
@@ -20,8 +21,6 @@ COPY package.json pnpm-lock.yaml* package-lock.json* ./
 
 # 开发阶段
 FROM base AS development
-
-RUN apk add --no-cache openssl1.1-compat
 
 # 安装所有依赖
 RUN if [ -f pnpm-lock.yaml ]; then \
@@ -70,13 +69,13 @@ FROM node:20-alpine AS production
 # 优化Node.js运行时内存设置（移除 --optimize-for-size，避免 NODE_OPTIONS 限制报错）
 ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV NODE_ENV=production
+ENV PRISMA_CLI_BINARY_TARGETS="linux-musl-openssl-3.0.x"
 
 # 只安装运行时必需的系统依赖
 RUN apk add --no-cache \
     sqlite \
     curl \
     dumb-init \
-    openssl1.1-compat \
     su-exec \
     && rm -rf /var/cache/apk/*
 
