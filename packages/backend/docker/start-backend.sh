@@ -8,12 +8,39 @@ set -euo pipefail
 
 DATA_DIR="/app/data"
 LOG_DIR="/app/logs"
-DB_FILE="$DATA_DIR/app.db"
+DEFAULT_DB_NAME="app.db"
 
-mkdir -p "$DATA_DIR" "$LOG_DIR" || true
+normalize_database_url() {
+  local raw="${DATABASE_URL:-file:./data/$DEFAULT_DB_NAME}"
+
+  if [[ "$raw" =~ ^file: ]]; then
+    local path="${raw#file:}"
+    if [[ "$path" = /* ]]; then
+      DB_FILE="$path"
+    else
+      # 统一写入 DATA_DIR，避免相对路径落到 /app/prisma/data
+      local filename
+      filename="$(basename "$path")"
+      DB_FILE="$DATA_DIR/${filename:-$DEFAULT_DB_NAME}"
+      export DATABASE_URL="file:$DB_FILE"
+    fi
+  else
+    echo "[entrypoint] WARN: Unsupported DATABASE_URL scheme ($raw). Falling back to file storage under $DATA_DIR/$DEFAULT_DB_NAME" >&2
+    DB_FILE="$DATA_DIR/$DEFAULT_DB_NAME"
+    export DATABASE_URL="file:$DB_FILE"
+  fi
+}
+
+normalize_database_url
+
+DB_DIR="$(dirname "$DB_FILE")"
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$DB_DIR" || true
 
 # 修复卷权限（容器首次创建命名卷时可能为 root:root）
 chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" || true
+if [ "$DB_DIR" != "$DATA_DIR" ]; then
+  chown -R 1001:1001 "$DB_DIR" || true
+fi
 
 SHOULD_INIT_DB=0
 
