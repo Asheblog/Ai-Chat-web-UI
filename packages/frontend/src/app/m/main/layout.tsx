@@ -7,13 +7,15 @@ import { useEffect, useState } from 'react'
 import { AuthGuard } from '@/components/auth-guard'
 import { useSettingsStore } from '@/store/settings-store'
 import { Button } from '@/components/ui/button'
-import { Menu, Cog, Monitor } from 'lucide-react'
-import Link from 'next/link'
+import { Menu } from 'lucide-react'
 import { Sidebar } from '@/components/sidebar'
+import { ModelSelector } from '@/components/model-selector'
+import { useChatStore } from '@/store/chat-store'
 
 export default function MobileMainLayout({ children }: { children: React.ReactNode }) {
-  const { theme, setTheme, systemSettings } = useSettingsStore()
+  const { theme, setTheme } = useSettingsStore()
   const [mounted, setMounted] = useState(false)
+  const { currentSession } = useChatStore()
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => { if (mounted) setTheme(theme) }, [mounted, theme, setTheme])
@@ -25,9 +27,10 @@ export default function MobileMainLayout({ children }: { children: React.ReactNo
       <Sidebar />
       <div className="flex h-screen min-h-0 bg-background">
         <main className="flex-1 flex flex-col min-h-0">
-          {/* 顶部栏（简化） */}
-          <div className="px-4 py-3 border-b flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex items-center gap-3">
+          {/* 顶部栏（移动端）：左侧菜单按钮 + 中间模型选择器；移除Logo及右侧按钮 */}
+          <div className="sticky top-0 z-40 px-4 py-3 border-b grid grid-cols-3 items-center bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            {/* 左：菜单按钮（保留） */}
+            <div className="justify-self-start">
               <Button
                 variant="outline"
                 size="icon"
@@ -37,21 +40,27 @@ export default function MobileMainLayout({ children }: { children: React.ReactNo
               >
                 <Menu className="h-4 w-4" />
               </Button>
-              <div className="text-base font-semibold">{systemSettings?.brandText || 'AIChat'}</div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="切换到桌面版"
-                onClick={() => { try { document.cookie = `viewMode=desktop; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/main' }}
-                className="hidden sm:inline-flex"
-              >
-                <Monitor className="h-4 w-4 mr-1" /> 桌面版
+            {/* 中：模型选择器（无会话也显示；选择即创建/切换） */}
+            <div className="justify-self-center">
+              <ModelSelector
+                selectedModelId={currentSession?.modelLabel || currentSession?.modelRawId || null}
+                onModelChange={(modelId) => {
+                  const cur = useChatStore.getState().currentSession
+                  if (cur) {
+                    useChatStore.getState().switchSessionModel(cur.id, modelId)
+                  } else {
+                    useChatStore.getState().createSession(modelId, '新的对话')
+                  }
+                }}
+                className="w-[60vw] max-w-[280px]"
+              />
+            </div>
+            {/* 右：占位，确保中间绝对居中 */}
+            <div className="justify-self-end">
+              <Button variant="outline" size="icon" aria-hidden className="opacity-0 pointer-events-none lg:hidden">
+                <Menu className="h-4 w-4" />
               </Button>
-              <Link href="/m/main/settings">
-                <Button variant="ghost" size="icon" aria-label="设置"><Cog className="h-4 w-4" /></Button>
-              </Link>
             </div>
           </div>
           {/* 内容区 */}

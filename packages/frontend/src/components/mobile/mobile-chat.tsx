@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MessageList } from '@/components/message-list'
-import { ModelSelector } from '@/components/model-selector'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useChatStore } from '@/store/chat-store'
@@ -189,19 +188,7 @@ export function MobileChatInterface() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      {/* 顶部：模型选择器（紧凑） */}
-      {currentSession && (
-        <div className="border-b px-4 py-2">
-          <ModelSelector
-            selectedModelId={currentSession.modelLabel || currentSession.modelRawId || null}
-            onModelChange={(modelId) => {
-              if (!currentSession) return
-              useChatStore.getState().switchSessionModel(currentSession.id, modelId)
-            }}
-            className="w-full"
-          />
-        </div>
-      )}
+      {/* 顶部模型选择器已移至全局移动端顶栏，避免重复显示 */}
       {/* 消息区：卡片式消息流 */}
       <div className="flex-1 min-h-0">
         <ScrollArea className="h-full" ref={scrollAreaRef}>
