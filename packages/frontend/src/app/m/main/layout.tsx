@@ -25,8 +25,8 @@ export default function MobileMainLayout({ children }: { children: React.ReactNo
     <AuthGuard>
       {/* Sidebar 组件内已自带移动端 Sheet + 固定的菜单按钮 */}
       <Sidebar />
-      <div className="flex h-screen min-h-0 bg-background">
-        <main className="flex-1 flex flex-col min-h-0">
+      <div className="flex h-screen min-h-0 w-full min-w-0 bg-background overflow-x-hidden">
+        <main className="flex-1 flex flex-col min-h-0 min-w-0">
           {/* 顶部栏（移动端）：左侧菜单按钮 + 中间模型选择器；移除Logo及右侧按钮 */}
           <div className="sticky top-0 z-40 px-4 py-3 border-b grid grid-cols-3 items-center bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             {/* 左：菜单按钮（保留） */}

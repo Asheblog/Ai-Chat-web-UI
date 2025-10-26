@@ -113,7 +113,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                       )}
                     </Button>
                   </div>
-                  <pre className={cn("m-0 text-sm overflow-x-auto px-3 py-3", isStreaming && "typing-cursor")} style={{ background: 'transparent', color: '#e6edf3', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                  <pre className={cn("m-0 text-sm overflow-x-auto px-3 py-3", isStreaming && "typing-cursor")} style={{ background: 'transparent', color: '#e6edf3', whiteSpace: 'pre' }}>
                     <code style={{ background: 'transparent' }}>{codeContent}</code>
                   </pre>
                 </div>
@@ -157,10 +157,12 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                     borderRadius: 0,
                     background: 'transparent',
                     padding: '12px 14px 14px 14px',
+                    overflowX: 'auto',
+                    width: '100%',
                   }}
                   codeTagProps={{ style: { background: 'transparent' } }}
                   showLineNumbers
-                  wrapLongLines
+                  wrapLongLines={false}
                   lineNumberStyle={{ minWidth: '2.5em', paddingRight: '12px', color: '#64748b', opacity: 0.9 }}
                   className={cn(
                     "text-sm",

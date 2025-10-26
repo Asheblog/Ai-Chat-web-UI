@@ -36,7 +36,7 @@ export default function MainLayout({
 
   return (
     <AuthGuard>
-      <div className="flex h-screen min-h-0 bg-background">
+      <div className="flex h-screen min-h-0 w-full min-w-0 bg-background overflow-x-hidden">
         {!sidebarCollapsed && <Sidebar />}
         <MainContent>
           {children}
