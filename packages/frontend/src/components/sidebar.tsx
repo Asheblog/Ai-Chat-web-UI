@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, Smartphone } from 'lucide-react'
+import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, Smartphone, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -130,8 +130,8 @@ export function Sidebar() {
     setTheme(newTheme)
   }
 
-  // 将标题限制在 10 个字符以内（按 Unicode 码点计数），超出添加省略号
-  const clipTitle = (s: string, max = 10) => {
+  // 将标题限制在 15 个字符以内（按 Unicode 码点计数），超出添加省略号
+  const clipTitle = (s: string, max = 15) => {
     try {
       const arr = Array.from(s || '')
       return arr.length > max ? arr.slice(0, max).join('') + '…' : s
@@ -139,7 +139,7 @@ export function Sidebar() {
   }
 
   const sidebarContent = (
-    <div className="flex h-full w-64 flex-col bg-card border-r">
+    <div className="flex h-full w-full lg:w-64 flex-col bg-card lg:border-r">
       {/* 顶部文字LOGO */}
       <div className="px-4 pt-4 pb-2 flex items-center justify-center">
         <Link href="/main" className="block select-none text-center">
@@ -204,7 +204,7 @@ export function Sidebar() {
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium" title={session.title}>
-                  {clipTitle(session.title, 10)}
+                  {clipTitle(session.title, 15)}
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
@@ -223,12 +223,11 @@ export function Sidebar() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-7 w-7 sm:h-6 sm:w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
                       onClick={(e) => requestDeleteSession(session.id, e)}
                       aria-label="删除会话"
                     >
-                      {/* simple dot icon via CSS to avoid extra icon dependency */}
-                      <span className="block h-3 w-3 rounded-full bg-foreground/70" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>删除会话</TooltipContent>
