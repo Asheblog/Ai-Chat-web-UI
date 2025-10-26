@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu } from 'lucide-react'
+import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -49,6 +49,22 @@ export function Sidebar() {
   useEffect(() => {
     fetchSessions()
   }, [fetchSessions])
+
+  // 监听全局事件以从外部打开/关闭移动端侧栏
+  useEffect(() => {
+    const open = () => setIsMobileMenuOpen(true)
+    const close = () => setIsMobileMenuOpen(false)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('aichat:sidebar-open', open)
+      window.addEventListener('aichat:sidebar-close', close)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('aichat:sidebar-open', open)
+        window.removeEventListener('aichat:sidebar-close', close)
+      }
+    }
+  }, [])
 
   // 深链：URL 带 settings=1 时自动打开
   useEffect(() => {
@@ -256,6 +272,11 @@ export function Sidebar() {
               跟随系统
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => { try { document.cookie = `viewMode=mobile; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/m/main' }}>
+              <Smartphone className="mr-2 h-4 w-4" />
+              切换到移动版
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" />
               退出登录
@@ -271,24 +292,7 @@ export function Sidebar() {
       {/* 全局设置弹框 */}
       <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
 
-      {/* 移动端菜单按钮（配合 Sheet 使用） */}
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setIsMobileMenuOpen(true)}
-                aria-label="打开侧边栏"
-              >
-                <Menu className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>打开菜单</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+      {/* 顶栏按钮触发：通过全局事件在 MobileMainLayout 中调用 */}
 
       {/* 桌面端侧边栏 */}
       <div className="hidden lg:flex">

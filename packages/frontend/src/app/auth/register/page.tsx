@@ -128,11 +128,20 @@ export default function RegisterPage() {
             {isLoading ? '注册中...' : '注册'}
           </Button>
         </form>
-        <div className="mt-6 text-center text-sm">
-          已有账户？{' '}
-          <Link href="/auth/login" className="text-primary hover:underline">
-            立即登录
-          </Link>
+        <div className="mt-6 text-center text-sm space-y-2">
+          <div>
+            已有账户？{' '}
+            <Link href="/auth/login" className="text-primary hover:underline">立即登录</Link>
+          </div>
+          <div className="text-muted-foreground">
+            <button
+              type="button"
+              className="underline hover:text-foreground"
+              onClick={() => { try { document.cookie = `viewMode=mobile; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/m/auth/register' }}
+            >
+              使用移动版
+            </button>
+          </div>
         </div>
       </CardContent>
     </Card>

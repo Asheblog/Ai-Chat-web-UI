@@ -134,11 +134,20 @@ export default function LoginPage() {
             {isLoading ? '登录中...' : '登录'}
           </Button>
         </form>
-        <div className="mt-6 text-center text-sm">
-          还没有账户？{' '}
-          <Link href="/auth/register" className="text-primary hover:underline">
-            立即注册
-          </Link>
+        <div className="mt-6 text-center text-sm space-y-2">
+          <div>
+            还没有账户？{' '}
+            <Link href="/auth/register" className="text-primary hover:underline">立即注册</Link>
+          </div>
+          <div className="text-muted-foreground">
+            <button
+              type="button"
+              className="underline hover:text-foreground"
+              onClick={() => { try { document.cookie = `viewMode=mobile; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/m/auth/login' }}
+            >
+              使用移动版
+            </button>
+          </div>
         </div>
       </CardContent>
     </Card>
