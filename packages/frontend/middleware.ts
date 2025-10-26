@@ -9,9 +9,15 @@ export function middleware(req: NextRequest) {
   const hasToken = !!req.cookies.get('token')?.value
   const ua = userAgent(req)
   const deviceType = ua.device.type // 'mobile' | 'tablet' | 'desktop' | undefined
+  const secChUaMobile = req.headers.get('sec-ch-ua-mobile')
+  const headerSuggestsMobile = secChUaMobile === '?1'
+  const uaValue = req.headers.get('user-agent') || ''
+  const uaStringSuggestsMobile = /\b(Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Silk)\b/i.test(uaValue)
   const uaIsMobile = deviceType === 'mobile' || deviceType === 'tablet'
+  const detectedMobile = uaIsMobile || headerSuggestsMobile || uaStringSuggestsMobile
   const override = req.cookies.get('viewMode')?.value as 'mobile'|'desktop'|undefined
-  const isMobile = override === 'mobile' ? true : override === 'desktop' ? false : uaIsMobile
+  // viewMode Cookie 优先，其次结合 UA 解析结果与请求头回退判断移动端
+  const isMobile = override === 'mobile' ? true : override === 'desktop' ? false : detectedMobile
   const isMobileRoute = pathname.startsWith('/m')
 
   // 受保护区域
