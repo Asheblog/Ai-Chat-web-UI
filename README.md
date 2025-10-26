@@ -34,6 +34,7 @@ services:
       - ENABLE_CORS=true #不要cors就关了
       - CORS_ORIGIN=http://你的IP或域名:3555
       - LOG_LEVEL=info
+      - DB_INIT_ON_START=true #首次部署结束后记得进入编排修改为false或删除，避免重复播种
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs

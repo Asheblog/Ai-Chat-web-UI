@@ -39,6 +39,7 @@ logs/
 .DS_Store
 Thumbs.db
 *.swp
+.claude/
 
 # --- Prisma/SQLite/Runtime Data ---
 **/data/
