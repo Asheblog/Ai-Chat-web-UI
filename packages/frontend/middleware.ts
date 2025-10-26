@@ -19,7 +19,7 @@ export function middleware(req: NextRequest) {
   if (pathname.startsWith('/main') || pathname.startsWith('/m/main')) {
     if (!hasToken) {
       const url = req.nextUrl.clone()
-      url.pathname = '/auth/login'
+      url.pathname = isMobile ? '/m/auth/login' : '/auth/login'
       url.search = ''
       return NextResponse.redirect(url)
     }
@@ -39,21 +39,48 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // 认证页面在已登录时跳转
-  if (pathname === '/' || pathname.startsWith('/auth/login') || pathname.startsWith('/auth/register')) {
+  // 根路径与认证页面：
+  // - 已登录：根据端类型跳转到对应主页
+  // - 未登录：根据端类型跳转到对应的登录/注册页（修复：移动端访问根路径不会自动跳到 /m）
+  if (
+    pathname === '/' ||
+    pathname.startsWith('/auth/login') ||
+    pathname.startsWith('/auth/register')
+  ) {
+    const url = req.nextUrl.clone()
     if (hasToken) {
-      const url = req.nextUrl.clone()
       url.pathname = isMobile ? '/m/main' : '/main'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+    // 未登录时的端间跳转
+    // 从桌面认证页到移动认证页
+    if (!isMobileRoute && isMobile) {
+      if (pathname.startsWith('/auth/register')) {
+        url.pathname = '/m/auth/register'
+      } else {
+        // 对于根路径和 /auth/login 统一跳转到移动端登录
+        url.pathname = '/m/auth/login'
+      }
       url.search = ''
       return NextResponse.redirect(url)
     }
   }
 
-  // 已登录访问移动端认证页 → 跳转 /m/main
+  // 移动端认证页：
+  // - 已登录：跳转移动端主页
+  // - 在非移动端且未强制 mobile（viewMode≠mobile）时，跳转到桌面认证页，避免误入
   if (pathname.startsWith('/m/auth/login') || pathname.startsWith('/m/auth/register')) {
+    const url = req.nextUrl.clone()
     if (hasToken) {
-      const url = req.nextUrl.clone()
       url.pathname = '/m/main'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+    if (!isMobile) {
+      url.pathname = pathname.replace(/^\/m\//, '/').replace(/^auth\//, '/auth/')
+      // 保险：若上面的替换不符合预期，则显式回落到登录页
+      if (!url.pathname.startsWith('/auth/')) url.pathname = '/auth/login'
       url.search = ''
       return NextResponse.redirect(url)
     }

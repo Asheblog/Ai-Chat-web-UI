@@ -271,10 +271,23 @@ export function Sidebar() {
               跟随系统
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => { try { document.cookie = `viewMode=mobile; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/m/main' }}>
-              <Smartphone className="mr-2 h-4 w-4" />
-              切换到移动版
-            </DropdownMenuItem>
+            {(() => {
+              const isMobileRoute = typeof pathname === 'string' && pathname.startsWith('/m')
+              if (isMobileRoute) {
+                return (
+                  <DropdownMenuItem onClick={() => { try { document.cookie = `viewMode=desktop; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/main' }}>
+                    <Monitor className="mr-2 h-4 w-4" />
+                    切换到桌面版
+                  </DropdownMenuItem>
+                )
+              }
+              return (
+                <DropdownMenuItem onClick={() => { try { document.cookie = `viewMode=mobile; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/m/main' }}>
+                  <Smartphone className="mr-2 h-4 w-4" />
+                  切换到移动版
+                </DropdownMenuItem>
+              )
+            })()}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" />
