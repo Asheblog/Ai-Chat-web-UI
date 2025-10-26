@@ -239,9 +239,6 @@ export function MobileChatInterface() {
             {/* 操作区 */}
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="icon" className="h-10 w-10 rounded-full" onClick={handleStop} disabled={!isStreaming} aria-label="停止">
-                  <Square className="h-4 w-4" />
-                </Button>
                 <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} />
                 <Button type="button" variant="outline" size="icon" className="h-10 w-10 rounded-full" onClick={pickImages} aria-label="上传图片">
                   <ImagePlus className="h-4 w-4" />
@@ -250,8 +247,22 @@ export function MobileChatInterface() {
                   <SettingsIcon className="h-4 w-4" />
                 </Button>
               </div>
-              <Button type="button" className="h-11 px-6 rounded-full" onClick={handleSend} disabled={!input.trim() || isStreaming || !currentSession}>
-                <Send className="mr-1 h-4 w-4" /> 发送
+              <Button
+                type="button"
+                className="h-11 px-6 rounded-full"
+                onClick={() => { isStreaming ? handleStop() : handleSend() }}
+                disabled={isStreaming ? false : (!input.trim() || !currentSession)}
+                aria-label={isStreaming ? '停止' : '发送'}
+              >
+                {isStreaming ? (
+                  <>
+                    <Square className="mr-1 h-4 w-4" /> 停止
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-1 h-4 w-4" /> 发送
+                  </>
+                )}
               </Button>
             </div>
           </div>
