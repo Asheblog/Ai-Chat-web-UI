@@ -60,6 +60,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
         },
         // 自定义代码块渲染
         code({ node, inline, className, children, ...props }: any) {
+          const responsiveContainerStyle = { maxWidth: 'min(100%, calc(100vw - 2rem))' }
           const match = /language-([\w+-]+)/.exec(className || '')
           const rawLang = match ? match[1] : ''
           const lang0 = (rawLang || '').toLowerCase()
@@ -88,9 +89,12 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
             }
             if (tooLargeForHL) {
               return (
-                <div className={cn(
-                  "relative group rounded-xl my-2 overflow-hidden bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8"
-                )}>
+                <div
+                  className={cn(
+                    "relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 overflow-x-auto overflow-y-hidden max-w-full min-w-0"
+                  )}
+                  style={responsiveContainerStyle}
+                >
                   <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
                     <span className="w-3 h-3 rounded-full bg-[#ff5f56]"/>
                     <span className="w-3 h-3 rounded-full bg-[#ffbd2e]"/>
@@ -122,8 +126,9 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
             return (
               <div
                 className={cn(
-                  "relative group rounded-xl my-2 overflow-hidden bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8"
+                  "relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 overflow-x-auto overflow-y-hidden max-w-full min-w-0"
                 )}
+                style={responsiveContainerStyle}
               >
                 <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
                   <span className="w-3 h-3 rounded-full bg-[#ff5f56]"/>

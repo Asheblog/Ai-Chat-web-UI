@@ -56,9 +56,9 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
       </Avatar>
 
       {/* 消息内容 */}
-      <div className={`flex-1 max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
+      <div className={`flex-1 min-w-0 max-w-full lg:max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
         <div
-          className={`inline-block max-w-full rounded-lg ${isUser ? 'px-4 py-3' : (isCodeOnly ? 'p-0' : 'px-4 py-3')} ${
+          className={`inline-block max-w-full box-border rounded-lg ${isUser ? 'px-4 py-3' : (isCodeOnly ? 'p-0' : 'px-4 py-3')} ${
             isUser
               ? 'bg-muted text-foreground ml-auto'
               : (isCodeOnly ? 'bg-transparent border-0 text-foreground' : 'bg-background border text-foreground')
