@@ -393,12 +393,7 @@ class ApiClient {
     return response.data
   }
 
-  async getDailyUsage(params: { from?: string; to?: string; sessionId?: number }) {
-    const response = await this.client.get<import('@/types').ApiResponse<{ from: string; to: string; rows: Array<{ date: string; prompt_tokens: number; completion_tokens: number; total_tokens: number }> }>>(`/chat/usage/daily`, {
-      params,
-    })
-    return response.data
-  }
+  // 按日统计导出（JSON）接口仅用于 CSV 导出；现已移除对应前端功能，保留后端接口以兼容其他潜在用途。
 
   // 旧的模型配置接口已移除：请改用连接 + 聚合模型
 

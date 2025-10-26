@@ -13,7 +13,6 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
-import { apiClient } from '@/lib/api'
 import { useModelsStore } from '@/store/models-store'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -39,7 +38,6 @@ export function ChatInterface() {
     stopStreaming,
     clearError,
     error,
-    usageCurrent,
   } = useChatStore()
 
   const { sidebarCollapsed, setSidebarCollapsed, systemSettings } = useSettingsStore()
@@ -164,31 +162,7 @@ export function ChatInterface() {
     stopStreaming()
   }
 
-  const handleExportCSV = async () => {
-    try {
-      if (!currentSession) return
-      const now = new Date()
-      const from = new Date(now.getTime() - 30 * 24 * 3600 * 1000)
-      const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`)
-      const fmt = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`
-      const res = await apiClient.getDailyUsage({ from: fmt(from), to: fmt(now), sessionId: currentSession.id })
-      const rows = res.data?.rows || []
-      const header = ['date','prompt_tokens','completion_tokens','total_tokens']
-      const csv = [header.join(',')].concat(rows.map((r: any) => [r.date, r.prompt_tokens, r.completion_tokens, r.total_tokens].join(','))).join('\n')
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `usage_${currentSession.id}_${fmt(from)}_${fmt(now)}.csv`
-      document.body.appendChild(a)
-      a.click()
-      URL.revokeObjectURL(url)
-      a.remove()
-    } catch (err) {
-      console.error('Export CSV failed:', err)
-      toast({ title: '导出失败', description: err instanceof Error ? err.message : '未知错误', variant: 'destructive' })
-    }
-  }
+  // 导出 CSV 功能已移除
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value)
@@ -298,19 +272,7 @@ export function ChatInterface() {
               }}
             />
           </div>
-          <div className="text-xs text-muted-foreground flex items-center gap-2">
-            {usageCurrent && (
-              <div className="px-2 py-1 bg-muted rounded">
-                上下文: {usageCurrent.prompt_tokens ?? '-'} / {usageCurrent.context_limit ?? '-'}
-                {typeof usageCurrent.context_remaining === 'number' && (
-                  <span className="ml-1">(剩余 {usageCurrent.context_remaining})</span>
-                )}
-              </div>
-            )}
-            <Button size="sm" variant="outline" className="ml-2" onClick={handleExportCSV}>
-              导出CSV
-            </Button>
-          </div>
+          {/* 顶部栏右侧内容移除（上下文总结 + 导出CSV） */}
         </div>
       </div>
 
