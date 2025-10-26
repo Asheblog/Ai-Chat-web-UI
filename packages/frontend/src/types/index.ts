@@ -52,6 +52,9 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  clientMessageId?: string | null;
+  reasoning?: string | null;
+  reasoningDurationSeconds?: number | null;
   // 可选的图片（data URL，用于展示，不入库）
   images?: string[];
 }
@@ -97,10 +100,12 @@ export interface ChatState {
   isLoading: boolean;
   isStreaming: boolean;
   error: string | null;
+  messageImageCache: Record<string, string[]>;
   // usage 展示状态
   usageCurrent?: UsageStats | null;
   usageLastRound?: UsageStats | null;
   usageTotals?: UsageTotals | null;
+  sessionUsageTotalsMap: Record<number, UsageTotals>;
 }
 
 export interface AuthState {

@@ -24,6 +24,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   currentSession: null,
   sessions: [],
   messages: [],
+  messageImageCache: {},
   isLoading: false,
   isStreaming: false,
   error: null,
@@ -70,8 +71,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const response = await apiClient.getMessages(sessionId)
+      const cache = get().messageImageCache
+      const normalized = (response.data || []).map((msg) => {
+        if (msg.clientMessageId && cache[msg.clientMessageId]) {
+          return { ...msg, images: cache[msg.clientMessageId] }
+        }
+        return msg
+      })
+      const nextCache = { ...cache }
+      normalized.forEach((msg) => {
+        if (msg.clientMessageId && msg.images && msg.images.length > 0) {
+          nextCache[msg.clientMessageId] = msg.images
+        }
+      })
       set({
-        messages: response.data || [],
+        messages: normalized,
+        messageImageCache: nextCache,
         isLoading: false,
       })
     } catch (error: any) {
@@ -254,12 +269,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 忽略改名失败，不影响消息发送
     }
 
+    const userClientMessageId = (() => {
+      try { return (crypto as any)?.randomUUID?.() ?? '' } catch { return '' }
+    })() || (Math.random().toString(36).slice(2) + Date.now().toString(36))
+
     const userMessage: Message = {
       id: Date.now(), // 临时ID
       sessionId,
       role: 'user',
       content,
       createdAt: new Date().toISOString(),
+      clientMessageId: userClientMessageId,
     }
     if (images && images.length) {
       userMessage.images = images.map(img => `data:${img.mime};base64,${img.data}`)
@@ -274,22 +294,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       createdAt: new Date().toISOString(),
     }
 
-    set((state) => ({
-      messages: [...state.messages, userMessage, aiMessage],
-      isStreaming: true,
-      error: null,
-    }))
+    set((state) => {
+      const nextCache = userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
+        ? { ...state.messageImageCache, [userMessage.clientMessageId]: userMessage.images }
+        : state.messageImageCache
+      return {
+        messages: [...state.messages, userMessage, aiMessage],
+        messageImageCache: nextCache,
+        isStreaming: true,
+        error: null,
+      }
+    })
 
     try {
       let accumulatedContent = ''
       let accumulatedReasoning = ''
 
-      // 生成幂等ID（跨重试/降级复用）
-      const clientMessageId = (() => {
-        try { return (crypto as any)?.randomUUID?.() ?? '' } catch { return '' }
-      })() || (Math.random().toString(36).slice(2) + Date.now().toString(36))
-
-      for await (const evt of apiClient.streamChat(sessionId, content, images, { ...(options||{}), clientMessageId })) {
+      // 使用相同幂等ID（跨重试/降级复用）
+      for await (const evt of apiClient.streamChat(sessionId, content, images, { ...(options||{}), clientMessageId: userClientMessageId })) {
         if (evt?.type === 'content' && evt.content) {
           accumulatedContent += evt.content
           set((state) => ({
@@ -320,14 +342,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             }))
           }
         } else if (evt?.type === 'usage' && evt.usage) {
+          const usage = evt.usage
           // 实时更新当前 usage；若包含 completion/total 则可同步作为 lastRound
           set((state) => ({
             usageCurrent: {
-              prompt_tokens: evt.usage.prompt_tokens,
-              context_limit: evt.usage.context_limit ?? state.usageCurrent?.context_limit ?? undefined,
-              context_remaining: evt.usage.context_remaining ?? state.usageCurrent?.context_remaining ?? undefined,
+              prompt_tokens: usage.prompt_tokens,
+              context_limit: usage.context_limit ?? state.usageCurrent?.context_limit ?? undefined,
+              context_remaining: usage.context_remaining ?? state.usageCurrent?.context_remaining ?? undefined,
             },
-            usageLastRound: (evt.usage.completion_tokens != null || evt.usage.total_tokens != null) ? evt.usage : state.usageLastRound,
+            usageLastRound: (usage.completion_tokens != null || usage.total_tokens != null) ? usage : state.usageLastRound,
           }))
         }
       }
@@ -345,7 +368,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (error: any) {
       // 流式失败，降级尝试非流式一次
       try {
-        const resp = await apiClient.chatCompletion(sessionId, content, images, { ...(options||{}), clientMessageId })
+        const resp = await apiClient.chatCompletion(sessionId, content, images, { ...(options||{}), clientMessageId: userClientMessageId })
         const finalText = resp?.data?.content || ''
         if (finalText) {
           set((state) => ({
@@ -382,9 +405,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   addMessage: (message: Message) => {
-    set((state) => ({
-      messages: [...state.messages, message],
-    }))
+    set((state) => {
+      const nextCache = message.clientMessageId && message.images && message.images.length > 0
+        ? { ...state.messageImageCache, [message.clientMessageId]: message.images }
+        : state.messageImageCache
+      return {
+        messages: [...state.messages, message],
+        messageImageCache: nextCache,
+      }
+    })
   },
 
   clearError: () => {

@@ -39,6 +39,9 @@ export interface Message {
   sessionId: number;
   role: 'user' | 'assistant';
   content: string;
+  clientMessageId?: string | null;
+  reasoning?: string | null;
+  reasoningDurationSeconds?: number | null;
   createdAt: Date;
 }
 

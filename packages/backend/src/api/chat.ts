@@ -79,6 +79,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
           sessionId: true,
           role: true,
           content: true,
+          clientMessageId: true,
           reasoning: true,
           reasoningDurationSeconds: true,
           createdAt: true,
@@ -93,7 +94,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
     ]);
 
     return c.json<ApiResponse<{
-      messages: Array<{ id: number; sessionId: number; role: string; content: string; createdAt: Date }>;
+      messages: Array<{ id: number; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date }>;
       pagination: {
         page: number;
         limit: number;
