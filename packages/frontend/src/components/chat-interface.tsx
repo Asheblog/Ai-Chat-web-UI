@@ -180,7 +180,7 @@ export function ChatInterface() {
                     onKeyDown={handleKeyDown}
                     onCompositionStart={() => setIsComposing(true)}
                     onCompositionEnd={() => setIsComposing(false)}
-                    className="h-auto min-h-[44px] w-full resize-none rounded-2xl border-0 bg-muted/40 px-4 py-2 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="h-auto min-h-[44px] w-full resize-none rounded-2xl border-0 bg-muted/40 px-4 py-2 text-sm leading-[1.45] focus-visible:ring-0 focus-visible:ring-offset-0"
                     rows={1}
                     disabled={isStreaming}
                   />
@@ -300,7 +300,7 @@ export function ChatInterface() {
                   onCompositionEnd={() => setIsComposing(false)}
                   placeholder={isStreaming ? 'AI正在思考中...' : '输入消息（Shift+Enter 换行）'}
                   disabled={isStreaming}
-                  className="h-auto min-h-[48px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-4 py-2 leading-7 text-left placeholder:text-muted-foreground"
+                  className="h-auto min-h-[48px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-4 py-2 leading-[1.5] text-left placeholder:text-muted-foreground"
                   rows={1}
                 />
               </div>

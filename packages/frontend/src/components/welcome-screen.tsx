@@ -275,7 +275,7 @@ export function WelcomeScreen() {
                 onCompositionEnd={() => setIsComposing(false)}
                 placeholder="输入消息（Shift+Enter 换行）"
                 disabled={!canCreate || isCreating}
-                className="h-auto min-h-[40px] sm:min-h-[48px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-2 sm:py-3 leading-6 sm:leading-7 text-left placeholder:text-muted-foreground"
+                className="h-auto min-h-[40px] sm:min-h-[48px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-2 sm:py-3 leading-[1.4] sm:leading-[1.5] text-left placeholder:text-muted-foreground"
                 rows={1}
               />
             </div>
