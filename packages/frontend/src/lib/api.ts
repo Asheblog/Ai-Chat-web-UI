@@ -231,8 +231,8 @@ class ApiClient {
     return response.data
   }
 
-  async updateSessionModel(sessionId: number, modelId: string) {
-    const response = await this.client.put<ApiResponse<any>>(`/sessions/${sessionId}/model`, { modelId })
+  async updateSessionModel(sessionId: number, payload: { modelId: string; connectionId?: number; rawId?: string }) {
+    const response = await this.client.put<ApiResponse<any>>(`/sessions/${sessionId}/model`, payload)
     return response.data
   }
 

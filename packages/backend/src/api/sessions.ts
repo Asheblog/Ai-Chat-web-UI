@@ -8,6 +8,25 @@ import type { ApiResponse, ChatSession } from '../types';
 
 const sessions = new Hono();
 
+// 容错解析连接配置的模型ID列表
+const parseModelIds = (json?: string | null): string[] => {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : []
+  } catch {
+    return []
+  }
+}
+
+const composeModelLabel = (rawId?: string | null, prefix?: string | null, fallback?: string | null): string | null => {
+  const cleanRaw = (rawId || '').trim()
+  const cleanPrefix = (prefix || '').trim()
+  if (cleanRaw && cleanPrefix) return `${cleanPrefix}.${cleanRaw}`
+  if (cleanRaw) return cleanRaw
+  return fallback || null
+}
+
 // 创建会话schema
 // 支持同时传入 connectionId + rawId 以绕开字符串解析歧义
 const createSessionSchema = z.object({
@@ -83,7 +102,7 @@ sessions.get('/', authMiddleware, async (c) => {
         sessions: sessionsList.map((s) => ({
           ...s,
           // 附加一个模型标签，供前端展示
-          modelLabel: s.modelRawId || undefined,
+          modelLabel: composeModelLabel(s.modelRawId, s.connection?.prefixId || null) || undefined,
         })),
         pagination: {
           page,
@@ -130,18 +149,32 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       } else {
         // 回退：尝试匹配 prefix 到连接（旧逻辑留作兼容；优先使用前端直传 connectionId/rawId）
         const conns = await prisma.connection.findMany({ where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true } })
+        let fallbackExact: { connectionId: number; rawId: string } | null = null
+        let fallbackFirst: { connectionId: number; rawId: string } | null = null
         for (const conn of conns) {
-          const px = (conn.prefixId || '')
+          const px = (conn.prefixId || '').trim()
           if (px && modelId.startsWith(px + '.')) {
             connectionId = conn.id
             rawId = modelId.substring(px.length + 1)
             break
           }
           if (!px) {
-            // 无前缀连接，尝试直接匹配
-            connectionId = conn.id
-            rawId = modelId
-            break
+            if (!fallbackFirst) {
+              fallbackFirst = { connectionId: conn.id, rawId: modelId }
+            }
+            if (!fallbackExact) {
+              const ids = parseModelIds(conn.modelIdsJson)
+              if (ids.includes(modelId)) {
+                fallbackExact = { connectionId: conn.id, rawId: modelId }
+              }
+            }
+          }
+        }
+        if (!connectionId || !rawId) {
+          const selected = fallbackExact || fallbackFirst
+          if (selected) {
+            connectionId = selected.connectionId
+            rawId = selected.rawId
           }
         }
       }
@@ -186,7 +219,7 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       ollamaThink: boolean | null;
     }>>({
       success: true,
-      data: { ...session, modelLabel: session.modelRawId },
+      data: { ...session, modelLabel: modelId || composeModelLabel(session.modelRawId, session.connection?.prefixId || null) },
       message: 'Chat session created successfully',
     });
   } )().catch((error) => {
@@ -246,7 +279,7 @@ sessions.get('/:id', authMiddleware, async (c) => {
 
     return c.json<ApiResponse<any>>({
       success: true,
-      data: { ...session, modelLabel: session?.modelRawId },
+      data: { ...session, modelLabel: composeModelLabel(session?.modelRawId, session?.connection?.prefixId || null) },
     });
 
   } catch (error) {
@@ -338,11 +371,13 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
 // 切换会话的模型（聚合模型ID -> 连接ID + 原始模型ID）
 sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
   modelId: z.string().min(1),
+  connectionId: z.number().int().positive().optional(),
+  rawId: z.string().min(1).optional(),
 })), async (c) => {
   try {
     const user = c.get('user')
     const sessionId = parseInt(c.req.param('id'))
-    const { modelId } = c.req.valid('json')
+    const { modelId, connectionId: reqConnectionId, rawId: reqRawId } = c.req.valid('json') as { modelId: string; connectionId?: number; rawId?: string }
 
     if (isNaN(sessionId)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
@@ -358,27 +393,59 @@ sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
     let connectionId: number | null = null
     let rawId: string | null = null
 
-    // 优先命中缓存目录
-    const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
-    if (cached) {
-      connectionId = cached.connectionId
-      rawId = cached.rawId
-    } else {
-      // 回退：从可见连接中匹配（系统级 + 用户级）
-      const conns = await prisma.connection.findMany({
-        where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true },
+    if (reqConnectionId && reqRawId) {
+      const conn = await prisma.connection.findFirst({
+        where: {
+          id: reqConnectionId,
+          enable: true,
+          OR: [ { ownerUserId: null }, { ownerUserId: user.id } ],
+        },
       })
-      for (const conn of conns) {
-        const px = (conn.prefixId || '')
-        if (px && modelId.startsWith(px + '.')) {
-          connectionId = conn.id
-          rawId = modelId.substring(px.length + 1)
-          break
+      if (!conn) {
+        return c.json<ApiResponse>({ success: false, error: 'Connection not found for current user' }, 404)
+      }
+      connectionId = conn.id
+      rawId = reqRawId
+    }
+
+    if (!connectionId || !rawId) {
+      // 优先命中缓存目录
+      const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
+      if (cached) {
+        connectionId = cached.connectionId
+        rawId = cached.rawId
+      } else {
+        // 回退：从可见连接中匹配（系统级 + 用户级）
+        const conns = await prisma.connection.findMany({
+          where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true },
+        })
+        let fallbackExact: { connectionId: number; rawId: string } | null = null
+        let fallbackFirst: { connectionId: number; rawId: string } | null = null
+        for (const conn of conns) {
+          const px = (conn.prefixId || '').trim()
+          if (px && modelId.startsWith(px + '.')) {
+            connectionId = conn.id
+            rawId = modelId.substring(px.length + 1)
+            break
+          }
+          if (!px) {
+            if (!fallbackFirst) {
+              fallbackFirst = { connectionId: conn.id, rawId: modelId }
+            }
+            if (!fallbackExact) {
+              const ids = parseModelIds(conn.modelIdsJson)
+              if (ids.includes(modelId)) {
+                fallbackExact = { connectionId: conn.id, rawId: modelId }
+              }
+            }
+          }
         }
-        if (!px) {
-          connectionId = conn.id
-          rawId = modelId
-          break
+        if (!connectionId || !rawId) {
+          const selected = fallbackExact || fallbackFirst
+          if (selected) {
+            connectionId = selected.connectionId
+            rawId = selected.rawId
+          }
         }
       }
     }
@@ -404,7 +471,7 @@ sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
       },
     })
 
-    return c.json<ApiResponse<any>>({ success: true, data: { ...updated, modelLabel: updated.modelRawId } })
+    return c.json<ApiResponse<any>>({ success: true, data: { ...updated, modelLabel: modelId } })
   } catch (error) {
     console.error('Switch session model error:', error)
     return c.json<ApiResponse>({ success: false, error: 'Failed to switch session model' }, 500)

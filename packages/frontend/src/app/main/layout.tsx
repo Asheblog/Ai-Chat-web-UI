@@ -59,12 +59,12 @@ export default function MainLayout({
               <div className="justify-self-center">
                 <ModelSelector
                   selectedModelId={currentSession?.modelLabel || currentSession?.modelRawId || null}
-                  onModelChange={(modelId) => {
+                  onModelChange={(model) => {
                     const cur = useChatStore.getState().currentSession
                     if (cur) {
-                      useChatStore.getState().switchSessionModel(cur.id, modelId)
+                      useChatStore.getState().switchSessionModel(cur.id, model)
                     } else {
-                      useChatStore.getState().createSession(modelId, '新的对话')
+                      useChatStore.getState().createSession(model.id, '新的对话', model.connectionId, model.rawId)
                     }
                   }}
                   className="w-[60vw] max-w-[280px]"

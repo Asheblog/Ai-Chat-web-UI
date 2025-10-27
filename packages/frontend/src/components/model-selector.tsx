@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
-import { apiClient } from "@/lib/api"
-import { useModelsStore } from "@/store/models-store"
+import { useModelsStore, type ModelItem } from "@/store/models-store"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -12,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 interface ModelSelectorProps {
   selectedModelId: string | null
-  onModelChange: (modelId: string) => void
+  onModelChange: (model: ModelItem) => void
   disabled?: boolean
   className?: string
   variant?: "default" | "inline"
@@ -68,10 +67,10 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
             <CommandGroup heading="全部模型">
               {allModels.map((model) => (
                 <CommandItem
-                  key={model.id}
+                  key={`${model.connectionId}:${model.id}`}
                   value={`${model.name} ${model.id}`}
                   onSelect={() => {
-                    onModelChange(model.id)
+                    onModelChange(model)
                     setOpen(false)
                   }}
                 >

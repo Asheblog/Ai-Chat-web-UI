@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { apiClient } from '@/lib/api'
 
-type ModelItem = {
+export type ModelItem = {
   id: string
   rawId: string
   name: string

@@ -208,7 +208,7 @@ export function WelcomeScreen() {
       <header className="hidden lg:flex border-b bg-background/80 supports-[backdrop-filter]:backdrop-blur px-4 h-14 items-center">
         <ModelSelector
           selectedModelId={selectedModelId}
-          onModelChange={(id) => setSelectedModelId(id)}
+          onModelChange={(model) => setSelectedModelId(model.id)}
           disabled={!canCreate || isCreating}
         />
       </header>

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ChatState, ChatSession, Message } from '@/types'
 import { apiClient } from '@/lib/api'
+import type { ModelItem } from '@/store/models-store'
 
 interface ChatStore extends ChatState {
   fetchSessions: () => Promise<void>
@@ -11,7 +12,7 @@ interface ChatStore extends ChatState {
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>
   updateSessionTitle: (sessionId: number, title: string) => Promise<void>
-  switchSessionModel: (sessionId: number, modelId: string) => Promise<void>
+  switchSessionModel: (sessionId: number, model: ModelItem) => Promise<void>
   updateSessionPrefs: (sessionId: number, prefs: Partial<{ reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean }>) => Promise<void>
   sendMessage: (sessionId: number, content: string) => Promise<void>
   streamMessage: (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) => Promise<void>
@@ -191,13 +192,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  switchSessionModel: async (sessionId: number, modelId: string) => {
+  switchSessionModel: async (sessionId: number, model: ModelItem) => {
     try {
-      const resp = await apiClient.updateSessionModel(sessionId, modelId)
+      const resp = await apiClient.updateSessionModel(sessionId, {
+        modelId: model.id,
+        connectionId: model.connectionId,
+        rawId: model.rawId || model.id,
+      })
       const updated = resp.data
       set((state) => ({
-        sessions: state.sessions.map(s => s.id === sessionId ? { ...s, connectionId: updated.connectionId, modelRawId: updated.modelRawId, modelLabel: updated.modelRawId } : s),
-        currentSession: state.currentSession?.id === sessionId ? { ...(state.currentSession as any), connectionId: updated.connectionId, modelRawId: updated.modelRawId, modelLabel: updated.modelRawId } : state.currentSession,
+        sessions: state.sessions.map(s => s.id === sessionId ? { ...s, connectionId: updated.connectionId, modelRawId: updated.modelRawId, modelLabel: updated.modelLabel || model.id } : s),
+        currentSession: state.currentSession?.id === sessionId ? { ...(state.currentSession as any), connectionId: updated.connectionId, modelRawId: updated.modelRawId, modelLabel: updated.modelLabel || model.id } : state.currentSession,
       }))
     } catch (error: any) {
       set({ error: error.response?.data?.error || error.message || '切换模型失败' })

@@ -151,10 +151,10 @@ export function ChatInterface() {
             </TooltipProvider>
             <ModelSelector
               selectedModelId={currentSession.modelLabel || currentSession.modelRawId || null}
-              onModelChange={(modelId) => {
+              onModelChange={(model) => {
                 const cur = useChatStore.getState().currentSession
                 if (cur) {
-                  useChatStore.getState().switchSessionModel(cur.id, modelId)
+                  useChatStore.getState().switchSessionModel(cur.id, model)
                 }
               }}
             />
