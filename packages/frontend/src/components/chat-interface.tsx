@@ -1,17 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  Send,
-  Square,
-  ImagePlus,
-  X,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plus,
-  Maximize2,
-  Settings as SettingsIcon,
-} from 'lucide-react'
+import { Send, Square, ImagePlus, X, PanelLeftClose, PanelLeftOpen, Plus, Maximize2, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -176,98 +166,89 @@ export function ChatInterface() {
 
       <div className="sticky bottom-0 w-full border-t bg-background">
         {/* 移动端输入区 */}
-        <div className="px-4 pb-5 pt-3 md:hidden">
-          <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
-            <div className="flex items-center gap-3">
-              <Button type="button" variant="outline" size="icon" className="h-9 w-9 rounded-full" aria-label="更多设置" disabled>
-                <Plus className="h-4 w-4" />
-              </Button>
-              <span>思考模式</span>
-              <Switch checked={thinkingEnabled} onCheckedChange={(checked) => toggleReasoning(!!checked)} />
-            </div>
-            <Select value={effort} onValueChange={(value) => updateEffort(value as any)}>
-              <SelectTrigger className="h-8 w-[120px] rounded-full">
-                <SelectValue placeholder="深度：未设置" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unset">深度：未设置</SelectItem>
-                <SelectItem value="low">深度：较低</SelectItem>
-                <SelectItem value="medium">深度：适中</SelectItem>
-                <SelectItem value="high">深度：较高</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="mt-3 rounded-2xl border bg-card shadow-sm px-3 py-2">
-            <Textarea
-              ref={textareaRef}
-              placeholder={currentSession ? '继续输入...' : '输入你要翻译的文字'}
-              value={input}
-              onChange={(e) => handleTextareaInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              className="resize-none rounded-xl min-h-[110px]"
-              rows={3}
-            />
-
+        <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
+          <div className="rounded-3xl border bg-card shadow-sm px-3 py-3 space-y-3">
             {imagePreview}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1 overflow-hidden">
+                  <Textarea
+                    ref={textareaRef}
+                    placeholder={currentSession ? '继续输入...' : '输入你要翻译的文字'}
+                    value={input}
+                    onChange={(e) => handleTextareaInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onCompositionStart={() => setIsComposing(true)}
+                    onCompositionEnd={() => setIsComposing(false)}
+                    className="h-auto min-h-[44px] w-full resize-none rounded-2xl border-0 bg-muted/40 px-4 py-2 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    rows={1}
+                    disabled={isStreaming}
+                  />
+                </div>
 
-            <div className="mt-3 flex items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  className={`h-12 w-12 shrink-0 rounded-full ${
+                    isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
+                  }`}
+                  onClick={() => {
+                    if (isStreaming) {
+                      handleStop()
+                    } else {
+                      handleSend()
+                    }
+                  }}
+                  disabled={isStreaming ? false : (!input.trim() && selectedImages.length === 0)}
+                  aria-label={isStreaming ? '停止' : '发送'}
+                >
+                  {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+                </Button>
+              </div>
+
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  size="icon"
-                  className="h-10 w-10 rounded-full"
-                  onClick={pickImages}
-                  disabled={isStreaming || !isVisionEnabled}
-                  aria-label="上传图片"
+                  className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${
+                    thinkingEnabled
+                      ? 'bg-primary/10 border-primary text-primary hover:bg-primary/20'
+                      : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                  }`}
+                  onClick={() => toggleReasoning(!thinkingEnabled)}
+                  aria-pressed={thinkingEnabled}
+                  aria-label={thinkingEnabled ? '关闭思考模式' : '开启思考模式'}
                 >
-                  <ImagePlus className="h-4 w-4" />
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                      thinkingEnabled ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <Brain className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-xs font-medium">{thinkingEnabled ? '深度思考中' : '深度思考'}</span>
                 </Button>
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        variant={noSaveThisRound ? 'secondary' : 'outline'}
+                        variant="outline"
                         size="icon"
                         className="h-10 w-10 rounded-full"
-                        onClick={() => setNoSaveThisRound((prev) => !prev)}
-                        aria-label="本轮不保存思考过程"
+                        onClick={pickImages}
+                        disabled={isStreaming || !isVisionEnabled}
+                        aria-label="上传图片"
                       >
-                        <SettingsIcon className="h-4 w-4" />
+                        <ImagePlus className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{noSaveThisRound ? '已设置本轮不保存推理过程' : '点击后本轮不保存推理过程'}</TooltipContent>
+                    <TooltipContent>上传图片</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <Button
-                type="button"
-                className="h-11 px-6 rounded-full"
-                onClick={() => {
-                  if (isStreaming) {
-                    handleStop()
-                  } else {
-                    handleSend()
-                  }
-                }}
-                disabled={isStreaming ? false : (!input.trim() && selectedImages.length === 0)}
-                aria-label={isStreaming ? '停止' : '发送'}
-              >
-                {isStreaming ? (
-                  <>
-                    <Square className="mr-1 h-4 w-4" /> 停止
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-1 h-4 w-4" /> 发送
-                  </>
-                )}
-              </Button>
             </div>
+
           </div>
         </div>
 
