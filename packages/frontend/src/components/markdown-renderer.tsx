@@ -45,7 +45,11 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
   }
 
   return (
-    <div className={cn("prose prose-zinc dark:prose-invert max-w-none")}
+    <div
+      className={cn(
+        "prose prose-zinc dark:prose-invert max-w-none break-words",
+        "[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:whitespace-pre-wrap"
+      )}
     >
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -60,7 +64,11 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
         },
         // 自定义代码块渲染
         code({ node, inline, className, children, ...props }: any) {
-          const responsiveContainerStyle = { maxWidth: 'min(100%, calc(100vw - 2rem))' }
+          const responsiveContainerStyle = {
+            maxWidth: '100%',
+            overflowX: 'hidden',
+            wordBreak: 'break-word' as const,
+          }
           const match = /language-([\w+-]+)/.exec(className || '')
           const rawLang = match ? match[1] : ''
           const lang0 = (rawLang || '').toLowerCase()
@@ -91,7 +99,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
               return (
                 <div
                   className={cn(
-                    "relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 overflow-x-auto overflow-y-hidden max-w-full min-w-0"
+                    "relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0"
                   )}
                   style={responsiveContainerStyle}
                 >
@@ -117,8 +125,11 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                       )}
                     </Button>
                   </div>
-                  <pre className={cn("m-0 text-sm overflow-x-auto px-3 py-3", isStreaming && "typing-cursor")} style={{ background: 'transparent', color: '#e6edf3', whiteSpace: 'pre' }}>
-                    <code style={{ background: 'transparent' }}>{codeContent}</code>
+                  <pre
+                    className={cn("m-0 text-sm px-3 py-3", isStreaming && "typing-cursor")}
+                    style={{ background: 'transparent', color: '#e6edf3', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowX: 'hidden' }}
+                  >
+                    <code style={{ background: 'transparent', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{codeContent}</code>
                   </pre>
                 </div>
               )
@@ -126,7 +137,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
             return (
               <div
                 className={cn(
-                  "relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 overflow-x-auto overflow-y-hidden max-w-full min-w-0"
+                  "relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0"
                 )}
                 style={responsiveContainerStyle}
               >
@@ -162,13 +173,14 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                     borderRadius: 0,
                     background: 'transparent',
                     padding: '12px 14px 14px 14px',
-                    overflowX: 'auto',
+                    overflowX: 'hidden',
                     width: '100%',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
                   }}
-                  codeTagProps={{ style: { background: 'transparent' } }}
-                  showLineNumbers
-                  wrapLongLines={false}
-                  lineNumberStyle={{ minWidth: '2.5em', paddingRight: '12px', color: '#64748b', opacity: 0.9 }}
+                  codeTagProps={{ style: { background: 'transparent', whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }}
+                  showLineNumbers={false}
+                  wrapLongLines
                   className={cn(
                     "text-sm",
                     isStreaming && "typing-cursor"
@@ -184,7 +196,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
           return (
             <code
               className={cn(
-                "px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30",
+                "px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30 break-words whitespace-pre-wrap",
                 isStreaming && "typing-cursor"
               )}
               {...props}
