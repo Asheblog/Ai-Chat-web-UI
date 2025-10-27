@@ -105,13 +105,13 @@ export function SystemConnectionsPage() {
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-base font-medium">连接管理（系统）</div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>刷新</Button>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="w-full sm:w-auto">刷新</Button>
       </div>
       {error && <div className="text-sm text-destructive">{error}</div>}
       <div className="space-y-3 bg-muted/30 p-3 rounded">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Provider</Label>
             <Select value={form.provider} onValueChange={(v)=>setForm((f:any)=>({...f, provider:v }))}>
@@ -136,12 +136,12 @@ export function SystemConnectionsPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <Label>Base URL</Label>
             <Input value={form.baseUrl} onChange={(e)=>setForm((f:any)=>({...f, baseUrl:e.target.value }))} placeholder="https://api.openai.com/v1" />
           </div>
           {form.authType==='bearer' && (
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2">
               <Label>API Key</Label>
               <Input type="password" value={form.apiKey} onChange={(e)=>setForm((f:any)=>({...f, apiKey:e.target.value }))} placeholder="sk-..." />
             </div>
@@ -166,13 +166,13 @@ export function SystemConnectionsPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <Label>Tags（逗号分隔）</Label>
             <Input value={form.tags} onChange={(e)=>setForm((f:any)=>({...f, tags:e.target.value }))} placeholder="prod,team-a" />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <Label>能力标签（勾选即添加 vision/file_upload 等标签）</Label>
-            <div className="flex gap-4 text-sm mt-1">
+            <div className="flex flex-wrap gap-3 text-sm mt-1">
               {['vision','file_upload','web_search','image_generation','code_interpreter'].map((k) => (
                 <label key={k} className="flex items-center gap-1">
                   <input type="checkbox" checked={(cap as any)[k]} onChange={(e)=>setCap((c:any)=>({ ...c, [k]: e.target.checked }))} />
@@ -181,15 +181,15 @@ export function SystemConnectionsPage() {
               ))}
             </div>
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <Label>Model IDs（逗号分隔，留空自动枚举）</Label>
             <Input value={form.modelIds} onChange={(e)=>setForm((f:any)=>({...f, modelIds:e.target.value }))} placeholder="gpt-4o, gpt-4o-mini" />
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={onSubmit} disabled={loading}>{editing? '保存' : '新增'}</Button>
-          <Button onClick={onVerify} variant="outline" disabled={loading}>验证连接</Button>
-          {editing && <Button onClick={()=>{ setEditing(null); resetForm() }} variant="ghost">取消编辑</Button>}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button onClick={onSubmit} disabled={loading} className="w-full sm:w-auto">{editing? '保存' : '新增'}</Button>
+          <Button onClick={onVerify} variant="outline" disabled={loading} className="w-full sm:w-auto">验证连接</Button>
+          {editing && <Button onClick={()=>{ setEditing(null); resetForm() }} variant="ghost" className="w-full sm:w-auto">取消编辑</Button>}
         </div>
       </div>
       <div className="space-y-2">
@@ -211,14 +211,14 @@ export function SystemConnectionsPage() {
         )}
 
         {rows.map((r:any) => (
-          <div key={r.id} className="p-3 border rounded flex items-center justify-between">
-            <div>
+          <div key={r.id} className="p-3 border rounded flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
               <div className="font-medium">[{r.provider}] {r.baseUrl}</div>
               <div className="text-xs text-muted-foreground">auth={r.authType} prefix={r.prefixId||'-'} type={r.connectionType}</div>
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={()=>onEdit(r)}>编辑</Button>
-              <Button size="sm" variant="destructive" onClick={()=>onDelete(r.id)}>删除</Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button size="sm" variant="outline" onClick={()=>onEdit(r)} className="w-full sm:w-auto">编辑</Button>
+              <Button size="sm" variant="destructive" onClick={()=>onDelete(r.id)} className="w-full sm:w-auto">删除</Button>
             </div>
           </div>
         ))}

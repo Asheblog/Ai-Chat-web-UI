@@ -34,11 +34,13 @@ export function SettingsShellNested({
 
   return (
     <div className="mx-auto w-full max-w-5xl bg-background flex-1 min-h-0">
-      <div className="flex h-full min-h-0">
+      <div className="flex h-full min-h-0 flex-col md:flex-row">
         {/* 左侧：单列菜单 + 下拉式二级 */}
-        <aside className="w-60 shrink-0 border-r bg-muted/10 flex flex-col min-h-0">
-          <div className="px-4 py-3 font-semibold border-b">{title}</div>
-          <nav className="p-2 overflow-auto">
+        <aside className="w-full shrink-0 border-b bg-muted/10 flex flex-col min-h-0 md:w-60 md:border-b-0 md:border-r">
+          <div className="px-4 py-3 font-semibold border-b md:border-b-0 md:border-r md:py-4 md:px-5 md:text-base sticky top-0 z-10 bg-muted/10 md:static">
+            {title}
+          </div>
+          <nav className="p-2 overflow-x-hidden overflow-y-auto md:p-3">
             {tree.map((m) => {
               const isOpen = openKey === m.key
               const isActiveMain = activeMain === m.key
@@ -56,7 +58,7 @@ export function SettingsShellNested({
                     {isOpen ? <ChevronDown className="h-4 w-4"/> : <ChevronRight className="h-4 w-4"/>}
                   </button>
                   {isOpen && m.children && (
-                    <div className="mt-1 pl-2">
+                    <div className="mt-1 pl-2 space-y-1">
                       {m.children.map((s) => (
                         <button
                           key={s.key}

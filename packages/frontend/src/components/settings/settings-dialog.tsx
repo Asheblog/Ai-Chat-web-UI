@@ -72,7 +72,9 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[1000px] w-[92vw] h-[82vh] max-h-[85vh] p-0 sm:rounded-2xl border shadow-[0_24px_64px_rgba(0,0,0,0.18)] overflow-hidden flex flex-col min-h-0">
+      <DialogContent
+        className="w-screen h-[100dvh] max-w-none border-0 p-0 shadow-none sm:w-[92vw] sm:h-[82vh] sm:max-h-[85vh] sm:max-w-[1000px] sm:border sm:rounded-2xl sm:shadow-[0_24px_64px_rgba(0,0,0,0.18)] flex flex-col min-h-0 overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      >
         {(() => {
           const tree = settingsNav.filter(m => !m.adminOnly || user?.role === 'ADMIN')
           const mains = tree.map(m => ({ key: m.key, label: m.label }))

@@ -63,35 +63,35 @@ export function SystemReasoningPage() {
       <div className="text-base font-medium">推理链（CoT）</div>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
             <Label htmlFor="reasoningEnabled">启用推理链</Label>
             <p className="text-sm text-muted-foreground">识别 reasoning_content 与常见 CoT 标签，并在 UI 折叠显示。</p>
           </div>
-          <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v)=>setReasoningEnabled(!!v)} />
+          <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v)=>setReasoningEnabled(!!v)} className="self-start sm:self-auto" />
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
             <Label htmlFor="reasoningDefaultExpand">默认展开</Label>
             <p className="text-sm text-muted-foreground">仅影响默认展示，用户可手动折叠/展开。</p>
           </div>
-          <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v)=>setReasoningDefaultExpand(!!v)} />
+          <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v)=>setReasoningDefaultExpand(!!v)} className="self-start sm:self-auto" />
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
             <Label htmlFor="reasoningSaveToDb">保存到数据库</Label>
             <p className="text-sm text-muted-foreground">可能包含中间推断过程，请按需开启。</p>
           </div>
-          <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v)=>setReasoningSaveToDb(!!v)} />
+          <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v)=>setReasoningSaveToDb(!!v)} className="self-start sm:self-auto" />
         </div>
 
         <div className="grid gap-2">
           <Label>标签模式</Label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Select value={reasoningTagsMode} onValueChange={(v)=>setReasoningTagsMode(v as any)}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="选择模式" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="选择模式" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="default">默认</SelectItem>
                 <SelectItem value="custom">自定义</SelectItem>
@@ -99,7 +99,7 @@ export function SystemReasoningPage() {
               </SelectContent>
             </Select>
             {reasoningTagsMode === 'custom' && (
-              <Input placeholder='["<think>","</think>"]' value={reasoningCustomTags} onChange={(e)=>setReasoningCustomTags(e.target.value)} className="flex-1" />
+              <Input placeholder='["<think>","</think>"]' value={reasoningCustomTags} onChange={(e)=>setReasoningCustomTags(e.target.value)} className="w-full sm:flex-1" />
             )}
           </div>
           <p className="text-xs text-muted-foreground">默认包含 &lt;think&gt; / &lt;|begin_of_thought|&gt; 等常见标签。</p>
@@ -107,17 +107,17 @@ export function SystemReasoningPage() {
 
         <div className="grid gap-2">
           <Label htmlFor="deltaSize">流式增量聚合（分片大小）</Label>
-          <div className="flex items-center gap-2">
-            <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-36" />
-            <span className="text-sm text-muted-foreground">越大则刷新更平滑但延迟稍增</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-full sm:w-36" />
+            <span className="text-sm text-muted-foreground sm:w-auto">越大则刷新更平滑但延迟稍增</span>
           </div>
         </div>
 
         <div className="grid gap-2">
           <Label>OpenAI reasoning_effort</Label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Select value={openaiReasoningEffort} onValueChange={(v)=>setOpenaiReasoningEffort(v as any)}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="不设置" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="不设置" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="unset">不设置</SelectItem>
                 <SelectItem value="low">low</SelectItem>
@@ -125,20 +125,20 @@ export function SystemReasoningPage() {
                 <SelectItem value="high">high</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-xs text-muted-foreground">仅对支持该参数的模型生效</span>
+            <span className="text-xs text-muted-foreground sm:w-auto">仅对支持该参数的模型生效</span>
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
             <Label htmlFor="ollamaThink">Ollama think</Label>
             <p className="text-sm text-muted-foreground">上游为 Ollama 时按需启用。</p>
           </div>
-          <Switch id="ollamaThink" checked={ollamaThink} onCheckedChange={(v)=>setOllamaThink(!!v)} />
+          <Switch id="ollamaThink" checked={ollamaThink} onCheckedChange={(v)=>setOllamaThink(!!v)} className="self-start sm:self-auto" />
         </div>
 
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={isLoading}>保存</Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button onClick={handleSave} disabled={isLoading} className="w-full sm:w-auto">保存</Button>
         </div>
       </div>
     </div>

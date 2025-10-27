@@ -71,20 +71,20 @@ export function SystemUsersPage(){
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-base font-medium">用户管理</div>
-        <div className="flex items-center gap-2">
-          <Input placeholder="搜索用户名" value={searchDraft} onChange={(e)=>setSearchDraft(e.target.value)} className="w-56" onKeyDown={(e)=>{ if(e.key==='Enter') onSearch() }} />
-          <Button variant="outline" onClick={onSearch} disabled={loading}>搜索</Button>
-          {search && <Button variant="ghost" onClick={onClearSearch} disabled={loading}>清空</Button>}
-          <Button variant="outline" onClick={()=>load()} disabled={loading}>刷新</Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+          <Input placeholder="搜索用户名" value={searchDraft} onChange={(e)=>setSearchDraft(e.target.value)} className="w-full sm:w-56" onKeyDown={(e)=>{ if(e.key==='Enter') onSearch() }} />
+          <Button variant="outline" onClick={onSearch} disabled={loading} className="w-full sm:w-auto">搜索</Button>
+          {search && <Button variant="ghost" onClick={onClearSearch} disabled={loading} className="w-full sm:w-auto">清空</Button>}
+          <Button variant="outline" onClick={()=>load()} disabled={loading} className="w-full sm:w-auto">刷新</Button>
         </div>
       </div>
 
       {error && <div className="text-sm text-destructive">{error}</div>}
 
-      <div className="border rounded">
-        <Table>
+      <div className="border rounded overflow-x-auto">
+        <Table className="min-w-[720px]">
           <TableHeader>
             <TableRow>
               <TableHead>用户名</TableHead>
@@ -111,14 +111,16 @@ export function SystemUsersPage(){
                 <TableCell>{r._count?.chatSessions ?? '-'}</TableCell>
                 <TableCell>{r._count?.connections ?? '-'}</TableCell>
                 <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
-                <TableCell className="text-right space-x-2">
-                  {r.role !== 'ADMIN' && (
-                    <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'ADMIN')}>设为管理员</Button>
-                  )}
-                  {r.role !== 'USER' && (
-                    <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'USER')}>设为用户</Button>
-                  )}
-                  <Button size="sm" variant="destructive" onClick={()=>deleteUser(r)}>删除</Button>
+                <TableCell className="text-right">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {r.role !== 'ADMIN' && (
+                      <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'ADMIN')} className="w-full sm:w-auto">设为管理员</Button>
+                    )}
+                    {r.role !== 'USER' && (
+                      <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'USER')} className="w-full sm:w-auto">设为用户</Button>
+                    )}
+                    <Button size="sm" variant="destructive" onClick={()=>deleteUser(r)} className="w-full sm:w-auto">删除</Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -126,15 +128,19 @@ export function SystemUsersPage(){
         </Table>
       </div>
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
         <div className="text-muted-foreground">第 {pagination.page} / {pagination.totalPages} 页</div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={page<=1 || loading} onClick={()=>{ const p=Math.max(1,page-1); setPage(p); load({ page: p }) }}>上一页</Button>
-          <Button variant="outline" size="sm" disabled={page>=totalPages || loading} onClick={()=>{ const p=Math.min(totalPages,page+1); setPage(p); load({ page: p }) }}>下一页</Button>
-          <Label className="text-muted-foreground">每页</Label>
-          <select className="border rounded px-2 py-1" value={limit} onChange={(e)=>{ const l = parseInt(e.target.value)||10; setLimit(l); setPage(1); load({ page:1, limit:l }) }}>
-            {[10,20,50].map(n => (<option key={n} value={n}>{n}</option>))}
-          </select>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
+            <Button variant="outline" size="sm" disabled={page<=1 || loading} onClick={()=>{ const p=Math.max(1,page-1); setPage(p); load({ page: p }) }} className="w-full sm:w-auto">上一页</Button>
+            <Button variant="outline" size="sm" disabled={page>=totalPages || loading} onClick={()=>{ const p=Math.min(totalPages,page+1); setPage(p); load({ page: p }) }} className="w-full sm:w-auto">下一页</Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-muted-foreground">每页</Label>
+            <select className="border rounded px-2 py-1" value={limit} onChange={(e)=>{ const l = parseInt(e.target.value)||10; setLimit(l); setPage(1); load({ page:1, limit:l }) }}>
+              {[10,20,50].map(n => (<option key={n} value={n}>{n}</option>))}
+            </select>
+          </div>
         </div>
       </div>
     </div>

@@ -76,25 +76,25 @@ export function SystemModelsPage() {
   return (
     <div className="space-y-3 p-4">
       {/* 顶部：标题 + 工具条 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-base font-medium">模型管理（能力标签）</div>
-        <div className="flex items-center gap-2">
-          <Input className="w-64" placeholder="搜索模型/提供方..." value={q} onChange={(e)=>setQ(e.target.value)} />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <Input className="w-full sm:w-64" placeholder="搜索模型/提供方..." value={q} onChange={(e)=>setQ(e.target.value)} />
           <label className="text-sm flex items-center gap-1">
             <input type="checkbox" checked={onlyOverridden} onChange={(e)=>setOnlyOverridden(e.target.checked)} />
             仅显示已手动设置
           </label>
-          <Button variant="outline" size="sm" onClick={()=>fetchAll()}>刷新</Button>
+          <Button variant="outline" size="sm" onClick={()=>fetchAll()} className="w-full sm:w-auto">刷新</Button>
         </div>
       </div>
       <div className="text-xs text-muted-foreground">为模型开启/关闭能力：图片理解、文件上传、联网搜索、图像生成、代码解释器。若不确定，可点击卡片右下角“重置为自动识别”。</div>
 
       {/* 精简：保留“更多”菜单以收纳导入/导出/清空等操作 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs text-muted-foreground">小提示：开关仅影响前端可用功能；若模型原生不支持，对应功能不会生效。</div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline">更多</Button>
+            <Button size="sm" variant="outline" className="w-full sm:w-auto">更多</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={async ()=>{
@@ -145,12 +145,13 @@ export function SystemModelsPage() {
         {isLoading && list.length===0 && (<div className="text-sm text-muted-foreground">加载中...</div>)}
         {!isLoading && list.length===0 && (<div className="text-sm text-muted-foreground">暂无模型</div>)}
 
-        <Table className="table-fixed">
-          <TableHeader className="sticky top-0 z-30 bg-background shadow-sm">
-            <TableRow>
-              <TableHead className="sticky top-0 z-30 w-[32%] h-10 bg-background">模型</TableHead>
-              <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-background">图片</TableHead>
-              <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-background">上传</TableHead>
+        <div className="overflow-x-auto">
+          <Table className="min-w-[720px] table-fixed">
+            <TableHeader className="sticky top-0 z-30 bg-background shadow-sm">
+              <TableRow>
+                <TableHead className="sticky top-0 z-30 w-[32%] h-10 bg-background">模型</TableHead>
+                <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-background">图片</TableHead>
+                <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-background">上传</TableHead>
               <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-background">联网</TableHead>
               <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-background">生图</TableHead>
               <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-background">解释器</TableHead>
@@ -187,7 +188,8 @@ export function SystemModelsPage() {
               )
             })}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </div>
     </div>
   )
