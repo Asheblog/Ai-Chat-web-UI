@@ -65,22 +65,26 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
             )}
             {!loading && <CommandEmpty>暂无可用模型</CommandEmpty>}
             <CommandGroup heading="全部模型">
-              {allModels.map((model) => (
-                <CommandItem
-                  key={`${model.connectionId}:${model.id}`}
-                  value={`${model.name} ${model.id}`}
-                  onSelect={() => {
-                    onModelChange(model)
-                    setOpen(false)
-                  }}
-                >
-                  <Check className={cn("mr-2 h-4 w-4", selectedModelId === model.id ? "opacity-100" : "opacity-0")} />
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium leading-none">{model.name}</span>
-                    <span className="text-xs text-muted-foreground">{model.id}</span>
-                  </div>
-                </CommandItem>
-              ))}
+              {allModels.map((model) => {
+                const isActive = selectedModelId === model.id
+                return (
+                  <CommandItem
+                    key={`${model.connectionId}:${model.id}`}
+                    value={`${model.name} ${model.id}`}
+                    onSelect={() => {
+                      onModelChange(model)
+                      setOpen(false)
+                    }}
+                    className="px-3"
+                  >
+                    <div className="flex flex-col flex-1 min-w-0 text-left">
+                      <span className="text-sm font-medium leading-none truncate">{model.name}</span>
+                      <span className="text-xs text-muted-foreground truncate">{model.id}</span>
+                    </div>
+                    {isActive && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-primary" />}
+                  </CommandItem>
+                )
+              })}
             </CommandGroup>
           </CommandList>
         </Command>
