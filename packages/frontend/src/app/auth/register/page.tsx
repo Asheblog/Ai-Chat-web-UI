@@ -65,7 +65,7 @@ export default function RegisterPage() {
   const isValid = username && password && confirmPassword && !passwordError && password === confirmPassword
 
   return (
-    <Card>
+    <Card className="rounded-3xl shadow-xl md:shadow-lg">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl font-bold">AI聊天平台</CardTitle>
         <CardDescription>
@@ -133,15 +133,7 @@ export default function RegisterPage() {
             已有账户？{' '}
             <Link href="/auth/login" className="text-primary hover:underline">立即登录</Link>
           </div>
-          <div className="text-muted-foreground">
-            <button
-              type="button"
-              className="underline hover:text-foreground"
-              onClick={() => { try { document.cookie = `viewMode=mobile; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/m/auth/register' }}
-            >
-              使用移动版
-            </button>
-          </div>
+          <div className="text-muted-foreground">界面已自适应移动端，无需切换。</div>
         </div>
       </CardContent>
     </Card>

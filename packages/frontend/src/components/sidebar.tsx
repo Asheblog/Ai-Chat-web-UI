@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, Smartphone, Trash2 } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -39,11 +39,10 @@ export function Sidebar() {
   const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
   const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
-  const { theme, setTheme, systemSettings } = useSettingsStore()
+  const { theme, setTheme, systemSettings, sidebarCollapsed } = useSettingsStore()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -271,24 +270,6 @@ export function Sidebar() {
               跟随系统
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {(() => {
-              const isMobileRoute = typeof pathname === 'string' && pathname.startsWith('/m')
-              if (isMobileRoute) {
-                return (
-                  <DropdownMenuItem onClick={() => { try { document.cookie = `viewMode=desktop; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/main' }}>
-                    <Monitor className="mr-2 h-4 w-4" />
-                    切换到桌面版
-                  </DropdownMenuItem>
-                )
-              }
-              return (
-                <DropdownMenuItem onClick={() => { try { document.cookie = `viewMode=mobile; Path=/; Max-Age=${60*60*24*30}; SameSite=Lax` } catch {}; window.location.href = '/m/main' }}>
-                  <Smartphone className="mr-2 h-4 w-4" />
-                  切换到移动版
-                </DropdownMenuItem>
-              )
-            })()}
-            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" />
               退出登录
@@ -307,7 +288,7 @@ export function Sidebar() {
       {/* 顶栏按钮触发：通过全局事件在 MobileMainLayout 中调用 */}
 
       {/* 桌面端侧边栏 */}
-      <div className="hidden lg:flex">
+      <div className={cn("hidden lg:flex", sidebarCollapsed ? "lg:hidden" : "")}>
         {sidebarContent}
       </div>
 
