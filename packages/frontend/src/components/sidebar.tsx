@@ -302,7 +302,11 @@ export function Sidebar() {
 
       {/* 移动端侧边栏：Sheet */}
       <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-        <SheetContent side="left" className="p-0 w-72 border-r border-slate-200/70 bg-slate-50">
+        <SheetContent
+          side="left"
+          showCloseButton={false}
+          className="p-0 w-72 border-r border-slate-200/70 bg-slate-50"
+        >
           {sidebarContent}
         </SheetContent>
       </Sheet>
