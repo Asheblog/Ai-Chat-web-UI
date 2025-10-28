@@ -138,7 +138,7 @@ export function Sidebar() {
   }
 
   const sidebarContent = (
-    <div className="flex h-full w-full lg:w-64 flex-col bg-card lg:border-r">
+    <div className="flex h-full w-full lg:w-72 flex-col bg-slate-50">
       {/* 顶部文字LOGO + 折叠按钮 */}
       <div className="px-4 pt-[10px] pb-2 flex items-center justify-between">
         <Link href="/main" className="block flex-1 select-none text-center">
@@ -147,10 +147,11 @@ export function Sidebar() {
           </span>
         </Link>
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           aria-label="收起侧边栏"
-          className="hidden lg:inline-flex ml-2"
+          className="hidden lg:inline-flex ml-2 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
           onClick={() => setSidebarCollapsed(true)}
         >
           <SidebarToggleIcon className="h-6 w-6" />
@@ -161,7 +162,7 @@ export function Sidebar() {
       <div className="px-4 pb-4">
         <Button
           onClick={handleNewChat}
-          className="w-full justify-start"
+          className="w-full justify-start bg-slate-100 hover:bg-slate-200 text-foreground border-0 shadow-none"
           variant="outline"
           disabled={isCreating}
           aria-busy={isCreating}
@@ -205,8 +206,8 @@ export function Sidebar() {
             <div
               key={session.id}
               className={cn(
-                "group relative flex items-center justify-between rounded-lg p-3 cursor-pointer hover:bg-muted transition-colors",
-                currentSession?.id === session.id && "bg-muted"
+                "group relative flex items-center justify-between rounded-lg p-3 cursor-pointer hover:bg-slate-100 transition-colors",
+                currentSession?.id === session.id && "bg-slate-100"
               )}
               onClick={() => handleSessionClick(session.id)}
             >
@@ -290,7 +291,7 @@ export function Sidebar() {
   )
 
   const collapsedSidebar = (
-    <div className="w-14 flex flex-col items-center justify-start bg-background py-3">
+    <div className="w-14 flex flex-col items-center justify-start bg-slate-50 py-3">
       <Button
         variant="ghost"
         size="icon"
