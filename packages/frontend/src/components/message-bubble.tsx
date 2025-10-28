@@ -7,14 +7,14 @@ import { Message } from '@/types'
 import { MarkdownRenderer } from './markdown-renderer'
 import { formatDate, copyToClipboard } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
-import { useState } from 'react'
+import { memo, useState } from 'react'
 
 interface MessageBubbleProps {
   message: Message
   isStreaming?: boolean
 }
 
-export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
+function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
   const [isCopied, setIsCopied] = useState(false)
   const [showReasoning, setShowReasoning] = useState(false)
   const { toast } = useToast()
@@ -164,3 +164,29 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
     </div>
   )
 }
+
+export const MessageBubble = memo(
+  MessageBubbleComponent,
+  (prev, next) => {
+    const prevMsg = prev.message
+    const nextMsg = next.message
+    const sameBasic =
+      prevMsg.id === nextMsg.id &&
+      prevMsg.role === nextMsg.role &&
+      prevMsg.content === nextMsg.content &&
+      prevMsg.reasoning === nextMsg.reasoning &&
+      prevMsg.reasoningDurationSeconds === nextMsg.reasoningDurationSeconds &&
+      prevMsg.createdAt === nextMsg.createdAt
+    const prevImages = prevMsg.images || []
+    const nextImages = nextMsg.images || []
+    const sameImages =
+      prevImages.length === nextImages.length &&
+      prevImages.every((img, idx) => img === nextImages[idx])
+
+    return (
+      prev.isStreaming === next.isStreaming &&
+      sameBasic &&
+      sameImages
+    )
+  }
+)

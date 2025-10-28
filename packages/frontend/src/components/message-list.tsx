@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Message } from '@/types'
 import { MessageBubble } from './message-bubble'
 import { TypingIndicator } from './typing-indicator'
@@ -8,7 +9,7 @@ interface MessageListProps {
   isLoading?: boolean
 }
 
-export function MessageList({ messages, isStreaming, isLoading }: MessageListProps) {
+function MessageListComponent({ messages, isStreaming, isLoading }: MessageListProps) {
   if (isLoading && messages.length === 0) {
     return (
       <div className="space-y-4">
@@ -52,3 +53,11 @@ export function MessageList({ messages, isStreaming, isLoading }: MessageListPro
     </div>
   )
 }
+
+export const MessageList = memo(
+  MessageListComponent,
+  (prev, next) =>
+    prev.isLoading === next.isLoading &&
+    prev.isStreaming === next.isStreaming &&
+    prev.messages === next.messages
+)

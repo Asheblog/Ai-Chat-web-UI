@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Send, Square, ImagePlus, X, PanelLeftClose, PanelLeftOpen, Plus, Maximize2, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -62,18 +62,37 @@ export function ChatInterface() {
     return null
   }
 
+  const resizeRaf = useRef<number | null>(null)
+  const lastHeightRef = useRef<number>(0)
+
   const applyTextareaAutoHeight = (el: HTMLTextAreaElement | null) => {
     if (!el) return
-    el.style.height = 'auto'
-    const height = Math.min(el.scrollHeight, MAX_AUTO_HEIGHT)
-    el.style.height = `${height}px`
-    setShowExpand(el.scrollHeight > MAX_AUTO_HEIGHT)
+    if (resizeRaf.current) {
+      cancelAnimationFrame(resizeRaf.current)
+    }
+    resizeRaf.current = requestAnimationFrame(() => {
+      el.style.height = 'auto'
+      const nextHeight = Math.min(el.scrollHeight, MAX_AUTO_HEIGHT)
+      if (lastHeightRef.current !== nextHeight) {
+        el.style.height = `${nextHeight}px`
+        lastHeightRef.current = nextHeight
+      }
+      setShowExpand(el.scrollHeight > MAX_AUTO_HEIGHT)
+    })
   }
 
   const handleTextareaInput = (value: string) => {
     handleTextareaChange(value)
     applyTextareaAutoHeight(textareaRef.current)
   }
+
+  useEffect(() => {
+    return () => {
+      if (resizeRaf.current) {
+        cancelAnimationFrame(resizeRaf.current)
+      }
+    }
+  }, [])
 
   const desktopSendDisabled = (!input.trim() && selectedImages.length === 0) && !isStreaming
 
@@ -164,7 +183,7 @@ export function ChatInterface() {
         </div>
       </ScrollArea>
 
-      <div className="sticky bottom-0 w-full border-t bg-background">
+      <div className="sticky bottom-0 w-full bg-background">
         {/* 移动端输入区 */}
         <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
           <div className="rounded-3xl border bg-card shadow-sm px-3 py-3 space-y-3">
@@ -180,7 +199,7 @@ export function ChatInterface() {
                     onKeyDown={handleKeyDown}
                     onCompositionStart={() => setIsComposing(true)}
                     onCompositionEnd={() => setIsComposing(false)}
-                  className="h-auto min-h-[44px] w-full resize-none rounded-2xl border-0 bg-muted/40 px-4 py-2 text-sm leading-[1.45] focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="h-auto min-h-[40px] w-full resize-none rounded-2xl border-0 bg-muted/40 px-4 py-2 text-sm leading-[1.45] focus-visible:ring-0 focus-visible:ring-offset-0"
                     rows={1}
                     disabled={isStreaming}
                   />
@@ -256,7 +275,7 @@ export function ChatInterface() {
         <div className="hidden md:block">
           <div className="mx-auto max-w-3xl px-4 md:px-6 pb-6">
             {imagePreview}
-            <div className="rounded-full border bg-background shadow-sm px-4 py-2 gap-2 flex items-center min-h-16 focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition">
+            <div className="rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 flex items-center min-h-14 focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -300,7 +319,7 @@ export function ChatInterface() {
                   onCompositionEnd={() => setIsComposing(false)}
                   placeholder={isStreaming ? 'AI正在思考中...' : '输入消息（Shift+Enter 换行）'}
                   disabled={isStreaming}
-                  className="h-auto min-h-[48px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-4 py-2 leading-[1.5] text-left placeholder:text-muted-foreground"
+                  className="h-auto min-h-[40px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-2 leading-[1.4] text-left placeholder:text-muted-foreground"
                   rows={1}
                 />
               </div>
@@ -364,9 +383,6 @@ export function ChatInterface() {
                   <TooltipContent>{isStreaming ? '停止生成' : '发送'}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </div>
-            <div className="mt-3 text-center text-[11px] text-muted-foreground">
-              图片 ≤ 4 张 / 单张 5MB · 内容可能不准确，请核实关键信息。
             </div>
           </div>
         </div>
