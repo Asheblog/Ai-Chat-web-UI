@@ -1,6 +1,6 @@
 'use client'
 
-import { Settings, LogOut, Sun, Moon, Monitor } from 'lucide-react'
+import { LogOut, Sun, Moon, Monitor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -22,12 +22,6 @@ interface UserMenuProps {
 export function UserMenu({ variant = 'label', className }: UserMenuProps) {
   const { user, logout } = useAuthStore()
   const { setTheme } = useSettingsStore()
-
-  const openSettingsDialog = () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('aichat:open-settings'))
-    }
-  }
 
   const handleThemeChange = (mode: 'light' | 'dark' | 'system') => {
     setTheme(mode)
@@ -61,11 +55,6 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={openSettingsDialog} className="flex items-center">
-          <Settings className="mr-2 h-4 w-4" />
-          设置
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => handleThemeChange('light')}>
           <Sun className="mr-2 h-4 w-4" />
           浅色模式
