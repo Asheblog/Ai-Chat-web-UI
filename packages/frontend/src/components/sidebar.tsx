@@ -144,16 +144,31 @@ export function Sidebar() {
             {systemSettings?.brandText || 'AIChat'}
           </span>
         </Link>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="收起侧边栏"
-          className="hidden lg:inline-flex ml-2 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
-          onClick={() => setSidebarCollapsed(true)}
-        >
-          <SidebarToggleIcon className="h-6 w-6" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="折叠侧边栏"
+            className="inline-flex lg:hidden h-10 w-10 rounded-full border border-slate-200/70 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
+            onClick={() => {
+              setSidebarCollapsed(true)
+              setIsMobileMenuOpen(false)
+            }}
+          >
+            <SidebarToggleIcon className="h-6 w-6" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="收起侧边栏"
+            className="hidden lg:inline-flex ml-2 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
+            onClick={() => setSidebarCollapsed(true)}
+          >
+            <SidebarToggleIcon className="h-6 w-6" />
+          </Button>
+        </div>
       </div>
 
       {/* 顶部新建聊天按钮 */}
@@ -287,7 +302,7 @@ export function Sidebar() {
 
       {/* 移动端侧边栏：Sheet */}
       <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-        <SheetContent side="left" className="p-0 w-72">
+        <SheetContent side="left" className="p-0 w-72 border-r border-slate-200/70 bg-slate-50">
           {sidebarContent}
         </SheetContent>
       </Sheet>
@@ -316,6 +331,26 @@ export function Sidebar() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {sidebarCollapsed && !isMobileMenuOpen && (
+        <div
+          className="lg:hidden fixed left-4 z-40"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+        >
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="展开侧边栏"
+            className="h-12 w-12 rounded-full border border-slate-200/80 bg-background/95 shadow-lg hover:bg-accent/70"
+            onClick={() => {
+              setSidebarCollapsed(false)
+              setIsMobileMenuOpen(true)
+            }}
+          >
+            <SidebarToggleIcon className="h-6 w-6" />
+          </Button>
+        </div>
+      )}
     </>
   )
 }
