@@ -58,10 +58,6 @@ export function ChatInterface() {
   const [expandOpen, setExpandOpen] = useState(false)
   const [expandDraft, setExpandDraft] = useState('')
 
-  if (!currentSession) {
-    return null
-  }
-
   const resizeRaf = useRef<number | null>(null)
   const lastHeightRef = useRef<number>(0)
 
@@ -114,22 +110,20 @@ export function ChatInterface() {
     </div>
   )
 
+  if (!currentSession) {
+    return null
+  }
+
   const toggleReasoning = (value: boolean) => {
     setThinkingEnabled(value)
-    if (currentSession) {
-      useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEnabled: value })
-    }
+    useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEnabled: value })
   }
 
   const updateEffort = (value: 'low' | 'medium' | 'high' | 'unset') => {
     setEffort(value)
-    if (currentSession) {
-      useChatStore
-        .getState()
-        .updateSessionPrefs(currentSession.id, {
-          reasoningEffort: value === 'unset' ? undefined : value,
-        })
-    }
+    useChatStore.getState().updateSessionPrefs(currentSession.id, {
+      reasoningEffort: value === 'unset' ? undefined : value,
+    })
   }
 
   return (
