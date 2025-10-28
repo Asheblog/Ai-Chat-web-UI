@@ -275,7 +275,7 @@ export function Sidebar() {
   )
 
   const collapsedSidebar = (
-    <div className="w-14 flex flex-col items-center justify-start bg-slate-50 py-3">
+    <div className="flex h-full w-14 flex-col items-center justify-start bg-slate-50 py-3">
       <Button
         variant="ghost"
         size="icon"
@@ -297,7 +297,33 @@ export function Sidebar() {
 
       {/* 桌面端侧边栏 */}
       <div className="hidden lg:flex">
-        {sidebarCollapsed ? collapsedSidebar : sidebarContent}
+        <div
+          className={cn(
+            "relative h-full overflow-hidden transition-[width] duration-300 ease-in-out bg-slate-50 will-change-[width]",
+            sidebarCollapsed ? "w-14" : "w-72"
+          )}
+        >
+          <div
+            className={cn(
+              "absolute inset-0 transition-all duration-300 ease-in-out",
+              sidebarCollapsed
+                ? "-translate-x-4 opacity-0 pointer-events-none"
+                : "translate-x-0 opacity-100 pointer-events-auto"
+            )}
+          >
+            {sidebarContent}
+          </div>
+          <div
+            className={cn(
+              "absolute inset-0 transition-all duration-300 ease-in-out",
+              sidebarCollapsed
+                ? "translate-x-0 opacity-100 pointer-events-auto"
+                : "translate-x-4 opacity-0 pointer-events-none"
+            )}
+          >
+            {collapsedSidebar}
+          </div>
+        </div>
       </div>
 
       {/* 移动端侧边栏：Sheet */}
@@ -305,7 +331,7 @@ export function Sidebar() {
         <SheetContent
           side="left"
           showCloseButton={false}
-          className="p-0 w-72 border-r border-slate-200/70 bg-slate-50"
+          className="w-72 border-r border-slate-200/70 bg-slate-50 p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
         >
           {sidebarContent}
         </SheetContent>
