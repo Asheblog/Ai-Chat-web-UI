@@ -162,8 +162,8 @@ export function Sidebar() {
       <div className="px-4 pb-4">
         <Button
           onClick={handleNewChat}
-          className="w-full justify-start bg-slate-100 hover:bg-slate-200 text-foreground border-0 shadow-none"
-          variant="outline"
+          className="w-full justify-start text-foreground hover:bg-slate-100 border-0 shadow-none bg-transparent"
+          variant="ghost"
           disabled={isCreating}
           aria-busy={isCreating}
         >
