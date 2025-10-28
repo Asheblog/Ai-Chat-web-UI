@@ -129,7 +129,7 @@ export function ChatInterface() {
   return (
     <div className="flex-1 flex flex-col h-full min-h-0">
       {/* 桌面端顶部工具栏 */}
-      <div className="hidden md:block border-b px-4 py-3">
+      <div className="hidden md:block border-b rounded-b-3xl px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <TooltipProvider>
@@ -279,7 +279,7 @@ export function ChatInterface() {
                     <Plus className="h-5 w-5" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuContent align="start" className="w-64 rounded-2xl">
                   <div className="px-3 py-3 space-y-3 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">思考模式</span>
@@ -393,8 +393,8 @@ export function ChatInterface() {
       </div>
 
       <Dialog open={expandOpen} onOpenChange={setExpandOpen}>
-        <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 sm:rounded-2xl overflow-hidden flex flex-col">
-          <div className="p-4 border-b text-sm text-muted-foreground">编辑消息</div>
+        <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col">
+          <div className="p-4 border-b rounded-t-2xl text-sm text-muted-foreground">编辑消息</div>
           <div className="flex-1 min-h-0 p-4">
             <Textarea
               value={expandDraft}
@@ -402,7 +402,7 @@ export function ChatInterface() {
               className="h-full w-full resize-none border rounded-md p-3"
             />
           </div>
-          <div className="p-4 border-t flex justify-end gap-2">
+          <div className="p-4 border-t rounded-b-2xl flex justify-end gap-2">
             <Button variant="outline" onClick={() => setExpandOpen(false)}>
               取消
             </Button>
