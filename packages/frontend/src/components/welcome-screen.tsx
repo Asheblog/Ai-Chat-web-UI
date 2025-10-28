@@ -205,7 +205,7 @@ export function WelcomeScreen() {
   return (
     <div className="relative flex-1 flex flex-col">
       {/* 顶部栏：仅在大屏展示，移动端使用 MainLayout 顶栏 */}
-      <header className="hidden lg:flex border-b bg-background/80 supports-[backdrop-filter]:backdrop-blur px-4 h-14 items-center">
+      <header className="hidden lg:flex bg-background/80 supports-[backdrop-filter]:backdrop-blur px-4 h-14 items-center">
         <ModelSelector
           selectedModelId={selectedModelId}
           onModelChange={(model) => setSelectedModelId(model.id)}

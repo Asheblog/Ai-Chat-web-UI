@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronDown } from "lucide-react"
 import { useModelsStore, type ModelItem } from "@/store/models-store"
 import { cn, deriveChannelName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -32,14 +32,25 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
       aria-expanded={open}
       aria-label="选择模型"
       disabled={disabled}
-      className={cn("justify-between", variant === "inline" ? "h-10 w-10 px-0" : "min-w-[220px]", className)}
+      className={cn(
+        "border-none shadow-none bg-background/80 hover:bg-accent/80",
+        variant === "inline" ? "h-10 w-10 px-0 justify-center" : "min-w-[220px] justify-between",
+        className
+      )}
     >
       {variant === "inline" ? (
-        <ChevronsUpDown className="h-4 w-4" />
+        <ChevronDown className={cn("h-4 w-4 transition-transform", open ? "rotate-180" : "")} />
       ) : (
-        <span className="truncate mr-2">{selected ? selected.name : "选择模型"}</span>
+        <>
+          <span className="truncate mr-2">{selected ? selected.name : "选择模型"}</span>
+          <ChevronDown
+            className={cn(
+              "ml-auto h-4 w-4 opacity-70 transition-transform",
+              open ? "rotate-180" : ""
+            )}
+          />
+        </>
       )}
-      {variant !== "inline" && <ChevronsUpDown className="ml-auto h-4 w-4 opacity-50" />}
     </Button>
   )
 
