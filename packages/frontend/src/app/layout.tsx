@@ -4,11 +4,12 @@ import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import ConsoleSilencer from '@/components/console-silencer'
+import { TitleSync } from '@/components/title-sync'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AI聊天平台',
+  title: 'AIChat',
   description: '一个轻量级、易部署的AI聊天应用',
 }
 
@@ -28,6 +29,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <TitleSync />
           {children}
           <Toaster />
         </ThemeProvider>
