@@ -3,17 +3,9 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Plus, Settings, LogOut, Moon, Sun, Monitor, Trash2 } from 'lucide-react'
+import { Plus, Settings, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -25,7 +17,6 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useAuthStore } from '@/store/auth-store'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { apiClient } from '@/lib/api'
@@ -40,9 +31,8 @@ export function Sidebar() {
   const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const { user, logout } = useAuthStore()
   const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
-  const { theme, setTheme, systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
+  const { systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -71,6 +61,18 @@ export function Sidebar() {
       setIsSettingsOpen(true)
     }
   }, [searchParams])
+
+  useEffect(() => {
+    const openSettings = () => setIsSettingsOpen(true)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('aichat:open-settings', openSettings)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('aichat:open-settings', openSettings)
+      }
+    }
+  }, [])
 
   const handleNewChat = async () => {
     if (isCreating) return
@@ -125,10 +127,6 @@ export function Sidebar() {
     setDeleteTargetId(sessionId)
   }
 
-  const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
-    setTheme(newTheme)
-  }
-
   // 将标题限制在 15 个字符以内（按 Unicode 码点计数），超出添加省略号
   const clipTitle = (s: string, max = 15) => {
     try {
@@ -159,7 +157,7 @@ export function Sidebar() {
       </div>
 
       {/* 顶部新建聊天按钮 */}
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 space-y-2">
         <Button
           onClick={handleNewChat}
           className="w-full justify-start text-foreground hover:bg-slate-100 border-0 shadow-none bg-transparent"
@@ -175,8 +173,19 @@ export function Sidebar() {
           )}
           新建聊天
         </Button>
+        <Button
+          onClick={() => setIsSettingsOpen(true)}
+          className="w-full justify-start text-foreground hover:bg-slate-100 border-0 shadow-none bg-transparent"
+          variant="ghost"
+        >
+          <Settings className="mr-2 h-4 w-4" />
+          系统设置
+        </Button>
       </div>
 
+      <div className="px-4 pb-4">
+        <div className="border-t border-slate-200" />
+      </div>
       {/* 会话列表 */}
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-2">
@@ -247,46 +256,6 @@ export function Sidebar() {
         </div>
       </ScrollArea>
 
-      {/* 底部用户菜单 */}
-      <div className="border-t p-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full justify-start">
-              <Avatar className="h-6 w-6 mr-2">
-                <AvatarImage src={undefined} />
-                <AvatarFallback className="text-xs">
-                  {user?.username?.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <span className="truncate">{user?.username}</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => setIsSettingsOpen(true)} className="flex items-center">
-              <Settings className="mr-2 h-4 w-4" />
-              设置
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleThemeChange('light')}>
-              <Sun className="mr-2 h-4 w-4" />
-              浅色模式
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleThemeChange('dark')}>
-              <Moon className="mr-2 h-4 w-4" />
-              深色模式
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleThemeChange('system')}>
-              <Monitor className="mr-2 h-4 w-4" />
-              跟随系统
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-destructive">
-              <LogOut className="mr-2 h-4 w-4" />
-              退出登录
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
     </div>
   )
 

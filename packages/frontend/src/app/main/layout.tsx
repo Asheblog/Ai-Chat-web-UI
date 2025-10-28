@@ -9,14 +9,14 @@ import { AuthGuard } from '@/components/auth-guard'
 import { Sidebar } from '@/components/sidebar'
 import { MainContent } from '@/components/main-content'
 import { ModelSelector } from '@/components/model-selector'
-import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
+import { UserMenu } from '@/components/user-menu'
 
 export default function MainLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { theme, setTheme, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
+  const { theme, setTheme } = useSettingsStore()
   const { currentSession } = useChatStore()
   const [mounted, setMounted] = useState(false)
 
@@ -72,9 +72,7 @@ export default function MainLayout({
                 />
               </div>
               <div className="justify-self-end">
-                <Button variant="outline" size="icon" aria-hidden className="opacity-0 pointer-events-none">
-                  <Menu className="h-4 w-4" />
-                </Button>
+                <UserMenu variant="icon" />
               </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col">

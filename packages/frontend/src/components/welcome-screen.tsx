@@ -17,7 +17,7 @@ import { Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { useSettingsStore } from '@/store/settings-store'
-// 顶部栏仅放模型选择器，不再显示品牌文案
+import { UserMenu } from '@/components/user-menu'
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
@@ -206,11 +206,14 @@ export function WelcomeScreen() {
     <div className="relative flex-1 flex flex-col">
       {/* 顶部栏：仅在大屏展示，移动端使用 MainLayout 顶栏 */}
       <header className="hidden lg:flex bg-background/80 supports-[backdrop-filter]:backdrop-blur px-4 h-14 items-center">
-        <ModelSelector
-          selectedModelId={selectedModelId}
-          onModelChange={(model) => setSelectedModelId(model.id)}
-          disabled={!canCreate || isCreating}
-        />
+        <div className="flex w-full items-center justify-between gap-4">
+          <ModelSelector
+            selectedModelId={selectedModelId}
+            onModelChange={(model) => setSelectedModelId(model.id)}
+            disabled={!canCreate || isCreating}
+          />
+          <UserMenu />
+        </div>
       </header>
 
       {/* 中心内容区 */}

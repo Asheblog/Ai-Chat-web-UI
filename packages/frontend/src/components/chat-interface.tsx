@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Send, Square, ImagePlus, X, PanelLeftClose, PanelLeftOpen, Plus, Maximize2, Brain } from 'lucide-react'
+import { Send, Square, ImagePlus, X, Plus, Maximize2, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -9,12 +9,11 @@ import { MessageList } from '@/components/message-list'
 import { ModelSelector } from '@/components/model-selector'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { useSettingsStore } from '@/store/settings-store'
 import { useChatStore } from '@/store/chat-store'
 import { useChatComposer } from '@/hooks/use-chat-composer'
+import { UserMenu } from '@/components/user-menu'
 
 const MAX_AUTO_HEIGHT = 200
 
@@ -51,8 +50,6 @@ export function ChatInterface() {
     onFilesSelected,
     removeImage,
   } = useChatComposer()
-
-  const { sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
 
   const [showExpand, setShowExpand] = useState(false)
   const [expandOpen, setExpandOpen] = useState(false)
@@ -129,39 +126,18 @@ export function ChatInterface() {
   return (
     <div className="flex-1 flex flex-col h-full min-h-0">
       {/* 桌面端顶部工具栏 */}
-      <div className="hidden md:block border-b rounded-b-3xl px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="h-9 w-9 flex items-center justify-center rounded-md border hover:bg-muted"
-                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-                    aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-                  >
-                    {sidebarCollapsed ? (
-                      <PanelLeftOpen className="h-4 w-4" />
-                    ) : (
-                      <PanelLeftClose className="h-4 w-4" />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <ModelSelector
-              selectedModelId={currentSession.modelLabel || currentSession.modelRawId || null}
-              onModelChange={(model) => {
-                const cur = useChatStore.getState().currentSession
-                if (cur) {
-                  useChatStore.getState().switchSessionModel(cur.id, model)
-                }
-              }}
-            />
-          </div>
+      <div className="hidden lg:flex bg-background/80 supports-[backdrop-filter]:backdrop-blur px-4 h-14 items-center">
+        <div className="flex w-full items-center justify-between gap-4">
+          <ModelSelector
+            selectedModelId={currentSession.modelLabel || currentSession.modelRawId || null}
+            onModelChange={(model) => {
+              const cur = useChatStore.getState().currentSession
+              if (cur) {
+                useChatStore.getState().switchSessionModel(cur.id, model)
+              }
+            }}
+          />
+          <UserMenu />
         </div>
       </div>
 
