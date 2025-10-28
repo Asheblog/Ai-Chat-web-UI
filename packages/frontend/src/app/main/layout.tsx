@@ -9,6 +9,7 @@ import { AuthGuard } from '@/components/auth-guard'
 import { Sidebar } from '@/components/sidebar'
 import { MainContent } from '@/components/main-content'
 import { ModelSelector } from '@/components/model-selector'
+import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 
 export default function MainLayout({
   children,
@@ -81,14 +82,6 @@ export default function MainLayout({
             </div>
           </div>
         </MainContent>
-        {/* 当折叠侧边栏时，提供一个在桌面端显示的打开按钮（固定在左上） */}
-        {sidebarCollapsed && (
-          <div className="hidden lg:block fixed top-4 left-4 z-40">
-            <Button variant="outline" size="icon" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧边栏">
-              <Menu className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
       </div>
     </AuthGuard>
   )

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Settings, LogOut, Moon, Sun, Monitor, User, Menu, Trash2 } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Plus, Settings, LogOut, Moon, Sun, Monitor, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -32,6 +32,7 @@ import { apiClient } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
+import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -39,10 +40,9 @@ export function Sidebar() {
   const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const router = useRouter()
   const { user, logout } = useAuthStore()
   const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
-  const { theme, setTheme, systemSettings, sidebarCollapsed } = useSettingsStore()
+  const { theme, setTheme, systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -139,13 +139,22 @@ export function Sidebar() {
 
   const sidebarContent = (
     <div className="flex h-full w-full lg:w-64 flex-col bg-card lg:border-r">
-      {/* 顶部文字LOGO */}
-      <div className="px-4 pt-4 pb-2 flex items-center justify-center">
-        <Link href="/main" className="block select-none text-center">
+      {/* 顶部文字LOGO + 折叠按钮 */}
+      <div className="px-4 pt-[10px] pb-2 flex items-center justify-between">
+        <Link href="/main" className="block flex-1 select-none text-center">
           <span className="text-lg font-semibold tracking-tight">
             {systemSettings?.brandText || 'AIChat'}
           </span>
         </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="收起侧边栏"
+          className="hidden lg:inline-flex ml-2"
+          onClick={() => setSidebarCollapsed(true)}
+        >
+          <SidebarToggleIcon className="h-6 w-6" />
+        </Button>
       </div>
 
       {/* 顶部新建聊天按钮 */}
@@ -280,6 +289,20 @@ export function Sidebar() {
     </div>
   )
 
+  const collapsedSidebar = (
+    <div className="w-14 flex flex-col items-center justify-start bg-background py-3">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-10 w-10"
+        aria-label="展开侧边栏"
+        onClick={() => setSidebarCollapsed(false)}
+      >
+        <SidebarToggleIcon className="h-6 w-6" />
+      </Button>
+    </div>
+  )
+
   return (
     <>
       {/* 全局设置弹框 */}
@@ -288,8 +311,8 @@ export function Sidebar() {
       {/* 顶栏按钮触发：通过全局事件在 MobileMainLayout 中调用 */}
 
       {/* 桌面端侧边栏 */}
-      <div className={cn("hidden lg:flex", sidebarCollapsed ? "lg:hidden" : "")}>
-        {sidebarContent}
+      <div className="hidden lg:flex">
+        {sidebarCollapsed ? collapsedSidebar : sidebarContent}
       </div>
 
       {/* 移动端侧边栏：Sheet */}
