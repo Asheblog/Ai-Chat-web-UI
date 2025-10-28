@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api'
+import { deriveChannelName } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -210,18 +211,22 @@ export function SystemConnectionsPage() {
           <div className="text-sm text-muted-foreground text-center py-6">暂无连接，填写上方表单后新增</div>
         )}
 
-        {rows.map((r:any) => (
-          <div key={r.id} className="p-3 border rounded flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <div className="font-medium">[{r.provider}] {r.baseUrl}</div>
-              <div className="text-xs text-muted-foreground">auth={r.authType} prefix={r.prefixId||'-'} type={r.connectionType}</div>
+        {rows.map((r:any) => {
+          const channelLabel = deriveChannelName(r.provider, r.baseUrl)
+          return (
+            <div key={r.id} className="p-3 border rounded flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="font-medium">渠道商 | {channelLabel}</div>
+                <div className="text-xs text-muted-foreground break-all">{r.baseUrl}</div>
+                <div className="text-xs text-muted-foreground">provider={r.provider} auth={r.authType} prefix={r.prefixId||'-'} type={r.connectionType}</div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button size="sm" variant="outline" onClick={()=>onEdit(r)} className="w-full sm:w-auto">编辑</Button>
+                <Button size="sm" variant="destructive" onClick={()=>onDelete(r.id)} className="w-full sm:w-auto">删除</Button>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button size="sm" variant="outline" onClick={()=>onEdit(r)} className="w-full sm:w-auto">编辑</Button>
-              <Button size="sm" variant="destructive" onClick={()=>onDelete(r.id)} className="w-full sm:w-auto">删除</Button>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

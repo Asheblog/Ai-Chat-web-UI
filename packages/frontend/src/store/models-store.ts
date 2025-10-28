@@ -6,6 +6,8 @@ export type ModelItem = {
   rawId: string
   name: string
   provider: string
+  channelName: string
+  connectionBaseUrl: string
   connectionId: number
   connectionType?: string
   tags?: Array<{ name: string }>

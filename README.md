@@ -145,36 +145,6 @@ aichat/
 
 ---
 
-## 移动端/平板端适配（/m 路由）
-
-- 自动跳转：基于 UA 的中间件判断设备类型（手机/平板），
-  - 访问 `/main` 将自动重定向到 `/m/main`；
-  - 桌面访问 `/m/main` 将自动跳回 `/main`。
-- 独立组件：移动端页面与布局独立于桌面端，路径在：
-  - `packages/frontend/src/app/m/main/page.tsx`
-  - `packages/frontend/src/app/m/main/layout.tsx`
-  - 复用逻辑但采用更适合移动端的 UI：`packages/frontend/src/components/mobile/mobile-chat.tsx`
-- 设计参考：`packages/frontend/previews/mobile-variant-a-shadcn.html`
-- 设置页：`/m/main/settings` 与桌面功能一致，沿用相同的设置组件。
-
-显式切换（Cookie 覆盖 UA）
-- 登录前：
-  - 桌面登录/注册页底部有“使用移动版”，点击后设置 `viewMode=mobile` 并跳转 `/m/auth/login` 或 `/m/auth/register`。
-  - 移动登录/注册页底部有“切换到桌面版”，点击后设置 `viewMode=desktop` 并跳转至 `/auth/*`。
-- 登录后：
-  - 侧边栏用户菜单新增“切换到移动版”项（设 `viewMode=mobile`，跳转 `/m/main`）。
-  - 移动端顶部栏提供“桌面版”按钮（设 `viewMode=desktop`，跳转 `/main`）。
-- 中间件读取 `viewMode` Cookie 优先于 UA，用于在 `/main*` 与 `/m/main*` 之间重定向。
-
-移动端视觉细化
-- 登录/注册采用更大圆角与更强阴影（`rounded-3xl shadow-xl`），留白与字号层级更接近设计稿。
-- 移动聊天页：
-  - 顶部提供紧凑 `ModelSelector`；
-  - 输入区为 `rounded-2xl border bg-card shadow-sm` 卡片；
-  - 操作按钮使用圆形图标按钮与圆角“发送”按钮，简洁一致。
-
----
-
 ## 业务流程图
 
 ```mermaid

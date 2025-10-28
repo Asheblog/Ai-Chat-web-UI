@@ -102,3 +102,49 @@ export function extractErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error
   return '发生未知错误'
 }
+
+const CHANNEL_PREFIX_BLACKLIST = new Set(['api', 'app', 'prod', 'dev', 'test', 'staging', 'stage', 'ai', 'llm', 'model', 'models', 'gateway', 'gw'])
+const GENERIC_TLDS = new Set(['com', 'net', 'org', 'gov', 'edu', 'co', 'ai', 'io', 'app', 'dev', 'cn', 'uk'])
+
+function parseUrlCandidate(input?: string): URL | null {
+  if (!input) return null
+  const tryParse = (value: string): URL | null => {
+    try {
+      return new URL(value)
+    } catch {
+      return null
+    }
+  }
+  const direct = tryParse(input)
+  if (direct) return direct
+  if (!/^https?:\/\//i.test(input)) {
+    return tryParse(`https://${input}`)
+  }
+  return null
+}
+
+export function deriveChannelName(provider: string, baseUrl?: string): string {
+  const fallback = provider
+  const parsed = parseUrlCandidate(baseUrl)
+  if (!parsed) return fallback
+
+  const hostname = parsed.hostname.toLowerCase()
+  if (!hostname) return fallback
+
+  let parts = hostname.split('.').filter(Boolean)
+  if (parts.length > 1 && CHANNEL_PREFIX_BLACKLIST.has(parts[0])) {
+    parts = parts.slice(1)
+  }
+
+  if (parts.length === 0) return fallback
+  if (parts.length === 1) return parts[0]
+
+  let candidate = parts[parts.length - 2]
+  if (GENERIC_TLDS.has(candidate) && parts.length >= 3) {
+    candidate = parts[parts.length - 3]
+  }
+
+  candidate = candidate || parts[parts.length - 1]
+  if (!candidate || candidate.length < 2) return fallback
+  return candidate
+}

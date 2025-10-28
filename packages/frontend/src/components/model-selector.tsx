@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
 import { useModelsStore, type ModelItem } from "@/store/models-store"
-import { cn } from "@/lib/utils"
+import { cn, deriveChannelName } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -67,6 +67,7 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
             <CommandGroup heading="全部模型">
               {allModels.map((model) => {
                 const isActive = selectedModelId === model.id
+                const channel = model.channelName || deriveChannelName(model.provider, model.connectionBaseUrl)
                 return (
                   <CommandItem
                     key={`${model.connectionId}:${model.id}`}
@@ -79,7 +80,9 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
                   >
                     <div className="flex flex-col flex-1 min-w-0 text-left">
                       <span className="text-sm font-medium leading-none truncate">{model.name}</span>
-                      <span className="text-xs text-muted-foreground truncate">{model.id}</span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        渠道商 | {channel}
+                      </span>
                     </div>
                     {isActive && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-primary" />}
                   </CommandItem>

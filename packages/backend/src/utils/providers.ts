@@ -23,6 +23,8 @@ export interface CatalogItem {
   rawId: string
   name: string
   provider: ProviderType
+  channelName: string
+  connectionBaseUrl: string
   connectionType: 'external' | 'local'
   tags: Array<{ name: string }>
   // 模型能力元数据：对齐 open-webui 的能力设计
@@ -59,6 +61,54 @@ export function computeCapabilities(rawId: string, tags?: Array<{ name: string }
     if (visionHints.some((p) => id.includes(p))) caps.vision = true
   }
   return caps
+}
+
+const CHANNEL_PREFIX_BLACKLIST = new Set(['api', 'app', 'prod', 'dev', 'test', 'staging', 'stage', 'ai', 'llm', 'model', 'models', 'gateway', 'gw'])
+const GENERIC_TLDS = new Set(['com', 'net', 'org', 'gov', 'edu', 'co', 'ai', 'io', 'app', 'dev', 'cn', 'uk'])
+
+function parseUrlCandidate(input?: string): URL | null {
+  if (!input) return null
+  const tryParse = (value: string): URL | null => {
+    try {
+      return new URL(value)
+    } catch {
+      return null
+    }
+  }
+  const direct = tryParse(input)
+  if (direct) return direct
+  if (!/^https?:\/\//i.test(input)) {
+    return tryParse(`https://${input}`)
+  }
+  return null
+}
+
+export function deriveChannelName(provider: ProviderType, baseUrl?: string): string {
+  const fallback = provider
+  const parsed = parseUrlCandidate(baseUrl)
+  if (!parsed) return fallback
+
+  const hostname = parsed.hostname.toLowerCase()
+  if (!hostname) return fallback
+
+  let parts = hostname.split('.').filter(Boolean)
+  if (parts.length > 1 && CHANNEL_PREFIX_BLACKLIST.has(parts[0])) {
+    parts = parts.slice(1)
+  }
+
+  if (parts.length === 0) return fallback
+  if (parts.length === 1) {
+    return parts[0]
+  }
+
+  let candidate = parts[parts.length - 2]
+  if (GENERIC_TLDS.has(candidate) && parts.length >= 3) {
+    candidate = parts[parts.length - 3]
+  }
+  candidate = candidate || parts[parts.length - 1]
+  if (!candidate || candidate.length < 2) return fallback
+
+  return candidate
 }
 
 async function getAzureAccessToken(): Promise<string | null> {
@@ -126,6 +176,8 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const connectionType = (cfg.connectionType || 'external') as 'external' | 'local'
   const tags = cfg.tags || []
   const prefix = cfg.prefixId || ''
+  const baseUrl = cfg.baseUrl
+  const channelName = deriveChannelName(cfg.provider, baseUrl)
   const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
 
   const apply = (id: string, name?: string): CatalogItem => ({
@@ -133,6 +185,8 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
     rawId: id,
     name: name || id,
     provider: cfg.provider,
+    channelName,
+    connectionBaseUrl: baseUrl,
     connectionType,
     tags,
     capabilities: computeCapabilities(id, tags),
