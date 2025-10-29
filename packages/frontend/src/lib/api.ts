@@ -566,17 +566,36 @@ class ApiClient {
       const choice = json.choices[0]
       const delta = choice?.delta || {}
 
-      if (delta?.content) {
-        emits.push({ type: 'content', content: delta.content })
-      }
-      if (Array.isArray(delta?.reasoning_content)) {
-        const reasoningText = delta.reasoning_content
-          .map((item: any) => item?.text)
-          .filter(Boolean)
-          .join('')
-        if (reasoningText) {
-          emits.push({ type: 'reasoning', content: reasoningText })
+      const contentPieces: string[] = []
+      const reasoningPieces: string[] = []
+
+      const collectText = (value: unknown, bucket: string[]) => {
+        if (!value) return
+        if (typeof value === 'string') {
+          if (value.trim().length > 0) bucket.push(value)
+        } else if (Array.isArray(value)) {
+          value
+            .map((item: any) => {
+              if (typeof item === 'string') return item
+              if (item?.text) return item.text
+              if (item?.content) return item.content
+              return ''
+            })
+            .filter((text: string) => text && text.trim().length > 0)
+            .forEach((text: string) => bucket.push(text))
         }
+      }
+
+      collectText(delta?.content, contentPieces)
+      collectText(delta?.reasoning_content, reasoningPieces)
+      collectText(delta?.reasoning, reasoningPieces)
+      collectText(delta?.thinking, reasoningPieces)
+
+      if (contentPieces.length > 0) {
+        emits.push({ type: 'content', content: contentPieces.join('') })
+      }
+      if (reasoningPieces.length > 0) {
+        emits.push({ type: 'reasoning', content: reasoningPieces.join('') })
       }
 
       if (choice?.finish_reason) {
@@ -585,9 +604,38 @@ class ApiClient {
     } else if (json.type && typeof json.type === 'string') {
       // 处理来自响应 API 的事件
       if (json.type === 'response.delta') {
-        const deltaText = json?.data?.delta
-        if (typeof deltaText === 'string' && deltaText.length > 0) {
-          emits.push({ type: 'content', content: deltaText })
+        const deltaType = String(json?.data?.type || '')
+        const payload = json?.data?.delta ?? json?.data?.text ?? json?.data?.content
+
+        const emitText = (text: unknown, asReasoning = false) => {
+          if (typeof text !== 'string' || text.length === 0) return
+          emits.push({
+            type: asReasoning ? 'reasoning' : 'content',
+            content: text,
+          })
+        }
+
+        if (typeof payload === 'string') {
+          const asReasoning =
+            deltaType.includes('reasoning') ||
+            deltaType.includes('deliberate') ||
+            deltaType.includes('thinking')
+          emitText(payload, asReasoning)
+        } else if (Array.isArray(payload)) {
+          const text = payload
+            .map((item: any) => {
+              if (typeof item === 'string') return item
+              if (item?.text) return item.text
+              if (item?.content) return item.content
+              return ''
+            })
+            .filter(Boolean)
+            .join('')
+          const asReasoning =
+            deltaType.includes('reasoning') ||
+            deltaType.includes('deliberate') ||
+            deltaType.includes('thinking')
+          emitText(text, asReasoning)
         }
       } else if (json.type === 'response.completed') {
         emits.push({ type: 'complete' })
