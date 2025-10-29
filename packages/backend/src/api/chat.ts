@@ -12,13 +12,6 @@ import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../
 
 const chat = new Hono();
 
-// ---- 流式/网络稳定性相关可调参数（环境变量控制） ----
-// SSE 心跳间隔（毫秒），用于穿透代理连接空闲关闭，默认 15s
-const HEARTBEAT_INTERVAL_MS = parseInt(process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000');
-// 厂商流式连接最大空闲时长（毫秒），超过则中止并按退避策略重试，默认 60s
-const PROVIDER_MAX_IDLE_MS = parseInt(process.env.PROVIDER_MAX_IDLE_MS || '60000');
-// 厂商请求总体超时（毫秒），默认 5 分钟
-const PROVIDER_TIMEOUT_MS = parseInt(process.env.PROVIDER_TIMEOUT_MS || '300000');
 // 429 退避（毫秒）与 5xx/超时 退避（毫秒）
 const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
@@ -352,7 +345,10 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       } catch {}
       return null;
     })();
-    const STREAM_DELTA_CHUNK_SIZE = parseInt(sysMap.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1');
+    const STREAM_DELTA_CHUNK_SIZE = Math.max(1, parseInt(sysMap.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'));
+    const providerInitialGraceMs = Math.max(0, parseInt(sysMap.provider_initial_grace_ms || process.env.PROVIDER_INITIAL_GRACE_MS || '120000'));
+    const providerReasoningIdleMs = Math.max(0, parseInt(sysMap.provider_reasoning_idle_ms || process.env.PROVIDER_REASONING_IDLE_MS || '300000'));
+    const reasoningKeepaliveIntervalMs = Math.max(0, parseInt(sysMap.reasoning_keepalive_interval_ms || process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0'));
 
     // 提前记录是否已收到厂商 usage（优先使用）
     let providerUsageSeen = false as boolean;
@@ -416,13 +412,46 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
     const stream = new ReadableStream({
       async start(controller) {
+        class DownstreamClosedError extends Error {
+          constructor(cause?: unknown) {
+            super('SSE downstream closed');
+            this.name = 'DownstreamClosedError';
+            if (cause !== undefined) {
+              (this as any).cause = cause;
+            }
+          }
+        }
+
+        let heartbeat: ReturnType<typeof setInterval> | null = null;
+        const stopHeartbeat = () => {
+          if (heartbeat) {
+            clearInterval(heartbeat);
+            heartbeat = null;
+          }
+        };
+
+        let downstreamAborted = false;
+        const safeEnqueue = (payload: string) => {
+          if (downstreamAborted) {
+            throw new DownstreamClosedError();
+          }
+          try {
+            controller.enqueue(encoder.encode(payload));
+          } catch (err) {
+            downstreamAborted = true;
+            stopHeartbeat();
+            console.warn('SSE downstream closed, stop streaming', err);
+            throw new DownstreamClosedError(err);
+          }
+        };
+
         try {
           // 发送开始事件
           const startEvent = `data: ${JSON.stringify({
             type: 'start',
             messageId: userMessage.id,
           })}\n\n`;
-          controller.enqueue(encoder.encode(startEvent));
+          safeEnqueue(startEvent);
 
           // 在开始后透出一次 usage（prompt 部分）
           if (USAGE_EMIT && !USAGE_PROVIDER_ONLY) {
@@ -436,7 +465,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                 context_remaining: contextRemaining,
               },
             })}\n\n`;
-            controller.enqueue(encoder.encode(usageEvent));
+            safeEnqueue(usageEvent);
           }
 
           // 调用第三方AI API（带退避）
@@ -456,16 +485,67 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
           const decoder = new TextDecoder();
           let buffer = '';
 
+          const requestStartedAt = Date.now();
+          let firstChunkAt: number | null = null;
+          let lastChunkAt: number | null = null;
+          let lastKeepaliveSentAt = 0;
+          let pendingVisibleDelta = '';
+          let visibleDeltaCount = 0;
+          let pendingReasoningDelta = '';
+          let reasoningDeltaCount = 0;
+          let providerDone = false;
+
+          const flushVisibleDelta = (force = false) => {
+            if (!pendingVisibleDelta) return;
+            if (!force && visibleDeltaCount < STREAM_DELTA_CHUNK_SIZE) return;
+            aiResponseContent += pendingVisibleDelta;
+            const contentEvent = `data: ${JSON.stringify({ type: 'content', content: pendingVisibleDelta })}\n\n`;
+            safeEnqueue(contentEvent);
+            pendingVisibleDelta = '';
+            visibleDeltaCount = 0;
+          };
+
+          const flushReasoningDelta = (force = false) => {
+            if (!pendingReasoningDelta) return;
+            if (!force && reasoningDeltaCount < STREAM_DELTA_CHUNK_SIZE) return;
+            reasoningBuffer += pendingReasoningDelta;
+            const reasoningEvent = `data: ${JSON.stringify({ type: 'reasoning', content: pendingReasoningDelta })}\n\n`;
+            safeEnqueue(reasoningEvent);
+            pendingReasoningDelta = '';
+            reasoningDeltaCount = 0;
+          };
+
+          const emitReasoningKeepalive = (idleMs: number) => {
+            const keepaliveEvent = `data: ${JSON.stringify({ type: 'reasoning', keepalive: true, idle_ms: idleMs })}\n\n`;
+            safeEnqueue(keepaliveEvent);
+            lastKeepaliveSentAt = Date.now();
+          };
+
           // 心跳&空闲监控
-          let lastChunkAt = Date.now();
-          const heartbeat = setInterval(() => {
+          heartbeat = setInterval(() => {
             try {
               // SSE 注释心跳（客户端忽略），同时也可用 data: keepalive
-              controller.enqueue(encoder.encode(': ping\n\n'));
+              safeEnqueue(': ping\n\n');
             } catch {}
-            if (providerMaxIdleMs > 0 && Date.now() - lastChunkAt > providerMaxIdleMs) {
-              // 厂商连接空闲过久，主动中止
+            const now = Date.now();
+            if (!firstChunkAt) {
+              if (providerInitialGraceMs > 0 && now - requestStartedAt > providerInitialGraceMs) {
+                try { (response as any)?.body?.cancel?.(); } catch {}
+              }
+              return;
+            }
+            const last = lastChunkAt ?? firstChunkAt;
+            const idleMs = now - last;
+            if (providerReasoningIdleMs > 0 && idleMs > providerReasoningIdleMs) {
               try { (response as any)?.body?.cancel?.(); } catch {}
+              return;
+            }
+            if (reasoningKeepaliveIntervalMs > 0 && idleMs > reasoningKeepaliveIntervalMs && now - lastKeepaliveSentAt > reasoningKeepaliveIntervalMs) {
+              try {
+                flushReasoningDelta(true);
+                flushVisibleDelta(true);
+                emitReasoningKeepalive(idleMs);
+              } catch {}
             }
           }, Math.max(1000, heartbeatIntervalMs));
 
@@ -473,100 +553,114 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             const { done, value } = await reader.read();
             if (done) break;
 
-            lastChunkAt = Date.now();
+            const now = Date.now();
+            lastChunkAt = now;
+            if (!firstChunkAt) firstChunkAt = now;
+            lastKeepaliveSentAt = now;
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
             for (const line of lines) {
               const l = line.replace(/\r$/, '');
-              if (l.startsWith('data: ')) {
-                const data = l.slice(6);
-                log.debug('SSE line', data?.slice(0, 120))
+              if (!l.startsWith('data: ')) continue;
 
-                if (data === '[DONE]') {
-                  // 流结束
-                  const endEvent = `data: ${JSON.stringify({
-                    type: 'end',
-                  })}\n\n`;
-                  controller.enqueue(encoder.encode(endEvent));
-                  break;
+              const data = l.slice(6);
+              log.debug('SSE line', data?.slice(0, 120));
+
+              if (data === '[DONE]') {
+                flushReasoningDelta(true);
+                flushVisibleDelta(true);
+                // 流结束
+                const endEvent = `data: ${JSON.stringify({
+                  type: 'end',
+                })}\n\n`;
+                safeEnqueue(endEvent);
+                providerDone = true;
+                break;
+              }
+
+              let parsed: any;
+              try {
+                parsed = JSON.parse(data);
+              } catch (parseError) {
+                console.warn('Failed to parse SSE data:', data, parseError);
+                continue;
+              }
+
+              // 提取AI响应内容
+              const deltaContent: string | undefined = parsed.choices?.[0]?.delta?.content;
+              const deltaReasoning: string | undefined = parsed.choices?.[0]?.delta?.reasoning_content;
+
+              // 供应商原生 reasoning_content（OpenAI 等）
+              if (REASONING_ENABLED && deltaReasoning) {
+                if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
+                pendingReasoningDelta += deltaReasoning;
+                reasoningDeltaCount += 1;
+                flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
+              }
+
+              if (deltaContent) {
+                let visible = deltaContent;
+                if (REASONING_ENABLED && REASONING_TAGS_MODE !== 'off') {
+                  const tags = REASONING_TAGS_MODE === 'custom' && REASONING_CUSTOM_TAGS ? REASONING_CUSTOM_TAGS : DEFAULT_REASONING_TAGS;
+                  const { visibleDelta, reasoningDelta } = extractByTags(deltaContent, tags, reasoningState);
+                  visible = visibleDelta;
+                  if (reasoningDelta) {
+                    if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
+                    pendingReasoningDelta += reasoningDelta;
+                    reasoningDeltaCount += 1;
+                    flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
+                  }
                 }
 
-                try {
-                  const parsed = JSON.parse(data);
-
-                  // 提取AI响应内容
-                  const deltaContent: string | undefined = parsed.choices?.[0]?.delta?.content;
-                  const deltaReasoning: string | undefined = parsed.choices?.[0]?.delta?.reasoning_content;
-
-                  // 供应商原生 reasoning_content（OpenAI 等）
-                  if (REASONING_ENABLED && deltaReasoning) {
-                    if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
-                    reasoningBuffer += deltaReasoning;
-                    const reasoningEvent = `data: ${JSON.stringify({ type: 'reasoning', content: deltaReasoning })}\n\n`;
-                    controller.enqueue(encoder.encode(reasoningEvent));
-                  }
-
-                  if (deltaContent) {
-                    let visible = deltaContent;
-                    if (REASONING_ENABLED && REASONING_TAGS_MODE !== 'off') {
-                      const tags = REASONING_TAGS_MODE === 'custom' && REASONING_CUSTOM_TAGS ? REASONING_CUSTOM_TAGS : DEFAULT_REASONING_TAGS;
-                      const { visibleDelta, reasoningDelta } = extractByTags(deltaContent, tags, reasoningState);
-                      visible = visibleDelta;
-                      if (reasoningDelta) {
-                        if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
-                        reasoningBuffer += reasoningDelta;
-                        const reasoningEvent = `data: ${JSON.stringify({ type: 'reasoning', content: reasoningDelta })}\n\n`;
-                        controller.enqueue(encoder.encode(reasoningEvent));
-                      }
-                    }
-
-                    if (visible) {
-                      aiResponseContent += visible;
-                      const contentEvent = `data: ${JSON.stringify({ type: 'content', content: visible })}\n\n`;
-                      controller.enqueue(encoder.encode(contentEvent));
-                    }
-                  }
-
-                  // 结束原因（如果可用）
-                  const fr = parsed.choices?.[0]?.finish_reason;
-                  if (fr) {
-                    const stopEvent = `data: ${JSON.stringify({
-                      type: 'stop',
-                      reason: fr,
-                    })}\n\n`;
-                    controller.enqueue(encoder.encode(stopEvent));
-                  }
-
-          // 厂商 usage 透传（优先级更高）
-          if (USAGE_EMIT && parsed.usage) {
-            // 仅当厂商 usage 含有效数值时，才标记为已接收，避免空对象/全0 覆盖本地估算
-            const n = (u: any) => ({
-              prompt: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0,
-              completion: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
-              total: Number(u?.total_tokens ?? 0) || 0,
-            })
-            const nn = n(parsed.usage)
-            const valid = (nn.prompt > 0) || (nn.completion > 0) || (nn.total > 0)
-            if (valid) {
-              providerUsageSeen = true;
-              providerUsageSnapshot = parsed.usage;
-            }
-            const providerUsageEvent = `data: ${JSON.stringify({
-              type: 'usage',
-              usage: parsed.usage,
-            })}\n\n`;
-            controller.enqueue(encoder.encode(providerUsageEvent));
-          }
-                } catch (parseError) {
-                  console.warn('Failed to parse SSE data:', data, parseError);
+                if (visible) {
+                  pendingVisibleDelta += visible;
+                  visibleDeltaCount += 1;
+                  flushVisibleDelta(visibleDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
                 }
               }
+
+              // 结束原因（如果可用）
+              const fr = parsed.choices?.[0]?.finish_reason;
+              if (fr) {
+                const stopEvent = `data: ${JSON.stringify({
+                  type: 'stop',
+                  reason: fr,
+                })}\n\n`;
+                safeEnqueue(stopEvent);
+              }
+
+              // 厂商 usage 透传（优先级更高）
+              if (USAGE_EMIT && parsed.usage) {
+                // 仅当厂商 usage 含有效数值时，才标记为已接收，避免空对象/全0 覆盖本地估算
+                const n = (u: any) => ({
+                  prompt: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0,
+                  completion: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
+                  total: Number(u?.total_tokens ?? 0) || 0,
+                });
+                const nn = n(parsed.usage);
+                const valid = (nn.prompt > 0) || (nn.completion > 0) || (nn.total > 0);
+                if (valid) {
+                  providerUsageSeen = true;
+                  providerUsageSnapshot = parsed.usage;
+                }
+                const providerUsageEvent = `data: ${JSON.stringify({
+                  type: 'usage',
+                  usage: parsed.usage,
+                })}\n\n`;
+                safeEnqueue(providerUsageEvent);
+              }
+            }
+
+            if (providerDone || downstreamAborted) {
+              break;
             }
           }
 
-          clearInterval(heartbeat);
+          flushReasoningDelta(true);
+          flushVisibleDelta(true);
+          stopHeartbeat();
 
           // 推理结束事件（若产生过推理）
           if (REASONING_ENABLED && !reasoningDoneEmitted && reasoningBuffer.trim()) {
@@ -575,7 +669,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
               reasoningDurationSeconds = Math.max(0, Math.round((endedAt - reasoningState.startedAt) / 1000));
             }
             const reasoningDoneEvent = `data: ${JSON.stringify({ type: 'reasoning', done: true, duration: reasoningDurationSeconds })}\n\n`;
-            controller.enqueue(encoder.encode(reasoningDoneEvent));
+            safeEnqueue(reasoningDoneEvent);
             reasoningDoneEmitted = true;
           }
 
@@ -598,14 +692,14 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                 context_remaining: Math.max(0, contextLimit - promptTokens),
               },
             })}\n\n`;
-            controller.enqueue(encoder.encode(finalUsageEvent));
+            safeEnqueue(finalUsageEvent);
           }
 
           // 发送完成事件
           const completeEvent = `data: ${JSON.stringify({
             type: 'complete',
           })}\n\n`;
-          controller.enqueue(encoder.encode(completeEvent));
+          safeEnqueue(completeEvent);
 
           // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
           try {
@@ -669,6 +763,10 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
           console.error('Streaming error:', error);
           log.error('Streaming error detail', (error as Error)?.message, (error as Error)?.stack)
 
+          if (error instanceof DownstreamClosedError || downstreamAborted) {
+            return;
+          }
+
           // 若尚未输出内容，尝试降级为非流式一次
           if (!aiResponseContent) {
             try {
@@ -708,8 +806,8 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
                 const text = j?.choices?.[0]?.message?.content || '';
                 if (text) {
                   aiResponseContent = text;
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content', content: text })}\n\n`));
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete' })}\n\n`));
+                  safeEnqueue(`data: ${JSON.stringify({ type: 'content', content: text })}\n\n`);
+                  safeEnqueue(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
                   return;
                 }
               }
@@ -723,9 +821,12 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
             type: 'error',
             error: error instanceof Error ? error.message : 'Unknown error',
           })}\n\n`;
-          controller.enqueue(encoder.encode(errorEvent));
+          safeEnqueue(errorEvent);
         } finally {
-          controller.close();
+          try {
+            stopHeartbeat();
+            controller.close();
+          } catch {}
         }
       },
     });
