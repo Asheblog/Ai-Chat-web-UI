@@ -15,7 +15,11 @@ export function SystemGeneralPage() {
   const [isIMEComposing, setIsIMEComposing] = useState(false)
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
-  useEffect(() => { if(systemSettings) setBrandTextDraft(systemSettings.brandText || '') }, [systemSettings?.brandText])
+  useEffect(() => {
+    if (systemSettings) {
+      setBrandTextDraft(systemSettings.brandText || '')
+    }
+  }, [systemSettings])
 
   if (isLoading && !systemSettings) {
     return (

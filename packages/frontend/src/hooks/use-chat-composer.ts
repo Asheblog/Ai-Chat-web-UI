@@ -43,11 +43,12 @@ export function useChatComposer() {
   const MAX_IMAGE_MB = 5
   const MAX_IMAGE_EDGE = 4096
 
+  const modelsCount = allModels.length
   useEffect(() => {
-    if (!allModels || allModels.length === 0) {
+    if (modelsCount === 0) {
       fetchModels().catch(() => {})
     }
-  }, [allModels?.length, fetchModels])
+  }, [modelsCount, fetchModels])
 
   useEffect(() => {
     if (!currentSession) return
@@ -70,6 +71,7 @@ export function useChatComposer() {
         : sysOllamaThink,
     )
   }, [
+    currentSession,
     currentSession?.id,
     currentSession?.reasoningEnabled,
     currentSession?.reasoningEffort,

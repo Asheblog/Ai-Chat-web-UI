@@ -27,7 +27,9 @@ export function SystemModelsPage() {
   const [onlyOverridden, setOnlyOverridden] = useState(false)
   const [saving, setSaving] = useState<string>('') // key `${cid}:${id}`
 
-  useEffect(() => { fetchAll().catch(()=>{}) }, [])
+  useEffect(() => {
+    fetchAll().catch(() => {})
+  }, [fetchAll])
 
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase()

@@ -3,6 +3,7 @@
 // 全新欢迎页：模仿 ChatGPT 着陆面板（大标题 + 大输入框），并保持响应式
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, ImagePlus, X } from 'lucide-react'
+import NextImage from 'next/image'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { ModelSelector } from '@/components/model-selector'
@@ -49,7 +50,12 @@ export function WelcomeScreen() {
 
   // 选择一个默认模型（取聚合列表的第一个）
   const { models, fetchAll } = useModelsStore()
-  useEffect(() => { if (!models || models.length===0) fetchAll().catch(()=>{}) }, [models?.length])
+  const modelsCount = models?.length ?? 0
+  useEffect(() => {
+    if (modelsCount === 0) {
+      fetchAll().catch(() => {})
+    }
+  }, [modelsCount, fetchAll])
   useEffect(() => {
     const first = models?.[0]?.id as string | undefined
     if (first) setSelectedModelId(first)
@@ -317,7 +323,14 @@ export function WelcomeScreen() {
             <div className="mt-2 flex flex-wrap gap-2">
               {selectedImages.map((img, idx) => (
                 <div key={idx} className="relative border rounded p-1">
-                  <img src={img.dataUrl} className="h-20 w-20 object-contain rounded" />
+                  <NextImage
+                    src={img.dataUrl}
+                    alt={`预览图片 ${idx + 1}`}
+                    width={80}
+                    height={80}
+                    unoptimized
+                    className="h-20 w-20 object-contain rounded"
+                  />
                   <button type="button" className={cn('absolute -top-2 -right-2 bg-background border rounded-full p-1')} onClick={() => removeImage(idx)}>
                     <X className="h-3 w-3" />
                   </button>

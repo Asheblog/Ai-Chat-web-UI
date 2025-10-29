@@ -1,6 +1,7 @@
 'use client'
 
 import { Copy, RotateCcw } from 'lucide-react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Message } from '@/types'
@@ -115,7 +116,15 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
               {message.images && message.images.length > 0 && (
                 <div className="mb-2 grid grid-cols-2 gap-2">
                   {message.images.map((src, i) => (
-                    <img key={i} src={src} alt={`img-${i}`} className="max-h-40 rounded border object-contain" />
+                    <Image
+                      key={i}
+                      src={src}
+                      alt={`消息图片 ${i + 1}`}
+                      width={160}
+                      height={160}
+                      unoptimized
+                      className="max-h-40 rounded border object-contain"
+                    />
                   ))}
                 </div>
               )}

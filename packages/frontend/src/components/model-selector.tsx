@@ -20,7 +20,12 @@ interface ModelSelectorProps {
 export function ModelSelector({ selectedModelId, onModelChange, disabled, className, variant = "default" }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
   const { models: allModels, isLoading: loading, fetchAll } = useModelsStore()
-  useEffect(() => { if (!allModels || allModels.length === 0) fetchAll().catch(()=>{}) }, [])
+  const modelsCount = allModels.length
+  useEffect(() => {
+    if (modelsCount === 0) {
+      fetchAll().catch(() => {})
+    }
+  }, [modelsCount, fetchAll])
 
   const selected = allModels.find((m) => m.id === selectedModelId)
 

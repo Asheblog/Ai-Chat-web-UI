@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import { Send, Square, ImagePlus, X, Plus, Maximize2, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -94,7 +95,14 @@ export function ChatInterface() {
     <div className="mb-2 flex flex-wrap gap-2">
       {selectedImages.map((img, idx) => (
         <div key={idx} className="relative border rounded p-1">
-          <img src={img.dataUrl} className="h-20 w-20 object-contain rounded" alt="" />
+          <Image
+            src={img.dataUrl}
+            alt={`预览图片 ${idx + 1}`}
+            width={80}
+            height={80}
+            unoptimized
+            className="h-20 w-20 object-contain rounded"
+          />
           <button
             type="button"
             className="absolute -top-2 -right-2 bg-background border rounded-full p-1"

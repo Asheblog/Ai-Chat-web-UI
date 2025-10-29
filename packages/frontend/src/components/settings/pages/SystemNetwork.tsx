@@ -22,7 +22,7 @@ export function SystemNetworkPage() {
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => {
-    if(systemSettings){
+    if (systemSettings) {
       setHbMs(Number(systemSettings.sseHeartbeatIntervalMs ?? 15000))
       setIdleMs(Number(systemSettings.providerMaxIdleMs ?? 60000))
       setTimeoutMs(Number(systemSettings.providerTimeoutMs ?? 300000))
@@ -32,16 +32,7 @@ export function SystemNetworkPage() {
       setReasoningIdleMs(Number(systemSettings.providerReasoningIdleMs ?? 300000))
       setKeepaliveMs(Number(systemSettings.reasoningKeepaliveIntervalMs ?? 0))
     }
-  }, [
-    systemSettings?.sseHeartbeatIntervalMs,
-    systemSettings?.providerMaxIdleMs,
-    systemSettings?.providerTimeoutMs,
-    systemSettings?.usageEmit,
-    systemSettings?.usageProviderOnly,
-    systemSettings?.providerInitialGraceMs,
-    systemSettings?.providerReasoningIdleMs,
-    systemSettings?.reasoningKeepaliveIntervalMs,
-  ])
+  }, [systemSettings])
 
   if (isLoading && !systemSettings) {
     return (
