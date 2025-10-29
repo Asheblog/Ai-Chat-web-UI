@@ -42,7 +42,16 @@ if (enableCors) {
 
 // 静态文件服务（可选）
 app.use('/static/*', serveStatic({ root: './public' }));
-app.use(`${CHAT_IMAGE_PUBLIC_PATH}/*`, serveStatic({ root: CHAT_IMAGE_STORAGE_ROOT }));
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+app.use(
+  `${CHAT_IMAGE_PUBLIC_PATH}/*`,
+  serveStatic({
+    root: CHAT_IMAGE_STORAGE_ROOT,
+    rewriteRequestPath: (path) =>
+      path.replace(new RegExp(`^${escapeRegex(CHAT_IMAGE_PUBLIC_PATH)}`), ''),
+  }),
+);
 
 // API路由
 app.route('/api/auth', auth);

@@ -724,6 +724,7 @@ class ApiClient {
         openai_reasoning_effort?: 'low' | 'medium' | 'high',
         ollama_think?: boolean,
         chat_image_retention_days?: number,
+        site_base_url?: string,
       }>>('/settings/system')
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
     const brandText = settingsRes.data.data?.brand_text || 'AIChat'
@@ -753,7 +754,8 @@ class ApiClient {
       }
       return 30
     })()
-    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays } }
+    const siteBaseUrl = typeof settingsRes.data.data?.site_base_url === 'string' ? settingsRes.data.data?.site_base_url : ''
+    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl } }
   }
 
   async updateSystemSettings(settings: any) {
@@ -778,10 +780,16 @@ class ApiClient {
     if (typeof settings.openaiReasoningEffort === 'string') payload.openai_reasoning_effort = settings.openaiReasoningEffort
     if (typeof settings.ollamaThink === 'boolean') payload.ollama_think = !!settings.ollamaThink
     if (typeof settings.chatImageRetentionDays === 'number') payload.chat_image_retention_days = settings.chatImageRetentionDays
+    if (typeof settings.siteBaseUrl === 'string') payload.site_base_url = settings.siteBaseUrl
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()
     return current
+  }
+
+  async refreshImageAttachments() {
+    const res = await this.client.post<ApiResponse<{ baseUrl: string; attachments: number; samples: Array<{ id: number; messageId: number; url: string }>; refreshedAt: string }>>('/chat/admin/attachments/refresh')
+    return res.data
   }
 
   async getUsers(params?: { page?: number; limit?: number; search?: string }) {

@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { prisma } from '../db'
@@ -6,6 +7,7 @@ import {
   CHAT_IMAGE_STORAGE_ROOT,
   CHAT_IMAGE_PUBLIC_PATH,
   CHAT_IMAGE_DEFAULT_RETENTION_DAYS,
+  CHAT_IMAGE_BASE_URL,
 } from '../config/storage'
 
 type IncomingImage = { data: string; mime: string }
@@ -41,6 +43,40 @@ function getExtFromMime(mime: string): string {
     if (fallback) return fallback.replace(/[^a-z0-9]+/g, '')
   }
   return 'bin'
+}
+
+const sanitizeBaseUrl = (value: string | null | undefined): string => {
+  if (!value) return ''
+  let raw = value.trim()
+  if (!raw) return ''
+  if (!/^https?:\/\//i.test(raw)) {
+    raw = `https://${raw}`
+  }
+  try {
+    const url = new URL(raw)
+    return `${url.protocol}//${url.host}`.replace(/\/+$/, '')
+  } catch {
+    return ''
+  }
+}
+
+const pickLanIPv4 = (): string | null => {
+  const nets = os.networkInterfaces()
+  for (const name of Object.keys(nets)) {
+    const entries = nets[name] || []
+    for (const entry of entries) {
+      if (entry && entry.family === 'IPv4' && !entry.internal && entry.address) {
+        return entry.address
+      }
+    }
+  }
+  return null
+}
+
+const ensureProtocol = (proto: string | null | undefined, fallback: 'http' | 'https'): 'http' | 'https' => {
+  if (!proto) return fallback
+  const lower = proto.toLowerCase()
+  return lower === 'https' ? 'https' : 'http'
 }
 
 export async function persistChatImages(
@@ -94,9 +130,68 @@ export async function persistChatImages(
   return relativePaths
 }
 
-export function resolveChatImageUrls(relativePaths: string[] | null | undefined, origin: string): string[] {
+export function determineChatImageBaseUrl(options: { request: Request; siteBaseUrl?: string | null }): string {
+  const candidate = sanitizeBaseUrl(options.siteBaseUrl) || sanitizeBaseUrl(CHAT_IMAGE_BASE_URL)
+  if (candidate) return candidate
+
+  // 若请求来源已有公网/局域网 IP 访问后端端口，则优先使用当前监听端口
+  const req = options.request
+  const headers = req.headers
+  const url = new URL(req.url)
+
+  const hostHeader = headers.get('host')
+  if (hostHeader) {
+    const protoFromUrl = url.protocol === 'https:' ? 'https' : 'http'
+    return `${protoFromUrl}://${hostHeader}`.replace(/\/+/g, '/').replace(/\/+$/, '')
+  }
+
+  const forwardedProto = headers.get('x-forwarded-proto')
+  const forwardedHost = headers.get('x-forwarded-host')
+  const forwardedPort = headers.get('x-forwarded-port')
+
+  let protocol = ensureProtocol(forwardedProto, url.protocol === 'https:' ? 'https' : 'http')
+  let host = forwardedHost || url.host
+
+  if (forwardedPort) {
+    const bareHost = host ? host.split(':')[0] : ''
+    host = bareHost ? `${bareHost}:${forwardedPort}` : host
+  }
+
+  if (host) {
+    const bareHost = host.split(':')[0]
+    const shouldSwapToLan =
+      !bareHost ||
+      bareHost === 'localhost' ||
+      bareHost === '127.0.0.1' ||
+      bareHost === '::1'
+    if (shouldSwapToLan) {
+      const lan = pickLanIPv4()
+      if (lan) {
+        const portPart =
+          (host.includes(':') ? host.split(':')[1] : url.port) ||
+          (protocol === 'https' ? '443' : '80')
+        host = portPart ? `${lan}:${portPart}` : lan
+      }
+    }
+    return `${protocol}://${host}`.replace(/\/+$/, '')
+  }
+
+  const lan = pickLanIPv4()
+  if (lan) {
+    const fallbackProtocol = url.protocol === 'https:' ? 'https' : 'http'
+    const port = url.port || (fallbackProtocol === 'https' ? '443' : '80')
+    const hostWithPort = port ? `${lan}:${port}` : lan
+    return `${fallbackProtocol}://${hostWithPort}`.replace(/\/+$/, '')
+  }
+
+  const finalProtocol = url.protocol === 'https:' ? 'https' : 'http'
+  return `${finalProtocol}://${url.host}`.replace(/\/+$/, '')
+}
+
+export function resolveChatImageUrls(relativePaths: string[] | null | undefined, baseUrl: string): string[] {
   if (!relativePaths || relativePaths.length === 0) return []
-  const prefix = `${origin.replace(/\/+$/, '')}${CHAT_IMAGE_PUBLIC_PATH}`
+  const origin = baseUrl && baseUrl.trim().length > 0 ? baseUrl.replace(/\/+$/, '') : ''
+  const prefix = `${origin}${CHAT_IMAGE_PUBLIC_PATH}`
   return relativePaths.map((rel) => {
     const sanitized = rel.replace(/^\/*/, '').replace(/\\/g, '/')
     return `${prefix}/${sanitized}`
@@ -151,22 +246,4 @@ export async function cleanupExpiredChatImages(retentionDays: number) {
   } catch (error) {
     console.warn('[cleanupExpiredChatImages] failed to remove expired metadata', error)
   }
-}
-
-export function resolveRequestOrigin(req: Request): string {
-  const headers = req.headers
-  const xfProto = headers.get('x-forwarded-proto')
-  const xfHost = headers.get('x-forwarded-host')
-  const xfPort = headers.get('x-forwarded-port')
-  if (xfProto && xfHost) {
-    const host = xfPort ? `${xfHost.split(':')[0]}:${xfPort}` : xfHost
-    return `${xfProto}://${host}`
-  }
-
-  const url = new URL(req.url)
-  if (headers.get('host')) {
-    const host = headers.get('host')!
-    return `${url.protocol}//${host}`
-  }
-  return `${url.protocol}//${url.host}`
 }

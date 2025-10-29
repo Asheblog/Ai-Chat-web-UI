@@ -3,6 +3,7 @@
 ## v1.3.5 · 2025-10-29
 
 - 新增聊天图片本地化存储：后端将图片写入 `storage/chat-images` 并通过 `message_attachments` 表持久化路径，前端展示会优先使用服务端返回的可访问 URL，刷新或跨端均可查看历史图片。
+- 系统设置新增“图片访问域名”配置并提供管理员刷新接口，可自定义生成外部访问地址；若留空将自动回退到请求头或局域网地址，便于本地调试。
 - 系统设置新增“聊天图片保留天数”项（默认 30 天，可设为 0 立即清理），同时在新消息入库时后台会按设定异步清理过期附件。
 - 聊天输入框在点击发送后即清空已选图片，发送失败会自动回滚，避免重复点按造成的残留。
 - 部署须执行数据库迁移：`pnpm --filter backend prisma migrate deploy`（或等效的 `prisma migrate deploy` 流程），确保 `message_attachments` 表创建完毕后，再运行 pnpm --filter backend prisma generate 重新生成 Prisma Client，再重启服务。

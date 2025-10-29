@@ -35,6 +35,7 @@ const systemSettingSchema = z.object({
   openai_reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
   ollama_think: z.boolean().optional(),
   chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
+  site_base_url: z.string().max(200).optional(),
 });
 
 // 获取系统设置（仅管理员）
@@ -83,6 +84,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
         const parsed = Number.parseInt(String(raw), 10)
         return Number.isFinite(parsed) && parsed >= 0 ? parsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
       })(),
+      site_base_url: settingsObj.site_base_url || process.env.CHAT_IMAGE_BASE_URL || '',
     };
 
     return c.json<ApiResponse>({
@@ -102,7 +104,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url } = c.req.valid('json');
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -257,6 +259,19 @@ settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', 
         update: { value: String(chat_image_retention_days) },
         create: { key: 'chat_image_retention_days', value: String(chat_image_retention_days) },
       });
+    }
+
+    if (typeof site_base_url === 'string') {
+      const trimmed = site_base_url.trim()
+      if (trimmed) {
+        await prisma.systemSetting.upsert({
+          where: { key: 'site_base_url' },
+          update: { value: trimmed },
+          create: { key: 'site_base_url', value: trimmed },
+        });
+      } else {
+        await prisma.systemSetting.deleteMany({ where: { key: 'site_base_url' } })
+      }
     }
 
     return c.json<ApiResponse>({

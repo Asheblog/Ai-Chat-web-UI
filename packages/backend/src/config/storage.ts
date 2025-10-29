@@ -25,3 +25,11 @@ export const CHAT_IMAGE_DEFAULT_RETENTION_DAYS = (() => {
   const parsed = raw ? Number.parseInt(raw, 10) : NaN
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 30
 })()
+
+/**
+ * 图片访问基础域名（含协议），可通过系统设置覆盖。
+ */
+export const CHAT_IMAGE_BASE_URL = (() => {
+  const raw = (process.env.CHAT_IMAGE_BASE_URL || '').trim()
+  return raw.replace(/\/+$/, '')
+})()

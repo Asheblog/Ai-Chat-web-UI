@@ -96,6 +96,7 @@ export interface SystemSettings {
   openaiReasoningEffort?: 'low' | 'medium' | 'high' | '' | 'unset';
   ollamaThink?: boolean;
   chatImageRetentionDays?: number;
+  siteBaseUrl?: string;
 }
 
 // UI 状态类型

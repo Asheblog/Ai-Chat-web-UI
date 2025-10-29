@@ -105,6 +105,10 @@ networks:
 - 前端：`http://你的IP或域名:3555/api/health`
 - 后端：`http://你的IP或域名:3556/api/settings/health`
 
+版本更新
+- 1panel部署的话，直接在面板拉取最新镜像重启容器即可。
+- **如果涉及数据库更新，请阅读 CHANGLOG.MD文件，注意升级命令。**
+
 ---
 
 ## 二、本地运行（不使用 Docker）
@@ -182,6 +186,7 @@ sequenceDiagram
 - 无法拉取镜像：GHCR 包设为 Public，或在服务器 `docker login ghcr.io -u asheblog -p <PAT>`。
 - 跨域报错：确认 `CORS_ORIGIN` 与前端访问地址一致（协议+端口）。
 - 首次注册失败：`APP_MODE=single` 下仅首个用户可注册；多用户改为 `multi` 并在系统设置开启注册。
+- 图片 URL 指向 localhost：在系统设置「通用」页填写“图片访问域名”并保存，随后点击“刷新图片链接”即可生成新域名样例；如留空则会根据请求头或局域网 IP 自动推断（便于本地调试）。
 
 ---
 

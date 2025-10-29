@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { useSettingsStore } from "@/store/settings-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
+import { apiClient } from "@/lib/api"
 
 export function SystemGeneralPage() {
   const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading, error } = useSettingsStore()
@@ -14,12 +15,14 @@ export function SystemGeneralPage() {
   const [brandTextDraft, setBrandTextDraft] = useState("")
   const [isIMEComposing, setIsIMEComposing] = useState(false)
   const [retentionDraft, setRetentionDraft] = useState('30')
+  const [siteBaseDraft, setSiteBaseDraft] = useState('')
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => {
     if (systemSettings) {
       setBrandTextDraft(systemSettings.brandText || '')
       setRetentionDraft(String(systemSettings.chatImageRetentionDays ?? 30))
+      setSiteBaseDraft(systemSettings.siteBaseUrl || '')
     }
   }, [systemSettings])
 
@@ -128,6 +131,52 @@ export function SystemGeneralPage() {
           </div>
           <p className="text-xs text-muted-foreground">
             默认 30 天，可设为 0 表示立即清理（上传后仅当前会话保留）。超过设置天数的图片会在新消息写入时异步清理。
+          </p>
+        </div>
+        <div className="space-y-2">
+          <div className="font-medium">图片访问域名</div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              id="chatImageDomain"
+              type="text"
+              value={siteBaseDraft}
+              onChange={(e) => setSiteBaseDraft(e.target.value)}
+              placeholder="例如：https://chat.example.com"
+              className="w-full sm:max-w-xl"
+            />
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  await updateSystemSettings({ siteBaseUrl: siteBaseDraft.trim() })
+                  toast({ title: '已保存', description: '新域名将用于生成图片链接' })
+                }}
+                disabled={siteBaseDraft.trim() === (systemSettings.siteBaseUrl || '').trim()}
+                className="flex-1 sm:flex-initial"
+              >保存</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={async () => {
+                  try {
+                    const res = await apiClient.refreshImageAttachments()
+                    if (res.success) {
+                      const sample = Array.isArray(res.data?.samples) && res.data.samples.length > 0 ? res.data.samples[0].url : '已刷新'
+                      toast({ title: '刷新成功', description: `当前域名：${res.data?.baseUrl || '未识别'}\n示例：${sample}` })
+                    } else {
+                      toast({ title: '刷新失败', description: res.error || '服务器未返回结果', variant: 'destructive' })
+                    }
+                  } catch (error: any) {
+                    toast({ title: '刷新失败', description: error?.message || '未知错误', variant: 'destructive' })
+                  }
+                }}
+                className="flex-1 sm:flex-initial"
+              >刷新图片链接</Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            若留空，将尝试使用请求头或局域网 IP 生成地址；保存后可点击“刷新图片链接”生成示例并验证。
           </p>
         </div>
       </div>

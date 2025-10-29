@@ -5,7 +5,7 @@ import { prisma } from '../db';
 import { AuthUtils } from '../utils/auth';
 import { convertOpenAIReasoningPayload } from '../utils/providers'
 import { Tokenizer } from '../utils/tokenizer';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Message } from '../types';
 import { BackendLogger as log } from '../utils/logger';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../utils/reasoning-tags';
@@ -13,7 +13,7 @@ import {
   cleanupExpiredChatImages,
   persistChatImages,
   resolveChatImageUrls,
-  resolveRequestOrigin,
+  determineChatImageBaseUrl,
 } from '../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 
@@ -71,7 +71,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '50');
 
-    const [messages, total] = await Promise.all([
+    const [messages, total, siteBaseSetting] = await Promise.all([
       prisma.message.findMany({
         where: { sessionId },
         select: {
@@ -96,15 +96,22 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
       prisma.message.count({
         where: { sessionId },
       }),
+      prisma.systemSetting.findUnique({
+        where: { key: 'site_base_url' },
+        select: { value: true },
+      }),
     ]);
 
-    const origin = resolveRequestOrigin(c.req.raw);
+    const baseUrl = determineChatImageBaseUrl({
+      request: c.req.raw,
+      siteBaseUrl: siteBaseSetting?.value ?? null,
+    });
     const normalizedMessages = messages.map((msg) => {
       const { attachments, ...rest } = msg as typeof msg & { attachments?: Array<{ relativePath: string }> }
       const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
       return {
         ...rest,
-        images: resolveChatImageUrls(rel, origin),
+        images: resolveChatImageUrls(rel, baseUrl),
       }
     });
 
@@ -137,6 +144,49 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
     }, 500);
   }
 });
+
+// 管理员：刷新图片访问地址（基于最新域名生成示例链接）
+chat.post('/admin/attachments/refresh', authMiddleware, adminOnlyMiddleware, async (c) => {
+  try {
+    const siteBaseSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'site_base_url' },
+      select: { value: true },
+    })
+    const baseUrl = determineChatImageBaseUrl({
+      request: c.req.raw,
+      siteBaseUrl: siteBaseSetting?.value ?? null,
+    })
+
+    const total = await prisma.messageAttachment.count()
+    const samples = await prisma.messageAttachment.findMany({
+      orderBy: { id: 'desc' },
+      take: 5,
+      select: { id: true, messageId: true, relativePath: true },
+    })
+
+    const sampleUrls = samples.map((item) => ({
+      id: item.id,
+      messageId: item.messageId,
+      url: resolveChatImageUrls([item.relativePath], baseUrl)[0] || '',
+    }))
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        baseUrl,
+        attachments: total,
+        samples: sampleUrls,
+        refreshedAt: new Date().toISOString(),
+      },
+    })
+  } catch (error) {
+    console.error('[attachments.refresh] error', error)
+    return c.json<ApiResponse>({
+      success: false,
+      error: error instanceof Error ? error.message : '刷新图片链接失败',
+    }, 500)
+  }
+})
 
 // 发送消息并获取AI响应（流式）
 chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), async (c) => {
