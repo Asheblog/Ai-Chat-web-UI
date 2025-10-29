@@ -22,17 +22,19 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
     }
     return Boolean(message.reasoning && message.reasoning.trim().length > 0)
   })
+  const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
     if (
       message.role === 'assistant' &&
       (message.reasoningStatus === 'idle' || message.reasoningStatus === 'streaming') &&
-      !showReasoning
+      !showReasoning &&
+      !reasoningManuallyToggled
     ) {
       setShowReasoning(true)
     }
-  }, [message.reasoningStatus, message.role, showReasoning])
+  }, [message.reasoningStatus, message.role, showReasoning, reasoningManuallyToggled])
 
   const handleCopy = async () => {
     try {
@@ -69,6 +71,13 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
     (reasoningText.length > 0 ||
       (hasReasoningState && message.reasoningStatus !== 'done') ||
       (isStreaming && message.role === 'assistant' && hasReasoningState))
+
+  useEffect(() => {
+    if (!hasReasoningState && reasoningText.length === 0) {
+      setReasoningManuallyToggled(false)
+      setShowReasoning(false)
+    }
+  }, [hasReasoningState, reasoningText.length])
   const reasoningTitle = (() => {
     if (message.reasoningDurationSeconds && !isStreaming) {
       return `思维过程 · 用时 ${message.reasoningDurationSeconds}s`
@@ -120,7 +129,10 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
                   <button
                     type="button"
                     className="w-full text-left px-3 py-2 text-xs text-muted-foreground flex items-center justify-between"
-                    onClick={() => setShowReasoning((v) => !v)}
+                    onClick={() => {
+                      setReasoningManuallyToggled(true)
+                      setShowReasoning((v) => !v)
+                    }}
                     title="思维过程（可折叠）"
                   >
                     <span>{reasoningTitle}</span>

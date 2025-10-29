@@ -361,6 +361,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ),
           }))
         } else if (evt?.type === 'reasoning') {
+          const chunkHasContent = typeof evt.content === 'string' && evt.content.length > 0
+          if (!reasoningActive && !chunkHasContent) {
+            // 忽略纯 keepalive / done 事件，避免在非推理模型误触发折叠
+            continue
+          }
           ensureReasoningActivated()
           if (evt.keepalive) {
             updateAssistantMessage((msg) => ({
@@ -417,6 +422,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             : msg
         ),
       }))
+
+      if (reasoningActive && !accumulatedReasoning.trim()) {
+        updateAssistantMessage((msg) => {
+          const next = { ...msg }
+          delete (next as any).reasoning
+          delete (next as any).reasoningStatus
+          delete (next as any).reasoningIdleMs
+          delete (next as any).reasoningDurationSeconds
+          return next
+        })
+      }
 
       // 重新获取消息列表与 usage 聚合
       await Promise.all([
