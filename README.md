@@ -6,13 +6,7 @@
 
 <img width="1920" height="861" alt="微信图片_20251029144356_346_176" src="https://github.com/user-attachments/assets/26757bae-78de-4cf4-9e6a-584c4b2101db" />
 <img width="1920" height="870" alt="微信图片_20251029144331_345_176" src="https://github.com/user-attachments/assets/48179c04-afda-46e4-b74f-ffd29431934d" />
-<img width="1250" height="714" alt="微信图片_20251029144411_347_176" src="https://github.com/user-attachments/assets/09dfd2f7-d5ed-4f6d-bc8b-0ea4eb79e5ea" />
-
-![微信图片_20251029144712_349_176](https://github.com/user-attachments/assets/a7a98e91-6bde-44eb-9e87-c99274ef4d14)
-
-![微信图片_20251029144714_350_176](https://github.com/user-attachments/assets/3d846db7-4f4c-4dce-b7ce-1cafbcb4a9e1)
-
-![微信图片_20251029144745_352_176](https://github.com/user-attachments/assets/d39b8fa6-782c-4977-bf20-7821cabc15b6)
+<img width="1920" height="868" alt="34743ff6e60f5e86424887bf8dba0daf" src="https://github.com/user-attachments/assets/59714062-e7d2-4198-b245-7c353f040941" />
 
 ---
 
