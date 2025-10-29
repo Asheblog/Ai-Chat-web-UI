@@ -63,11 +63,12 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
   const hasContent = content.length > 0
   const shouldShowStreamingPlaceholder = isStreaming && !hasContent
+  const hasReasoningState = typeof message.reasoningStatus === 'string'
   const shouldShowReasoningSection =
     !isUser &&
     (reasoningText.length > 0 ||
-      (message.reasoningStatus && message.reasoningStatus !== 'done') ||
-      (isStreaming && message.role === 'assistant'))
+      (hasReasoningState && message.reasoningStatus !== 'done') ||
+      (isStreaming && message.role === 'assistant' && hasReasoningState))
   const reasoningTitle = (() => {
     if (message.reasoningDurationSeconds && !isStreaming) {
       return `思维过程 · 用时 ${message.reasoningDurationSeconds}s`

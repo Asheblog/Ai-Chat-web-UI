@@ -229,14 +229,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   streamMessage: async (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) => {
     // 首先添加用户消息
     // 在发送前尝试基于首条用户输入为“新的对话”自动改名（与常见产品一致）
+    const snapshot = get()
     try {
-      const state = get()
-      const cur = state.currentSession
+      const cur = snapshot.currentSession
       const isTarget = !!cur && cur.id === sessionId
       const isDefaultTitle = isTarget && (
         !cur!.title || cur!.title.trim() === '' || cur!.title === '新的对话' || cur!.title === 'New Chat'
       )
-      const noUserMessagesYet = state.messages.filter(m => m.sessionId === sessionId && m.role === 'user').length === 0
+      const noUserMessagesYet = snapshot.messages.filter(m => m.sessionId === sessionId && m.role === 'user').length === 0
 
       if (isTarget && isDefaultTitle && noUserMessagesYet) {
         const deriveTitleFrom = (text: string) => {
@@ -290,16 +290,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       userMessage.images = images.map(img => `data:${img.mime};base64,${img.data}`)
     }
 
+    const sessionPref =
+      snapshot.currentSession?.id === sessionId
+        ? snapshot.currentSession?.reasoningEnabled
+        : snapshot.sessions.find((s) => s.id === sessionId)?.reasoningEnabled
+    let reasoningActive = Boolean(options?.reasoningEnabled ?? sessionPref ?? false)
+
     // 创建AI消息的占位符
-    const aiMessage: Message = {
+    const baseAiMessage: Message = {
       id: Date.now() + 1, // 临时ID
       sessionId,
       role: 'assistant',
       content: '',
       createdAt: new Date().toISOString(),
-      reasoningStatus: 'idle',
-      reasoningIdleMs: null,
     }
+    const aiMessage: Message = reasoningActive
+      ? {
+          ...baseAiMessage,
+          reasoningStatus: 'idle',
+          reasoningIdleMs: null,
+          reasoning: '',
+        }
+      : baseAiMessage
 
     set((state) => {
       const nextCache = userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
@@ -317,6 +329,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       let accumulatedContent = ''
       let accumulatedReasoning = ''
 
+      const updateAssistantMessage = (updater: (msg: Message) => Message) => {
+        set((state) => ({
+          messages: state.messages.map((msg, index) =>
+            index === state.messages.length - 1 ? updater(msg) : msg
+          ),
+        }))
+      }
+
+      const ensureReasoningActivated = () => {
+        if (reasoningActive) return
+        reasoningActive = true
+        accumulatedReasoning = ''
+        updateAssistantMessage((msg) => ({
+          ...msg,
+          reasoningStatus: 'idle',
+          reasoningIdleMs: null,
+          reasoning: msg.reasoning || '',
+        }))
+      }
+
       // 使用相同幂等ID（跨重试/降级复用）
       for await (const evt of apiClient.streamChat(sessionId, content, images, { ...(options||{}), clientMessageId: userClientMessageId })) {
         if (evt?.type === 'content' && evt.content) {
@@ -329,43 +361,40 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ),
           }))
         } else if (evt?.type === 'reasoning') {
+          ensureReasoningActivated()
           if (evt.keepalive) {
-            set((state) => ({
-              messages: state.messages.map((msg, index) =>
-                index === state.messages.length - 1
-                  ? { ...msg, reasoningStatus: 'idle', reasoningIdleMs: evt.idleMs ?? null }
-                  : msg
-              ),
+            updateAssistantMessage((msg) => ({
+              ...msg,
+              reasoningStatus: 'idle',
+              reasoningIdleMs: evt.idleMs ?? null,
             }))
             continue
           }
           if (evt.content) {
             accumulatedReasoning += evt.content
-            set((state) => ({
-              messages: state.messages.map((msg, index) =>
-                index === state.messages.length - 1
-                  ? { ...msg, reasoning: accumulatedReasoning, reasoningStatus: 'streaming', reasoningIdleMs: null }
-                  : msg
-              ),
+            updateAssistantMessage((msg) => ({
+              ...msg,
+              reasoning: accumulatedReasoning,
+              reasoningStatus: 'streaming',
+              reasoningIdleMs: null,
             }))
           }
           if (evt.done) {
-            set((state) => ({
-              messages: state.messages.map((msg, index) =>
-                index === state.messages.length - 1
-                  ? { ...msg, reasoningDurationSeconds: evt.duration ?? msg.reasoningDurationSeconds ?? null, reasoningStatus: 'done', reasoningIdleMs: null }
-                  : msg
-              ),
+            updateAssistantMessage((msg) => ({
+              ...msg,
+              reasoningDurationSeconds: evt.duration ?? msg.reasoningDurationSeconds ?? null,
+              reasoningStatus: 'done',
+              reasoningIdleMs: null,
             }))
           }
         } else if (evt?.type === 'complete') {
-          set((state) => ({
-            messages: state.messages.map((msg, index) =>
-              index === state.messages.length - 1
-                ? { ...msg, reasoningStatus: 'done', reasoningIdleMs: null }
-                : msg
-            ),
-          }))
+          if (reasoningActive) {
+            updateAssistantMessage((msg) => ({
+              ...msg,
+              reasoningStatus: 'done',
+              reasoningIdleMs: null,
+            }))
+          }
         } else if (evt?.type === 'usage' && evt.usage) {
           const usage = evt.usage
           // 实时更新当前 usage；若包含 completion/total 则可同步作为 lastRound
@@ -383,7 +412,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => ({
         isStreaming: false,
         messages: state.messages.map((msg, index) =>
-          index === state.messages.length - 1
+          index === state.messages.length - 1 && (reasoningActive || typeof msg.reasoningStatus === 'string')
             ? { ...msg, reasoningStatus: 'done', reasoningIdleMs: null }
             : msg
         ),
