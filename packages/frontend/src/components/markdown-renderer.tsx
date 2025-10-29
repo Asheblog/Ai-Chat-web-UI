@@ -66,7 +66,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
         code({ node, inline, className, children, ...props }: any) {
           const responsiveContainerStyle = {
             maxWidth: '100%',
-            overflowX: 'hidden',
+            overflowX: 'hidden' as const,
             wordBreak: 'break-word' as const,
           }
           const match = /language-([\w+-]+)/.exec(className || '')
@@ -127,7 +127,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                   </div>
                   <pre
                     className={cn("m-0 text-sm px-3 py-3", isStreaming && "typing-cursor")}
-                    style={{ background: 'transparent', color: '#e6edf3', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowX: 'hidden' }}
+                    style={{ background: 'transparent', color: '#e6edf3', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowX: 'hidden' as const }}
                   >
                     <code style={{ background: 'transparent', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{codeContent}</code>
                   </pre>
@@ -173,7 +173,7 @@ export function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps
                     borderRadius: 0,
                     background: 'transparent',
                     padding: '12px 14px 14px 14px',
-                    overflowX: 'hidden',
+                    overflowX: 'hidden' as const,
                     width: '100%',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',

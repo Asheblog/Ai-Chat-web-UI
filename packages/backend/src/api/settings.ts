@@ -16,6 +16,9 @@ const systemSettingSchema = z.object({
   sse_heartbeat_interval_ms: z.number().int().min(1000).max(600000).optional(),
   provider_max_idle_ms: z.number().int().min(0).max(3600000).optional(),
   provider_timeout_ms: z.number().int().min(10000).max(3600000).optional(),
+  provider_initial_grace_ms: z.number().int().min(0).max(3600000).optional(),
+  provider_reasoning_idle_ms: z.number().int().min(0).max(3600000).optional(),
+  reasoning_keepalive_interval_ms: z.number().int().min(0).max(3600000).optional(),
   usage_emit: z.boolean().optional(),
   usage_provider_only: z.boolean().optional(),
   // 推理链（思维链）相关
@@ -60,6 +63,9 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
       provider_timeout_ms: parseInt(settingsObj.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000'),
       usage_emit: (settingsObj.usage_emit ?? (process.env.USAGE_EMIT ?? 'true')).toString().toLowerCase() !== 'false',
       usage_provider_only: (settingsObj.usage_provider_only ?? (process.env.USAGE_PROVIDER_ONLY ?? 'false')).toString().toLowerCase() === 'true',
+      provider_initial_grace_ms: parseInt(settingsObj.provider_initial_grace_ms || process.env.PROVIDER_INITIAL_GRACE_MS || '120000'),
+      provider_reasoning_idle_ms: parseInt(settingsObj.provider_reasoning_idle_ms || process.env.PROVIDER_REASONING_IDLE_MS || '300000'),
+      reasoning_keepalive_interval_ms: parseInt(settingsObj.reasoning_keepalive_interval_ms || process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0'),
       // 推理链
       reasoning_enabled: (settingsObj.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false',
       reasoning_default_expand: (settingsObj.reasoning_default_expand ?? (process.env.REASONING_DEFAULT_EXPAND ?? 'false')).toString().toLowerCase() === 'true',
@@ -89,7 +95,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think } = c.req.valid('json');
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -130,6 +136,30 @@ settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', 
         where: { key: 'provider_timeout_ms' },
         update: { value: String(provider_timeout_ms) },
         create: { key: 'provider_timeout_ms', value: String(provider_timeout_ms) },
+      });
+    }
+
+    if (typeof provider_initial_grace_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'provider_initial_grace_ms' },
+        update: { value: String(provider_initial_grace_ms) },
+        create: { key: 'provider_initial_grace_ms', value: String(provider_initial_grace_ms) },
+      });
+    }
+
+    if (typeof provider_reasoning_idle_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'provider_reasoning_idle_ms' },
+        update: { value: String(provider_reasoning_idle_ms) },
+        create: { key: 'provider_reasoning_idle_ms', value: String(provider_reasoning_idle_ms) },
+      });
+    }
+
+    if (typeof reasoning_keepalive_interval_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'reasoning_keepalive_interval_ms' },
+        update: { value: String(reasoning_keepalive_interval_ms) },
+        create: { key: 'reasoning_keepalive_interval_ms', value: String(reasoning_keepalive_interval_ms) },
       });
     }
 

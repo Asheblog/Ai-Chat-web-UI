@@ -133,6 +133,7 @@ npm run dev
 - `usage`：用量统计事件（OpenAI 兼容字段）。示例：
   - `{ "type": "usage", "usage": { "prompt_tokens": 123, "completion_tokens": 45, "total_tokens": 168, "context_limit": 4000, "context_remaining": 3877 } }`
   - 若上游厂商在流中返回 `usage` 字段，会被原样透出；否则在开始时发送一次基于上下文估算的 `usage`，在结束前补齐 `completion_tokens` 与 `total_tokens`（估算）。
+- `reasoning`：推理链事件，包含 `content`（增量文本）、`done`（推理结束）、`duration`（秒），以及 `keepalive`（仅保活提示，表示模型仍在思考，可配合 `idle_ms` 展示静默时长）。
 - `end`：上游流结束（如收到 `[DONE]`）
 - `complete`：服务端完成收尾
 - `stop`：可选的结束原因（如 `finish_reason`）
@@ -143,14 +144,17 @@ npm run dev
 - 上游退避：
   - 429 → 退避 15s 后重试 1 次
   - 5xx/超时 → 退避 2s 后重试 1 次
-- 最大空闲：若上游流在阈值（默认 60s）内无数据，主动中止本次连接。
+- 推理空闲策略：首次收到增量前遵循“初始宽限”（默认 120s），之后采用“推理阶段最大静默”（默认 300s）。在静默超过可配置阈值时发送保活提示事件，并在超过上限后才主动中止。
 - 自动降级：流式失败且尚未输出内容时，会自动改走一次非流式请求并返回完整文本。
 
 可配置环境变量：
 
 - `SSE_HEARTBEAT_INTERVAL_MS`（默认 15000）SSE 心跳间隔（毫秒）
-- `PROVIDER_MAX_IDLE_MS`（默认 60000）上游最大空闲时长（毫秒）
+- `PROVIDER_MAX_IDLE_MS`（默认 60000）兼容旧行为的退避阈值（系统设置中更细粒度配置会覆盖）
 - `PROVIDER_TIMEOUT_MS`（默认 300000）上游请求总体超时（毫秒）
+- `PROVIDER_INITIAL_GRACE_MS`（默认 120000）首个增量到达的最长宽限时间（毫秒）
+- `PROVIDER_REASONING_IDLE_MS`（默认 300000）推理阶段允许的最大静默（毫秒）
+- `REASONING_KEEPALIVE_INTERVAL_MS`（默认 0，禁用）推理静默阶段多久发送一次保活提示（毫秒）
 
 #### Usage 统计与环境变量
 

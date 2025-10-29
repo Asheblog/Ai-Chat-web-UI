@@ -760,12 +760,13 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
           }
 
         } catch (error) {
-          console.error('Streaming error:', error);
-          log.error('Streaming error detail', (error as Error)?.message, (error as Error)?.stack)
-
           if (error instanceof DownstreamClosedError || downstreamAborted) {
+            log.debug('Streaming aborted: SSE downstream closed');
             return;
           }
+
+          console.error('Streaming error:', error);
+          log.error('Streaming error detail', (error as Error)?.message, (error as Error)?.stack)
 
           // 若尚未输出内容，尝试降级为非流式一次
           if (!aiResponseContent) {

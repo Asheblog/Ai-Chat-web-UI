@@ -16,6 +16,9 @@ export function SystemNetworkPage() {
   const [timeoutMs, setTimeoutMs] = useState(300000)
   const [usageEmit, setUsageEmit] = useState(true)
   const [usageProviderOnly, setUsageProviderOnly] = useState(false)
+  const [initialGraceMs, setInitialGraceMs] = useState(120000)
+  const [reasoningIdleMs, setReasoningIdleMs] = useState(300000)
+  const [keepaliveMs, setKeepaliveMs] = useState(0)
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => {
@@ -25,8 +28,20 @@ export function SystemNetworkPage() {
       setTimeoutMs(Number(systemSettings.providerTimeoutMs ?? 300000))
       setUsageEmit(Boolean(systemSettings.usageEmit ?? true))
       setUsageProviderOnly(Boolean(systemSettings.usageProviderOnly ?? false))
+      setInitialGraceMs(Number(systemSettings.providerInitialGraceMs ?? 120000))
+      setReasoningIdleMs(Number(systemSettings.providerReasoningIdleMs ?? 300000))
+      setKeepaliveMs(Number(systemSettings.reasoningKeepaliveIntervalMs ?? 0))
     }
-  }, [systemSettings?.sseHeartbeatIntervalMs, systemSettings?.providerMaxIdleMs, systemSettings?.providerTimeoutMs, systemSettings?.usageEmit, systemSettings?.usageProviderOnly])
+  }, [
+    systemSettings?.sseHeartbeatIntervalMs,
+    systemSettings?.providerMaxIdleMs,
+    systemSettings?.providerTimeoutMs,
+    systemSettings?.usageEmit,
+    systemSettings?.usageProviderOnly,
+    systemSettings?.providerInitialGraceMs,
+    systemSettings?.providerReasoningIdleMs,
+    systemSettings?.reasoningKeepaliveIntervalMs,
+  ])
 
   if (isLoading && !systemSettings) {
     return (
@@ -58,29 +73,41 @@ export function SystemNetworkPage() {
       </div>
     )
   }
-  const msToSec = (v:number)=>`${Math.round(v/1000)} 秒`
+  const msToSec = (v:number)=>v === 0 ? '已禁用' : `${Math.round(v/1000)} 秒`
   const within = (v:number,min:number,max:number)=>v>=min&&v<=max
   const hbRange={min:1000,max:600000}
   const idleRange={min:0,max:3600000}
   const toutRange={min:10000,max:3600000}
+  const initialRange={min:0,max:3600000}
+  const reasoningIdleRange={min:0,max:3600000}
+  const keepaliveRange={min:0,max:3600000}
   const hbValid=within(hbMs,hbRange.min,hbRange.max)
   const idleValid=within(idleMs,idleRange.min,idleRange.max)
   const toutValid=within(timeoutMs,toutRange.min,toutRange.max)
+  const initialValid=within(initialGraceMs,initialRange.min,initialRange.max)
+  const reasoningIdleValid=within(reasoningIdleMs,reasoningIdleRange.min,reasoningIdleRange.max)
+  const keepaliveValid=within(keepaliveMs,keepaliveRange.min,keepaliveRange.max)
 
   const changed = (
     hbMs !== Number(systemSettings.sseHeartbeatIntervalMs ?? 15000) ||
     idleMs !== Number(systemSettings.providerMaxIdleMs ?? 60000) ||
     timeoutMs !== Number(systemSettings.providerTimeoutMs ?? 300000) ||
+    initialGraceMs !== Number(systemSettings.providerInitialGraceMs ?? 120000) ||
+    reasoningIdleMs !== Number(systemSettings.providerReasoningIdleMs ?? 300000) ||
+    keepaliveMs !== Number(systemSettings.reasoningKeepaliveIntervalMs ?? 0) ||
     usageEmit !== Boolean(systemSettings.usageEmit ?? true) ||
     usageProviderOnly !== Boolean(systemSettings.usageProviderOnly ?? false)
   )
 
   const save = async()=>{
-    if(!hbValid||!idleValid||!toutValid) return
+    if(!hbValid||!idleValid||!toutValid||!initialValid||!reasoningIdleValid||!keepaliveValid) return
     await updateSystemSettings({
       sseHeartbeatIntervalMs: hbMs,
       providerMaxIdleMs: idleMs,
       providerTimeoutMs: timeoutMs,
+      providerInitialGraceMs: initialGraceMs,
+      providerReasoningIdleMs: reasoningIdleMs,
+      reasoningKeepaliveIntervalMs: keepaliveMs,
       usageEmit,
       usageProviderOnly,
     })
@@ -112,6 +139,36 @@ export function SystemNetworkPage() {
         </div>
 
         <div>
+          <Label htmlFor="initialGrace" className="font-medium">推理初始宽限（毫秒）</Label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input id="initialGrace" type="number" value={initialGraceMs} onChange={(e)=>setInitialGraceMs(Number(e.target.value||0))} className="w-full sm:w-48" />
+            <span className="text-sm text-muted-foreground w-full sm:w-24">≈ {msToSec(initialGraceMs)}</span>
+            <Button size="sm" variant="outline" onClick={()=>setInitialGraceMs(120000)} className="w-full sm:w-auto">重置为 120000</Button>
+          </div>
+          {!initialValid ? <p className="text-xs text-destructive mt-1">范围 {initialRange.min}–{initialRange.max}</p> : <p className="text-xs text-muted-foreground mt-1">等待模型吐出首帧前允许的最大空闲。</p>}
+        </div>
+
+        <div>
+          <Label htmlFor="reasoningIdle" className="font-medium">推理阶段空闲上限（毫秒）</Label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input id="reasoningIdle" type="number" value={reasoningIdleMs} onChange={(e)=>setReasoningIdleMs(Number(e.target.value||0))} className="w-full sm:w-48" />
+            <span className="text-sm text-muted-foreground w-full sm:w-24">≈ {msToSec(reasoningIdleMs)}</span>
+            <Button size="sm" variant="outline" onClick={()=>setReasoningIdleMs(300000)} className="w-full sm:w-auto">重置为 300000</Button>
+          </div>
+          {!reasoningIdleValid ? <p className="text-xs text-destructive mt-1">范围 {reasoningIdleRange.min}–{reasoningIdleRange.max}</p> : <p className="text-xs text-muted-foreground mt-1">收到首帧后用于控制“思考”阶段的最长静默。</p>}
+        </div>
+
+        <div>
+          <Label htmlFor="keepalive" className="font-medium">推理保活提示间隔（毫秒）</Label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input id="keepalive" type="number" value={keepaliveMs} onChange={(e)=>setKeepaliveMs(Number(e.target.value||0))} className="w-full sm:w-48" />
+            <span className="text-sm text-muted-foreground w-full sm:w-24">{keepaliveMs === 0 ? '已禁用' : `≈ ${msToSec(keepaliveMs)}`}</span>
+            <Button size="sm" variant="outline" onClick={()=>setKeepaliveMs(0)} className="w-full sm:w-auto">禁用保活提示</Button>
+          </div>
+          {!keepaliveValid ? <p className="text-xs text-destructive mt-1">范围 {keepaliveRange.min}–{keepaliveRange.max}</p> : <p className="text-xs text-muted-foreground mt-1">大于 0 时在推理静默期间周期性发送“思考中”事件。</p>}
+        </div>
+
+        <div>
           <Label htmlFor="providerTimeout" className="font-medium">上游总体超时（毫秒）</Label>
           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
             <Input id="providerTimeout" type="number" value={timeoutMs} onChange={(e)=>setTimeoutMs(Number(e.target.value||0))} className="w-full sm:w-48" />
@@ -137,7 +194,7 @@ export function SystemNetworkPage() {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button onClick={save} disabled={!hbValid||!idleValid||!toutValid||!changed} className="w-full sm:w-auto">保存更改</Button>
+          <Button onClick={save} disabled={!hbValid||!idleValid||!toutValid||!initialValid||!reasoningIdleValid||!keepaliveValid||!changed} className="w-full sm:w-auto">保存更改</Button>
         </div>
       </div>
     </div>

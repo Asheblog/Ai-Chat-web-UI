@@ -7,7 +7,7 @@ import { Message } from '@/types'
 import { MarkdownRenderer } from './markdown-renderer'
 import { formatDate, copyToClipboard } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
-import { memo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 
 interface MessageBubbleProps {
   message: Message
@@ -16,8 +16,23 @@ interface MessageBubbleProps {
 
 function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
   const [isCopied, setIsCopied] = useState(false)
-  const [showReasoning, setShowReasoning] = useState(false)
+  const [showReasoning, setShowReasoning] = useState(() => {
+    if (typeof message.reasoningStatus === 'string') {
+      return message.reasoningStatus !== 'done'
+    }
+    return Boolean(message.reasoning && message.reasoning.trim().length > 0)
+  })
   const { toast } = useToast()
+
+  useEffect(() => {
+    if (
+      message.role === 'assistant' &&
+      (message.reasoningStatus === 'idle' || message.reasoningStatus === 'streaming') &&
+      !showReasoning
+    ) {
+      setShowReasoning(true)
+    }
+  }, [message.reasoningStatus, message.role, showReasoning])
 
   const handleCopy = async () => {
     try {
@@ -42,8 +57,29 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   // 若助手消息仅包含代码块（一个或多个）而无其它文本，则去除外层气泡的底色与边框，避免出现“双层黑底”。
   const content = (message.content || '').trim()
+  const reasoningRaw = message.reasoning || ''
+  const reasoningText = reasoningRaw.trim()
   const outsideText = content.replace(/```[\s\S]*?```/g, '').trim()
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
+  const hasContent = content.length > 0
+  const shouldShowStreamingPlaceholder = isStreaming && !hasContent
+  const shouldShowReasoningSection =
+    !isUser &&
+    (reasoningText.length > 0 ||
+      (message.reasoningStatus && message.reasoningStatus !== 'done') ||
+      (isStreaming && message.role === 'assistant'))
+  const reasoningTitle = (() => {
+    if (message.reasoningDurationSeconds && !isStreaming) {
+      return `思维过程 · 用时 ${message.reasoningDurationSeconds}s`
+    }
+    if (message.reasoningStatus === 'idle') {
+      return '思维过程 · 正在思考'
+    }
+    if (message.reasoningStatus === 'streaming') {
+      return '思维过程 · 输出中'
+    }
+    return '思维过程'
+  })()
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -76,48 +112,53 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
               <p className="whitespace-pre-wrap text-left">{message.content}</p>
             </div>
           ) : (
-            // 助手消息：当处于流式且内容为空时，直接在该气泡内显示“思考中”占位，避免再额外渲染一条提示气泡
-            (isStreaming && (!message.content || message.content.trim() === '')) ? (
-              <div className="flex items-center gap-1">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="space-y-2">
+              {/* 推理折叠块：在助手流式阶段始终展示，便于实时查看思维链 */}
+              {shouldShowReasoningSection && (
+                <div className="border rounded bg-background/60">
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs text-muted-foreground flex items-center justify-between"
+                    onClick={() => setShowReasoning((v) => !v)}
+                    title="思维过程（可折叠）"
+                  >
+                    <span>{reasoningTitle}</span>
+                    <span className="ml-2">{showReasoning ? '▼' : '▶'}</span>
+                  </button>
+                  {showReasoning && (
+                    <div className="px-3 pb-2">
+                      {message.reasoningStatus === 'idle' && (
+                        <div className="text-xs text-muted-foreground mb-1">
+                          模型正在思考…
+                          {typeof message.reasoningIdleMs === 'number' && message.reasoningIdleMs > 0
+                            ? `（静默 ${Math.round(message.reasoningIdleMs / 1000)}s）`
+                            : null}
+                        </div>
+                      )}
+                      {reasoningText ? (
+                        <pre className="whitespace-pre-wrap text-xs text-muted-foreground">{reasoningRaw.split('\n').map(l => l.startsWith('>') ? l : `> ${l}`).join('\n')}</pre>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          {message.reasoningStatus === 'streaming' ? '推理内容接收中…' : '正在思考中…'}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {/* 思维过程折叠块（存在推理内容或处于流式中，且为助手消息时显示） */}
-                {(message.reasoning || (isStreaming && message.role === 'assistant')) && (
-                  <div className="border rounded bg-background/60">
-                    <button
-                      type="button"
-                      className="w-full text-left px-3 py-2 text-xs text-muted-foreground flex items-center justify-between"
-                      onClick={() => setShowReasoning((v) => !v)}
-                      title="思维过程（可折叠）"
-                    >
-                      <span>
-                        {message.reasoningDurationSeconds && !isStreaming
-                          ? `思维过程 · 用时 ${message.reasoningDurationSeconds}s`
-                          : '思维过程'}
-                      </span>
-                      <span className="ml-2">{showReasoning ? '▼' : '▶'}</span>
-                    </button>
-                    {showReasoning && (
-                      <div className="px-3 pb-2">
-                        {message.reasoning ? (
-                          <pre className="whitespace-pre-wrap text-xs text-muted-foreground">{message.reasoning.split('\n').map(l => l.startsWith('>') ? l : `> ${l}`).join('\n')}</pre>
-                        ) : (
-                          <div className="text-xs text-muted-foreground">正在思考中…</div>
-                        )}
-                      </div>
-                    )}
+              )}
+              {shouldShowStreamingPlaceholder ? (
+                <div className="flex items-center gap-1">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                )}
+                  <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
+                </div>
+              ) : (
                 <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
-              </div>
-            )
+              )}
+            </div>
           )}
         </div>
 
@@ -176,6 +217,8 @@ export const MessageBubble = memo(
       prevMsg.content === nextMsg.content &&
       prevMsg.reasoning === nextMsg.reasoning &&
       prevMsg.reasoningDurationSeconds === nextMsg.reasoningDurationSeconds &&
+      prevMsg.reasoningStatus === nextMsg.reasoningStatus &&
+      prevMsg.reasoningIdleMs === nextMsg.reasoningIdleMs &&
       prevMsg.createdAt === nextMsg.createdAt
     const prevImages = prevMsg.images || []
     const nextImages = nextMsg.images || []

@@ -55,6 +55,8 @@ export interface Message {
   clientMessageId?: string | null;
   reasoning?: string | null;
   reasoningDurationSeconds?: number | null;
+  reasoningStatus?: 'idle' | 'streaming' | 'done';
+  reasoningIdleMs?: number | null;
   // 可选的图片（data URL，用于展示，不入库）
   images?: string[];
 }
@@ -78,6 +80,9 @@ export interface SystemSettings {
   sseHeartbeatIntervalMs?: number;
   providerMaxIdleMs?: number;
   providerTimeoutMs?: number;
+  providerInitialGraceMs?: number;
+  providerReasoningIdleMs?: number;
+  reasoningKeepaliveIntervalMs?: number;
   usageEmit?: boolean;
   usageProviderOnly?: boolean;
   // 推理链相关（可选）
@@ -139,6 +144,8 @@ export interface ChatStreamChunk {
   done?: boolean;
   duration?: number;
   error?: string;
+  keepalive?: boolean;
+  idleMs?: number;
 }
 
 // Usage 统计类型（OpenAI 兼容字段为主）

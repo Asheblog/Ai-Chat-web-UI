@@ -297,6 +297,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       role: 'assistant',
       content: '',
       createdAt: new Date().toISOString(),
+      reasoningStatus: 'idle',
+      reasoningIdleMs: null,
     }
 
     set((state) => {
@@ -327,12 +329,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ),
           }))
         } else if (evt?.type === 'reasoning') {
+          if (evt.keepalive) {
+            set((state) => ({
+              messages: state.messages.map((msg, index) =>
+                index === state.messages.length - 1
+                  ? { ...msg, reasoningStatus: 'idle', reasoningIdleMs: evt.idleMs ?? null }
+                  : msg
+              ),
+            }))
+            continue
+          }
           if (evt.content) {
             accumulatedReasoning += evt.content
             set((state) => ({
               messages: state.messages.map((msg, index) =>
                 index === state.messages.length - 1
-                  ? { ...msg, reasoning: accumulatedReasoning }
+                  ? { ...msg, reasoning: accumulatedReasoning, reasoningStatus: 'streaming', reasoningIdleMs: null }
                   : msg
               ),
             }))
@@ -341,11 +353,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             set((state) => ({
               messages: state.messages.map((msg, index) =>
                 index === state.messages.length - 1
-                  ? { ...msg, reasoningDurationSeconds: evt.duration }
+                  ? { ...msg, reasoningDurationSeconds: evt.duration ?? msg.reasoningDurationSeconds ?? null, reasoningStatus: 'done', reasoningIdleMs: null }
                   : msg
               ),
             }))
           }
+        } else if (evt?.type === 'complete') {
+          set((state) => ({
+            messages: state.messages.map((msg, index) =>
+              index === state.messages.length - 1
+                ? { ...msg, reasoningStatus: 'done', reasoningIdleMs: null }
+                : msg
+            ),
+          }))
         } else if (evt?.type === 'usage' && evt.usage) {
           const usage = evt.usage
           // 实时更新当前 usage；若包含 completion/total 则可同步作为 lastRound
@@ -360,7 +380,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }
 
-      set({ isStreaming: false })
+      set((state) => ({
+        isStreaming: false,
+        messages: state.messages.map((msg, index) =>
+          index === state.messages.length - 1
+            ? { ...msg, reasoningStatus: 'done', reasoningIdleMs: null }
+            : msg
+        ),
+      }))
 
       // 重新获取消息列表与 usage 聚合
       await Promise.all([
@@ -378,7 +405,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (finalText) {
           set((state) => ({
             messages: state.messages.map((msg, index) =>
-              index === state.messages.length - 1 ? { ...msg, content: finalText } : msg
+              index === state.messages.length - 1
+                ? { ...msg, content: finalText, reasoningStatus: 'done', reasoningIdleMs: null }
+                : msg
             ),
             isStreaming: false,
           }))

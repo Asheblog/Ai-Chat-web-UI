@@ -312,11 +312,11 @@ class ApiClient {
           console.debug('[streamChat] chunk', chunk.slice(0, 120))
         }
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') {
-              return
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6)
+          if (data === '[DONE]') {
+            return
             }
             try {
               const parsed = JSON.parse(data)
@@ -329,6 +329,8 @@ class ApiClient {
                 // 可能是增量或结束事件
                 if (parsed.done) {
                   yield { type: 'reasoning', done: true, duration: parsed.duration }
+                } else if (parsed.keepalive) {
+                  yield { type: 'reasoning', keepalive: true, idleMs: typeof parsed.idle_ms === 'number' ? parsed.idle_ms : undefined }
                 } else if (parsed.content) {
                   yield { type: 'reasoning', content: parsed.content }
                 }
@@ -406,6 +408,9 @@ class ApiClient {
         sse_heartbeat_interval_ms?: number;
         provider_max_idle_ms?: number;
         provider_timeout_ms?: number;
+        provider_initial_grace_ms?: number;
+        provider_reasoning_idle_ms?: number;
+        reasoning_keepalive_interval_ms?: number;
         usage_emit?: boolean;
         usage_provider_only?: boolean;
         reasoning_enabled?: boolean;
@@ -423,6 +428,9 @@ class ApiClient {
     const sseHeartbeatIntervalMs = Number(settingsRes.data.data?.sse_heartbeat_interval_ms ?? 15000)
     const providerMaxIdleMs = Number(settingsRes.data.data?.provider_max_idle_ms ?? 60000)
     const providerTimeoutMs = Number(settingsRes.data.data?.provider_timeout_ms ?? 300000)
+    const providerInitialGraceMs = Number(settingsRes.data.data?.provider_initial_grace_ms ?? 120000)
+    const providerReasoningIdleMs = Number(settingsRes.data.data?.provider_reasoning_idle_ms ?? 300000)
+    const reasoningKeepaliveIntervalMs = Number(settingsRes.data.data?.reasoning_keepalive_interval_ms ?? 0)
     const usageEmit = (settingsRes.data.data?.usage_emit ?? true) as boolean
     const usageProviderOnly = (settingsRes.data.data?.usage_provider_only ?? false) as boolean
     const reasoningEnabled = (settingsRes.data.data?.reasoning_enabled ?? true) as boolean
@@ -433,7 +441,7 @@ class ApiClient {
     const streamDeltaChunkSize = Number(settingsRes.data.data?.stream_delta_chunk_size ?? 1)
     const openaiReasoningEffort = (settingsRes.data.data?.openai_reasoning_effort ?? '') as any
     const ollamaThink = Boolean(settingsRes.data.data?.ollama_think ?? false)
-    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink } }
+    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink } }
   }
 
   async updateSystemSettings(settings: any) {
@@ -444,6 +452,9 @@ class ApiClient {
     if (typeof settings.sseHeartbeatIntervalMs === 'number') payload.sse_heartbeat_interval_ms = settings.sseHeartbeatIntervalMs
     if (typeof settings.providerMaxIdleMs === 'number') payload.provider_max_idle_ms = settings.providerMaxIdleMs
     if (typeof settings.providerTimeoutMs === 'number') payload.provider_timeout_ms = settings.providerTimeoutMs
+    if (typeof settings.providerInitialGraceMs === 'number') payload.provider_initial_grace_ms = settings.providerInitialGraceMs
+    if (typeof settings.providerReasoningIdleMs === 'number') payload.provider_reasoning_idle_ms = settings.providerReasoningIdleMs
+    if (typeof settings.reasoningKeepaliveIntervalMs === 'number') payload.reasoning_keepalive_interval_ms = settings.reasoningKeepaliveIntervalMs
     if (typeof settings.usageEmit === 'boolean') payload.usage_emit = !!settings.usageEmit
     if (typeof settings.usageProviderOnly === 'boolean') payload.usage_provider_only = !!settings.usageProviderOnly
     if (typeof settings.reasoningEnabled === 'boolean') payload.reasoning_enabled = !!settings.reasoningEnabled
