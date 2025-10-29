@@ -152,7 +152,7 @@ export function ChatInterface() {
 
       {/* 消息列表 */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 md:px-6">
-        <div className="py-4 md:py-6">
+        <div className="pt-4 md:pt-6 pb-[calc(env(safe-area-inset-bottom)+120px)] md:pb-32">
           {error && (
             <div className="mb-3 text-sm text-destructive bg-destructive/10 p-3 rounded-md">
               {String(error)}
@@ -162,7 +162,7 @@ export function ChatInterface() {
         </div>
       </ScrollArea>
 
-      <div className="sticky bottom-0 w-full bg-background">
+      <div className="sticky bottom-0 w-full">
         {/* 移动端输入区 */}
         <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
           <div className="rounded-3xl border bg-card shadow-sm px-3 py-3 space-y-3">
@@ -254,11 +254,11 @@ export function ChatInterface() {
         <div className="hidden md:block">
           <div className="mx-auto max-w-3xl px-4 md:px-6 pb-6">
             {imagePreview}
-            <div className="rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 flex items-center min-h-14 focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition">
+            <div className="flex items-end gap-3 transition">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="h-10 w-10 inline-flex items-center justify-center rounded-full text-muted-foreground"
+                    className="h-10 w-10 inline-flex items-center justify-center rounded-full text-muted-foreground border border-transparent hover:border-border/70 hover:bg-muted/40"
                     aria-label="更多操作"
                   >
                     <Plus className="h-5 w-5" />
@@ -298,7 +298,7 @@ export function ChatInterface() {
                   onCompositionEnd={() => setIsComposing(false)}
                   placeholder={isStreaming ? 'AI正在思考中...' : '输入消息（Shift+Enter 换行）'}
                   disabled={isStreaming}
-                  className="h-auto min-h-[40px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-2 leading-[1.4] text-left placeholder:text-muted-foreground"
+                  className="h-auto min-h-[48px] w-full resize-none rounded-3xl border border-border/60 bg-muted/60 px-4 sm:px-5 py-3 leading-[1.4] text-left placeholder:text-muted-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   rows={1}
                 />
               </div>
@@ -308,7 +308,7 @@ export function ChatInterface() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        className="h-10 w-10 inline-flex items-center justify-center rounded-full border hover:bg-muted"
+                        className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-transparent hover:border-border/70 hover:bg-muted/40"
                         onClick={() => {
                           setExpandDraft(input)
                           setExpandOpen(true)
