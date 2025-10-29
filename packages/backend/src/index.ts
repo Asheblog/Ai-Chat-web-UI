@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { CHAT_IMAGE_PUBLIC_PATH, CHAT_IMAGE_STORAGE_ROOT } from './config/storage';
 
 // 导入路由
 import auth from './api/auth';
@@ -41,6 +42,7 @@ if (enableCors) {
 
 // 静态文件服务（可选）
 app.use('/static/*', serveStatic({ root: './public' }));
+app.use(`${CHAT_IMAGE_PUBLIC_PATH}/*`, serveStatic({ root: CHAT_IMAGE_STORAGE_ROOT }));
 
 // API路由
 app.route('/api/auth', auth);

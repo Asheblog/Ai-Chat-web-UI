@@ -73,7 +73,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const response = await apiClient.getMessages(sessionId)
       const cache = get().messageImageCache
-      const normalized = (response.data || []).map((msg) => {
+      const rawMessages = Array.isArray(response.data) ? response.data : []
+      const normalized = rawMessages.map((msg) => {
+        const serverImages = Array.isArray(msg.images) ? msg.images : []
+        if (serverImages.length > 0) {
+          return { ...msg, images: serverImages }
+        }
         if (msg.clientMessageId && cache[msg.clientMessageId]) {
           return { ...msg, images: cache[msg.clientMessageId] }
         }

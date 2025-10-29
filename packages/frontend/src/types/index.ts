@@ -57,7 +57,7 @@ export interface Message {
   reasoningDurationSeconds?: number | null;
   reasoningStatus?: 'idle' | 'streaming' | 'done';
   reasoningIdleMs?: number | null;
-  // 可选的图片（data URL，用于展示，不入库）
+  // 可选图片：可能为 data URL（本地预览）或服务端返回的可访问 URL
   images?: string[];
 }
 
@@ -95,6 +95,7 @@ export interface SystemSettings {
   // 供应商参数（可选）
   openaiReasoningEffort?: 'low' | 'medium' | 'high' | '' | 'unset';
   ollamaThink?: boolean;
+  chatImageRetentionDays?: number;
 }
 
 // UI 状态类型

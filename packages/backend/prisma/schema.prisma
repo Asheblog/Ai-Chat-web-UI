@@ -62,12 +62,25 @@ model Message {
   createdAt DateTime @default(now())
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attachments MessageAttachment[]
   usageMetrics UsageMetric[]
 
   // 若提供了 clientMessageId，则 (sessionId, clientMessageId) 必须唯一；
   // clientMessageId 为空时不受限（SQLite 下 NULL 不参与唯一比较）。
   @@unique([sessionId, clientMessageId])
   @@map("messages")
+}
+
+model MessageAttachment {
+  id           Int      @id @default(autoincrement())
+  messageId    Int
+  relativePath String
+  createdAt    DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_attachments")
 }
 
 // 3. 用量统计表（每轮生成一条，关联到 assistant 消息）

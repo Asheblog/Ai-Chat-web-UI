@@ -1,13 +1,4 @@
 # AI Chat Platform
-
----
-
-## 部分图片预览
-
-<img width="1920" height="861" alt="微信图片_20251029144356_346_176" src="https://github.com/user-attachments/assets/26757bae-78de-4cf4-9e6a-584c4b2101db" />
-<img width="1920" height="870" alt="微信图片_20251029144331_345_176" src="https://github.com/user-attachments/assets/48179c04-afda-46e4-b74f-ffd29431934d" />
-<img width="1920" height="868" alt="34743ff6e60f5e86424887bf8dba0daf" src="https://github.com/user-attachments/assets/59714062-e7d2-4198-b245-7c353f040941" />
-
 ---
 
 轻量级 AI 聊天平台（后端 Hono + SQLite，前端 Next.js）。本文档仅保留两种最简部署方式：
@@ -48,7 +39,7 @@ services:
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs
-      - 你服务器数据库目录地址/app.db:/app/data/app.db #常态化数据库，这里要改成你服务器数据库目录地址
+      - backend_images:/app/storage/chat-images
     ports:
       - "3556:8001" #后端端口可以改 
     restart: unless-stopped
@@ -175,6 +166,14 @@ sequenceDiagram
   BE->>DB: 持久化消息/用量
   FE-->>U: 渲染模型回复
 ```
+---
+
+## 部分图片预览
+
+<img width="1920" height="861" alt="微信图片_20251029144356_346_176" src="https://github.com/user-attachments/assets/26757bae-78de-4cf4-9e6a-584c4b2101db" />
+<img width="1920" height="870" alt="微信图片_20251029144331_345_176" src="https://github.com/user-attachments/assets/48179c04-afda-46e4-b74f-ffd29431934d" />
+<img width="1920" height="868" alt="34743ff6e60f5e86424887bf8dba0daf" src="https://github.com/user-attachments/assets/59714062-e7d2-4198-b245-7c353f040941" />
+
 
 ---
 

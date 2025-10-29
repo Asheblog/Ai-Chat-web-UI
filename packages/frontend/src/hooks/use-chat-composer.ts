@@ -158,13 +158,17 @@ export function useChatComposer() {
   const handleSend = useCallback(async () => {
     if (!input.trim() || isStreaming || !currentSession) return
     const message = input.trim()
+    const prevSelectedImages = selectedImages
     setInput('')
     clearError()
     try {
       const imagesPayload =
-        isVisionEnabled && selectedImages.length
-          ? selectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
+        isVisionEnabled && prevSelectedImages.length
+          ? prevSelectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
           : undefined
+      if (prevSelectedImages.length > 0) {
+        setSelectedImages([])
+      }
       const options = {
         reasoningEnabled: thinkingEnabled,
         reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
@@ -172,9 +176,11 @@ export function useChatComposer() {
         saveReasoning: !noSaveThisRound,
       }
       await streamMessage(currentSession.id, message, imagesPayload, options)
-      setSelectedImages([])
       setNoSaveThisRound(false)
     } catch (error) {
+      if (prevSelectedImages.length > 0) {
+        setSelectedImages(prevSelectedImages)
+      }
       console.error('Failed to send message:', error)
       toast({
         title: '发送失败',

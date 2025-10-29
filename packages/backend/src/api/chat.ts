@@ -9,6 +9,13 @@ import { authMiddleware } from '../middleware/auth';
 import type { ApiResponse, Message } from '../types';
 import { BackendLogger as log } from '../utils/logger';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../utils/reasoning-tags';
+import {
+  cleanupExpiredChatImages,
+  persistChatImages,
+  resolveChatImageUrls,
+  resolveRequestOrigin,
+} from '../utils/chat-images';
+import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 
 const chat = new Hono();
 
@@ -72,6 +79,11 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
           sessionId: true,
           role: true,
           content: true,
+          attachments: {
+            select: {
+              relativePath: true,
+            },
+          },
           clientMessageId: true,
           reasoning: true,
           reasoningDurationSeconds: true,
@@ -86,8 +98,18 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
       }),
     ]);
 
+    const origin = resolveRequestOrigin(c.req.raw);
+    const normalizedMessages = messages.map((msg) => {
+      const { attachments, ...rest } = msg as typeof msg & { attachments?: Array<{ relativePath: string }> }
+      const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
+      return {
+        ...rest,
+        images: resolveChatImageUrls(rel, origin),
+      }
+    });
+
     return c.json<ApiResponse<{
-      messages: Array<{ id: number; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date }>;
+      messages: Array<{ id: number; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date; images?: string[] }>;
       pagination: {
         page: number;
         limit: number;
@@ -97,7 +119,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
     }>>({
       success: true,
       data: {
-        messages,
+        messages: normalizedMessages,
         pagination: {
           page,
           limit,
@@ -151,21 +173,30 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 
     // 保存用户消息（优先使用 clientMessageId 幂等；无ID时使用时间窗去重）
     const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
-    let userMessage: any
+    let userMessageRecord: any
     if (clientMessageId && clientMessageId.trim()) {
-      userMessage = await prisma.message.upsert({
+      userMessageRecord = await prisma.message.upsert({
         where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
         update: {},
         create: { sessionId, role: 'user', content, clientMessageId },
       });
     } else {
-      userMessage = await prisma.message.findFirst({
+      userMessageRecord = await prisma.message.findFirst({
         where: { sessionId, role: 'user', content },
         orderBy: { createdAt: 'desc' },
       });
-      if (!userMessage || (Date.now() - new Date(userMessage.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
-        userMessage = await prisma.message.create({ data: { sessionId, role: 'user', content } });
+      if (!userMessageRecord || (Date.now() - new Date(userMessageRecord.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
+        userMessageRecord = await prisma.message.create({ data: { sessionId, role: 'user', content } });
       }
+    }
+
+    if (images && images.length > 0 && userMessageRecord?.id) {
+      await persistChatImages(images, {
+        sessionId,
+        messageId: userMessageRecord.id,
+        userId: user.id,
+        clientMessageId: clientMessageId ?? null,
+      });
     }
 
     // 获取用户上下文token限制
@@ -280,6 +311,11 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
     // 读取系统设置以支持推理/思考等开关的默认值（需在使用 sysMap 前初始化）
     const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+    const retentionDaysRaw = sysMap.chat_image_retention_days || process.env.CHAT_IMAGE_RETENTION_DAYS || `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
+    const retentionDaysParsed = Number.parseInt(retentionDaysRaw, 10)
+    cleanupExpiredChatImages(Number.isFinite(retentionDaysParsed) ? retentionDaysParsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS).catch((error) => {
+      console.warn('[chat] cleanupExpiredChatImages', error)
+    })
     const reqReasoningEnabled = (c.req.valid('json') as any).reasoningEnabled
     const reqReasoningEffort = (c.req.valid('json') as any).reasoningEffort
     const reqOllamaThink = (c.req.valid('json') as any).ollamaThink
@@ -449,7 +485,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
           // 发送开始事件
           const startEvent = `data: ${JSON.stringify({
             type: 'start',
-            messageId: userMessage.id,
+            messageId: userMessageRecord?.id ?? null,
           })}\n\n`;
           safeEnqueue(startEvent);
 
@@ -865,23 +901,31 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     }
 
     // 保存用户消息（优先使用 clientMessageId 幂等；无ID时使用时间窗去重）
-    {
-      const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
-      if (clientMessageId && clientMessageId.trim()) {
-        await prisma.message.upsert({
-          where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
-          update: {},
-          create: { sessionId, role: 'user', content, clientMessageId },
-        });
-      } else {
-        const existing = await prisma.message.findFirst({
-          where: { sessionId, role: 'user', content },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (!existing || (Date.now() - new Date(existing.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
-          await prisma.message.create({ data: { sessionId, role: 'user', content } });
-        }
+    const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
+    let userMessageRecord: any
+    if (clientMessageId && clientMessageId.trim()) {
+      userMessageRecord = await prisma.message.upsert({
+        where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
+        update: {},
+        create: { sessionId, role: 'user', content, clientMessageId },
+      });
+    } else {
+      userMessageRecord = await prisma.message.findFirst({
+        where: { sessionId, role: 'user', content },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!userMessageRecord || (Date.now() - new Date(userMessageRecord.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
+        userMessageRecord = await prisma.message.create({ data: { sessionId, role: 'user', content } });
       }
+    }
+
+    if (images && images.length > 0 && userMessageRecord?.id) {
+      await persistChatImages(images, {
+        sessionId,
+        messageId: userMessageRecord.id,
+        userId: user.id,
+        clientMessageId: clientMessageId ?? null,
+      })
     }
 
     // 构建历史上下文
@@ -916,6 +960,11 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
     let body: any = { model: session.modelRawId, messages: messagesPayload, stream: false, temperature: 0.7 };
     const settingsRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const settingsMap = settingsRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+    const retentionDaysRaw = settingsMap.chat_image_retention_days || process.env.CHAT_IMAGE_RETENTION_DAYS || `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
+    const retentionDaysParsed = Number.parseInt(retentionDaysRaw, 10)
+    cleanupExpiredChatImages(Number.isFinite(retentionDaysParsed) ? retentionDaysParsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS).catch((error) => {
+      console.warn('[chat] cleanupExpiredChatImages', error)
+    })
     // 非流式补全请求的超时（毫秒），优先系统设置，其次环境变量，默认 5 分钟
     const providerTimeoutMs = parseInt(settingsMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
     const sess = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })

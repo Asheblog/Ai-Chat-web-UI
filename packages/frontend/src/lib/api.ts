@@ -723,6 +723,7 @@ class ApiClient {
         stream_delta_chunk_size?: number;
         openai_reasoning_effort?: 'low' | 'medium' | 'high',
         ollama_think?: boolean,
+        chat_image_retention_days?: number,
       }>>('/settings/system')
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
     const brandText = settingsRes.data.data?.brand_text || 'AIChat'
@@ -743,7 +744,16 @@ class ApiClient {
     const streamDeltaChunkSize = Number(settingsRes.data.data?.stream_delta_chunk_size ?? 1)
     const openaiReasoningEffort = (settingsRes.data.data?.openai_reasoning_effort ?? '') as any
     const ollamaThink = Boolean(settingsRes.data.data?.ollama_think ?? false)
-    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink } }
+    const chatImageRetentionDays = (() => {
+      const raw = settingsRes.data.data?.chat_image_retention_days
+      if (typeof raw === 'number') return raw
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number.parseInt(raw, 10)
+        if (Number.isFinite(parsed) && parsed >= 0) return parsed
+      }
+      return 30
+    })()
+    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays } }
   }
 
   async updateSystemSettings(settings: any) {
@@ -767,6 +777,7 @@ class ApiClient {
     if (typeof settings.streamDeltaChunkSize === 'number') payload.stream_delta_chunk_size = settings.streamDeltaChunkSize
     if (typeof settings.openaiReasoningEffort === 'string') payload.openai_reasoning_effort = settings.openaiReasoningEffort
     if (typeof settings.ollamaThink === 'boolean') payload.ollama_think = !!settings.ollamaThink
+    if (typeof settings.chatImageRetentionDays === 'number') payload.chat_image_retention_days = settings.chatImageRetentionDays
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()

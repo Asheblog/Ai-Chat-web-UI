@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse } from '../types';
+import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 
 const settings = new Hono();
 
@@ -33,6 +34,7 @@ const systemSettingSchema = z.object({
   // 供应商参数（可选）
   openai_reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
   ollama_think: z.boolean().optional(),
+  chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
 });
 
 // 获取系统设置（仅管理员）
@@ -76,6 +78,11 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
       stream_delta_chunk_size: parseInt(settingsObj.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'),
       openai_reasoning_effort: (settingsObj.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || ''),
       ollama_think: (settingsObj.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true',
+      chat_image_retention_days: (() => {
+        const raw = settingsObj.chat_image_retention_days ?? process.env.CHAT_IMAGE_RETENTION_DAYS ?? `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
+        const parsed = Number.parseInt(String(raw), 10)
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
+      })(),
     };
 
     return c.json<ApiResponse>({
@@ -95,7 +102,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days } = c.req.valid('json');
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -241,6 +248,14 @@ settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', 
         where: { key: 'ollama_think' },
         update: { value: ollama_think.toString() },
         create: { key: 'ollama_think', value: ollama_think.toString() },
+      });
+    }
+
+    if (typeof chat_image_retention_days === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'chat_image_retention_days' },
+        update: { value: String(chat_image_retention_days) },
+        create: { key: 'chat_image_retention_days', value: String(chat_image_retention_days) },
       });
     }
 

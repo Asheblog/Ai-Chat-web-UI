@@ -13,11 +13,13 @@ export function SystemGeneralPage() {
   const { toast } = useToast()
   const [brandTextDraft, setBrandTextDraft] = useState("")
   const [isIMEComposing, setIsIMEComposing] = useState(false)
+  const [retentionDraft, setRetentionDraft] = useState('30')
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => {
     if (systemSettings) {
       setBrandTextDraft(systemSettings.brandText || '')
+      setRetentionDraft(String(systemSettings.chatImageRetentionDays ?? 30))
     }
   }, [systemSettings])
 
@@ -90,6 +92,43 @@ export function SystemGeneralPage() {
             }} disabled={brandTextDraft === (systemSettings.brandText||'')} className="w-full sm:w-auto">保存</Button>
           </div>
           <p className="text-xs text-muted-foreground mt-1">显示在左上角（类似 ChatGPT），最多 40 个字符。</p>
+        </div>
+        <div className="space-y-2">
+          <div className="font-medium">聊天图片保留天数</div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              id="chatImageRetentionDays"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={3650}
+              value={retentionDraft}
+              onChange={(e) => setRetentionDraft(e.target.value)}
+              className="w-full sm:max-w-[120px]"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const parsed = Number.parseInt(retentionDraft, 10)
+                if (Number.isNaN(parsed) || parsed < 0) {
+                  toast({ title: '输入无效', description: '请输入不小于 0 的整数', variant: 'destructive' })
+                  return
+                }
+                await updateSystemSettings({ chatImageRetentionDays: parsed })
+                toast({ title: '已保存' })
+              }}
+              disabled={(() => {
+                const parsed = Number.parseInt(retentionDraft, 10)
+                if (Number.isNaN(parsed) || parsed < 0) return true
+                return parsed === (systemSettings.chatImageRetentionDays ?? 30)
+              })()}
+              className="w-full sm:w-auto"
+            >保存</Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            默认 30 天，可设为 0 表示立即清理（上传后仅当前会话保留）。超过设置天数的图片会在新消息写入时异步清理。
+          </p>
         </div>
       </div>
     </div>
