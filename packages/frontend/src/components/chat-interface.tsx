@@ -152,7 +152,7 @@ export function ChatInterface() {
 
       {/* 消息列表 */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 md:px-6">
-        <div className="pt-4 md:pt-6 pb-[calc(env(safe-area-inset-bottom)+120px)] md:pb-32">
+        <div className="pt-4 md:pt-6 pb-4 md:pb-6">
           {error && (
             <div className="mb-3 text-sm text-destructive bg-destructive/10 p-3 rounded-md">
               {String(error)}
