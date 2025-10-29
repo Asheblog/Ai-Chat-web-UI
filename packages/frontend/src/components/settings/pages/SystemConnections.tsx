@@ -27,7 +27,21 @@ export function SystemConnectionsPage() {
 
   useEffect(() => { load() }, [])
 
-  const resetForm = () => { setForm({ provider: 'openai', baseUrl: '', authType: 'bearer', apiKey: '', azureApiVersion: '', enable: true, prefixId: '', tags: '', modelIds: '', connectionType: 'external' }); setCap({ vision: false, file_upload: false, web_search: false, image_generation: false, code_interpreter: false }) }
+  const resetForm = () => {
+    setForm({
+      provider: 'openai',
+      baseUrl: '',
+      authType: 'bearer',
+      apiKey: '',
+      azureApiVersion: '',
+      enable: true,
+      prefixId: '',
+      tags: '',
+      modelIds: '',
+      connectionType: 'external',
+    })
+    setCap({ vision: false, file_upload: false, web_search: false, image_generation: false, code_interpreter: false })
+  }
 
   const onEdit = (row: any) => {
     setEditing(row)
@@ -115,18 +129,32 @@ export function SystemConnectionsPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Provider</Label>
-            <Select value={form.provider} onValueChange={(v)=>setForm((f:any)=>({...f, provider:v }))}>
+            <Select
+              value={form.provider}
+              onValueChange={(v) =>
+                setForm((f: any) => ({
+                  ...f,
+                  provider: v,
+                  authType: v === 'google_genai' ? 'bearer' : f.authType,
+                }))
+              }
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
                 <SelectItem value="ollama">Ollama</SelectItem>
+                <SelectItem value="google_genai">Google Generative AI</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label>Auth</Label>
-            <Select value={form.authType} onValueChange={(v)=>setForm((f:any)=>({...f, authType:v }))}>
+            <Select
+              value={form.authType}
+              onValueChange={(v) => setForm((f: any) => ({ ...f, authType: v }))}
+              disabled={form.provider === 'google_genai'}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
@@ -139,7 +167,23 @@ export function SystemConnectionsPage() {
           </div>
           <div className="col-span-1 sm:col-span-2">
             <Label>Base URL</Label>
-            <Input value={form.baseUrl} onChange={(e)=>setForm((f:any)=>({...f, baseUrl:e.target.value }))} placeholder="https://api.openai.com/v1" />
+            <Input
+              value={form.baseUrl}
+              onChange={(e) => setForm((f: any) => ({ ...f, baseUrl: e.target.value }))}
+              placeholder={
+                form.provider === 'ollama'
+                  ? 'http://localhost:11434'
+                  : form.provider === 'google_genai'
+                  ? 'https://generativelanguage.googleapis.com/v1beta'
+                  : 'https://api.openai.com/v1'
+              }
+            />
+            {form.provider === 'google_genai' && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                需要在 Google AI Studio 控制台启用 API 并配置 API Key，默认基地址为
+                https://generativelanguage.googleapis.com/v1beta
+              </p>
+            )}
           </div>
           {form.authType==='bearer' && (
             <div className="col-span-1 sm:col-span-2">

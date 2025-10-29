@@ -47,7 +47,7 @@ export interface CreateSessionRequest {
 
 // 消息类型
 export interface Message {
-  id: number;
+  id: number | string;
   sessionId: number;
   role: 'user' | 'assistant';
   content: string;
@@ -176,7 +176,7 @@ export interface MessageProps {
   message: Message;
   isStreaming?: boolean;
   onCopy?: (content: string) => void;
-  onRegenerate?: (messageId: number) => void;
+  onRegenerate?: (messageId: number | string) => void;
 }
 
 export interface SessionItemProps {

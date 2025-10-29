@@ -10,7 +10,7 @@ import { verifyConnection } from '../utils/providers'
 const connections = new Hono()
 
 const connectionSchema = z.object({
-  provider: z.enum(['openai','azure_openai','ollama']),
+  provider: z.enum(['openai','azure_openai','ollama','google_genai']),
   baseUrl: z.string().url(),
   enable: z.boolean().optional().default(true),
   authType: z.enum(['bearer','none','session','system_oauth','microsoft_entra_id']).optional().default('bearer'),
@@ -159,4 +159,3 @@ connections.delete('/user/:id', authMiddleware, async (c) => {
 })
 
 export default connections
-

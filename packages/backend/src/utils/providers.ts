@@ -1,7 +1,7 @@
 import fetch from 'node-fetch'
 import { BackendLogger as log } from './logger'
 
-export type ProviderType = 'openai' | 'azure_openai' | 'ollama'
+export type ProviderType = 'openai' | 'azure_openai' | 'ollama' | 'google_genai'
 export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
 
 export interface ConnectionConfig {
@@ -127,10 +127,15 @@ async function getAzureAccessToken(): Promise<string | null> {
   }
 }
 
-async function buildHeaders(provider: ProviderType, authType: AuthType, apiKey?: string, extra?: Record<string, string>) {
+export async function buildHeaders(provider: ProviderType, authType: AuthType, apiKey?: string, extra?: Record<string, string>) {
   const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authType === 'bearer' && apiKey) h['Authorization'] = `Bearer ${apiKey}`
-  else if (authType === 'system_oauth') {
+  if (provider === 'google_genai') {
+    if (authType === 'bearer' && apiKey) {
+      h['x-goog-api-key'] = apiKey
+    }
+  } else if (authType === 'bearer' && apiKey) {
+    h['Authorization'] = `Bearer ${apiKey}`
+  } else if (authType === 'system_oauth') {
     const token = process.env.SYSTEM_OAUTH_TOKEN
     if (token) h['Authorization'] = `Bearer ${token}`
   } else if (authType === 'microsoft_entra_id' && provider === 'azure_openai') {
@@ -159,6 +164,9 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
     } else if (cfg.provider === 'ollama') {
       const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/api/version`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Ollama verify failed: ${res.status}`)
+    } else if (cfg.provider === 'google_genai') {
+      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
+      if (!res.ok) throw new Error(`Google Generative verify failed: ${res.status}`)
     } else {
       throw new Error('Unsupported provider')
     }
@@ -221,6 +229,17 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.models) ? json.models : []
       return list.map((m) => apply(m.model, m.name || m.model))
+    }
+    if (cfg.provider === 'google_genai') {
+      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
+      if (!res.ok) throw new Error(`Google models failed: ${res.status}`)
+      const json: any = await res.json()
+      const list: any[] = Array.isArray(json?.models) ? json.models : []
+      return list.map((m) => {
+        const raw = typeof m?.name === 'string' ? m.name.split('/').pop() || m.name : ''
+        const display = m?.displayName || raw
+        return apply(raw, display)
+      })
     }
     return []
   } finally {

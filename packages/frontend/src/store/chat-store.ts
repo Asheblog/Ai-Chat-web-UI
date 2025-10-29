@@ -227,142 +227,225 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   streamMessage: async (sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }) => {
-    // 首先添加用户消息
-    // 在发送前尝试基于首条用户输入为“新的对话”自动改名（与常见产品一致）
     const snapshot = get()
-    try {
-      const cur = snapshot.currentSession
-      const isTarget = !!cur && cur.id === sessionId
-      const isDefaultTitle = isTarget && (
-        !cur!.title || cur!.title.trim() === '' || cur!.title === '新的对话' || cur!.title === 'New Chat'
-      )
-      const noUserMessagesYet = snapshot.messages.filter(m => m.sessionId === sessionId && m.role === 'user').length === 0
+    const session = snapshot.sessions.find((s) => s.id === sessionId) || snapshot.currentSession
+    if (!session || session.id !== sessionId) {
+      set({ error: '会话不存在或未选中' })
+      return
+    }
 
-      if (isTarget && isDefaultTitle && noUserMessagesYet) {
-        const deriveTitleFrom = (text: string) => {
-          if (!text) return ''
-          let s = String(text)
-          // 去除代码块/图片/多余空白/标题符号
-          s = s.replace(/```[\s\S]*?```/g, ' ')
-               .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
-               .replace(/^[#>\-\*\s]+/gm, '')
-               .replace(/\n+/g, ' ')
-               .trim()
-          // 取前 30 个字符作为标题
+    const modelId = session.modelLabel || session.modelRawId || ''
+
+    // 自动改名 - 仅针对首条用户消息
+    try {
+      const isTarget = snapshot.currentSession?.id === sessionId
+      const isDefaultTitle =
+        isTarget &&
+        (!!snapshot.currentSession?.title === false ||
+          snapshot.currentSession?.title === '新的对话' ||
+          snapshot.currentSession?.title === 'New Chat')
+      const noUserMessagesYet =
+        snapshot.messages.filter((m) => m.sessionId === sessionId && m.role === 'user').length === 0
+
+      if (isTarget && isDefaultTitle && noUserMessagesYet && content) {
+        const deriveTitle = (text: string) => {
+          let s = text
+            .replace(/```[\s\S]*?```/g, ' ')
+            .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
+            .replace(/^[#>\-\*\s]+/gm, '')
+            .replace(/\n+/g, ' ')
+            .trim()
           const limit = 30
           return s.length > limit ? s.slice(0, limit) : s
         }
-
-        const newTitle = deriveTitleFrom(content)
-        if (newTitle) {
-          const prevTitle = cur!.title
-          // 本地乐观更新，提升侧边栏即时性
-          set((st) => ({
-            sessions: st.sessions.map(s => s.id === sessionId ? { ...s, title: newTitle } : s),
-            currentSession: st.currentSession?.id === sessionId ? { ...st.currentSession!, title: newTitle } : st.currentSession,
+        const titleCandidate = deriveTitle(content)
+        if (titleCandidate) {
+          const prevTitle = snapshot.currentSession?.title
+          set((state) => ({
+            sessions: state.sessions.map((s) =>
+              s.id === sessionId ? { ...s, title: titleCandidate } : s
+            ),
+            currentSession:
+              state.currentSession?.id === sessionId
+                ? { ...state.currentSession, title: titleCandidate }
+                : state.currentSession,
           }))
-          // 后台持久化；失败则回滚
-          get().updateSessionTitle(sessionId, newTitle).catch(() => {
-            set((st) => ({
-              sessions: st.sessions.map(s => s.id === sessionId ? { ...s, title: prevTitle } : s),
-              currentSession: st.currentSession?.id === sessionId ? { ...st.currentSession!, title: prevTitle } : st.currentSession,
-            }))
-          })
+          get()
+            .updateSessionTitle(sessionId, titleCandidate)
+            .catch(() => {
+              set((state) => ({
+                sessions: state.sessions.map((s) =>
+                  s.id === sessionId ? { ...s, title: prevTitle } : s
+                ),
+                currentSession:
+                  state.currentSession?.id === sessionId
+                    ? { ...state.currentSession, title: prevTitle }
+                    : state.currentSession,
+              }))
+            })
         }
       }
-    } catch (e) {
-      // 忽略改名失败，不影响消息发送
+    } catch {
+      // 忽略改名失败
     }
 
-    const userClientMessageId = (() => {
-      try { return (crypto as any)?.randomUUID?.() ?? '' } catch { return '' }
-    })() || (Math.random().toString(36).slice(2) + Date.now().toString(36))
+    const userClientMessageId =
+      (() => {
+        try {
+          return (crypto as any)?.randomUUID?.() ?? ''
+        } catch {
+          return ''
+        }
+      })() || `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
 
     const userMessage: Message = {
-      id: Date.now(), // 临时ID
+      id: Date.now(),
       sessionId,
       role: 'user',
       content,
       createdAt: new Date().toISOString(),
       clientMessageId: userClientMessageId,
-    }
-    if (images && images.length) {
-      userMessage.images = images.map(img => `data:${img.mime};base64,${img.data}`)
+      images: images?.length
+        ? images.map((img) => `data:${img.mime};base64,${img.data}`)
+        : undefined,
     }
 
-    const sessionPref =
+    const reasoningPreference =
       snapshot.currentSession?.id === sessionId
         ? snapshot.currentSession?.reasoningEnabled
         : snapshot.sessions.find((s) => s.id === sessionId)?.reasoningEnabled
-    const reasoningDesired = Boolean(options?.reasoningEnabled ?? sessionPref ?? false)
-    let reasoningActive = false
+    const reasoningDesired = Boolean(options?.reasoningEnabled ?? reasoningPreference ?? false)
 
-    // 创建AI消息的占位符
-    const baseAiMessage: Message = {
-      id: Date.now() + 1, // 临时ID
+    const assistantPlaceholder: Message = {
+      id: Date.now() + 1,
       sessionId,
       role: 'assistant',
       content: '',
       createdAt: new Date().toISOString(),
     }
-    const aiMessage: Message = baseAiMessage
 
     set((state) => {
-      const nextCache = userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
-        ? { ...state.messageImageCache, [userMessage.clientMessageId]: userMessage.images }
-        : state.messageImageCache
+      const nextCache =
+        userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
+          ? { ...state.messageImageCache, [userMessage.clientMessageId]: userMessage.images }
+          : state.messageImageCache
       return {
-        messages: [...state.messages, userMessage, aiMessage],
+        messages: [...state.messages, userMessage, assistantPlaceholder],
         messageImageCache: nextCache,
         isStreaming: true,
         error: null,
       }
     })
 
+    const convertMessageToProvider = (msg: Message): Record<string, any> => {
+      const parts: Array<Record<string, any>> = []
+      if (msg.content?.trim()) {
+        parts.push({ type: 'text', text: msg.content })
+      }
+      if (msg.images?.length) {
+        msg.images.forEach((img) =>
+          parts.push({
+            type: 'image_url',
+            image_url: { url: img },
+          })
+        )
+      }
+      if (parts.length === 0) {
+        parts.push({ type: 'text', text: '' })
+      }
+      return {
+        role: msg.role,
+        content: parts.length === 1 && parts[0].type === 'text' ? parts[0].text : parts,
+      }
+    }
+
+    const historyMessages = snapshot.messages
+      .filter((m) => m.sessionId === sessionId)
+      .map(convertMessageToProvider)
+    const providerMessages = [...historyMessages, convertMessageToProvider(userMessage)]
+
+    const streamParams: Record<string, any> = {}
+    if (options?.reasoningEffort) streamParams.reasoning_effort = options.reasoningEffort
+    if (options?.ollamaThink) streamParams.think = true
+
+    let reasoningActive = false
+    let accumulatedContent = ''
+    let accumulatedReasoning = ''
+    let useV1Pipeline = false
+
+    const updateAssistantMessage = (updater: (msg: Message) => Message) => {
+      set((state) => ({
+        messages: state.messages.map((msg, index) =>
+          index === state.messages.length - 1 ? updater(msg) : msg
+        ),
+      }))
+    }
+
+    const ensureReasoningActivated = () => {
+      if (reasoningActive) return
+      reasoningActive = true
+      accumulatedReasoning = ''
+      updateAssistantMessage((msg) => ({
+        ...msg,
+        reasoningStatus: 'idle',
+        reasoningIdleMs: null,
+        reasoning: msg.reasoning || '',
+      }))
+    }
+
+    const startLegacyStream = () =>
+      apiClient.streamChat(sessionId, content, images, {
+        ...(options || {}),
+        clientMessageId: userClientMessageId,
+      })
+
+    let iterator: AsyncGenerator<ChatStreamChunk, void, unknown> | null = null
+
     try {
-      let accumulatedContent = ''
-      let accumulatedReasoning = ''
-
-      const updateAssistantMessage = (updater: (msg: Message) => Message) => {
-        set((state) => ({
-          messages: state.messages.map((msg, index) =>
-            index === state.messages.length - 1 ? updater(msg) : msg
-          ),
-        }))
+      if (modelId) {
+        try {
+          const created = await apiClient.createMessageV1({
+            sessionId,
+            role: 'user',
+            content,
+            clientMessageId: userClientMessageId,
+          })
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.clientMessageId === userClientMessageId ? { ...msg, id: created.id } : msg
+            ),
+          }))
+          iterator = apiClient.streamV1ChatCompletions({
+            modelId,
+            messages: providerMessages,
+            metadata: { session_id: sessionId },
+            params: streamParams,
+          })
+          useV1Pipeline = true
+        } catch (err) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[streamMessage] fallback to legacy streaming', err)
+          }
+          iterator = startLegacyStream()
+          useV1Pipeline = false
+        }
+      } else {
+        iterator = startLegacyStream()
+        useV1Pipeline = false
       }
 
-      const ensureReasoningActivated = () => {
-        if (reasoningActive) return
-        reasoningActive = true
-        accumulatedReasoning = ''
-        updateAssistantMessage((msg) => ({
-          ...msg,
-          reasoningStatus: 'idle',
-          reasoningIdleMs: null,
-          reasoning: msg.reasoning || '',
-        }))
-      }
-
-      // 使用相同幂等ID（跨重试/降级复用）
-      for await (const evt of apiClient.streamChat(sessionId, content, images, { ...(options||{}), clientMessageId: userClientMessageId })) {
+      for await (const evt of iterator!) {
         if (evt?.type === 'content' && evt.content) {
           accumulatedContent += evt.content
           set((state) => ({
             messages: state.messages.map((msg, index) =>
-              index === state.messages.length - 1
-                ? { ...msg, content: accumulatedContent }
-                : msg
+              index === state.messages.length - 1 ? { ...msg, content: accumulatedContent } : msg
             ),
           }))
         } else if (evt?.type === 'reasoning') {
+          if (!reasoningDesired) continue
           const chunkHasContent = typeof evt.content === 'string' && evt.content.length > 0
-          if (!reasoningDesired) {
-            continue
-          }
-          if (!reasoningActive && !chunkHasContent) {
-            // 忽略纯 keepalive / done 事件，避免在非推理模型误触发折叠
-            continue
-          }
+          if (!reasoningActive && !chunkHasContent) continue
           ensureReasoningActivated()
           if (evt.keepalive) {
             updateAssistantMessage((msg) => ({
@@ -389,6 +472,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               reasoningIdleMs: null,
             }))
           }
+        } else if (evt?.type === 'usage' && evt.usage) {
+          const usage = evt.usage
+          set((state) => ({
+            usageCurrent: {
+              prompt_tokens: usage.prompt_tokens,
+              context_limit: usage.context_limit ?? state.usageCurrent?.context_limit ?? undefined,
+              context_remaining: usage.context_remaining ?? state.usageCurrent?.context_remaining ?? undefined,
+            },
+            usageLastRound:
+              usage.completion_tokens != null || usage.total_tokens != null
+                ? usage
+                : state.usageLastRound,
+          }))
         } else if (evt?.type === 'complete') {
           if (reasoningActive) {
             updateAssistantMessage((msg) => ({
@@ -397,17 +493,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               reasoningIdleMs: null,
             }))
           }
-        } else if (evt?.type === 'usage' && evt.usage) {
-          const usage = evt.usage
-          // 实时更新当前 usage；若包含 completion/total 则可同步作为 lastRound
-          set((state) => ({
-            usageCurrent: {
-              prompt_tokens: usage.prompt_tokens,
-              context_limit: usage.context_limit ?? state.usageCurrent?.context_limit ?? undefined,
-              context_remaining: usage.context_remaining ?? state.usageCurrent?.context_remaining ?? undefined,
-            },
-            usageLastRound: (usage.completion_tokens != null || usage.total_tokens != null) ? usage : state.usageLastRound,
-          }))
         }
       }
 
@@ -422,29 +507,40 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : state.messages,
       }))
 
-      if (reasoningActive && !accumulatedReasoning.trim()) {
-        updateAssistantMessage((msg) => {
-          const next = { ...msg }
-          delete (next as any).reasoning
-          delete (next as any).reasoningStatus
-          delete (next as any).reasoningIdleMs
-          delete (next as any).reasoningDurationSeconds
-          return next
-        })
+      if (useV1Pipeline && accumulatedContent.trim()) {
+        try {
+          const assistantRecord = await apiClient.createMessageV1({
+            sessionId,
+            role: 'assistant',
+            content: accumulatedContent.trim(),
+            reasoning: reasoningActive ? accumulatedReasoning.trim() || null : null,
+            reasoningDurationSeconds: reasoningActive
+              ? get().messages.at(-1)?.reasoningDurationSeconds ?? null
+              : null,
+          })
+          set((state) => ({
+            messages: state.messages.map((msg, index) =>
+              index === state.messages.length - 1
+                ? { ...msg, id: assistantRecord.id }
+                : msg
+            ),
+          }))
+          get().fetchMessages(sessionId).catch(() => {})
+        } catch (err) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[streamMessage] failed to persist assistant message via v1', err)
+          }
+        }
       }
 
-      // 重新获取消息列表与 usage 聚合
-      await Promise.all([
-        get().fetchMessages(sessionId),
-        get().fetchUsage(sessionId),
-      ])
-      // 同步刷新侧边栏汇总用量，避免需要手动刷新
+      get().fetchUsage(sessionId).catch(() => {})
       get().fetchSessionsUsage().catch(() => {})
-
     } catch (error: any) {
-      // 流式失败，降级尝试非流式一次
       try {
-        const resp = await apiClient.chatCompletion(sessionId, content, images, { ...(options||{}), clientMessageId: userClientMessageId })
+        const resp = await apiClient.chatCompletion(sessionId, content, images, {
+          ...(options || {}),
+          clientMessageId: userClientMessageId,
+        })
         const finalText = resp?.data?.content || ''
         if (finalText) {
           set((state) => ({
@@ -455,20 +551,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ),
             isStreaming: false,
           }))
-          // 同步用量（若返回带有 usage 可另行处理，这里触发一次聚合刷新）
           await get().fetchUsage(sessionId)
+          get().fetchSessionsUsage().catch(() => {})
           return
         }
-      } catch (_) {
-        // ignore
+      } catch {
+        // ignore secondary failure
       }
 
       set({
-        error: error?.response?.data?.error || error?.message || '发送消息失败',
+        error: error?.message || '发送消息失败',
         isStreaming: false,
       })
-
-      // 移除失败的AI消息
       set((state) => ({
         messages: state.messages.filter((msg, index) =>
           !(index === state.messages.length - 1 && msg.role === 'assistant' && msg.content === '')
