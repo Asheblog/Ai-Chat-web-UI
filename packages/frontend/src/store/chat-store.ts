@@ -294,7 +294,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       snapshot.currentSession?.id === sessionId
         ? snapshot.currentSession?.reasoningEnabled
         : snapshot.sessions.find((s) => s.id === sessionId)?.reasoningEnabled
-    let reasoningActive = Boolean(options?.reasoningEnabled ?? sessionPref ?? false)
+    const reasoningDesired = Boolean(options?.reasoningEnabled ?? sessionPref ?? false)
+    let reasoningActive = false
 
     // 创建AI消息的占位符
     const baseAiMessage: Message = {
@@ -304,14 +305,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       content: '',
       createdAt: new Date().toISOString(),
     }
-    const aiMessage: Message = reasoningActive
-      ? {
-          ...baseAiMessage,
-          reasoningStatus: 'idle',
-          reasoningIdleMs: null,
-          reasoning: '',
-        }
-      : baseAiMessage
+    const aiMessage: Message = baseAiMessage
 
     set((state) => {
       const nextCache = userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
@@ -362,6 +356,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }))
         } else if (evt?.type === 'reasoning') {
           const chunkHasContent = typeof evt.content === 'string' && evt.content.length > 0
+          if (!reasoningDesired) {
+            continue
+          }
           if (!reasoningActive && !chunkHasContent) {
             // 忽略纯 keepalive / done 事件，避免在非推理模型误触发折叠
             continue
@@ -416,11 +413,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       set((state) => ({
         isStreaming: false,
-        messages: state.messages.map((msg, index) =>
-          index === state.messages.length - 1 && (reasoningActive || typeof msg.reasoningStatus === 'string')
-            ? { ...msg, reasoningStatus: 'done', reasoningIdleMs: null }
-            : msg
-        ),
+        messages: reasoningActive
+          ? state.messages.map((msg, index) =>
+              index === state.messages.length - 1
+                ? { ...msg, reasoningStatus: 'done', reasoningIdleMs: null }
+                : msg
+            )
+          : state.messages,
       }))
 
       if (reasoningActive && !accumulatedReasoning.trim()) {
