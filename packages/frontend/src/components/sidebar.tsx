@@ -136,7 +136,7 @@ export function Sidebar() {
   }
 
   const sidebarContent = (
-    <div className="flex h-full w-full lg:w-72 flex-col bg-card text-foreground">
+    <div className="flex h-full w-full lg:w-72 flex-col bg-slate-50 dark:bg-slate-900 dark:text-slate-100">
       {/* 顶部文字LOGO + 折叠按钮 */}
       <div className="px-4 pt-[10px] pb-2 flex items-center justify-between">
         <Link href="/main" className="block flex-1 select-none text-center">
@@ -150,7 +150,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="折叠侧边栏"
-            className="inline-flex lg:hidden h-10 w-10 rounded-full border border-border/70 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
+            className="inline-flex lg:hidden h-10 w-10 rounded-full border border-slate-200/70 hover:bg-slate-200 dark:border-slate-800/70 dark:hover:bg-slate-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
             onClick={() => {
               setSidebarCollapsed(true)
               setIsMobileMenuOpen(false)
@@ -163,7 +163,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="收起侧边栏"
-            className="hidden lg:inline-flex ml-2 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
+            className="hidden lg:inline-flex ml-2 hover:bg-slate-200 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
             onClick={() => setSidebarCollapsed(true)}
           >
             <SidebarToggleIcon className="h-6 w-6" />
@@ -175,7 +175,7 @@ export function Sidebar() {
       <div className="px-4 pb-4 space-y-2">
         <Button
           onClick={handleNewChat}
-          className="w-full justify-start text-foreground hover:bg-muted border-0 shadow-none bg-transparent"
+          className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
           variant="ghost"
           disabled={isCreating}
           aria-busy={isCreating}
@@ -190,7 +190,7 @@ export function Sidebar() {
         </Button>
         <Button
           onClick={() => setIsSettingsOpen(true)}
-          className="w-full justify-start text-foreground hover:bg-muted border-0 shadow-none bg-transparent"
+          className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
           variant="ghost"
         >
           <Settings className="mr-2 h-4 w-4" />
@@ -199,7 +199,7 @@ export function Sidebar() {
       </div>
 
       <div className="px-4 pb-4">
-        <div className="border-t border-border" />
+        <div className="border-t border-slate-200 dark:border-slate-800" />
       </div>
       {/* 会话列表 */}
       <ScrollArea className="flex-1 px-4">
@@ -230,8 +230,8 @@ export function Sidebar() {
             <div
               key={session.id}
               className={cn(
-                "group relative flex items-center justify-between rounded-lg p-3 cursor-pointer hover:bg-muted transition-colors",
-                currentSession?.id === session.id && "bg-muted"
+                "group relative flex items-center justify-between rounded-lg p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
+                currentSession?.id === session.id && "bg-slate-100 dark:bg-slate-800"
               )}
               onClick={() => handleSessionClick(session.id)}
             >
@@ -275,7 +275,7 @@ export function Sidebar() {
   )
 
   const collapsedSidebar = (
-    <div className="flex h-full w-14 flex-col items-center justify-start bg-card py-3">
+    <div className="flex h-full w-14 flex-col items-center justify-start bg-slate-50 dark:bg-slate-900 dark:text-slate-100 py-3">
       <Button
         variant="ghost"
         size="icon"
@@ -299,7 +299,7 @@ export function Sidebar() {
       <div className="hidden lg:flex">
         <div
           className={cn(
-            "relative h-full overflow-hidden transition-[width] duration-300 ease-in-out bg-card will-change-[width]",
+            "relative h-full overflow-hidden transition-[width] duration-300 ease-in-out bg-slate-50 dark:bg-slate-900 will-change-[width]",
             sidebarCollapsed ? "w-14" : "w-72"
           )}
         >
@@ -331,7 +331,7 @@ export function Sidebar() {
         <SheetContent
           side="left"
           showCloseButton={false}
-          className="w-72 border-r border-border/70 bg-card p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
+          className="w-72 border-r border-slate-200/70 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-900 p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
         >
           {sidebarContent}
         </SheetContent>
@@ -371,7 +371,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="展开侧边栏"
-            className="h-12 w-12 rounded-full border border-border/80 bg-background/95 shadow-lg hover:bg-accent/70"
+            className="h-12 w-12 rounded-full border border-slate-200/80 dark:border-slate-800/80 bg-background/95 shadow-lg hover:bg-accent/70 dark:hover:bg-slate-800/80"
             onClick={() => {
               setSidebarCollapsed(false)
               setIsMobileMenuOpen(true)
