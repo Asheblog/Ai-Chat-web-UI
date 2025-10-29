@@ -1,10 +1,8 @@
 # 更新日志
 
-## v1.3.3 · 2025-10-29
+## v1.3.4 · 2025-10-29
 
-- **流式稳定性**：重构后端聊天流管线，新增内容/推理分块聚合、安全排队、连接断开检测与保活，减少碎片化输出并支持优雅取消。
-- **推理流程体验**：引入推理首段宽限、空闲超时、保活探活等细粒度超时控制，并在前端展示实时推理状态与耗时。
-- **按需推理激活**：优化流式回复期间的推理启用逻辑，新增 `hasReasoningState`/`ensureReasoningActivated` 等守护函数，确保推理结果不会遗漏。
-- **手动开关与清理**：改进推理开关状态管理，自动清理空推理内容，确保手动触发流程在多次交互中保持一致。
-- **事件过滤修复**：修正推理事件过滤条件与状态同步问题，避免重复激活或缺失推理输出。
-
+- [7e5f232](https://github.com/your-username/aichat/commit/7e5f23226c05d0242d7cb20671e76b5190a01e1f) 调整聊天输入区布局、按钮悬停态与移动端安全区内边距，统一多端视觉体验。
+- [7bb98a3](https://github.com/your-username/aichat/commit/7bb98a3f49d4c9a4e87034158293dfcf47ada8e8) 侧边栏改用语义化颜色令牌，确保亮暗主题下的层级与可读性一致。
+- [805d132](https://github.com/your-username/aichat/commit/805d13272f80d09d0313840981cfb0d04ae99ae2) 将静态图片全面替换为Next.js `Image`，补足中文alt文本并收敛多处依赖数组，减少无效渲染。
+- [e61d494](https://github.com/your-username/aichat/commit/e61d4945080ff506470caa6ca9df7df29fa01f92) 登录/注册页面抽离复用的`AuthFormLayout`，移除冗余Shell组件，降低表单布局重复代码。
