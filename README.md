@@ -82,6 +82,9 @@ volumes:
   backend_logs:
     driver: local
     name: ai_chat_web_ui_logs
+  backend_images:
+    driver: local
+    name: ai_chat_web_ui_images
 
 networks:
   ai-chat-web-ui-network:

@@ -14,6 +14,8 @@ import {
   persistChatImages,
   resolveChatImageUrls,
   determineChatImageBaseUrl,
+  isMessageAttachmentTableMissing,
+  MESSAGE_ATTACHMENT_MIGRATION_HINT,
 } from '../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 
@@ -157,12 +159,24 @@ chat.post('/admin/attachments/refresh', authMiddleware, adminOnlyMiddleware, asy
       siteBaseUrl: siteBaseSetting?.value ?? null,
     })
 
-    const total = await prisma.messageAttachment.count()
-    const samples = await prisma.messageAttachment.findMany({
-      orderBy: { id: 'desc' },
-      take: 5,
-      select: { id: true, messageId: true, relativePath: true },
-    })
+    let total = 0
+    let samples: Array<{ id: number; messageId: number; relativePath: string }> = []
+    try {
+      total = await prisma.messageAttachment.count()
+      samples = await prisma.messageAttachment.findMany({
+        orderBy: { id: 'desc' },
+        take: 5,
+        select: { id: true, messageId: true, relativePath: true },
+      })
+    } catch (error) {
+      if (isMessageAttachmentTableMissing(error)) {
+        return c.json<ApiResponse>({
+          success: false,
+          error: `图片附件功能尚未初始化：${MESSAGE_ATTACHMENT_MIGRATION_HINT}`,
+        }, 503)
+      }
+      throw error
+    }
 
     const sampleUrls = samples.map((item) => ({
       id: item.id,

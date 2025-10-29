@@ -43,17 +43,45 @@ if [ "$DB_DIR" != "$DATA_DIR" ]; then
 fi
 
 SHOULD_INIT_DB=0
+PRISMA_SCHEMA_PATH="${PRISMA_SCHEMA_PATH:-/app/prisma/schema.prisma}"
+PRISMA_BIN="./node_modules/.bin/prisma"
+
+run_prisma_command() {
+  local subcommand="$1"
+  shift || true
+
+  if command -v npx >/dev/null 2>&1; then
+    npx prisma "$subcommand" "$@" || return $?
+    return 0
+  fi
+
+  if [ -x "$PRISMA_BIN" ]; then
+    "$PRISMA_BIN" "$subcommand" "$@" || return $?
+    return 0
+  fi
+
+  echo "[entrypoint] ERROR: Prisma CLI not found (npx/prisma). Please ensure dependencies are installed." >&2
+  return 1
+}
+
+run_prisma_generate() {
+  run_prisma_command "generate" --schema "$PRISMA_SCHEMA_PATH" || true
+}
+
+run_prisma_migrate_deploy() {
+  run_prisma_command "migrate" "deploy" --schema "$PRISMA_SCHEMA_PATH"
+}
 
 if [ ! -f "$DB_FILE" ]; then
-  echo "[entrypoint] Database not found. Running prisma db push to initialize schema..."
-  # 以 root 运行以避免写 @prisma/engines 权限问题，随后再修正卷属主
-  if command -v npx >/dev/null 2>&1; then
-    npx prisma generate || true
-    npx prisma db push || npm run db:push || true
-  else
-    npm run db:push || true
-  fi
+  echo "[entrypoint] Database not found. Will initialize schema and seed data..."
   SHOULD_INIT_DB=1
+fi
+
+run_prisma_generate
+
+if ! run_prisma_migrate_deploy; then
+  echo "[entrypoint] WARN: prisma migrate deploy failed, falling back to prisma db push" >&2
+  run_prisma_command "db" "push" --schema "$PRISMA_SCHEMA_PATH" || npm run db:push || true
 fi
 
 # 显式触发数据库初始化：DB_INIT_ON_START=true/TRUE/1 时无论数据库是否存在均执行

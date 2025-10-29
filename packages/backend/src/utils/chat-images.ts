@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../db'
 import {
   CHAT_IMAGE_STORAGE_ROOT,
@@ -26,6 +27,37 @@ const MIME_EXT: Record<string, string> = {
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 let lastCleanupAt = 0
+let messageAttachmentUnavailable = false
+let messageAttachmentWarningPrinted = false
+
+const MIGRATION_HINT =
+  '请在部署环境内执行 `npx prisma migrate deploy --schema prisma/schema.prisma` 或等效命令，确保 message_attachments 表已创建。'
+
+export const MESSAGE_ATTACHMENT_MIGRATION_HINT = MIGRATION_HINT
+
+export function isMessageAttachmentTableMissing(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2021' &&
+    (error.meta?.modelName === 'MessageAttachment' ||
+      error.meta?.table === 'main.message_attachments' ||
+      error.meta?.table === 'message_attachments')
+  )
+}
+
+function handleMessageAttachmentTableMissing(context: string, error: unknown): boolean {
+  if (!isMessageAttachmentTableMissing(error)) {
+    return false
+  }
+  messageAttachmentUnavailable = true
+  if (!messageAttachmentWarningPrinted) {
+    console.warn(
+      `[${context}] message_attachments 表不存在，已跳过图片元数据操作。${MIGRATION_HINT}`,
+    )
+    messageAttachmentWarningPrinted = true
+  }
+  return true
+}
 
 async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true })
@@ -118,13 +150,27 @@ export async function persistChatImages(
   }
 
   if (relativePaths.length > 0) {
-    await prisma.messageAttachment.deleteMany({ where: { messageId: opts.messageId } })
-    await prisma.messageAttachment.createMany({
-      data: relativePaths.map((relative) => ({
-        messageId: opts.messageId,
-        relativePath: relative,
-      })),
-    })
+    if (messageAttachmentUnavailable) {
+      return relativePaths
+    }
+
+    try {
+      await prisma.messageAttachment.deleteMany({ where: { messageId: opts.messageId } })
+      await prisma.messageAttachment.createMany({
+        data: relativePaths.map((relative) => ({
+          messageId: opts.messageId,
+          relativePath: relative,
+        })),
+      })
+    } catch (error) {
+      if (!handleMessageAttachmentTableMissing('persistChatImages', error)) {
+        console.error('[persistChatImages] failed to sync metadata', {
+          sessionId: opts.sessionId,
+          messageId: opts.messageId,
+          error,
+        })
+      }
+    }
   }
 
   return relativePaths
@@ -213,6 +259,10 @@ export async function cleanupExpiredChatImages(retentionDays: number) {
   if (now - lastCleanupAt < CLEANUP_INTERVAL_MS) return
   lastCleanupAt = now
 
+  if (messageAttachmentUnavailable) {
+    return
+  }
+
   const effectiveDays = Number.isFinite(retentionDays) && retentionDays >= 0
     ? retentionDays
     : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
@@ -244,6 +294,8 @@ export async function cleanupExpiredChatImages(retentionDays: number) {
       where: { id: { in: expiredAttachments.map((a) => a.id) } },
     })
   } catch (error) {
-    console.warn('[cleanupExpiredChatImages] failed to remove expired metadata', error)
+    if (!handleMessageAttachmentTableMissing('cleanupExpiredChatImages', error)) {
+      console.warn('[cleanupExpiredChatImages] failed to remove expired metadata', error)
+    }
   }
 }
