@@ -1520,10 +1520,17 @@ chat.get('/usage', actorMiddleware, async (c) => {
 // 所有会话的用量聚合（当前用户）
 chat.get('/sessions/usage', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
-    // 获取当前用户的会话列表
+    const actor = c.get('actor') as Actor | undefined;
+    if (!actor) {
+      return c.json<ApiResponse>({ success: false, error: 'Actor context missing' }, 401);
+    }
+
+    const whereClause = actor.type === 'user'
+      ? { userId: actor.id }
+      : { anonymousKey: actor.key };
+
     const sessions = await prisma.chatSession.findMany({
-      where: { userId: user.id },
+      where: whereClause,
       select: { id: true },
     });
     const sessionIds = sessions.map(s => s.id);

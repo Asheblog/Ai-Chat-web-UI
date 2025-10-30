@@ -14,6 +14,7 @@ import settings from './api/settings';
 import connections from './api/connections';
 import catalog from './api/catalog';
 import openaiCompat from './api/openai-compatible';
+import { scheduleModelCatalogAutoRefresh } from './utils/model-catalog';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -144,6 +145,8 @@ app.get('/api', (c) => {
 app.notFound(notFoundHandler);
 app.onError(errorHandler);
 
+const stopCatalogRefresh = scheduleModelCatalogAutoRefresh();
+
 // 启动服务器
 // 端口解析：优先 PORT，其次兼容 BACKEND_PORT，最后回退 8001（统一本地/容器内行为）
 const port = parseInt(process.env.PORT || process.env.BACKEND_PORT || '8001');
@@ -170,11 +173,13 @@ serve({
 // 优雅关闭
 process.on('SIGINT', async () => {
   console.log('\n🔄 Gracefully shutting down...');
+  try { stopCatalogRefresh(); } catch {}
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n🔄 Gracefully shutting down...');
+  try { stopCatalogRefresh(); } catch {}
   process.exit(0);
 });
 

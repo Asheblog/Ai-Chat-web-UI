@@ -20,10 +20,9 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ variant = 'label', className }: UserMenuProps) {
-  const { actorState, user, quota, logout } = useAuthStore((state) => ({
+  const { actorState, user, logout } = useAuthStore((state) => ({
     actorState: state.actorState,
     user: state.user,
-    quota: state.quota,
     logout: state.logout,
   }))
   const { setTheme } = useSettingsStore()
@@ -33,13 +32,6 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
   }
 
   const showLabel = variant === 'label'
-
-  const quotaRemaining = (() => {
-    if (!quota) return null
-    if (quota.unlimited) return '无限'
-    if (typeof quota.remaining === 'number') return Math.max(0, quota.remaining)
-    return Math.max(0, quota.dailyLimit - quota.usedCount)
-  })()
 
   if (actorState !== 'authenticated' || !user) {
     const button = (
@@ -60,25 +52,15 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
 
     if (variant === 'icon') {
       return (
-        <div className={cn('flex flex-col items-center gap-1', className)}>
+        <div className={cn('flex flex-col items-center', className)}>
           {button}
-          {quotaRemaining !== null && (
-            <span className="text-[10px] text-muted-foreground">
-              今日剩余 {quotaRemaining}
-            </span>
-          )}
         </div>
       )
     }
 
     return (
-      <div className={cn('flex items-center gap-2', className)}>
+      <div className={cn('flex items-center', className)}>
         {button}
-        {quotaRemaining !== null && (
-          <span className="text-xs text-muted-foreground">
-            今日剩余 {quotaRemaining}
-          </span>
-        )}
       </div>
     )
   }

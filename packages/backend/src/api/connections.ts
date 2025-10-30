@@ -6,6 +6,8 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import type { ApiResponse } from '../types'
 import { AuthUtils } from '../utils/auth'
 import { verifyConnection } from '../utils/providers'
+import { refreshModelCatalogForConnection } from '../utils/model-catalog'
+import { BackendLogger as log } from '../utils/logger'
 
 const connections = new Hono()
 
@@ -49,6 +51,11 @@ connections.post('/', requireUserActor, adminOnlyMiddleware, zValidator('json', 
       connectionType: body.connectionType || 'external',
     },
   })
+  try {
+    await refreshModelCatalogForConnection(row)
+  } catch (error) {
+    log.warn('新增系统连接后刷新模型目录失败', { id: row.id, error })
+  }
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
 })
 
@@ -68,12 +75,18 @@ connections.put('/:id', requireUserActor, adminOnlyMiddleware, zValidator('json'
   if (body.modelIds) updates.modelIdsJson = JSON.stringify(body.modelIds)
   if (body.connectionType) updates.connectionType = body.connectionType
   const row = await prisma.connection.update({ where: { id }, data: updates })
+  try {
+    await refreshModelCatalogForConnection(row)
+  } catch (error) {
+    log.warn('更新系统连接后刷新模型目录失败', { id: row.id, error })
+  }
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection updated' })
 })
 
 connections.delete('/:id', requireUserActor, adminOnlyMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   await prisma.connection.delete({ where: { id } })
+  await prisma.modelCatalog.deleteMany({ where: { connectionId: id } })
   return c.json<ApiResponse>({ success: true, message: 'Connection deleted' })
 })
 
@@ -126,6 +139,11 @@ connections.post('/user', requireUserActor, zValidator('json', connectionSchema)
       connectionType: body.connectionType || 'external',
     },
   })
+  try {
+    await refreshModelCatalogForConnection(row)
+  } catch (error) {
+    log.warn('新增个人连接后刷新模型目录失败', { id: row.id, owner: row.ownerUserId, error })
+  }
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
 })
 
@@ -148,6 +166,11 @@ connections.put('/user/:id', requireUserActor, zValidator('json', connectionSche
   if (body.modelIds) updates.modelIdsJson = JSON.stringify(body.modelIds)
   if (body.connectionType) updates.connectionType = body.connectionType
   const row = await prisma.connection.update({ where: { id }, data: updates })
+  try {
+    await refreshModelCatalogForConnection(row)
+  } catch (error) {
+    log.warn('更新个人连接后刷新模型目录失败', { id: row.id, owner: row.ownerUserId, error })
+  }
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection updated' })
 })
 
@@ -157,6 +180,7 @@ connections.delete('/user/:id', requireUserActor, async (c) => {
   const exists = await prisma.connection.findFirst({ where: { id, ownerUserId: user.id } })
   if (!exists) return c.json<ApiResponse>({ success: false, error: 'Not found' }, 404)
   await prisma.connection.delete({ where: { id } })
+  await prisma.modelCatalog.deleteMany({ where: { connectionId: id } })
   return c.json<ApiResponse>({ success: true, message: 'Connection deleted' })
 })
 

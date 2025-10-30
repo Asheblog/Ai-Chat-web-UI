@@ -2,8 +2,9 @@ import { Hono } from 'hono'
 import { prisma } from '../db'
 import type { ApiResponse, Actor } from '../types'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
-import { fetchModelsForConnection, type CatalogItem, computeCapabilities } from '../utils/providers'
-import { AuthUtils } from '../utils/auth'
+import { computeCapabilities, deriveChannelName } from '../utils/providers'
+import { refreshAllModelCatalog, refreshModelCatalogForConnections, refreshModelCatalogForConnectionId } from '../utils/model-catalog'
+import { BackendLogger as log } from '../utils/logger'
 
 const catalog = new Hono()
 
@@ -12,106 +13,83 @@ catalog.use('*', actorMiddleware)
 // GET /api/catalog/models - 当前用户可见（系统连接 + 本人直连）聚合后的模型列表
 catalog.get('/models', async (c) => {
   const actor = c.get('actor') as Actor
-  // 系统连接
+
   const systemConns = await prisma.connection.findMany({ where: { ownerUserId: null, enable: true } })
-  // 用户直连
   const userConns = actor.type === 'user'
     ? await prisma.connection.findMany({ where: { ownerUserId: actor.id, enable: true } })
     : []
 
-  const all = [...systemConns, ...userConns]
-  const results: Array<{ connectionId: number; items: CatalogItem[] }> = []
+  const connections = [...systemConns, ...userConns]
+  if (connections.length === 0) {
+    return c.json<ApiResponse>({ success: true, data: [] })
+  }
 
-  for (const conn of all) {
-    const cfg = {
-      provider: conn.provider as any,
-      baseUrl: conn.baseUrl,
-      enable: conn.enable,
-      authType: conn.authType as any,
-      apiKey: conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : undefined,
-      headers: conn.headersJson ? JSON.parse(conn.headersJson) : undefined,
-      azureApiVersion: conn.azureApiVersion || undefined,
-      prefixId: conn.prefixId || undefined,
-      tags: conn.tagsJson ? JSON.parse(conn.tagsJson) : [],
-      modelIds: conn.modelIdsJson ? JSON.parse(conn.modelIdsJson) : [],
-      connectionType: (conn.connectionType as any) || 'external',
+  const connMap = new Map(connections.map((item) => [item.id, item]))
+  const connectionIds = connections.map((item) => item.id)
+
+  const loadRows = async () => prisma.modelCatalog.findMany({ where: { connectionId: { in: connectionIds } } })
+
+  let rows = await loadRows()
+  const now = new Date()
+  const needsRefresh: number[] = []
+
+  for (const conn of connections) {
+    const related = rows.filter((row) => row.connectionId === conn.id)
+    if (related.length === 0) {
+      needsRefresh.push(conn.id)
+      continue
     }
-
-    try {
-      const items = await fetchModelsForConnection(cfg)
-      results.push({ connectionId: conn.id, items })
-    } catch (e) {
-      // 某个连接失败不影响整体
+    const expired = related.every((row) => row.expiresAt <= now)
+    if (expired) {
+      needsRefresh.push(conn.id)
     }
   }
 
-  // 读取覆盖标签（管理员可在模型管理中编辑）；若存在则覆盖动态抓取的 tags
-  const overrides = await prisma.modelCatalog.findMany({ select: { connectionId: true, modelId: true, tagsJson: true } })
-  const overrideMap = new Map<string, Array<{ name: string }>>()
-  for (const r of overrides) {
-    try {
-      const key = `${r.connectionId}:${r.modelId}`
-      overrideMap.set(key, JSON.parse(r.tagsJson || '[]') || [])
-    } catch {}
+  if (needsRefresh.length) {
+    const refreshTargets = connections.filter((conn) => needsRefresh.includes(conn.id))
+    await refreshModelCatalogForConnections(refreshTargets)
+    rows = await loadRows()
   }
 
-  // 扁平化并覆盖 tags/capabilities
-  const flat = results.flatMap(({ connectionId, items }) => {
-    return items.map((m) => {
-      const key = `${connectionId}:${m.id}`
-      const tags = overrideMap.get(key) || m.tags || []
-      return { ...m, connectionId, tags, capabilities: computeCapabilities(m.rawId, tags), overridden: overrideMap.has(key) }
+  const list = rows
+    .filter((row) => connMap.has(row.connectionId))
+    .map((row) => {
+      const conn = connMap.get(row.connectionId)!
+      let tags: Array<{ name: string }> = []
+      try {
+        const parsed = JSON.parse(row.tagsJson || '[]')
+        tags = Array.isArray(parsed) ? parsed : []
+      } catch {
+        tags = []
+      }
+
+      return {
+        id: row.modelId,
+        rawId: row.rawId,
+        name: row.name,
+        provider: row.provider,
+        channelName: deriveChannelName(conn.provider as any, conn.baseUrl),
+        connectionBaseUrl: conn.baseUrl,
+        connectionId: row.connectionId,
+        connectionType: row.connectionType,
+        tags,
+        capabilities: computeCapabilities(row.rawId, tags),
+        overridden: row.manualOverride,
+      }
     })
-  })
 
-  return c.json<ApiResponse>({ success: true, data: flat })
+  return c.json<ApiResponse>({ success: true, data: list })
 })
 
 // 管理员手动刷新（将列表写入缓存表）
 catalog.post('/models/refresh', requireUserActor, adminOnlyMiddleware, async (c) => {
-  const now = new Date()
-  const ttlSec = parseInt(process.env.MODELS_TTL_S || '120')
-  const expiresAt = new Date(now.getTime() + ttlSec * 1000)
-
-  const conns = await prisma.connection.findMany({ where: { enable: true } })
-  for (const conn of conns) {
-    const cfg = {
-      provider: conn.provider as any,
-      baseUrl: conn.baseUrl,
-      enable: conn.enable,
-      authType: conn.authType as any,
-      apiKey: conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : undefined,
-      headers: conn.headersJson ? JSON.parse(conn.headersJson) : undefined,
-      azureApiVersion: conn.azureApiVersion || undefined,
-      prefixId: conn.prefixId || undefined,
-      tags: conn.tagsJson ? JSON.parse(conn.tagsJson) : [],
-      modelIds: conn.modelIdsJson ? JSON.parse(conn.modelIdsJson) : [],
-      connectionType: (conn.connectionType as any) || 'external',
-    }
-    try {
-      const items = await fetchModelsForConnection(cfg)
-      // 清理旧条目
-      await prisma.modelCatalog.deleteMany({ where: { connectionId: conn.id } })
-      // 写入新条目
-      for (const it of items) {
-        await prisma.modelCatalog.create({
-          data: {
-            connectionId: conn.id,
-            modelId: it.id,
-            rawId: it.rawId,
-            name: it.name,
-            provider: it.provider,
-            connectionType: it.connectionType,
-            tagsJson: JSON.stringify(it.tags || []),
-            lastFetchedAt: now,
-            expiresAt,
-          },
-        })
-      }
-    } catch (e) {}
+  try {
+    await refreshAllModelCatalog()
+    return c.json<ApiResponse>({ success: true, message: 'Refreshed' })
+  } catch (error: any) {
+    log.error('手动刷新模型目录失败', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to refresh models' }, 500)
   }
-
-  return c.json<ApiResponse>({ success: true, message: 'Refreshed' })
 })
 
 export default catalog
@@ -132,6 +110,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     const now = new Date()
     const ttlSec = parseInt(process.env.MODELS_TTL_S || '120')
     const exists = await prisma.modelCatalog.findFirst({ where: { connectionId, modelId } })
+    const expiresAt = new Date(now.getTime() + ttlSec * 1000)
     if (!exists) {
       await prisma.modelCatalog.create({
         data: {
@@ -142,12 +121,21 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
           provider: conn.provider,
           connectionType: (conn.connectionType as any) || 'external',
           tagsJson: JSON.stringify(tags || []),
+          manualOverride: true,
           lastFetchedAt: now,
-          expiresAt: new Date(now.getTime() + ttlSec * 1000),
+          expiresAt,
         },
       })
     } else {
-      await prisma.modelCatalog.update({ where: { id: exists.id }, data: { tagsJson: JSON.stringify(tags || []), lastFetchedAt: now } })
+      await prisma.modelCatalog.update({
+        where: { id: exists.id },
+        data: {
+          tagsJson: JSON.stringify(tags || []),
+          manualOverride: true,
+          lastFetchedAt: now,
+          expiresAt,
+        },
+      })
     }
 
     return c.json<ApiResponse>({ success: true, message: 'Saved' })
@@ -163,7 +151,8 @@ catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) 
     try { body = await c.req.json() } catch {}
     const all = Boolean(body?.all)
     if (all) {
-      const r = await prisma.modelCatalog.deleteMany({})
+      const r = await prisma.modelCatalog.deleteMany({ where: { manualOverride: true } })
+      await refreshAllModelCatalog()
       return c.json<ApiResponse>({ success: true, message: `Deleted ${r.count} overrides` })
     }
     const items = Array.isArray(body?.items) ? body.items : []
@@ -180,7 +169,10 @@ catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) 
       const modelId = (px ? `${px}.` : '') + raw
       return { connectionId: cid, modelId }
     })
-    const r = await prisma.modelCatalog.deleteMany({ where: { OR: orKeys } })
+    const r = await prisma.modelCatalog.deleteMany({ where: { OR: orKeys, manualOverride: true } })
+    for (const cid of connectionIds) {
+      await refreshModelCatalogForConnectionId(cid)
+    }
     return c.json<ApiResponse>({ success: true, message: `Deleted ${r.count} overrides` })
   } catch (e) {
     return c.json<ApiResponse>({ success: false, error: 'Failed to delete overrides' }, 500)
@@ -190,7 +182,7 @@ catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) 
 // 管理端：导出当前覆写（覆盖记录）
 catalog.get('/models/overrides', requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const rows = await prisma.modelCatalog.findMany({ select: { connectionId: true, rawId: true, modelId: true, tagsJson: true } })
+    const rows = await prisma.modelCatalog.findMany({ where: { manualOverride: true }, select: { connectionId: true, rawId: true, modelId: true, tagsJson: true } })
     const items = rows.map((r) => ({ connectionId: r.connectionId, rawId: r.rawId, modelId: r.modelId, tags: JSON.parse(r.tagsJson || '[]') }))
     return c.json<ApiResponse>({ success: true, data: items })
   } catch (e) {

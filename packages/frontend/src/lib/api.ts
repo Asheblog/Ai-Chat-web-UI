@@ -213,6 +213,11 @@ class ApiClient {
     return response.data
   }
 
+  async refreshModelCatalog() {
+    const response = await this.client.post<ApiResponse<any>>('/catalog/models/refresh')
+    return response.data
+  }
+
   async deleteModelOverrides(items: Array<{ connectionId: number; rawId: string }>) {
     const response = await this.client.delete<ApiResponse<any>>('/catalog/models/tags', { data: { items } })
     return response.data

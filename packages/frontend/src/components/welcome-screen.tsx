@@ -371,15 +371,6 @@ export function WelcomeScreen() {
               ))}
             </div>
           )}
-          {isAnonymous && (
-            <div className="mt-3 text-xs text-muted-foreground text-center">
-              {quota
-                ? (quotaExhausted
-                  ? '今日匿名额度已用尽，请登录或等待次日重置。'
-                  : `今日匿名额度剩余 ${quotaLabel}`)
-                : '匿名访客每日额度有限，请登录获取更多额度。'}
-            </div>
-          )}
           {/* 隐藏文件选择 */}
           <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} disabled={creationDisabled} />
         </div>

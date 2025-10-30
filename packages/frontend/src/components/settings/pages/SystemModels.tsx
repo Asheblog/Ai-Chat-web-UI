@@ -26,6 +26,7 @@ export function SystemModelsPage() {
   const [q, setQ] = useState('')
   const [onlyOverridden, setOnlyOverridden] = useState(false)
   const [saving, setSaving] = useState<string>('') // key `${cid}:${id}`
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     fetchAll().catch(() => {})
@@ -75,6 +76,19 @@ export function SystemModelsPage() {
     await fetchAll()
   }
 
+  const manualRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await apiClient.refreshModelCatalog()
+      await fetchAll()
+      alert('已获取最新模型列表')
+    } catch (err: any) {
+      alert('刷新失败：' + (err?.message || String(err)))
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <div className="space-y-3 p-4">
       {/* 顶部：标题 + 工具条 */}
@@ -86,7 +100,12 @@ export function SystemModelsPage() {
             <input type="checkbox" checked={onlyOverridden} onChange={(e)=>setOnlyOverridden(e.target.checked)} />
             仅显示已手动设置
           </label>
-          <Button variant="outline" size="sm" onClick={()=>fetchAll()} className="w-full sm:w-auto">刷新</Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button variant="outline" size="sm" onClick={()=>fetchAll()} className="w-full sm:w-auto">重新加载列表</Button>
+            <Button size="sm" onClick={manualRefresh} disabled={refreshing} className="w-full sm:w-auto">
+              {refreshing ? '刷新中…' : '手动获取最新模型'}
+            </Button>
+          </div>
         </div>
       </div>
       <div className="text-xs text-muted-foreground">为模型开启/关闭能力：图片理解、文件上传、联网搜索、图像生成、代码解释器。若不确定，可点击卡片右下角“重置为自动识别”。</div>
