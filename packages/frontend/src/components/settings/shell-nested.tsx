@@ -12,6 +12,8 @@ interface Props {
   onChangeMain: (key: string) => void
   onChangeSub: (key: string) => void
   headerText?: string
+  readOnly?: boolean
+  readOnlyMessage?: string
   children: React.ReactNode
 }
 
@@ -22,6 +24,8 @@ export function SettingsShellNested({
   activeSub,
   onChangeMain,
   onChangeSub,
+  readOnly = false,
+  readOnlyMessage,
   children,
 }: Props) {
   const [openKey, setOpenKey] = useState<string>('')
@@ -82,7 +86,19 @@ export function SettingsShellNested({
 
         {/* 右侧内容：标题由各页面自行渲染，避免重复 */}
         <section className="flex-1 min-h-0 flex flex-col">
-          <div className="flex-1 min-h-0 overflow-auto p-4">{children}</div>
+          {readOnly && (
+            <div className="px-4 py-3 border-b bg-muted/20 text-sm text-muted-foreground">
+              {readOnlyMessage || '当前模式下无法编辑设置，请登录后再试。'}
+            </div>
+          )}
+          <div
+            className={cn(
+              'flex-1 min-h-0 overflow-auto p-4 transition-opacity',
+              readOnly ? 'pointer-events-none opacity-60' : ''
+            )}
+          >
+            {children}
+          </div>
         </section>
       </div>
     </div>

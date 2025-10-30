@@ -13,9 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { useChatStore } from '@/store/chat-store'
 import { useChatComposer } from '@/hooks/use-chat-composer'
 import { UserMenu } from '@/components/user-menu'
+import { useAuthStore } from '@/store/auth-store'
 
 const MAX_AUTO_HEIGHT = 200
 
@@ -90,6 +90,17 @@ export function ChatInterface() {
   }, [])
 
   const desktopSendDisabled = (!input.trim() && selectedImages.length === 0) && !isStreaming
+
+  const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
+  const isAnonymous = actorState !== 'authenticated'
+  const quotaRemaining = quota?.unlimited
+    ? Infinity
+    : quota?.remaining ?? (quota ? Math.max(0, quota.dailyLimit - quota.usedCount) : null)
+  const quotaExhausted = isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0
+  const quotaLabel = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
+  const basePlaceholder = quota
+    ? (quotaExhausted ? '额度已用尽，请登录或等待次日重置' : `本日消息发送额度剩余 ${quotaLabel}`)
+    : '输入消息（Shift+Enter 换行）'
 
   const imagePreview = selectedImages.length > 0 && (
     <div className="mb-2 flex flex-wrap gap-2">
@@ -296,8 +307,8 @@ export function ChatInterface() {
                   onKeyDown={handleKeyDown}
                   onCompositionStart={() => setIsComposing(true)}
                   onCompositionEnd={() => setIsComposing(false)}
-                  placeholder={isStreaming ? 'AI正在思考中...' : '输入消息（Shift+Enter 换行）'}
-                  disabled={isStreaming}
+                  placeholder={isStreaming ? 'AI正在思考中...' : basePlaceholder}
+                  disabled={isStreaming || (quota ? quotaExhausted : false)}
                   className="h-auto min-h-[48px] w-full resize-none rounded-3xl border border-border/60 bg-muted/60 px-4 sm:px-5 py-3 leading-[1.4] text-left placeholder:text-muted-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   rows={1}
                 />

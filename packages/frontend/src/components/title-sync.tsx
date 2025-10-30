@@ -9,12 +9,19 @@ const DEFAULT_TITLE = 'AIChat'
 export function TitleSync() {
   const brandText = useSettingsStore((state) => state.systemSettings?.brandText)
   const fetchSystemSettings = useSettingsStore((state) => state.fetchSystemSettings)
-  const user = useAuthStore((state) => state.user)
+  const actorState = useAuthStore((state) => state.actorState)
+  const fetchActor = useAuthStore((state) => state.fetchActor)
   const hasRequested = useRef(false)
 
   useEffect(() => {
+    if (actorState === 'loading') {
+      fetchActor().catch(() => {})
+    }
+  }, [actorState, fetchActor])
+
+  useEffect(() => {
     // 仅在已登录后请求系统设置，避免未认证状态触发 401 重定向
-    if (!user) {
+    if (actorState !== 'authenticated') {
       hasRequested.current = false
       return
     }
@@ -22,7 +29,7 @@ export function TitleSync() {
       hasRequested.current = true
       fetchSystemSettings().catch(() => {})
     }
-  }, [user, brandText, fetchSystemSettings])
+  }, [actorState, brandText, fetchSystemSettings])
 
   useEffect(() => {
     if (typeof document === 'undefined') return

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { ChatState, ChatSession, Message } from '@/types'
 import { apiClient } from '@/lib/api'
 import type { ModelItem } from '@/store/models-store'
+import { useAuthStore } from '@/store/auth-store'
 
 interface ChatStore extends ChatState {
   fetchSessions: () => Promise<void>
@@ -490,6 +491,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 ? usage
                 : state.usageLastRound,
           }))
+        } else if (evt?.type === 'quota' && evt.quota) {
+          useAuthStore.getState().updateQuota(evt.quota)
         } else if (evt?.type === 'complete') {
           if (reasoningActive) {
             updateAssistantMessage((msg) => ({
@@ -541,12 +544,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       get().fetchUsage(sessionId).catch(() => {})
       get().fetchSessionsUsage().catch(() => {})
     } catch (error: any) {
+      const quotaPayload = error?.payload?.quota ?? null
+      if (quotaPayload) {
+        useAuthStore.getState().updateQuota(quotaPayload)
+      }
+
+      if (error?.status === 429) {
+        const message = error?.payload?.error || '额度不足，请登录或等待次日重置'
+        set({ error: message, isStreaming: false })
+        set((state) => ({
+          messages: state.messages.filter((msg, index) =>
+            !(index === state.messages.length - 1 && msg.role === 'assistant' && msg.content === '')
+          ),
+        }))
+        return
+      }
+
       try {
         const resp = await apiClient.chatCompletion(sessionId, content, images, {
           ...(options || {}),
           clientMessageId: userClientMessageId,
         })
         const finalText = resp?.data?.content || ''
+        if (resp?.data?.quota) {
+          useAuthStore.getState().updateQuota(resp.data.quota)
+        }
         if (finalText) {
           set((state) => ({
             messages: state.messages.map((msg, index) =>
@@ -560,8 +582,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           get().fetchSessionsUsage().catch(() => {})
           return
         }
-      } catch {
-        // ignore secondary failure
+      } catch (fallbackError: any) {
+        const fallbackQuota = fallbackError?.response?.data?.quota ?? fallbackError?.payload?.quota ?? null
+        if (fallbackQuota) {
+          useAuthStore.getState().updateQuota(fallbackQuota)
+        }
+        if (fallbackError?.response?.status === 429) {
+          const message = fallbackError?.response?.data?.error || '额度不足，请登录或等待次日重置'
+          set({ error: message, isStreaming: false })
+          set((state) => ({
+            messages: state.messages.filter((msg, index) =>
+              !(index === state.messages.length - 1 && msg.role === 'assistant' && msg.content === '')
+            ),
+          }))
+          return
+        }
       }
 
       set({

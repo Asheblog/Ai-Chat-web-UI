@@ -96,6 +96,39 @@ export interface AuthResponse {
   token: string;
 }
 
+export type UsageQuotaScope = 'USER' | 'ANON';
+
+export interface UsageQuotaSnapshot {
+  scope: UsageQuotaScope;
+  identifier: string;
+  dailyLimit: number;
+  usedCount: number;
+  remaining: number | null;
+  lastResetAt: Date;
+  unlimited: boolean;
+}
+
+export interface UsageQuotaDTO {
+  scope: UsageQuotaScope;
+  identifier: string;
+  dailyLimit: number;
+  usedCount: number;
+  remaining: number | null;
+  lastResetAt: string;
+  unlimited: boolean;
+}
+
+export interface ActorContext {
+  actor: Actor;
+  quota: UsageQuotaDTO | null;
+  user?: {
+    id: number;
+    username: string;
+    role: 'ADMIN' | 'USER';
+    createdAt: Date;
+  } | null;
+}
+
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;

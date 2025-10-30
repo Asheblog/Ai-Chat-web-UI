@@ -2,6 +2,7 @@ export type SettingsNavItem = {
   key: string
   label: string
   adminOnly?: boolean
+  requiresAuth?: boolean
   children?: SettingsNavItem[]
 }
 
@@ -10,9 +11,9 @@ export const settingsNav: SettingsNavItem[] = [
     key: 'personal',
     label: '个人设置',
     children: [
-      { key: 'personal.connections', label: '直连连接' },
-      { key: 'personal.preferences', label: '偏好设置' },
-      { key: 'personal.security', label: '账号安全' },
+      { key: 'personal.connections', label: '直连连接', requiresAuth: true },
+      { key: 'personal.preferences', label: '偏好设置', requiresAuth: true },
+      { key: 'personal.security', label: '账号安全', requiresAuth: true },
       { key: 'personal.about', label: '关于' },
     ],
   },
@@ -20,6 +21,7 @@ export const settingsNav: SettingsNavItem[] = [
     key: 'system',
     label: '系统设置',
     adminOnly: true,
+    requiresAuth: true,
     children: [
       { key: 'system.general', label: '通用' },
       { key: 'system.reasoning', label: '推理链（CoT）' },

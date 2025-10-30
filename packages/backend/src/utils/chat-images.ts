@@ -299,3 +299,37 @@ export async function cleanupExpiredChatImages(retentionDays: number) {
     }
   }
 }
+
+export async function deleteAttachmentsForSessions(sessionIds: number[]) {
+  if (messageAttachmentUnavailable) {
+    return
+  }
+  const uniqueIds = Array.from(new Set(sessionIds.filter((id) => Number.isInteger(id))))
+  if (uniqueIds.length === 0) return
+
+  try {
+    const attachments = await prisma.messageAttachment.findMany({
+      where: {
+        message: {
+          sessionId: { in: uniqueIds },
+        },
+      },
+      select: { id: true, relativePath: true },
+    })
+
+    if (attachments.length === 0) return
+
+    for (const attachment of attachments) {
+      const absolute = path.join(CHAT_IMAGE_STORAGE_ROOT, attachment.relativePath)
+      await deleteFileQuietly(absolute)
+    }
+
+    await prisma.messageAttachment.deleteMany({
+      where: { id: { in: attachments.map((item) => item.id) } },
+    })
+  } catch (error) {
+    if (!handleMessageAttachmentTableMissing('deleteAttachmentsForSessions', error)) {
+      console.warn('[deleteAttachmentsForSessions] failed to remove attachments', error)
+    }
+  }
+}

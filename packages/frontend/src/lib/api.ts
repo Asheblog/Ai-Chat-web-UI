@@ -10,6 +10,7 @@ import type {
   ApiResponse,
   Message as ChatMessage,
   ChatStreamChunk,
+  ActorContextDTO,
 } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
@@ -164,6 +165,11 @@ class ApiClient {
 
   async getCurrentUser(): Promise<User> {
     const response = await this.client.get<ApiResponse<User>>('/auth/me')
+    return response.data.data!
+  }
+
+  async getActorContext(): Promise<ActorContextDTO> {
+    const response = await this.client.get<ApiResponse<ActorContextDTO>>('/auth/actor')
     return response.data.data!
   }
 
@@ -381,13 +387,14 @@ class ApiClient {
       throw new Error('Unauthorized')
     }
     if (response.status === 429) {
-      await new Promise(r => setTimeout(r, 15000))
-      response = await doOnce(this.currentStreamController.signal)
-      if (response.status === 401) {
-        this.handleUnauthorized()
-        throw new Error('Unauthorized')
-      }
-    } else if (response.status >= 500) {
+      let payload: any = null
+      try { payload = await response.json() } catch {}
+      const error: any = new Error('Quota exceeded')
+      error.status = 429
+      error.payload = payload
+      throw error
+    }
+    if (response.status >= 500) {
       await new Promise(r => setTimeout(r, 2000))
       response = await doOnce(this.currentStreamController.signal)
       if (response.status === 401) {
@@ -397,7 +404,12 @@ class ApiClient {
     }
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      let payload: any = null
+      try { payload = await response.json() } catch {}
+      const error: any = new Error(`HTTP error ${response.status}`)
+      error.status = response.status
+      error.payload = payload
+      throw error
     }
 
     const reader = response.body?.getReader()
@@ -449,6 +461,8 @@ class ApiClient {
                 // 可用于前端识别结束原因，不强制处理
               } else if (parsed.type === 'complete') {
                 yield { type: 'complete' }
+              } else if (parsed.type === 'quota' && parsed.quota) {
+                yield { type: 'quota', quota: parsed.quota }
               } else if (parsed.error) {
                 throw new Error(parsed.error)
               }
@@ -675,8 +689,10 @@ class ApiClient {
     try {
       let res = await doOnce()
       if (res.status === 429) {
-        await new Promise(r => setTimeout(r, 15000))
-        res = await doOnce()
+        const error: any = new Error('Quota exceeded')
+        error.status = 429
+        error.response = res
+        throw error
       } else if (res.status >= 500) {
         await new Promise(r => setTimeout(r, 2000))
         res = await doOnce()
@@ -754,8 +770,37 @@ class ApiClient {
       }
       return 30
     })()
+    const anonymousRetentionDays = (() => {
+      const raw = settingsRes.data.data?.anonymous_retention_days
+      if (typeof raw === 'number') return Math.max(0, Math.min(15, raw))
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number.parseInt(raw, 10)
+        if (Number.isFinite(parsed)) {
+          return Math.max(0, Math.min(15, parsed))
+        }
+      }
+      return 15
+    })()
+    const anonymousDailyQuota = (() => {
+      const raw = settingsRes.data.data?.anonymous_daily_quota
+      if (typeof raw === 'number') return Math.max(0, raw)
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number.parseInt(raw, 10)
+        if (Number.isFinite(parsed)) return Math.max(0, parsed)
+      }
+      return 20
+    })()
+    const defaultUserDailyQuota = (() => {
+      const raw = settingsRes.data.data?.default_user_daily_quota
+      if (typeof raw === 'number') return Math.max(0, raw)
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number.parseInt(raw, 10)
+        if (Number.isFinite(parsed)) return Math.max(0, parsed)
+      }
+      return 200
+    })()
     const siteBaseUrl = typeof settingsRes.data.data?.site_base_url === 'string' ? settingsRes.data.data?.site_base_url : ''
-    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl } }
+    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl, anonymousRetentionDays, anonymousDailyQuota, defaultUserDailyQuota } }
   }
 
   async updateSystemSettings(settings: any) {
@@ -781,6 +826,9 @@ class ApiClient {
     if (typeof settings.ollamaThink === 'boolean') payload.ollama_think = !!settings.ollamaThink
     if (typeof settings.chatImageRetentionDays === 'number') payload.chat_image_retention_days = settings.chatImageRetentionDays
     if (typeof settings.siteBaseUrl === 'string') payload.site_base_url = settings.siteBaseUrl
+    if (typeof settings.anonymousRetentionDays === 'number') payload.anonymous_retention_days = settings.anonymousRetentionDays
+    if (typeof settings.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = settings.anonymousDailyQuota
+    if (typeof settings.defaultUserDailyQuota === 'number') payload.default_user_daily_quota = settings.defaultUserDailyQuota
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()

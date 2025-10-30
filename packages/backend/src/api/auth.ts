@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { AuthUtils } from '../utils/auth';
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
-import type { AuthResponse, ApiResponse } from '../types';
+import type { AuthResponse, ApiResponse, ActorContext, Actor } from '../types';
+import { inspectActorQuota, serializeQuotaSnapshot } from '../utils/quota';
 
 const auth = new Hono();
 
@@ -205,6 +206,46 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
   }
 });
 
+auth.get('/actor', actorMiddleware, async (c) => {
+  const actor = c.get('actor') as Actor | undefined;
+  if (!actor) {
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Actor unavailable',
+    }, 401);
+  }
+
+  try {
+    const quota = await inspectActorQuota(actor);
+    let userProfile: ActorContext['user'] = null;
+
+    if (actor.type === 'user') {
+      const profile = await prisma.user.findUnique({
+        where: { id: actor.id },
+        select: { id: true, username: true, role: true, createdAt: true },
+      });
+      if (profile) {
+        userProfile = profile;
+      }
+    }
+
+    return c.json<ApiResponse<ActorContext>>({
+      success: true,
+      data: {
+        actor,
+        quota: serializeQuotaSnapshot(quota),
+        user: userProfile,
+      },
+    });
+  } catch (error) {
+    console.error('Resolve actor context error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Failed to resolve actor context',
+    }, 500);
+  }
+});
+
 // 获取当前用户信息
 auth.get('/me', actorMiddleware, requireUserActor, async (c) => {
   const user = c.get('user');
@@ -260,8 +301,17 @@ auth.put('/password', actorMiddleware, requireUserActor, zValidator('json', z.ob
       data: { hashedPassword: hashedNewPassword },
     });
 
-    return c.json<ApiResponse>({
+    const refreshed = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, username: true, role: true },
+    });
+    if (refreshed) {
+      c.set('user', refreshed as any);
+    }
+
+    return c.json<ApiResponse<{ user: { id: number; username: string; role: string } }>>({
       success: true,
+      data: refreshed ? { user: refreshed } : undefined,
       message: 'Password updated successfully',
     });
 

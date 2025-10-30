@@ -19,11 +19,26 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { useSettingsStore } from '@/store/settings-store'
 import { UserMenu } from '@/components/user-menu'
+import { useAuthStore } from '@/store/auth-store'
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
   const { systemSettings } = useSettingsStore()
   const { toast } = useToast()
+  const { actorState, quota } = useAuthStore((state) => ({
+    actorState: state.actorState,
+    quota: state.quota,
+  }))
+  const isAnonymous = actorState !== 'authenticated'
+  const quotaRemaining = quota?.unlimited
+    ? Infinity
+    : quota
+      ? (typeof quota.remaining === 'number'
+        ? quota.remaining
+        : Math.max(0, quota.dailyLimit - quota.usedCount))
+      : null
+  const quotaExhausted = isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0
+  const quotaLabel = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
 
   const [query, setQuery] = useState('')
   const [isComposing, setIsComposing] = useState(false)
@@ -62,6 +77,10 @@ export function WelcomeScreen() {
   }, [models])
 
   const canCreate = useMemo(() => !!selectedModelId, [selectedModelId])
+  const creationDisabled = !canCreate || isCreating || quotaExhausted
+  const basePlaceholder = quota
+    ? (quotaExhausted ? '额度已用尽，请登录或等待次日重置' : `本日消息发送额度剩余 ${quotaLabel}`)
+    : '输入消息（Shift+Enter 换行）'
 
   // 默认跟随系统设置（除非用户在下拉里改动）
   useEffect(() => {
@@ -114,6 +133,10 @@ export function WelcomeScreen() {
   }
 
   const pickImages = () => {
+    if (quotaExhausted) {
+      toast({ title: '额度已用尽', description: '请登录或等待次日重置额度', variant: 'destructive' })
+      return
+    }
     if (!isVisionEnabled) {
       toast({ title: '当前模型不支持图片', description: '请切换到支持图片的模型', variant: 'destructive' })
       return
@@ -145,6 +168,14 @@ export function WelcomeScreen() {
 
   const handleCreate = async () => {
     if (!canCreate || !selectedModelId) return
+    if (quotaExhausted) {
+      toast({
+        title: '匿名额度已用尽',
+        description: '请登录账户或等待次日额度重置',
+        variant: 'destructive',
+      })
+      return
+    }
 
     setIsCreating(true)
     const text = query.trim()
@@ -192,6 +223,7 @@ export function WelcomeScreen() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (creationDisabled) return
     if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault()
       handleCreate()
@@ -240,7 +272,7 @@ export function WelcomeScreen() {
                   variant="ghost"
                   size="icon"
                   className="h-10 w-10 rounded-full text-muted-foreground"
-                  disabled={!canCreate || isCreating}
+                  disabled={creationDisabled}
                   aria-label="更多操作"
                 >
                   <Plus className="h-5 w-5" />
@@ -282,8 +314,8 @@ export function WelcomeScreen() {
                 onKeyDown={handleKeyDown}
                 onCompositionStart={() => setIsComposing(true)}
                 onCompositionEnd={() => setIsComposing(false)}
-                placeholder="输入消息（Shift+Enter 换行）"
-                disabled={!canCreate || isCreating}
+                placeholder={basePlaceholder}
+                disabled={creationDisabled}
                 className="h-auto min-h-[40px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-2 leading-[1.4] text-left placeholder:text-muted-foreground"
                 rows={1}
               />
@@ -291,15 +323,16 @@ export function WelcomeScreen() {
 
             <div className="flex items-center gap-1 sm:gap-2">
               {showExpand && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-10 w-10 rounded-full"
-                  onClick={() => { setExpandDraft(query); setExpandOpen(true) }}
-                  aria-label="全屏编辑"
-                  title="全屏编辑"
-                >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={() => { setExpandDraft(query); setExpandOpen(true) }}
+                disabled={creationDisabled}
+                aria-label="全屏编辑"
+                title="全屏编辑"
+              >
                   <Maximize2 className="h-4 w-4" />
                 </Button>
               )}
@@ -310,7 +343,7 @@ export function WelcomeScreen() {
                 size="icon"
                 className="h-10 w-10 rounded-full"
                 onClick={pickImages}
-                disabled={!isVisionEnabled || isCreating}
+                disabled={!isVisionEnabled || creationDisabled}
                 aria-label="添加图片"
                 title={isVisionEnabled ? '添加图片' : '当前模型不支持图片'}
               >
@@ -338,8 +371,17 @@ export function WelcomeScreen() {
               ))}
             </div>
           )}
+          {isAnonymous && (
+            <div className="mt-3 text-xs text-muted-foreground text-center">
+              {quota
+                ? (quotaExhausted
+                  ? '今日匿名额度已用尽，请登录或等待次日重置。'
+                  : `今日匿名额度剩余 ${quotaLabel}`)
+                : '匿名访客每日额度有限，请登录获取更多额度。'}
+            </div>
+          )}
           {/* 隐藏文件选择 */}
-          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesSelected} disabled={creationDisabled} />
         </div>
 
         {/* 全屏编辑弹框 */}

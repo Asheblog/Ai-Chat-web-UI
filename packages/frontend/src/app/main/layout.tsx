@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react'
 import { useSettingsStore } from '@/store/settings-store'
 import { useChatStore } from '@/store/chat-store'
 import { Button } from '@/components/ui/button'
-import { AuthGuard } from '@/components/auth-guard'
 import { Sidebar } from '@/components/sidebar'
 import { MainContent } from '@/components/main-content'
 import { ModelSelector } from '@/components/model-selector'
 import { UserMenu } from '@/components/user-menu'
 import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
+import { useAuthStore } from '@/store/auth-store'
 
 export default function MainLayout({
   children,
@@ -18,6 +18,7 @@ export default function MainLayout({
 }) {
   const { theme, setTheme, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const { currentSession } = useChatStore()
+  const actorState = useAuthStore((state) => state.actorState)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -36,11 +37,20 @@ export default function MainLayout({
     return null
   }
 
+  const isActorReady = actorState !== 'loading'
+
   return (
-    <AuthGuard>
-      <div className="flex h-screen min-h-0 w-full min-w-0 bg-background overflow-x-hidden">
-        <Sidebar />
-        <MainContent className="relative">
+    <div className="flex h-screen min-h-0 w-full min-w-0 bg-background overflow-x-hidden">
+      <Sidebar />
+      <MainContent className="relative">
+        {!isActorReady ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="text-center text-muted-foreground space-y-3">
+              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-border border-t-primary" />
+              <p>正在同步身份信息...</p>
+            </div>
+          </div>
+        ) : (
           <div className="flex flex-col h-full min-h-0">
             <div className="lg:hidden sticky top-0 z-40 grid grid-cols-3 items-center gap-2 px-4 py-3 border-b border-border/60 rounded-b-3xl shadow-sm bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <div className="justify-self-start">
@@ -83,8 +93,8 @@ export default function MainLayout({
               {children}
             </div>
           </div>
-        </MainContent>
-      </div>
-    </AuthGuard>
+        )}
+      </MainContent>
+    </div>
   )
 }

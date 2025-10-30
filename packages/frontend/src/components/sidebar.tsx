@@ -24,6 +24,7 @@ import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
 import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
+import { useAuthStore } from '@/store/auth-store'
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -33,6 +34,14 @@ export function Sidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
   const { systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
+  const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
+
+  const isAnonymous = actorState !== 'authenticated'
+  const quotaRemaining = quota?.unlimited
+    ? Infinity
+    : quota?.remaining ?? (quota ? Math.max(0, quota.dailyLimit - quota.usedCount) : null)
+  const quotaExhausted = isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0
+  const quotaDisplay = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -75,7 +84,7 @@ export function Sidebar() {
   }, [])
 
   const handleNewChat = async () => {
-    if (isCreating) return
+    if (isCreating || quotaExhausted) return
     setIsCreating(true)
     let defaultModelId: string | null = null
     let defaultConnectionId: number | null = null
@@ -177,7 +186,7 @@ export function Sidebar() {
           onClick={handleNewChat}
           className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
           variant="ghost"
-          disabled={isCreating}
+          disabled={isCreating || quotaExhausted}
           aria-busy={isCreating}
         >
           {isCreating ? (
@@ -197,6 +206,22 @@ export function Sidebar() {
           系统设置
         </Button>
       </div>
+      {quotaExhausted && (
+        <div className="px-4 pb-4">
+          <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1">
+            <p>今日匿名额度已用尽。</p>
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => {
+                try { window.location.href = '/auth/login' } catch {}
+              }}
+            >
+              登录后即可继续对话
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-4 pb-4">
         <div className="border-t border-slate-200 dark:border-slate-800" />
@@ -389,3 +414,9 @@ export function SidebarSettingsDialogBridge() {
   // 保留一个便于测试的导出（若需要在其他地方打开设置）
   return null
 }
+        {isAnonymous && (
+          <p className="text-xs text-muted-foreground">
+            今日剩余额度 {quotaDisplay}{' '}
+            {quotaExhausted ? '请登录或等待次日重置。' : ''}
+          </p>
+        )}

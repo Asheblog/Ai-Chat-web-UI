@@ -11,6 +11,41 @@ export interface AuthResponse {
   token: string;
 }
 
+export type ActorQuotaScope = 'USER' | 'ANON';
+
+export interface ActorQuota {
+  scope: ActorQuotaScope;
+  identifier: string;
+  dailyLimit: number;
+  usedCount: number;
+  remaining: number | null;
+  lastResetAt: string;
+  unlimited: boolean;
+}
+
+export type AnonymousActorProfile = {
+  type: 'anonymous';
+  key: string;
+  identifier: string;
+  expiresAt: string | null;
+};
+
+export type UserActorProfile = {
+  type: 'user';
+  id: number;
+  username: string;
+  role: 'ADMIN' | 'USER';
+  identifier: string;
+};
+
+export type ActorProfile = AnonymousActorProfile | UserActorProfile;
+
+export interface ActorContextDTO {
+  actor: ActorProfile;
+  quota: ActorQuota | null;
+  user?: User | null;
+}
+
 export interface LoginRequest {
   username: string;
   password: string;
@@ -97,6 +132,9 @@ export interface SystemSettings {
   ollamaThink?: boolean;
   chatImageRetentionDays?: number;
   siteBaseUrl?: string;
+  anonymousRetentionDays?: number;
+  anonymousDailyQuota?: number;
+  defaultUserDailyQuota?: number;
 }
 
 // UI 状态类型
@@ -116,8 +154,10 @@ export interface ChatState {
 }
 
 export interface AuthState {
+  actor: ActorProfile | null;
   user: User | null;
-  token: string | null;
+  quota: ActorQuota | null;
+  actorState: 'loading' | 'anonymous' | 'authenticated';
   isLoading: boolean;
   error: string | null;
 }
@@ -148,6 +188,7 @@ export interface ChatStreamChunk {
   error?: string;
   keepalive?: boolean;
   idleMs?: number;
+  quota?: ActorQuota;
 }
 
 // Usage 统计类型（OpenAI 兼容字段为主）

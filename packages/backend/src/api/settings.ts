@@ -3,8 +3,9 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { prisma } from '../db';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
-import type { ApiResponse } from '../types';
+import type { ApiResponse, Actor } from '../types';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
+import { getQuotaPolicy, invalidateQuotaPolicyCache } from '../utils/system-settings';
 
 const settings = new Hono();
 
@@ -36,11 +37,22 @@ const systemSettingSchema = z.object({
   ollama_think: z.boolean().optional(),
   chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
   site_base_url: z.string().max(200).optional(),
+  anonymous_retention_days: z.number().int().min(0).max(15).optional(),
+  anonymous_daily_quota: z.number().int().min(0).optional(),
+  default_user_daily_quota: z.number().int().min(0).optional(),
 });
 
 // 获取系统设置（仅管理员）
-settings.get('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+settings.get('/system', actorMiddleware, async (c) => {
   try {
+    const actor = c.get('actor') as Actor | undefined;
+    if (!actor) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Actor unavailable',
+      }, 401);
+    }
+    const isAdmin = actor.type === 'user' && actor.role === 'ADMIN';
     const systemSettings = await prisma.systemSetting.findMany({
       select: {
         key: true,
@@ -53,6 +65,8 @@ settings.get('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
       acc[setting.key] = setting.value;
       return acc;
     }, {} as Record<string, string>);
+
+    const quotaPolicy = await getQuotaPolicy();
 
     // 转换布尔值
     const formattedSettings = {
@@ -85,7 +99,24 @@ settings.get('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         return Number.isFinite(parsed) && parsed >= 0 ? parsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
       })(),
       site_base_url: settingsObj.site_base_url || process.env.CHAT_IMAGE_BASE_URL || '',
+      anonymous_retention_days: quotaPolicy.anonymousRetentionDays,
+      anonymous_daily_quota: quotaPolicy.anonymousDailyQuota,
+      default_user_daily_quota: quotaPolicy.defaultUserDailyQuota,
     };
+
+    if (!isAdmin) {
+      const publicSettings = {
+        brand_text: formattedSettings.brand_text,
+        registration_enabled: formattedSettings.registration_enabled,
+        anonymous_retention_days: formattedSettings.anonymous_retention_days,
+        anonymous_daily_quota: formattedSettings.anonymous_daily_quota,
+        default_user_daily_quota: formattedSettings.default_user_daily_quota,
+      };
+      return c.json<ApiResponse>({
+        success: true,
+        data: publicSettings,
+      });
+    }
 
     return c.json<ApiResponse>({
       success: true,
@@ -104,7 +135,7 @@ settings.get('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
 // 更新系统设置（仅管理员）
 settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url, anonymous_retention_days, anonymous_daily_quota, default_user_daily_quota } = c.req.valid('json');
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -273,6 +304,35 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         await prisma.systemSetting.deleteMany({ where: { key: 'site_base_url' } })
       }
     }
+
+    if (typeof anonymous_retention_days === 'number') {
+      const clamped = Math.max(0, Math.min(15, anonymous_retention_days))
+      await prisma.systemSetting.upsert({
+        where: { key: 'anonymous_retention_days' },
+        update: { value: String(clamped) },
+        create: { key: 'anonymous_retention_days', value: String(clamped) },
+      })
+    }
+
+    if (typeof anonymous_daily_quota === 'number') {
+      const sanitized = Math.max(0, anonymous_daily_quota)
+      await prisma.systemSetting.upsert({
+        where: { key: 'anonymous_daily_quota' },
+        update: { value: String(sanitized) },
+        create: { key: 'anonymous_daily_quota', value: String(sanitized) },
+      })
+    }
+
+    if (typeof default_user_daily_quota === 'number') {
+      const sanitized = Math.max(0, default_user_daily_quota)
+      await prisma.systemSetting.upsert({
+        where: { key: 'default_user_daily_quota' },
+        update: { value: String(sanitized) },
+        create: { key: 'default_user_daily_quota', value: String(sanitized) },
+      })
+    }
+
+    invalidateQuotaPolicyCache();
 
     return c.json<ApiResponse>({
       success: true,

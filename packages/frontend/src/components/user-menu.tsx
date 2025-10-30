@@ -20,7 +20,12 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ variant = 'label', className }: UserMenuProps) {
-  const { user, logout } = useAuthStore()
+  const { actorState, user, quota, logout } = useAuthStore((state) => ({
+    actorState: state.actorState,
+    user: state.user,
+    quota: state.quota,
+    logout: state.logout,
+  }))
   const { setTheme } = useSettingsStore()
 
   const handleThemeChange = (mode: 'light' | 'dark' | 'system') => {
@@ -28,6 +33,55 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
   }
 
   const showLabel = variant === 'label'
+
+  const quotaRemaining = (() => {
+    if (!quota) return null
+    if (quota.unlimited) return '无限'
+    if (typeof quota.remaining === 'number') return Math.max(0, quota.remaining)
+    return Math.max(0, quota.dailyLimit - quota.usedCount)
+  })()
+
+  if (actorState !== 'authenticated' || !user) {
+    const button = (
+      <Button
+        type="button"
+        variant="default"
+        size={variant === 'icon' ? 'sm' : 'default'}
+        className={cn(variant === 'icon' ? 'h-8 px-3' : 'h-9 px-4', className)}
+        onClick={() => {
+          try {
+            window.location.href = '/auth/login'
+          } catch {}
+        }}
+      >
+        登录
+      </Button>
+    )
+
+    if (variant === 'icon') {
+      return (
+        <div className={cn('flex flex-col items-center gap-1', className)}>
+          {button}
+          {quotaRemaining !== null && (
+            <span className="text-[10px] text-muted-foreground">
+              今日剩余 {quotaRemaining}
+            </span>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div className={cn('flex items-center gap-2', className)}>
+        {button}
+        {quotaRemaining !== null && (
+          <span className="text-xs text-muted-foreground">
+            今日剩余 {quotaRemaining}
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <DropdownMenu>
@@ -68,7 +122,7 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
           跟随系统
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={logout} className="text-destructive">
+        <DropdownMenuItem onClick={() => { logout().catch(() => {}) }} className="text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
           退出登录
         </DropdownMenuItem>

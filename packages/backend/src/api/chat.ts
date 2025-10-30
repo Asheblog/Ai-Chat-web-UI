@@ -6,7 +6,7 @@ import { AuthUtils } from '../utils/auth';
 import { convertOpenAIReasoningPayload } from '../utils/providers'
 import { Tokenizer } from '../utils/tokenizer';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
-import type { ApiResponse, Message, Actor } from '../types';
+import type { ApiResponse, Message, Actor, UsageQuotaSnapshot } from '../types';
 import { ensureAnonymousSession } from '../utils/actor';
 import { BackendLogger as log } from '../utils/logger';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../utils/reasoning-tags';
@@ -19,6 +19,8 @@ import {
   MESSAGE_ATTACHMENT_MIGRATION_HINT,
 } from '../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
+import { consumeActorQuota, inspectActorQuota, serializeQuotaSnapshot } from '../utils/quota';
+import { cleanupAnonymousSessions } from '../utils/anonymous-cleanup';
 
 const chat = new Hono();
 
@@ -46,6 +48,16 @@ const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
 // 前端出现失败重试/降级时，避免同一条用户消息被重复写入数据库
 const MESSAGE_DEDUPE_WINDOW_MS = parseInt(process.env.MESSAGE_DEDUPE_WINDOW_MS || '30000');
+
+class QuotaExceededError extends Error {
+  snapshot: UsageQuotaSnapshot
+
+  constructor(snapshot: UsageQuotaSnapshot) {
+    super('Daily quota exceeded')
+    this.name = 'QuotaExceededError'
+    this.snapshot = snapshot
+  }
+}
 
 // 发送消息schema
 const sendMessageSchema = z.object({
@@ -256,31 +268,91 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
     await extendAnonymousSession(actor, sessionId)
 
-    // 保存用户消息（优先使用 clientMessageId 幂等；无ID时使用时间窗去重）
-    const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
-    let userMessageRecord: any
-    if (clientMessageId && clientMessageId.trim()) {
-      userMessageRecord = await prisma.message.upsert({
-        where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
-        update: {},
-        create: { sessionId, role: 'user', content, clientMessageId },
-      });
-    } else {
-      userMessageRecord = await prisma.message.findFirst({
-        where: { sessionId, role: 'user', content },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (!userMessageRecord || (Date.now() - new Date(userMessageRecord.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
-        userMessageRecord = await prisma.message.create({ data: { sessionId, role: 'user', content } });
+    const payload = c.req.valid('json') as any
+    const clientMessageIdInput = typeof payload?.clientMessageId === 'string' ? payload.clientMessageId.trim() : ''
+    const clientMessageId = clientMessageIdInput || null
+    const now = new Date()
+
+    let userMessageRecord: any = null
+    let messageWasReused = false
+    let quotaSnapshot: UsageQuotaSnapshot | null = null
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (clientMessageId) {
+          const existing = await tx.message.findUnique({
+            where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
+          })
+          if (existing) {
+            userMessageRecord = existing
+            messageWasReused = true
+            quotaSnapshot = await inspectActorQuota(actor, { tx, now })
+            return
+          }
+        } else {
+          const existing = await tx.message.findFirst({
+            where: { sessionId, role: 'user', content },
+            orderBy: { createdAt: 'desc' },
+          })
+          if (existing) {
+            const createdAt = existing.createdAt instanceof Date
+              ? existing.createdAt
+              : new Date(existing.createdAt as any)
+            if (now.getTime() - createdAt.getTime() <= MESSAGE_DEDUPE_WINDOW_MS) {
+              userMessageRecord = existing
+              messageWasReused = true
+              quotaSnapshot = await inspectActorQuota(actor, { tx, now })
+              return
+            }
+          }
+        }
+
+        const consumeResult = await consumeActorQuota(actor, { tx, now })
+        if (!consumeResult.success) {
+          throw new QuotaExceededError(consumeResult.snapshot)
+        }
+        quotaSnapshot = consumeResult.snapshot
+
+        userMessageRecord = await tx.message.create({
+          data: {
+            sessionId,
+            role: 'user',
+            content,
+            ...(clientMessageId ? { clientMessageId } : {}),
+          },
+        })
+      })
+    } catch (error) {
+      if (error instanceof QuotaExceededError) {
+        return c.json({
+          success: false,
+          error: 'Daily quota exhausted',
+          quota: serializeQuotaSnapshot(error.snapshot),
+          requiredLogin: actor.type !== 'user',
+        }, 429)
       }
+      throw error
     }
 
-    if (images && images.length > 0 && userMessageRecord?.id) {
+    if (!userMessageRecord) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Failed to persist user message',
+      }, 500)
+    }
+
+    if (images && images.length > 0 && userMessageRecord?.id && !messageWasReused) {
       await persistChatImages(images, {
         sessionId,
         messageId: userMessageRecord.id,
         userId: userId ?? 0,
-        clientMessageId: clientMessageId ?? null,
+        clientMessageId,
+      });
+    }
+
+    if (actor.type === 'anonymous') {
+      cleanupAnonymousSessions({ activeSessionId: sessionId }).catch((error) => {
+        log.debug('Anonymous cleanup error', error);
       });
     }
 
@@ -573,6 +645,14 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             messageId: userMessageRecord?.id ?? null,
           })}\n\n`;
           safeEnqueue(startEvent);
+
+          if (quotaSnapshot) {
+            const quotaEvent = `data: ${JSON.stringify({
+              type: 'quota',
+              quota: serializeQuotaSnapshot(quotaSnapshot),
+            })}\n\n`;
+            safeEnqueue(quotaEvent);
+          }
 
           // 在开始后透出一次 usage（prompt 部分）
           if (USAGE_EMIT && !USAGE_PROVIDER_ONLY) {
@@ -968,48 +1048,108 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 // 非流式：同步返回完整回复
 chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
   try {
-    const user = c.get('user');
-    const { sessionId, content, images } = c.req.valid('json');
+    const actor = c.get('actor') as Actor
+    const userId = actor.type === 'user' ? actor.id : null
+    const { sessionId, content, images } = c.req.valid('json')
 
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
+    const session = await prisma.chatSession.findFirst({
+      where: {
+        id: sessionId,
+        ...sessionOwnershipClause(actor),
+      },
       include: { connection: true },
-    });
+    })
     if (!session) {
-      return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
-    }
-    if (session.userId !== user.id) {
-      return c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403);
+      return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404)
     }
     if (!session.connectionId || !session.connection || !session.modelRawId) {
-      return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400);
+      return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400)
     }
 
-    // 保存用户消息（优先使用 clientMessageId 幂等；无ID时使用时间窗去重）
-    const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
-    let userMessageRecord: any
-    if (clientMessageId && clientMessageId.trim()) {
-      userMessageRecord = await prisma.message.upsert({
-        where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
-        update: {},
-        create: { sessionId, role: 'user', content, clientMessageId },
-      });
-    } else {
-      userMessageRecord = await prisma.message.findFirst({
-        where: { sessionId, role: 'user', content },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (!userMessageRecord || (Date.now() - new Date(userMessageRecord.createdAt as any).getTime()) > MESSAGE_DEDUPE_WINDOW_MS) {
-        userMessageRecord = await prisma.message.create({ data: { sessionId, role: 'user', content } });
+    await extendAnonymousSession(actor, sessionId)
+
+    const payload = c.req.valid('json') as any
+    const clientMessageIdInput = typeof payload?.clientMessageId === 'string' ? payload.clientMessageId.trim() : ''
+    const clientMessageId = clientMessageIdInput || null
+    const now = new Date()
+
+    let userMessageRecord: any = null
+    let messageWasReused = false
+    let quotaSnapshot: UsageQuotaSnapshot | null = null
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (clientMessageId) {
+          const existing = await tx.message.findUnique({
+            where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
+          })
+          if (existing) {
+            userMessageRecord = existing
+            messageWasReused = true
+            quotaSnapshot = await inspectActorQuota(actor, { tx, now })
+            return
+          }
+        } else {
+          const existing = await tx.message.findFirst({
+            where: { sessionId, role: 'user', content },
+            orderBy: { createdAt: 'desc' },
+          })
+          if (existing) {
+            const createdAt = existing.createdAt instanceof Date
+              ? existing.createdAt
+              : new Date(existing.createdAt as any)
+            if (now.getTime() - createdAt.getTime() <= MESSAGE_DEDUPE_WINDOW_MS) {
+              userMessageRecord = existing
+              messageWasReused = true
+              quotaSnapshot = await inspectActorQuota(actor, { tx, now })
+              return
+            }
+          }
+        }
+
+        const consumeResult = await consumeActorQuota(actor, { tx, now })
+        if (!consumeResult.success) {
+          throw new QuotaExceededError(consumeResult.snapshot)
+        }
+        quotaSnapshot = consumeResult.snapshot
+
+        userMessageRecord = await tx.message.create({
+          data: {
+            sessionId,
+            role: 'user',
+            content,
+            ...(clientMessageId ? { clientMessageId } : {}),
+          },
+        })
+      })
+    } catch (error) {
+      if (error instanceof QuotaExceededError) {
+        return c.json({
+          success: false,
+          error: 'Daily quota exhausted',
+          quota: serializeQuotaSnapshot(error.snapshot),
+          requiredLogin: actor.type !== 'user',
+        }, 429)
       }
+      throw error
     }
 
-    if (images && images.length > 0 && userMessageRecord?.id) {
+    if (!userMessageRecord) {
+      return c.json<ApiResponse>({ success: false, error: 'Failed to persist user message' }, 500)
+    }
+
+    if (images && images.length > 0 && userMessageRecord?.id && !messageWasReused) {
       await persistChatImages(images, {
         sessionId,
         messageId: userMessageRecord.id,
-        userId: user.id,
-        clientMessageId: clientMessageId ?? null,
+        userId: userId ?? 0,
+        clientMessageId,
+      })
+    }
+
+    if (actor.type === 'anonymous') {
+      cleanupAnonymousSessions({ activeSessionId: sessionId }).catch((error) => {
+        log.debug('Anonymous cleanup error', error)
       })
     }
 
@@ -1137,7 +1277,14 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
       },
     });
 
-    return c.json<ApiResponse<{ content: string; usage: typeof usage }>>({ success: true, data: { content: text, usage } });
+    return c.json<ApiResponse<{ content: string; usage: typeof usage; quota?: ReturnType<typeof serializeQuotaSnapshot> | null }>>({
+      success: true,
+      data: {
+        content: text,
+        usage,
+        quota: quotaSnapshot ? serializeQuotaSnapshot(quotaSnapshot) : null,
+      },
+    });
   } catch (error) {
     console.error('Chat completion error:', error);
     return c.json<ApiResponse>({ success: false, error: 'Failed to process non-stream completion' }, 500);
