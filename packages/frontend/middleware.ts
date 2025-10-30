@@ -21,12 +21,6 @@ export function middleware(req: NextRequest) {
   }
 
   if (pathname.startsWith('/main')) {
-    if (!hasToken) {
-      const url = req.nextUrl.clone()
-      url.pathname = '/auth/login'
-      url.search = ''
-      return NextResponse.redirect(url)
-    }
     return NextResponse.next()
   }
 
@@ -42,7 +36,7 @@ export function middleware(req: NextRequest) {
 
   if (pathname === '/') {
     const url = req.nextUrl.clone()
-    url.pathname = hasToken ? '/main' : '/auth/login'
+    url.pathname = hasToken ? '/main' : '/main'
     url.search = ''
     return NextResponse.redirect(url)
   }

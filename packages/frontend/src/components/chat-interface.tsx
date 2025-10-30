@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import { useChatComposer } from '@/hooks/use-chat-composer'
 import { UserMenu } from '@/components/user-menu'
 import { useAuthStore } from '@/store/auth-store'
+import { useChatStore } from '@/store/chat-store'
 
 const MAX_AUTO_HEIGHT = 200
 

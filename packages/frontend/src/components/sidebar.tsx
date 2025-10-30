@@ -414,9 +414,3 @@ export function SidebarSettingsDialogBridge() {
   // 保留一个便于测试的导出（若需要在其他地方打开设置）
   return null
 }
-        {isAnonymous && (
-          <p className="text-xs text-muted-foreground">
-            今日剩余额度 {quotaDisplay}{' '}
-            {quotaExhausted ? '请登录或等待次日重置。' : ''}
-          </p>
-        )}
