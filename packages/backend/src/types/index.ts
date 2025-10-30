@@ -5,6 +5,23 @@ export interface User {
   createdAt: Date;
 }
 
+export type Actor = UserActor | AnonymousActor;
+
+export interface UserActor {
+  type: 'user';
+  id: number;
+  username: string;
+  role: 'ADMIN' | 'USER';
+  identifier: string;
+}
+
+export interface AnonymousActor {
+  type: 'anonymous';
+  key: string;
+  identifier: string;
+  expiresAt: Date | null;
+}
+
 export interface AuthPayload {
   userId: number;
   username: string;
@@ -23,7 +40,9 @@ export interface JWTPayload {
 
 export interface ChatSession {
   id: number;
-  userId: number;
+  userId: number | null;
+  anonymousKey?: string | null;
+  expiresAt?: Date | null;
   connectionId?: number | null;
   modelRawId?: string | null;
   title: string;

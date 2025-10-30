@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { prisma } from '../db'
-import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth'
+import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import { AuthUtils } from '../utils/auth'
 import { verifyConnection } from '../utils/providers'
@@ -23,12 +23,14 @@ const connectionSchema = z.object({
   connectionType: z.enum(['external','local']).optional(),
 })
 
-connections.get('/', authMiddleware, adminOnlyMiddleware, async (c) => {
+connections.use('*', actorMiddleware)
+
+connections.get('/', requireUserActor, adminOnlyMiddleware, async (c) => {
   const rows = await prisma.connection.findMany({ where: { ownerUserId: null } })
   return c.json<ApiResponse>({ success: true, data: rows })
 })
 
-connections.post('/', authMiddleware, adminOnlyMiddleware, zValidator('json', connectionSchema), async (c) => {
+connections.post('/', requireUserActor, adminOnlyMiddleware, zValidator('json', connectionSchema), async (c) => {
   const body = c.req.valid('json')
   const encKey = body.authType === 'bearer' && body.apiKey ? AuthUtils.encryptApiKey(body.apiKey) : ''
   const row = await prisma.connection.create({
@@ -50,7 +52,7 @@ connections.post('/', authMiddleware, adminOnlyMiddleware, zValidator('json', co
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
 })
 
-connections.put('/:id', authMiddleware, adminOnlyMiddleware, zValidator('json', connectionSchema.partial()), async (c) => {
+connections.put('/:id', requireUserActor, adminOnlyMiddleware, zValidator('json', connectionSchema.partial()), async (c) => {
   const id = parseInt(c.req.param('id'))
   const body = c.req.valid('json')
   const updates: any = {}
@@ -69,13 +71,13 @@ connections.put('/:id', authMiddleware, adminOnlyMiddleware, zValidator('json', 
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection updated' })
 })
 
-connections.delete('/:id', authMiddleware, adminOnlyMiddleware, async (c) => {
+connections.delete('/:id', requireUserActor, adminOnlyMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   await prisma.connection.delete({ where: { id } })
   return c.json<ApiResponse>({ success: true, message: 'Connection deleted' })
 })
 
-connections.post('/verify', authMiddleware, zValidator('json', connectionSchema), async (c) => {
+connections.post('/verify', requireUserActor, zValidator('json', connectionSchema), async (c) => {
   const body = c.req.valid('json')
   try {
     await verifyConnection({
@@ -98,13 +100,13 @@ connections.post('/verify', authMiddleware, zValidator('json', connectionSchema)
 })
 
 // 用户直连
-connections.get('/user', authMiddleware, async (c) => {
+connections.get('/user', requireUserActor, async (c) => {
   const user = c.get('user')
   const rows = await prisma.connection.findMany({ where: { ownerUserId: user.id } })
   return c.json<ApiResponse>({ success: true, data: rows })
 })
 
-connections.post('/user', authMiddleware, zValidator('json', connectionSchema), async (c) => {
+connections.post('/user', requireUserActor, zValidator('json', connectionSchema), async (c) => {
   const user = c.get('user')
   const body = c.req.valid('json')
   const encKey = body.authType === 'bearer' && body.apiKey ? AuthUtils.encryptApiKey(body.apiKey) : ''
@@ -127,7 +129,7 @@ connections.post('/user', authMiddleware, zValidator('json', connectionSchema), 
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
 })
 
-connections.put('/user/:id', authMiddleware, zValidator('json', connectionSchema.partial()), async (c) => {
+connections.put('/user/:id', requireUserActor, zValidator('json', connectionSchema.partial()), async (c) => {
   const user = c.get('user')
   const id = parseInt(c.req.param('id'))
   const exists = await prisma.connection.findFirst({ where: { id, ownerUserId: user.id } })
@@ -149,7 +151,7 @@ connections.put('/user/:id', authMiddleware, zValidator('json', connectionSchema
   return c.json<ApiResponse>({ success: true, data: row, message: 'Connection updated' })
 })
 
-connections.delete('/user/:id', authMiddleware, async (c) => {
+connections.delete('/user/:id', requireUserActor, async (c) => {
   const user = c.get('user')
   const id = parseInt(c.req.param('id'))
   const exists = await prisma.connection.findFirst({ where: { id, ownerUserId: user.id } })

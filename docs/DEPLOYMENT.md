@@ -317,6 +317,49 @@ git pull
 ./scripts/db-manager.sh migrate
 ```
 
+## 匿名访问改造迁移指引
+
+在应用匿名会话与配额功能的数据库迁移 (`20251101000000_support_anonymous`) 前，请务必完成备份，并了解回滚步骤：
+
+1. **备份 SQLite 数据文件**
+   - Linux/WSL: `./scripts/db-manager.sh backup`
+   - Windows PowerShell（无 WSL）：
+     ```powershell
+     $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+     Copy-Item -Path ".\\packages\\backend\\prisma\\data\\app.db" -Destination ".\\backup\\app_$timestamp.db"
+     ```
+2. **执行迁移**（Linux/WSL 与 Windows PowerShell 均支持）：
+   ```bash
+   ./scripts/db-manager.sh migrate
+   ```
+3. **需要回滚时**：
+   - 首选方式是恢复上一步备份的 `app.db` 文件。
+   - 若已执行迁移且希望保留其他数据，可使用 SQLite 恢复脚本：
+     ```bash
+     sqlite3 packages/backend/prisma/data/app.db <<'SQL'
+     DROP TABLE IF EXISTS usage_quota;
+     CREATE TABLE IF NOT EXISTS chat_sessions_backup AS SELECT * FROM chat_sessions;
+     -- 手动移除匿名字段后再恢复数据
+     CREATE TABLE chat_sessions (
+       id INTEGER PRIMARY KEY,
+       userId INTEGER NOT NULL,
+       connectionId INTEGER,
+       modelRawId TEXT,
+       title TEXT NOT NULL,
+       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+       reasoningEnabled BOOLEAN,
+       reasoningEffort TEXT,
+       ollamaThink BOOLEAN,
+       CONSTRAINT chat_sessions_userId_fkey FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+       CONSTRAINT chat_sessions_connectionId_fkey FOREIGN KEY (connectionId) REFERENCES connections(id) ON DELETE SET NULL ON UPDATE CASCADE
+     );
+     INSERT INTO chat_sessions (id, userId, connectionId, modelRawId, title, createdAt, reasoningEnabled, reasoningEffort, ollamaThink)
+       SELECT id, userId, connectionId, modelRawId, title, createdAt, reasoningEnabled, reasoningEffort, ollamaThink
+       FROM chat_sessions_backup;
+     DROP TABLE chat_sessions_backup;
+     SQL
+     ```
+
 ### 备份策略
 
 建议设置定期备份：

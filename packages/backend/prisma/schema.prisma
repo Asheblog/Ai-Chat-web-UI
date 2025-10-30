@@ -22,28 +22,33 @@ model User {
 
   chatSessions  ChatSession[]
   connections   Connection[]
+  usageQuotas   UsageQuota[]
 
   @@map("users")
 }
 
 // 2. 聊天会话表
 model ChatSession {
-  id            Int       @id @default(autoincrement())
-  userId        Int
+  id              Int       @id @default(autoincrement())
+  userId          Int?
+  anonymousKey    String?   @unique
+  expiresAt       DateTime?
   // 连接为中心：使用 Connection + 原始模型ID
-  connectionId  Int?
-  modelRawId    String?   // 供应商原始模型ID（不含前缀）
-  title         String    // 可由首条消息自动生成
-  createdAt     DateTime  @default(now())
+  connectionId    Int?
+  modelRawId      String?   // 供应商原始模型ID（不含前缀）
+  title           String    // 可由首条消息自动生成
+  createdAt       DateTime  @default(now())
   // 会话级推理默认：为空表示遵循系统设置
   reasoningEnabled Boolean?
   reasoningEffort  String?   // 'low' | 'medium' | 'high'
   ollamaThink      Boolean?
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   connection  Connection?  @relation(fields: [connectionId], references: [id])
   messages    Message[]
   usageMetrics UsageMetric[]
+
+  @@index([expiresAt])
 
   @@map("chat_sessions")
 }
@@ -110,6 +115,22 @@ model SystemSetting {
   value String
 
   @@map("system_settings")
+}
+
+model UsageQuota {
+  id          Int              @id @default(autoincrement())
+  identifier  String
+  scope       String
+  dailyLimit  Int
+  usedCount   Int              @default(0)
+  lastResetAt DateTime         @default(now())
+  userId      Int?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scope, identifier])
+  @@index([userId])
+  @@map("usage_quota")
 }
 
 // 5. 连接（系统或用户直连）

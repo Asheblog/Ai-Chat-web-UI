@@ -4,7 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { prisma } from '../db';
 import { AuthUtils } from '../utils/auth';
-import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth';
+import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import type { AuthResponse, ApiResponse } from '../types';
 
 const auth = new Hono();
@@ -206,7 +206,7 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
 });
 
 // 获取当前用户信息
-auth.get('/me', authMiddleware, async (c) => {
+auth.get('/me', actorMiddleware, requireUserActor, async (c) => {
   const user = c.get('user');
 
   return c.json<ApiResponse>({
@@ -216,7 +216,7 @@ auth.get('/me', authMiddleware, async (c) => {
 });
 
 // 更新用户密码
-auth.put('/password', authMiddleware, zValidator('json', z.object({
+auth.put('/password', actorMiddleware, requireUserActor, zValidator('json', z.object({
   currentPassword: z.string(),
   newPassword: z.string().min(8),
 })), async (c) => {

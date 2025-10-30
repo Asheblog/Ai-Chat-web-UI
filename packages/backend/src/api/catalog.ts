@@ -1,19 +1,23 @@
 import { Hono } from 'hono'
 import { prisma } from '../db'
-import type { ApiResponse } from '../types'
-import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth'
+import type { ApiResponse, Actor } from '../types'
+import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import { fetchModelsForConnection, type CatalogItem, computeCapabilities } from '../utils/providers'
 import { AuthUtils } from '../utils/auth'
 
 const catalog = new Hono()
 
+catalog.use('*', actorMiddleware)
+
 // GET /api/catalog/models - 当前用户可见（系统连接 + 本人直连）聚合后的模型列表
-catalog.get('/models', authMiddleware, async (c) => {
-  const user = c.get('user')
+catalog.get('/models', async (c) => {
+  const actor = c.get('actor') as Actor
   // 系统连接
   const systemConns = await prisma.connection.findMany({ where: { ownerUserId: null, enable: true } })
   // 用户直连
-  const userConns = await prisma.connection.findMany({ where: { ownerUserId: user.id, enable: true } })
+  const userConns = actor.type === 'user'
+    ? await prisma.connection.findMany({ where: { ownerUserId: actor.id, enable: true } })
+    : []
 
   const all = [...systemConns, ...userConns]
   const results: Array<{ connectionId: number; items: CatalogItem[] }> = []
@@ -64,7 +68,7 @@ catalog.get('/models', authMiddleware, async (c) => {
 })
 
 // 管理员手动刷新（将列表写入缓存表）
-catalog.post('/models/refresh', authMiddleware, adminOnlyMiddleware, async (c) => {
+catalog.post('/models/refresh', requireUserActor, adminOnlyMiddleware, async (c) => {
   const now = new Date()
   const ttlSec = parseInt(process.env.MODELS_TTL_S || '120')
   const expiresAt = new Date(now.getTime() + ttlSec * 1000)
@@ -113,7 +117,7 @@ catalog.post('/models/refresh', authMiddleware, adminOnlyMiddleware, async (c) =
 export default catalog
 
 // 管理端：为某个聚合模型（连接+原始ID）设置标签（覆盖）
-catalog.put('/models/tags', authMiddleware, adminOnlyMiddleware, async (c) => {
+catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const connectionId = parseInt(String(body.connectionId || '0'))
@@ -153,7 +157,7 @@ catalog.put('/models/tags', authMiddleware, adminOnlyMiddleware, async (c) => {
 })
 
 // 管理端：批量或全部删除模型覆写（model_catalog 中的条目）
-catalog.delete('/models/tags', authMiddleware, adminOnlyMiddleware, async (c) => {
+catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     let body: any = {}
     try { body = await c.req.json() } catch {}
@@ -184,7 +188,7 @@ catalog.delete('/models/tags', authMiddleware, adminOnlyMiddleware, async (c) =>
 })
 
 // 管理端：导出当前覆写（覆盖记录）
-catalog.get('/models/overrides', authMiddleware, adminOnlyMiddleware, async (c) => {
+catalog.get('/models/overrides', requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const rows = await prisma.modelCatalog.findMany({ select: { connectionId: true, rawId: true, modelId: true, tagsJson: true } })
     const items = rows.map((r) => ({ connectionId: r.connectionId, rawId: r.rawId, modelId: r.modelId, tags: JSON.parse(r.tagsJson || '[]') }))

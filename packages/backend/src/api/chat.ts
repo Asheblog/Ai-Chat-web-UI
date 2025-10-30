@@ -5,8 +5,9 @@ import { prisma } from '../db';
 import { AuthUtils } from '../utils/auth';
 import { convertOpenAIReasoningPayload } from '../utils/providers'
 import { Tokenizer } from '../utils/tokenizer';
-import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth';
-import type { ApiResponse, Message } from '../types';
+import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
+import type { ApiResponse, Message, Actor } from '../types';
+import { ensureAnonymousSession } from '../utils/actor';
 import { BackendLogger as log } from '../utils/logger';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../utils/reasoning-tags';
 import {
@@ -20,6 +21,25 @@ import {
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 
 const chat = new Hono();
+
+const sessionOwnershipClause = (actor: Actor) =>
+  actor.type === 'user'
+    ? { userId: actor.id }
+    : { anonymousKey: actor.key };
+
+const extendAnonymousSession = async (actor: Actor, sessionId: number | null) => {
+  if (actor.type !== 'anonymous' || !sessionId) return;
+  const context = await ensureAnonymousSession(actor);
+  await prisma.chatSession.updateMany({
+    where: {
+      id: sessionId,
+      anonymousKey: actor.key,
+    },
+    data: {
+      expiresAt: context?.expiresAt ?? null,
+    },
+  });
+};
 
 // 429 退避（毫秒）与 5xx/超时 退避（毫秒）
 const BACKOFF_429_MS = 15000;
@@ -43,9 +63,9 @@ const sendMessageSchema = z.object({
 });
 
 // 获取会话消息历史
-chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
+chat.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
     const sessionId = parseInt(c.req.param('sessionId'));
 
     if (isNaN(sessionId)) {
@@ -59,7 +79,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
     const session = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
-        userId: user.id,
+        ...sessionOwnershipClause(actor),
       },
     });
 
@@ -117,6 +137,8 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
       }
     });
 
+    await extendAnonymousSession(actor, sessionId)
+
     return c.json<ApiResponse<{
       messages: Array<{ id: number; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date; images?: string[] }>;
       pagination: {
@@ -148,7 +170,7 @@ chat.get('/sessions/:sessionId/messages', authMiddleware, async (c) => {
 });
 
 // 管理员：刷新图片访问地址（基于最新域名生成示例链接）
-chat.post('/admin/attachments/refresh', authMiddleware, adminOnlyMiddleware, async (c) => {
+chat.post('/admin/attachments/refresh', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const siteBaseSetting = await prisma.systemSetting.findUnique({
       where: { key: 'site_base_url' },
@@ -203,14 +225,18 @@ chat.post('/admin/attachments/refresh', authMiddleware, adminOnlyMiddleware, asy
 })
 
 // 发送消息并获取AI响应（流式）
-chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), async (c) => {
+chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
+    const userId = actor.type === 'user' ? actor.id : null;
     const { sessionId, content, images } = c.req.valid('json');
 
     // 验证会话是否存在且属于当前用户
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
+    const session = await prisma.chatSession.findFirst({
+      where: {
+        id: sessionId,
+        ...sessionOwnershipClause(actor),
+      },
       include: {
         connection: true,
       },
@@ -223,17 +249,12 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       }, 404);
     }
 
-    if (session.userId !== user.id) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Access denied',
-      }, 403);
-    }
-
     // 新模型选择：要求存在 connection + modelRawId
     if (!session.connectionId || !session.connection || !session.modelRawId) {
       return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400)
     }
+
+    await extendAnonymousSession(actor, sessionId)
 
     // 保存用户消息（优先使用 clientMessageId 幂等；无ID时使用时间窗去重）
     const clientMessageId = (c.req.valid('json') as any).clientMessageId as string | undefined
@@ -258,7 +279,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       await persistChatImages(images, {
         sessionId,
         messageId: userMessageRecord.id,
-        userId: user.id,
+        userId: userId ?? 0,
         clientMessageId: clientMessageId ?? null,
       });
     }
@@ -334,7 +355,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
       }
     }
 
-    log.debug('Chat stream request', { sessionId, userId: user.id, provider, baseUrl, model: session.modelRawId })
+    log.debug('Chat stream request', { sessionId, actor: actor.identifier, provider, baseUrl, model: session.modelRawId })
 
     // 构建AI API请求
     // 先将历史消息（纯文本）放入
@@ -945,7 +966,7 @@ chat.post('/stream', authMiddleware, zValidator('json', sendMessageSchema), asyn
 });
 
 // 非流式：同步返回完整回复
-chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), async (c) => {
+chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
   try {
     const user = c.get('user');
     const { sessionId, content, images } = c.req.valid('json');
@@ -1124,7 +1145,7 @@ chat.post('/completion', authMiddleware, zValidator('json', sendMessageSchema), 
 });
 
 // 停止生成（前端可通过关闭连接实现，这里提供确认接口）
-chat.post('/stop', authMiddleware, zValidator('json', z.object({
+chat.post('/stop', actorMiddleware, zValidator('json', z.object({
   sessionId: z.number().int().positive(),
 })), async (c) => {
   // 这个接口主要用于前端确认停止生成
@@ -1136,7 +1157,7 @@ chat.post('/stop', authMiddleware, zValidator('json', z.object({
 });
 
 // 重新生成AI回复
-chat.post('/regenerate', authMiddleware, zValidator('json', z.object({
+chat.post('/regenerate', actorMiddleware, zValidator('json', z.object({
   sessionId: z.number().int().positive(),
   messageId: z.number().int().positive(), // 要重新生成的消息ID
 })), async (c) => {
@@ -1220,7 +1241,7 @@ chat.post('/regenerate', authMiddleware, zValidator('json', z.object({
 
 // 统一生成接口（非会话态），按 provider 映射到相应 generate API
 // 入参：{ connectionId?: number, modelId?: string, prompt: string, stream?: boolean }
-chat.post('/generate', authMiddleware, zValidator('json', z.object({
+chat.post('/generate', actorMiddleware, zValidator('json', z.object({
   connectionId: z.number().int().positive().optional(),
   modelId: z.string().min(1).optional(),
   prompt: z.string().min(1),
@@ -1284,7 +1305,7 @@ chat.post('/generate', authMiddleware, zValidator('json', z.object({
 export default chat;
 
 // 用量聚合查询
-chat.get('/usage', authMiddleware, async (c) => {
+chat.get('/usage', actorMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const sessionId = parseInt(c.req.query('sessionId') || '0');
@@ -1350,7 +1371,7 @@ chat.get('/usage', authMiddleware, async (c) => {
 });
 
 // 所有会话的用量聚合（当前用户）
-chat.get('/sessions/usage', authMiddleware, async (c) => {
+chat.get('/sessions/usage', actorMiddleware, async (c) => {
   try {
     const user = c.get('user');
     // 获取当前用户的会话列表
@@ -1391,7 +1412,7 @@ chat.get('/sessions/usage', authMiddleware, async (c) => {
 });
 
 // 按日统计导出（JSON）: /api/chat/usage/daily?from=YYYY-MM-DD&to=YYYY-MM-DD&sessionId=optional
-chat.get('/usage/daily', authMiddleware, async (c) => {
+chat.get('/usage/daily', actorMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const from = c.req.query('from');

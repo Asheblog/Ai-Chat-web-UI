@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { prisma } from '../db';
-import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth';
+import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse } from '../types';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 
@@ -39,7 +39,7 @@ const systemSettingSchema = z.object({
 });
 
 // 获取系统设置（仅管理员）
-settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
+settings.get('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const systemSettings = await prisma.systemSetting.findMany({
       select: {
@@ -102,7 +102,7 @@ settings.get('/system', authMiddleware, adminOnlyMiddleware, async (c) => {
 });
 
 // 更新系统设置（仅管理员）
-settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
+settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
     const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url } = c.req.valid('json');
 
@@ -289,7 +289,7 @@ settings.put('/system', authMiddleware, adminOnlyMiddleware, zValidator('json', 
 });
 
 // 获取用户个人设置
-settings.get('/personal', authMiddleware, async (c) => {
+settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
   try {
     const user = c.get('user');
 
@@ -314,7 +314,7 @@ settings.get('/personal', authMiddleware, async (c) => {
 });
 
 // 更新用户个人设置
-settings.put('/personal', authMiddleware, zValidator('json', z.object({
+settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', z.object({
   context_token_limit: z.number().int().min(1000).max(32000).optional(),
   theme: z.enum(['light', 'dark']).optional(),
 })), async (c) => {

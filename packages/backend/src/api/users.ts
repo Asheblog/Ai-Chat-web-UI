@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
 import { prisma } from '../db';
-import { authMiddleware, adminOnlyMiddleware } from '../middleware/auth';
+import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse } from '../types';
 
 const users = new Hono();
 
+users.use('*', actorMiddleware, requireUserActor, adminOnlyMiddleware)
+
 // 获取所有用户 (仅管理员)
-users.get('/', authMiddleware, adminOnlyMiddleware, async (c) => {
+users.get('/', async (c) => {
   try {
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '10');
@@ -63,7 +65,7 @@ users.get('/', authMiddleware, adminOnlyMiddleware, async (c) => {
 });
 
 // 获取单个用户详情 (仅管理员)
-users.get('/:id', authMiddleware, adminOnlyMiddleware, async (c) => {
+users.get('/:id', async (c) => {
   try {
     const userId = parseInt(c.req.param('id'));
 
@@ -112,7 +114,7 @@ users.get('/:id', authMiddleware, adminOnlyMiddleware, async (c) => {
 });
 
 // 更新用户角色 (仅管理员)
-users.put('/:id/role', authMiddleware, adminOnlyMiddleware, async (c) => {
+users.put('/:id/role', async (c) => {
   try {
     const userId = parseInt(c.req.param('id'));
     const { role } = await c.req.json();
@@ -182,7 +184,7 @@ users.put('/:id/role', authMiddleware, adminOnlyMiddleware, async (c) => {
 });
 
 // 删除用户 (仅管理员)
-users.delete('/:id', authMiddleware, adminOnlyMiddleware, async (c) => {
+users.delete('/:id', async (c) => {
   try {
     const userId = parseInt(c.req.param('id'));
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { randomUUID } from 'node:crypto';
 
-import { authMiddleware } from '../middleware/auth';
+import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import { resolveModelIdForUser } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
 import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
@@ -300,7 +300,8 @@ const openaiCompat = new Hono();
 
 openaiCompat.post(
   '/chat/completions',
-  authMiddleware,
+  actorMiddleware,
+  requireUserActor,
   zValidator('json', chatCompletionsSchema),
   async (c) => {
     const user = c.get('user');
@@ -431,7 +432,8 @@ openaiCompat.post(
 
 openaiCompat.post(
   '/responses',
-  authMiddleware,
+  actorMiddleware,
+  requireUserActor,
   zValidator('json', responsesSchema),
   async (c) => {
     const user = c.get('user');
@@ -619,7 +621,7 @@ openaiCompat.post(
   },
 );
 
-openaiCompat.get('/messages', authMiddleware, async (c) => {
+openaiCompat.get('/messages', actorMiddleware, requireUserActor, async (c) => {
   const user = c.get('user');
   const rawSessionId = c.req.query('session_id') ?? c.req.query('sessionId');
   const sessionId = Number(rawSessionId);
@@ -653,7 +655,8 @@ openaiCompat.get('/messages', authMiddleware, async (c) => {
 
 openaiCompat.post(
   '/messages',
-  authMiddleware,
+  actorMiddleware,
+  requireUserActor,
   zValidator('json', messageCreateSchema),
   async (c) => {
     const user = c.get('user');

@@ -2,11 +2,28 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { prisma } from '../db';
-import { authMiddleware } from '../middleware/auth';
-import type { ApiResponse, ChatSession } from '../types';
+import { actorMiddleware } from '../middleware/auth';
+import type { ApiResponse, ChatSession, Actor } from '../types';
+import { ensureAnonymousSession } from '../utils/actor';
 // 保留原有创建会话解析逻辑；前端可传 connectionId/rawId 以避免歧义
 
 const sessions = new Hono();
+
+const sessionOwnershipClause = (actor: Actor) =>
+  actor.type === 'user'
+    ? { userId: actor.id }
+    : { anonymousKey: actor.key };
+
+const visibleConnectionFilter = (actor: Actor) =>
+  actor.type === 'user'
+    ? {
+        OR: [
+          { ownerUserId: null },
+          { ownerUserId: actor.id },
+        ],
+        enable: true,
+      }
+    : { ownerUserId: null, enable: true };
 
 // 容错解析连接配置的模型ID列表
 const parseModelIds = (json?: string | null): string[] => {
@@ -42,18 +59,21 @@ const createSessionSchema = z.object({
 });
 
 // 获取用户的聊天会话列表
-sessions.get('/', authMiddleware, async (c) => {
+sessions.get('/', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '20');
+    const where = sessionOwnershipClause(actor);
 
     const [sessionsList, total] = await Promise.all([
       prisma.chatSession.findMany({
-        where: { userId: user.id },
+        where,
         select: {
           id: true,
           userId: true,
+          anonymousKey: true,
+          expiresAt: true,
           connectionId: true,
           modelRawId: true,
           title: true,
@@ -75,14 +95,16 @@ sessions.get('/', authMiddleware, async (c) => {
         take: limit,
       }),
       prisma.chatSession.count({
-        where: { userId: user.id },
+        where,
       }),
     ]);
 
     return c.json<ApiResponse<{
       sessions: Array<{
         id: number;
-        userId: number;
+        userId: number | null;
+        anonymousKey?: string | null;
+        expiresAt?: Date | null;
         title: string;
         createdAt: Date;
         reasoningEnabled: boolean | null;
@@ -123,10 +145,13 @@ sessions.get('/', authMiddleware, async (c) => {
 });
 
 // 创建新的聊天会话
-sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), async (c) => {
+sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), async (c) => {
   return (async () => {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
     const { modelId, title, connectionId: reqConnectionId, rawId: reqRawId, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
+    const connectionScope = actor.type === 'user'
+      ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] as const }
+      : { ownerUserId: null as const }
 
     // 解析 modelId -> (connectionId, rawId)
     // 优先使用客户端直传（更可靠）
@@ -134,7 +159,15 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
     let rawId: string | null = null
     if (reqConnectionId && reqRawId) {
       // 校验连接对当前用户可见且启用
-      const conn = await prisma.connection.findFirst({ where: { id: reqConnectionId, enable: true, OR: [ { ownerUserId: null }, { ownerUserId: user.id } ] } })
+      const conn = await prisma.connection.findFirst({
+        where: {
+          id: reqConnectionId,
+          enable: true,
+          ...(actor.type === 'user'
+            ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] }
+            : { ownerUserId: null }),
+        },
+      })
       if (!conn) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid connectionId for current user' }, 400)
       }
@@ -148,7 +181,12 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
         rawId = cached.rawId
       } else {
         // 回退：尝试匹配 prefix 到连接（旧逻辑留作兼容；优先使用前端直传 connectionId/rawId）
-        const conns = await prisma.connection.findMany({ where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true } })
+        const conns = await prisma.connection.findMany({
+          where: {
+            ...connectionScope,
+            enable: true,
+          },
+        })
         let fallbackExact: { connectionId: number; rawId: string } | null = null
         let fallbackFirst: { connectionId: number; rawId: string } | null = null
         for (const conn of conns) {
@@ -185,9 +223,17 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
     }
 
     // 创建会话
+    const anonymousContext = actor.type === 'anonymous' ? await ensureAnonymousSession(actor) : null
+
     const session = await prisma.chatSession.create({
       data: {
-        userId: user.id,
+        ...(actor.type === 'user' ? { userId: actor.id } : {}),
+        ...(actor.type === 'anonymous'
+          ? {
+              anonymousKey: anonymousContext?.anonymousKey ?? actor.key,
+              expiresAt: anonymousContext?.expiresAt ?? null,
+            }
+          : {}),
         connectionId,
         modelRawId: rawId,
         title: title || 'New Chat',
@@ -198,6 +244,8 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
       select: {
         id: true,
         userId: true,
+        anonymousKey: true,
+        expiresAt: true,
         connectionId: true,
         modelRawId: true,
         title: true,
@@ -229,9 +277,9 @@ sessions.post('/', authMiddleware, zValidator('json', createSessionSchema), asyn
 });
 
 // 获取单个聊天会话详情
-sessions.get('/:id', authMiddleware, async (c) => {
+sessions.get('/:id', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
     const sessionId = parseInt(c.req.param('id'));
 
     if (isNaN(sessionId)) {
@@ -244,11 +292,13 @@ sessions.get('/:id', authMiddleware, async (c) => {
     const session = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
-        userId: user.id,
+        ...sessionOwnershipClause(actor),
       },
       select: {
         id: true,
         userId: true,
+        anonymousKey: true,
+        expiresAt: true,
         connectionId: true,
         modelRawId: true,
         title: true,
@@ -292,14 +342,14 @@ sessions.get('/:id', authMiddleware, async (c) => {
 });
 
 // 更新会话标题
-sessions.put('/:id', authMiddleware, zValidator('json', z.object({
+sessions.put('/:id', actorMiddleware, zValidator('json', z.object({
   title: z.string().min(1).max(200).optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low','medium','high']).optional(),
   ollamaThink: z.boolean().optional(),
 })), async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
     const sessionId = parseInt(c.req.param('id'));
     const { title, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
 
@@ -314,7 +364,7 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
     const existingSession = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
-        userId: user.id,
+        ...sessionOwnershipClause(actor),
       },
     });
 
@@ -337,6 +387,8 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
       select: {
         id: true,
         userId: true,
+        anonymousKey: true,
+        expiresAt: true,
         title: true,
         createdAt: true,
         reasoningEnabled: true,
@@ -369,13 +421,13 @@ sessions.put('/:id', authMiddleware, zValidator('json', z.object({
 });
 
 // 切换会话的模型（聚合模型ID -> 连接ID + 原始模型ID）
-sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
+sessions.put('/:id/model', actorMiddleware, zValidator('json', z.object({
   modelId: z.string().min(1),
   connectionId: z.number().int().positive().optional(),
   rawId: z.string().min(1).optional(),
 })), async (c) => {
   try {
-    const user = c.get('user')
+    const actor = c.get('actor') as Actor
     const sessionId = parseInt(c.req.param('id'))
     const { modelId, connectionId: reqConnectionId, rawId: reqRawId } = c.req.valid('json') as { modelId: string; connectionId?: number; rawId?: string }
 
@@ -384,7 +436,7 @@ sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
     }
 
     // 验证会话归属
-    const existing = await prisma.chatSession.findFirst({ where: { id: sessionId, userId: user.id } })
+    const existing = await prisma.chatSession.findFirst({ where: { id: sessionId, ...sessionOwnershipClause(actor) } })
     if (!existing) {
       return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404)
     }
@@ -398,7 +450,9 @@ sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
         where: {
           id: reqConnectionId,
           enable: true,
-          OR: [ { ownerUserId: null }, { ownerUserId: user.id } ],
+          ...(actor.type === 'user'
+            ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] }
+            : { ownerUserId: null }),
         },
       })
       if (!conn) {
@@ -416,9 +470,14 @@ sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
         rawId = cached.rawId
       } else {
         // 回退：从可见连接中匹配（系统级 + 用户级）
-        const conns = await prisma.connection.findMany({
-          where: { OR: [ { ownerUserId: null }, { ownerUserId: user.id } ], enable: true },
-        })
+      const conns = await prisma.connection.findMany({
+        where: {
+          enable: true,
+          ...(actor.type === 'user'
+            ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] }
+            : { ownerUserId: null }),
+        },
+      })
         let fallbackExact: { connectionId: number; rawId: string } | null = null
         let fallbackFirst: { connectionId: number; rawId: string } | null = null
         for (const conn of conns) {
@@ -461,6 +520,8 @@ sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
       select: {
         id: true,
         userId: true,
+        anonymousKey: true,
+        expiresAt: true,
         connectionId: true,
         modelRawId: true,
         title: true,
@@ -479,9 +540,9 @@ sessions.put('/:id/model', authMiddleware, zValidator('json', z.object({
 })
 
 // 删除聊天会话
-sessions.delete('/:id', authMiddleware, async (c) => {
+sessions.delete('/:id', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
     const sessionId = parseInt(c.req.param('id'));
 
     if (isNaN(sessionId)) {
@@ -495,7 +556,7 @@ sessions.delete('/:id', authMiddleware, async (c) => {
     const existingSession = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
-        userId: user.id,
+        ...sessionOwnershipClause(actor),
       },
     });
 
@@ -526,9 +587,9 @@ sessions.delete('/:id', authMiddleware, async (c) => {
 });
 
 // 清空会话消息
-sessions.delete('/:id/messages', authMiddleware, async (c) => {
+sessions.delete('/:id/messages', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor;
     const sessionId = parseInt(c.req.param('id'));
 
     if (isNaN(sessionId)) {
@@ -542,7 +603,7 @@ sessions.delete('/:id/messages', authMiddleware, async (c) => {
     const existingSession = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
-        userId: user.id,
+        ...sessionOwnershipClause(actor),
       },
     });
 
