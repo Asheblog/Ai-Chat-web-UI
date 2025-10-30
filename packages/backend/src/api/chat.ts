@@ -1401,7 +1401,7 @@ chat.post('/generate', actorMiddleware, zValidator('json', z.object({
     let rawId: string | null = null
 
     if (body.connectionId) {
-      conn = await prisma.connection.findFirst({ where: { id: body.connectionId, OR: [ { ownerUserId: null }, { ownerUserId: user.id } ] } })
+      conn = await prisma.connection.findFirst({ where: { id: body.connectionId, ownerUserId: null } })
       if (!conn) return c.json<ApiResponse>({ success: false, error: 'Connection not found' }, 404)
       rawId = body.modelId || null
     } else if (body.modelId) {
@@ -1454,15 +1454,25 @@ export default chat;
 // 用量聚合查询
 chat.get('/usage', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const actor = c.get('actor') as Actor | undefined;
     const sessionId = parseInt(c.req.query('sessionId') || '0');
     if (!sessionId || Number.isNaN(sessionId)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid sessionId' }, 400);
     }
 
-    // 验证归属
-    const session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
-    if (!session || session.userId !== user.id) {
+    if (!actor) {
+      return c.json<ApiResponse>({ success: false, error: 'Actor context missing' }, 401);
+    }
+
+    const session = await prisma.chatSession.findFirst({
+      where: {
+        id: sessionId,
+        ...(actor.type === 'user'
+          ? { userId: actor.id }
+          : { anonymousKey: actor.key }),
+      },
+    });
+    if (!session) {
       return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
     }
 

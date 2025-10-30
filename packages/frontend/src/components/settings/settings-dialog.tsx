@@ -17,7 +17,6 @@ import { SystemModelsPage } from "./pages/SystemModels"
 // import { SystemModelsPage } from "./pages/SystemModels"
 import { SystemUsersPage } from "./pages/SystemUsers"
 import { SystemConnectionsPage } from "./pages/SystemConnections"
-import { UserConnectionsPage } from "./pages/UserConnections"
 
 interface SettingsDialogProps {
   open: boolean
@@ -96,7 +95,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     const roleDefaultSub =
       nextMain === 'system'
         ? 'system.general'
-        : (isAuthenticated ? 'personal.connections' : 'personal.about')
+        : (isAuthenticated ? 'personal.preferences' : 'personal.about')
     let nextSub = (urlSub || memSub || roleDefaultSub || subs[0]?.key || '') as string
     if (nextSub && !subs.some((item) => item.key === nextSub)) {
       if (!denialNotifiedRef.current && (urlSub || urlMain)) {
@@ -179,7 +178,6 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
           >
             {(() => {
               switch (activeSub) {
-                case 'personal.connections': return <UserConnectionsPage />
                 // case 'personal.models': return <PersonalModelsPage />
                 case 'personal.preferences': return <PersonalPreferencesPage />
                 case 'personal.security': return <PersonalSecurityPage />

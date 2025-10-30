@@ -33,6 +33,10 @@ const nextConfig = {
         source: '/api/:path*',
         destination: `${proxyOrigin}/api/:path*`,
       },
+      {
+        source: '/v1/:path*',
+        destination: `${proxyOrigin}/v1/:path*`,
+      },
     ]
   },
 

@@ -99,10 +99,6 @@ app.get('/api', (c) => {
         'PUT /api/connections/:id': '更新系统连接（管理员）',
         'DELETE /api/connections/:id': '删除系统连接（管理员）',
         'POST /api/connections/verify': '验证连接',
-        'GET /api/connections/user': '个人直连列表',
-        'POST /api/connections/user': '新增个人直连',
-        'PUT /api/connections/user/:id': '更新个人直连',
-        'DELETE /api/connections/user/:id': '删除个人直连',
       },
       sessions: {
         'GET /api/sessions': '获取会话列表',

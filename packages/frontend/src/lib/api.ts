@@ -238,11 +238,6 @@ class ApiClient {
     return response.data
   }
 
-  async getUserConnections() {
-    const response = await this.client.get<ApiResponse<any[]>>('/connections/user')
-    return response.data
-  }
-
   async createSystemConnection(data: any) {
     const response = await this.client.post<ApiResponse<any>>('/connections', data)
     return response.data
@@ -263,33 +258,27 @@ class ApiClient {
     return response.data
   }
 
-  async createUserConnection(data: any) {
-    const response = await this.client.post<ApiResponse<any>>('/connections/user', data)
-    return response.data
-  }
-
   async createMessageV1(payload: {
     sessionId: number
     role: 'user' | 'assistant'
-    content: string
+    content: string | any
     clientMessageId?: string | null
     reasoning?: string | null
     reasoningDurationSeconds?: number | null
+    images?: Array<{ data: string; mime: string }>
   }) {
     const body: any = {
       session_id: payload.sessionId,
       role: payload.role,
-      content: [
-        {
-          type: 'text',
-          text: payload.content,
-        },
-      ],
+      content: payload.content,
     }
     if (payload.clientMessageId) body.client_message_id = payload.clientMessageId
     if (payload.reasoning != null) body.reasoning = payload.reasoning
     if (payload.reasoningDurationSeconds != null) {
       body.reasoning_duration_seconds = payload.reasoningDurationSeconds
+    }
+    if (payload.images && payload.images.length) {
+      body.images = payload.images
     }
     const response = await this.requestV1('/v1/messages', {
       method: 'POST',
@@ -297,16 +286,6 @@ class ApiClient {
     })
     const json = await response.json()
     return this.normalizeV1Message(json, payload.sessionId)
-  }
-
-  async updateUserConnection(id: number, data: any) {
-    const response = await this.client.put<ApiResponse<any>>(`/connections/user/${id}`, data)
-    return response.data
-  }
-
-  async deleteUserConnection(id: number) {
-    const response = await this.client.delete<ApiResponse<any>>(`/connections/user/${id}`)
-    return response.data
   }
 
   async deleteSession(sessionId: number) {

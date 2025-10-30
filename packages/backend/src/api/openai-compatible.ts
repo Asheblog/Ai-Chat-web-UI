@@ -8,6 +8,7 @@ import { resolveModelIdForUser } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
 import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
 import { prisma } from '../db';
+import { persistChatImages } from '../utils/chat-images';
 
 import type { Connection, Message as MessageEntity } from '@prisma/client';
 
@@ -85,6 +86,10 @@ const messageCreateSchema = z.object({
   client_message_id: z.string().min(1).max(128).optional(),
   reasoning: z.string().optional(),
   reasoning_duration_seconds: z.number().int().nonnegative().optional(),
+  images: z
+    .array(z.object({ data: z.string().min(1), mime: z.string().min(1) }))
+    .max(4)
+    .optional(),
 });
 
 function flattenMessageContent(content: z.infer<typeof messageContentSchema>): string {
@@ -709,6 +714,19 @@ openaiCompat.post(
       message = await prisma.message.create({
         data: createData,
       });
+    }
+
+    if (body.images && body.images.length > 0) {
+      try {
+        await persistChatImages(body.images, {
+          sessionId: body.session_id,
+          messageId: message.id,
+          userId: user.id,
+          clientMessageId: body.client_message_id,
+        });
+      } catch (error) {
+        console.warn('[openai-compatible] persist images failed', error);
+      }
     }
 
     return c.json(formatMessage(message));

@@ -31,7 +31,7 @@ model User {
 model ChatSession {
   id              Int       @id @default(autoincrement())
   userId          Int?
-  anonymousKey    String?   @unique
+  anonymousKey    String?
   expiresAt       DateTime?
   // 连接为中心：使用 Connection + 原始模型ID
   connectionId    Int?
@@ -49,6 +49,7 @@ model ChatSession {
   usageMetrics UsageMetric[]
 
   @@index([expiresAt])
+  @@index([anonymousKey])
 
   @@map("chat_sessions")
 }

@@ -406,15 +406,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
 
     let iterator: AsyncGenerator<ChatStreamChunk, void, unknown> | null = null
+    const actorState = useAuthStore.getState().actorState
+    const canUseV1Pipeline = actorState === 'authenticated'
 
     try {
-      if (modelId) {
+      if (modelId && canUseV1Pipeline) {
         try {
+          const latestMessage = providerMessages[providerMessages.length - 1]
           const created = await apiClient.createMessageV1({
             sessionId,
             role: 'user',
-            content,
+            content: latestMessage?.content ?? content,
             clientMessageId: userClientMessageId,
+            images: images && images.length ? images.map((img) => ({ data: img.data, mime: img.mime })) : undefined,
           })
           set((state) => ({
             messages: state.messages.map((msg) =>
@@ -516,27 +520,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }))
 
       if (useV1Pipeline && accumulatedContent.trim()) {
-        try {
-          const assistantRecord = await apiClient.createMessageV1({
-            sessionId,
-            role: 'assistant',
-            content: accumulatedContent.trim(),
-            reasoning: reasoningActive ? accumulatedReasoning.trim() || null : null,
-            reasoningDurationSeconds: reasoningActive
-              ? get().messages.at(-1)?.reasoningDurationSeconds ?? null
-              : null,
-          })
-          set((state) => ({
-            messages: state.messages.map((msg, index) =>
-              index === state.messages.length - 1
-                ? { ...msg, id: assistantRecord.id }
-                : msg
-            ),
-          }))
-          get().fetchMessages(sessionId).catch(() => {})
-        } catch (err) {
-          if (process.env.NODE_ENV !== 'production') {
-            console.debug('[streamMessage] failed to persist assistant message via v1', err)
+        if (canUseV1Pipeline) {
+          try {
+            const assistantRecord = await apiClient.createMessageV1({
+              sessionId,
+              role: 'assistant',
+              content: accumulatedContent.trim(),
+              reasoning: reasoningActive ? accumulatedReasoning.trim() || null : null,
+              reasoningDurationSeconds: reasoningActive
+                ? get().messages.at(-1)?.reasoningDurationSeconds ?? null
+                : null,
+            })
+            set((state) => ({
+              messages: state.messages.map((msg, index) =>
+                index === state.messages.length - 1
+                  ? { ...msg, id: assistantRecord.id }
+                  : msg
+              ),
+            }))
+            get().fetchMessages(sessionId).catch(() => {})
+          } catch (err) {
+            if (process.env.NODE_ENV !== 'production') {
+              console.debug('[streamMessage] failed to persist assistant message via v1', err)
+            }
           }
         }
       }

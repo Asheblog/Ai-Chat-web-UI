@@ -10,16 +10,11 @@ const catalog = new Hono()
 
 catalog.use('*', actorMiddleware)
 
-// GET /api/catalog/models - 当前用户可见（系统连接 + 本人直连）聚合后的模型列表
+// GET /api/catalog/models - 当前用户可见的系统连接聚合模型列表
 catalog.get('/models', async (c) => {
   const actor = c.get('actor') as Actor
 
-  const systemConns = await prisma.connection.findMany({ where: { ownerUserId: null, enable: true } })
-  const userConns = actor.type === 'user'
-    ? await prisma.connection.findMany({ where: { ownerUserId: actor.id, enable: true } })
-    : []
-
-  const connections = [...systemConns, ...userConns]
+  const connections = await prisma.connection.findMany({ where: { ownerUserId: null, enable: true } })
   if (connections.length === 0) {
     return c.json<ApiResponse>({ success: true, data: [] })
   }

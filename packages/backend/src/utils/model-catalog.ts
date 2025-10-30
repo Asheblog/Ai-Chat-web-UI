@@ -49,6 +49,16 @@ const resolveTtlSeconds = () => {
   return DEFAULT_TTL_S
 }
 
+const normalizeConnectionsToSystem = async () => {
+  const result = await prisma.connection.updateMany({
+    where: { ownerUserId: { not: null } },
+    data: { ownerUserId: null },
+  })
+  if (result.count > 0) {
+    log.info('已自动将个人直连转为系统连接', { affected: result.count })
+  }
+}
+
 const expireManual = async (connectionId: number) => {
   await prisma.modelCatalog.deleteMany({
     where: {
@@ -59,6 +69,10 @@ const expireManual = async (connectionId: number) => {
 }
 
 export async function refreshModelCatalogForConnection(conn: Connection): Promise<{ connectionId: number; total: number }> {
+  if (conn.ownerUserId != null) {
+    log.debug('跳过个人连接的模型刷新', { connectionId: conn.id, ownerUserId: conn.ownerUserId })
+    return { connectionId: conn.id, total: 0 }
+  }
   const cfg = buildConfigFromConnection(conn)
   if (!cfg.enable) {
     await expireManual(conn.id)
@@ -148,7 +162,7 @@ export async function refreshModelCatalogForConnections(connections: Connection[
 }
 
 export async function refreshAllModelCatalog() {
-  const connections = await prisma.connection.findMany({ where: { enable: true } })
+  const connections = await prisma.connection.findMany({ where: { enable: true, ownerUserId: null } })
   await refreshModelCatalogForConnections(connections)
 }
 
@@ -172,7 +186,11 @@ export function scheduleModelCatalogAutoRefresh() {
     }
   }
 
-  run().catch(() => {})
+  normalizeConnectionsToSystem()
+    .catch((err) => log.warn('归并个人直连失败', err))
+    .finally(() => {
+      run().catch(() => {})
+    })
 
   catalogTimer = setInterval(() => {
     run().catch(() => {})

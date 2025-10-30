@@ -74,6 +74,7 @@ connections.put('/:id', requireUserActor, adminOnlyMiddleware, zValidator('json'
   if (body.tags) updates.tagsJson = JSON.stringify(body.tags)
   if (body.modelIds) updates.modelIdsJson = JSON.stringify(body.modelIds)
   if (body.connectionType) updates.connectionType = body.connectionType
+  updates.ownerUserId = null
   const row = await prisma.connection.update({ where: { id }, data: updates })
   try {
     await refreshModelCatalogForConnection(row)
@@ -110,78 +111,6 @@ connections.post('/verify', requireUserActor, zValidator('json', connectionSchem
   } catch (e: any) {
     return c.json<ApiResponse>({ success: false, error: e?.message || 'Verify failed' }, 400)
   }
-})
-
-// 用户直连
-connections.get('/user', requireUserActor, async (c) => {
-  const user = c.get('user')
-  const rows = await prisma.connection.findMany({ where: { ownerUserId: user.id } })
-  return c.json<ApiResponse>({ success: true, data: rows })
-})
-
-connections.post('/user', requireUserActor, zValidator('json', connectionSchema), async (c) => {
-  const user = c.get('user')
-  const body = c.req.valid('json')
-  const encKey = body.authType === 'bearer' && body.apiKey ? AuthUtils.encryptApiKey(body.apiKey) : ''
-  const row = await prisma.connection.create({
-    data: {
-      ownerUserId: user.id,
-      provider: body.provider,
-      baseUrl: body.baseUrl.replace(/\/$/, ''),
-      enable: body.enable ?? true,
-      authType: body.authType ?? 'bearer',
-      apiKey: encKey,
-      headersJson: body.headers ? JSON.stringify(body.headers) : '',
-      azureApiVersion: body.azureApiVersion,
-      prefixId: body.prefixId,
-      tagsJson: JSON.stringify(body.tags || []),
-      modelIdsJson: JSON.stringify(body.modelIds || []),
-      connectionType: body.connectionType || 'external',
-    },
-  })
-  try {
-    await refreshModelCatalogForConnection(row)
-  } catch (error) {
-    log.warn('新增个人连接后刷新模型目录失败', { id: row.id, owner: row.ownerUserId, error })
-  }
-  return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
-})
-
-connections.put('/user/:id', requireUserActor, zValidator('json', connectionSchema.partial()), async (c) => {
-  const user = c.get('user')
-  const id = parseInt(c.req.param('id'))
-  const exists = await prisma.connection.findFirst({ where: { id, ownerUserId: user.id } })
-  if (!exists) return c.json<ApiResponse>({ success: false, error: 'Not found' }, 404)
-  const body = c.req.valid('json')
-  const updates: any = {}
-  if (body.provider) updates.provider = body.provider
-  if (body.baseUrl) updates.baseUrl = body.baseUrl.replace(/\/$/, '')
-  if (typeof body.enable === 'boolean') updates.enable = body.enable
-  if (body.authType) updates.authType = body.authType
-  if (body.apiKey != null) updates.apiKey = body.authType === 'bearer' && body.apiKey ? AuthUtils.encryptApiKey(body.apiKey) : ''
-  if (body.headers) updates.headersJson = JSON.stringify(body.headers)
-  if (body.azureApiVersion != null) updates.azureApiVersion = body.azureApiVersion
-  if (body.prefixId != null) updates.prefixId = body.prefixId
-  if (body.tags) updates.tagsJson = JSON.stringify(body.tags)
-  if (body.modelIds) updates.modelIdsJson = JSON.stringify(body.modelIds)
-  if (body.connectionType) updates.connectionType = body.connectionType
-  const row = await prisma.connection.update({ where: { id }, data: updates })
-  try {
-    await refreshModelCatalogForConnection(row)
-  } catch (error) {
-    log.warn('更新个人连接后刷新模型目录失败', { id: row.id, owner: row.ownerUserId, error })
-  }
-  return c.json<ApiResponse>({ success: true, data: row, message: 'Connection updated' })
-})
-
-connections.delete('/user/:id', requireUserActor, async (c) => {
-  const user = c.get('user')
-  const id = parseInt(c.req.param('id'))
-  const exists = await prisma.connection.findFirst({ where: { id, ownerUserId: user.id } })
-  if (!exists) return c.json<ApiResponse>({ success: false, error: 'Not found' }, 404)
-  await prisma.connection.delete({ where: { id } })
-  await prisma.modelCatalog.deleteMany({ where: { connectionId: id } })
-  return c.json<ApiResponse>({ success: true, message: 'Connection deleted' })
 })
 
 export default connections

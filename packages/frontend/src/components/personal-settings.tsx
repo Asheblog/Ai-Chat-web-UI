@@ -5,13 +5,13 @@
 
 import React from "react"
 import { PersonalPreferencesPage } from "@/components/settings/pages/PersonalPreferences"
-import { UserConnectionsPage } from "@/components/settings/pages/UserConnections"
+import { PersonalSecurityPage } from "@/components/settings/pages/PersonalSecurity"
 
 export function PersonalSettings() {
   return (
     <div className="space-y-6">
       <PersonalPreferencesPage />
-      <UserConnectionsPage />
+      <PersonalSecurityPage />
     </div>
   )
 }

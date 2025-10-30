@@ -14,17 +14,6 @@ const sessionOwnershipClause = (actor: Actor) =>
     ? { userId: actor.id }
     : { anonymousKey: actor.key };
 
-const visibleConnectionFilter = (actor: Actor) =>
-  actor.type === 'user'
-    ? {
-        OR: [
-          { ownerUserId: null },
-          { ownerUserId: actor.id },
-        ],
-        enable: true,
-      }
-    : { ownerUserId: null, enable: true };
-
 // 容错解析连接配置的模型ID列表
 const parseModelIds = (json?: string | null): string[] => {
   if (!json) return []
@@ -149,10 +138,6 @@ sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), asy
   return (async () => {
     const actor = c.get('actor') as Actor;
     const { modelId, title, connectionId: reqConnectionId, rawId: reqRawId, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
-    const connectionScope = actor.type === 'user'
-      ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] as const }
-      : { ownerUserId: null as const }
-
     // 解析 modelId -> (connectionId, rawId)
     // 优先使用客户端直传（更可靠）
     let connectionId: number | null = null
@@ -163,9 +148,7 @@ sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), asy
         where: {
           id: reqConnectionId,
           enable: true,
-          ...(actor.type === 'user'
-            ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] }
-            : { ownerUserId: null }),
+          ownerUserId: null,
         },
       })
       if (!conn) {
@@ -183,7 +166,7 @@ sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), asy
         // 回退：尝试匹配 prefix 到连接（旧逻辑留作兼容；优先使用前端直传 connectionId/rawId）
         const conns = await prisma.connection.findMany({
           where: {
-            ...connectionScope,
+            ownerUserId: null,
             enable: true,
           },
         })
@@ -450,9 +433,7 @@ sessions.put('/:id/model', actorMiddleware, zValidator('json', z.object({
         where: {
           id: reqConnectionId,
           enable: true,
-          ...(actor.type === 'user'
-            ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] }
-            : { ownerUserId: null }),
+          ownerUserId: null,
         },
       })
       if (!conn) {
@@ -473,9 +454,7 @@ sessions.put('/:id/model', actorMiddleware, zValidator('json', z.object({
       const conns = await prisma.connection.findMany({
         where: {
           enable: true,
-          ...(actor.type === 'user'
-            ? { OR: [{ ownerUserId: null }, { ownerUserId: actor.id }] }
-            : { ownerUserId: null }),
+          ownerUserId: null,
         },
       })
         let fallbackExact: { connectionId: number; rawId: string } | null = null

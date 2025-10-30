@@ -2,7 +2,7 @@ import { prisma } from '../db';
 import type { Connection } from '@prisma/client';
 
 /**
- * 解析 modelId 对应的连接（系统/个人）与原始模型 ID。
+ * 解析 modelId 对应的系统连接与原始模型 ID。
  * 优先查询 model_catalog 缓存，其次回退到 prefix 规则或连接的 modelIds。
  */
 export async function resolveModelIdForUser(
@@ -32,7 +32,7 @@ export async function resolveModelIdForUser(
   const connections = await prisma.connection.findMany({
     where: {
       enable: true,
-      OR: [{ ownerUserId: null }, { ownerUserId: userId }],
+      ownerUserId: null,
     },
   });
 
