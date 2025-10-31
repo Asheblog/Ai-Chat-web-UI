@@ -90,7 +90,11 @@ class ApiClient {
     return `${normalizedBase}/${path}`
   }
 
-  private async requestV1(path: string, init: RequestInit = {}) {
+  private async requestV1(
+    path: string,
+    init: RequestInit = {},
+    opts?: { suppressAuthRedirect?: boolean }
+  ) {
     const url = this.resolveV1Url(path)
     const response = await fetch(url, {
       credentials: 'include',
@@ -102,6 +106,12 @@ class ApiClient {
     })
 
     if (response.status === 401) {
+      if (opts?.suppressAuthRedirect) {
+        const error: any = new Error('Unauthorized')
+        error.status = 401
+        error.suppressAuthRedirect = true
+        throw error
+      }
       this.handleUnauthorized()
       throw new Error('Unauthorized')
     }
@@ -308,7 +318,9 @@ class ApiClient {
       const v1 = await this.getMessagesV1(sessionId)
       return v1
     } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
+      const suppressed401 =
+        Boolean((error as any)?.suppressAuthRedirect) && (error as any)?.status === 401
+      if (!suppressed401 && process.env.NODE_ENV !== 'production') {
         console.debug('[api.getMessages] fallback to legacy', (error as Error)?.message)
       }
     }
@@ -318,7 +330,11 @@ class ApiClient {
   }
 
   private async getMessagesV1(sessionId: number) {
-    const response = await this.requestV1(`/v1/messages?session_id=${sessionId}`)
+    const response = await this.requestV1(
+      `/v1/messages?session_id=${sessionId}`,
+      {},
+      { suppressAuthRedirect: true }
+    )
     const json = await response.json()
     const items = Array.isArray(json?.data) ? json.data : []
     const data = items.map((item: any) => this.normalizeV1Message(item, sessionId))
