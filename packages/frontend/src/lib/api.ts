@@ -4,14 +4,7 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig
 } from 'axios'
-import type {
-  AuthResponse,
-  User,
-  ApiResponse,
-  Message as ChatMessage,
-  ChatStreamChunk,
-  ActorContextDTO,
-} from '@/types'
+import type { AuthResponse, User, ApiResponse, ActorContextDTO } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
@@ -19,15 +12,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 class ApiClient {
   private client: AxiosInstance
-  private rootBaseUrl: string
   private currentStreamController: AbortController | null = null
   // 标记避免重复重定向
   private isRedirecting = false
 
   constructor() {
-    const base = API_BASE_URL
-    this.rootBaseUrl = base.endsWith('/api') ? base.slice(0, -4) || '' : base
-
     this.client = axios.create({
       baseURL: API_BASE_URL,
       timeout: 30000,
@@ -77,51 +66,6 @@ class ApiClient {
         return Promise.reject(error)
       }
     )
-  }
-
-  private resolveV1Url(path: string): string {
-    if (/^https?:\/\//i.test(path)) return path
-    const base = this.rootBaseUrl || ''
-    if (!base) return path
-    if (path.startsWith('/')) {
-      return `${base}${path}`
-    }
-    const normalizedBase = base.endsWith('/') ? base.slice(0, -1) : base
-    return `${normalizedBase}/${path}`
-  }
-
-  private async requestV1(
-    path: string,
-    init: RequestInit = {},
-    opts?: { suppressAuthRedirect?: boolean }
-  ) {
-    const url = this.resolveV1Url(path)
-    const response = await fetch(url, {
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init.headers || {}),
-      },
-      ...init,
-    })
-
-    if (response.status === 401) {
-      if (opts?.suppressAuthRedirect) {
-        const error: any = new Error('Unauthorized')
-        error.status = 401
-        error.suppressAuthRedirect = true
-        throw error
-      }
-      this.handleUnauthorized()
-      throw new Error('Unauthorized')
-    }
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      throw new Error(text || `Request failed with status ${response.status}`)
-    }
-
-    return response
   }
 
   // 统一处理 401：清理凭证与持久化，并跳转登录
@@ -268,36 +212,6 @@ class ApiClient {
     return response.data
   }
 
-  async createMessageV1(payload: {
-    sessionId: number
-    role: 'user' | 'assistant'
-    content: string | any
-    clientMessageId?: string | null
-    reasoning?: string | null
-    reasoningDurationSeconds?: number | null
-    images?: Array<{ data: string; mime: string }>
-  }) {
-    const body: any = {
-      session_id: payload.sessionId,
-      role: payload.role,
-      content: payload.content,
-    }
-    if (payload.clientMessageId) body.client_message_id = payload.clientMessageId
-    if (payload.reasoning != null) body.reasoning = payload.reasoning
-    if (payload.reasoningDurationSeconds != null) {
-      body.reasoning_duration_seconds = payload.reasoningDurationSeconds
-    }
-    if (payload.images && payload.images.length) {
-      body.images = payload.images
-    }
-    const response = await this.requestV1('/v1/messages', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    })
-    const json = await response.json()
-    return this.normalizeV1Message(json, payload.sessionId)
-  }
-
   async deleteSession(sessionId: number) {
     await this.client.delete(`/sessions/${sessionId}`)
   }
@@ -314,47 +228,9 @@ class ApiClient {
 
   // 消息相关API
   async getMessages(sessionId: number) {
-    try {
-      const v1 = await this.getMessagesV1(sessionId)
-      return v1
-    } catch (error) {
-      const suppressed401 =
-        Boolean((error as any)?.suppressAuthRedirect) && (error as any)?.status === 401
-      if (!suppressed401 && process.env.NODE_ENV !== 'production') {
-        console.debug('[api.getMessages] fallback to legacy', (error as Error)?.message)
-      }
-    }
     const response = await this.client.get<ApiResponse<{ messages: any[] }>>(`/chat/sessions/${sessionId}/messages`)
     const { data } = response.data
     return { data: data?.messages || [] }
-  }
-
-  private async getMessagesV1(sessionId: number) {
-    const response = await this.requestV1(
-      `/v1/messages?session_id=${sessionId}`,
-      {},
-      { suppressAuthRedirect: true }
-    )
-    const json = await response.json()
-    const items = Array.isArray(json?.data) ? json.data : []
-    const data = items.map((item: any) => this.normalizeV1Message(item, sessionId))
-    return { data }
-  }
-
-  private normalizeV1Message(message: any, fallbackSessionId: number): ChatMessage {
-    const firstContent = Array.isArray(message?.content) ? message.content.find((part: any) => part?.type === 'text') : null
-    const metadata = message?.metadata || {}
-    const created = typeof message?.created === 'number' ? new Date(message.created * 1000).toISOString() : new Date().toISOString()
-    return {
-      id: message?.id ?? Date.now(),
-      sessionId: Number(metadata?.session_id ?? fallbackSessionId),
-      role: (message?.role === 'assistant' || message?.role === 'user') ? message.role : 'assistant',
-      content: typeof firstContent?.text === 'string' ? firstContent.text : '',
-      createdAt: created,
-      clientMessageId: metadata?.client_message_id || null,
-      reasoning: metadata?.reasoning || null,
-      reasoningDurationSeconds: metadata?.reasoning_duration_seconds ?? null,
-    }
   }
 
   async sendMessage(sessionId: number, content: string) {
@@ -481,201 +357,6 @@ class ApiClient {
       // 释放当前控制器
       this.currentStreamController = null
     }
-  }
-
-  async *streamV1ChatCompletions(payload: {
-    modelId: string
-    messages: Array<Record<string, any>>
-    metadata?: Record<string, any>
-    params?: Record<string, any>
-  }): AsyncGenerator<ChatStreamChunk, void, unknown> {
-    const body = {
-      model: payload.modelId,
-      messages: payload.messages,
-      stream: true,
-      ...(payload.metadata ? { metadata: payload.metadata } : {}),
-      ...(payload.params ? payload.params : {}),
-    }
-
-    this.currentStreamController?.abort()
-    this.currentStreamController = new AbortController()
-
-    const response = await this.requestV1('/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Accept: 'text/event-stream',
-      },
-      body: JSON.stringify(body),
-      signal: this.currentStreamController.signal,
-    })
-
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error('Response body is not readable')
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    try {
-      for (;;) {
-        const { value, done } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        let boundary = buffer.indexOf('\n\n')
-        while (boundary !== -1) {
-          const rawEvent = buffer.slice(0, boundary).trim()
-          buffer = buffer.slice(boundary + 2)
-          boundary = buffer.indexOf('\n\n')
-
-          if (!rawEvent) continue
-
-          const lines = rawEvent.split('\n')
-          let dataPayload = ''
-          for (const line of lines) {
-            if (line.startsWith('data:')) {
-              dataPayload += line.slice(5).trim()
-            }
-          }
-
-          if (!dataPayload) continue
-          if (dataPayload === '[DONE]') {
-            yield { type: 'complete' }
-            return
-          }
-
-          try {
-            const json = JSON.parse(dataPayload)
-            const chunkResult = this.parseV1ChatChunk(json)
-            for (const emit of chunkResult) {
-              yield emit
-            }
-          } catch (error) {
-            if (process.env.NODE_ENV !== 'production') {
-              console.debug('[streamV1ChatCompletions] parse error', error)
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock()
-      this.currentStreamController = null
-    }
-  }
-
-  private parseV1ChatChunk(json: any): ChatStreamChunk[] {
-    const emits: ChatStreamChunk[] = []
-
-    if (!json || typeof json !== 'object') {
-      return emits
-    }
-
-    if (json.error) {
-      emits.push({ type: 'error', error: json.error })
-      return emits
-    }
-
-    if (Array.isArray(json?.choices) && json.choices.length > 0) {
-      const choice = json.choices[0]
-      const delta = choice?.delta || {}
-
-      const contentPieces: string[] = []
-      const reasoningPieces: string[] = []
-
-      const collectText = (value: unknown, bucket: string[]) => {
-        if (!value) return
-        if (typeof value === 'string') {
-          if (value.trim().length > 0) bucket.push(value)
-        } else if (Array.isArray(value)) {
-          value
-            .map((item: any) => {
-              if (typeof item === 'string') return item
-              if (item?.text) return item.text
-              if (item?.content) return item.content
-              return ''
-            })
-            .filter((text: string) => text && text.trim().length > 0)
-            .forEach((text: string) => bucket.push(text))
-        }
-      }
-
-      collectText(delta?.content, contentPieces)
-      collectText(delta?.reasoning_content, reasoningPieces)
-      collectText(delta?.reasoning, reasoningPieces)
-      collectText(delta?.thinking, reasoningPieces)
-
-      if (contentPieces.length > 0) {
-        emits.push({ type: 'content', content: contentPieces.join('') })
-      }
-      if (reasoningPieces.length > 0) {
-        emits.push({ type: 'reasoning', content: reasoningPieces.join('') })
-      }
-
-      if (choice?.finish_reason) {
-        emits.push({ type: 'complete' })
-      }
-    } else if (json.type && typeof json.type === 'string') {
-      // 处理来自响应 API 的事件
-      if (json.type === 'response.delta') {
-        const deltaType = String(json?.data?.type || '')
-        const payload = json?.data?.delta ?? json?.data?.text ?? json?.data?.content
-
-        const emitText = (text: unknown, asReasoning = false) => {
-          if (typeof text !== 'string' || text.length === 0) return
-          emits.push({
-            type: asReasoning ? 'reasoning' : 'content',
-            content: text,
-          })
-        }
-
-        if (typeof payload === 'string') {
-          const asReasoning =
-            deltaType.includes('reasoning') ||
-            deltaType.includes('deliberate') ||
-            deltaType.includes('thinking')
-          emitText(payload, asReasoning)
-        } else if (Array.isArray(payload)) {
-          const text = payload
-            .map((item: any) => {
-              if (typeof item === 'string') return item
-              if (item?.text) return item.text
-              if (item?.content) return item.content
-              return ''
-            })
-            .filter(Boolean)
-            .join('')
-          const asReasoning =
-            deltaType.includes('reasoning') ||
-            deltaType.includes('deliberate') ||
-            deltaType.includes('thinking')
-          emitText(text, asReasoning)
-        }
-      } else if (json.type === 'response.completed') {
-        emits.push({ type: 'complete' })
-      }
-    }
-
-    if (json.usage) {
-      const usage = json.usage
-      const promptTokens = usage.prompt_tokens ?? usage.prompt_eval_count ?? usage.input_tokens
-      const completionTokens = usage.completion_tokens ?? usage.eval_count ?? usage.output_tokens
-      const totalTokens =
-        usage.total_tokens ??
-        (typeof promptTokens === 'number' && typeof completionTokens === 'number'
-          ? promptTokens + completionTokens
-          : undefined)
-      emits.push({
-        type: 'usage',
-        usage: {
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          total_tokens: totalTokens,
-        },
-      })
-    }
-
-    return emits
   }
 
   cancelStream() {

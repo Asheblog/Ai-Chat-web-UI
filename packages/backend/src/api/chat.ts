@@ -9,6 +9,7 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import type { ApiResponse, Message, Actor, UsageQuotaSnapshot } from '../types';
 import { ensureAnonymousSession } from '../utils/actor';
 import { BackendLogger as log } from '../utils/logger';
+import { logTraffic } from '../utils/traffic-logger';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../utils/reasoning-tags';
 import {
   cleanupExpiredChatImages,
@@ -242,6 +243,22 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const actor = c.get('actor') as Actor;
     const userId = actor.type === 'user' ? actor.id : null;
     const { sessionId, content, images } = c.req.valid('json');
+
+    await logTraffic({
+      category: 'client-request',
+      route: '/api/chat/stream',
+      direction: 'inbound',
+      context: {
+        sessionId,
+        actor: actor.identifier,
+        actorType: actor.type,
+      },
+      payload: {
+        sessionId,
+        content,
+        images,
+      },
+    })
 
     // 验证会话是否存在且属于当前用户
     const session = await prisma.chatSession.findFirst({
@@ -579,7 +596,55 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         url = `${baseUrl}`
       }
 
-      return fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+      await logTraffic({
+        category: 'upstream-request',
+        route: '/api/chat/stream',
+        direction: 'outbound',
+        context: {
+          sessionId,
+          provider,
+          url,
+        },
+        payload: {
+          headers,
+          body,
+        },
+      })
+
+      try {
+        const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+        await logTraffic({
+          category: 'upstream-response',
+          route: '/api/chat/stream',
+          direction: 'outbound',
+          context: {
+            sessionId,
+            provider,
+            url,
+          },
+          payload: {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+          },
+        })
+        return response
+      } catch (error: any) {
+        await logTraffic({
+          category: 'upstream-error',
+          route: '/api/chat/stream',
+          direction: 'outbound',
+          context: {
+            sessionId,
+            provider,
+            url,
+          },
+          payload: {
+            message: error?.message || String(error),
+          },
+        })
+        throw error
+      }
     };
 
     const providerRequestWithBackoff = async (): Promise<Response> => {
@@ -1033,11 +1098,39 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       },
     });
 
+    await logTraffic({
+      category: 'client-response',
+      route: '/api/chat/stream',
+      direction: 'inbound',
+      context: {
+        sessionId,
+        actor: actor.identifier,
+      },
+      payload: {
+        status: 200,
+        stream: true,
+      },
+    })
     return c.newResponse(stream as any, 200, sseHeaders);
 
   } catch (error) {
     console.error('Chat stream error:', error);
     log.error('Chat stream error detail', (error as Error)?.message, (error as Error)?.stack)
+    await logTraffic({
+      category: 'client-response',
+      route: '/api/chat/stream',
+      direction: 'inbound',
+      context: {
+        actor: (() => {
+          try { return (c.get('actor') as Actor | undefined)?.identifier }
+          catch { return undefined }
+        })(),
+      },
+      payload: {
+        status: 500,
+        error: (error as Error)?.message || String(error),
+      },
+    })
     return c.json<ApiResponse>({
       success: false,
       error: 'Failed to process chat request',
@@ -1051,6 +1144,22 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
     const actor = c.get('actor') as Actor
     const userId = actor.type === 'user' ? actor.id : null
     const { sessionId, content, images } = c.req.valid('json')
+
+    await logTraffic({
+      category: 'client-request',
+      route: '/api/chat/completion',
+      direction: 'inbound',
+      context: {
+        sessionId,
+        actor: actor.identifier,
+        actorType: actor.type,
+      },
+      payload: {
+        sessionId,
+        content,
+        images,
+      },
+    })
 
     const session = await prisma.chatSession.findFirst({
       where: {
@@ -1219,7 +1328,56 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
       ...(session.connection.authType === 'bearer' && decryptedApiKey ? { 'Authorization': `Bearer ${decryptedApiKey}` } : {}),
       ...extraHeaders,
     }
-    const doOnce = async (signal: AbortSignal) => fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+    const doOnce = async (signal: AbortSignal) => {
+      await logTraffic({
+        category: 'upstream-request',
+        route: '/api/chat/completion',
+        direction: 'outbound',
+        context: {
+          sessionId,
+          provider,
+          url,
+        },
+        payload: {
+          headers,
+          body,
+        },
+      })
+      try {
+        const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+        await logTraffic({
+          category: 'upstream-response',
+          route: '/api/chat/completion',
+          direction: 'outbound',
+          context: {
+            sessionId,
+            provider,
+            url,
+          },
+          payload: {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+          },
+        })
+        return response
+      } catch (error: any) {
+        await logTraffic({
+          category: 'upstream-error',
+          route: '/api/chat/completion',
+          direction: 'outbound',
+          context: {
+            sessionId,
+            provider,
+            url,
+          },
+          payload: {
+            message: error?.message || String(error),
+          },
+        })
+        throw error
+      }
+    }
     const requestWithBackoff = async () => {
       const ac = new AbortController();
       const tout = setTimeout(() => ac.abort(new Error('provider timeout')), providerTimeoutMs);
@@ -1233,9 +1391,37 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
 
     const resp = await requestWithBackoff();
     if (!resp.ok) {
+      await logTraffic({
+        category: 'client-response',
+        route: '/api/chat/completion',
+        direction: 'inbound',
+        context: {
+          sessionId,
+          actor: actor.identifier,
+        },
+        payload: {
+          status: resp.status,
+          statusText: resp.statusText,
+        },
+      })
       return c.json<ApiResponse>({ success: false, error: `AI API request failed: ${resp.status} ${resp.statusText}` }, 502);
     }
     const json = await resp.json();
+    await logTraffic({
+      category: 'upstream-response',
+      route: '/api/chat/completion',
+      direction: 'outbound',
+      context: {
+        sessionId,
+        provider,
+        url,
+        stage: 'parsed',
+      },
+      payload: {
+        status: resp.status,
+        body: json,
+      },
+    })
     const text = json?.choices?.[0]?.message?.content || '';
     const fallbackReasoning: string | undefined = json?.choices?.[0]?.message?.reasoning_content || json?.message?.thinking || undefined;
     const u = json?.usage || {};
@@ -1277,6 +1463,22 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
       },
     });
 
+    await logTraffic({
+      category: 'client-response',
+      route: '/api/chat/completion',
+      direction: 'inbound',
+      context: {
+        sessionId,
+        actor: actor.identifier,
+      },
+      payload: {
+        status: 200,
+        contentPreview: text,
+        usage,
+        quota: quotaSnapshot ? serializeQuotaSnapshot(quotaSnapshot) : null,
+      },
+    })
+
     return c.json<ApiResponse<{ content: string; usage: typeof usage; quota?: ReturnType<typeof serializeQuotaSnapshot> | null }>>({
       success: true,
       data: {
@@ -1287,6 +1489,21 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
     });
   } catch (error) {
     console.error('Chat completion error:', error);
+    await logTraffic({
+      category: 'client-response',
+      route: '/api/chat/completion',
+      direction: 'inbound',
+      context: {
+        actor: (() => {
+          try { return (c.get('actor') as Actor | undefined)?.identifier }
+          catch { return undefined }
+        })(),
+      },
+      payload: {
+        status: 500,
+        error: (error as Error)?.message || String(error),
+      },
+    })
     return c.json<ApiResponse>({ success: false, error: 'Failed to process non-stream completion' }, 500);
   }
 });

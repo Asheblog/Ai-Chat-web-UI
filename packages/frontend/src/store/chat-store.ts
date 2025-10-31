@@ -240,8 +240,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return
     }
 
-    const modelId = session.modelLabel || session.modelRawId || ''
-
     // 自动改名 - 仅针对首条用户消息
     try {
       const isTarget = snapshot.currentSession?.id === sessionId
@@ -343,41 +341,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     })
 
-    const convertMessageToProvider = (msg: Message): Record<string, any> => {
-      const parts: Array<Record<string, any>> = []
-      if (msg.content?.trim()) {
-        parts.push({ type: 'text', text: msg.content })
-      }
-      if (msg.images?.length) {
-        msg.images.forEach((img) =>
-          parts.push({
-            type: 'image_url',
-            image_url: { url: img },
-          })
-        )
-      }
-      if (parts.length === 0) {
-        parts.push({ type: 'text', text: '' })
-      }
-      return {
-        role: msg.role,
-        content: parts.length === 1 && parts[0].type === 'text' ? parts[0].text : parts,
-      }
-    }
-
-    const historyMessages = snapshot.messages
-      .filter((m) => m.sessionId === sessionId)
-      .map(convertMessageToProvider)
-    const providerMessages = [...historyMessages, convertMessageToProvider(userMessage)]
-
-    const streamParams: Record<string, any> = {}
-    if (options?.reasoningEffort) streamParams.reasoning_effort = options.reasoningEffort
-    if (options?.ollamaThink) streamParams.think = true
-
     let reasoningActive = false
     let accumulatedContent = ''
     let accumulatedReasoning = ''
-    let useV1Pipeline = false
 
     const updateAssistantMessage = (updater: (msg: Message) => Message) => {
       set((state) => ({
@@ -405,46 +371,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         clientMessageId: userClientMessageId,
       })
 
-    let iterator: AsyncGenerator<ChatStreamChunk, void, unknown> | null = null
-    const actorState = useAuthStore.getState().actorState
-    const canUseV1Pipeline = actorState === 'authenticated'
-
     try {
-      if (modelId && canUseV1Pipeline) {
-        try {
-          const latestMessage = providerMessages[providerMessages.length - 1]
-          const created = await apiClient.createMessageV1({
-            sessionId,
-            role: 'user',
-            content: latestMessage?.content ?? content,
-            clientMessageId: userClientMessageId,
-            images: images && images.length ? images.map((img) => ({ data: img.data, mime: img.mime })) : undefined,
-          })
-          set((state) => ({
-            messages: state.messages.map((msg) =>
-              msg.clientMessageId === userClientMessageId ? { ...msg, id: created.id } : msg
-            ),
-          }))
-          iterator = apiClient.streamV1ChatCompletions({
-            modelId,
-            messages: providerMessages,
-            metadata: { session_id: sessionId },
-            params: streamParams,
-          })
-          useV1Pipeline = true
-        } catch (err) {
-          if (process.env.NODE_ENV !== 'production') {
-            console.debug('[streamMessage] fallback to legacy streaming', err)
-          }
-          iterator = startLegacyStream()
-          useV1Pipeline = false
-        }
-      } else {
-        iterator = startLegacyStream()
-        useV1Pipeline = false
-      }
+      const iterator = startLegacyStream()
 
-      for await (const evt of iterator!) {
+      for await (const evt of iterator) {
         if (evt?.type === 'content' && evt.content) {
           accumulatedContent += evt.content
           set((state) => ({
@@ -515,37 +445,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               index === state.messages.length - 1
                 ? { ...msg, reasoningStatus: 'done', reasoningIdleMs: null }
                 : msg
-            )
+          )
           : state.messages,
       }))
-
-      if (useV1Pipeline && accumulatedContent.trim()) {
-        if (canUseV1Pipeline) {
-          try {
-            const assistantRecord = await apiClient.createMessageV1({
-              sessionId,
-              role: 'assistant',
-              content: accumulatedContent.trim(),
-              reasoning: reasoningActive ? accumulatedReasoning.trim() || null : null,
-              reasoningDurationSeconds: reasoningActive
-                ? get().messages.at(-1)?.reasoningDurationSeconds ?? null
-                : null,
-            })
-            set((state) => ({
-              messages: state.messages.map((msg, index) =>
-                index === state.messages.length - 1
-                  ? { ...msg, id: assistantRecord.id }
-                  : msg
-              ),
-            }))
-            get().fetchMessages(sessionId).catch(() => {})
-          } catch (err) {
-            if (process.env.NODE_ENV !== 'production') {
-              console.debug('[streamMessage] failed to persist assistant message via v1', err)
-            }
-          }
-        }
-      }
 
       get().fetchUsage(sessionId).catch(() => {})
       get().fetchSessionsUsage().catch(() => {})

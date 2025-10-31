@@ -9,6 +9,7 @@ import { AuthUtils } from '../utils/auth';
 import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
 import { prisma } from '../db';
 import { persistChatImages } from '../utils/chat-images';
+import { logTraffic } from '../utils/traffic-logger';
 
 import type { Connection, Message as MessageEntity } from '@prisma/client';
 
@@ -312,6 +313,17 @@ openaiCompat.post(
     const user = c.get('user');
     const body = c.req.valid('json');
 
+    await logTraffic({
+      category: 'client-request',
+      route: '/v1/chat/completions',
+      direction: 'inbound',
+      context: {
+        userId: user.id,
+        stream: Boolean(body.stream),
+      },
+      payload: body,
+    })
+
     const resolved = await resolveModelIdForUser(user.id, body.model);
     if (!resolved) {
       return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
@@ -330,6 +342,22 @@ openaiCompat.post(
         },
       });
 
+      await logTraffic({
+        category: 'upstream-request',
+        route: '/v1/chat/completions',
+        direction: 'outbound',
+        context: {
+          userId: user.id,
+          provider,
+          url: request.url,
+          stream: Boolean(body.stream),
+        },
+        payload: {
+          headers: request.headers,
+          body: request.payload,
+        },
+      })
+
       const executor = (signal: AbortSignal) =>
         fetch(request.url, {
           method: 'POST',
@@ -339,9 +367,39 @@ openaiCompat.post(
         });
 
       const response = await requestWithBackoff(executor);
+      await logTraffic({
+        category: 'upstream-response',
+        route: '/v1/chat/completions',
+        direction: 'outbound',
+        context: {
+          userId: user.id,
+          provider,
+          url: request.url,
+          stream: Boolean(body.stream),
+        },
+        payload: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+        },
+      })
 
       if (!response.ok && response.status !== 200) {
         const errorPayload = await response.text();
+        await logTraffic({
+          category: 'client-response',
+          route: '/v1/chat/completions',
+          direction: 'inbound',
+          context: {
+            userId: user.id,
+            stream: Boolean(body.stream),
+          },
+          payload: {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorPayload,
+          },
+        })
         return c.newResponse(errorPayload, response.status, {
           'Content-Type': response.headers.get('Content-Type') || 'application/json',
         });
@@ -351,6 +409,20 @@ openaiCompat.post(
         if (provider === 'ollama') {
           const reader = response.body?.getReader();
           if (!reader) {
+            await logTraffic({
+              category: 'client-response',
+              route: '/v1/chat/completions',
+              direction: 'inbound',
+              context: {
+                userId: user.id,
+                stream: true,
+                provider,
+              },
+              payload: {
+                status: 500,
+                error: 'Stream not supported by provider response',
+              },
+            })
             return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
           }
 
@@ -403,6 +475,20 @@ openaiCompat.post(
             },
           });
 
+          await logTraffic({
+            category: 'client-response',
+            route: '/v1/chat/completions',
+            direction: 'inbound',
+            context: {
+              userId: user.id,
+              stream: true,
+              provider,
+            },
+            payload: {
+              status: 200,
+              mode: 'ollama-stream',
+            },
+          })
           return c.newResponse(stream as any, 200, sseHeaders);
         }
 
@@ -411,6 +497,20 @@ openaiCompat.post(
         if (providerContentType) {
           headers.set('Content-Type', providerContentType);
         }
+        await logTraffic({
+          category: 'client-response',
+          route: '/v1/chat/completions',
+          direction: 'inbound',
+          context: {
+            userId: user.id,
+            stream: true,
+            provider,
+          },
+          payload: {
+            status: 200,
+            mode: 'proxy-stream',
+          },
+        })
         return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
       }
 
@@ -418,12 +518,54 @@ openaiCompat.post(
         const json = await response.json();
         const requestId = `chatcmpl-${randomUUID()}`;
         const created = Math.floor(Date.now() / 1000);
-        return c.json(convertOllamaFinalToOpenAI(json, body.model, requestId, created));
+        const result = convertOllamaFinalToOpenAI(json, body.model, requestId, created)
+        await logTraffic({
+          category: 'client-response',
+          route: '/v1/chat/completions',
+          direction: 'inbound',
+          context: {
+            userId: user.id,
+            stream: false,
+            provider,
+          },
+          payload: {
+            status: 200,
+            body: result,
+          },
+        })
+        return c.json(result);
       }
 
       const json = await response.json();
+      await logTraffic({
+        category: 'client-response',
+        route: '/v1/chat/completions',
+        direction: 'inbound',
+        context: {
+          userId: user.id,
+          stream: false,
+          provider,
+        },
+        payload: {
+          status: response.status,
+          body: json,
+        },
+      })
       return c.json(json, response.status);
     } catch (error: any) {
+      await logTraffic({
+        category: 'client-response',
+        route: '/v1/chat/completions',
+        direction: 'inbound',
+        context: {
+          userId: user.id,
+          stream: Boolean(body.stream),
+        },
+        payload: {
+          status: 500,
+          error: error?.message || String(error),
+        },
+      })
       return c.json(
         {
           error: 'provider_error',
