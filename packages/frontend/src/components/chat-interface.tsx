@@ -362,7 +362,7 @@ export function ChatInterface() {
                       onClick={isStreaming ? handleStop : handleSend}
                       disabled={desktopSendDisabled}
                       aria-label={isStreaming ? '停止生成' : '发送'}
-                      className={`h-10 px-4 inline-flex items-center justify-center rounded-full ${
+                      className={`h-10 w-10 inline-flex items-center justify-center rounded-full ${
                         isStreaming
                           ? 'bg-destructive text-destructive-foreground hover:opacity-90'
                           : 'bg-primary text-primary-foreground hover:opacity-90'
