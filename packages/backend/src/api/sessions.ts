@@ -88,40 +88,25 @@ sessions.get('/', actorMiddleware, async (c) => {
       }),
     ]);
 
-    return c.json<ApiResponse<{
-      sessions: Array<{
-        id: number;
-        userId: number | null;
-        anonymousKey?: string | null;
-        expiresAt?: Date | null;
-        title: string;
-        createdAt: Date;
-        reasoningEnabled: boolean | null;
-        reasoningEffort: 'low'|'medium'|'high' | null;
-        ollamaThink: boolean | null;
-        _count: { messages: number };
-      }>;
+    const normalisedSessions = sessionsList.map((s) => ({
+      ...s,
+      reasoningEffort: s.reasoningEffort === 'low' || s.reasoningEffort === 'medium' || s.reasoningEffort === 'high' ? s.reasoningEffort : null,
+      // 附加一个模型标签，供前端展示
+      modelLabel: composeModelLabel(s.modelRawId, s.connection?.prefixId || null) || undefined,
+    }));
+    const responsePayload = {
+      sessions: normalisedSessions,
       pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-      };
-    }>>({
-      success: true,
-      data: {
-        sessions: sessionsList.map((s) => ({
-          ...s,
-          // 附加一个模型标签，供前端展示
-          modelLabel: composeModelLabel(s.modelRawId, s.connection?.prefixId || null) || undefined,
-        })),
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
+    };
+
+    return c.json<ApiResponse<typeof responsePayload>>({
+      success: true,
+      data: responsePayload,
     });
 
   } catch (error) {
@@ -240,17 +225,13 @@ sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), asy
       },
     });
 
-    return c.json<ApiResponse<{
-      id: number;
-      userId: number;
-      title: string;
-      createdAt: Date;
-      reasoningEnabled: boolean | null;
-      reasoningEffort: 'low' | 'medium' | 'high' | null;
-      ollamaThink: boolean | null;
-    }>>({
+    const responseData = {
+      ...session,
+      modelLabel: modelId || composeModelLabel(session.modelRawId, session.connection?.prefixId || null),
+    };
+    return c.json<ApiResponse<typeof responseData>>({
       success: true,
-      data: { ...session, modelLabel: modelId || composeModelLabel(session.modelRawId, session.connection?.prefixId || null) },
+      data: responseData,
       message: 'Chat session created successfully',
     });
   } )().catch((error) => {
@@ -380,15 +361,7 @@ sessions.put('/:id', actorMiddleware, zValidator('json', z.object({
       },
     });
 
-    return c.json<ApiResponse<{
-      id: number;
-      userId: number;
-      title: string;
-      createdAt: Date;
-      reasoningEnabled: boolean | null;
-      reasoningEffort: 'low'|'medium'|'high' | null;
-      ollamaThink: boolean | null;
-    }>>({
+    return c.json<ApiResponse<typeof updatedSession>>({
       success: true,
       data: updatedSession,
       message: 'Session updated successfully',

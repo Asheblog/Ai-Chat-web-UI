@@ -153,7 +153,10 @@ catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) 
     const items = Array.isArray(body?.items) ? body.items : []
     if (!items.length) return c.json<ApiResponse>({ success: false, error: 'items required' }, 400)
 
-    const connectionIds = Array.from(new Set(items.map((i: any) => Number(i.connectionId)).filter(Boolean)))
+    const rawConnectionIds = items
+      .map((i: any): number => Number(i.connectionId))
+      .filter((id: number): id is number => Number.isFinite(id) && id > 0)
+    const connectionIds: number[] = Array.from(new Set<number>(rawConnectionIds))
     const conns = await prisma.connection.findMany({ where: { id: { in: connectionIds } }, select: { id: true, prefixId: true } })
     const pxMap = new Map<number, string | null>()
     conns.forEach((c2) => pxMap.set(c2.id, c2.prefixId))

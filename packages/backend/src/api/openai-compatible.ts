@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { ContentfulStatusCode, StatusCode } from 'hono/utils/http-status';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { randomUUID } from 'node:crypto';
@@ -16,6 +17,21 @@ import type { Connection, Message as MessageEntity } from '@prisma/client';
 const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
 const PROVIDER_TIMEOUT_MS = parseInt(process.env.PROVIDER_TIMEOUT_MS || '300000');
+
+const toStatusCode = (status: number): StatusCode => {
+  if (status < 100 || status > 599) {
+    return 500 as StatusCode;
+  }
+  return status as StatusCode;
+};
+
+const toContentfulStatus = (status: number): ContentfulStatusCode => {
+  const resolved = toStatusCode(status);
+  if (resolved === 101 || resolved === 204 || resolved === 205 || resolved === 304) {
+    return 200 as ContentfulStatusCode;
+  }
+  return resolved as ContentfulStatusCode;
+};
 
 const sseHeaders = {
   'Content-Type': 'text/event-stream; charset=utf-8',
@@ -310,7 +326,7 @@ openaiCompat.post(
   requireUserActor,
   zValidator('json', chatCompletionsSchema),
   async (c) => {
-    const user = c.get('user');
+    const user = c.get('user')!; // requireUserActor 已确保 user 存在
     const body = c.req.valid('json');
 
     await logTraffic({
@@ -400,7 +416,7 @@ openaiCompat.post(
             body: errorPayload,
           },
         })
-        return c.newResponse(errorPayload, response.status, {
+        return c.newResponse(errorPayload, toStatusCode(response.status), {
           'Content-Type': response.headers.get('Content-Type') || 'application/json',
         });
       }
@@ -515,7 +531,12 @@ openaiCompat.post(
       }
 
       if (provider === 'ollama') {
-        const json = await response.json();
+        const json = await response.json() as {
+          message?: { content?: string | null };
+          prompt_eval_count?: number | null;
+          eval_count?: number | null;
+          [key: string]: unknown;
+        };
         const requestId = `chatcmpl-${randomUUID()}`;
         const created = Math.floor(Date.now() / 1000);
         const result = convertOllamaFinalToOpenAI(json, body.model, requestId, created)
@@ -551,7 +572,7 @@ openaiCompat.post(
           body: json,
         },
       })
-      return c.json(json, response.status);
+      return c.json(json, toContentfulStatus(response.status));
     } catch (error: any) {
       await logTraffic({
         category: 'client-response',
@@ -583,7 +604,7 @@ openaiCompat.post(
   requireUserActor,
   zValidator('json', responsesSchema),
   async (c) => {
-    const user = c.get('user');
+    const user = c.get('user')!; // requireUserActor 已确保 user 存在
     const body = c.req.valid('json');
 
     const resolved = await resolveModelIdForUser(user.id, body.model);
@@ -591,9 +612,9 @@ openaiCompat.post(
       return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
     }
 
-    const messages =
+    const messages = (
       body.messages && body.messages.length
-        ? body.messages
+        ? cloneMessages(body.messages)
         : [
             {
               role: 'user',
@@ -601,9 +622,10 @@ openaiCompat.post(
                 ? body.input
                 : typeof body.input === 'string'
                 ? body.input
-                : body.input || '',
+                : body.input ?? '',
             },
-          ];
+          ]
+    ) as z.infer<typeof chatMessageSchema>[];
 
     const chatBody = {
       model: body.model,
@@ -640,7 +662,7 @@ openaiCompat.post(
 
       if (!response.ok && response.status !== 200) {
         const errorPayload = await response.text();
-        return c.newResponse(errorPayload, response.status, {
+        return c.newResponse(errorPayload, toStatusCode(response.status), {
           'Content-Type': response.headers.get('Content-Type') || 'application/json',
         });
       }
@@ -722,7 +744,12 @@ openaiCompat.post(
       }
 
       if (provider === 'ollama') {
-        const json = await response.json();
+        const json = await response.json() as {
+          message?: { content?: string | null };
+          prompt_eval_count?: number | null;
+          eval_count?: number | null;
+          [key: string]: unknown;
+        };
         const responseId = `resp-${randomUUID()}`;
         const created = Math.floor(Date.now() / 1000);
         const text = json?.message?.content || '';
@@ -769,7 +796,7 @@ openaiCompat.post(
 );
 
 openaiCompat.get('/messages', actorMiddleware, requireUserActor, async (c) => {
-  const user = c.get('user');
+  const user = c.get('user')!; // requireUserActor 已确保 user 存在
   const rawSessionId = c.req.query('session_id') ?? c.req.query('sessionId');
   const sessionId = Number(rawSessionId);
   if (!sessionId || Number.isNaN(sessionId)) {
@@ -806,7 +833,7 @@ openaiCompat.post(
   requireUserActor,
   zValidator('json', messageCreateSchema),
   async (c) => {
-    const user = c.get('user');
+    const user = c.get('user')!; // requireUserActor 已确保 user 存在
     const body = c.req.valid('json');
 
     const session = await prisma.chatSession.findFirst({

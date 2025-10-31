@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { Context, Next } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { AuthUtils } from '../utils/auth'
 import { prisma } from '../db'
@@ -7,7 +8,17 @@ import { getQuotaPolicy } from '../utils/system-settings'
 import type { Actor, AnonymousActor, UserActor } from '../types'
 
 const ANON_COOKIE_KEY = 'anon_key'
-const COOKIE_PATH_ROOT = { path: '/' as const }
+const COOKIE_PATH_ROOT: Parameters<typeof deleteCookie>[2] = { path: '/' }
+
+const toContentfulStatus = (status: number): ContentfulStatusCode => {
+  if (status === 101 || status === 204 || status === 205 || status === 304) {
+    return 200 as ContentfulStatusCode
+  }
+  if (status < 100 || status > 599) {
+    return 500 as ContentfulStatusCode
+  }
+  return status as ContentfulStatusCode
+}
 
 const resolveTokenFromRequest = (c: Context) => {
   const authHeader = c.req.header('Authorization')
@@ -44,7 +55,7 @@ const buildAnonymousActor = (key: string, retentionDays: number): AnonymousActor
 
 const ensureAnonCookie = (c: Context, key: string, retentionDays: number) => {
   const secure = (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || process.env.NODE_ENV === 'production'
-  const cookieOptions: Parameters<typeof setCookie>[2] = {
+  const cookieOptions: Parameters<typeof setCookie>[3] = {
     httpOnly: true,
     sameSite: 'Lax',
     secure,
@@ -83,7 +94,7 @@ const resolveActor = async (c: Context): Promise<{ actor: Actor | null; status?:
     if (!user) {
       return { actor: null, status: 401, error: 'User not found', clearAuth: true }
     }
-    return { actor: buildUserActor(user) }
+    return { actor: buildUserActor({ ...user, role: user.role as 'ADMIN' | 'USER' }) }
   }
 
   const quotaPolicy = await getQuotaPolicy()
@@ -114,7 +125,7 @@ declare module 'hono' {
     user?: {
       id: number;
       username: string;
-      role: string;
+      role: 'ADMIN' | 'USER';
     };
   }
 }
@@ -131,7 +142,7 @@ export const actorMiddleware = async (c: Context, next: Next) => {
     if (result.status === 401) {
       return c.json({ success: false, error: result.error ?? 'Unauthorized' }, 401)
     }
-    return c.json({ success: false, error: result.error ?? 'Forbidden' }, result.status ?? 403)
+    return c.json({ success: false, error: result.error ?? 'Forbidden' }, toContentfulStatus(result.status ?? 403))
   }
 
   c.set('actor', result.actor)

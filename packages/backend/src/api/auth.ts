@@ -225,7 +225,10 @@ auth.get('/actor', actorMiddleware, async (c) => {
         select: { id: true, username: true, role: true, createdAt: true },
       });
       if (profile) {
-        userProfile = profile;
+        userProfile = {
+          ...profile,
+          role: profile.role === 'ADMIN' ? 'ADMIN' : 'USER',
+        };
       }
     }
 
@@ -248,7 +251,7 @@ auth.get('/actor', actorMiddleware, async (c) => {
 
 // 获取当前用户信息
 auth.get('/me', actorMiddleware, requireUserActor, async (c) => {
-  const user = c.get('user');
+  const user = c.get('user')!; // requireUserActor 已确保 user 存在
 
   return c.json<ApiResponse>({
     success: true,
@@ -262,7 +265,7 @@ auth.put('/password', actorMiddleware, requireUserActor, zValidator('json', z.ob
   newPassword: z.string().min(8),
 })), async (c) => {
   try {
-    const user = c.get('user');
+    const user = c.get('user')!; // requireUserActor 已确保 user 存在
     const { currentPassword, newPassword } = c.req.valid('json');
 
     if (!AuthUtils.validatePassword(newPassword)) {
@@ -305,13 +308,20 @@ auth.put('/password', actorMiddleware, requireUserActor, zValidator('json', z.ob
       where: { id: user.id },
       select: { id: true, username: true, role: true },
     });
-    if (refreshed) {
-      c.set('user', refreshed as any);
+    const normalised: { id: number; username: string; role: 'ADMIN' | 'USER' } | null = refreshed
+      ? {
+          id: refreshed.id,
+          username: refreshed.username,
+          role: refreshed.role === 'ADMIN' ? 'ADMIN' : 'USER',
+        }
+      : null;
+    if (normalised) {
+      c.set('user', normalised);
     }
 
-    return c.json<ApiResponse<{ user: { id: number; username: string; role: string } }>>({
+    return c.json<ApiResponse<{ user: { id: number; username: string; role: 'ADMIN' | 'USER' } }>>({
       success: true,
-      data: refreshed ? { user: refreshed } : undefined,
+      data: normalised ? { user: normalised } : undefined,
       message: 'Password updated successfully',
     });
 

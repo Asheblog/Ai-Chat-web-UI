@@ -5,10 +5,10 @@ export const BackendLogger = (() => {
   const level = (process.env.LOG_LEVEL || (process.env.NODE_ENV !== 'production' ? 'debug' : 'info')).toLowerCase()
   const allowDebug = level === 'debug'
 
-  function fmt(prefix: string, msg: any, ...args: any[]) {
+  function fmt(prefix: string, ...args: any[]) {
     const ts = new Date().toISOString()
     // eslint-disable-next-line no-console
-    console.log(`[BE][${ts}]${prefix}`, msg, ...args)
+    console.log(`[BE][${ts}]${prefix}`, ...args)
   }
 
   return {
@@ -18,4 +18,3 @@ export const BackendLogger = (() => {
     error: (...args: any[]) => fmt('[ERROR]', ...args),
   }
 })()
-

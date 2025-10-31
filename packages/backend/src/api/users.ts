@@ -257,7 +257,7 @@ users.put('/:id/username', zValidator('json', updateUsernameSchema), async (c) =
       }, 400);
     }
 
-    const currentUser = c.get('user');
+    const currentUser = c.get('user')!; // requireUserActor 已确保 user 存在
     if (targetId === currentUser.id) {
       return c.json<ApiResponse>({
         success: false,
@@ -324,7 +324,7 @@ users.put('/:id/role', async (c) => {
       }, 400);
     }
 
-    const currentUser = c.get('user');
+    const currentUser = c.get('user')!; // requireUserActor 已确保 user 存在
 
     // 防止管理员修改自己的角色
     if (userId === currentUser.id) {
@@ -389,7 +389,7 @@ users.put('/:id/password', zValidator('json', resetPasswordSchema), async (c) =>
       }, 400);
     }
 
-    const currentUser = c.get('user');
+    const currentUser = c.get('user')!; // requireUserActor 已确保 user 存在
     if (targetId === currentUser.id) {
       return c.json<ApiResponse>({
         success: false,
@@ -433,7 +433,7 @@ users.delete('/:id', async (c) => {
       }, 400);
     }
 
-    const currentUser = c.get('user');
+    const currentUser = c.get('user')!; // requireUserActor 已确保 user 存在
 
     // 防止管理员删除自己
     if (userId === currentUser.id) {
@@ -501,7 +501,7 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
 
     const { dailyLimit, resetUsed } = c.req.valid('json');
     const sanitizedLimit = dailyLimit === null ? null : Math.max(0, dailyLimit);
-    const currentUser = c.get('user');
+    const currentUser = c.get('user')!; // requireUserActor 已确保 user 存在
 
     const targetUser = await prisma.user.findUnique({
       where: { id: targetId },
