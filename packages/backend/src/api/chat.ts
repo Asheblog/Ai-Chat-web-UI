@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { prisma } from '../db';
@@ -23,7 +24,31 @@ import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 import { consumeActorQuota, inspectActorQuota, serializeQuotaSnapshot } from '../utils/quota';
 import { cleanupAnonymousSessions } from '../utils/anonymous-cleanup';
 
+type ProviderChatCompletionResponse = {
+  choices?: Array<{ message?: { content?: string; reasoning_content?: string } | null }>;
+  message?: { thinking?: string };
+  usage?: {
+    prompt_tokens?: number;
+    prompt_eval_count?: number;
+    input_tokens?: number;
+    completion_tokens?: number;
+    eval_count?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
+};
+
 const chat = new Hono();
+
+const toContentfulStatus = (status: number): ContentfulStatusCode => {
+  if (status === 101 || status === 204 || status === 205 || status === 304) {
+    return 200 as ContentfulStatusCode;
+  }
+  if (status < 100 || status > 599) {
+    return 500 as ContentfulStatusCode;
+  }
+  return status as ContentfulStatusCode;
+};
 
 const sessionOwnershipClause = (actor: Actor) =>
   actor.type === 'user'
@@ -1069,7 +1094,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
               });
               clearTimeout(timeout);
               if (resp.ok) {
-                const j = await resp.json();
+                const j = await resp.json() as ProviderChatCompletionResponse;
                 const text = j?.choices?.[0]?.message?.content || '';
                 if (text) {
                   aiResponseContent = text;
@@ -1406,7 +1431,7 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
       })
       return c.json<ApiResponse>({ success: false, error: `AI API request failed: ${resp.status} ${resp.statusText}` }, 502);
     }
-    const json = await resp.json();
+    const json = await resp.json() as ProviderChatCompletionResponse;
     await logTraffic({
       category: 'upstream-response',
       route: '/api/chat/completion',
@@ -1440,28 +1465,36 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
         if (typeof reqJson?.saveReasoning === 'boolean') return reqJson.saveReasoning
         return true
       })()
-      const saved = await prisma.message.create({
+      try {
+        const saved = await prisma.message.create({
+          data: {
+            sessionId,
+            role: 'assistant',
+            content: text,
+            ...((fallbackReasoning && saveFlag) ? { reasoning: String(fallbackReasoning) } : {}),
+          },
+        });
+        assistantMsgId = saved.id;
+      } catch (persistErr) {
+        console.warn('Persist assistant message failed:', persistErr);
+      }
+    }
+    try {
+      await (prisma as any).usageMetric.create({
         data: {
           sessionId,
-          role: 'assistant',
-          content: text,
-          ...((fallbackReasoning && saveFlag) ? { reasoning: String(fallbackReasoning) } : {}),
+          messageId: assistantMsgId ?? undefined,
+          model: session.modelRawId || 'unknown',
+          provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens,
+          contextLimit: defaultLimit,
         },
       });
-      assistantMsgId = saved.id;
+    } catch (persistErr) {
+      console.warn('Persist usage metric failed:', persistErr);
     }
-    await (prisma as any).usageMetric.create({
-      data: {
-        sessionId,
-        messageId: assistantMsgId ?? undefined,
-        model: session.modelRawId || 'unknown',
-        provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        totalTokens: usage.total_tokens,
-        contextLimit: defaultLimit,
-      },
-    });
 
     await logTraffic({
       category: 'client-response',
@@ -1526,7 +1559,10 @@ chat.post('/regenerate', actorMiddleware, zValidator('json', z.object({
   messageId: z.number().int().positive(), // 要重新生成的消息ID
 })), async (c) => {
   try {
-    const user = c.get('user');
+    const user = c.get('user') as { id: number } | undefined;
+    if (!user || typeof user.id !== 'number') {
+      return c.json<ApiResponse>({ success: false, error: 'User context missing' }, { status: 401 });
+    }
     const { sessionId, messageId } = c.req.valid('json');
 
     // 验证会话和消息权限
@@ -1647,7 +1683,7 @@ chat.post('/generate', actorMiddleware, zValidator('json', z.object({
         body: JSON.stringify({ model: rawId, prompt: body.prompt, stream: !!body.stream }),
       })
       const text = await res.text()
-      return c.text(text, res.status)
+      return c.text(text, toContentfulStatus(res.status))
     } else if (provider === 'openai' || provider === 'azure_openai') {
       const messages = [{ role: 'user', content: body.prompt }]
       let url = ''
@@ -1658,7 +1694,7 @@ chat.post('/generate', actorMiddleware, zValidator('json', z.object({
       }
       const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ model: rawId, messages, stream: !!body.stream }) })
       const json = await res.json()
-      return c.json(json, res.status)
+      return c.json(json, toContentfulStatus(res.status))
     }
     return c.json<ApiResponse>({ success: false, error: 'Unsupported provider' }, 400)
   } catch (e: any) {
@@ -1699,7 +1735,7 @@ chat.get('/usage', actorMiddleware, async (c) => {
       (prisma as any).usageMetric.findFirst({ where: { sessionId }, orderBy: { createdAt: 'desc' } }),
     ]);
 
-    const totals = metrics.reduce((acc, m: any) => {
+    const totals = metrics.reduce((acc: { prompt_tokens: number; completion_tokens: number; total_tokens: number }, m: any) => {
       acc.prompt_tokens += Number(m.promptTokens || 0);
       acc.completion_tokens += Number(m.completionTokens || 0);
       acc.total_tokens += Number(m.totalTokens || 0);
@@ -1795,7 +1831,10 @@ chat.get('/sessions/usage', actorMiddleware, async (c) => {
 // 按日统计导出（JSON）: /api/chat/usage/daily?from=YYYY-MM-DD&to=YYYY-MM-DD&sessionId=optional
 chat.get('/usage/daily', actorMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const user = c.get('user') as { id: number } | undefined;
+    if (!user || typeof user.id !== 'number') {
+      return c.json<ApiResponse>({ success: false, error: 'User context missing' }, { status: 401 });
+    }
     const from = c.req.query('from');
     const to = c.req.query('to');
     const sessionIdStr = c.req.query('sessionId');
