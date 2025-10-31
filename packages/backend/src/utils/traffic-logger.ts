@@ -1,8 +1,19 @@
 import { appendFile, mkdir } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { BackendLogger as log } from './logger'
 
-const LOG_PATH = process.env.TRAFFIC_LOG_PATH || './tmp/traffic.log'
+const resolveLogPath = () => {
+  const explicit = process.env.TRAFFIC_LOG_PATH
+  if (explicit) return resolve(explicit)
+
+  const dirFromEnv = process.env.TRAFFIC_LOG_DIR || process.env.LOG_DIR
+  if (dirFromEnv) return resolve(dirFromEnv, 'traffic.log')
+
+  // 默认写入 logs 目录，确保容器内使用已赋权的 /app/logs
+  return resolve(process.cwd(), 'logs', 'traffic.log')
+}
+
+const LOG_PATH = resolveLogPath()
 
 let ensured = false
 
@@ -36,4 +47,3 @@ export const logTraffic = async (entry: TrafficLogEntry) => {
     log.error('[traffic] log failed', error)
   }
 }
-
