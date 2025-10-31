@@ -270,7 +270,7 @@ export function ChatInterface() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="h-10 w-10 inline-flex items-center justify-center rounded-full text-muted-foreground border border-transparent hover:border-border/70 hover:bg-muted/40"
+                    className="h-12 w-12 inline-flex items-center justify-center rounded-full text-muted-foreground border border-transparent hover:border-border/70 hover:bg-muted/40"
                     aria-label="更多操作"
                   >
                     <Plus className="h-5 w-5" />
@@ -320,7 +320,7 @@ export function ChatInterface() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-transparent hover:border-border/70 hover:bg-muted/40"
+                        className="h-12 w-12 inline-flex items-center justify-center rounded-full border border-transparent hover:border-border/70 hover:bg-muted/40"
                         onClick={() => {
                           setExpandDraft(input)
                           setExpandOpen(true)
@@ -339,7 +339,7 @@ export function ChatInterface() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
-                      className="h-10 w-10 inline-flex items-center justify-center rounded-full border hover:bg-muted"
+                      className="h-12 w-12 inline-flex items-center justify-center rounded-full border hover:bg-muted"
                       onClick={pickImages}
                       disabled={isStreaming || !isVisionEnabled}
                       aria-label="添加图片"
@@ -362,7 +362,7 @@ export function ChatInterface() {
                       onClick={isStreaming ? handleStop : handleSend}
                       disabled={desktopSendDisabled}
                       aria-label={isStreaming ? '停止生成' : '发送'}
-                      className={`h-10 w-10 inline-flex items-center justify-center rounded-full ${
+                      className={`h-12 w-12 inline-flex items-center justify-center rounded-full ${
                         isStreaming
                           ? 'bg-destructive text-destructive-foreground hover:opacity-90'
                           : 'bg-primary text-primary-foreground hover:opacity-90'
