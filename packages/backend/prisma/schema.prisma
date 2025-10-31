@@ -119,13 +119,13 @@ model SystemSetting {
 }
 
 model UsageQuota {
-  id          Int              @id @default(autoincrement())
-  identifier  String
-  scope       String
-  dailyLimit  Int
-  usedCount   Int              @default(0)
-  lastResetAt DateTime         @default(now())
-  userId      Int?
+  id               Int      @id @default(autoincrement())
+  identifier       String
+  scope            String
+  customDailyLimit Int?     @map("dailyLimit")
+  usedCount        Int      @default(0)
+  lastResetAt      DateTime @default(now())
+  userId           Int?
 
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 

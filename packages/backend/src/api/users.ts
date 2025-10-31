@@ -12,7 +12,7 @@ const users = new Hono();
 users.use('*', actorMiddleware, requireUserActor, adminOnlyMiddleware)
 
 const quotaUpdateSchema = z.object({
-  dailyLimit: z.number().int(),
+  dailyLimit: z.union([z.number().int().min(0), z.literal(null)]),
   resetUsed: z.boolean().optional(),
 })
 
@@ -190,6 +190,53 @@ users.get('/:id', async (c) => {
     return c.json<ApiResponse>({
       success: false,
       error: 'Failed to fetch user',
+    }, 500);
+  }
+});
+
+users.get('/:id/quota', async (c) => {
+  try {
+    const targetId = parseInt(c.req.param('id'));
+    if (Number.isNaN(targetId)) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Invalid user ID',
+      }, 400);
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, username: true, role: true },
+    });
+
+    if (!user) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'User not found',
+      }, 404);
+    }
+
+    const quotaActor: Actor = {
+      type: 'user',
+      id: user.id,
+      username: user.username,
+      role: user.role as 'ADMIN' | 'USER',
+      identifier: `user:${user.id}`,
+    };
+
+    const snapshot = await inspectActorQuota(quotaActor);
+
+    return c.json<ApiResponse<{ quota: ReturnType<typeof serializeQuotaSnapshot> }>>({
+      success: true,
+      data: {
+        quota: serializeQuotaSnapshot(snapshot),
+      },
+    });
+  } catch (error) {
+    console.error('Get user quota error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Failed to fetch user quota',
     }, 500);
   }
 });
@@ -453,7 +500,7 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
     }
 
     const { dailyLimit, resetUsed } = c.req.valid('json');
-    const sanitizedLimit = Math.max(0, dailyLimit);
+    const sanitizedLimit = dailyLimit === null ? null : Math.max(0, dailyLimit);
     const currentUser = c.get('user');
 
     const targetUser = await prisma.user.findUnique({
@@ -464,7 +511,7 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
       return c.json<ApiResponse>({ success: false, error: 'User not found' }, 404);
     }
 
-    if (targetUser.id === currentUser.id && sanitizedLimit < 1) {
+    if (targetUser.id === currentUser.id && sanitizedLimit !== null && sanitizedLimit < 1) {
       return c.json<ApiResponse>({
         success: false,
         error: 'Cannot set your own daily limit below 1 to avoid lock-out',
@@ -474,12 +521,12 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
     const identifier = `user:${targetUser.id}`;
     const now = new Date();
     const updatePayload: {
-      dailyLimit: number;
+      customDailyLimit: number | null;
       userId: number;
       usedCount?: number;
       lastResetAt?: Date;
     } = {
-      dailyLimit: sanitizedLimit,
+      customDailyLimit: sanitizedLimit,
       userId: targetUser.id,
     };
     if (resetUsed) {
@@ -493,7 +540,7 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
       create: {
         scope: 'USER',
         identifier,
-        dailyLimit: sanitizedLimit,
+        customDailyLimit: sanitizedLimit,
         usedCount: 0,
         lastResetAt: now,
         userId: targetUser.id,

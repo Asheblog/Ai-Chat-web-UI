@@ -4,7 +4,7 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig
 } from 'axios'
-import type { AuthResponse, User, ApiResponse, ActorContextDTO } from '@/types'
+import type { AuthResponse, User, ApiResponse, ActorContextDTO, ActorQuota } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
@@ -533,6 +533,16 @@ class ApiClient {
 
   async deleteUser(userId: number) {
     await this.client.delete(`/users/${userId}`)
+  }
+
+  async getUserQuota(userId: number) {
+    const response = await this.client.get<ApiResponse<{ quota: ActorQuota }>>(`/users/${userId}/quota`)
+    return response.data
+  }
+
+  async updateUserQuota(userId: number, options: { dailyLimit: number | null; resetUsed?: boolean }) {
+    const response = await this.client.put<ApiResponse<{ quota: ActorQuota }>>(`/users/${userId}/quota`, options)
+    return response.data
   }
 
   // 修改密码

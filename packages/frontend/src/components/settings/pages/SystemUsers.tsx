@@ -4,8 +4,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { apiClient } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
+import type { ActorQuota } from "@/types"
 
 type UserRow = { id: number; username: string; role: 'ADMIN'|'USER'; createdAt: string; _count?: { chatSessions: number; connections: number } }
 type PageData = { users: UserRow[]; pagination: { page: number; limit: number; total: number; totalPages: number } }
@@ -20,6 +24,17 @@ export function SystemUsersPage(){
   const [totalPages, setTotalPages] = useState(1)
   const [search, setSearch] = useState("")
   const [searchDraft, setSearchDraft] = useState("")
+  const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
+  const [quotaTarget, setQuotaTarget] = useState<UserRow | null>(null)
+  const [quotaSnapshot, setQuotaSnapshot] = useState<ActorQuota | null>(null)
+  const [quotaLoading, setQuotaLoading] = useState(false)
+  const [quotaSubmitting, setQuotaSubmitting] = useState(false)
+  const [quotaError, setQuotaError] = useState<string | null>(null)
+  const [quotaForm, setQuotaForm] = useState<{ useDefault: boolean; dailyLimit: string; resetUsed: boolean }>({
+    useDefault: true,
+    dailyLimit: "",
+    resetUsed: false,
+  })
 
   const load = async (opts?: { page?: number; limit?: number; search?: string }) => {
     setLoading(true); setError(null)
@@ -40,6 +55,91 @@ export function SystemUsersPage(){
   useEffect(() => { load() // 初次加载
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const resetQuotaDialog = () => {
+    setQuotaTarget(null)
+    setQuotaSnapshot(null)
+    setQuotaForm({ useDefault: true, dailyLimit: "", resetUsed: false })
+    setQuotaError(null)
+    setQuotaLoading(false)
+    setQuotaSubmitting(false)
+  }
+
+  const handleQuotaDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetQuotaDialog()
+    }
+    setQuotaDialogOpen(nextOpen)
+  }
+
+  const openQuotaDialog = async (row: UserRow) => {
+    setQuotaTarget(row)
+    setQuotaDialogOpen(true)
+    setQuotaLoading(true)
+    setQuotaError(null)
+    setQuotaSnapshot(null)
+    setQuotaForm({ useDefault: true, dailyLimit: "", resetUsed: false })
+    try {
+      const response = await apiClient.getUserQuota(row.id)
+      if (!response?.success) {
+        throw new Error(response?.error || '获取用户额度失败')
+      }
+      const quota = response.data?.quota ?? null
+      setQuotaSnapshot(quota)
+      if (quota) {
+        setQuotaForm({
+          useDefault: quota.usingDefaultLimit,
+          dailyLimit: quota.customDailyLimit != null ? String(quota.customDailyLimit) : "",
+          resetUsed: false,
+        })
+      } else {
+        setQuotaForm({ useDefault: true, dailyLimit: "", resetUsed: false })
+      }
+    } catch (e: any) {
+      setQuotaError(e?.message || '获取用户额度失败')
+    } finally {
+      setQuotaLoading(false)
+    }
+  }
+
+  const handleQuotaSave = async () => {
+    if (!quotaTarget) return
+    setQuotaError(null)
+    let resolvedDailyLimit: number | null = null
+    if (!quotaForm.useDefault) {
+      const trimmed = quotaForm.dailyLimit.trim()
+      if (!trimmed) {
+        setQuotaError('请输入自定义额度')
+        return
+      }
+      const parsed = Number.parseInt(trimmed, 10)
+      if (Number.isNaN(parsed) || parsed < 0) {
+        setQuotaError('额度必须为不小于 0 的整数')
+        return
+      }
+      resolvedDailyLimit = parsed
+    }
+    setQuotaSubmitting(true)
+    try {
+      const response = await apiClient.updateUserQuota(quotaTarget.id, {
+        dailyLimit: resolvedDailyLimit,
+        resetUsed: quotaForm.resetUsed || undefined,
+      })
+      if (!response?.success) {
+        throw new Error(response?.error || '更新用户额度失败')
+      }
+      toast({
+        title: '额度已更新',
+        description: quotaForm.useDefault ? '已恢复跟随全局默认额度' : `已设置每日额度为 ${resolvedDailyLimit}`,
+      })
+      handleQuotaDialogOpenChange(false)
+      await load()
+    } catch (e: any) {
+      setQuotaError(e?.message || '更新用户额度失败')
+    } finally {
+      setQuotaSubmitting(false)
+    }
+  }
 
   const onSearch = () => { setPage(1); setSearch(searchDraft); load({ page: 1, search: searchDraft }) }
   const onClearSearch = () => { setSearchDraft(""); setSearch(""); setPage(1); load({ page: 1, search: '' }) }
@@ -84,15 +184,14 @@ export function SystemUsersPage(){
       {error && <div className="text-sm text-destructive">{error}</div>}
 
       <div className="border rounded overflow-x-auto">
-        <Table className="min-w-[720px]">
+        <Table className="min-w-[600px]">
           <TableHeader>
             <TableRow>
-              <TableHead>用户名</TableHead>
-              <TableHead>角色</TableHead>
-              <TableHead>会话数</TableHead>
-              <TableHead>连接数</TableHead>
-              <TableHead>创建时间</TableHead>
-              <TableHead className="text-right">操作</TableHead>
+              <TableHead className="text-center whitespace-nowrap w-[120px]">用户名</TableHead>
+              <TableHead className="text-center whitespace-nowrap w-[120px]">角色</TableHead>
+              <TableHead className="text-center whitespace-nowrap w-[100px]">会话数</TableHead>
+              <TableHead className="text-center whitespace-nowrap w-[160px]">创建时间</TableHead>
+              <TableHead className="text-center whitespace-nowrap w-[200px]">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -104,22 +203,22 @@ export function SystemUsersPage(){
             )}
             {rows.map((r) => (
               <TableRow key={r.id}>
-                <TableCell>{r.username}</TableCell>
-                <TableCell>
+                <TableCell className="text-center whitespace-nowrap">{r.username}</TableCell>
+                <TableCell className="text-center whitespace-nowrap">
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs border ${r.role==='ADMIN' ? 'bg-amber-100/30 border-amber-300 text-amber-700' : 'bg-muted/40 border-muted-foreground/20 text-muted-foreground'}`}>{r.role}</span>
                 </TableCell>
-                <TableCell>{r._count?.chatSessions ?? '-'}</TableCell>
-                <TableCell>{r._count?.connections ?? '-'}</TableCell>
-                <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex flex-wrap justify-end gap-2">
+                <TableCell className="text-center whitespace-nowrap">{r._count?.chatSessions ?? '-'}</TableCell>
+                <TableCell className="text-center whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</TableCell>
+                <TableCell className="text-center">
+                  <div className="flex justify-center gap-2">
+                    <Button size="sm" variant="outline" onClick={()=>openQuotaDialog(r)} disabled={loading || quotaSubmitting} className="min-w-[80px] px-2 py-1 text-xs">调整额度</Button>
                     {r.role !== 'ADMIN' && (
-                      <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'ADMIN')} className="w-full sm:w-auto">设为管理员</Button>
+                      <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'ADMIN')} className="min-w-[80px] px-2 py-1 text-xs">设为管理员</Button>
                     )}
                     {r.role !== 'USER' && (
-                      <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'USER')} className="w-full sm:w-auto">设为用户</Button>
+                      <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'USER')} className="min-w-[80px] px-2 py-1 text-xs">设为用户</Button>
                     )}
-                    <Button size="sm" variant="destructive" onClick={()=>deleteUser(r)} className="w-full sm:w-auto">删除</Button>
+                    <Button size="sm" variant="destructive" onClick={()=>deleteUser(r)} className="min-w-[72px] px-2 py-1 text-xs">删除</Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -143,6 +242,97 @@ export function SystemUsersPage(){
           </div>
         </div>
       </div>
+
+      <Dialog open={quotaDialogOpen} onOpenChange={handleQuotaDialogOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>调整每日额度</DialogTitle>
+            <DialogDescription>
+              {quotaTarget ? `用户：${quotaTarget.username}` : '选择要调整额度的用户'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {quotaError && (
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
+                {quotaError}
+              </div>
+            )}
+            <div className="space-y-1 text-sm">
+              <div>当前每日额度</div>
+              <div className="text-lg font-semibold">
+                {quotaLoading
+                  ? '加载中...'
+                  : quotaSnapshot
+                    ? (quotaSnapshot.unlimited ? '无限' : quotaSnapshot.dailyLimit)
+                    : '-'}
+              </div>
+              {quotaSnapshot && (
+                <div className="text-xs text-muted-foreground">
+                  已使用 {quotaSnapshot.usedCount}
+                  {quotaSnapshot.unlimited ? '' : ` / ${quotaSnapshot.dailyLimit}`}
+                  ，上次重置 {new Date(quotaSnapshot.lastResetAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="useDefaultQuota" className="text-sm">跟随全局默认额度</Label>
+                <Switch
+                  id="useDefaultQuota"
+                  checked={quotaForm.useDefault}
+                  disabled={quotaLoading || quotaSubmitting}
+                  onCheckedChange={(checked) => setQuotaForm((prev) => ({
+                    ...prev,
+                    useDefault: checked,
+                    dailyLimit: checked ? "" : prev.dailyLimit,
+                  }))}
+                />
+              </div>
+              {!quotaForm.useDefault && (
+                <div className="space-y-2">
+                  <Label htmlFor="customDailyLimit" className="text-sm">自定义每日额度</Label>
+                  <Input
+                    id="customDailyLimit"
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    value={quotaForm.dailyLimit}
+                    onChange={(e) => setQuotaForm((prev) => ({ ...prev, dailyLimit: e.target.value }))}
+                    disabled={quotaLoading || quotaSubmitting}
+                    placeholder="例如：5000"
+                  />
+                  <p className="text-xs text-muted-foreground">设置为 0 表示禁止发送消息，留空将无法保存。</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="resetUsed"
+                  checked={quotaForm.resetUsed}
+                  disabled={quotaLoading || quotaSubmitting}
+                  onChange={(e) => setQuotaForm((prev) => ({ ...prev, resetUsed: e.target.checked }))}
+                />
+                <Label htmlFor="resetUsed" className="text-sm">保存时同时清零已用额度</Label>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => handleQuotaDialogOpenChange(false)} disabled={quotaSubmitting}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              onClick={handleQuotaSave}
+              disabled={
+                quotaSubmitting
+                || quotaLoading
+                || (!quotaForm.useDefault && !quotaForm.dailyLimit.trim())
+              }
+            >
+              {quotaSubmitting ? '保存中...' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

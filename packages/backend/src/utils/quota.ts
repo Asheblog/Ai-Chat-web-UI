@@ -59,6 +59,8 @@ const toSnapshot = (
   record: UsageQuota,
   effectiveLimit: number,
   now: Date,
+  customLimit: number | null,
+  usingDefaultLimit: boolean,
 ): UsageQuotaSnapshot => {
   const unlimited = effectiveLimit < 0
   const remaining = unlimited
@@ -72,6 +74,8 @@ const toSnapshot = (
     remaining,
     lastResetAt: record.lastResetAt ?? now,
     unlimited,
+    customDailyLimit: customLimit,
+    usingDefaultLimit,
   }
 }
 
@@ -105,7 +109,6 @@ const processQuota = async (
       data: {
         scope,
         identifier,
-        dailyLimit: defaultLimit,
         usedCount: 0,
         lastResetAt: options.now,
         ...(userId ? { userId } : {}),
@@ -118,8 +121,9 @@ const processQuota = async (
     })
   }
 
-  const effectiveLimit =
-    record.dailyLimit == null ? defaultLimit : record.dailyLimit
+  const customLimit = record.customDailyLimit ?? null
+  const usingDefaultLimit = customLimit == null
+  const effectiveLimit = usingDefaultLimit ? defaultLimit : customLimit
 
   if (shouldResetUsage(record, options.now)) {
     record = await client.usageQuota.update({
@@ -139,7 +143,7 @@ const processQuota = async (
       return {
         success: false,
         reason: 'OVER_LIMIT',
-        snapshot: toSnapshot(record, effectiveLimit, options.now),
+        snapshot: toSnapshot(record, effectiveLimit, options.now, customLimit, usingDefaultLimit),
       }
     }
     record = await client.usageQuota.update({
@@ -160,7 +164,7 @@ const processQuota = async (
 
   return {
     success: true,
-    snapshot: toSnapshot(record, effectiveLimit, options.now),
+    snapshot: toSnapshot(record, effectiveLimit, options.now, customLimit, usingDefaultLimit),
   }
 }
 
@@ -205,4 +209,6 @@ export const serializeQuotaSnapshot = (snapshot: UsageQuotaSnapshot) => ({
   remaining: snapshot.remaining,
   lastResetAt: snapshot.lastResetAt.toISOString(),
   unlimited: snapshot.unlimited,
+  customDailyLimit: snapshot.customDailyLimit,
+  usingDefaultLimit: snapshot.usingDefaultLimit,
 })

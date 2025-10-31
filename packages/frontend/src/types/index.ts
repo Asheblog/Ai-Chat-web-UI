@@ -21,6 +21,8 @@ export interface ActorQuota {
   remaining: number | null;
   lastResetAt: string;
   unlimited: boolean;
+  customDailyLimit: number | null;
+  usingDefaultLimit: boolean;
 }
 
 export type AnonymousActorProfile = {

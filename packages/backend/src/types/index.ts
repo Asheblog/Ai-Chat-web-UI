@@ -106,6 +106,8 @@ export interface UsageQuotaSnapshot {
   remaining: number | null;
   lastResetAt: Date;
   unlimited: boolean;
+  customDailyLimit: number | null;
+  usingDefaultLimit: boolean;
 }
 
 export interface UsageQuotaDTO {
@@ -116,6 +118,8 @@ export interface UsageQuotaDTO {
   remaining: number | null;
   lastResetAt: string;
   unlimited: boolean;
+  customDailyLimit: number | null;
+  usingDefaultLimit: boolean;
 }
 
 export interface ActorContext {
