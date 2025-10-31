@@ -318,7 +318,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       snapshot.currentSession?.id === sessionId
         ? snapshot.currentSession?.reasoningEnabled
         : snapshot.sessions.find((s) => s.id === sessionId)?.reasoningEnabled
-    const reasoningDesired = Boolean(options?.reasoningEnabled ?? reasoningPreference ?? false)
+    const normalizedReasoningPreference =
+      typeof reasoningPreference === 'boolean' ? reasoningPreference : undefined
+    const resolvedReasoningEnabled =
+      options?.reasoningEnabled ?? normalizedReasoningPreference ?? true
+    const reasoningDesired = Boolean(resolvedReasoningEnabled)
 
     const assistantPlaceholder: Message = {
       id: Date.now() + 1,
