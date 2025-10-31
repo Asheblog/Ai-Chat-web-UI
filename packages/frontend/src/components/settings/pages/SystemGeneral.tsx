@@ -25,6 +25,7 @@ export function SystemGeneralPage() {
   const [anonymousQuotaDraft, setAnonymousQuotaDraft] = useState('20')
   const [defaultUserQuotaDraft, setDefaultUserQuotaDraft] = useState('200')
   const [anonymousRetentionDraft, setAnonymousRetentionDraft] = useState('15')
+  const [syncingAnonymousQuota, setSyncingAnonymousQuota] = useState(false)
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => {
@@ -76,6 +77,22 @@ export function SystemGeneralPage() {
         <button className="mt-3 px-3 py-2 border rounded" onClick={()=>fetchSystemSettings()}>重试</button>
       </div>
     )
+  }
+
+  const handleSyncAnonymousQuota = async () => {
+    if (!isAdmin || syncingAnonymousQuota) return
+    const confirmed = typeof window === 'undefined' ? true : window.confirm('是否同步匿名访客额度？该操作会重置匿名访客今日已用额度。')
+    if (!confirmed) return
+    setSyncingAnonymousQuota(true)
+    try {
+      await apiClient.syncAnonymousQuota({ resetUsed: true })
+      await fetchSystemSettings()
+      toast({ title: '已同步匿名额度', description: '匿名访客额度已更新为当前默认值，并清零今日用量。' })
+    } catch (err: any) {
+      toast({ title: '同步失败', description: err?.response?.data?.error || err?.message || '操作失败', variant: 'destructive' })
+    } finally {
+      setSyncingAnonymousQuota(false)
+    }
   }
 
   return (
@@ -207,29 +224,38 @@ export function SystemGeneralPage() {
               className="w-full sm:max-w-[140px]"
               disabled={!isAdmin}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (!isAdmin) return
-                const parsed = Number.parseInt(anonymousQuotaDraft, 10)
-                if (Number.isNaN(parsed) || parsed < 0) {
-                  toast({ title: '输入无效', description: '请输入不小于 0 的整数', variant: 'destructive' })
-                  return
-                }
-                await updateSystemSettings({ anonymousDailyQuota: parsed })
-                toast({ title: '已保存' })
-              }}
-              disabled={!isAdmin || (() => {
-                const parsed = Number.parseInt(anonymousQuotaDraft, 10)
-                if (Number.isNaN(parsed)) return true
-                return parsed === (systemSettings.anonymousDailyQuota ?? 20)
-              })()}
-              className="w-full sm:w-auto"
-            >保存</Button>
+            <div className="flex flex-col w-full gap-2 sm:flex-row sm:w-auto">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  if (!isAdmin) return
+                  const parsed = Number.parseInt(anonymousQuotaDraft, 10)
+                  if (Number.isNaN(parsed) || parsed < 0) {
+                    toast({ title: '输入无效', description: '请输入不小于 0 的整数', variant: 'destructive' })
+                    return
+                  }
+                  await updateSystemSettings({ anonymousDailyQuota: parsed })
+                  toast({ title: '已保存' })
+                }}
+                disabled={!isAdmin || (() => {
+                  const parsed = Number.parseInt(anonymousQuotaDraft, 10)
+                  if (Number.isNaN(parsed)) return true
+                  return parsed === (systemSettings.anonymousDailyQuota ?? 20)
+                })()}
+                className="w-full sm:w-auto"
+              >保存</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleSyncAnonymousQuota}
+                disabled={!isAdmin || syncingAnonymousQuota}
+                className="w-full sm:w-auto"
+              >{syncingAnonymousQuota ? '同步中...' : '同步匿名额度'}</Button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            匿名访问者每日可发送的消息上限，超出后会提示登录或等待次日重置。
+            所有匿名访问者共用该额度，超过后会提示登录或等待次日重置。点击“同步匿名额度”可立即应用最新默认值并清零匿名访客当日用量。
           </p>
         </div>
         <div className="space-y-2">

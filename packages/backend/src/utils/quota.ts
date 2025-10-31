@@ -3,6 +3,8 @@ import { prisma } from '../db'
 import type { Actor, UsageQuotaSnapshot, UsageQuotaScope } from '../types'
 import { getQuotaPolicy } from './system-settings'
 
+const SHARED_ANONYMOUS_IDENTIFIER = 'anon:shared' as const
+
 type PrismaClientOrTx = Prisma.TransactionClient
 
 interface ResolveScopeResult {
@@ -44,7 +46,7 @@ const resolveScope = (actor: Actor): ResolveScopeResult => {
   }
   return {
     scope: 'ANON',
-    identifier: actor.identifier,
+    identifier: SHARED_ANONYMOUS_IDENTIFIER,
     userId: null,
   }
 }
@@ -212,3 +214,40 @@ export const serializeQuotaSnapshot = (snapshot: UsageQuotaSnapshot) => ({
   customDailyLimit: snapshot.customDailyLimit,
   usingDefaultLimit: snapshot.usingDefaultLimit,
 })
+
+const ensureSharedAnonymousQuotaRecord = async (
+  client: PrismaClientOrTx,
+  options: { resetUsed: boolean; now: Date },
+) => {
+  const { resetUsed, now } = options
+  await client.usageQuota.upsert({
+    where: { scope_identifier: { scope: 'ANON', identifier: SHARED_ANONYMOUS_IDENTIFIER } },
+    update: {
+      customDailyLimit: null,
+      ...(resetUsed ? { usedCount: 0, lastResetAt: now } : {}),
+    },
+    create: {
+      scope: 'ANON',
+      identifier: SHARED_ANONYMOUS_IDENTIFIER,
+      customDailyLimit: null,
+      usedCount: 0,
+      lastResetAt: now,
+    },
+  })
+}
+
+export const syncSharedAnonymousQuota = async (
+  options: { resetUsed?: boolean; tx?: Prisma.TransactionClient } = {},
+) => {
+  const resetUsed = options.resetUsed ?? false
+  const now = new Date()
+  if (options.tx) {
+    await ensureSharedAnonymousQuotaRecord(options.tx, { resetUsed, now })
+    return
+  }
+  await prisma.$transaction((tx) =>
+    ensureSharedAnonymousQuotaRecord(tx, { resetUsed, now }),
+  )
+}
+
+export const SHARED_ANONYMOUS_QUOTA_IDENTIFIER = SHARED_ANONYMOUS_IDENTIFIER

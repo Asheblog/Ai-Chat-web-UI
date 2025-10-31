@@ -516,6 +516,13 @@ class ApiClient {
     return current
   }
 
+  async syncAnonymousQuota(options?: { resetUsed?: boolean }) {
+    const response = await this.client.post<ApiResponse<any>>('/settings/system/anonymous-quota/reset', {
+      resetUsed: options?.resetUsed ?? false,
+    })
+    return response.data
+  }
+
   async refreshImageAttachments() {
     const res = await this.client.post<ApiResponse<{ baseUrl: string; attachments: number; samples: Array<{ id: number; messageId: number; url: string }>; refreshedAt: string }>>('/chat/admin/attachments/refresh')
     return res.data

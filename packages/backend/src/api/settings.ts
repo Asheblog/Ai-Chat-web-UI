@@ -6,6 +6,7 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import type { ApiResponse, Actor } from '../types';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 import { getQuotaPolicy, invalidateQuotaPolicyCache } from '../utils/system-settings';
+import { syncSharedAnonymousQuota } from '../utils/quota';
 
 const settings = new Hono();
 
@@ -40,6 +41,10 @@ const systemSettingSchema = z.object({
   anonymous_retention_days: z.number().int().min(0).max(15).optional(),
   anonymous_daily_quota: z.number().int().min(0).optional(),
   default_user_daily_quota: z.number().int().min(0).optional(),
+});
+
+const resetAnonymousQuotaSchema = z.object({
+  resetUsed: z.boolean().optional(),
 });
 
 // 获取系统设置（仅管理员）
@@ -136,6 +141,7 @@ settings.get('/system', actorMiddleware, async (c) => {
 settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
     const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url, anonymous_retention_days, anonymous_daily_quota, default_user_daily_quota } = c.req.valid('json');
+    let anonymousQuotaUpdated = false;
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -321,6 +327,7 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         update: { value: String(sanitized) },
         create: { key: 'anonymous_daily_quota', value: String(sanitized) },
       })
+      anonymousQuotaUpdated = true;
     }
 
     if (typeof default_user_daily_quota === 'number') {
@@ -330,6 +337,10 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         update: { value: String(sanitized) },
         create: { key: 'default_user_daily_quota', value: String(sanitized) },
       })
+    }
+
+    if (anonymousQuotaUpdated) {
+      await syncSharedAnonymousQuota({ resetUsed: false })
     }
 
     invalidateQuotaPolicyCache();
@@ -344,6 +355,24 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
     return c.json<ApiResponse>({
       success: false,
       error: 'Failed to update system settings',
+    }, 500);
+  }
+});
+
+settings.post('/system/anonymous-quota/reset', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', resetAnonymousQuotaSchema), async (c) => {
+  try {
+    const { resetUsed } = c.req.valid('json');
+    await syncSharedAnonymousQuota({ resetUsed: Boolean(resetUsed) });
+    invalidateQuotaPolicyCache();
+    return c.json<ApiResponse>({
+      success: true,
+      message: 'Anonymous quota synchronized',
+    });
+  } catch (error) {
+    console.error('Reset anonymous quota error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Failed to synchronize anonymous quota',
     }, 500);
   }
 });
