@@ -714,19 +714,48 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         };
 
         let downstreamAborted = false;
+        let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+        const requestSignal = c.req.raw.signal;
+
+        const markDownstreamClosed = () => {
+          if (downstreamAborted) return;
+          downstreamAborted = true;
+          stopHeartbeat();
+          if (reader) {
+            try {
+              const cancelled = reader.cancel();
+              cancelled?.catch?.(() => {});
+            } catch {}
+            reader = null;
+          }
+        };
+
         const safeEnqueue = (payload: string) => {
+          if (!downstreamAborted && requestSignal?.aborted) {
+            markDownstreamClosed();
+          }
           if (downstreamAborted) {
             throw new DownstreamClosedError();
           }
           try {
             controller.enqueue(encoder.encode(payload));
           } catch (err) {
-            downstreamAborted = true;
-            stopHeartbeat();
+            markDownstreamClosed();
             console.warn('SSE downstream closed, stop streaming', err);
             throw new DownstreamClosedError(err);
           }
         };
+
+        const handleAbort = () => {
+          markDownstreamClosed();
+        };
+        if (requestSignal) {
+          if (requestSignal.aborted) {
+            markDownstreamClosed();
+          } else {
+            requestSignal.addEventListener('abort', handleAbort);
+          }
+        }
 
         try {
           // 发送开始事件
@@ -768,10 +797,11 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }
 
           // 处理流式响应
-          const reader = response.body?.getReader();
-          if (!reader) {
+          const responseBody = response.body;
+          if (!responseBody) {
             throw new Error('No response body reader');
           }
+          reader = responseBody.getReader();
 
           const decoder = new TextDecoder();
           let buffer = '';
@@ -1115,6 +1145,11 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           })}\n\n`;
           safeEnqueue(errorEvent);
         } finally {
+          if (requestSignal) {
+            try {
+              requestSignal.removeEventListener('abort', handleAbort);
+            } catch {}
+          }
           try {
             stopHeartbeat();
             controller.close();
