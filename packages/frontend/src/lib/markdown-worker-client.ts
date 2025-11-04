@@ -11,8 +11,8 @@ interface RenderRequest {
 }
 
 interface RenderResponse {
-  contentHtml: string
-  reasoningHtml?: string
+  contentHtml: string | null
+  reasoningHtml?: string | null
   contentVersion: number
   reasoningVersion: number
   errored?: boolean
@@ -20,6 +20,7 @@ interface RenderResponse {
 }
 
 interface PendingJob {
+  request: RenderRequest
   resolve: (value: RenderResponse) => void
   reject: (error: Error) => void
 }
@@ -27,6 +28,18 @@ interface PendingJob {
 let workerInstance: Worker | null = null
 const pendingJobs = new Map<string, PendingJob>()
 let jobCounter = 0
+
+const createFallbackResponse = (
+  request: RenderRequest,
+  errorMessage?: string | null
+): RenderResponse => ({
+  contentHtml: null,
+  reasoningHtml: request.reasoning ? null : undefined,
+  contentVersion: request.contentVersion,
+  reasoningVersion: request.reasoningVersion,
+  errored: true,
+  errorMessage: errorMessage ?? undefined,
+})
 
 const ensureWorker = () => {
   if (workerInstance || typeof window === 'undefined') {
@@ -42,18 +55,29 @@ const ensureWorker = () => {
     if (!pending) return
     pendingJobs.delete(data.jobId)
     if (data.errored) {
-      pending.reject(new Error(data.errorMessage || '渲染失败'))
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.warn('[markdown-worker-client] Markdown worker fallback', data.errorMessage || '渲染失败')
+      }
+      pending.resolve(createFallbackResponse(pending.request, data.errorMessage))
       return
     }
     pending.resolve({
       contentHtml: data.contentHtml,
-      reasoningHtml: data.reasoningHtml,
+      reasoningHtml: data.reasoningHtml ?? null,
       contentVersion: data.contentVersion,
       reasoningVersion: data.reasoningVersion,
     })
   })
   workerInstance.addEventListener('error', (error) => {
-    pendingJobs.forEach((job) => job.reject(error instanceof Error ? error : new Error('渲染失败')))
+    const message = error instanceof Error ? error.message : '渲染失败'
+    pendingJobs.forEach((job) => {
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.warn('[markdown-worker-client] Markdown worker error fallback', message)
+      }
+      job.resolve(createFallbackResponse(job.request, message))
+    })
     pendingJobs.clear()
     workerInstance?.terminate()
     workerInstance = null
@@ -93,7 +117,7 @@ export const requestMarkdownRender = async (payload: RenderRequest): Promise<Ren
   const jobId = `job-${Date.now()}-${jobCounter++}`
 
   const response = new Promise<RenderResponse>((resolve, reject) => {
-    pendingJobs.set(jobId, { resolve, reject })
+    pendingJobs.set(jobId, { request: payload, resolve, reject })
   })
 
   worker.postMessage({
