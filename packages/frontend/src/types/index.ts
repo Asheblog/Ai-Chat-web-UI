@@ -6,6 +6,12 @@ export interface User {
   createdAt: string;
 }
 
+export interface ModelPreferenceDTO {
+  modelId: string | null;
+  connectionId: number | null;
+  rawId: string | null;
+}
+
 export interface AuthResponse {
   user: User;
   token: string;
@@ -38,6 +44,7 @@ export type UserActorProfile = {
   username: string;
   role: 'ADMIN' | 'USER';
   identifier: string;
+  preferredModel?: ModelPreferenceDTO | null;
 };
 
 export type ActorProfile = AnonymousActorProfile | UserActorProfile;
@@ -46,6 +53,7 @@ export interface ActorContextDTO {
   actor: ActorProfile;
   quota: ActorQuota | null;
   user?: User | null;
+  preferredModel?: ModelPreferenceDTO | null;
 }
 
 export interface LoginRequest {

@@ -1,8 +1,15 @@
+export interface ModelPreference {
+  modelId: string | null;
+  connectionId: number | null;
+  rawId: string | null;
+}
+
 export interface User {
   id: number;
   username: string;
   role: 'ADMIN' | 'USER';
   createdAt: Date;
+  preferredModel?: ModelPreference | null;
 }
 
 export type Actor = UserActor | AnonymousActor;
@@ -13,6 +20,7 @@ export interface UserActor {
   username: string;
   role: 'ADMIN' | 'USER';
   identifier: string;
+  preferredModel?: ModelPreference | null;
 }
 
 export interface AnonymousActor {
@@ -131,6 +139,7 @@ export interface ActorContext {
     role: 'ADMIN' | 'USER';
     createdAt: Date;
   } | null;
+  preferredModel?: ModelPreference | null;
 }
 
 export interface ApiResponse<T = any> {

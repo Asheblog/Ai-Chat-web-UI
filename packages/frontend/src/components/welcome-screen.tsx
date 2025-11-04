@@ -20,6 +20,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { useSettingsStore } from '@/store/settings-store'
 import { UserMenu } from '@/components/user-menu'
 import { useAuthStore } from '@/store/auth-store'
+import { useModelPreferenceStore, persistPreferredModel, findPreferredModel } from '@/store/model-preference-store'
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
@@ -63,18 +64,43 @@ export function WelcomeScreen() {
   const [expandOpen, setExpandOpen] = useState(false)
   const [expandDraft, setExpandDraft] = useState('')
 
-  // 选择一个默认模型（取聚合列表的第一个）
+  // 选择一个默认模型（优先使用持久化偏好）
   const { models, fetchAll } = useModelsStore()
   const modelsCount = models?.length ?? 0
+  const preferred = useModelPreferenceStore((state) => state.preferred)
+  const actorType = useAuthStore((state) => state.actor?.type ?? 'anonymous')
+  const missingPreferredNotifiedRef = useRef(false)
+  useEffect(() => {
+    missingPreferredNotifiedRef.current = false
+  }, [preferred?.modelId])
   useEffect(() => {
     if (modelsCount === 0) {
       fetchAll().catch(() => {})
     }
   }, [modelsCount, fetchAll])
   useEffect(() => {
-    const first = models?.[0]?.id as string | undefined
-    if (first) setSelectedModelId(first)
-  }, [models])
+    if (modelsCount === 0) return
+    const currentMatch = selectedModelId ? (models || []).find((m) => m.id === selectedModelId) : null
+    if (currentMatch) return
+
+    let resolved = findPreferredModel(models || [], preferred) || undefined
+    if (!resolved && preferred && !missingPreferredNotifiedRef.current) {
+        missingPreferredNotifiedRef.current = true
+        toast({
+          title: '模型已更新',
+          description: '上一次选择的模型暂不可用，已为你切换到推荐模型。',
+        })
+      }
+
+    if (!resolved) {
+      resolved = models?.[0]
+    }
+
+    if (resolved) {
+      setSelectedModelId(resolved.id)
+      void persistPreferredModel(resolved, { actorType })
+    }
+  }, [models, modelsCount, preferred, selectedModelId, toast, actorType])
 
   const canCreate = useMemo(() => !!selectedModelId, [selectedModelId])
   const creationDisabled = !canCreate || isCreating || quotaExhausted
@@ -247,7 +273,10 @@ export function WelcomeScreen() {
         <div className="flex w-full items-center justify-between gap-4">
           <ModelSelector
             selectedModelId={selectedModelId}
-            onModelChange={(model) => setSelectedModelId(model.id)}
+            onModelChange={(model) => {
+              setSelectedModelId(model.id)
+              void persistPreferredModel(model, { actorType })
+            }}
             disabled={!canCreate || isCreating}
           />
           <UserMenu />

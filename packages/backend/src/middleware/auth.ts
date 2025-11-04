@@ -33,12 +33,13 @@ const resolveTokenFromRequest = (c: Context) => {
   return token
 }
 
-const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' | 'USER' }): UserActor => ({
+const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' | 'USER'; preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null }): UserActor => ({
   type: 'user',
   id: payload.id,
   username: payload.username,
   role: payload.role,
   identifier: `user:${payload.id}`,
+  preferredModel: payload.preferredModel ?? null,
 })
 
 const buildAnonymousActor = (key: string, retentionDays: number): AnonymousActor => {
@@ -89,12 +90,22 @@ const resolveActor = async (c: Context): Promise<{ actor: Actor | null; status?:
     }
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, username: true, role: true },
+      select: { id: true, username: true, role: true, preferredModelId: true, preferredConnectionId: true, preferredModelRawId: true },
     })
     if (!user) {
       return { actor: null, status: 401, error: 'User not found', clearAuth: true }
     }
-    return { actor: buildUserActor({ ...user, role: user.role as 'ADMIN' | 'USER' }) }
+    return {
+      actor: buildUserActor({
+        ...user,
+        role: user.role as 'ADMIN' | 'USER',
+        preferredModel: {
+          modelId: user.preferredModelId ?? null,
+          connectionId: user.preferredConnectionId ?? null,
+          rawId: user.preferredModelRawId ?? null,
+        },
+      }),
+    }
   }
 
   const quotaPolicy = await getQuotaPolicy()

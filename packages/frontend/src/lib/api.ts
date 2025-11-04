@@ -519,6 +519,22 @@ class ApiClient {
     return current
   }
 
+  async updatePersonalSettings(settings: { preferredModel?: { modelId: string; connectionId: number | null; rawId: string | null } | null }, signal?: AbortSignal) {
+    const payload: any = {}
+    if (Object.prototype.hasOwnProperty.call(settings, 'preferredModel')) {
+      const pref = settings.preferredModel
+      payload.preferred_model = pref
+        ? {
+            modelId: pref.modelId,
+            connectionId: pref.connectionId,
+            rawId: pref.rawId,
+          }
+        : null
+    }
+    const response = await this.client.put<ApiResponse<any>>('/settings/personal', payload, { signal })
+    return response.data?.data
+  }
+
   async syncAnonymousQuota(options?: { resetUsed?: boolean }) {
     const response = await this.client.post<ApiResponse<any>>('/settings/system/anonymous-quota/reset', {
       resetUsed: options?.resetUsed ?? false,

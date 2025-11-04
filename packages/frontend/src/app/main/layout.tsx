@@ -10,6 +10,7 @@ import { ModelSelector } from '@/components/model-selector'
 import { UserMenu } from '@/components/user-menu'
 import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
+import { persistPreferredModel } from '@/store/model-preference-store'
 
 export default function MainLayout({
   children,
@@ -19,6 +20,7 @@ export default function MainLayout({
   const { theme, setTheme, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const { currentSession } = useChatStore()
   const actorState = useAuthStore((state) => state.actorState)
+  const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -77,8 +79,10 @@ export default function MainLayout({
                   onModelChange={(model) => {
                     const cur = useChatStore.getState().currentSession
                     if (cur) {
+                      void persistPreferredModel(model, { actorType })
                       useChatStore.getState().switchSessionModel(cur.id, model)
                     } else {
+                      void persistPreferredModel(model, { actorType })
                       useChatStore.getState().createSession(model.id, '新的对话', model.connectionId, model.rawId)
                     }
                   }}

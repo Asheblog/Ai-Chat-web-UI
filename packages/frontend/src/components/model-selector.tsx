@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { useModelsStore, type ModelItem } from "@/store/models-store"
 import { cn, deriveChannelName } from "@/lib/utils"
+import { modelKeyFor } from "@/store/model-preference-store"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -27,7 +28,12 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
     }
   }, [modelsCount, fetchAll])
 
-  const selected = allModels.find((m) => m.id === selectedModelId)
+  const selected = allModels.find((m) => {
+    if (!selectedModelId) return false
+    if (m.id === selectedModelId) return true
+    if (m.rawId && m.rawId === selectedModelId) return true
+    return modelKeyFor(m) === selectedModelId
+  })
 
   const trigger = (
     <Button
@@ -82,7 +88,14 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
             {!loading && <CommandEmpty>暂无可用模型</CommandEmpty>}
             <CommandGroup heading="全部模型">
               {allModels.map((model) => {
-                const isActive = selectedModelId === model.id
+                const key = modelKeyFor(model)
+                const isActive = Boolean(
+                  selectedModelId && (
+                    selectedModelId === model.id ||
+                    selectedModelId === key ||
+                    (!!model.rawId && selectedModelId === model.rawId)
+                  )
+                )
                 const channel = model.channelName || deriveChannelName(model.provider, model.connectionBaseUrl)
                 return (
                   <CommandItem

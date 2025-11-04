@@ -17,6 +17,7 @@ import { useChatComposer } from '@/hooks/use-chat-composer'
 import { UserMenu } from '@/components/user-menu'
 import { useAuthStore } from '@/store/auth-store'
 import { useChatStore } from '@/store/chat-store'
+import { persistPreferredModel } from '@/store/model-preference-store'
 
 const MAX_AUTO_HEIGHT = 200
 
@@ -95,6 +96,7 @@ export function ChatInterface() {
   const desktopSendDisabled = (!input.trim() && selectedImages.length === 0) && !isStreaming
 
   const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
+  const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
   const isAnonymous = actorState !== 'authenticated'
   const quotaRemaining = quota?.unlimited
     ? Infinity
@@ -156,6 +158,7 @@ export function ChatInterface() {
             onModelChange={(model) => {
               const cur = useChatStore.getState().currentSession
               if (cur) {
+                void persistPreferredModel(model, { actorType })
                 useChatStore.getState().switchSessionModel(cur.id, model)
               }
             }}

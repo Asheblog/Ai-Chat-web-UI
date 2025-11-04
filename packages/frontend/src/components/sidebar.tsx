@@ -19,12 +19,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { apiClient } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
 import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
+import { useModelsStore } from '@/store/models-store'
+import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -35,6 +36,8 @@ export function Sidebar() {
   const { sessions, currentSession, messageMetas, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
   const { systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
+  const { models, fetchAll } = useModelsStore()
+  const preferredModel = useModelPreferenceStore((state) => state.preferred)
 
   const isAnonymous = actorState !== 'authenticated'
   const quotaRemaining = quota?.unlimited
@@ -86,19 +89,19 @@ export function Sidebar() {
   const handleNewChat = async () => {
     if (isCreating || quotaExhausted) return
     setIsCreating(true)
-    let defaultModelId: string | null = null
-    let defaultConnectionId: number | null = null
-    let defaultRawId: string | null = null
     try {
-      const res = await apiClient.getAggregatedModels()
-      const first = res?.data?.[0]
-      defaultModelId = (first?.id as string) || null
-      defaultConnectionId = (first?.connectionId as number) || null
-      defaultRawId = (first?.rawId as string) || null
-    } catch {}
-    if (!defaultModelId) { setIsCreating(false); return }
+      let available = models
+      if (!available || available.length === 0) {
+        await fetchAll()
+        available = useModelsStore.getState().models
+      }
 
-    try {
+      const resolved = findPreferredModel(available || [], preferredModel) || available?.[0]
+      if (!resolved) {
+        setIsCreating(false)
+        return
+      }
+
       // 若当前会话“完全空白”，则不创建新会话（与 ChatGPT 等产品一致）
       // 判断标准：
       // 1) 当前会话存在；
@@ -118,7 +121,8 @@ export function Sidebar() {
         return
       }
 
-      await createSession(defaultModelId, '新的对话', defaultConnectionId ?? undefined, defaultRawId ?? undefined)
+      await createSession(resolved.id, '新的对话', resolved.connectionId ?? undefined, resolved.rawId ?? undefined)
+      void persistPreferredModel(resolved, { actorType: isAnonymous ? 'anonymous' : 'user' })
       setIsMobileMenuOpen(false)
     } catch (error) {
       console.error('Failed to create session:', error)

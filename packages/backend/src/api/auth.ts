@@ -219,15 +219,30 @@ auth.get('/actor', actorMiddleware, async (c) => {
     const quota = await inspectActorQuota(actor);
     let userProfile: ActorContext['user'] = null;
 
+    let preference: { modelId: string | null; connectionId: number | null; rawId: string | null } | null = null;
+
     if (actor.type === 'user') {
       const profile = await prisma.user.findUnique({
         where: { id: actor.id },
-        select: { id: true, username: true, role: true, createdAt: true },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          createdAt: true,
+          preferredModelId: true,
+          preferredConnectionId: true,
+          preferredModelRawId: true,
+        },
       });
       if (profile) {
         userProfile = {
           ...profile,
           role: profile.role === 'ADMIN' ? 'ADMIN' : 'USER',
+        };
+        preference = {
+          modelId: profile.preferredModelId ?? null,
+          connectionId: profile.preferredConnectionId ?? null,
+          rawId: profile.preferredModelRawId ?? null,
         };
       }
     }
@@ -238,6 +253,13 @@ auth.get('/actor', actorMiddleware, async (c) => {
         actor,
         quota: serializeQuotaSnapshot(quota),
         user: userProfile,
+        preferredModel: actor.type === 'user'
+          ? {
+              modelId: actor.preferredModel?.modelId ?? preference?.modelId ?? null,
+              connectionId: actor.preferredModel?.connectionId ?? preference?.connectionId ?? null,
+              rawId: actor.preferredModel?.rawId ?? preference?.rawId ?? null,
+            }
+          : null,
       },
     });
   } catch (error) {

@@ -47,6 +47,12 @@ const resetAnonymousQuotaSchema = z.object({
   resetUsed: z.boolean().optional(),
 });
 
+const modelPreferenceSchema = z.object({
+  modelId: z.string().min(1).nullable().optional(),
+  connectionId: z.number().int().positive().nullable().optional(),
+  rawId: z.string().min(1).nullable().optional(),
+});
+
 // 获取系统设置（仅管理员）
 settings.get('/system', actorMiddleware, async (c) => {
   try {
@@ -381,11 +387,27 @@ settings.post('/system/anonymous-quota/reset', actorMiddleware, requireUserActor
 settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
   try {
     const user = c.get('user');
+    if (!user) {
+      return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
+    }
 
-    // 获取用户的个人设置（目前使用默认值，可扩展）
+    const record = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        preferredModelId: true,
+        preferredConnectionId: true,
+        preferredModelRawId: true,
+      },
+    });
+
     const personalSettings = {
       context_token_limit: parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000'),
-      theme: 'light', // 可扩展主题设置
+      theme: 'light',
+      preferred_model: {
+        modelId: record?.preferredModelId ?? null,
+        connectionId: record?.preferredConnectionId ?? null,
+        rawId: record?.preferredModelRawId ?? null,
+      },
     };
 
     return c.json<ApiResponse>({
@@ -406,16 +428,37 @@ settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
 settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', z.object({
   context_token_limit: z.number().int().min(1000).max(32000).optional(),
   theme: z.enum(['light', 'dark']).optional(),
+  preferred_model: modelPreferenceSchema.optional(),
 })), async (c) => {
   try {
     const user = c.get('user');
     const updateData = c.req.valid('json');
+    if (!user) {
+      return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
+    }
 
-    // 这里可以扩展为存储用户个人设置到数据库
-    // 目前返回成功响应
+    const updates: any = {};
+    if (Object.prototype.hasOwnProperty.call(updateData, 'preferred_model')) {
+      const pref = updateData.preferred_model || null;
+      updates.preferredModelId = pref?.modelId ?? null;
+      updates.preferredConnectionId = pref?.connectionId ?? null;
+      updates.preferredModelRawId = pref?.rawId ?? null;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await prisma.user.update({ where: { id: user.id }, data: updates });
+    }
+
     return c.json<ApiResponse>({
       success: true,
-      data: updateData,
+      data: {
+        ...updateData,
+        preferred_model: {
+          modelId: updates.preferredModelId ?? null,
+          connectionId: updates.preferredConnectionId ?? null,
+          rawId: updates.preferredModelRawId ?? null,
+        },
+      },
       message: 'Personal settings updated successfully',
     });
 

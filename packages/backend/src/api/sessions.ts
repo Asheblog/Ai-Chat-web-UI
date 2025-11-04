@@ -225,6 +225,21 @@ sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), asy
       },
     });
 
+    if (actor.type === 'user') {
+      try {
+        await prisma.user.update({
+          where: { id: actor.id },
+          data: {
+            preferredModelId: modelId,
+            preferredConnectionId: connectionId,
+            preferredModelRawId: rawId,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to persist preferred model on session create:', error);
+      }
+    }
+
     const responseData = {
       ...session,
       modelLabel: modelId || composeModelLabel(session.modelRawId, session.connection?.prefixId || null),
@@ -483,6 +498,21 @@ sessions.put('/:id/model', actorMiddleware, zValidator('json', z.object({
         ollamaThink: true,
       },
     })
+
+    if (actor.type === 'user') {
+      try {
+        await prisma.user.update({
+          where: { id: actor.id },
+          data: {
+            preferredModelId: modelId,
+            preferredConnectionId: connectionId,
+            preferredModelRawId: rawId,
+          },
+        })
+      } catch (error) {
+        console.error('Failed to persist preferred model on switch:', error)
+      }
+    }
 
     return c.json<ApiResponse<any>>({ success: true, data: { ...updated, modelLabel: modelId } })
   } catch (error) {

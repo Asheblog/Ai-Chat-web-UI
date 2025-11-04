@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { AuthState, User, ActorContextDTO } from '@/types'
 import { apiClient } from '@/lib/api'
+import { useModelPreferenceStore } from '@/store/model-preference-store'
 
 interface AuthStore extends AuthState {
   login: (username: string, password: string) => Promise<void>
@@ -58,6 +59,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           await apiClient.logout()
         } catch {}
+        useModelPreferenceStore.getState().clear()
         set({
           actor: null,
           user: null,
@@ -87,6 +89,7 @@ export const useAuthStore = create<AuthStore>()(
 
       setActorContext: (context: ActorContextDTO | null) => {
         if (!context) {
+          useModelPreferenceStore.getState().clear()
           set({
             actor: null,
             user: null,
@@ -98,6 +101,7 @@ export const useAuthStore = create<AuthStore>()(
           return
         }
         const actorState = context.actor.type === 'user' ? 'authenticated' : 'anonymous'
+        useModelPreferenceStore.getState().hydrateFromServer(context.preferredModel ?? null)
         let user: User | null = null
         if (context.actor.type === 'user') {
           const profile = context.user ?? null
