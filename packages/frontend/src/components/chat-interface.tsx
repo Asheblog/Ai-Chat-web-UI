@@ -36,7 +36,9 @@ export function ChatInterface() {
     setEffort,
     noSaveThisRound,
     setNoSaveThisRound,
-    messages,
+    messageMetas,
+    messageBodies,
+    messageRenderCache,
     isLoading,
     isStreaming,
     currentSession,
@@ -97,7 +99,7 @@ export function ChatInterface() {
   const quotaRemaining = quota?.unlimited
     ? Infinity
     : quota?.remaining ?? (quota ? Math.max(0, quota.dailyLimit - quota.usedCount) : null)
-  const quotaExhausted = isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0
+  const quotaExhausted = Boolean(isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0)
   const quotaLabel = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
   const basePlaceholder = quota
     ? (quotaExhausted ? '额度已用尽，请登录或等待次日重置' : `本日消息发送额度剩余 ${quotaLabel}`)
@@ -170,7 +172,14 @@ export function ChatInterface() {
               {String(error)}
             </div>
           )}
-          <MessageList messages={messages} isStreaming={isStreaming} isLoading={isLoading} />
+          <MessageList
+            metas={messageMetas}
+            bodies={messageBodies}
+            renderCache={messageRenderCache}
+            isStreaming={isStreaming}
+            isLoading={isLoading}
+            scrollRootRef={scrollAreaRef}
+          />
         </div>
       </ScrollArea>
 

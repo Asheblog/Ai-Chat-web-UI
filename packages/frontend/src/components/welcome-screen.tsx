@@ -37,7 +37,7 @@ export function WelcomeScreen() {
         ? quota.remaining
         : Math.max(0, quota.dailyLimit - quota.usedCount))
       : null
-  const quotaExhausted = isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0
+  const quotaExhausted = Boolean(isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0)
   const quotaLabel = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
 
   const [query, setQuery] = useState('')

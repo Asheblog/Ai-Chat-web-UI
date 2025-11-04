@@ -55,6 +55,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", system-ui, -apple-system, sans-serif;
   }
 }
 
@@ -76,26 +77,113 @@
   background: hsl(var(--muted-foreground) / 0.5);
 }
 
-/* 代码块样式 */
-.prose pre {
-  /* 背景交由外层容器控制，避免灰底与内容不一致 */
-  @apply rounded-lg p-4 overflow-x-auto;
-}
-
-/* 仅行内代码添加底色；代码块中的 <pre><code> 不受影响 */
-.prose :not(pre) > code {
-  @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
-}
-
-.prose pre code {
-  @apply bg-transparent p-0;
-}
-
 /* 打字机动画光标 */
 .typing-cursor::after {
   content: '|';
   animation: typing 1.4s ease-in-out infinite;
   color: hsl(var(--primary));
+}
+
+.markdown-body {
+  contain: content paint;
+  will-change: contents;
+}
+
+.markdown-body--pending {
+  opacity: 0.92;
+}
+
+.markdown-body :not(pre) > code {
+  background: hsl(var(--muted) / 0.6);
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.85em;
+  font-family: "JetBrains Mono", "Fira Code", "Menlo", "Consolas", monospace;
+}
+
+.markdown-body code {
+  font-family: "JetBrains Mono", "Fira Code", "Menlo", "Consolas", monospace;
+}
+
+.markdown-body .md-pre {
+  margin: 1rem 0;
+  border-radius: 0.75rem;
+  border: 1px solid #22262e;
+  background: #0d1117;
+  color: #e6edf3;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.markdown-body .md-pre code {
+  display: block;
+  padding: 14px 16px;
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+
+.markdown-body .md-pre + .md-pre {
+  margin-top: 1.2rem;
+}
+
+.markdown-body a {
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.25rem 0;
+  font-size: 0.95rem;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-body thead {
+  background: hsl(var(--muted));
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid hsl(var(--primary));
+  padding-left: 1rem;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.markdown-body li {
+  margin-bottom: 0.35rem;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 1.5rem 0;
+}
+
+.markdown-fallback {
+  background: hsl(var(--muted) / 0.5);
+  border: 1px dashed hsl(var(--border));
 }
 
 /* 消息气泡样式 */

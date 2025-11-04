@@ -32,7 +32,7 @@ export function Sidebar() {
   const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const { sessions, currentSession, messages, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
+  const { sessions, currentSession, messageMetas, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
   const { systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
 
@@ -40,7 +40,7 @@ export function Sidebar() {
   const quotaRemaining = quota?.unlimited
     ? Infinity
     : quota?.remaining ?? (quota ? Math.max(0, quota.dailyLimit - quota.usedCount) : null)
-  const quotaExhausted = isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0
+  const quotaExhausted = Boolean(isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0)
   const quotaDisplay = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
   const searchParams = useSearchParams()
 
@@ -110,7 +110,8 @@ export function Sidebar() {
         !cur.title || cur.title.trim() === '' || cur.title === '新的对话' || cur.title === 'New Chat'
       )
       const serverCount = cur ? (sessions.find(s => s.id === cur.id)?._count?.messages ?? null) : null
-      const definitelyEmpty = cur && isDefaultTitle && messages.length === 0 && (serverCount === null || serverCount === 0)
+      const localCount = cur ? messageMetas.length : 0
+      const definitelyEmpty = Boolean(cur && isDefaultTitle && localCount === 0 && (serverCount === null || serverCount === 0))
       if (definitelyEmpty) {
         // 直接返回，复用当前空白会话
         setIsMobileMenuOpen(false)

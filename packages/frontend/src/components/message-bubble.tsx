@@ -1,100 +1,164 @@
 'use client'
 
-import { Copy, RotateCcw } from 'lucide-react'
+import { Copy } from 'lucide-react'
 import Image from 'next/image'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Message } from '@/types'
 import { MarkdownRenderer } from './markdown-renderer'
 import { formatDate, copyToClipboard } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
-import { memo, useEffect, useState } from 'react'
+import { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
+import { requestMarkdownRender } from '@/lib/markdown-worker-client'
+import { useChatStore } from '@/store/chat-store'
+
+const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
+
+const toReasoningMarkdown = (input: string) =>
+  input
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trimEnd()
+      if (trimmed.length === 0) return '>'
+      return trimmed.startsWith('>') ? trimmed : `> ${trimmed}`
+    })
+    .join('\n')
 
 interface MessageBubbleProps {
-  message: Message
+  meta: MessageMeta
+  body: MessageBody
+  renderCache?: MessageRenderCacheEntry
   isStreaming?: boolean
 }
 
-function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
+function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: MessageBubbleProps) {
   const [isCopied, setIsCopied] = useState(false)
   const [showReasoning, setShowReasoning] = useState(() => {
-    if (typeof message.reasoningStatus === 'string') {
-      return message.reasoningStatus !== 'done'
+    if (meta.role !== 'assistant') return false
+    if (typeof meta.reasoningStatus === 'string') {
+      return meta.reasoningStatus !== 'done'
     }
-    return Boolean(message.reasoning && message.reasoning.trim().length > 0)
+    return Boolean(body.reasoning && body.reasoning.trim().length > 0)
   })
   const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
+  const [isRendering, setIsRendering] = useState(false)
+  const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const { toast } = useToast()
 
-  useEffect(() => {
-    if (
-      message.role === 'assistant' &&
-      (message.reasoningStatus === 'idle' || message.reasoningStatus === 'streaming') &&
-      !showReasoning &&
-      !reasoningManuallyToggled
-    ) {
-      setShowReasoning(true)
-    }
-  }, [message.reasoningStatus, message.role, showReasoning, reasoningManuallyToggled])
-
-  const handleCopy = async () => {
-    try {
-      await copyToClipboard(message.content)
-      setIsCopied(true)
-      toast({
-        title: "已复制",
-        description: "消息内容已复制到剪贴板",
-        duration: 2000,
-      })
-
-      setTimeout(() => setIsCopied(false), 2000)
-    } catch (error) {
-      toast({
-        title: "复制失败",
-        description: "无法复制消息内容",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const isUser = message.role === 'user'
-  // 若助手消息仅包含代码块（一个或多个）而无其它文本，则去除外层气泡的底色与边框，避免出现“双层黑底”。
-  const content = (message.content || '').trim()
-  const reasoningRaw = message.reasoning || ''
+  const isUser = meta.role === 'user'
+  const content = body.content || ''
+  const reasoningRaw = body.reasoning || ''
   const reasoningText = reasoningRaw.trim()
   const outsideText = content.replace(/```[\s\S]*?```/g, '').trim()
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
   const hasContent = content.length > 0
-  const shouldShowStreamingPlaceholder = isStreaming && !hasContent
-  const hasReasoningState = typeof message.reasoningStatus === 'string'
+  const shouldShowStreamingPlaceholder = isStreaming && !hasContent && meta.role === 'assistant'
+  const hasReasoningState = typeof meta.reasoningStatus === 'string'
   const shouldShowReasoningSection =
     !isUser &&
     (reasoningText.length > 0 ||
-      (hasReasoningState && message.reasoningStatus !== 'done') ||
-      (isStreaming && message.role === 'assistant' && hasReasoningState))
+      (hasReasoningState && meta.reasoningStatus !== 'done') ||
+      (isStreaming && meta.role === 'assistant' && hasReasoningState))
+
+  const cacheMatches =
+    renderCache &&
+    renderCache.contentVersion === body.version &&
+    renderCache.reasoningVersion === body.reasoningVersion
+  const contentHtml = cacheMatches ? renderCache?.contentHtml ?? '' : ''
+  const reasoningHtml =
+    cacheMatches && renderCache?.reasoningHtml && reasoningText.length > 0
+      ? renderCache.reasoningHtml
+      : ''
 
   useEffect(() => {
-    if (!hasReasoningState && reasoningText.length === 0) {
+    if (
+      !hasReasoningState &&
+      reasoningText.length === 0
+    ) {
       setReasoningManuallyToggled(false)
       setShowReasoning(false)
     }
   }, [hasReasoningState, reasoningText.length])
-  const reasoningTitle = (() => {
-    if (message.reasoningDurationSeconds && !isStreaming) {
-      return `思维过程 · 用时 ${message.reasoningDurationSeconds}s`
+
+  useEffect(() => {
+    if (meta.role === 'assistant' && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming') && !showReasoning && !reasoningManuallyToggled) {
+      setShowReasoning(true)
     }
-    if (message.reasoningStatus === 'idle') {
-      return '思维过程 · 正在思考'
+  }, [meta.reasoningStatus, meta.role, showReasoning, reasoningManuallyToggled])
+
+  useEffect(() => {
+    if (isUser) return
+    if (!body.content && !body.reasoning) return
+    if (body.version === 0 && body.reasoningVersion === 0) return
+    if (cacheMatches) return
+
+    let cancelled = false
+    const delay = isStreaming ? 160 : 40
+    const timer = window.setTimeout(() => {
+      setIsRendering(true)
+      const reasoningMarkdown =
+        body.reasoning && body.reasoning.trim().length > 0 ? toReasoningMarkdown(body.reasoning) : ''
+      requestMarkdownRender({
+        messageId: meta.id,
+        content: body.content,
+        reasoning: reasoningMarkdown,
+        contentVersion: body.version,
+        reasoningVersion: body.reasoningVersion,
+      })
+        .then((result) => {
+          if (cancelled) return
+          applyRenderedContent(meta.id, result)
+        })
+        .catch((error) => {
+          if (process.env.NODE_ENV !== 'production') {
+            // eslint-disable-next-line no-console
+            console.warn('[MessageBubble] Markdown render failed', error)
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsRendering(false)
+          }
+        })
+    }, delay)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
     }
-    if (message.reasoningStatus === 'streaming') {
-      return '思维过程 · 输出中'
+  }, [
+    applyRenderedContent,
+    body.content,
+    body.reasoning,
+    body.reasoningVersion,
+    body.version,
+    cacheMatches,
+    isStreaming,
+    isUser,
+    meta.id,
+  ])
+
+  const handleCopy = async () => {
+    try {
+      await copyToClipboard(content)
+      setIsCopied(true)
+      toast({
+        title: '已复制',
+        description: '消息内容已复制到剪贴板',
+        duration: 2000,
+      })
+      setTimeout(() => setIsCopied(false), 2000)
+    } catch (error) {
+      toast({
+        title: '复制失败',
+        description: '无法复制消息内容',
+        variant: 'destructive',
+      })
     }
-    return '思维过程'
-  })()
+  }
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-      {/* 头像 */}
       <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
         <AvatarImage src={undefined} />
         <AvatarFallback className={isUser ? 'text-muted-foreground' : 'text-muted-foreground'}>
@@ -102,20 +166,23 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
         </AvatarFallback>
       </Avatar>
 
-      {/* 消息内容 */}
       <div className={`flex-1 min-w-0 max-w-full lg:max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
         <div
-          className={`inline-block max-w-full box-border rounded-lg ${isUser ? 'px-4 py-3' : (isCodeOnly ? 'p-0' : 'px-4 py-3')} ${
+          className={`inline-block max-w-full box-border rounded-lg ${
+            isUser ? 'px-4 py-3' : isCodeOnly ? 'p-0' : 'px-4 py-3'
+          } ${
             isUser
               ? 'bg-muted text-foreground ml-auto'
-              : (isCodeOnly ? 'bg-transparent border-0 text-foreground' : 'bg-background border text-foreground')
+              : isCodeOnly
+              ? 'bg-transparent border-0 text-foreground'
+              : 'bg-background border text-foreground'
           }`}
         >
           {isUser ? (
             <div className="text-left">
-              {message.images && message.images.length > 0 && (
+              {meta.images && meta.images.length > 0 && (
                 <div className="mb-2 grid grid-cols-2 gap-2">
-                  {message.images.map((src, i) => (
+                  {meta.images.map((src, i) => (
                     <Image
                       key={i}
                       src={src}
@@ -128,11 +195,10 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
                   ))}
                 </div>
               )}
-              <p className="whitespace-pre-wrap text-left">{message.content}</p>
+              <p className="whitespace-pre-wrap text-left">{content}</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {/* 推理折叠块：在助手流式阶段始终展示，便于实时查看思维链 */}
               {shouldShowReasoningSection && (
                 <div className="border rounded bg-background/60">
                   <button
@@ -144,24 +210,41 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
                     }}
                     title="思维过程（可折叠）"
                   >
-                    <span>{reasoningTitle}</span>
+                    <span>
+                      {meta.reasoningStatus === 'idle'
+                        ? '思维过程 · 正在思考'
+                        : meta.reasoningStatus === 'streaming'
+                        ? '思维过程 · 输出中'
+                        : meta.reasoningDurationSeconds && !isStreaming
+                        ? `思维过程 · 用时 ${meta.reasoningDurationSeconds}s`
+                        : '思维过程'}
+                    </span>
                     <span className="ml-2">{showReasoning ? '▼' : '▶'}</span>
                   </button>
                   {showReasoning && (
                     <div className="px-3 pb-2">
-                      {message.reasoningStatus === 'idle' && (
+                      {meta.reasoningStatus === 'idle' && (
                         <div className="text-xs text-muted-foreground mb-1">
                           模型正在思考…
-                          {typeof message.reasoningIdleMs === 'number' && message.reasoningIdleMs > 0
-                            ? `（静默 ${Math.round(message.reasoningIdleMs / 1000)}s）`
+                          {typeof meta.reasoningIdleMs === 'number' && meta.reasoningIdleMs > 0
+                            ? `（静默 ${Math.round(meta.reasoningIdleMs / 1000)}s）`
                             : null}
                         </div>
                       )}
                       {reasoningText ? (
-                        <pre className="whitespace-pre-wrap text-xs text-muted-foreground">{reasoningRaw.split('\n').map(l => l.startsWith('>') ? l : `> ${l}`).join('\n')}</pre>
+                        reasoningHtml ? (
+                          <div
+                            className="markdown-body markdown-body--reasoning text-xs text-muted-foreground"
+                            dangerouslySetInnerHTML={{ __html: reasoningHtml }}
+                          />
+                        ) : (
+                          <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
+                            {reasoningRaw}
+                          </pre>
+                        )
                       ) : (
                         <div className="text-xs text-muted-foreground">
-                          {message.reasoningStatus === 'streaming' ? '推理内容接收中…' : '正在思考中…'}
+                          {meta.reasoningStatus === 'streaming' ? '推理内容接收中…' : '正在思考中…'}
                         </div>
                       )}
                     </div>
@@ -178,13 +261,17 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
                   <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
                 </div>
               ) : (
-                <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
+                <MarkdownRenderer
+                  html={contentHtml}
+                  fallback={content}
+                  isStreaming={isStreaming}
+                  isRendering={isRendering}
+                />
               )}
             </div>
           )}
         </div>
 
-        {/* 消息操作按钮 */}
         {!isUser && (
           <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
             <Button
@@ -194,33 +281,15 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
               onClick={handleCopy}
               title="复制消息"
             >
-              {isCopied ? (
-                <div className="h-3 w-3 bg-green-500 rounded" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
+              {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
             </Button>
-
-            {/* TODO: 实现重新生成功能 */}
-            {/* <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              title="重新生成"
-              disabled
-            >
-              <RotateCcw className="h-3 w-3" />
-            </Button> */}
-
-            <span className="ml-2">
-              {formatDate(message.createdAt)}
-            </span>
+            <span className="ml-2">{formatDate(meta.createdAt)}</span>
           </div>
         )}
 
         {isUser && (
           <div className="text-xs text-muted-foreground mt-2">
-            {formatDate(message.createdAt)}
+            {formatDate(meta.createdAt)}
           </div>
         )}
       </div>
@@ -228,30 +297,4 @@ function MessageBubbleComponent({ message, isStreaming }: MessageBubbleProps) {
   )
 }
 
-export const MessageBubble = memo(
-  MessageBubbleComponent,
-  (prev, next) => {
-    const prevMsg = prev.message
-    const nextMsg = next.message
-    const sameBasic =
-      prevMsg.id === nextMsg.id &&
-      prevMsg.role === nextMsg.role &&
-      prevMsg.content === nextMsg.content &&
-      prevMsg.reasoning === nextMsg.reasoning &&
-      prevMsg.reasoningDurationSeconds === nextMsg.reasoningDurationSeconds &&
-      prevMsg.reasoningStatus === nextMsg.reasoningStatus &&
-      prevMsg.reasoningIdleMs === nextMsg.reasoningIdleMs &&
-      prevMsg.createdAt === nextMsg.createdAt
-    const prevImages = prevMsg.images || []
-    const nextImages = nextMsg.images || []
-    const sameImages =
-      prevImages.length === nextImages.length &&
-      prevImages.every((img, idx) => img === nextImages[idx])
-
-    return (
-      prev.isStreaming === next.isStreaming &&
-      sameBasic &&
-      sameImages
-    )
-  }
-)
+export const MessageBubble = memo(MessageBubbleComponent)

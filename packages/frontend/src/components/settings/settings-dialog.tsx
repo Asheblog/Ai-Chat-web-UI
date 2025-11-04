@@ -41,22 +41,20 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   const denialNotifiedRef = useRef(false)
 
   const filteredTree = useMemo<SettingsNavItem[]>(() => {
-    return settingsNav
-      .map((item) => {
-        if (item.adminOnly && !isAdmin) return null
-        if (item.requiresAuth && !isAuthenticated) return null
-        const children = (item.children || []).filter((child) => {
-          if (child.adminOnly && !isAdmin) return false
-          if (child.requiresAuth && !isAuthenticated) return false
-          return true
-        })
-        return { ...item, children }
+    return settingsNav.reduce<SettingsNavItem[]>((acc, item) => {
+      if (item.adminOnly && !isAdmin) return acc
+      if (item.requiresAuth && !isAuthenticated) return acc
+      const children = (item.children || []).filter((child) => {
+        if (child.adminOnly && !isAdmin) return false
+        if (child.requiresAuth && !isAuthenticated) return false
+        return true
       })
-      .filter((item): item is SettingsNavItem => {
-        if (!item) return false
-        if (!item.children || item.children.length > 0) return true
-        return false
-      })
+      if (children.length === 0 && (item.children?.length ?? 0) > 0) {
+        return acc
+      }
+      acc.push({ ...item, children })
+      return acc
+    }, [])
   }, [isAdmin, isAuthenticated])
 
   useEffect(() => {

@@ -365,8 +365,8 @@ class ApiClient {
   }
 
   // 非流式接口：失败退避策略同上
-  async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string }) {
-    const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any }>>('/chat/completion', { sessionId, content, images, ...(options||{}) })
+  async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string }): Promise<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>> {
+    const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>>('/chat/completion', { sessionId, content, images, ...(options||{}) })
     try {
       let res = await doOnce()
       if (res.status === 429) {
@@ -420,8 +420,11 @@ class ApiClient {
         stream_delta_chunk_size?: number;
         openai_reasoning_effort?: 'low' | 'medium' | 'high',
         ollama_think?: boolean,
-        chat_image_retention_days?: number,
+        chat_image_retention_days?: number | string,
         site_base_url?: string,
+        anonymous_retention_days?: number | string,
+        anonymous_daily_quota?: number | string,
+        default_user_daily_quota?: number | string,
       }>>('/settings/system')
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
     const brandText = settingsRes.data.data?.brand_text || 'AIChat'

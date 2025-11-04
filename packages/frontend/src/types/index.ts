@@ -98,6 +98,35 @@ export interface Message {
   images?: string[];
 }
 
+export interface MessageMeta {
+  id: number | string;
+  sessionId: number;
+  role: 'user' | 'assistant';
+  createdAt: string;
+  clientMessageId?: string | null;
+  reasoningStatus?: 'idle' | 'streaming' | 'done';
+  reasoningDurationSeconds?: number | null;
+  reasoningIdleMs?: number | null;
+  images?: string[];
+  isPlaceholder?: boolean;
+}
+
+export interface MessageBody {
+  id: number | string;
+  content: string;
+  reasoning?: string | null;
+  version: number;
+  reasoningVersion: number;
+}
+
+export interface MessageRenderCacheEntry {
+  contentHtml: string | null;
+  reasoningHtml: string | null;
+  contentVersion: number;
+  reasoningVersion: number;
+  updatedAt: number;
+}
+
 export interface CreateMessageRequest {
   sessionId: number;
   content: string;
@@ -143,7 +172,9 @@ export interface SystemSettings {
 export interface ChatState {
   currentSession: ChatSession | null;
   sessions: ChatSession[];
-  messages: Message[];
+  messageMetas: MessageMeta[];
+  messageBodies: Record<string, MessageBody>;
+  messageRenderCache: Record<string, MessageRenderCacheEntry>;
   isLoading: boolean;
   isStreaming: boolean;
   error: string | null;
@@ -183,7 +214,7 @@ export interface ApiResponse<T = any> {
 
 // 流式响应类型
 export interface ChatStreamChunk {
-  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning';
+  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning' | 'quota';
   content?: string;
   usage?: UsageStats;
   done?: boolean;

@@ -26,7 +26,9 @@ export function useChatComposer() {
 
   const {
     currentSession,
-    messages,
+    messageMetas,
+    messageBodies,
+    messageRenderCache,
     isLoading,
     isStreaming,
     streamMessage,
@@ -89,7 +91,7 @@ export function useChatComposer() {
     if (scrollElement) {
       scrollElement.scrollTop = scrollElement.scrollHeight
     }
-  }, [messages])
+  }, [messageMetas.length])
 
   useEffect(() => {
     if (!textareaRef.current || isStreaming) return
@@ -274,7 +276,9 @@ export function useChatComposer() {
     effort,
     ollamaThink,
     noSaveThisRound,
-    messages,
+    messageMetas,
+    messageBodies,
+    messageRenderCache,
     isLoading,
     isStreaming,
     currentSession,
