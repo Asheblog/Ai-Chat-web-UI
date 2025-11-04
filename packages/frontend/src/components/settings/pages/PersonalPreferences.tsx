@@ -2,10 +2,11 @@
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { useSettingsStore } from "@/store/settings-store"
 
 export function PersonalPreferencesPage(){
-  const { theme, setTheme, maxTokens, setMaxTokens } = useSettingsStore()
+  const { theme, setTheme, maxTokens, setMaxTokens, contextEnabled, setContextEnabled } = useSettingsStore()
   return (
     <div className="p-4 space-y-6">
       <div className="text-base font-medium">偏好设置</div>
@@ -28,6 +29,13 @@ export function PersonalPreferencesPage(){
           <div className="mt-2">
             <Input id="maxTokens" className="w-48" type="number" min="1000" max="32000" step="1000" value={maxTokens} onChange={e=>setMaxTokens(parseInt(e.target.value)||4000)} />
             <p className="text-sm text-muted-foreground mt-1">更大值提供更多上下文但消耗更多资源</p>
+          </div>
+        </div>
+        <div>
+          <Label className="font-medium">上下文开关</Label>
+          <div className="mt-2 flex items-center space-x-3">
+            <Switch checked={contextEnabled} onCheckedChange={(v)=>setContextEnabled(!!v)} />
+            <span className="text-sm text-muted-foreground">{contextEnabled ? '已开启，会保留历史消息。' : '已关闭，仅发送当前消息。'}</span>
           </div>
         </div>
       </div>

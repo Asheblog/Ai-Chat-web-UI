@@ -22,6 +22,35 @@ const parseIntSafe = (input: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+let cachedContextLimit: { value: number; expiresAt: number } | null = null
+
+export const getSystemContextTokenLimit = async (): Promise<number> => {
+  const now = Date.now()
+  if (cachedContextLimit && cachedContextLimit.expiresAt > now) {
+    return cachedContextLimit.value
+  }
+
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: 'max_context_tokens' },
+    select: { value: true },
+  })
+
+  const envDefault = process.env.DEFAULT_CONTEXT_TOKEN_LIMIT
+  const parsedValue = parseIntSafe(setting?.value ?? envDefault, 4000)
+  const value = Math.max(parsedValue, 0)
+
+  cachedContextLimit = {
+    value,
+    expiresAt: now + CACHE_TTL_MS,
+  }
+
+  return value
+}
+
+export const invalidateSystemContextTokenLimitCache = () => {
+  cachedContextLimit = null
+}
+
 export const getQuotaPolicy = async (): Promise<SystemQuotaPolicy> => {
   const now = Date.now()
   if (cachedPolicy && cachedPolicy.expiresAt > now) {
@@ -75,4 +104,3 @@ export const getQuotaPolicy = async (): Promise<SystemQuotaPolicy> => {
 export const invalidateQuotaPolicyCache = () => {
   cachedPolicy = null
 }
-

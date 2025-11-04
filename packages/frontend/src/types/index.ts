@@ -167,6 +167,7 @@ export interface AuthState {
 export interface SettingsState {
   theme: 'light' | 'dark' | 'system';
   maxTokens: number;
+  contextEnabled: boolean;
   systemSettings: SystemSettings | null;
   isLoading: boolean;
   error: string | null;

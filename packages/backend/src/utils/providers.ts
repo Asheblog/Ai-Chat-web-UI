@@ -1,4 +1,5 @@
 import fetch from 'node-fetch'
+import type { Response } from 'node-fetch'
 import { BackendLogger as log } from './logger'
 
 export type ProviderType = 'openai' | 'azure_openai' | 'ollama' | 'google_genai'
@@ -148,6 +149,32 @@ export async function buildHeaders(provider: ProviderType, authType: AuthType, a
   return h
 }
 
+const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
+
+const ensureJsonContentType = (res: Response, context: string) => {
+  const contentType = res.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(`${context}: expected JSON response, received '${contentType || 'unknown'}'`)
+  }
+}
+
+const normalizeOpenAIBaseUrl = (baseUrl: string): string => {
+  const trimmed = trimTrailingSlashes(baseUrl || '')
+  let parsed: URL
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    throw new Error('OpenAI baseUrl 无效，请提供合法的 https://api.openai.com/v1 格式 URL')
+  }
+  const pathname = trimTrailingSlashes(parsed.pathname || '')
+  if (!/\/v\d+$/i.test(pathname)) {
+    throw new Error(
+      `OpenAI baseUrl 必须包含 API 版本路径（例如 https://api.openai.com/v1），当前为: ${trimmed}`
+    )
+  }
+  return trimmed
+}
+
 export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
   const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
   const timeoutMs = 15000
@@ -155,18 +182,25 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     if (cfg.provider === 'openai') {
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
+      const normalizedBase = normalizeOpenAIBaseUrl(cfg.baseUrl)
+      const res = await fetch(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`OpenAI verify failed: ${res.status}`)
+      ensureJsonContentType(res, 'OpenAI verify')
     } else if (cfg.provider === 'azure_openai') {
       const v = cfg.azureApiVersion || '2024-02-15-preview'
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
+      const base = trimTrailingSlashes(cfg.baseUrl)
+      const res = await fetch(`${base}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Azure OpenAI verify failed: ${res.status}`)
+      ensureJsonContentType(res, 'Azure OpenAI verify')
     } else if (cfg.provider === 'ollama') {
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/api/version`, { headers, signal: ctrl.signal })
+      const base = trimTrailingSlashes(cfg.baseUrl)
+      const res = await fetch(`${base}/api/version`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Ollama verify failed: ${res.status}`)
     } else if (cfg.provider === 'google_genai') {
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
+      const base = trimTrailingSlashes(cfg.baseUrl)
+      const res = await fetch(`${base}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Google Generative verify failed: ${res.status}`)
+      ensureJsonContentType(res, 'Google Generative AI verify')
     } else {
       throw new Error('Unsupported provider')
     }
@@ -209,7 +243,8 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     if (cfg.provider === 'openai') {
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
+      const normalizedBase = normalizeOpenAIBaseUrl(cfg.baseUrl)
+      const res = await fetch(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`OpenAI models failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.data) ? json.data : []

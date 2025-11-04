@@ -3,6 +3,7 @@ import { ChatState, ChatSession, Message } from '@/types'
 import { apiClient } from '@/lib/api'
 import type { ModelItem } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
+import { useSettingsStore } from '@/store/settings-store'
 
 interface ChatStore extends ChatState {
   fetchSessions: () => Promise<void>
@@ -323,6 +324,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const resolvedReasoningEnabled =
       options?.reasoningEnabled ?? normalizedReasoningPreference ?? true
     const reasoningDesired = Boolean(resolvedReasoningEnabled)
+    const { contextEnabled } = useSettingsStore.getState()
 
     const assistantPlaceholder: Message = {
       id: Date.now() + 1,
@@ -372,6 +374,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const startLegacyStream = () =>
       apiClient.streamChat(sessionId, content, images, {
         ...(options || {}),
+        contextEnabled,
         clientMessageId: userClientMessageId,
       })
 
@@ -475,6 +478,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       try {
         const resp = await apiClient.chatCompletion(sessionId, content, images, {
           ...(options || {}),
+          contextEnabled,
           clientMessageId: userClientMessageId,
         })
         const finalText = resp?.data?.content || ''

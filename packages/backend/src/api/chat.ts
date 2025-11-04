@@ -23,6 +23,7 @@ import {
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 import { consumeActorQuota, inspectActorQuota, serializeQuotaSnapshot } from '../utils/quota';
 import { cleanupAnonymousSessions } from '../utils/anonymous-cleanup';
+import { resolveContextLimit } from '../utils/context-window';
 
 type ProviderChatCompletionResponse = {
   choices?: Array<{ message?: { content?: string; reasoning_content?: string } | null }>;
@@ -98,6 +99,7 @@ const sendMessageSchema = z.object({
   saveReasoning: z.boolean().optional(),
   // 幂等ID：前端生成的 nonce，用于去重
   clientMessageId: z.string().min(1).max(128).optional(),
+  contextEnabled: z.boolean().optional(),
 });
 
 // 获取会话消息历史
@@ -267,7 +269,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
   try {
     const actor = c.get('actor') as Actor;
     const userId = actor.type === 'user' ? actor.id : null;
-    const { sessionId, content, images } = c.req.valid('json');
+    const payload = c.req.valid('json') as any;
+    const { sessionId, content, images } = payload;
 
     await logTraffic({
       category: 'client-request',
@@ -310,7 +313,6 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
     await extendAnonymousSession(actor, sessionId)
 
-    const payload = c.req.valid('json') as any
     const clientMessageIdInput = typeof payload?.clientMessageId === 'string' ? payload.clientMessageId.trim() : ''
     const clientMessageId = clientMessageIdInput || null
     const now = new Date()
@@ -398,44 +400,45 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       });
     }
 
-    // 获取用户上下文token限制
-    const defaultLimit = parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000');
-    let contextTokenLimit = defaultLimit;
-
-    // 这里可以从用户设置中获取个性化限制，暂时使用默认值
-    // TODO: 实现用户个性化设置功能
-
-    // 获取历史消息并构建上下文
-    const recentMessages = await prisma.message.findMany({
-      where: { sessionId },
-      select: {
-        role: true,
-        content: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50, // 最多获取50条历史消息
+    const contextEnabled = payload?.contextEnabled !== false;
+    const contextLimit = await resolveContextLimit({
+      connectionId: session.connectionId,
+      rawModelId: session.modelRawId,
+      provider: session.connection.provider,
     });
 
-    // 构建对话历史（不包括刚保存的用户消息）
-    const conversationHistory = recentMessages
-      .filter((msg: { role: string; content: string }) => msg.role !== 'user' || msg.content !== content)
-      .reverse(); // 按时间正序
+    let truncatedContext: Array<{ role: string; content: string }>;
 
-    // 添加当前用户消息
-    const fullConversation = [
-      ...conversationHistory,
-      { role: 'user', content },
-    ];
+    if (contextEnabled) {
+      const recentMessages = await prisma.message.findMany({
+        where: { sessionId },
+        select: {
+          role: true,
+          content: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
 
-    // 使用tokenizer截断上下文
-    const truncatedContext = await Tokenizer.truncateMessages(
-      fullConversation,
-      contextTokenLimit
-    );
+      const conversationHistory = recentMessages
+        .filter((msg: { role: string; content: string }) => msg.role !== 'user' || msg.content !== content)
+        .reverse();
+
+      const fullConversation = [
+        ...conversationHistory,
+        { role: 'user', content },
+      ];
+
+      truncatedContext = await Tokenizer.truncateMessages(
+        fullConversation,
+        contextLimit,
+      );
+    } else {
+      truncatedContext = [{ role: 'user', content }];
+    }
 
     // 统计上下文使用量（估算）
     const promptTokens = await Tokenizer.countConversationTokens(truncatedContext);
-    const contextLimit = contextTokenLimit;
     const contextRemaining = Math.max(0, contextLimit - promptTokens);
 
     // 解密API Key（仅 bearer 时需要）
@@ -515,9 +518,9 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     cleanupExpiredChatImages(Number.isFinite(retentionDaysParsed) ? retentionDaysParsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS).catch((error) => {
       console.warn('[chat] cleanupExpiredChatImages', error)
     })
-    const reqReasoningEnabled = (c.req.valid('json') as any).reasoningEnabled
-    const reqReasoningEffort = (c.req.valid('json') as any).reasoningEffort
-    const reqOllamaThink = (c.req.valid('json') as any).ollamaThink
+    const reqReasoningEnabled = payload.reasoningEnabled
+    const reqReasoningEffort = payload.reasoningEffort
+    const reqOllamaThink = payload.ollamaThink
 
     const effectiveReasoningEnabled = typeof reqReasoningEnabled === 'boolean'
       ? reqReasoningEnabled
@@ -1051,7 +1054,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                     sessionId,
                     role: 'assistant',
                     content: aiResponseContent.trim(),
-                    ...(REASONING_ENABLED && (typeof (c.req.valid('json') as any)?.saveReasoning === 'boolean' ? (c.req.valid('json') as any).saveReasoning : REASONING_SAVE_TO_DB) && reasoningBuffer.trim()
+                    ...(REASONING_ENABLED && (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) && reasoningBuffer.trim()
                       ? { reasoning: reasoningBuffer.trim(), reasoningDurationSeconds }
                       : {}),
                   },
@@ -1203,7 +1206,8 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
   try {
     const actor = c.get('actor') as Actor
     const userId = actor.type === 'user' ? actor.id : null
-    const { sessionId, content, images } = c.req.valid('json')
+    const payload = c.req.valid('json') as any
+    const { sessionId, content, images } = payload
 
     await logTraffic({
       category: 'client-request',
@@ -1237,7 +1241,6 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
 
     await extendAnonymousSession(actor, sessionId)
 
-    const payload = c.req.valid('json') as any
     const clientMessageIdInput = typeof payload?.clientMessageId === 'string' ? payload.clientMessageId.trim() : ''
     const clientMessageId = clientMessageIdInput || null
     const now = new Date()
@@ -1322,16 +1325,28 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
       })
     }
 
-    // 构建历史上下文
-    const defaultLimit = parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000');
-    const recent = await prisma.message.findMany({
-      where: { sessionId },
-      select: { role: true, content: true },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+    const contextEnabled = payload?.contextEnabled !== false;
+    const contextLimit = await resolveContextLimit({
+      connectionId: session.connectionId,
+      rawModelId: session.modelRawId,
+      provider: session.connection.provider,
     });
-    const conversation = recent.reverse();
-    const truncated = await Tokenizer.truncateMessages(conversation.concat([{ role: 'user', content }]), defaultLimit);
+
+    let truncated: Array<{ role: string; content: string }>;
+    if (contextEnabled) {
+      const recent = await prisma.message.findMany({
+        where: { sessionId },
+        select: { role: true, content: true },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+      const conversation = recent
+        .filter((msg: { role: string; content: string }) => msg.role !== 'user' || msg.content !== content)
+        .reverse();
+      truncated = await Tokenizer.truncateMessages(conversation.concat([{ role: 'user', content }]), contextLimit);
+    } else {
+      truncated = [{ role: 'user', content }];
+    }
     const promptTokens = await Tokenizer.countConversationTokens(truncated);
 
     const decryptedApiKey = session.connection.authType === 'bearer' && session.connection.apiKey
@@ -1362,10 +1377,9 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
     // 非流式补全请求的超时（毫秒），优先系统设置，其次环境变量，默认 5 分钟
     const providerTimeoutMs = parseInt(settingsMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
     const sess = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })
-    const reqJson = c.req.valid('json') as any
-    const ren = typeof reqJson?.reasoningEnabled === 'boolean' ? reqJson.reasoningEnabled : (sess?.reasoningEnabled ?? ((settingsMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false'))
-    const ref = (reqJson?.reasoningEffort || sess?.reasoningEffort || (settingsMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '')).toString()
-    const otk = typeof reqJson?.ollamaThink === 'boolean' ? reqJson.ollamaThink : ((sess?.ollamaThink ?? ((settingsMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean)
+    const ren = typeof payload?.reasoningEnabled === 'boolean' ? payload.reasoningEnabled : (sess?.reasoningEnabled ?? ((settingsMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false'))
+    const ref = (payload?.reasoningEffort || sess?.reasoningEffort || (settingsMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '')).toString()
+    const otk = typeof payload?.ollamaThink === 'boolean' ? payload.ollamaThink : ((sess?.ollamaThink ?? ((settingsMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean)
     if (ren && ref) body.reasoning_effort = ref
     if (ren && otk) body.think = true
 
@@ -1489,15 +1503,14 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
       prompt_tokens: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? promptTokens) || promptTokens,
       completion_tokens: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
       total_tokens: Number(u?.total_tokens ?? 0) || (promptTokens + (Number(u?.completion_tokens ?? 0) || 0)),
-      context_limit: defaultLimit,
-      context_remaining: Math.max(0, defaultLimit - promptTokens),
+      context_limit: contextLimit,
+      context_remaining: Math.max(0, contextLimit - promptTokens),
     };
 
     let assistantMsgId: number | null = null;
     if (text) {
       const saveFlag = (() => {
-        const reqJson = c.req.valid('json') as any
-        if (typeof reqJson?.saveReasoning === 'boolean') return reqJson.saveReasoning
+        if (typeof payload?.saveReasoning === 'boolean') return payload.saveReasoning
         return true
       })()
       try {
@@ -1524,7 +1537,7 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
           promptTokens: usage.prompt_tokens,
           completionTokens: usage.completion_tokens,
           totalTokens: usage.total_tokens,
-          contextLimit: defaultLimit,
+          contextLimit: contextLimit,
         },
       });
     } catch (persistErr) {
@@ -1759,6 +1772,7 @@ chat.get('/usage', actorMiddleware, async (c) => {
           ? { userId: actor.id }
           : { anonymousKey: actor.key }),
       },
+      include: { connection: true },
     });
     if (!session) {
       return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
@@ -1778,7 +1792,11 @@ chat.get('/usage', actorMiddleware, async (c) => {
     }, { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
 
     // 即时上下文占用（估算）
-    const defaultLimit = parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000');
+    const contextLimit = await resolveContextLimit({
+      connectionId: session.connectionId,
+      rawModelId: session.modelRawId,
+      provider: session.connection?.provider,
+    });
     const recentMessages = await prisma.message.findMany({
       where: { sessionId },
       select: { role: true, content: true },
@@ -1789,8 +1807,8 @@ chat.get('/usage', actorMiddleware, async (c) => {
     const used = await Tokenizer.countConversationTokens(conversation as Array<{ role: string; content: string }>);
     const current = {
       prompt_tokens: used,
-      context_limit: defaultLimit,
-      context_remaining: Math.max(0, defaultLimit - used),
+      context_limit: contextLimit,
+      context_remaining: Math.max(0, contextLimit - used),
     };
 
     return c.json<ApiResponse>({

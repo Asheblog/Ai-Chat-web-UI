@@ -169,6 +169,7 @@ model ModelCatalog {
   provider       String
   connectionType String
   tagsJson       String    @default("[]")
+  metaJson       String    @default("{}")
   manualOverride Boolean   @default(false)
   lastFetchedAt  DateTime  @default(now())
   expiresAt      DateTime

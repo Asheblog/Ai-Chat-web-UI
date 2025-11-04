@@ -8,6 +8,7 @@ interface SettingsStore extends SettingsState {
   updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setMaxTokens: (maxTokens: number) => void
+  setContextEnabled: (enabled: boolean) => void
   // UI：侧边栏折叠
   sidebarCollapsed: boolean
   setSidebarCollapsed: (v: boolean) => void
@@ -19,6 +20,7 @@ export const useSettingsStore = create<SettingsStore>()(
     (set, get) => ({
       theme: 'system',
       maxTokens: 4000,
+      contextEnabled: true,
       sidebarCollapsed: false,
       systemSettings: null,
       isLoading: false,
@@ -80,6 +82,10 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ maxTokens })
       },
 
+      setContextEnabled: (enabled: boolean) => {
+        set({ contextEnabled: !!enabled })
+      },
+
       setSidebarCollapsed: (v: boolean) => { set({ sidebarCollapsed: !!v }) },
 
       clearError: () => {
@@ -91,6 +97,7 @@ export const useSettingsStore = create<SettingsStore>()(
       partialize: (state) => ({
         theme: state.theme,
         maxTokens: state.maxTokens,
+        contextEnabled: state.contextEnabled,
         sidebarCollapsed: state.sidebarCollapsed,
       }),
     }
