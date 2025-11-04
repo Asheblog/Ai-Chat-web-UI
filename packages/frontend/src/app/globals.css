@@ -77,28 +77,9 @@
   background: hsl(var(--muted-foreground) / 0.5);
 }
 
-/* 打字机动画光标 */
+/* 打字机动画光标（禁用） */
 .typing-cursor::after {
-  content: '';
-  display: inline-block;
-  width: 2px;
-  height: 1.05em;
-  margin-left: 0.18em;
-  background-color: hsl(var(--primary));
-  border-radius: 9999px;
-  vertical-align: text-bottom;
-  animation: caret-blink 1.1s steps(2, start) infinite;
-}
-
-@keyframes caret-blink {
-  0%,
-  49% {
-    opacity: 1;
-  }
-  50%,
-  100% {
-    opacity: 0;
-  }
+  content: none;
 }
 
 .markdown-body {
