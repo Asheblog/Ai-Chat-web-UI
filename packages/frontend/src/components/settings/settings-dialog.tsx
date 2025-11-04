@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { settingsNav, type SettingsNavItem } from "./nav"
 import { SettingsShellNested } from "./shell-nested"
 import { useAuthStore } from "@/store/auth-store"
@@ -155,6 +155,9 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
       <DialogContent
         className="w-screen h-[100dvh] max-w-none border-0 p-0 shadow-none sm:w-[92vw] sm:h-[82vh] sm:max-h-[85vh] sm:max-w-[1000px] sm:border sm:rounded-2xl sm:shadow-[0_24px_64px_rgba(0,0,0,0.18)] flex flex-col min-h-0 overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       >
+        <DialogHeader className="sr-only">
+          <DialogTitle>设置</DialogTitle>
+        </DialogHeader>
         {filteredTree.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             当前账户没有可用的设置项

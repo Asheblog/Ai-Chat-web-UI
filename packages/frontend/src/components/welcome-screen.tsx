@@ -13,7 +13,7 @@ import { useModelsStore } from '@/store/models-store'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
@@ -407,6 +407,9 @@ export function WelcomeScreen() {
         {/* 全屏编辑弹框 */}
         <Dialog open={expandOpen} onOpenChange={setExpandOpen}>
           <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 sm:rounded-2xl overflow-hidden flex flex-col">
+            <DialogHeader className="sr-only">
+              <DialogTitle>编辑消息</DialogTitle>
+            </DialogHeader>
             <div className="p-4 border-b text-sm text-muted-foreground">编辑消息</div>
             <div className="flex-1 min-h-0 p-4">
               <Textarea

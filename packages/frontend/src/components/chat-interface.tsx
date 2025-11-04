@@ -11,7 +11,7 @@ import { ModelSelector } from '@/components/model-selector'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useChatComposer } from '@/hooks/use-chat-composer'
 import { UserMenu } from '@/components/user-menu'
@@ -403,6 +403,9 @@ export function ChatInterface() {
 
       <Dialog open={expandOpen} onOpenChange={setExpandOpen}>
         <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col">
+          <DialogHeader className="sr-only">
+            <DialogTitle>编辑消息</DialogTitle>
+          </DialogHeader>
           <div className="p-4 border-b rounded-t-2xl text-sm text-muted-foreground">编辑消息</div>
           <div className="flex-1 min-h-0 p-4">
             <Textarea
