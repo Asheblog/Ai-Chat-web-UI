@@ -29,6 +29,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       if (typeof window !== 'undefined' && navigator?.clipboard && (window.isSecureContext ?? true)) {
         await navigator.clipboard.writeText(code)
       } else {
+        if (typeof document === 'undefined') {
+          throw new Error('当前环境不支持剪贴板操作')
+        }
         const ta = document.createElement('textarea')
         ta.value = code
         ta.style.position = 'fixed'

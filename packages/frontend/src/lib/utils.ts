@@ -36,26 +36,30 @@ export function generateSessionTitle(firstMessage: string): string {
 }
 
 export function copyToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
     return navigator.clipboard.writeText(text)
-  } else {
-    // 降级方案
-    const textArea = document.createElement('textarea')
-    textArea.value = text
-    document.body.appendChild(textArea)
-    textArea.focus()
-    textArea.select()
-    return new Promise((resolve, reject) => {
-      try {
-        document.execCommand('copy')
-        document.body.removeChild(textArea)
-        resolve()
-      } catch (err) {
-        document.body.removeChild(textArea)
-        reject(err)
-      }
-    })
   }
+
+  if (typeof document === 'undefined') {
+    return Promise.reject(new Error('无法在当前环境访问剪贴板'))
+  }
+
+  // 降级方案（仅限浏览器环境）
+  const textArea = document.createElement('textarea')
+  textArea.value = text
+  document.body.appendChild(textArea)
+  textArea.focus()
+  textArea.select()
+  return new Promise((resolve, reject) => {
+    try {
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      resolve()
+    } catch (err) {
+      document.body.removeChild(textArea)
+      reject(err)
+    }
+  })
 }
 
 export function truncateText(text: string, maxLength: number): string {
