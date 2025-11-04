@@ -104,6 +104,7 @@ export function WelcomeScreen() {
 
   const canCreate = useMemo(() => !!selectedModelId, [selectedModelId])
   const creationDisabled = !canCreate || isCreating || quotaExhausted
+  const brandText = (systemSettings?.brandText ?? '').trim() || 'AIChat'
   const basePlaceholder = quota
     ? (quotaExhausted ? '额度已用尽，请登录或等待次日重置' : `本日消息发送额度剩余 ${quotaLabel}`)
     : '输入消息（Shift+Enter 换行）'
@@ -427,7 +428,7 @@ export function WelcomeScreen() {
 
         {/* 页脚提示信息 */}
         <p className="mt-8 text-xs sm:text-[13px] text-muted-foreground text-center px-4">
-          AIChat 可能生成不准确或不完整的内容，请自行核实关键信息。
+          {brandText} 可能生成不准确或不完整的内容，请自行核实关键信息。
         </p>
       </div>
     </div>
