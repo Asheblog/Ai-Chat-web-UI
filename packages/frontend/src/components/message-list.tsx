@@ -24,6 +24,35 @@ function MessageListComponent({
   isLoading,
   scrollRootRef,
 }: MessageListProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const root = scrollRootRef?.current
+    if (root) {
+      const viewport = root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null
+      if (viewport && viewport !== scrollElement) {
+        setScrollElement(viewport)
+      }
+    } else if (containerRef.current) {
+      const viewport = containerRef.current.closest(
+        '[data-radix-scroll-area-viewport]'
+      ) as HTMLElement | null
+      if (viewport && viewport !== scrollElement) {
+        setScrollElement(viewport)
+      }
+    }
+  }, [scrollRootRef, metas.length, scrollElement])
+
+  const virtualizer = useVirtualizer({
+    count: metas.length,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => 180,
+    overscan: 8,
+    paddingStart: 0,
+    paddingEnd: 16,
+  })
+
   if (isLoading && metas.length === 0) {
     return (
       <div className="space-y-4">
@@ -49,34 +78,6 @@ function MessageListComponent({
   }
 
   const lastMeta = metas[metas.length - 1]
-
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
-
-  useEffect(() => {
-    const root = scrollRootRef?.current
-    if (root) {
-      const viewport = root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null
-      if (viewport && viewport !== scrollElement) {
-        setScrollElement(viewport)
-      }
-    } else if (containerRef.current) {
-      const viewport = containerRef.current.closest('[data-radix-scroll-area-viewport]') as HTMLElement | null
-      if (viewport && viewport !== scrollElement) {
-        setScrollElement(viewport)
-      }
-    }
-  }, [scrollRootRef, metas.length, scrollElement])
-
-  const virtualizer = useVirtualizer({
-    count: metas.length,
-    getScrollElement: () => scrollElement,
-    estimateSize: () => 180,
-    overscan: 8,
-    paddingStart: 0,
-    paddingEnd: 16,
-  })
-
   const virtualItems = virtualizer.getVirtualItems()
   const virtualSize = virtualizer.getTotalSize()
   const indicatorVisible = isStreaming && (!lastMeta || lastMeta.role !== 'assistant')
