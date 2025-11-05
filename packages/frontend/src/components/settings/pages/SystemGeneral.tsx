@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 import { useSettingsStore } from "@/store/settings-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
@@ -105,12 +106,12 @@ export function SystemGeneralPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <UserPlus className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">用户注册</h3>
-            <p className="text-sm text-muted-foreground">控制新用户的注册和访客访问</p>
+            <CardTitle className="text-lg">用户注册</CardTitle>
+            <CardDescription>控制新用户的注册和访客访问</CardDescription>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
             <div className="font-medium flex items-center gap-2">
               开放用户注册
@@ -118,7 +119,7 @@ export function SystemGeneralPage() {
             </div>
             <div className="text-sm text-muted-foreground mt-1.5">允许新用户自行注册账号，关闭后只能由管理员手动创建用户</div>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 self-start sm:self-auto">
             <Switch
               id="allowRegistration"
               checked={systemSettings.allowRegistration}
@@ -130,14 +131,14 @@ export function SystemGeneralPage() {
               }}
             />
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
             <div className="font-medium">匿名访客每日额度</div>
             <div className="text-sm text-muted-foreground mt-1.5">未登录用户每天可使用的对话次数（设置为 0 表示禁用匿名访问）</div>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
             <Input
               id="anonymousDailyQuota"
               type="number"
@@ -174,14 +175,14 @@ export function SystemGeneralPage() {
               disabled={!isAdmin || syncingAnonymousQuota}
             >{syncingAnonymousQuota ? '同步中...' : '同步'}</Button>
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
             <div className="font-medium">注册用户默认每日额度</div>
             <div className="text-sm text-muted-foreground mt-1.5">新注册用户的初始每日对话额度，可在用户管理中单独调整</div>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
             <Input
               id="defaultUserDailyQuota"
               type="number"
@@ -212,7 +213,7 @@ export function SystemGeneralPage() {
               })()}
             >保存</Button>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* 品牌定制区块 */}
@@ -220,17 +221,17 @@ export function SystemGeneralPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <Palette className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">品牌定制</h3>
-            <p className="text-sm text-muted-foreground">自定义系统的品牌标识和外观</p>
+            <CardTitle className="text-lg">品牌定制</CardTitle>
+            <CardDescription>自定义系统的品牌标识和外观</CardDescription>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
             <div className="font-medium">文字 LOGO</div>
             <div className="text-sm text-muted-foreground mt-1.5">显示在页面顶部的品牌名称，最多 40 个字符</div>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
             <Input
               id="brandText"
               maxLength={40}
@@ -253,14 +254,14 @@ export function SystemGeneralPage() {
               disabled={!isAdmin || brandTextDraft === (systemSettings.brandText||'')}
             >保存</Button>
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
             <div className="font-medium">图片访问域名</div>
             <div className="text-sm text-muted-foreground mt-1.5">用户上传图片的公开访问地址前缀（需包含协议）</div>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
             <Input
               id="chatImageDomain"
               type="text"
@@ -299,7 +300,7 @@ export function SystemGeneralPage() {
               disabled={!isAdmin}
             >刷新</Button>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* 数据保留策略区块 */}
@@ -307,12 +308,12 @@ export function SystemGeneralPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <Clock className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">数据保留策略</h3>
-            <p className="text-sm text-muted-foreground">控制系统数据的自动清理规则</p>
+            <CardTitle className="text-lg">数据保留策略</CardTitle>
+            <CardDescription>控制系统数据的自动清理规则</CardDescription>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
             <div className="font-medium flex items-center gap-2">
               聊天图片保留天数
@@ -320,7 +321,7 @@ export function SystemGeneralPage() {
             </div>
             <div className="text-sm text-muted-foreground mt-1.5">超过此天数的聊天图片将被自动清理（设置为 0 表示永久保留）</div>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
             <Input
               id="chatImageRetentionDays"
               type="number"
@@ -353,14 +354,14 @@ export function SystemGeneralPage() {
               })()}
             >保存</Button>
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
             <div className="font-medium">匿名访客数据保留天数</div>
             <div className="text-sm text-muted-foreground mt-1.5">匿名用户的聊天记录保留时长（设置为 0 表示永久保留）</div>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
             <Input
               id="anonymousRetentionDays"
               type="number"
@@ -392,7 +393,7 @@ export function SystemGeneralPage() {
               })()}
             >保存</Button>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   )

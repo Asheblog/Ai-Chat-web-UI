@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Card, CardTitle, CardDescription } from '@/components/ui/card'
 import { Link2, Edit, Trash2 } from 'lucide-react'
 
 export function SystemConnectionsPage() {
@@ -127,14 +128,14 @@ export function SystemConnectionsPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <Link2 className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">连接配置</h3>
-            <p className="text-sm text-muted-foreground">配置API端点和认证信息</p>
+            <CardTitle className="text-lg">连接配置</CardTitle>
+            <CardDescription>配置API端点和认证信息</CardDescription>
           </div>
         </div>
 
         {error && <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded">{error}</div>}
 
-        <div className="space-y-3 px-5 py-5 rounded-lg border border-border bg-card">
+        <Card className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Provider</Label>
@@ -245,13 +246,13 @@ export function SystemConnectionsPage() {
             <Button onClick={onVerify} variant="outline" disabled={loading} className="w-full sm:w-auto">验证连接</Button>
             {editing && <Button onClick={()=>{ setEditing(null); resetForm() }} variant="ghost" className="w-full sm:w-auto">取消编辑</Button>}
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* 连接列表区块 */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">已配置的连接</h3>
+          <CardTitle className="text-lg">已配置的连接</CardTitle>
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>刷新</Button>
         </div>
 
@@ -276,7 +277,7 @@ export function SystemConnectionsPage() {
           {rows.map((r:any) => {
             const channelLabel = deriveChannelName(r.provider, r.baseUrl)
             return (
-              <div key={r.id} className="px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+              <Card key={r.id} className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 space-y-2">
                     <div className="font-medium text-lg">{channelLabel}</div>
@@ -297,7 +298,7 @@ export function SystemConnectionsPage() {
                     </Button>
                   </div>
                 </div>
-              </div>
+              </Card>
             )
           })}
         </div>

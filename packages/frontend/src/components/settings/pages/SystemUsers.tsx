@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -338,12 +339,12 @@ export function SystemUsersPage(){
         <div className="flex items-center gap-3 pb-3 border-b">
           <Users className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">搜索和筛选</h3>
-            <p className="text-sm text-muted-foreground">按用户名或状态快速查找用户</p>
+            <CardTitle className="text-lg">搜索和筛选</CardTitle>
+            <CardDescription>按用户名或状态快速查找用户</CardDescription>
           </div>
         </div>
 
-        <div className="px-5 py-5 rounded-lg border border-border bg-card">
+        <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
               <Input
@@ -376,7 +377,7 @@ export function SystemUsersPage(){
               <Button variant="outline" onClick={()=>load()} disabled={loading} className="w-full sm:w-auto">刷新</Button>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {error && <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded">{error}</div>}
@@ -384,7 +385,7 @@ export function SystemUsersPage(){
       {/* 用户列表区块 */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">用户列表</h3>
+          <CardTitle className="text-lg">用户列表</CardTitle>
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-border">

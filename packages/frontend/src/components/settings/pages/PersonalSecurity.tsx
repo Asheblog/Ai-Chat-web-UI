@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
+import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 import { apiClient } from "@/lib/api"
 import { Lock, Check } from "lucide-react"
 
@@ -49,13 +50,13 @@ export function PersonalSecurityPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <Lock className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">修改密码</h3>
-            <p className="text-sm text-muted-foreground">定期更新密码以保护账户安全</p>
+            <CardTitle className="text-lg">修改密码</CardTitle>
+            <CardDescription>定期更新密码以保护账户安全</CardDescription>
           </div>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-3 max-w-2xl">
-          <div className="px-5 py-5 rounded-lg border border-border bg-card">
+          <Card className="px-4 py-4 sm:px-5 sm:py-5">
             <Label htmlFor="currentPassword" className="font-medium">当前密码</Label>
             <Input
               id="currentPassword"
@@ -67,9 +68,9 @@ export function PersonalSecurityPage() {
               className="mt-2"
               placeholder="请输入当前密码"
             />
-          </div>
+          </Card>
 
-          <div className="px-5 py-5 rounded-lg border border-border bg-card">
+          <Card className="px-4 py-4 sm:px-5 sm:py-5">
             <Label htmlFor="newPassword" className="font-medium">新密码</Label>
             <Input
               id="newPassword"
@@ -82,9 +83,9 @@ export function PersonalSecurityPage() {
               placeholder="至少8位，且包含字母与数字"
             />
             <p className="text-xs text-muted-foreground mt-2">密码强度要求：至少 8 位，包含字母与数字</p>
-          </div>
+          </Card>
 
-          <div className="px-5 py-5 rounded-lg border border-border bg-card">
+          <Card className="px-4 py-4 sm:px-5 sm:py-5">
             <Label htmlFor="confirmPassword" className="font-medium">确认新密码</Label>
             <Input
               id="confirmPassword"
@@ -96,7 +97,7 @@ export function PersonalSecurityPage() {
               className="mt-2"
               placeholder="再次输入新密码"
             />
-          </div>
+          </Card>
 
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 px-4 py-3 rounded-lg border border-destructive/20">

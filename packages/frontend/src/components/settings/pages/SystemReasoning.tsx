@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 import { useSettingsStore } from "@/store/settings-store"
 import { Brain } from "lucide-react"
 
@@ -67,46 +68,46 @@ export function SystemReasoningPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <Brain className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">推理链配置</h3>
-            <p className="text-sm text-muted-foreground">控制思维过程的识别、展示和存储</p>
+            <CardTitle className="text-lg">推理链配置</CardTitle>
+            <CardDescription>控制思维过程的识别、展示和存储</CardDescription>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
-            <div className="font-medium">启用推理链</div>
-            <div className="text-sm text-muted-foreground mt-1.5">识别 reasoning_content 与常见 CoT 标签，并在 UI 折叠显示</div>
+            <CardTitle className="text-lg">启用推理链</CardTitle>
+            <CardDescription>识别 reasoning_content 与常见 CoT 标签，并在 UI 折叠显示</CardDescription>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 self-start sm:self-auto">
             <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v)=>setReasoningEnabled(!!v)} />
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
-            <div className="font-medium">默认展开</div>
-            <div className="text-sm text-muted-foreground mt-1.5">仅影响默认展示，用户可手动折叠/展开</div>
+            <CardTitle className="text-lg">默认展开</CardTitle>
+            <CardDescription>仅影响默认展示，用户可手动折叠/展开</CardDescription>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 self-start sm:self-auto">
             <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v)=>setReasoningDefaultExpand(!!v)} />
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
-            <div className="font-medium">保存到数据库</div>
-            <div className="text-sm text-muted-foreground mt-1.5">可能包含中间推断过程，请按需开启</div>
+            <CardTitle className="text-lg">保存到数据库</CardTitle>
+            <CardDescription>可能包含中间推断过程，请按需开启</CardDescription>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 self-start sm:self-auto">
             <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v)=>setReasoningSaveToDb(!!v)} />
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
-            <div className="font-medium">标签模式</div>
-            <div className="text-sm text-muted-foreground mt-1.5">默认包含 &lt;think&gt; / &lt;|begin_of_thought|&gt; 等常见标签</div>
+            <CardTitle className="text-lg">标签模式</CardTitle>
+            <CardDescription>默认包含 &lt;think&gt; / &lt;|begin_of_thought|&gt; 等常见标签</CardDescription>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
             <Select value={reasoningTagsMode} onValueChange={(v)=>setReasoningTagsMode(v as any)}>
               <SelectTrigger className="w-36"><SelectValue placeholder="选择模式" /></SelectTrigger>
               <SelectContent>
@@ -119,24 +120,24 @@ export function SystemReasoningPage() {
               <Input placeholder='["<think>","</think>"]' value={reasoningCustomTags} onChange={(e)=>setReasoningCustomTags(e.target.value)} className="w-64 font-mono text-xs" />
             )}
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
-            <div className="font-medium">流式增量聚合（分片大小）</div>
-            <div className="text-sm text-muted-foreground mt-1.5">越大则刷新更平滑但延迟稍增</div>
+            <CardTitle className="text-lg">流式增量聚合（分片大小）</CardTitle>
+            <CardDescription>越大则刷新更平滑但延迟稍增</CardDescription>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 self-start sm:self-auto">
             <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-24 text-right" />
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
-            <div className="font-medium">OpenAI reasoning_effort</div>
-            <div className="text-sm text-muted-foreground mt-1.5">仅对支持该参数的模型生效</div>
+            <CardTitle className="text-lg">OpenAI reasoning_effort</CardTitle>
+            <CardDescription>仅对支持该参数的模型生效</CardDescription>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 self-start sm:self-auto">
             <Select value={openaiReasoningEffort} onValueChange={(v)=>setOpenaiReasoningEffort(v as any)}>
               <SelectTrigger className="w-36"><SelectValue placeholder="不设置" /></SelectTrigger>
               <SelectContent>
@@ -147,17 +148,17 @@ export function SystemReasoningPage() {
               </SelectContent>
             </Select>
           </div>
-        </div>
+        </Card>
 
-        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex-1">
-            <div className="font-medium">Ollama think</div>
-            <div className="text-sm text-muted-foreground mt-1.5">上游为 Ollama 时按需启用</div>
+            <CardTitle className="text-lg">Ollama think</CardTitle>
+            <CardDescription>上游为 Ollama 时按需启用</CardDescription>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 self-start sm:self-auto">
             <Switch id="ollamaThink" checked={ollamaThink} onCheckedChange={(v)=>setOllamaThink(!!v)} />
           </div>
-        </div>
+        </Card>
 
         <div className="flex justify-end pt-4">
           <Button onClick={handleSave} disabled={isLoading}>保存设置</Button>

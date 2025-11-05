@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Card, CardTitle, CardDescription } from '@/components/ui/card'
 import { useModelsStore } from '@/store/models-store'
 import { apiClient } from '@/lib/api'
 import { Cpu, MoreVertical } from 'lucide-react'
@@ -98,12 +99,12 @@ export function SystemModelsPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <Cpu className="w-5 h-5 text-primary" />
           <div>
-            <h3 className="text-lg font-semibold">搜索和筛选</h3>
-            <p className="text-sm text-muted-foreground">为模型开启/关闭能力标签：图片理解、文件上传、联网搜索、图像生成、代码解释器</p>
+            <CardTitle className="text-lg">搜索和筛选</CardTitle>
+            <CardDescription>为模型开启/关闭能力标签：图片理解、文件上传、联网搜索、图像生成、代码解释器</CardDescription>
           </div>
         </div>
 
-        <div className="px-5 py-5 rounded-lg border border-border bg-card">
+        <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Input className="w-full sm:w-64" placeholder="搜索模型/提供方..." value={q} onChange={(e)=>setQ(e.target.value)} />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -165,13 +166,13 @@ export function SystemModelsPage() {
             <span className="inline-flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-muted border"></i>未开启</span>
             <span className="ml-auto">小提示：开关仅影响前端可用功能；若模型原生不支持，对应功能不会生效</span>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* 模型列表区块 */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">模型列表 ({list.length})</h3>
+          <CardTitle className="text-lg">模型列表 ({list.length})</CardTitle>
         </div>
 
         {isLoading && list.length===0 && (<div className="text-sm text-muted-foreground text-center py-6">加载中...</div>)}
