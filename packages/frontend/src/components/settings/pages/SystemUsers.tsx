@@ -472,7 +472,7 @@ export function SystemUsersPage(){
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm px-3 sm:px-4">
         <div className="text-muted-foreground">第 {pagination.page} / {pagination.totalPages} 页</div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
