@@ -12,6 +12,7 @@ export function TitleSync() {
   const actorState = useAuthStore((state) => state.actorState)
   const fetchActor = useAuthStore((state) => state.fetchActor)
   const hasRequested = useRef(false)
+  const lastBrandRef = useRef<string>('')
 
   useEffect(() => {
     if (actorState === 'loading') {
@@ -25,15 +26,23 @@ export function TitleSync() {
       hasRequested.current = false
       return
     }
-    if (!hasRequested.current && !brandText) {
+    const effectiveBrand = (brandText ?? '').trim() || lastBrandRef.current
+    if (!hasRequested.current && !effectiveBrand) {
       hasRequested.current = true
       fetchSystemSettings().catch(() => {})
     }
   }, [actorState, brandText, fetchSystemSettings])
 
   useEffect(() => {
+    const trimmed = (brandText ?? '').trim()
+    if (trimmed) {
+      lastBrandRef.current = trimmed
+    }
+  }, [brandText])
+
+  useEffect(() => {
     if (typeof document === 'undefined') return
-    const nextTitle = brandText?.trim() || DEFAULT_TITLE
+    const nextTitle = (brandText ?? '').trim() || lastBrandRef.current || DEFAULT_TITLE
     if (document.title !== nextTitle) {
       document.title = nextTitle
     }

@@ -15,6 +15,20 @@ interface SettingsStore extends SettingsState {
   clearError: () => void
 }
 
+const pickBrandText = (incoming?: string, current?: string) => {
+  const normalizedIncoming = typeof incoming === 'string' ? incoming.trim() : ''
+  if (normalizedIncoming) return incoming
+  const normalizedCurrent = typeof current === 'string' ? current.trim() : ''
+  if (normalizedCurrent) return current
+  return incoming ?? current ?? undefined
+}
+
+const mergeSystemSettings = (current: SystemSettings | null, incoming: SystemSettings): SystemSettings => ({
+  ...(current ?? {}),
+  ...incoming,
+  brandText: pickBrandText(incoming.brandText, current?.brandText),
+})
+
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => ({
@@ -30,8 +44,10 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ isLoading: true, error: null })
         try {
           const response = await apiClient.getSystemSettings()
+          const prevSettings = get().systemSettings
+          const merged = mergeSystemSettings(prevSettings, response.data)
           set({
-            systemSettings: response.data,
+            systemSettings: merged,
             isLoading: false,
           })
         } catch (error: any) {
@@ -46,7 +62,8 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ isLoading: true, error: null })
         try {
           const response = await apiClient.updateSystemSettings(settings)
-          const updatedSettings = response.data
+          const prevSettings = get().systemSettings
+          const updatedSettings = mergeSystemSettings(prevSettings, response.data)
 
           set({
             systemSettings: updatedSettings,

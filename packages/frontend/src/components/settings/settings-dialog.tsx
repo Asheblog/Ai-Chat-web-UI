@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { settingsNav, type SettingsNavItem } from "./nav"
 import { SettingsShellNested } from "./shell-nested"
 import { useAuthStore } from "@/store/auth-store"
@@ -157,6 +157,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
       >
         <DialogHeader className="sr-only">
           <DialogTitle>设置</DialogTitle>
+          <DialogDescription>管理系统与个人配置项</DialogDescription>
         </DialogHeader>
         {filteredTree.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
