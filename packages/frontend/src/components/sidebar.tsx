@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Plus, Settings, Trash2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
@@ -26,6 +27,7 @@ import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
+import { sessionItemVariants, sessionListVariants } from '@/lib/animations'
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -256,48 +258,59 @@ export function Sidebar() {
             </div>
           )}
 
-          {sessions.map((session) => (
-            <div
-              key={session.id}
-              className={cn(
-                "group relative flex items-center justify-between rounded-lg p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
-                currentSession?.id === session.id && "bg-slate-100 dark:bg-slate-800"
-              )}
-              onClick={() => handleSessionClick(session.id)}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium" title={session.title}>
-                  {clipTitle(session.title, 15)}
-                </p>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(session.createdAt)}
-                  </p>
-                  {sessionUsageTotalsMap?.[session.id] && (
-                    <p className="text-[10px] text-muted-foreground whitespace-nowrap">
-                      总计{sessionUsageTotalsMap[session.id].total_tokens}
-                    </p>
+          <motion.div variants={sessionListVariants} initial={false} animate="animate">
+            <AnimatePresence mode="popLayout">
+              {sessions.map((session) => (
+                <motion.div
+                  key={session.id}
+                  variants={sessionItemVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  layout
+                  className={cn(
+                    "group relative flex items-center justify-between rounded-lg p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
+                    currentSession?.id === session.id && "bg-slate-100 dark:bg-slate-800"
                   )}
-                </div>
-              </div>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 sm:h-6 sm:w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
-                      onClick={(e) => requestDeleteSession(session.id, e)}
-                      aria-label="删除会话"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>删除会话</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          ))}
+                  onClick={() => handleSessionClick(session.id)}
+                  whileHover={{ x: 4 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium" title={session.title}>
+                      {clipTitle(session.title, 15)}
+                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(session.createdAt)}
+                      </p>
+                      {sessionUsageTotalsMap?.[session.id] && (
+                        <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          总计{sessionUsageTotalsMap[session.id].total_tokens}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 sm:h-6 sm:w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                          onClick={(e) => requestDeleteSession(session.id, e)}
+                          aria-label="删除会话"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>删除会话</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
         </div>
       </ScrollArea>
 

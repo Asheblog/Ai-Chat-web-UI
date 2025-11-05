@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { Send, Square, ImagePlus, X, Plus, Maximize2, Brain } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -18,6 +19,7 @@ import { UserMenu } from '@/components/user-menu'
 import { useAuthStore } from '@/store/auth-store'
 import { useChatStore } from '@/store/chat-store'
 import { persistPreferredModel } from '@/store/model-preference-store'
+import { imageUploadVariants, sendButtonVariants } from '@/lib/animations'
 
 const MAX_AUTO_HEIGHT = 200
 
@@ -109,26 +111,37 @@ export function ChatInterface() {
 
   const imagePreview = selectedImages.length > 0 && (
     <div className="mb-2 flex flex-wrap gap-2">
-      {selectedImages.map((img, idx) => (
-        <div key={idx} className="relative border rounded p-1">
-          <Image
-            src={img.dataUrl}
-            alt={`预览图片 ${idx + 1}`}
-            width={80}
-            height={80}
-            unoptimized
-            className="h-20 w-20 object-contain rounded"
-          />
-          <button
-            type="button"
-            className="absolute -top-2 -right-2 bg-background border rounded-full p-1"
-            onClick={() => removeImage(idx)}
-            aria-label="移除图片"
+      <AnimatePresence mode="popLayout">
+        {selectedImages.map((img, idx) => (
+          <motion.div
+            key={`${img.dataUrl}-${idx}`}
+            variants={imageUploadVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            whileHover="hover"
+            className="relative border rounded p-1"
+            layout
           >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      ))}
+            <Image
+              src={img.dataUrl}
+              alt={`预览图片 ${idx + 1}`}
+              width={80}
+              height={80}
+              unoptimized
+              className="h-20 w-20 object-contain rounded"
+            />
+            <button
+              type="button"
+              className="absolute -top-2 -right-2 bg-background border rounded-full p-1 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+              onClick={() => removeImage(idx)}
+              aria-label="移除图片"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   )
 
@@ -208,23 +221,30 @@ export function ChatInterface() {
                   />
                 </div>
 
-                <Button
-                  type="button"
-                  className={`h-12 w-12 shrink-0 rounded-full ${
-                    isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
-                  }`}
-                  onClick={() => {
-                    if (isStreaming) {
-                      handleStop()
-                    } else {
-                      handleSend()
-                    }
-                  }}
-                  disabled={isStreaming ? false : (!input.trim() && selectedImages.length === 0)}
-                  aria-label={isStreaming ? '停止' : '发送'}
+                <motion.div
+                  variants={sendButtonVariants}
+                  animate={isStreaming ? 'sending' : 'idle'}
+                  whileHover={!isStreaming ? 'hover' : undefined}
+                  whileTap={!isStreaming ? 'tap' : undefined}
                 >
-                  {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
-                </Button>
+                  <Button
+                    type="button"
+                    className={`h-12 w-12 shrink-0 rounded-full ${
+                      isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
+                    }`}
+                    onClick={() => {
+                      if (isStreaming) {
+                        handleStop()
+                      } else {
+                        handleSend()
+                      }
+                    }}
+                    disabled={isStreaming ? false : (!input.trim() && selectedImages.length === 0)}
+                    aria-label={isStreaming ? '停止' : '发送'}
+                  >
+                    {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+                  </Button>
+                </motion.div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -370,7 +390,7 @@ export function ChatInterface() {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
+                    <motion.button
                       onClick={isStreaming ? handleStop : handleSend}
                       disabled={desktopSendDisabled}
                       aria-label={isStreaming ? '停止生成' : '发送'}
@@ -379,9 +399,13 @@ export function ChatInterface() {
                           ? 'bg-destructive text-destructive-foreground hover:opacity-90'
                           : 'bg-primary text-primary-foreground hover:opacity-90'
                       }`}
+                      variants={sendButtonVariants}
+                      animate={isStreaming ? 'sending' : 'idle'}
+                      whileHover={!isStreaming ? 'hover' : undefined}
+                      whileTap={!isStreaming ? 'tap' : undefined}
                     >
                       {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
-                    </button>
+                    </motion.button>
                   </TooltipTrigger>
                   <TooltipContent>{isStreaming ? '停止生成' : '发送'}</TooltipContent>
                 </Tooltip>
