@@ -34,7 +34,7 @@ const systemSettingSchema = z.object({
   // 服务端流分片大小（可选）
   stream_delta_chunk_size: z.number().int().min(1).max(100).optional(),
   // 供应商参数（可选）
-  openai_reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
+  openai_reasoning_effort: z.enum(['low', 'medium', 'high', 'unset']).optional(),
   ollama_think: z.boolean().optional(),
   chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
   site_base_url: z.string().max(200).optional(),
@@ -280,11 +280,15 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
     }
 
     if (typeof openai_reasoning_effort === 'string') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'openai_reasoning_effort' },
-        update: { value: openai_reasoning_effort },
-        create: { key: 'openai_reasoning_effort', value: openai_reasoning_effort },
-      });
+      if (openai_reasoning_effort === 'unset') {
+        await prisma.systemSetting.deleteMany({ where: { key: 'openai_reasoning_effort' } });
+      } else {
+        await prisma.systemSetting.upsert({
+          where: { key: 'openai_reasoning_effort' },
+          update: { value: openai_reasoning_effort },
+          create: { key: 'openai_reasoning_effort', value: openai_reasoning_effort },
+        });
+      }
     }
 
     if (typeof ollama_think === 'boolean') {

@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { requestMarkdownRender } from '@/lib/markdown-worker-client'
 import { useChatStore } from '@/store/chat-store'
+import { useSettingsStore } from '@/store/settings-store'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
 
@@ -33,13 +34,23 @@ interface MessageBubbleProps {
 
 function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: MessageBubbleProps) {
   const [isCopied, setIsCopied] = useState(false)
-  const [showReasoning, setShowReasoning] = useState(() => {
+  const reasoningRaw = body.reasoning || ''
+  const reasoningText = reasoningRaw.trim()
+  const reasoningDefaultExpand = useSettingsStore(
+    (state) => Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
+  )
+  const defaultShouldShow = useMemo(() => {
     if (meta.role !== 'assistant') return false
     if (typeof meta.reasoningStatus === 'string') {
-      return meta.reasoningStatus !== 'done'
+      if (meta.reasoningStatus === 'done') {
+        return reasoningDefaultExpand && reasoningText.length > 0
+      }
+      return true
     }
-    return Boolean(body.reasoning && body.reasoning.trim().length > 0)
-  })
+    if (reasoningText.length === 0) return false
+    return reasoningDefaultExpand
+  }, [meta.role, meta.reasoningStatus, reasoningDefaultExpand, reasoningText.length])
+  const [showReasoning, setShowReasoning] = useState(defaultShouldShow)
   const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
@@ -47,8 +58,6 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
 
   const isUser = meta.role === 'user'
   const content = body.content || ''
-  const reasoningRaw = body.reasoning || ''
-  const reasoningText = reasoningRaw.trim()
   const outsideText = content.replace(/```[\s\S]*?```/g, '').trim()
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
   const hasContent = content.length > 0
@@ -69,6 +78,11 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
     cacheMatches && renderCache?.reasoningHtml && reasoningText.length > 0
       ? renderCache.reasoningHtml
       : ''
+
+  useEffect(() => {
+    if (reasoningManuallyToggled) return
+    setShowReasoning(defaultShouldShow)
+  }, [defaultShouldShow, reasoningManuallyToggled])
 
   useEffect(() => {
     if (

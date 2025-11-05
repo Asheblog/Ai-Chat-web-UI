@@ -52,7 +52,7 @@ export function SystemReasoningPage() {
       reasoningTagsMode,
       reasoningCustomTags,
       streamDeltaChunkSize,
-      openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : '',
+      openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : 'unset',
       ollamaThink,
     } as any)
   }
