@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
@@ -11,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { apiClient } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
 import type { ActorQuota } from "@/types"
+import { Users } from "lucide-react"
 
 type UserRow = {
   id: number
@@ -329,119 +331,145 @@ export function SystemUsersPage(){
   const pagination = useMemo(() => ({ page, limit, totalPages }), [page, limit, totalPages])
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-base font-medium">用户管理</div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-            <Input
-              placeholder="搜索用户名"
-              value={searchDraft}
-              onChange={(e)=>setSearchDraft(e.target.value)}
-              className="w-full sm:w-56"
-              onKeyDown={(e)=>{ if(e.key==='Enter') onSearch() }}
-            />
-            <Button variant="outline" onClick={onSearch} disabled={loading} className="w-full sm:w-auto">搜索</Button>
-            {search && (
-              <Button variant="ghost" onClick={onClearSearch} disabled={loading} className="w-full sm:w-auto">
-                清空
-              </Button>
-            )}
+    <div className="space-y-6">
+
+      {/* 搜索筛选工具区块 */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <Users className="w-5 h-5 text-primary" />
+          <div>
+            <h3 className="text-lg font-semibold">搜索和筛选</h3>
+            <p className="text-sm text-muted-foreground">按用户名或状态快速查找用户</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground whitespace-nowrap">状态</Label>
-            <select
-              className="border rounded px-2 py-1 text-sm"
-              value={statusFilter}
-              onChange={(e)=>handleStatusFilterChange(e.target.value as StatusFilter)}
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+        </div>
+
+        <div className="px-5 py-5 rounded-lg border border-border bg-card">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+              <Input
+                placeholder="搜索用户名"
+                value={searchDraft}
+                onChange={(e)=>setSearchDraft(e.target.value)}
+                className="w-full sm:w-56"
+                onKeyDown={(e)=>{ if(e.key==='Enter') onSearch() }}
+              />
+              <Button variant="outline" onClick={onSearch} disabled={loading} className="w-full sm:w-auto">搜索</Button>
+              {search && (
+                <Button variant="ghost" onClick={onClearSearch} disabled={loading} className="w-full sm:w-auto">
+                  清空
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm text-muted-foreground whitespace-nowrap">状态</Label>
+                <select
+                  className="border rounded px-2 py-1 text-sm"
+                  value={statusFilter}
+                  onChange={(e)=>handleStatusFilterChange(e.target.value as StatusFilter)}
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <Button variant="outline" onClick={()=>load()} disabled={loading} className="w-full sm:w-auto">刷新</Button>
+            </div>
           </div>
-          <Button variant="outline" onClick={()=>load()} disabled={loading} className="w-full sm:w-auto">刷新</Button>
         </div>
       </div>
 
-      {error && <div className="text-sm text-destructive">{error}</div>}
+      {error && <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded">{error}</div>}
 
-      <div className="border rounded overflow-x-auto">
-        <Table className="min-w-[600px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-center whitespace-nowrap w-[120px]">用户名</TableHead>
-              <TableHead className="text-center whitespace-nowrap w-[120px]">角色</TableHead>
-              <TableHead className="text-center whitespace-nowrap w-[120px]">状态</TableHead>
-              <TableHead className="text-center whitespace-nowrap w-[140px]">创建时间</TableHead>
-              <TableHead className="text-center whitespace-nowrap w-[320px]">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && rows.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">加载中...</TableCell></TableRow>
-            )}
-            {!loading && rows.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">暂无数据</TableCell></TableRow>
-            )}
-            {rows.map((r) => {
-              const statusInfo = STATUS_META[r.status]
-              const statusTitle = r.status === 'DISABLED'
-                ? (r.rejectionReason ? `禁用原因：${r.rejectionReason}` : '账户已被禁用')
-                : r.status === 'PENDING'
-                  ? '等待管理员审批'
-                  : '账户已启用'
-              const isActionBusy = actionUserId === r.id || loading
-              return (
-                <TableRow key={r.id}>
-                  <TableCell className="text-center whitespace-nowrap">{r.username}</TableCell>
-                  <TableCell className="text-center whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs border ${r.role==='ADMIN' ? 'bg-amber-100/30 border-amber-300 text-amber-700' : 'bg-muted/40 border-muted-foreground/20 text-muted-foreground'}`}>{r.role}</span>
-                  </TableCell>
-                  <TableCell className="text-center whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs border ${statusInfo.className}`}
-                      title={statusTitle}
-                    >
-                      {statusInfo.label}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center whitespace-nowrap">
-                    <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground min-w-[120px]">
-                      <span>{formatTimestamp(r.createdAt)}</span>
-                      {r.approvedAt && <span>批：{formatTimestamp(r.approvedAt)}</span>}
-                      {!r.approvedAt && r.rejectedAt && <span>禁：{formatTimestamp(r.rejectedAt)}</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 max-w-[320px] mx-auto">
-                      <Button size="sm" variant="outline" onClick={()=>openQuotaDialog(r)} disabled={quotaSubmitting || isActionBusy} className="px-3 py-2 text-sm w-full">调整额度</Button>
+      {/* 用户列表区块 */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">用户列表</h3>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table className="min-w-[720px]">
+            <TableHeader className="sticky top-0 z-30 bg-muted/50 shadow-sm">
+              <TableRow>
+                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[120px] bg-muted/50">用户名</TableHead>
+                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">角色</TableHead>
+                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">状态</TableHead>
+                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[140px] bg-muted/50">创建时间</TableHead>
+                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-auto bg-muted/50">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading && rows.length === 0 && (
+                <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">加载中...</TableCell></TableRow>
+              )}
+              {!loading && rows.length === 0 && (
+                <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">暂无数据</TableCell></TableRow>
+              )}
+              {rows.map((r) => {
+                const statusTitle = r.status === 'DISABLED'
+                  ? (r.rejectionReason ? `禁用原因：${r.rejectionReason}` : '账户已被禁用')
+                  : r.status === 'PENDING'
+                    ? '等待管理员审批'
+                    : '账户已启用'
+                const isActionBusy = actionUserId === r.id || loading
+                return (
+                  <TableRow key={r.id} className="hover:bg-muted/30 transition-colors">
+                    <TableCell className="text-center whitespace-nowrap">{r.username}</TableCell>
+                    <TableCell className="text-center whitespace-nowrap">
+                      {r.role === 'ADMIN' ? (
+                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">ADMIN</Badge>
+                      ) : (
+                        <Badge variant="outline">USER</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center whitespace-nowrap">
                       {r.status === 'PENDING' && (
-                        <>
-                          <Button size="sm" variant="outline" onClick={()=>approveUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">审批通过</Button>
-                          <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('REJECT', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">拒绝</Button>
-                        </>
+                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" title={statusTitle}>待审批</Badge>
                       )}
                       {r.status === 'ACTIVE' && (
-                        <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('DISABLE', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">禁用</Button>
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" title={statusTitle}>已启用</Badge>
                       )}
                       {r.status === 'DISABLED' && (
-                        <Button size="sm" variant="outline" onClick={()=>enableUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">启用</Button>
+                        <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" title={statusTitle}>已禁用</Badge>
                       )}
-                      {r.role !== 'ADMIN' && (
-                        <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'ADMIN')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为管理员</Button>
-                      )}
-                      {r.role !== 'USER' && (
-                        <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'USER')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为用户</Button>
-                      )}
-                      <Button size="sm" variant="destructive" onClick={()=>deleteUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">删除</Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+                    </TableCell>
+                    <TableCell className="text-center whitespace-nowrap">
+                      <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground min-w-[120px]">
+                        <span>{formatTimestamp(r.createdAt)}</span>
+                        {r.approvedAt && <span>批：{formatTimestamp(r.approvedAt)}</span>}
+                        {!r.approvedAt && r.rejectedAt && <span>禁：{formatTimestamp(r.rejectedAt)}</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 max-w-[320px] mx-auto">
+                        <Button size="sm" variant="outline" onClick={()=>openQuotaDialog(r)} disabled={quotaSubmitting || isActionBusy} className="px-3 py-2 text-sm w-full">调整额度</Button>
+                        {r.status === 'PENDING' && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={()=>approveUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">审批通过</Button>
+                            <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('REJECT', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">拒绝</Button>
+                          </>
+                        )}
+                        {r.status === 'ACTIVE' && (
+                          <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('DISABLE', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">禁用</Button>
+                        )}
+                        {r.status === 'DISABLED' && (
+                          <Button size="sm" variant="outline" onClick={()=>enableUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">启用</Button>
+                        )}
+                        {r.role !== 'ADMIN' && (
+                          <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'ADMIN')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为管理员</Button>
+                        )}
+                        {r.role !== 'USER' && (
+                          <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'USER')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为用户</Button>
+                        )}
+                        <Button size="sm" variant="destructive" onClick={()=>deleteUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">删除</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">

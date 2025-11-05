@@ -153,7 +153,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="w-screen h-[100dvh] max-w-none border-0 p-0 shadow-none sm:w-[92vw] sm:h-[82vh] sm:max-h-[85vh] sm:max-w-[1000px] sm:border sm:rounded-2xl sm:shadow-[0_24px_64px_rgba(0,0,0,0.18)] flex flex-col min-h-0 overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+        className="w-screen h-[100dvh] max-w-none border-0 p-0 shadow-none sm:w-[92vw] sm:h-[82vh] sm:max-h-[85vh] sm:max-w-[1000px] sm:border sm:rounded-2xl sm:shadow-2xl flex flex-col min-h-0 overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] animate-in fade-in-0 zoom-in-95 duration-200"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>设置</DialogTitle>

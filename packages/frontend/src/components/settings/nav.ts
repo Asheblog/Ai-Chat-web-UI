@@ -1,6 +1,9 @@
+import { ReactNode } from "react"
+
 export type SettingsNavItem = {
   key: string
   label: string
+  icon?: ReactNode
   adminOnly?: boolean
   requiresAuth?: boolean
   children?: SettingsNavItem[]

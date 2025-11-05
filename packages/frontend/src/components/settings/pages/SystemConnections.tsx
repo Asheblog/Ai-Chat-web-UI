@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Link2, Edit, Trash2 } from 'lucide-react'
 
 export function SystemConnectionsPage() {
   const [rows, setRows] = useState<any[]>([])
@@ -119,13 +120,21 @@ export function SystemConnectionsPage() {
   }
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-base font-medium">连接管理（系统）</div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="w-full sm:w-auto">刷新</Button>
-      </div>
-      {error && <div className="text-sm text-destructive">{error}</div>}
-      <div className="space-y-3 bg-muted/30 p-3 rounded">
+    <div className="space-y-6">
+
+      {/* 连接表单区块 */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <Link2 className="w-5 h-5 text-primary" />
+          <div>
+            <h3 className="text-lg font-semibold">连接配置</h3>
+            <p className="text-sm text-muted-foreground">配置API端点和认证信息</p>
+          </div>
+        </div>
+
+        {error && <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded">{error}</div>}
+
+        <div className="space-y-3 px-5 py-5 rounded-lg border border-border bg-card">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Provider</Label>
@@ -231,13 +240,22 @@ export function SystemConnectionsPage() {
             <Input value={form.modelIds} onChange={(e)=>setForm((f:any)=>({...f, modelIds:e.target.value }))} placeholder="gpt-4o, gpt-4o-mini" />
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button onClick={onSubmit} disabled={loading} className="w-full sm:w-auto">{editing? '保存' : '新增'}</Button>
-          <Button onClick={onVerify} variant="outline" disabled={loading} className="w-full sm:w-auto">验证连接</Button>
-          {editing && <Button onClick={()=>{ setEditing(null); resetForm() }} variant="ghost" className="w-full sm:w-auto">取消编辑</Button>}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button onClick={onSubmit} disabled={loading} className="w-full sm:w-auto">{editing? '保存' : '新增'}</Button>
+            <Button onClick={onVerify} variant="outline" disabled={loading} className="w-full sm:w-auto">验证连接</Button>
+            {editing && <Button onClick={()=>{ setEditing(null); resetForm() }} variant="ghost" className="w-full sm:w-auto">取消编辑</Button>}
+          </div>
         </div>
       </div>
-      <div className="space-y-2">
+
+      {/* 连接列表区块 */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">已配置的连接</h3>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>刷新</Button>
+        </div>
+
+        <div className="space-y-2">
         {/* 骨架屏 */}
         {loading && rows.length === 0 && (
           <>
@@ -255,22 +273,34 @@ export function SystemConnectionsPage() {
           <div className="text-sm text-muted-foreground text-center py-6">暂无连接，填写上方表单后新增</div>
         )}
 
-        {rows.map((r:any) => {
-          const channelLabel = deriveChannelName(r.provider, r.baseUrl)
-          return (
-            <div key={r.id} className="p-3 border rounded flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <div className="font-medium">渠道商 | {channelLabel}</div>
-                <div className="text-xs text-muted-foreground break-all">{r.baseUrl}</div>
-                <div className="text-xs text-muted-foreground">provider={r.provider} auth={r.authType} prefix={r.prefixId||'-'} type={r.connectionType}</div>
+          {rows.map((r:any) => {
+            const channelLabel = deriveChannelName(r.provider, r.baseUrl)
+            return (
+              <div key={r.id} className="px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-2">
+                    <div className="font-medium text-lg">{channelLabel}</div>
+                    <div className="text-sm text-muted-foreground break-all">{r.baseUrl}</div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Provider: {r.provider}</span>
+                      <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Auth: {r.authType}</span>
+                      {r.prefixId && <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Prefix: {r.prefixId}</span>}
+                      <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Type: {r.connectionType}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={()=>onEdit(r)}>
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={()=>onDelete(r.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button size="sm" variant="outline" onClick={()=>onEdit(r)} className="w-full sm:w-auto">编辑</Button>
-                <Button size="sm" variant="destructive" onClick={()=>onDelete(r.id)} className="w-full sm:w-auto">删除</Button>
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )

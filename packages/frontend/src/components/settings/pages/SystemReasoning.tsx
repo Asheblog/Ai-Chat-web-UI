@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSettingsStore } from "@/store/settings-store"
+import { Brain } from "lucide-react"
 
 export function SystemReasoningPage() {
   const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading } = useSettingsStore()
@@ -59,39 +60,55 @@ export function SystemReasoningPage() {
   if (!systemSettings) return null
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="text-base font-medium">推理链（CoT）</div>
+    <div className="space-y-6">
 
+      {/* 推理链配置区块 */}
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="reasoningEnabled">启用推理链</Label>
-            <p className="text-sm text-muted-foreground">识别 reasoning_content 与常见 CoT 标签，并在 UI 折叠显示。</p>
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <Brain className="w-5 h-5 text-primary" />
+          <div>
+            <h3 className="text-lg font-semibold">推理链配置</h3>
+            <p className="text-sm text-muted-foreground">控制思维过程的识别、展示和存储</p>
           </div>
-          <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v)=>setReasoningEnabled(!!v)} className="self-start sm:self-auto" />
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <div className="font-medium">启用推理链</div>
+            <div className="text-sm text-muted-foreground mt-1.5">识别 reasoning_content 与常见 CoT 标签，并在 UI 折叠显示</div>
+          </div>
+          <div className="shrink-0">
+            <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v)=>setReasoningEnabled(!!v)} />
+          </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="reasoningDefaultExpand">默认展开</Label>
-            <p className="text-sm text-muted-foreground">仅影响默认展示，用户可手动折叠/展开。</p>
+        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <div className="font-medium">默认展开</div>
+            <div className="text-sm text-muted-foreground mt-1.5">仅影响默认展示，用户可手动折叠/展开</div>
           </div>
-          <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v)=>setReasoningDefaultExpand(!!v)} className="self-start sm:self-auto" />
+          <div className="shrink-0">
+            <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v)=>setReasoningDefaultExpand(!!v)} />
+          </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="reasoningSaveToDb">保存到数据库</Label>
-            <p className="text-sm text-muted-foreground">可能包含中间推断过程，请按需开启。</p>
+        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <div className="font-medium">保存到数据库</div>
+            <div className="text-sm text-muted-foreground mt-1.5">可能包含中间推断过程，请按需开启</div>
           </div>
-          <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v)=>setReasoningSaveToDb(!!v)} className="self-start sm:self-auto" />
+          <div className="shrink-0">
+            <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v)=>setReasoningSaveToDb(!!v)} />
+          </div>
         </div>
 
-        <div className="grid gap-2">
-          <Label>标签模式</Label>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <div className="font-medium">标签模式</div>
+            <div className="text-sm text-muted-foreground mt-1.5">默认包含 &lt;think&gt; / &lt;|begin_of_thought|&gt; 等常见标签</div>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
             <Select value={reasoningTagsMode} onValueChange={(v)=>setReasoningTagsMode(v as any)}>
-              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="选择模式" /></SelectTrigger>
+              <SelectTrigger className="w-36"><SelectValue placeholder="选择模式" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="default">默认</SelectItem>
                 <SelectItem value="custom">自定义</SelectItem>
@@ -99,25 +116,29 @@ export function SystemReasoningPage() {
               </SelectContent>
             </Select>
             {reasoningTagsMode === 'custom' && (
-              <Input placeholder='["<think>","</think>"]' value={reasoningCustomTags} onChange={(e)=>setReasoningCustomTags(e.target.value)} className="w-full sm:flex-1" />
+              <Input placeholder='["<think>","</think>"]' value={reasoningCustomTags} onChange={(e)=>setReasoningCustomTags(e.target.value)} className="w-64 font-mono text-xs" />
             )}
           </div>
-          <p className="text-xs text-muted-foreground">默认包含 &lt;think&gt; / &lt;|begin_of_thought|&gt; 等常见标签。</p>
         </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor="deltaSize">流式增量聚合（分片大小）</Label>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-full sm:w-36" />
-            <span className="text-sm text-muted-foreground sm:w-auto">越大则刷新更平滑但延迟稍增</span>
+        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <div className="font-medium">流式增量聚合（分片大小）</div>
+            <div className="text-sm text-muted-foreground mt-1.5">越大则刷新更平滑但延迟稍增</div>
+          </div>
+          <div className="shrink-0">
+            <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-24 text-right" />
           </div>
         </div>
 
-        <div className="grid gap-2">
-          <Label>OpenAI reasoning_effort</Label>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <div className="font-medium">OpenAI reasoning_effort</div>
+            <div className="text-sm text-muted-foreground mt-1.5">仅对支持该参数的模型生效</div>
+          </div>
+          <div className="shrink-0">
             <Select value={openaiReasoningEffort} onValueChange={(v)=>setOpenaiReasoningEffort(v as any)}>
-              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="不设置" /></SelectTrigger>
+              <SelectTrigger className="w-36"><SelectValue placeholder="不设置" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="unset">不设置</SelectItem>
                 <SelectItem value="low">low</SelectItem>
@@ -125,20 +146,21 @@ export function SystemReasoningPage() {
                 <SelectItem value="high">high</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-xs text-muted-foreground sm:w-auto">仅对支持该参数的模型生效</span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="ollamaThink">Ollama think</Label>
-            <p className="text-sm text-muted-foreground">上游为 Ollama 时按需启用。</p>
+        <div className="flex items-center justify-between gap-6 px-5 py-5 rounded-lg border border-border bg-card transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <div className="font-medium">Ollama think</div>
+            <div className="text-sm text-muted-foreground mt-1.5">上游为 Ollama 时按需启用</div>
           </div>
-          <Switch id="ollamaThink" checked={ollamaThink} onCheckedChange={(v)=>setOllamaThink(!!v)} className="self-start sm:self-auto" />
+          <div className="shrink-0">
+            <Switch id="ollamaThink" checked={ollamaThink} onCheckedChange={(v)=>setOllamaThink(!!v)} />
+          </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button onClick={handleSave} disabled={isLoading} className="w-full sm:w-auto">保存</Button>
+        <div className="flex justify-end pt-4">
+          <Button onClick={handleSave} disabled={isLoading}>保存设置</Button>
         </div>
       </div>
     </div>
