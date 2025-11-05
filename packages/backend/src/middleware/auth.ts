@@ -33,11 +33,12 @@ const resolveTokenFromRequest = (c: Context) => {
   return token
 }
 
-const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' | 'USER'; preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null }): UserActor => ({
+const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' | 'USER'; status: 'PENDING' | 'ACTIVE' | 'DISABLED'; preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null }): UserActor => ({
   type: 'user',
   id: payload.id,
   username: payload.username,
   role: payload.role,
+  status: payload.status,
   identifier: `user:${payload.id}`,
   preferredModel: payload.preferredModel ?? null,
 })
@@ -90,15 +91,20 @@ const resolveActor = async (c: Context): Promise<{ actor: Actor | null; status?:
     }
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, username: true, role: true, preferredModelId: true, preferredConnectionId: true, preferredModelRawId: true },
+      select: { id: true, username: true, role: true, status: true, preferredModelId: true, preferredConnectionId: true, preferredModelRawId: true },
     })
     if (!user) {
       return { actor: null, status: 401, error: 'User not found', clearAuth: true }
+    }
+    if (user.status !== 'ACTIVE') {
+      const error = user.status === 'PENDING' ? 'Account pending approval' : 'Account disabled'
+      return { actor: null, status: user.status === 'PENDING' ? 423 : 403, error, clearAuth: true }
     }
     return {
       actor: buildUserActor({
         ...user,
         role: user.role as 'ADMIN' | 'USER',
+        status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
         preferredModel: {
           modelId: user.preferredModelId ?? null,
           connectionId: user.preferredConnectionId ?? null,
@@ -137,6 +143,7 @@ declare module 'hono' {
       id: number;
       username: string;
       role: 'ADMIN' | 'USER';
+      status: 'PENDING' | 'ACTIVE' | 'DISABLED';
     };
   }
 }
@@ -163,6 +170,7 @@ export const actorMiddleware = async (c: Context, next: Next) => {
       id: result.actor.id,
       username: result.actor.username,
       role: result.actor.role,
+      status: result.actor.status,
     })
   }
 

@@ -9,6 +9,7 @@ export interface User {
   username: string;
   role: 'ADMIN' | 'USER';
   createdAt: Date;
+  status: 'PENDING' | 'ACTIVE' | 'DISABLED';
   preferredModel?: ModelPreference | null;
 }
 
@@ -19,6 +20,7 @@ export interface UserActor {
   id: number;
   username: string;
   role: 'ADMIN' | 'USER';
+  status: 'PENDING' | 'ACTIVE' | 'DISABLED';
   identifier: string;
   preferredModel?: ModelPreference | null;
 }
@@ -104,6 +106,16 @@ export interface AuthResponse {
   token: string;
 }
 
+export interface RegisterResponse {
+  user: {
+    id: number;
+    username: string;
+    role: 'ADMIN' | 'USER';
+    status: 'PENDING' | 'ACTIVE' | 'DISABLED';
+  };
+  token?: string;
+}
+
 export type UsageQuotaScope = 'USER' | 'ANON';
 
 export interface UsageQuotaSnapshot {
@@ -137,6 +149,7 @@ export interface ActorContext {
     id: number;
     username: string;
     role: 'ADMIN' | 'USER';
+    status: 'PENDING' | 'ACTIVE' | 'DISABLED';
     createdAt: Date;
   } | null;
   preferredModel?: ModelPreference | null;

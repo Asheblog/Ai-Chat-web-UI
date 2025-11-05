@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const router = useRouter()
   const { register, user, error, clearError } = useAuthStore()
@@ -41,10 +42,18 @@ export default function RegisterPage() {
 
     setIsLoading(true)
     clearError()
+    setSuccessMessage(null)
 
     try {
-      await register(username, password)
-      router.replace('/main')
+      const result = await register(username, password)
+      if (result.token) {
+        router.replace('/main')
+        return
+      }
+      setSuccessMessage('注册申请已提交，请等待管理员审批通知后再登录。')
+      setUsername('')
+      setPassword('')
+      setConfirmPassword('')
     } catch (error) {
       console.error('Registration failed:', error)
     } finally {
@@ -81,6 +90,11 @@ export default function RegisterPage() {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {successMessage && (
+          <div className="text-sm text-emerald-600 bg-emerald-100/60 border border-emerald-200 rounded px-3 py-2">
+            {successMessage}
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="username">用户名</Label>
           <Input

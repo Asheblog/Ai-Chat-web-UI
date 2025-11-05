@@ -4,6 +4,7 @@ export interface User {
   username: string;
   role: 'ADMIN' | 'USER';
   createdAt: string;
+  status: 'PENDING' | 'ACTIVE' | 'DISABLED';
 }
 
 export interface ModelPreferenceDTO {
@@ -15,6 +16,11 @@ export interface ModelPreferenceDTO {
 export interface AuthResponse {
   user: User;
   token: string;
+}
+
+export interface RegisterResponse {
+  user: User;
+  token?: string;
 }
 
 export type ActorQuotaScope = 'USER' | 'ANON';
@@ -43,6 +49,7 @@ export type UserActorProfile = {
   id: number;
   username: string;
   role: 'ADMIN' | 'USER';
+  status: 'PENDING' | 'ACTIVE' | 'DISABLED';
   identifier: string;
   preferredModel?: ModelPreferenceDTO | null;
 };

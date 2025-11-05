@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { zValidator } from '@hono/zod-validator';
 import { prisma } from '../db';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
@@ -20,6 +21,7 @@ const createUserSchema = z.object({
   username: z.string().min(3).max(20),
   password: z.string().min(8),
   role: z.enum(['ADMIN', 'USER']).optional(),
+  status: z.enum(['ACTIVE', 'DISABLED', 'PENDING']).optional(),
 })
 
 const updateUsernameSchema = z.object({
@@ -30,12 +32,48 @@ const resetPasswordSchema = z.object({
   password: z.string().min(8),
 })
 
+const statusUpdateSchema = z.object({
+  status: z.enum(['ACTIVE', 'DISABLED']),
+  reason: z.string().max(200).optional(),
+})
+
+const rejectionSchema = z.object({
+  reason: z.string().max(200).optional(),
+})
+
+const listStatusValues = ['PENDING', 'ACTIVE', 'DISABLED'] as const
+type ListStatus = typeof listStatusValues[number]
+
+const basicUserSelect = {
+  id: true,
+  username: true,
+  role: true,
+  status: true,
+  createdAt: true,
+  approvedAt: true,
+  approvedById: true,
+  rejectedAt: true,
+  rejectedById: true,
+  rejectionReason: true,
+} as const
+
+const userWithCountsSelect = {
+  ...basicUserSelect,
+  _count: {
+    select: {
+      chatSessions: true,
+      connections: true,
+    },
+  },
+} as const
+
 users.post('/', zValidator('json', createUserSchema), async (c) => {
   try {
     const payload = c.req.valid('json');
     const username = payload.username.trim();
     const password = payload.password;
     const role = payload.role ?? 'USER';
+    const status = payload.status ?? 'ACTIVE';
 
     if (!AuthUtils.validateUsername(username)) {
       return c.json<ApiResponse>({
@@ -60,17 +98,29 @@ users.post('/', zValidator('json', createUserSchema), async (c) => {
     }
 
     const hashedPassword = await AuthUtils.hashPassword(password);
+    const now = new Date();
     const newUser = await prisma.user.create({
       data: {
         username,
         hashedPassword,
         role,
+        status,
+        approvedAt: status === 'ACTIVE' ? now : null,
+        approvedById: status === 'ACTIVE' ? c.get('user')?.id ?? null : null,
+        rejectedAt: status === 'DISABLED' ? now : null,
+        rejectedById: status === 'DISABLED' ? c.get('user')?.id ?? null : null,
       },
       select: {
         id: true,
         username: true,
         role: true,
+        status: true,
         createdAt: true,
+        approvedAt: true,
+        approvedById: true,
+        rejectedAt: true,
+        rejectedById: true,
+        rejectionReason: true,
       },
     });
 
@@ -94,28 +144,26 @@ users.get('/', async (c) => {
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '10');
     const search = c.req.query('search');
+    const rawStatus = c.req.query('status');
+    const normalisedStatus = rawStatus ? rawStatus.toUpperCase() : undefined;
+    const statusFilter = normalisedStatus && (listStatusValues as readonly string[]).includes(normalisedStatus)
+      ? (normalisedStatus as ListStatus)
+      : undefined;
 
-    const where = search ? {
-      username: {
+    const where: Prisma.UserWhereInput = {};
+    if (search) {
+      where.username = {
         contains: search,
-      },
-    } : {};
+      };
+    }
+    if (statusFilter) {
+      where.status = statusFilter;
+    }
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
-        select: {
-          id: true,
-          username: true,
-          role: true,
-          createdAt: true,
-          _count: {
-            select: {
-              chatSessions: true,
-              connections: true,
-            },
-          },
-        },
+        select: userWithCountsSelect,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
@@ -159,18 +207,7 @@ users.get('/:id', async (c) => {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        createdAt: true,
-        _count: {
-          select: {
-            chatSessions: true,
-            connections: true,
-          },
-        },
-      },
+      select: userWithCountsSelect,
     });
 
     if (!user) {
@@ -267,7 +304,7 @@ users.put('/:id/username', zValidator('json', updateUsernameSchema), async (c) =
 
     const targetUser = await prisma.user.findUnique({
       where: { id: targetId },
-      select: { id: true, username: true, role: true },
+      select: { id: true, username: true, role: true, status: true },
     });
     if (!targetUser) {
       return c.json<ApiResponse>({ success: false, error: 'User not found' }, 404);
@@ -287,7 +324,9 @@ users.put('/:id/username', zValidator('json', updateUsernameSchema), async (c) =
     const updated = await prisma.user.update({
       where: { id: targetId },
       data: { username: normalized },
-      select: { id: true, username: true, role: true, createdAt: true },
+      select: {
+        ...basicUserSelect,
+      },
     });
 
     return c.json<ApiResponse>({
@@ -337,7 +376,7 @@ users.put('/:id/role', async (c) => {
     // 检查是否是最后一个管理员
     if (role === 'USER') {
       const adminCount = await prisma.user.count({
-        where: { role: 'ADMIN' },
+        where: { role: 'ADMIN', status: 'ACTIVE' },
       });
 
       if (adminCount <= 1) {
@@ -352,10 +391,7 @@ users.put('/:id/role', async (c) => {
       where: { id: userId },
       data: { role },
       select: {
-        id: true,
-        username: true,
-        role: true,
-        createdAt: true,
+        ...basicUserSelect,
       },
     });
 
@@ -370,6 +406,217 @@ users.put('/:id/role', async (c) => {
     return c.json<ApiResponse>({
       success: false,
       error: 'Failed to update user role',
+    }, 500);
+  }
+});
+
+// 审批待注册用户
+users.post('/:id/approve', async (c) => {
+  try {
+    const targetId = parseInt(c.req.param('id'));
+    if (Number.isNaN(targetId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400);
+    }
+
+    const currentUser = c.get('user')!;
+    const pendingUser = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, status: true, role: true },
+    });
+
+    if (!pendingUser) {
+      return c.json<ApiResponse>({ success: false, error: 'User not found' }, 404);
+    }
+    if (pendingUser.status !== 'PENDING') {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Only pending users can be approved',
+      }, 400);
+    }
+
+    const now = new Date();
+    const updated = await prisma.user.update({
+      where: { id: targetId },
+      data: {
+        status: 'ACTIVE',
+        approvedAt: now,
+        approvedById: currentUser.id,
+        rejectedAt: null,
+        rejectedById: null,
+        rejectionReason: null,
+      },
+      select: {
+        ...basicUserSelect,
+      },
+    });
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: updated,
+      message: 'User approved successfully',
+    });
+  } catch (error) {
+    console.error('Approve user error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Failed to approve user',
+    }, 500);
+  }
+});
+
+// 拒绝待注册用户或将用户标记为禁用（保留记录）
+users.post('/:id/reject', zValidator('json', rejectionSchema), async (c) => {
+  try {
+    const targetId = parseInt(c.req.param('id'));
+    if (Number.isNaN(targetId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400);
+    }
+    const { reason } = c.req.valid('json');
+    const trimmedReason = reason ? reason.trim().slice(0, 200) : '';
+    const currentUser = c.get('user')!;
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, status: true, role: true },
+    });
+    if (!targetUser) {
+      return c.json<ApiResponse>({ success: false, error: 'User not found' }, 404);
+    }
+    if (targetUser.status !== 'PENDING') {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Only pending users can be rejected here',
+      }, 400);
+    }
+
+    const now = new Date();
+    const updated = await prisma.user.update({
+      where: { id: targetId },
+      data: {
+        status: 'DISABLED',
+        rejectedAt: now,
+        rejectedById: currentUser.id,
+        rejectionReason: trimmedReason || null,
+      },
+      select: {
+        ...basicUserSelect,
+      },
+    });
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: updated,
+      message: 'User request rejected',
+    });
+  } catch (error) {
+    console.error('Reject user error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Failed to reject user',
+    }, 500);
+  }
+});
+
+// 更新非待审核用户状态（启用/禁用）
+users.post('/:id/status', zValidator('json', statusUpdateSchema), async (c) => {
+  try {
+    const targetId = parseInt(c.req.param('id'));
+    if (Number.isNaN(targetId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400);
+    }
+
+    const { status, reason } = c.req.valid('json');
+    const trimmedReason = reason ? reason.trim().slice(0, 200) : '';
+    const currentUser = c.get('user')!;
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, status: true, role: true },
+    });
+    if (!targetUser) {
+      return c.json<ApiResponse>({ success: false, error: 'User not found' }, 404);
+    }
+
+    if (targetUser.status === 'PENDING') {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'Pending users must be approved or rejected first',
+      }, 400);
+    }
+
+    if (status === targetUser.status) {
+      const unchanged = await prisma.user.findUnique({
+        where: { id: targetId },
+        select: {
+          ...basicUserSelect,
+        },
+      });
+      return c.json<ApiResponse>({
+        success: true,
+        data: unchanged ?? undefined,
+        message: 'User status unchanged',
+      });
+    }
+
+    if (status === 'DISABLED') {
+      if (targetId === currentUser.id) {
+        return c.json<ApiResponse>({
+          success: false,
+          error: 'You cannot disable your own account',
+        }, 400);
+      }
+      if (targetUser.role === 'ADMIN') {
+        const activeAdmins = await prisma.user.count({
+          where: {
+            role: 'ADMIN',
+            status: 'ACTIVE',
+            id: { not: targetId },
+          },
+        });
+        if (activeAdmins < 1) {
+          return c.json<ApiResponse>({
+            success: false,
+            error: 'At least one active admin is required',
+          }, 400);
+        }
+      }
+    }
+
+    const now = new Date();
+    const updateData: Prisma.UserUpdateInput = {
+      status,
+    };
+
+    if (status === 'ACTIVE') {
+      updateData.approvedAt = now;
+      updateData.approvedById = currentUser.id;
+      updateData.rejectedAt = null;
+      updateData.rejectedById = null;
+      updateData.rejectionReason = null;
+    } else {
+      updateData.rejectedAt = now;
+      updateData.rejectedById = currentUser.id;
+      updateData.rejectionReason = trimmedReason || null;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: targetId },
+      data: updateData,
+      select: {
+        ...basicUserSelect,
+      },
+    });
+
+    return c.json<ApiResponse>({
+      success: true,
+      data: updated,
+      message: 'User status updated',
+    });
+  } catch (error) {
+    console.error('Update user status error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Failed to update user status',
     }, 500);
   }
 });
@@ -459,7 +706,7 @@ users.delete('/:id', async (c) => {
     // 检查是否是最后一个管理员
     if (user.role === 'ADMIN') {
       const adminCount = await prisma.user.count({
-        where: { role: 'ADMIN' },
+        where: { role: 'ADMIN', status: 'ACTIVE' },
       });
 
       if (adminCount <= 1) {
@@ -505,7 +752,7 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
 
     const targetUser = await prisma.user.findUnique({
       where: { id: targetId },
-      select: { id: true, username: true, role: true },
+      select: { id: true, username: true, role: true, status: true },
     });
     if (!targetUser) {
       return c.json<ApiResponse>({ success: false, error: 'User not found' }, 404);

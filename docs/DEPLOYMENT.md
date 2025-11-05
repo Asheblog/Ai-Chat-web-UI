@@ -66,25 +66,19 @@ JWT_SECRET=your-super-secret-jwt-key-here
 DEFAULT_ADMIN_USERNAME=your-admin-username
 DEFAULT_ADMIN_PASSWORD=your-secure-password
 
-# 应用模式
-APP_MODE=single  # single | multi
-
 # 其他配置
 DEFAULT_CONTEXT_TOKEN_LIMIT=4000
 CORS_ORIGIN=http://localhost:3000
+
+# 可选项：初始化时关闭注册
+# DEFAULT_REGISTRATION_ENABLED=false
 ```
 
-### 应用模式说明
+### 注册策略
 
-#### 单用户模式 (single)
-- 禁用新用户注册
-- 仅管理员可使用
-- 适合个人使用
-
-#### 多用户模式 (multi)
-- 管理员可控制是否开放注册
-- 支持多个独立用户
-- 适合团队使用
+- 首次启动时默认允许注册，首个用户会自动成为管理员。
+- 管理员可在系统设置 → 通用 中切换“允许注册”开关，关闭后新用户申请将被拒绝。
+- 即使关闭注册，已存在的管理员仍可通过后台审批/创建用户。
 
 ## 🛠️ 管理命令
 

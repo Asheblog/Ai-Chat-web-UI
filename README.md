@@ -30,7 +30,7 @@ services:
       - PORT=8001
       - DATABASE_URL=file:./data/app.db
       - JWT_SECRET=请改成强随机密码 #这里要改
-      - APP_MODE=single
+      - DEFAULT_REGISTRATION_ENABLED=true
       - DEFAULT_CONTEXT_TOKEN_LIMIT=120000 #这里后面大概率就要废弃的
       - ENABLE_CORS=true #不要cors就关了
       - CORS_ORIGIN=http://你的IP或域名:3555
@@ -188,7 +188,7 @@ sequenceDiagram
 
 - 无法拉取镜像：GHCR 包设为 Public，或在服务器 `docker login ghcr.io -u asheblog -p <PAT>`。
 - 跨域报错：确认 `CORS_ORIGIN` 与前端访问地址一致（协议+端口）。
-- 首次注册失败：`APP_MODE=single` 下仅首个用户可注册；多用户改为 `multi` 并在系统设置开启注册。
+- 首次注册失败：请在系统设置「通用」页确认“允许注册”开关已开启；默认情况下首个注册者会成为管理员，其余用户需管理员审批。
 - 图片 URL 指向 localhost：在系统设置「通用」页填写“图片访问域名”并保存，随后点击“刷新图片链接”即可生成新域名样例；如留空则会根据请求头或局域网 IP 自动推断（便于本地调试）。
 
 ---

@@ -16,7 +16,7 @@ services:
       - PORT=8001
       - DATABASE_URL=file:./data/dev.db
       - JWT_SECRET=dev-jwt-secret-key
-      - APP_MODE=single
+      - DEFAULT_REGISTRATION_ENABLED=${DEFAULT_REGISTRATION_ENABLED:-true}
       - DEFAULT_CONTEXT_TOKEN_LIMIT=4000
       - DEFAULT_ADMIN_USERNAME=admin
       - DEFAULT_ADMIN_PASSWORD=admin123456

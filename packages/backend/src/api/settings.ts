@@ -82,7 +82,6 @@ settings.get('/system', actorMiddleware, async (c) => {
     // 转换布尔值
     const formattedSettings = {
       registration_enabled: settingsObj.registration_enabled === 'true',
-      app_mode: settingsObj.app_mode || 'single',
       max_context_tokens: parseInt(settingsObj.max_context_tokens || '4000'),
       brand_text: settingsObj.brand_text || 'AIChat',
       // 流式/稳定性（若DB无配置，则回退到环境变量或默认值）
@@ -474,12 +473,17 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
 // 获取应用信息
 settings.get('/app-info', async (c) => {
   try {
+    const registrationSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'registration_enabled' },
+    });
+    const registrationEnabled = registrationSetting?.value !== 'false';
+
     const appInfo = {
       name: 'AI Chat Platform',
       version: 'v1.1.0',
-      mode: process.env.APP_MODE || 'single',
+      mode: registrationEnabled ? 'multi' : 'restricted',
       features: {
-        registration: process.env.APP_MODE === 'multi',
+        registration: registrationEnabled,
         streaming: true,
         file_upload: false, // 未来功能
         long_term_memory: false, // 未来功能

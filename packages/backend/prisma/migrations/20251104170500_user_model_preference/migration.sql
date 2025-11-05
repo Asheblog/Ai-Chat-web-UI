@@ -1,5 +1,1 @@
--- Add default model preference fields to users table
-ALTER TABLE "users"
-  ADD COLUMN "preferredModelId" TEXT,
-  ADD COLUMN "preferredConnectionId" INTEGER,
-  ADD COLUMN "preferredModelRawId" TEXT;
+-- 迁移留空：用户偏好字段已存在，为避免重复新增导致错误。

@@ -4,7 +4,7 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig
 } from 'axios'
-import type { AuthResponse, User, ApiResponse, ActorContextDTO, ActorQuota } from '@/types'
+import type { AuthResponse, RegisterResponse, User, ApiResponse, ActorContextDTO, ActorQuota } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
@@ -104,8 +104,8 @@ class ApiClient {
     return data
   }
 
-  async register(username: string, password: string): Promise<AuthResponse> {
-    const response = await this.client.post<ApiResponse<AuthResponse>>('/auth/register', {
+  async register(username: string, password: string): Promise<RegisterResponse> {
+    const response = await this.client.post<ApiResponse<RegisterResponse>>('/auth/register', {
       username,
       password,
     })
@@ -547,13 +547,36 @@ class ApiClient {
     return res.data
   }
 
-  async getUsers(params?: { page?: number; limit?: number; search?: string }) {
-    const response = await this.client.get<ApiResponse<{ users: Array<{ id: number; username: string; role: 'ADMIN'|'USER'; createdAt: string; _count?: { chatSessions: number; connections: number } }>; pagination: { page: number; limit: number; total: number; totalPages: number } }>>('/users', { params })
+  async getUsers(params?: { page?: number; limit?: number; search?: string; status?: 'PENDING' | 'ACTIVE' | 'DISABLED' }) {
+    const response = await this.client.get<ApiResponse<{ users: Array<{ id: number; username: string; role: 'ADMIN'|'USER'; status: 'PENDING'|'ACTIVE'|'DISABLED'; createdAt: string; approvedAt: string | null; approvedById: number | null; rejectedAt: string | null; rejectedById: number | null; rejectionReason: string | null; _count?: { chatSessions: number; connections: number } }>; pagination: { page: number; limit: number; total: number; totalPages: number } }>>('/users', { params })
     return response.data
   }
 
   async updateUserRole(userId: number, role: 'ADMIN' | 'USER') {
     const response = await this.client.put(`/users/${userId}/role`, { role })
+    return response.data
+  }
+
+  async approveUser(userId: number) {
+    const response = await this.client.post<ApiResponse<any>>(`/users/${userId}/approve`)
+    return response.data
+  }
+
+  async rejectUser(userId: number, reason?: string) {
+    const payload: { reason?: string } = {}
+    if (reason && reason.trim()) {
+      payload.reason = reason.trim()
+    }
+    const response = await this.client.post<ApiResponse<any>>(`/users/${userId}/reject`, payload)
+    return response.data
+  }
+
+  async updateUserStatus(userId: number, status: 'ACTIVE' | 'DISABLED', reason?: string) {
+    const payload: { status: 'ACTIVE' | 'DISABLED'; reason?: string } = { status }
+    if (reason && reason.trim()) {
+      payload.reason = reason.trim()
+    }
+    const response = await this.client.post<ApiResponse<any>>(`/users/${userId}/status`, payload)
     return response.data
   }
 

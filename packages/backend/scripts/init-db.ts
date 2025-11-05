@@ -43,11 +43,7 @@ async function initSystemSettings() {
   const defaultSettings = [
     {
       key: 'registration_enabled',
-      value: process.env.APP_MODE === 'multi' ? 'true' : 'false',
-    },
-    {
-      key: 'app_mode',
-      value: process.env.APP_MODE || 'single',
+      value: process.env.DEFAULT_REGISTRATION_ENABLED === 'false' ? 'false' : 'true',
     },
     {
       key: 'max_context_tokens',
@@ -107,6 +103,8 @@ async function createDefaultAdmin() {
         username: defaultUsername,
         hashedPassword,
         role: 'ADMIN',
+        status: 'ACTIVE',
+        approvedAt: new Date(),
       },
     });
 

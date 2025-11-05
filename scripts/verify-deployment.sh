@@ -163,7 +163,7 @@ check_environment_config() {
 
     log_check "检查环境变量模板"
     if [ -f ".env.example" ]; then
-        local required_vars=("NODE_ENV" "DATABASE_URL" "JWT_SECRET" "APP_MODE")
+        local required_vars=("NODE_ENV" "DATABASE_URL" "JWT_SECRET")
         local missing_vars=()
 
         for var in "${required_vars[@]}"; do

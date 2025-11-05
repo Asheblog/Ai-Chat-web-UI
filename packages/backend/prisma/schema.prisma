@@ -19,6 +19,12 @@ model User {
   hashedPassword String
   role           String   @default("USER") // 'ADMIN' or 'USER'
   createdAt      DateTime @default(now())
+  status         String   @default("ACTIVE") // 'PENDING' | 'ACTIVE' | 'DISABLED'
+  approvedAt     DateTime?
+  approvedById   Int?
+  rejectedAt     DateTime?
+  rejectedById   Int?
+  rejectionReason String?
   preferredModelId       String?
   preferredConnectionId  Int?
   preferredModelRawId    String?
@@ -27,6 +33,7 @@ model User {
   connections   Connection[]
   usageQuotas   UsageQuota[]
 
+  @@index([status])
   @@map("users")
 }
 

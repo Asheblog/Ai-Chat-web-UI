@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { AuthState, User, ActorContextDTO } from '@/types'
+import { AuthState, User, ActorContextDTO, RegisterResponse } from '@/types'
 import { apiClient } from '@/lib/api'
 import { useModelPreferenceStore } from '@/store/model-preference-store'
 
 interface AuthStore extends AuthState {
   login: (username: string, password: string) => Promise<void>
-  register: (username: string, password: string) => Promise<void>
+  register: (username: string, password: string) => Promise<RegisterResponse>
   logout: () => Promise<void>
   fetchActor: () => Promise<void>
   setActorContext: (context: ActorContextDTO | null) => void
@@ -31,7 +31,16 @@ export const useAuthStore = create<AuthStore>()(
           await apiClient.login(username, password)
           await get().fetchActor()
         } catch (error: any) {
-          const errorMessage = error.response?.data?.error || error.message || '登录失败'
+          const status = error.response?.data?.data?.status
+          const rejectionReason = error.response?.data?.data?.rejectionReason
+          let errorMessage = error.response?.data?.error || error.message || '登录失败'
+          if (status === 'PENDING') {
+            errorMessage = '账户正在等待管理员审批，暂时无法登录'
+          } else if (status === 'DISABLED') {
+            errorMessage = rejectionReason
+              ? `账户已被禁用：${rejectionReason}`
+              : '账户已被禁用，请联系管理员'
+          }
           set({
             error: errorMessage,
             isLoading: false,
@@ -43,8 +52,13 @@ export const useAuthStore = create<AuthStore>()(
       register: async (username: string, password: string) => {
         set({ isLoading: true, error: null })
         try {
-          await apiClient.register(username, password)
-          await get().fetchActor()
+          const result = await apiClient.register(username, password)
+          if (result.token) {
+            await get().fetchActor()
+          } else {
+            set({ isLoading: false })
+          }
+          return result
         } catch (error: any) {
           const errorMessage = error.response?.data?.error || error.message || '注册失败'
           set({
@@ -111,6 +125,7 @@ export const useAuthStore = create<AuthStore>()(
             id: profile?.id ?? context.actor.id,
             username: profile?.username ?? context.actor.username,
             role: profile?.role ?? context.actor.role,
+            status: profile?.status ?? context.actor.status,
             createdAt,
           }
         }
