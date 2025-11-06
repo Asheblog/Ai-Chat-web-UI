@@ -13,6 +13,7 @@ export type ModelItem = {
   tags?: Array<{ name: string }>
   capabilities?: { vision?: boolean; file_upload?: boolean; web_search?: boolean; image_generation?: boolean; code_interpreter?: boolean }
   overridden?: boolean
+  contextWindow?: number | null
 }
 
 interface ModelsStoreState {

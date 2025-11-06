@@ -408,6 +408,11 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
                     >
                       <div className="text-xs font-medium truncate">{model.name}</div>
                       <div className="text-[10px] text-muted-foreground truncate">{model.provider}</div>
+                      {typeof model.contextWindow === "number" && model.contextWindow > 0 && (
+                        <div className="text-[10px] text-muted-foreground truncate">
+                          上下文：{model.contextWindow.toLocaleString()} tokens
+                        </div>
+                      )}
                     </button>
                   )
                 })}
@@ -469,6 +474,9 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
                         )
                         const isFavorite = favoriteModels.includes(key) || favoriteModels.includes(model.id)
                         const channel = model.channelName || deriveChannelName(model.provider, model.connectionBaseUrl)
+                        const contextTokens = typeof model.contextWindow === "number" && model.contextWindow > 0
+                          ? `${model.contextWindow.toLocaleString()} tokens`
+                          : null
 
                         return (
                           <CommandItem
@@ -495,6 +503,11 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
                                 <div className="text-xs text-muted-foreground truncate">
                                   {model.provider} | {channel}
                                 </div>
+                                {contextTokens && (
+                                  <div className="text-[11px] text-muted-foreground truncate">
+                                    上下文窗口：{contextTokens}
+                                  </div>
+                                )}
                                 {renderCapabilities(model)}
                               </div>
 

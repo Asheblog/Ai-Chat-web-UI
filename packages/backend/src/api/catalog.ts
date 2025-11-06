@@ -6,6 +6,24 @@ import { computeCapabilities, deriveChannelName } from '../utils/providers'
 import { refreshAllModelCatalog, refreshModelCatalogForConnections, refreshModelCatalogForConnectionId } from '../utils/model-catalog'
 import { BackendLogger as log } from '../utils/logger'
 
+const extractContextWindow = (metaJson: string | null | undefined): number | null => {
+  if (!metaJson) return null
+  try {
+    const parsed = JSON.parse(metaJson)
+    const raw = (parsed as any)?.context_window
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+      return Math.floor(raw)
+    }
+    const coerced = Number.parseInt(String(raw ?? ''), 10)
+    if (Number.isFinite(coerced) && coerced > 0) {
+      return Math.floor(coerced)
+    }
+  } catch {
+    // ignore malformed payload
+  }
+  return null
+}
+
 const catalog = new Hono()
 
 catalog.use('*', actorMiddleware)
@@ -57,6 +75,7 @@ catalog.get('/models', async (c) => {
       } catch {
         tags = []
       }
+      const contextWindow = extractContextWindow(row.metaJson)
 
       return {
         id: row.modelId,
@@ -70,6 +89,7 @@ catalog.get('/models', async (c) => {
         tags,
         capabilities: computeCapabilities(row.rawId, tags),
         overridden: row.manualOverride,
+        contextWindow,
       }
     })
 
