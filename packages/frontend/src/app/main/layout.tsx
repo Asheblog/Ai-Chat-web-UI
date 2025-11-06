@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSettingsStore } from '@/store/settings-store'
 import { useChatStore } from '@/store/chat-store'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ export default function MainLayout({
   const actorState = useAuthStore((state) => state.actorState)
   const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
   const [mounted, setMounted] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     setMounted(true)
@@ -83,7 +85,14 @@ export default function MainLayout({
                       useChatStore.getState().switchSessionModel(cur.id, model)
                     } else {
                       void persistPreferredModel(model, { actorType })
-                      useChatStore.getState().createSession(model.id, '新的对话', model.connectionId, model.rawId)
+                      useChatStore
+                        .getState()
+                        .createSession(model.id, '新的对话', model.connectionId, model.rawId)
+                        .then((created) => {
+                          if (created?.id) {
+                            router.push(`/main/${created.id}`)
+                          }
+                        })
                     }
                   }}
                   className="w-[60vw] max-w-[280px]"

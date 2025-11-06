@@ -74,7 +74,7 @@ interface ChatStore extends ChatState {
   fetchSessionsUsage: () => Promise<void>
   fetchMessages: (sessionId: number) => Promise<void>
   fetchUsage: (sessionId: number) => Promise<void>
-  createSession: (modelId: string, title?: string, connectionId?: number, rawId?: string) => Promise<void>
+  createSession: (modelId: string, title?: string, connectionId?: number, rawId?: string) => Promise<ChatSession | null>
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>
   updateSessionTitle: (sessionId: number, title: string) => Promise<void>
@@ -327,11 +327,13 @@ export const useChatStore = create<ChatStore>((set, get) => {
           messageRenderCache: {},
           isLoading: false,
         }))
+        return newSession
       } catch (error: any) {
         set({
           error: error?.response?.data?.error || error?.message || '创建会话失败',
           isLoading: false,
         })
+        return null
       }
     },
 

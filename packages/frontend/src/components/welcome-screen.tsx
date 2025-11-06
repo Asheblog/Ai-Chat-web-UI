@@ -2,6 +2,7 @@
 
 // 全新欢迎页：模仿 ChatGPT 着陆面板（大标题 + 大输入框），并保持响应式
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, ImagePlus, X } from 'lucide-react'
 import NextImage from 'next/image'
 import { Textarea } from '@/components/ui/textarea'
@@ -26,6 +27,7 @@ export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
   const { systemSettings } = useSettingsStore()
   const { toast } = useToast()
+  const router = useRouter()
   const { actorState, quota } = useAuthStore((state) => ({
     actorState: state.actorState,
     quota: state.quota,
@@ -211,7 +213,10 @@ export function WelcomeScreen() {
       const title = text ? text.slice(0, 50) : '新的对话'
       // 携带 connectionId/rawId 以避免后端解析歧义
       const m = (models || []).find(mm => mm.id === selectedModelId)
-      await createSession(selectedModelId, title, m?.connectionId, m?.rawId)
+      const created = await createSession(selectedModelId, title, m?.connectionId, m?.rawId)
+      if (created?.id) {
+        router.push(`/main/${created.id}`)
+      }
 
       // 仅当用户改动过时，才写入会话偏好
       try {

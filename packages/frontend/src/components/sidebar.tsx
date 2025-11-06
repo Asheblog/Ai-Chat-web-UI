@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Settings, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,7 @@ export function Sidebar() {
   const quotaExhausted = Boolean(isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0)
   const quotaDisplay = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   useEffect(() => {
     fetchSessions()
@@ -119,11 +120,22 @@ export function Sidebar() {
       const definitelyEmpty = Boolean(cur && isDefaultTitle && localCount === 0 && (serverCount === null || serverCount === 0))
       if (definitelyEmpty) {
         // 直接返回，复用当前空白会话
+        if (cur?.id) {
+          router.push(`/main/${cur.id}`)
+        }
         setIsMobileMenuOpen(false)
         return
       }
 
-      await createSession(resolved.id, '新的对话', resolved.connectionId ?? undefined, resolved.rawId ?? undefined)
+      const created = await createSession(
+        resolved.id,
+        '新的对话',
+        resolved.connectionId ?? undefined,
+        resolved.rawId ?? undefined
+      )
+      if (created?.id) {
+        router.push(`/main/${created.id}`)
+      }
       void persistPreferredModel(resolved, { actorType: isAnonymous ? 'anonymous' : 'user' })
       setIsMobileMenuOpen(false)
     } catch (error) {
@@ -135,6 +147,7 @@ export function Sidebar() {
 
   const handleSessionClick = (sessionId: number) => {
     selectSession(sessionId)
+    router.push(`/main/${sessionId}`)
     setIsMobileMenuOpen(false)
   }
 
@@ -396,7 +409,22 @@ export function Sidebar() {
                   const id = deleteTargetId
                   setDeleteTargetId(null)
                   if (typeof id === 'number') {
-                    try { await deleteSession(id) } catch (e) { console.error(e) }
+                    try {
+                      const wasCurrent = useChatStore.getState().currentSession?.id === id
+                      await deleteSession(id)
+                      if (wasCurrent) {
+                        const state = useChatStore.getState()
+                        if (state.currentSession?.id) {
+                          router.replace(`/main/${state.currentSession.id}`)
+                        } else if (state.sessions.length > 0) {
+                          const nextId = state.sessions[0].id
+                          state.selectSession(nextId)
+                          router.replace(`/main/${nextId}`)
+                        } else {
+                          router.replace('/main')
+                        }
+                      }
+                    } catch (e) { console.error(e) }
                   }
                 }}
               >确定</Button>
