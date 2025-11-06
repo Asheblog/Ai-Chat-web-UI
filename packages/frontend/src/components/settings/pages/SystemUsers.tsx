@@ -634,7 +634,7 @@ export function SystemUsersPage(){
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table className="w-full min-w-[720px]">
+              <Table className="w-full table-fixed">
                 <TableHeader className="sticky top-0 z-30 bg-muted/50">
                   <TableRow>
                     <TableHead className="w-12 text-center">
@@ -644,25 +644,25 @@ export function SystemUsersPage(){
                       />
                     </TableHead>
                     <TableHead
-                      className="cursor-pointer hover:bg-muted/80 transition-colors"
+                      className="w-[160px] cursor-pointer hover:bg-muted/80 transition-colors"
                       onClick={() => toggleSort('username')}
                     >
                       用户名 {sortField === 'username' && (sortOrder === 'asc' ? '↑' : '↓')}
                     </TableHead>
-                    <TableHead className="text-center w-[100px]">角色</TableHead>
+                    <TableHead className="text-center w-[96px]">角色</TableHead>
                     <TableHead
-                      className="text-center w-[100px] cursor-pointer hover:bg-muted/80 transition-colors"
+                      className="text-center w-[96px] cursor-pointer hover:bg-muted/80 transition-colors"
                       onClick={() => toggleSort('status')}
                     >
                       状态 {sortField === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}
                     </TableHead>
                     <TableHead
-                      className="text-center w-[160px] cursor-pointer hover:bg-muted/80 transition-colors"
+                      className="text-center w-[140px] cursor-pointer hover:bg-muted/80 transition-colors"
                       onClick={() => toggleSort('createdAt')}
                     >
                       创建时间 {sortField === 'createdAt' && (sortOrder === 'asc' ? '↑' : '↓')}
                     </TableHead>
-                    <TableHead className="text-center w-[80px]">操作</TableHead>
+                    <TableHead className="text-center w-[72px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -681,7 +681,9 @@ export function SystemUsersPage(){
                             onChange={() => toggleSelectRow(r.id)}
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{r.username}</TableCell>
+                        <TableCell className="font-medium truncate" title={r.username}>
+                          <span className="block truncate">{r.username}</span>
+                        </TableCell>
                         <TableCell className="text-center">
                           {r.role === 'ADMIN' ? (
                             <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
@@ -692,7 +694,7 @@ export function SystemUsersPage(){
                             <Badge variant="outline">用户</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center whitespace-nowrap">
                           <Badge
                             className={STATUS_META[r.status].className}
                             title={statusTitle}
@@ -700,10 +702,10 @@ export function SystemUsersPage(){
                             {STATUS_META[r.status].label}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center text-xs text-muted-foreground">
+                        <TableCell className="text-center text-xs text-muted-foreground whitespace-nowrap">
                           {formatTimestamp(r.createdAt)}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center whitespace-nowrap">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm" disabled={isActionBusy}>
