@@ -55,7 +55,8 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Segoe UI", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+    /* 兜底字体栈：首选开源简体中文字体，随后回退至常见系统字体 */
+    font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "HarmonyOS Sans", "Inter", "Segoe UI", "Helvetica Neue", system-ui, -apple-system, sans-serif;
   }
 }
 

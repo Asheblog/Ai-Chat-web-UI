@@ -1,12 +1,26 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Noto_Sans_SC } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import ConsoleSilencer from '@/components/console-silencer'
 import { TitleSync } from '@/components/title-sync'
 
-const inter = Inter({ subsets: ['latin'] })
+const notoSansSC = Noto_Sans_SC({
+  weight: ['400', '500', '600', '700'],
+  subsets: ['latin'],
+  display: 'swap',
+  fallback: [
+    'PingFang SC',
+    'Microsoft YaHei',
+    'HarmonyOS Sans',
+    'Noto Sans SC',
+    'Segoe UI',
+    'Helvetica Neue',
+    'Arial',
+    'sans-serif',
+  ],
+})
 
 export const metadata: Metadata = {
   title: 'AIChat',
@@ -20,7 +34,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={notoSansSC.className}>
         {/* 生产环境禁用前端控制台输出 */}
         <ConsoleSilencer />
         <ThemeProvider
