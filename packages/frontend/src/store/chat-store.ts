@@ -219,7 +219,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
     messageBodies: {},
     messageRenderCache: {},
     messageImageCache: {},
-    isLoading: false,
+    messagesHydrated: {},
+    isSessionsLoading: false,
+    isMessagesLoading: false,
     isStreaming: false,
     error: null,
     usageCurrent: null,
@@ -228,18 +230,18 @@ export const useChatStore = create<ChatStore>((set, get) => {
     sessionUsageTotalsMap: {} as Record<number, import('@/types').UsageTotals>,
 
     fetchSessions: async () => {
-      set({ isLoading: true, error: null })
+      set({ isSessionsLoading: true, error: null })
       try {
         const response = await apiClient.getSessions()
         set({
           sessions: response.data || [],
-          isLoading: false,
+          isSessionsLoading: false,
         })
         get().fetchSessionsUsage().catch(() => {})
       } catch (error: any) {
         set({
           error: error?.response?.data?.error || error?.message || '获取会话列表失败',
-          isLoading: false,
+          isSessionsLoading: false,
         })
       }
     },
@@ -262,7 +264,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
     },
 
     fetchMessages: async (sessionId: number) => {
-      set({ isLoading: true, error: null })
+      set({ isMessagesLoading: true, error: null })
       try {
         const response = await apiClient.getMessages(sessionId)
         const cache = get().messageImageCache
@@ -282,17 +284,18 @@ export const useChatStore = create<ChatStore>((set, get) => {
           }
         })
 
-        set({
+        set((state) => ({
           messageMetas: metas,
           messageBodies: bodies,
           messageRenderCache: {},
           messageImageCache: nextCache,
-          isLoading: false,
-        })
+          messagesHydrated: { ...state.messagesHydrated, [sessionId]: true },
+          isMessagesLoading: false,
+        }))
       } catch (error: any) {
         set({
           error: error?.response?.data?.error || error?.message || '获取消息列表失败',
-          isLoading: false,
+          isMessagesLoading: false,
         })
       }
     },
@@ -315,7 +318,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
     },
 
     createSession: async (modelId: string, title?: string, connectionId?: number, rawId?: string) => {
-      set({ isLoading: true, error: null })
+      set({ isSessionsLoading: true, error: null })
       try {
         const response = await apiClient.createSessionByModelId(modelId, title, connectionId, rawId)
         const newSession = response.data as ChatSession
@@ -325,22 +328,28 @@ export const useChatStore = create<ChatStore>((set, get) => {
           messageMetas: [],
           messageBodies: {},
           messageRenderCache: {},
-          isLoading: false,
+          messagesHydrated: { ...state.messagesHydrated, [newSession.id]: true },
+          isMessagesLoading: false,
+          isSessionsLoading: false,
         }))
         return newSession
       } catch (error: any) {
         set({
           error: error?.response?.data?.error || error?.message || '创建会话失败',
-          isLoading: false,
+          isSessionsLoading: false,
         })
         return null
       }
     },
 
     selectSession: (sessionId: number) => {
-      const { sessions } = get()
+      const { sessions, messagesHydrated } = get()
       const session = sessions.find((s) => s.id === sessionId)
       if (session) {
+        const nextHydrated = { ...messagesHydrated }
+        if (nextHydrated[sessionId]) {
+          delete nextHydrated[sessionId]
+        }
         set({
           currentSession: session,
           messageMetas: [],
@@ -349,6 +358,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           usageCurrent: null,
           usageLastRound: null,
           usageTotals: null,
+          messagesHydrated: nextHydrated,
         })
         get().fetchMessages(sessionId)
         get().fetchUsage(sessionId)

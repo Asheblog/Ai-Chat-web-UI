@@ -35,7 +35,17 @@ export function Sidebar() {
   const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const { sessions, currentSession, messageMetas, fetchSessions, selectSession, deleteSession, createSession, sessionUsageTotalsMap, isLoading } = useChatStore()
+  const {
+    sessions,
+    currentSession,
+    messageMetas,
+    fetchSessions,
+    selectSession,
+    deleteSession,
+    createSession,
+    sessionUsageTotalsMap,
+    isSessionsLoading,
+  } = useChatStore()
   const { systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
   const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
   const { models, fetchAll } = useModelsStore()
@@ -250,7 +260,7 @@ export function Sidebar() {
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-2">
           {/* 加载骨架 */}
-          {isLoading && sessions.length === 0 && (
+          {isSessionsLoading && sessions.length === 0 && (
             <>
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="border rounded-lg p-3">
@@ -265,7 +275,7 @@ export function Sidebar() {
           )}
 
           {/* 空态 */}
-          {!isLoading && sessions.length === 0 && (
+          {!isSessionsLoading && sessions.length === 0 && (
             <div className="text-center text-muted-foreground py-6">
               <p>暂无会话</p>
             </div>

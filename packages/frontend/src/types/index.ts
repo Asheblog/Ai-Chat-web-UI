@@ -190,10 +190,12 @@ export interface ChatState {
   messageMetas: MessageMeta[];
   messageBodies: Record<string, MessageBody>;
   messageRenderCache: Record<string, MessageRenderCacheEntry>;
-  isLoading: boolean;
+  isSessionsLoading: boolean;
+  isMessagesLoading: boolean;
   isStreaming: boolean;
   error: string | null;
   messageImageCache: Record<string, string[]>;
+  messagesHydrated: Record<number, boolean>;
   // usage 展示状态
   usageCurrent?: UsageStats | null;
   usageLastRound?: UsageStats | null;

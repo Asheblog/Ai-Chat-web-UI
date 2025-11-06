@@ -51,9 +51,11 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
         if (state.currentSession?.id !== matched.id) {
           state.selectSession(matched.id)
         } else if (state.messageMetas.length === 0) {
-          // 防止极端情况下刷新后会话已恢复但消息仍为空
-          state.fetchMessages(matched.id)
-          state.fetchUsage(matched.id)
+          if (state.messagesHydrated[matched.id] !== true) {
+            // 防止极端情况下刷新后会话已恢复但消息仍为空
+            state.fetchMessages(matched.id)
+            state.fetchUsage(matched.id)
+          }
         }
         return
       }

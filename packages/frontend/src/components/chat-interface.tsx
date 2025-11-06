@@ -42,7 +42,7 @@ export function ChatInterface() {
     messageMetas,
     messageBodies,
     messageRenderCache,
-    isLoading,
+    isMessagesLoading,
     isStreaming,
     currentSession,
     error,
@@ -193,7 +193,7 @@ export function ChatInterface() {
             bodies={messageBodies}
             renderCache={messageRenderCache}
             isStreaming={isStreaming}
-            isLoading={isLoading}
+            isLoading={isMessagesLoading}
             scrollRootRef={scrollAreaRef}
           />
         </div>
