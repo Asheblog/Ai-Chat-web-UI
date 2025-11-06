@@ -267,11 +267,13 @@ export function SystemConnectionsPage() {
                   <Checkbox
                     id={`cap-${k}`}
                     checked={cap[k]}
-                    onCheckedChange={(value)=>setCap((prev)=>{
-                      const next = { ...prev }
-                      next[k] = value === true
-                      return next
-                    })}
+                    onChange={(event) =>
+                      setCap((prev) => {
+                        const next = { ...prev }
+                        next[k] = event.currentTarget.checked
+                        return next
+                      })
+                    }
                   />
                   <Label htmlFor={`cap-${k}`} className="font-normal">{CAP_LABELS[k]}</Label>
                 </div>
