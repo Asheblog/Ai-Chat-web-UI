@@ -62,7 +62,7 @@ export function SystemNetworkPage() {
     return (
       <div className="p-6 text-center text-muted-foreground">
         <p>{error || '无法加载系统设置'}</p>
-        <button className="mt-3 px-3 py-2 border rounded" onClick={()=>fetchSystemSettings()}>重试</button>
+        <Button variant="outline" className="mt-3" onClick={()=>fetchSystemSettings()}>重试</Button>
       </div>
     )
   }

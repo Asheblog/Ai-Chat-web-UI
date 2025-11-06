@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { settingsNav, type SettingsNavItem } from "./nav"
-import { SettingsShellNested } from "./shell-nested"
+import { SettingsShell } from "./shell"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 // import { PersonalModelsPage } from "./pages/PersonalModels"
@@ -153,7 +153,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="w-screen h-[100dvh] max-w-none border-0 p-0 shadow-none sm:w-[92vw] sm:h-[82vh] sm:max-h-[85vh] sm:max-w-[1000px] sm:border sm:rounded-2xl sm:shadow-2xl flex flex-col min-h-0 overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] animate-in fade-in-0 zoom-in-95 duration-200"
+        className="w-screen h-[100dvh] max-w-none border-0 p-0 shadow-none sm:w-[92vw] sm:h-[82vh] sm:max-h-[85vh] sm:max-w-5xl sm:border sm:rounded-2xl sm:shadow-2xl flex flex-col min-h-0 overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] animate-in fade-in-0 zoom-in-95 duration-200"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>设置</DialogTitle>
@@ -164,7 +164,8 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
             当前账户没有可用的设置项
           </div>
         ) : (
-          <SettingsShellNested
+          <SettingsShell
+            mode="nested"
             title="设置"
             tree={filteredTree}
             activeMain={activeMain}
@@ -198,7 +199,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
                   ) : <AboutPage />
               }
             })()}
-          </SettingsShellNested>
+          </SettingsShell>
         )}
       </DialogContent>
     </Dialog>

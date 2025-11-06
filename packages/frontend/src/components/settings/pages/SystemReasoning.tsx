@@ -8,9 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 import { useSettingsStore } from "@/store/settings-store"
 import { Brain } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 export function SystemReasoningPage() {
   const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading } = useSettingsStore()
+  const { toast } = useToast()
 
   const [reasoningEnabled, setReasoningEnabled] = useState(true)
   const [reasoningDefaultExpand, setReasoningDefaultExpand] = useState(false)
@@ -42,7 +44,11 @@ export function SystemReasoningPage() {
           throw new Error('自定义标签需为 [startTag, endTag]')
         }
       } catch (e) {
-        alert('自定义标签无效，必须是形如 ["<think>","</think>"] 的 JSON')
+        toast({
+          title: '自定义标签无效',
+          description: '格式必须为 ["<think>","</think>"] 这样的 JSON 数组。',
+          variant: 'destructive',
+        })
         return
       }
     }
@@ -56,6 +62,7 @@ export function SystemReasoningPage() {
       openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : 'unset',
       ollamaThink,
     } as any)
+    toast({ title: '已保存推理链设置' })
   }
 
   if (!systemSettings) return null

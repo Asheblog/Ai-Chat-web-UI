@@ -14,6 +14,16 @@ import { apiClient } from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
 import type { ActorQuota } from "@/types"
 import { Users } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type UserRow = {
   id: number
@@ -31,6 +41,7 @@ type UserRow = {
 type PageData = { users: UserRow[]; pagination: { page: number; limit: number; total: number; totalPages: number } }
 
 type StatusFilter = 'ALL' | 'PENDING' | 'ACTIVE' | 'DISABLED'
+type ConfirmMode = 'APPROVE' | 'ENABLE' | 'CHANGE_ROLE' | 'DELETE'
 
 const STATUS_META: Record<'PENDING' | 'ACTIVE' | 'DISABLED', { label: string; className: string }> = {
   PENDING: { label: '待审批', className: 'bg-blue-100/60 text-blue-700 border-blue-200' },
@@ -96,6 +107,13 @@ export function SystemUsersPage(){
     submitting: false,
     error: null,
   })
+  const [confirmState, setConfirmState] = useState<{ open: boolean; mode: ConfirmMode | null; target: UserRow | null; role?: 'ADMIN' | 'USER' }>({
+    open: false,
+    mode: null,
+    target: null,
+    role: undefined,
+  })
+  const [confirmLoading, setConfirmLoading] = useState(false)
 
   const load = async (opts?: { page?: number; limit?: number; search?: string; status?: StatusFilter }) => {
     setLoading(true); setError(null)
@@ -228,20 +246,6 @@ export function SystemUsersPage(){
     load({ page: 1, search, status: value })
   }
 
-  const approveUser = async (row: UserRow) => {
-    if (!confirm(`确认审批通过 “${row.username}”？`)) return
-    setActionUserId(row.id)
-    try {
-      await apiClient.approveUser(row.id)
-      toast({ title: '审批通过', description: `用户 ${row.username} 已可登录` })
-      await load()
-    } catch (e: any) {
-      toast({ title: '审批失败', description: e?.response?.data?.error || e?.message || '审批失败', variant: 'destructive' })
-    } finally {
-      setActionUserId(null)
-    }
-  }
-
   const openDecisionDialog = (mode: 'REJECT' | 'DISABLE', target: UserRow) => {
     setDecisionDialog({
       open: true,
@@ -286,48 +290,102 @@ export function SystemUsersPage(){
     }
   }
 
-  const enableUser = async (row: UserRow) => {
-    if (!confirm(`确认启用用户 “${row.username}”？`)) return
-    setActionUserId(row.id)
+  const openConfirm = (mode: ConfirmMode, target: UserRow, extras?: { role?: 'ADMIN' | 'USER' }) => {
+    setConfirmState({ open: true, mode, target, role: extras?.role })
+  }
+
+  const closeConfirm = () => {
+    if (confirmLoading) return
+    setConfirmState({ open: false, mode: null, target: null, role: undefined })
+  }
+
+  const confirmApprove = (row: UserRow) => openConfirm('APPROVE', row)
+  const confirmEnable = (row: UserRow) => openConfirm('ENABLE', row)
+  const confirmChangeRole = (row: UserRow, role: 'ADMIN' | 'USER') => openConfirm('CHANGE_ROLE', row, { role })
+  const confirmDelete = (row: UserRow) => openConfirm('DELETE', row)
+
+  const runConfirmAction = async () => {
+    if (!confirmState.mode || !confirmState.target) return
+    setConfirmLoading(true)
+    setActionUserId(confirmState.target.id)
+    const username = confirmState.target.username
     try {
-      await apiClient.updateUserStatus(row.id, 'ACTIVE')
-      toast({ title: '已启用用户', description: `用户 ${row.username} 可以重新登录` })
+      switch (confirmState.mode) {
+        case 'APPROVE':
+          await apiClient.approveUser(confirmState.target.id)
+          toast({ title: '审批通过', description: `用户 ${username} 已可登录` })
+          break
+        case 'ENABLE':
+          await apiClient.updateUserStatus(confirmState.target.id, 'ACTIVE')
+          toast({ title: '已启用用户', description: `用户 ${username} 可以重新登录` })
+          break
+        case 'CHANGE_ROLE': {
+          const role = confirmState.role
+          if (!role) throw new Error('缺少角色参数')
+          await apiClient.updateUserRole(confirmState.target.id, role)
+          toast({ title: '已更新用户角色', description: role === 'ADMIN' ? '已设为管理员' : '已设为普通用户' })
+          break
+        }
+        case 'DELETE':
+          await apiClient.deleteUser(confirmState.target.id)
+          toast({ title: '已删除用户' })
+          break
+      }
       await load()
     } catch (e: any) {
-      toast({ title: '启用失败', description: e?.response?.data?.error || e?.message || '启用失败', variant: 'destructive' })
+      const message = e?.response?.data?.error || e?.message || '操作失败'
+      const failTitle = (() => {
+        switch (confirmState.mode) {
+          case 'APPROVE': return '审批失败'
+          case 'ENABLE': return '启用失败'
+          case 'CHANGE_ROLE': return '更新失败'
+          case 'DELETE': return '删除失败'
+          default: return '操作失败'
+        }
+      })()
+      toast({ title: failTitle, description: message, variant: 'destructive' })
     } finally {
+      setConfirmLoading(false)
       setActionUserId(null)
+      setConfirmState({ open: false, mode: null, target: null, role: undefined })
     }
   }
 
-  const changeRole = async (row: UserRow, role: 'ADMIN'|'USER') => {
-    if (!confirm(`确认将用户 “${row.username}” 角色变更为 ${role}?`)) return
-    setActionUserId(row.id)
-    try {
-      await apiClient.updateUserRole(row.id, role)
-      toast({ title: '已更新用户角色' })
-      await load()
-    } catch (e:any) {
-      toast({ title: '更新失败', description: e?.response?.data?.error || e?.message || '更新失败', variant: 'destructive' })
-    } finally {
-      setActionUserId(null)
+  const confirmMeta = useMemo(() => {
+    if (!confirmState.mode || !confirmState.target) return null
+    const username = confirmState.target.username
+    switch (confirmState.mode) {
+      case 'APPROVE':
+        return {
+          title: '审批通过确认',
+          description: `确认审批通过 “${username}”？审批通过后，用户可立即登录系统。`,
+          action: '确认通过',
+        }
+      case 'ENABLE':
+        return {
+          title: '启用用户',
+          description: `确认启用 “${username}”？启用后用户可以重新登录并使用系统。`,
+          action: '确认启用',
+        }
+      case 'CHANGE_ROLE': {
+        const role = confirmState.role
+        const roleLabel = role === 'ADMIN' ? '管理员' : '普通用户'
+        return {
+          title: '变更用户角色',
+          description: `确认将 “${username}” 角色调整为 ${roleLabel}？该操作会立即生效。`,
+          action: '确认变更',
+        }
+      }
+      case 'DELETE':
+        return {
+          title: '删除用户',
+          description: `确认删除 “${username}”？该操作不可恢复，将级联删除该用户的会话与消息。`,
+          action: '确认删除',
+        }
+      default:
+        return null
     }
-  }
-
-  const deleteUser = async (row: UserRow) => {
-    if (!confirm(`确认删除用户 “${row.username}”? 该操作不可恢复，将级联删除其会话/消息。`)) return
-    setActionUserId(row.id)
-    try {
-      await apiClient.deleteUser(row.id)
-      toast({ title: '已删除用户' })
-      // 若当前页为空则回退一页
-      await load()
-    } catch (e:any) {
-      toast({ title: '删除失败', description: e?.response?.data?.error || e?.message || '删除失败', variant: 'destructive' })
-    } finally {
-      setActionUserId(null)
-    }
-  }
+  }, [confirmState])
 
   const pagination = useMemo(() => ({ page, limit, totalPages }), [page, limit, totalPages])
 
@@ -388,90 +446,113 @@ export function SystemUsersPage(){
           <CardTitle className="text-lg">用户列表</CardTitle>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table className="min-w-[720px]">
-            <TableHeader className="sticky top-0 z-30 bg-muted/50 shadow-sm">
-              <TableRow>
-                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[120px] bg-muted/50">用户名</TableHead>
-                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">角色</TableHead>
-                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">状态</TableHead>
-                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[140px] bg-muted/50">创建时间</TableHead>
-                <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-auto bg-muted/50">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && rows.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">加载中...</TableCell></TableRow>
-              )}
-              {!loading && rows.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">暂无数据</TableCell></TableRow>
-              )}
-              {rows.map((r) => {
-                const statusTitle = r.status === 'DISABLED'
-                  ? (r.rejectionReason ? `禁用原因：${r.rejectionReason}` : '账户已被禁用')
-                  : r.status === 'PENDING'
-                    ? '等待管理员审批'
-                    : '账户已启用'
-                const isActionBusy = actionUserId === r.id || loading
-                return (
-                  <TableRow key={r.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="text-center whitespace-nowrap">{r.username}</TableCell>
-                    <TableCell className="text-center whitespace-nowrap">
-                      {r.role === 'ADMIN' ? (
-                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">ADMIN</Badge>
-                      ) : (
-                        <Badge variant="outline">USER</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center whitespace-nowrap">
-                      {r.status === 'PENDING' && (
-                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" title={statusTitle}>待审批</Badge>
-                      )}
-                      {r.status === 'ACTIVE' && (
-                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" title={statusTitle}>已启用</Badge>
-                      )}
-                      {r.status === 'DISABLED' && (
-                        <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" title={statusTitle}>已禁用</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center whitespace-nowrap">
-                      <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground min-w-[120px]">
-                        <span>{formatTimestamp(r.createdAt)}</span>
-                        {r.approvedAt && <span>批：{formatTimestamp(r.approvedAt)}</span>}
-                        {!r.approvedAt && r.rejectedAt && <span>禁：{formatTimestamp(r.rejectedAt)}</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 max-w-[320px] mx-auto">
-                        <Button size="sm" variant="outline" onClick={()=>openQuotaDialog(r)} disabled={quotaSubmitting || isActionBusy} className="px-3 py-2 text-sm w-full">调整额度</Button>
+        <Card className="px-4 py-4 sm:px-5 sm:py-5">
+          <div className="overflow-x-auto">
+            <Table className="w-full min-w-[720px]">
+              <TableHeader className="sticky top-0 z-30 bg-muted/50 shadow-sm">
+                <TableRow>
+                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[120px] bg-muted/50">用户名</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">角色</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">状态</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[140px] bg-muted/50">创建时间</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-auto bg-muted/50">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading && rows.length === 0 && (
+                  <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">加载中...</TableCell></TableRow>
+                )}
+                {!loading && rows.length === 0 && (
+                  <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">暂无数据</TableCell></TableRow>
+                )}
+                {rows.map((r) => {
+                  const statusTitle = r.status === 'DISABLED'
+                    ? (r.rejectionReason ? `禁用原因：${r.rejectionReason}` : '账户已被禁用')
+                    : r.status === 'PENDING'
+                      ? '等待管理员审批'
+                      : '账户已启用'
+                  const isActionBusy = actionUserId === r.id || loading
+                  return (
+                    <TableRow key={r.id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="text-center whitespace-nowrap">{r.username}</TableCell>
+                      <TableCell className="text-center whitespace-nowrap">
+                        {r.role === 'ADMIN' ? (
+                          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">ADMIN</Badge>
+                        ) : (
+                          <Badge variant="outline">USER</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center whitespace-nowrap">
                         {r.status === 'PENDING' && (
-                          <>
-                            <Button size="sm" variant="outline" onClick={()=>approveUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">审批通过</Button>
-                            <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('REJECT', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">拒绝</Button>
-                          </>
+                          <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" title={statusTitle}>待审批</Badge>
                         )}
                         {r.status === 'ACTIVE' && (
-                          <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('DISABLE', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">禁用</Button>
+                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" title={statusTitle}>已启用</Badge>
                         )}
                         {r.status === 'DISABLED' && (
-                          <Button size="sm" variant="outline" onClick={()=>enableUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">启用</Button>
+                          <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" title={statusTitle}>已禁用</Badge>
                         )}
-                        {r.role !== 'ADMIN' && (
-                          <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'ADMIN')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为管理员</Button>
-                        )}
-                        {r.role !== 'USER' && (
-                          <Button size="sm" variant="outline" onClick={()=>changeRole(r, 'USER')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为用户</Button>
-                        )}
-                        <Button size="sm" variant="destructive" onClick={()=>deleteUser(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">删除</Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                      </TableCell>
+                      <TableCell className="text-center whitespace-nowrap">
+                        <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground min-w-[120px]">
+                          <span>{formatTimestamp(r.createdAt)}</span>
+                          {r.approvedAt && <span>批：{formatTimestamp(r.approvedAt)}</span>}
+                          {!r.approvedAt && r.rejectedAt && <span>禁：{formatTimestamp(r.rejectedAt)}</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 max-w-[320px] mx-auto">
+                          <Button size="sm" variant="outline" onClick={()=>openQuotaDialog(r)} disabled={quotaSubmitting || isActionBusy} className="px-3 py-2 text-sm w-full">调整额度</Button>
+                          {r.status === 'PENDING' && (
+                            <>
+                              <Button size="sm" variant="outline" onClick={()=>confirmApprove(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">审批通过</Button>
+                              <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('REJECT', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">拒绝</Button>
+                            </>
+                          )}
+                          {r.status === 'ACTIVE' && (
+                            <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('DISABLE', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">禁用</Button>
+                          )}
+                          {r.status === 'DISABLED' && (
+                            <Button size="sm" variant="outline" onClick={()=>confirmEnable(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">启用</Button>
+                          )}
+                          {r.role !== 'ADMIN' && (
+                            <Button size="sm" variant="outline" onClick={()=>confirmChangeRole(r, 'ADMIN')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为管理员</Button>
+                          )}
+                          {r.role !== 'USER' && (
+                            <Button size="sm" variant="outline" onClick={()=>confirmChangeRole(r, 'USER')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为用户</Button>
+                          )}
+                          <Button size="sm" variant="destructive" onClick={()=>confirmDelete(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">删除</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
       </div>
+
+      {confirmMeta && (
+        <AlertDialog open={confirmState.open} onOpenChange={(open)=>{ if (!open) closeConfirm(); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{confirmMeta.title}</AlertDialogTitle>
+              <AlertDialogDescription>{confirmMeta.description}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={confirmLoading}>取消</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={runConfirmAction}
+                disabled={confirmLoading}
+                className={confirmState.mode === 'DELETE' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
+              >
+                {confirmLoading ? '执行中…' : confirmMeta.action}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm px-3 sm:px-4">
         <div className="text-muted-foreground">第 {pagination.page} / {pagination.totalPages} 页</div>

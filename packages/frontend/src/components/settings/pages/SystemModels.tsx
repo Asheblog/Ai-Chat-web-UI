@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -7,6 +7,19 @@ import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card, CardTitle, CardDescription } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/use-toast'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useModelsStore } from '@/store/models-store'
 import { apiClient } from '@/lib/api'
 import { Cpu, MoreVertical } from 'lucide-react'
@@ -29,6 +42,10 @@ export function SystemModelsPage() {
   const [onlyOverridden, setOnlyOverridden] = useState(false)
   const [saving, setSaving] = useState<string>('') // key `${cid}:${id}`
   const [refreshing, setRefreshing] = useState(false)
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     fetchAll().catch(() => {})
@@ -83,11 +100,65 @@ export function SystemModelsPage() {
     try {
       await apiClient.refreshModelCatalog()
       await fetchAll()
-      alert('已获取最新模型列表')
+      toast({ title: '已获取最新模型列表' })
     } catch (err: any) {
-      alert('刷新失败：' + (err?.message || String(err)))
+      toast({
+        title: '刷新失败',
+        description: err?.message || String(err),
+        variant: 'destructive',
+      })
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleClearAll = async () => {
+    if (clearing) return
+    setClearing(true)
+    try {
+      await apiClient.deleteAllModelOverrides()
+      await fetchAll()
+      toast({ title: '已清除全部覆写' })
+    } catch (err: any) {
+      toast({
+        title: '清除覆写失败',
+        description: err?.message || String(err),
+        variant: 'destructive',
+      })
+    } finally {
+      setClearing(false)
+      setClearDialogOpen(false)
+    }
+  }
+
+  const handleImport = async (file: File) => {
+    try {
+      const txt = await file.text()
+      const json = JSON.parse(txt)
+      const items = Array.isArray(json?.items) ? json.items : []
+      for (const it of items) {
+        let tags = Array.isArray(it?.tags) ? it.tags : []
+        if ((!tags || tags.length === 0) && it?.capabilities && typeof it.capabilities === 'object') {
+          const caps = it.capabilities
+          const capTags = CAP_KEYS.filter((k)=>Boolean(caps[k])).map((k)=>({ name: k }))
+          tags = capTags
+        }
+        if (it?.connectionId && it?.rawId) {
+          await apiClient.updateModelTags(Number(it.connectionId), String(it.rawId), tags)
+        }
+      }
+      await fetchAll()
+      toast({ title: '导入完成', description: `共应用 ${items.length} 项覆写。` })
+    } catch (err:any) {
+      toast({
+        title: '导入失败',
+        description: err?.message || String(err),
+        variant: 'destructive',
+      })
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
@@ -108,10 +179,10 @@ export function SystemModelsPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Input className="w-full sm:w-64" placeholder="搜索模型/提供方..." value={q} onChange={(e)=>setQ(e.target.value)} />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <label className="text-sm flex items-center gap-2 px-3 py-2 rounded border bg-background">
-                <input type="checkbox" checked={onlyOverridden} onChange={(e)=>setOnlyOverridden(e.target.checked)} />
-                仅显示已手动设置
-              </label>
+              <div className="text-sm flex items-center gap-2 px-3 py-2 rounded border bg-background">
+                <Checkbox id="only-overridden" checked={onlyOverridden} onCheckedChange={(value)=>setOnlyOverridden(value === true)} />
+                <Label htmlFor="only-overridden" className="font-normal">仅显示已手动设置</Label>
+              </div>
               <Button variant="outline" size="sm" onClick={()=>fetchAll()} className="w-full sm:w-auto">重新加载</Button>
               <Button size="sm" onClick={manualRefresh} disabled={refreshing} className="w-full sm:w-auto">
                 {refreshing ? '刷新中…' : '手动获取最新'}
@@ -131,33 +202,20 @@ export function SystemModelsPage() {
                     const a = document.createElement('a'); a.href = url; a.download = 'model-capabilities-overrides.json';
                     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
                   }}>导出覆写</DropdownMenuItem>
-                  <DropdownMenuItem onClick={()=>document.getElementById('import-cap-file')?.click() as any}>导入覆写</DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive" onClick={async ()=>{
-                    if (!confirm('确定要清除全部覆写吗？此操作不可撤销。')) return
-                    await apiClient.deleteAllModelOverrides(); await fetchAll()
-                  }}>清除全部覆写</DropdownMenuItem>
+                  <DropdownMenuItem onClick={()=>fileInputRef.current?.click()}>导入覆写</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onSelect={()=>setClearDialogOpen(true)}>清除全部覆写</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <input type="file" accept="application/json" className="hidden" id="import-cap-file" onChange={async (e)=>{
-                const f = e.target.files?.[0]; if (!f) return
-                try {
-                  const txt = await f.text(); const json = JSON.parse(txt)
-                  const items = Array.isArray(json?.items) ? json.items : []
-                  for (const it of items) {
-                    let tags = Array.isArray(it?.tags) ? it.tags : []
-                    if ((!tags || tags.length===0) && it?.capabilities && typeof it.capabilities === 'object') {
-                      const caps = it.capabilities
-                      const capTags = CAP_KEYS.filter((k)=>Boolean(caps[k])).map((k)=>({ name: k }))
-                      tags = capTags
-                    }
-                    if (it?.connectionId && it?.rawId) {
-                      await apiClient.updateModelTags(Number(it.connectionId), String(it.rawId), tags)
-                    }
-                  }
-                  await fetchAll(); alert('导入完成')
-                } catch (err:any) { alert('导入失败: ' + (err?.message||String(err))) }
-                finally { (e.target as HTMLInputElement).value = '' }
-              }} />
+              <Input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e)=>{
+                  const file = e.target.files?.[0]
+                  if (file) { handleImport(file) }
+                }}
+              />
             </div>
           </div>
 
@@ -169,6 +227,23 @@ export function SystemModelsPage() {
         </Card>
       </div>
 
+      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认清除全部覆写？</AlertDialogTitle>
+            <AlertDialogDescription>
+              该操作将移除全部模型能力覆写配置，且无法撤销。请确认已备份所需规则。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearing}>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearAll} disabled={clearing}>
+              {clearing ? '清除中…' : '确认清除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* 模型列表区块 */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -178,53 +253,55 @@ export function SystemModelsPage() {
         {isLoading && list.length===0 && (<div className="text-sm text-muted-foreground text-center py-6">加载中...</div>)}
         {!isLoading && list.length===0 && (<div className="text-sm text-muted-foreground text-center py-6">暂无模型</div>)}
 
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table className="min-w-[720px] table-fixed">
-            <TableHeader className="sticky top-0 z-30 bg-muted/50 shadow-sm">
-              <TableRow>
-                <TableHead className="sticky top-0 z-30 w-[32%] h-10 bg-muted/50">模型</TableHead>
-                <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">图片</TableHead>
-                <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">上传</TableHead>
-              <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">联网</TableHead>
-              <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">生图</TableHead>
-              <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">解释器</TableHead>
-              <TableHead className="sticky top-0 z-30 text-center w-[8%] text-xs h-10 bg-muted/50 whitespace-nowrap">手动</TableHead>
-              <TableHead className="sticky top-0 z-30 text-right w-[8%] text-xs h-10 bg-muted/50 whitespace-nowrap">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.map((m:any)=>{
-              return (
-                <TableRow key={`${m.connectionId}:${m.id}`} className="hover:bg-muted/30 transition-colors">
-                  <TableCell className="py-3 px-3 w-[32%]">
-                    <div className="font-medium whitespace-normal break-words">{m.name || m.id}</div>
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="text-[11px] font-normal">{recommendTag(m)}</Badge>
-                    </div>
-                  </TableCell>
-                  {CAP_KEYS.map((k)=>{
-                    const checked = has(m, k)
-                    const sid = `${m.connectionId}-${m.id}-${k}`
-                    return (
-                      <TableCell key={k} className="py-3 px-3 align-middle text-center w-[10%]">
-                        <Switch id={sid} className="scale-75 mx-auto" defaultChecked={checked} disabled={saving===`${m.connectionId}:${m.id}`}
-                          onCheckedChange={(v)=>{ const newTags = onToggle(m, k, v); saveCaps(m, newTags) }}
-                          aria-label={`${CAP_LABELS[k]}开关`} />
-                      </TableCell>
-                    )
-                  })}
-                  <TableCell className="py-3 px-3 text-center text-xs w-[8%] whitespace-nowrap">
-                    {m.overridden ? <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">是</Badge> : '否'}
-                  </TableCell>
-                  <TableCell className="py-3 px-3 text-right text-xs w-[8%] whitespace-nowrap">
-                    <Button variant="ghost" size="sm" onClick={()=>resetOne(m)} className="h-7 text-xs">重置</Button>
-                  </TableCell>
+        <Card className="px-4 py-4 sm:px-5 sm:py-5">
+          <div className="overflow-x-auto">
+            <Table className="w-full min-w-[720px] table-fixed">
+              <TableHeader className="sticky top-0 z-30 bg-muted/50 shadow-sm">
+                <TableRow>
+                  <TableHead className="sticky top-0 z-30 w-[32%] h-10 bg-muted/50">模型</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">图片</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">上传</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">联网</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">生图</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center w-[10%] text-xs h-10 bg-muted/50">解释器</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-center w-[8%] text-xs h-10 bg-muted/50 whitespace-nowrap">手动</TableHead>
+                  <TableHead className="sticky top-0 z-30 text-right w-[8%] text-xs h-10 bg-muted/50 whitespace-nowrap">操作</TableHead>
                 </TableRow>
-              )
-            })}
-          </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {list.map((m:any)=>{
+                  return (
+                    <TableRow key={`${m.connectionId}:${m.id}`} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="py-3 px-3 w-[32%]">
+                        <div className="font-medium whitespace-normal break-words">{m.name || m.id}</div>
+                        <div className="mt-1 flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="text-[11px] font-normal">{recommendTag(m)}</Badge>
+                        </div>
+                      </TableCell>
+                      {CAP_KEYS.map((k)=>{
+                        const checked = has(m, k)
+                        const sid = `${m.connectionId}-${m.id}-${k}`
+                        return (
+                          <TableCell key={k} className="py-3 px-3 align-middle text-center w-[10%]">
+                            <Switch id={sid} className="scale-75 mx-auto" defaultChecked={checked} disabled={saving===`${m.connectionId}:${m.id}`}
+                              onCheckedChange={(v)=>{ const newTags = onToggle(m, k, v); saveCaps(m, newTags) }}
+                              aria-label={`${CAP_LABELS[k]}开关`} />
+                          </TableCell>
+                        )
+                      })}
+                      <TableCell className="py-3 px-3 text-center text-xs w-[8%] whitespace-nowrap">
+                        {m.overridden ? <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">是</Badge> : '否'}
+                      </TableCell>
+                      <TableCell className="py-3 px-3 text-right text-xs w-[8%] whitespace-nowrap">
+                        <Button variant="ghost" size="sm" onClick={()=>resetOne(m)} className="h-7 text-xs">重置</Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
       </div>
     </div>
   )

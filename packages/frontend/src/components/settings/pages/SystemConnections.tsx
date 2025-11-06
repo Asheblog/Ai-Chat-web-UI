@@ -7,7 +7,27 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardTitle, CardDescription } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useToast } from '@/components/ui/use-toast'
 import { Link2, Edit, Trash2 } from 'lucide-react'
+
+const CAP_KEYS = ['vision','file_upload','web_search','image_generation','code_interpreter'] as const
+type CapKey = typeof CAP_KEYS[number]
+const CAP_LABELS: Record<CapKey, string> = {
+  vision: '图片理解（Vision）',
+  file_upload: '文件上传',
+  web_search: '联网搜索',
+  image_generation: '图像生成',
+  code_interpreter: '代码解释器',
+}
+
+const createEmptyCaps = (): Record<CapKey, boolean> => ({
+  vision: false,
+  file_upload: false,
+  web_search: false,
+  image_generation: false,
+  code_interpreter: false,
+})
 
 export function SystemConnectionsPage() {
   const [rows, setRows] = useState<any[]>([])
@@ -15,7 +35,8 @@ export function SystemConnectionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<any | null>(null)
   const [form, setForm] = useState<any>({ provider: 'openai', baseUrl: '', authType: 'bearer', apiKey: '', azureApiVersion: '', enable: true, prefixId: '', tags: '', modelIds: '', connectionType: 'external' })
-  const [cap, setCap] = useState<{ vision: boolean; file_upload: boolean; web_search: boolean; image_generation: boolean; code_interpreter: boolean }>({ vision: false, file_upload: false, web_search: false, image_generation: false, code_interpreter: false })
+  const [cap, setCap] = useState<Record<CapKey, boolean>>(createEmptyCaps)
+  const { toast } = useToast()
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -42,7 +63,7 @@ export function SystemConnectionsPage() {
       modelIds: '',
       connectionType: 'external',
     })
-    setCap({ vision: false, file_upload: false, web_search: false, image_generation: false, code_interpreter: false })
+    setCap(createEmptyCaps())
   }
 
   const onEdit = (row: any) => {
@@ -62,62 +83,75 @@ export function SystemConnectionsPage() {
     try {
       const arr = JSON.parse(row.tagsJson||'[]') || []
       const names = new Set(arr.map((t:any)=>String(t?.name||'')))
-      setCap({
-        vision: names.has('vision'),
-        file_upload: names.has('file_upload'),
-        web_search: names.has('web_search'),
-        image_generation: names.has('image_generation'),
-        code_interpreter: names.has('code_interpreter'),
+      setCap(() => {
+        const next = createEmptyCaps()
+        CAP_KEYS.forEach((key)=>{ next[key] = names.has(key) })
+        return next
       })
-    } catch { setCap({ vision:false, file_upload:false, web_search:false, image_generation:false, code_interpreter:false }) }
+    } catch { setCap(createEmptyCaps()) }
   }
 
   const onDelete = async (id: number) => {
-    await apiClient.deleteSystemConnection(id)
-    await load()
+    try {
+      await apiClient.deleteSystemConnection(id)
+      toast({ title: '已删除连接' })
+      await load()
+    } catch (err: any) {
+      toast({
+        title: '删除失败',
+        description: err?.response?.data?.error || err?.message || '操作失败',
+        variant: 'destructive',
+      })
+    }
   }
 
   const buildTags = () => {
     const free = form.tags ? form.tags.split(',').map((s:string)=>({name:s.trim()})).filter((s:any)=>s.name && !['vision','file_upload','web_search','image_generation','code_interpreter'].includes(s.name)) : []
-    const caps = Object.entries(cap).filter(([,v])=>v).map(([k])=>({ name: k }))
+    const caps = CAP_KEYS.filter((key)=>cap[key]).map((key)=>({ name: key }))
     return [...free, ...caps]
   }
 
+  const buildPayload = () => ({
+    provider: form.provider,
+    baseUrl: form.baseUrl,
+    authType: form.authType,
+    apiKey: form.apiKey || undefined,
+    azureApiVersion: form.azureApiVersion || undefined,
+    enable: !!form.enable,
+    prefixId: form.prefixId || undefined,
+    tags: buildTags(),
+    modelIds: form.modelIds ? form.modelIds.split(',').map((s:string)=>s.trim()).filter(Boolean) : [],
+    connectionType: form.connectionType,
+  })
+
   const onVerify = async () => {
-    const payload = {
-      provider: form.provider,
-      baseUrl: form.baseUrl,
-      authType: form.authType,
-      apiKey: form.apiKey || undefined,
-      azureApiVersion: form.azureApiVersion || undefined,
-      enable: !!form.enable,
-      prefixId: form.prefixId || undefined,
-      tags: buildTags(),
-      modelIds: form.modelIds ? form.modelIds.split(',').map((s:string)=>s.trim()).filter(Boolean) : [],
-      connectionType: form.connectionType,
+    try {
+      await apiClient.verifySystemConnection(buildPayload())
+      toast({ title: '验证成功', description: '连接可用，配置已通过测试。' })
+    } catch (err: any) {
+      toast({
+        title: '验证失败',
+        description: err?.response?.data?.error || err?.message || '无法完成验证',
+        variant: 'destructive',
+      })
     }
-    await apiClient.verifySystemConnection(payload)
-    alert('验证成功')
   }
 
   const onSubmit = async () => {
-    const payload = {
-      provider: form.provider,
-      baseUrl: form.baseUrl,
-      authType: form.authType,
-      apiKey: form.apiKey || undefined,
-      azureApiVersion: form.azureApiVersion || undefined,
-      enable: !!form.enable,
-      prefixId: form.prefixId || undefined,
-      tags: buildTags(),
-      modelIds: form.modelIds ? form.modelIds.split(',').map((s:string)=>s.trim()).filter(Boolean) : [],
-      connectionType: form.connectionType,
+    try {
+      if (editing) await apiClient.updateSystemConnection(editing.id, buildPayload())
+      else await apiClient.createSystemConnection(buildPayload())
+      toast({ title: editing ? '连接已更新' : '连接已创建' })
+      setEditing(null)
+      resetForm()
+      await load()
+    } catch (err: any) {
+      toast({
+        title: '保存失败',
+        description: err?.response?.data?.error || err?.message || '无法保存连接配置',
+        variant: 'destructive',
+      })
     }
-    if (editing) await apiClient.updateSystemConnection(editing.id, payload)
-    else await apiClient.createSystemConnection(payload)
-    setEditing(null)
-    resetForm()
-    await load()
   }
 
   return (
@@ -228,11 +262,19 @@ export function SystemConnectionsPage() {
           <div className="col-span-1 sm:col-span-2">
             <Label>能力标签（勾选即添加 vision/file_upload 等标签）</Label>
             <div className="flex flex-wrap gap-3 text-sm mt-1">
-              {['vision','file_upload','web_search','image_generation','code_interpreter'].map((k) => (
-                <label key={k} className="flex items-center gap-1">
-                  <input type="checkbox" checked={(cap as any)[k]} onChange={(e)=>setCap((c:any)=>({ ...c, [k]: e.target.checked }))} />
-                  <span>{k}</span>
-                </label>
+              {CAP_KEYS.map((k) => (
+                <div key={k} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`cap-${k}`}
+                    checked={cap[k]}
+                    onCheckedChange={(value)=>setCap((prev)=>{
+                      const next = { ...prev }
+                      next[k] = value === true
+                      return next
+                    })}
+                  />
+                  <Label htmlFor={`cap-${k}`} className="font-normal">{CAP_LABELS[k]}</Label>
+                </div>
               ))}
             </div>
           </div>

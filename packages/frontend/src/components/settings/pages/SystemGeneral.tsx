@@ -1,11 +1,21 @@
 "use client"
 import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { useSettingsStore } from "@/store/settings-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
@@ -29,6 +39,7 @@ export function SystemGeneralPage() {
   const [defaultUserQuotaDraft, setDefaultUserQuotaDraft] = useState('200')
   const [anonymousRetentionDraft, setAnonymousRetentionDraft] = useState('15')
   const [syncingAnonymousQuota, setSyncingAnonymousQuota] = useState(false)
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false)
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => {
@@ -77,15 +88,13 @@ export function SystemGeneralPage() {
     return (
       <div className="p-6 text-center text-muted-foreground">
         <p>{error || '无法加载系统设置'}</p>
-        <button className="mt-3 px-3 py-2 border rounded" onClick={()=>fetchSystemSettings()}>重试</button>
+        <Button className="mt-3" variant="outline" onClick={()=>fetchSystemSettings()}>重试</Button>
       </div>
     )
   }
 
   const handleSyncAnonymousQuota = async () => {
     if (!isAdmin || syncingAnonymousQuota) return
-    const confirmed = typeof window === 'undefined' ? true : window.confirm('是否同步匿名访客额度？该操作会重置匿名访客今日已用额度。')
-    if (!confirmed) return
     setSyncingAnonymousQuota(true)
     try {
       await apiClient.syncAnonymousQuota({ resetUsed: true })
@@ -95,6 +104,7 @@ export function SystemGeneralPage() {
       toast({ title: '同步失败', description: err?.response?.data?.error || err?.message || '操作失败', variant: 'destructive' })
     } finally {
       setSyncingAnonymousQuota(false)
+      setSyncDialogOpen(false)
     }
   }
 
@@ -168,12 +178,29 @@ export function SystemGeneralPage() {
                 return parsed === (systemSettings.anonymousDailyQuota ?? 20)
               })()}
             >保存</Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleSyncAnonymousQuota}
-              disabled={!isAdmin || syncingAnonymousQuota}
-            >{syncingAnonymousQuota ? '同步中...' : '同步'}</Button>
+            <AlertDialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!isAdmin || syncingAnonymousQuota}
+                >{syncingAnonymousQuota ? '同步中...' : '同步'}</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认同步匿名访客额度？</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    该操作会重置匿名访客今日已用额度，并将额度同步为当前默认值。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={syncingAnonymousQuota}>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleSyncAnonymousQuota} disabled={syncingAnonymousQuota}>
+                    {syncingAnonymousQuota ? '处理中…' : '确认同步'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </Card>
 
