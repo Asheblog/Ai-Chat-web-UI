@@ -27,7 +27,9 @@ interface StreamAccumulator {
   reasoningActivated: boolean
 }
 
-const STREAM_FLUSH_INTERVAL = 70
+// 优化为实时刷新，支持逐字显示效果
+// 原值: 70ms批量更新 -> 现值: 0ms立即更新
+const STREAM_FLUSH_INTERVAL = 0
 
 const messageKey = (id: MessageId) => (typeof id === 'string' ? id : String(id))
 

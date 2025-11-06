@@ -82,6 +82,26 @@
   content: none;
 }
 
+/* 打字机光标闪烁动画 */
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* 思维链容器展开/折叠过渡动画 */
+.thinking-container {
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+  will-change: max-height, opacity;
+}
+
 .markdown-body {
   contain: content paint;
   will-change: contents;

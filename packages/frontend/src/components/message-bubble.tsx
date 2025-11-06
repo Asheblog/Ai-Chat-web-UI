@@ -12,6 +12,7 @@ import { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { requestMarkdownRender } from '@/lib/markdown-worker-client'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { TypewriterReasoning } from './typewriter-reasoning'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
 
@@ -252,9 +253,13 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                             dangerouslySetInnerHTML={{ __html: reasoningHtml }}
                           />
                         ) : (
-                          <pre className="whitespace-pre-wrap text-xs text-muted-foreground">
-                            {reasoningRaw}
-                          </pre>
+                          <div className="whitespace-pre-wrap text-xs text-muted-foreground">
+                            <TypewriterReasoning
+                              text={reasoningRaw}
+                              isStreaming={meta.reasoningStatus === 'streaming'}
+                              speed={20}
+                            />
+                          </div>
                         )
                       ) : (
                         <div className="text-xs text-muted-foreground">
