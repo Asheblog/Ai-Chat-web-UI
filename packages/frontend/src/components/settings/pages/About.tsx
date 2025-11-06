@@ -3,7 +3,7 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 
-// 关于页面：展示版本信息与更新日志（v1.3.9）
+// 关于页面：展示版本信息与更新日志（v1.4.0）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.3.9</Badge>
+          <Badge variant="secondary" className="font-mono">v1.4.0</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
@@ -52,45 +52,21 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d986049</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5532db8</span>
               <span className="text-muted-foreground leading-relaxed">
-                设置页模型与用户表格新增批量选择、排序、骨架加载与导入导出能力，大幅提升运维效率。
+                聊天会话新增 URL 同步与跳转逻辑；createSession 现返回会话详情（BREAKING），删除后自动定位到邻近会话。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6de6f48</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1473896</span>
               <span className="text-muted-foreground leading-relaxed">
-                全面替换原生对话框为 shadcn/ui 组件，统一操作反馈并整合设置壳层逻辑。
+                推理内容加入打字机动画与光标效果，实时流式反馈更清晰。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b458dda</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5a57dd4</span>
               <span className="text-muted-foreground leading-relaxed">
-                设置页全部采用 Card 组件与语义化标题，改善响应式间距与可访问性。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b77c76f</span>
-              <span className="text-muted-foreground leading-relaxed">
-                引入 framer-motion，实现页面切换、侧边栏与上传预览的统一动画体验。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a41a79c</span>
-              <span className="text-muted-foreground leading-relaxed">
-                品牌文案支持回退到上次有效值，并为多处对话框补充描述提升可访问性。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">297b27c</span>
-              <span className="text-muted-foreground leading-relaxed">
-                用户管理表格优化列宽与文本换行，分页控件补充水平内边距，避免信息拥挤。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b349b44</span>
-              <span className="text-muted-foreground leading-relaxed">
-                模型管理表格重新梳理列宽与徽章位置，提升多端阅读体验。
+                清理未使用的设置页辅助组件与旧 UI 封装，减轻前端包体。
               </span>
             </li>
           </ul>
