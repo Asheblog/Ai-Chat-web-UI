@@ -3,7 +3,7 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 
-// 关于页面：展示版本信息与更新日志（v1.4.0）
+// 关于页面：展示版本信息与更新日志（v1.4.1）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.4.0</Badge>
+          <Badge variant="secondary" className="font-mono">v1.4.1</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
@@ -52,21 +52,33 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5532db8</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">86da2fc</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天会话新增 URL 同步与跳转逻辑；createSession 现返回会话详情（BREAKING），删除后自动定位到邻近会话。
+                模型选择器加入搜索、能力筛选与分组折叠，支持收藏与最近使用，显著提升模型定位效率。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1473896</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">010f345</span>
               <span className="text-muted-foreground leading-relaxed">
-                推理内容加入打字机动画与光标效果，实时流式反馈更清晰。
+                提供模型上下文信息，前后端同步暴露能力标签，方便前端呈现更多提示。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5a57dd4</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bbdd3fe</span>
               <span className="text-muted-foreground leading-relaxed">
-                清理未使用的设置页辅助组件与旧 UI 封装，减轻前端包体。
+                拆分会话与消息加载状态，避免重复请求并让界面反馈更精准。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">55474f2</span>
+              <span className="text-muted-foreground leading-relaxed">
+                更新全局字体栈，改善中文字符的渲染效果与跨平台一致性。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">26f1c02</span>
+              <span className="text-muted-foreground leading-relaxed">
+                修复设置页连接管理的 lint 报错，保持代码质量基线。
               </span>
             </li>
           </ul>
