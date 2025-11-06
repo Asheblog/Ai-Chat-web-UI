@@ -466,7 +466,7 @@ export function SystemModelsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table className="w-full min-w-[680px]">
+              <Table className="w-full table-fixed">
                 <TableHeader className="sticky top-0 z-30 bg-muted/50">
                   <TableRow>
                     <TableHead className="w-12 text-center">
@@ -476,7 +476,7 @@ export function SystemModelsPage() {
                       />
                     </TableHead>
                     <TableHead
-                      className="cursor-pointer hover:bg-muted/80 transition-colors"
+                      className="w-[200px] cursor-pointer hover:bg-muted/80 transition-colors"
                       onClick={() => toggleSort('name')}
                     >
                       模型 {sortField === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -484,7 +484,7 @@ export function SystemModelsPage() {
                     {CAP_KEYS.map((k) => {
                       const Icon = CAP_ICONS[k]
                       return (
-                        <TableHead key={k} className="text-center w-[52px]">
+                        <TableHead key={k} className="text-center w-[48px]">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -500,8 +500,8 @@ export function SystemModelsPage() {
                         </TableHead>
                       )
                     })}
-                    <TableHead className="text-center w-[60px]">手动</TableHead>
-                    <TableHead className="text-center w-[70px]">操作</TableHead>
+                    <TableHead className="text-center w-[56px]">手动</TableHead>
+                    <TableHead className="text-center w-[64px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -517,8 +517,8 @@ export function SystemModelsPage() {
                           />
                         </TableCell>
                         <TableCell className="py-3 px-3">
-                          <div className="font-medium break-words">{m.name || m.id}</div>
-                          <div className="mt-1 flex items-center gap-2 flex-wrap">
+                          <div className="font-medium whitespace-normal break-words">{m.name || m.id}</div>
+                          <div className="mt-1 flex items-center gap-2 flex-wrap text-xs">
                             <Badge variant="outline" className="text-[11px] font-normal">
                               {recommendTag(m)}
                             </Badge>
