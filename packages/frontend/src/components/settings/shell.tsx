@@ -70,7 +70,7 @@ function SettingsShellLayout({
         className
       )}
     >
-      <div className="flex h-full min-h-0 flex-col md:flex-row">
+      <div className="flex h-full min-h-0 min-w-0 flex-col md:flex-row">
         <aside
           className={cn(
             "w-full shrink-0 border-b bg-muted/30 flex flex-col min-h-0 md:w-60 md:border-b-0 md:border-r overflow-y-auto",
@@ -119,9 +119,9 @@ function SettingsShellFlatImpl({
   )
 
   const content = (
-    <section className="flex-1 min-h-0 flex flex-col">
+    <section className="flex-1 min-h-0 min-w-0 flex flex-col">
       <div className="border-b px-8 py-6 font-semibold text-2xl">{activeLabel}</div>
-      <div className="flex-1 min-h-0 overflow-auto px-8 py-6">{children}</div>
+      <div className="flex-1 min-h-0 min-w-0 overflow-auto px-8 py-6">{children}</div>
     </section>
   )
 
@@ -204,7 +204,7 @@ function SettingsShellNestedImpl({
   )
 
   const content = (
-    <section className="flex-1 min-h-0 flex flex-col">
+    <section className="flex-1 min-h-0 min-w-0 flex flex-col">
       {readOnly && (
         <div className="px-6 py-3 border-b bg-muted/20 text-sm text-muted-foreground">
           {readOnlyMessage || "当前模式下无法编辑设置，请登录后再试。"}
@@ -212,7 +212,7 @@ function SettingsShellNestedImpl({
       )}
       <div
         className={cn(
-          "flex-1 min-h-0 overflow-auto px-4 py-4 md:px-6 md:py-6 transition-opacity scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground",
+          "flex-1 min-h-0 min-w-0 overflow-auto px-4 py-4 md:px-6 md:py-6 transition-opacity scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground",
           readOnly ? "pointer-events-none opacity-60" : ""
         )}
       >

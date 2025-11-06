@@ -10,10 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
-import { apiClient } from "@/lib/api"
-import { useToast } from "@/components/ui/use-toast"
-import type { ActorQuota } from "@/types"
-import { Users } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +23,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { apiClient } from "@/lib/api"
+import { useToast } from "@/components/ui/use-toast"
+import type { ActorQuota } from "@/types"
+import {
+  Users,
+  RefreshCw,
+  Search,
+  X,
+  MoreVertical,
+  DollarSign,
+  CheckCircle,
+  XCircle,
+  Shield,
+  UserX,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  UserCheck
+} from "lucide-react"
 
 type UserRow = {
   id: number
@@ -42,6 +60,8 @@ type PageData = { users: UserRow[]; pagination: { page: number; limit: number; t
 
 type StatusFilter = 'ALL' | 'PENDING' | 'ACTIVE' | 'DISABLED'
 type ConfirmMode = 'APPROVE' | 'ENABLE' | 'CHANGE_ROLE' | 'DELETE'
+type SortField = 'username' | 'createdAt' | 'status'
+type SortOrder = 'asc' | 'desc'
 
 const STATUS_META: Record<'PENDING' | 'ACTIVE' | 'DISABLED', { label: string; className: string }> = {
   PENDING: { label: '待审批', className: 'bg-blue-100/60 text-blue-700 border-blue-200' },
@@ -81,6 +101,15 @@ export function SystemUsersPage(){
   const [searchDraft, setSearchDraft] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [actionUserId, setActionUserId] = useState<number | null>(null)
+
+  // 排序状态
+  const [sortField, setSortField] = useState<SortField>('createdAt')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+
+  // 批量选择状态
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
+  // 额度对话框状态
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
   const [quotaTarget, setQuotaTarget] = useState<UserRow | null>(null)
   const [quotaSnapshot, setQuotaSnapshot] = useState<ActorQuota | null>(null)
@@ -92,6 +121,8 @@ export function SystemUsersPage(){
     dailyLimit: "",
     resetUsed: false,
   })
+
+  // 拒绝/禁用对话框状态
   const [decisionDialog, setDecisionDialog] = useState<{
     open: boolean
     mode: 'REJECT' | 'DISABLE'
@@ -107,6 +138,8 @@ export function SystemUsersPage(){
     submitting: false,
     error: null,
   })
+
+  // 确认对话框状态
   const [confirmState, setConfirmState] = useState<{ open: boolean; mode: ConfirmMode | null; target: UserRow | null; role?: 'ADMIN' | 'USER' }>({
     open: false,
     mode: null,
@@ -358,13 +391,13 @@ export function SystemUsersPage(){
       case 'APPROVE':
         return {
           title: '审批通过确认',
-          description: `确认审批通过 “${username}”？审批通过后，用户可立即登录系统。`,
+          description: `确认审批通过 "${username}"？审批通过后,用户可立即登录系统。`,
           action: '确认通过',
         }
       case 'ENABLE':
         return {
           title: '启用用户',
-          description: `确认启用 “${username}”？启用后用户可以重新登录并使用系统。`,
+          description: `确认启用 "${username}"？启用后用户可以重新登录并使用系统。`,
           action: '确认启用',
         }
       case 'CHANGE_ROLE': {
@@ -372,14 +405,14 @@ export function SystemUsersPage(){
         const roleLabel = role === 'ADMIN' ? '管理员' : '普通用户'
         return {
           title: '变更用户角色',
-          description: `确认将 “${username}” 角色调整为 ${roleLabel}？该操作会立即生效。`,
+          description: `确认将 "${username}" 角色调整为 ${roleLabel}？该操作会立即生效。`,
           action: '确认变更',
         }
       }
       case 'DELETE':
         return {
           title: '删除用户',
-          description: `确认删除 “${username}”？该操作不可恢复，将级联删除该用户的会话与消息。`,
+          description: `确认删除 "${username}"？该操作不可恢复,将级联删除该用户的会话与消息。`,
           action: '确认删除',
         }
       default:
@@ -387,58 +420,188 @@ export function SystemUsersPage(){
     }
   }, [confirmState])
 
+  // 排序逻辑
+  const sortedRows = useMemo(() => {
+    const sorted = [...rows]
+    sorted.sort((a, b) => {
+      let comparison = 0
+      if (sortField === 'username') {
+        comparison = a.username.localeCompare(b.username)
+      } else if (sortField === 'createdAt') {
+        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      } else if (sortField === 'status') {
+        comparison = a.status.localeCompare(b.status)
+      }
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+    return sorted
+  }, [rows, sortField, sortOrder])
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortOrder('asc')
+    }
+  }
+
+  // 批量选择逻辑
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sortedRows.length && sortedRows.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(sortedRows.map(r => r.id)))
+    }
+  }
+
+  const toggleSelectRow = (id: number) => {
+    const newSet = new Set(selectedIds)
+    if (newSet.has(id)) {
+      newSet.delete(id)
+    } else {
+      newSet.add(id)
+    }
+    setSelectedIds(newSet)
+  }
+
+  // 批量操作
+  const handleBatchEnable = async () => {
+    const ids = Array.from(selectedIds)
+    setLoading(true)
+    try {
+      await Promise.all(ids.map(id => apiClient.updateUserStatus(id, 'ACTIVE')))
+      toast({ title: '批量启用成功', description: `已启用 ${ids.length} 个用户` })
+      setSelectedIds(new Set())
+      await load()
+    } catch (e: any) {
+      toast({ title: '批量启用失败', description: e?.message || '操作失败', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleBatchDisable = async () => {
+    const ids = Array.from(selectedIds)
+    setLoading(true)
+    try {
+      await Promise.all(ids.map(id => apiClient.updateUserStatus(id, 'DISABLED')))
+      toast({ title: '批量禁用成功', description: `已禁用 ${ids.length} 个用户` })
+      setSelectedIds(new Set())
+      await load()
+    } catch (e: any) {
+      toast({ title: '批量禁用失败', description: e?.message || '操作失败', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    const ids = Array.from(selectedIds)
+    setLoading(true)
+    try {
+      await Promise.all(ids.map(id => apiClient.deleteUser(id)))
+      toast({ title: '批量删除成功', description: `已删除 ${ids.length} 个用户` })
+      setSelectedIds(new Set())
+      await load()
+    } catch (e: any) {
+      toast({ title: '批量删除失败', description: e?.message || '操作失败', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const pagination = useMemo(() => ({ page, limit, totalPages }), [page, limit, totalPages])
 
   return (
     <div className="space-y-6">
 
-      {/* 搜索筛选工具区块 */}
+      {/* 搜索筛选区块 */}
       <div className="space-y-4">
         <div className="flex items-center gap-3 pb-3 border-b">
           <Users className="w-5 h-5 text-primary" />
           <div>
-            <CardTitle className="text-lg">搜索和筛选</CardTitle>
-            <CardDescription>按用户名或状态快速查找用户</CardDescription>
+            <CardTitle className="text-lg">用户管理</CardTitle>
+            <CardDescription>管理系统用户、审批注册、调整权限和额度</CardDescription>
           </div>
         </div>
 
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-              <Input
-                placeholder="搜索用户名"
-                value={searchDraft}
-                onChange={(e)=>setSearchDraft(e.target.value)}
-                className="w-full sm:w-56"
-                onKeyDown={(e)=>{ if(e.key==='Enter') onSearch() }}
-              />
-              <Button variant="outline" onClick={onSearch} disabled={loading} className="w-full sm:w-auto">搜索</Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 flex-1">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索用户名..."
+                  value={searchDraft}
+                  onChange={(e)=>setSearchDraft(e.target.value)}
+                  className="pl-9"
+                  onKeyDown={(e)=>{ if(e.key==='Enter') onSearch() }}
+                />
+              </div>
+              <Button variant="default" onClick={onSearch} disabled={loading} className="w-full sm:w-auto">
+                搜索
+              </Button>
               {search && (
                 <Button variant="ghost" onClick={onClearSearch} disabled={loading} className="w-full sm:w-auto">
+                  <X className="w-4 h-4 mr-1" />
                   清空
                 </Button>
               )}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm text-muted-foreground whitespace-nowrap">状态</Label>
-                <select
-                  className="border rounded px-2 py-1 text-sm"
-                  value={statusFilter}
-                  onChange={(e)=>handleStatusFilterChange(e.target.value as StatusFilter)}
-                >
+              <Select value={statusFilter} onValueChange={(value) => handleStatusFilterChange(value as StatusFilter)}>
+                <SelectTrigger className="w-full sm:w-[140px]">
+                  <SelectValue placeholder="状态筛选" />
+                </SelectTrigger>
+                <SelectContent>
                   {STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
-                </select>
-              </div>
-              <Button variant="outline" onClick={()=>load()} disabled={loading} className="w-full sm:w-auto">刷新</Button>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={()=>load()} disabled={loading} className="w-full sm:w-auto">
+                <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                刷新
+              </Button>
             </div>
           </div>
         </Card>
       </div>
 
-      {error && <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded">{error}</div>}
+      {error && (
+        <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded border border-destructive/20">
+          {error}
+        </div>
+      )}
+
+      {/* 批量操作栏 */}
+      {selectedIds.size > 0 && (
+        <Card className="px-4 py-3 sm:px-5 sm:py-3 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm font-medium">
+              已选择 {selectedIds.size} 个用户
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
+              <Button size="sm" variant="outline" onClick={handleBatchEnable} disabled={loading}>
+                <UserCheck className="w-4 h-4 mr-1" />
+                批量启用
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleBatchDisable} disabled={loading}>
+                <UserX className="w-4 h-4 mr-1" />
+                批量禁用
+              </Button>
+              <Button size="sm" variant="destructive" onClick={handleBatchDelete} disabled={loading}>
+                <Trash2 className="w-4 h-4 mr-1" />
+                批量删除
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                取消选择
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* 用户列表区块 */}
       <div className="space-y-4">
@@ -447,92 +610,226 @@ export function SystemUsersPage(){
         </div>
 
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
-          <div className="overflow-x-auto">
-            <Table className="w-full min-w-[720px]">
-              <TableHeader className="sticky top-0 z-30 bg-muted/50 shadow-sm">
-                <TableRow>
-                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[120px] bg-muted/50">用户名</TableHead>
-                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">角色</TableHead>
-                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[100px] bg-muted/50">状态</TableHead>
-                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-[140px] bg-muted/50">创建时间</TableHead>
-                  <TableHead className="sticky top-0 z-30 text-center whitespace-nowrap w-auto bg-muted/50">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading && rows.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">加载中...</TableCell></TableRow>
-                )}
-                {!loading && rows.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">暂无数据</TableCell></TableRow>
-                )}
-                {rows.map((r) => {
-                  const statusTitle = r.status === 'DISABLED'
-                    ? (r.rejectionReason ? `禁用原因：${r.rejectionReason}` : '账户已被禁用')
-                    : r.status === 'PENDING'
-                      ? '等待管理员审批'
-                      : '账户已启用'
-                  const isActionBusy = actionUserId === r.id || loading
-                  return (
-                    <TableRow key={r.id} className="hover:bg-muted/30 transition-colors">
-                      <TableCell className="text-center whitespace-nowrap">{r.username}</TableCell>
-                      <TableCell className="text-center whitespace-nowrap">
-                        {r.role === 'ADMIN' ? (
-                          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">ADMIN</Badge>
-                        ) : (
-                          <Badge variant="outline">USER</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center whitespace-nowrap">
-                        {r.status === 'PENDING' && (
-                          <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" title={statusTitle}>待审批</Badge>
-                        )}
-                        {r.status === 'ACTIVE' && (
-                          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" title={statusTitle}>已启用</Badge>
-                        )}
-                        {r.status === 'DISABLED' && (
-                          <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" title={statusTitle}>已禁用</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center whitespace-nowrap">
-                        <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground min-w-[120px]">
-                          <span>{formatTimestamp(r.createdAt)}</span>
-                          {r.approvedAt && <span>批：{formatTimestamp(r.approvedAt)}</span>}
-                          {!r.approvedAt && r.rejectedAt && <span>禁：{formatTimestamp(r.rejectedAt)}</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 max-w-[320px] mx-auto">
-                          <Button size="sm" variant="outline" onClick={()=>openQuotaDialog(r)} disabled={quotaSubmitting || isActionBusy} className="px-3 py-2 text-sm w-full">调整额度</Button>
-                          {r.status === 'PENDING' && (
-                            <>
-                              <Button size="sm" variant="outline" onClick={()=>confirmApprove(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">审批通过</Button>
-                              <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('REJECT', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">拒绝</Button>
-                            </>
+          {loading && rows.length === 0 ? (
+            // 骨架屏加载
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="w-8 h-8" />
+                  <Skeleton className="h-8 flex-1" />
+                  <Skeleton className="w-24 h-8" />
+                  <Skeleton className="w-24 h-8" />
+                  <Skeleton className="w-32 h-8" />
+                </div>
+              ))}
+            </div>
+          ) : !loading && rows.length === 0 ? (
+            // 空状态
+            <div className="text-center py-12">
+              <Users className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
+              <p className="text-sm text-muted-foreground mb-2">暂无用户数据</p>
+              <p className="text-xs text-muted-foreground">
+                {search ? '尝试调整搜索条件或筛选器' : '等待用户注册后将在此显示'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="w-full min-w-[720px]">
+                <TableHeader className="sticky top-0 z-30 bg-muted/50">
+                  <TableRow>
+                    <TableHead className="w-12 text-center">
+                      <Checkbox
+                        checked={selectedIds.size === sortedRows.length && sortedRows.length > 0}
+                        onChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/80 transition-colors"
+                      onClick={() => toggleSort('username')}
+                    >
+                      用户名 {sortField === 'username' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </TableHead>
+                    <TableHead className="text-center w-[100px]">角色</TableHead>
+                    <TableHead
+                      className="text-center w-[100px] cursor-pointer hover:bg-muted/80 transition-colors"
+                      onClick={() => toggleSort('status')}
+                    >
+                      状态 {sortField === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </TableHead>
+                    <TableHead
+                      className="text-center w-[160px] cursor-pointer hover:bg-muted/80 transition-colors"
+                      onClick={() => toggleSort('createdAt')}
+                    >
+                      创建时间 {sortField === 'createdAt' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </TableHead>
+                    <TableHead className="text-center w-[80px]">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedRows.map((r) => {
+                    const statusTitle = r.status === 'DISABLED'
+                      ? (r.rejectionReason ? `禁用原因：${r.rejectionReason}` : '账户已被禁用')
+                      : r.status === 'PENDING'
+                        ? '等待管理员审批'
+                        : '账户已启用'
+                    const isActionBusy = actionUserId === r.id || loading
+                    return (
+                      <TableRow key={r.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={selectedIds.has(r.id)}
+                            onChange={() => toggleSelectRow(r.id)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{r.username}</TableCell>
+                        <TableCell className="text-center">
+                          {r.role === 'ADMIN' ? (
+                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                              <Shield className="w-3 h-3 mr-1" />
+                              管理员
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">用户</Badge>
                           )}
-                          {r.status === 'ACTIVE' && (
-                            <Button size="sm" variant="destructive" onClick={()=>openDecisionDialog('DISABLE', r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">禁用</Button>
-                          )}
-                          {r.status === 'DISABLED' && (
-                            <Button size="sm" variant="outline" onClick={()=>confirmEnable(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">启用</Button>
-                          )}
-                          {r.role !== 'ADMIN' && (
-                            <Button size="sm" variant="outline" onClick={()=>confirmChangeRole(r, 'ADMIN')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为管理员</Button>
-                          )}
-                          {r.role !== 'USER' && (
-                            <Button size="sm" variant="outline" onClick={()=>confirmChangeRole(r, 'USER')} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">设为用户</Button>
-                          )}
-                          <Button size="sm" variant="destructive" onClick={()=>confirmDelete(r)} disabled={isActionBusy} className="px-3 py-2 text-sm w-full">删除</Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            className={STATUS_META[r.status].className}
+                            title={statusTitle}
+                          >
+                            {STATUS_META[r.status].label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center text-xs text-muted-foreground">
+                          {formatTimestamp(r.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" disabled={isActionBusy}>
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem onClick={()=>openQuotaDialog(r)} disabled={quotaSubmitting || isActionBusy}>
+                                <DollarSign className="w-4 h-4 mr-2" />
+                                调整额度
+                              </DropdownMenuItem>
+                              {r.status === 'PENDING' && (
+                                <>
+                                  <DropdownMenuItem onClick={()=>confirmApprove(r)} disabled={isActionBusy}>
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    审批通过
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={()=>openDecisionDialog('REJECT', r)} disabled={isActionBusy} className="text-destructive">
+                                    <XCircle className="w-4 h-4 mr-2" />
+                                    拒绝申请
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {r.status === 'ACTIVE' && (
+                                <DropdownMenuItem onClick={()=>openDecisionDialog('DISABLE', r)} disabled={isActionBusy} className="text-destructive">
+                                  <UserX className="w-4 h-4 mr-2" />
+                                  禁用用户
+                                </DropdownMenuItem>
+                              )}
+                              {r.status === 'DISABLED' && (
+                                <DropdownMenuItem onClick={()=>confirmEnable(r)} disabled={isActionBusy}>
+                                  <UserCheck className="w-4 h-4 mr-2" />
+                                  启用用户
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              {r.role !== 'ADMIN' && (
+                                <DropdownMenuItem onClick={()=>confirmChangeRole(r, 'ADMIN')} disabled={isActionBusy}>
+                                  <Shield className="w-4 h-4 mr-2" />
+                                  设为管理员
+                                </DropdownMenuItem>
+                              )}
+                              {r.role !== 'USER' && (
+                                <DropdownMenuItem onClick={()=>confirmChangeRole(r, 'USER')} disabled={isActionBusy}>
+                                  设为普通用户
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={()=>confirmDelete(r)} disabled={isActionBusy} className="text-destructive">
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                删除用户
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </Card>
       </div>
 
+      {/* 分页控制 */}
+      {rows.length > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-2">
+          <div className="text-sm text-muted-foreground">
+            第 {pagination.page} / {pagination.totalPages} 页
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground whitespace-nowrap">每页显示</Label>
+              <Select
+                value={String(limit)}
+                onValueChange={(value)=>{
+                  const l = parseInt(value)||10;
+                  setLimit(l);
+                  setPage(1);
+                  load({ page:1, limit:l, status: statusFilter })
+                }}
+              >
+                <SelectTrigger className="w-[80px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[10,20,50].map(n => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page<=1 || loading}
+                onClick={()=>{
+                  const p=Math.max(1,page-1);
+                  setPage(p);
+                  load({ page: p, status: statusFilter })
+                }}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                上一页
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page>=totalPages || loading}
+                onClick={()=>{
+                  const p=Math.min(totalPages,page+1);
+                  setPage(p);
+                  load({ page: p, status: statusFilter })
+                }}
+              >
+                下一页
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 确认对话框 */}
       {confirmMeta && (
         <AlertDialog open={confirmState.open} onOpenChange={(open)=>{ if (!open) closeConfirm(); }}>
           <AlertDialogContent>
@@ -554,22 +851,7 @@ export function SystemUsersPage(){
         </AlertDialog>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm px-3 sm:px-4">
-        <div className="text-muted-foreground">第 {pagination.page} / {pagination.totalPages} 页</div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
-            <Button variant="outline" size="sm" disabled={page<=1 || loading} onClick={()=>{ const p=Math.max(1,page-1); setPage(p); load({ page: p, status: statusFilter }) }} className="w-full sm:w-auto">上一页</Button>
-            <Button variant="outline" size="sm" disabled={page>=totalPages || loading} onClick={()=>{ const p=Math.min(totalPages,page+1); setPage(p); load({ page: p, status: statusFilter }) }} className="w-full sm:w-auto">下一页</Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-muted-foreground">每页</Label>
-            <select className="border rounded px-2 py-1" value={limit} onChange={(e)=>{ const l = parseInt(e.target.value)||10; setLimit(l); setPage(1); load({ page:1, limit:l, status: statusFilter }) }}>
-              {[10,20,50].map(n => (<option key={n} value={n}>{n}</option>))}
-            </select>
-          </div>
-        </div>
-      </div>
-
+      {/* 额度调整对话框 */}
       <Dialog open={quotaDialogOpen} onOpenChange={handleQuotaDialogOpenChange}>
         <DialogContent>
           <DialogHeader>
@@ -661,6 +943,7 @@ export function SystemUsersPage(){
         </DialogContent>
       </Dialog>
 
+      {/* 拒绝/禁用对话框 */}
       <Dialog open={decisionDialog.open} onOpenChange={(open)=>{ if(!open) closeDecisionDialog() }}>
         <DialogContent>
           <DialogHeader>

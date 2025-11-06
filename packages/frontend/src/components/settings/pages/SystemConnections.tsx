@@ -155,7 +155,7 @@ export function SystemConnectionsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
 
       {/* 连接表单区块 */}
       <div className="space-y-4">
@@ -169,7 +169,7 @@ export function SystemConnectionsPage() {
 
         {error && <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded">{error}</div>}
 
-        <Card className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
+        <Card className="space-y-3 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Provider</Label>
