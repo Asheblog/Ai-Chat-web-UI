@@ -158,6 +158,7 @@ model Connection {
   prefixId       String?
   tagsJson       String    @default("[]")
   modelIdsJson   String    @default("[]")
+  defaultCapabilitiesJson String @default("{}")
   connectionType String    @default("external") // 'external' | 'local'
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -180,6 +181,7 @@ model ModelCatalog {
   connectionType String
   tagsJson       String    @default("[]")
   metaJson       String    @default("{}")
+  capabilitiesJson String  @default("{}")
   manualOverride Boolean   @default(false)
   lastFetchedAt  DateTime  @default(now())
   expiresAt      DateTime

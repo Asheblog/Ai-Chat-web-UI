@@ -29,6 +29,20 @@ const createEmptyCaps = (): Record<CapKey, boolean> => ({
   code_interpreter: false,
 })
 
+const parseCapJson = (raw?: string | null): Record<CapKey, boolean> => {
+  const next = createEmptyCaps()
+  if (!raw) return next
+  try {
+    const parsed = JSON.parse(raw || '{}')
+    CAP_KEYS.forEach((key) => {
+      next[key] = Boolean(parsed?.[key])
+    })
+  } catch {
+    // ignore
+  }
+  return next
+}
+
 export function SystemConnectionsPage() {
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -80,15 +94,7 @@ export function SystemConnectionsPage() {
       modelIds: (() => { try { return (JSON.parse(row.modelIdsJson||'[]')||[]).join(',') } catch { return '' } })(),
       connectionType: row.connectionType || 'external',
     })
-    try {
-      const arr = JSON.parse(row.tagsJson||'[]') || []
-      const names = new Set(arr.map((t:any)=>String(t?.name||'')))
-      setCap(() => {
-        const next = createEmptyCaps()
-        CAP_KEYS.forEach((key)=>{ next[key] = names.has(key) })
-        return next
-      })
-    } catch { setCap(createEmptyCaps()) }
+    setCap(parseCapJson(row.defaultCapabilitiesJson))
   }
 
   const onDelete = async (id: number) => {
@@ -106,9 +112,8 @@ export function SystemConnectionsPage() {
   }
 
   const buildTags = () => {
-    const free = form.tags ? form.tags.split(',').map((s:string)=>({name:s.trim()})).filter((s:any)=>s.name && !['vision','file_upload','web_search','image_generation','code_interpreter'].includes(s.name)) : []
-    const caps = CAP_KEYS.filter((key)=>cap[key]).map((key)=>({ name: key }))
-    return [...free, ...caps]
+    const free = form.tags ? form.tags.split(',').map((s:string)=>({name:s.trim()})).filter((s:any)=>s.name) : []
+    return free
   }
 
   const buildPayload = () => ({
@@ -122,6 +127,7 @@ export function SystemConnectionsPage() {
     tags: buildTags(),
     modelIds: form.modelIds ? form.modelIds.split(',').map((s:string)=>s.trim()).filter(Boolean) : [],
     connectionType: form.connectionType,
+    defaultCapabilities: cap,
   })
 
   const onVerify = async () => {
@@ -260,7 +266,7 @@ export function SystemConnectionsPage() {
             <Input value={form.tags} onChange={(e)=>setForm((f:any)=>({...f, tags:e.target.value }))} placeholder="prod,team-a" />
           </div>
           <div className="col-span-1 sm:col-span-2">
-            <Label>能力标签（勾选即添加 vision/file_upload 等标签）</Label>
+            <Label>默认能力（影响此连接拉取的所有模型）</Label>
             <div className="flex flex-wrap gap-3 text-sm mt-1">
               {CAP_KEYS.map((k) => (
                 <div key={k} className="flex items-center gap-2">

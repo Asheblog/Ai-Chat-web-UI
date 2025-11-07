@@ -1,6 +1,8 @@
 import fetch from 'node-fetch'
 import type { Response } from 'node-fetch'
 import { BackendLogger as log } from './logger'
+import type { CapabilityFlags, CapabilitySource } from './capabilities'
+import { hasDefinedCapability } from './capabilities'
 
 export type ProviderType = 'openai' | 'azure_openai' | 'ollama' | 'google_genai'
 export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
@@ -17,6 +19,7 @@ export interface ConnectionConfig {
   tags?: Array<{ name: string }>
   modelIds?: string[]
   connectionType?: 'external' | 'local'
+  defaultCapabilities?: CapabilityFlags
 }
 
 export interface CatalogItem {
@@ -30,18 +33,13 @@ export interface CatalogItem {
   tags: Array<{ name: string }>
   // 模型能力元数据：对齐 open-webui 的能力设计
   // 仅在聚合内存中计算与返回，不落库
-  capabilities?: {
-    vision?: boolean
-    file_upload?: boolean
-    web_search?: boolean
-    image_generation?: boolean
-    code_interpreter?: boolean
-  }
+  capabilities?: CapabilityFlags
+  capabilitySource?: CapabilitySource
 }
 
 // 公共工具：根据 tags 与 rawId 推导模型能力（标签优先，启发式其次）
-export function computeCapabilities(rawId: string, tags?: Array<{ name: string }>): CatalogItem['capabilities'] {
-  const caps: CatalogItem['capabilities'] = {}
+export function computeCapabilities(rawId: string, tags?: Array<{ name: string }>): CapabilityFlags {
+  const caps: CapabilityFlags = {}
   const tnames = (tags || []).map((t) => (t?.name || '').toLowerCase())
   const hasTag = (k: string) => tnames.includes(k)
 
@@ -61,6 +59,27 @@ export function computeCapabilities(rawId: string, tags?: Array<{ name: string }
     ]
     if (visionHints.some((p) => id.includes(p))) caps.vision = true
   }
+
+  const fileUploadHints = ['upload-anything', 'file-gpt', 'omni', 'vision', 'gpt-4.1', 'gpt4o', 'o4']
+  if (caps.file_upload !== true && fileUploadHints.some((p) => id.includes(p))) {
+    caps.file_upload = true
+  }
+
+  const webSearchHints = ['web', 'browse', 'search', 'perplexity', 'webgpt', 'internet']
+  if (caps.web_search !== true && webSearchHints.some((p) => id.includes(p))) {
+    caps.web_search = true
+  }
+
+  const imageGenHints = ['image-gen', 'image_generation', 'dall', 'kandinsky', 'sdxl', 'flux', 'kling', 'midjourney']
+  if (caps.image_generation !== true && imageGenHints.some((p) => id.includes(p))) {
+    caps.image_generation = true
+  }
+
+  const codeHints = ['code', 'coder', 'program', 'deepseek', 'o1', 'o3', 'reasoner', 'math']
+  if (caps.code_interpreter !== true && codeHints.some((p) => id.includes(p))) {
+    caps.code_interpreter = true
+  }
+
   return caps
 }
 
@@ -222,17 +241,26 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const channelName = deriveChannelName(cfg.provider, baseUrl)
   const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
 
-  const apply = (id: string, name?: string): CatalogItem => ({
-    id: prefix ? `${prefix}.${id}` : id,
-    rawId: id,
-    name: name || id,
-    provider: cfg.provider,
-    channelName,
-    connectionBaseUrl: baseUrl,
-    connectionType,
-    tags,
-    capabilities: computeCapabilities(id, tags),
-  })
+  const apply = (id: string, name?: string): CatalogItem => {
+    const inferred = computeCapabilities(id, tags)
+    const hasInferred = hasDefinedCapability(inferred)
+    return {
+      id: prefix ? `${prefix}.${id}` : id,
+      rawId: id,
+      name: name || id,
+      provider: cfg.provider,
+      channelName,
+      connectionBaseUrl: baseUrl,
+      connectionType,
+      tags,
+      ...(hasInferred
+        ? {
+            capabilities: inferred,
+            capabilitySource: 'heuristic' as CapabilitySource,
+          }
+        : {}),
+    }
+  }
 
   if (cfg.modelIds && cfg.modelIds.length) {
     return cfg.modelIds.map((m) => apply(m))

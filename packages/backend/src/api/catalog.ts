@@ -5,6 +5,12 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import { computeCapabilities, deriveChannelName } from '../utils/providers'
 import { refreshAllModelCatalog, refreshModelCatalogForConnections, refreshModelCatalogForConnectionId } from '../utils/model-catalog'
 import { BackendLogger as log } from '../utils/logger'
+import {
+  parseCapabilityEnvelope,
+  normalizeCapabilityFlags,
+  hasDefinedCapability,
+  serializeCapabilityEnvelope,
+} from '../utils/capabilities'
 
 const extractContextWindow = (metaJson: string | null | undefined): number | null => {
   if (!metaJson) return null
@@ -76,6 +82,19 @@ catalog.get('/models', async (c) => {
         tags = []
       }
       const contextWindow = extractContextWindow(row.metaJson)
+      const storedCaps = parseCapabilityEnvelope(row.capabilitiesJson)
+      let capabilities = storedCaps?.flags
+      let capabilitySource = storedCaps?.source ?? null
+      if (!storedCaps || !hasDefinedCapability(capabilities)) {
+        const fallback = computeCapabilities(row.rawId, tags)
+        if (hasDefinedCapability(fallback)) {
+          capabilities = fallback
+          capabilitySource = 'legacy'
+        } else {
+          capabilities = undefined
+          capabilitySource = null
+        }
+      }
 
       return {
         id: row.modelId,
@@ -87,7 +106,8 @@ catalog.get('/models', async (c) => {
         connectionId: row.connectionId,
         connectionType: row.connectionType,
         tags,
-        capabilities: computeCapabilities(row.rawId, tags),
+        capabilities,
+        capabilitySource: capabilitySource || undefined,
         overridden: row.manualOverride,
         contextWindow,
       }
@@ -116,6 +136,9 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     const connectionId = parseInt(String(body.connectionId || '0'))
     const rawId = String(body.rawId || '')
     const tags: Array<{ name: string }> = Array.isArray(body.tags) ? body.tags : []
+    const hasCapabilitiesPayload = body.capabilities != null
+    const capabilityFlags = hasCapabilitiesPayload ? normalizeCapabilityFlags(body.capabilities) : undefined
+    const capabilitiesJson = hasCapabilitiesPayload ? serializeCapabilityEnvelope({ flags: capabilityFlags || {}, source: 'manual' }) : undefined
     if (!connectionId || !rawId) return c.json<ApiResponse>({ success: false, error: 'connectionId/rawId required' }, 400)
 
     const conn = await prisma.connection.findUnique({ where: { id: connectionId } })
@@ -136,6 +159,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
           provider: conn.provider,
           connectionType: (conn.connectionType as any) || 'external',
           tagsJson: JSON.stringify(tags || []),
+          capabilitiesJson: capabilitiesJson || '{}',
           manualOverride: true,
           lastFetchedAt: now,
           expiresAt,
@@ -146,6 +170,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
         where: { id: exists.id },
         data: {
           tagsJson: JSON.stringify(tags || []),
+          ...(capabilitiesJson ? { capabilitiesJson } : {}),
           manualOverride: true,
           lastFetchedAt: now,
           expiresAt,
@@ -200,8 +225,18 @@ catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) 
 // 管理端：导出当前覆写（覆盖记录）
 catalog.get('/models/overrides', requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const rows = await prisma.modelCatalog.findMany({ where: { manualOverride: true }, select: { connectionId: true, rawId: true, modelId: true, tagsJson: true } })
-    const items = rows.map((r) => ({ connectionId: r.connectionId, rawId: r.rawId, modelId: r.modelId, tags: JSON.parse(r.tagsJson || '[]') }))
+    const rows = await prisma.modelCatalog.findMany({ where: { manualOverride: true }, select: { connectionId: true, rawId: true, modelId: true, tagsJson: true, capabilitiesJson: true } })
+    const items = rows.map((r) => {
+      const parsedCaps = parseCapabilityEnvelope(r.capabilitiesJson)
+      return {
+        connectionId: r.connectionId,
+        rawId: r.rawId,
+        modelId: r.modelId,
+        tags: JSON.parse(r.tagsJson || '[]'),
+        capabilities: parsedCaps?.flags || undefined,
+        capabilitySource: parsedCaps?.source || null,
+      }
+    })
     return c.json<ApiResponse>({ success: true, data: items })
   } catch (e) {
     return c.json<ApiResponse>({ success: false, error: 'Failed to export overrides' }, 500)

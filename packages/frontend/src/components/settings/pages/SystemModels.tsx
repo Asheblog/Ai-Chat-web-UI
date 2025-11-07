@@ -63,6 +63,14 @@ const CAP_ICONS: Record<CapKey, React.ElementType> = {
   code_interpreter: Code2,
 }
 
+const CAP_SOURCE_LABELS: Record<string, string> = {
+  manual: '手动设置',
+  connection_default: '连接默认',
+  provider: '供应商标注',
+  heuristic: '系统推断',
+  legacy: '兼容标签',
+}
+
 export function SystemModelsPage() {
   const { models, isLoading, fetchAll } = useModelsStore()
   const [q, setQ] = useState('')
@@ -117,6 +125,15 @@ export function SystemModelsPage() {
 
   const has = (m:any, k:CapKey) => Boolean(m?.capabilities?.[k])
 
+  const capabilityStateOf = (m:any): Record<CapKey, boolean> => {
+    const next = {} as Record<CapKey, boolean>
+    CAP_KEYS.forEach((key)=> {
+      const value = m?.capabilities?.[key]
+      next[key] = typeof value === 'boolean' ? value : false
+    })
+    return next
+  }
+
   // 简单启发式:给出"推荐用途"标签(无后端字段时的友好占位)
   const recommendTag = (m:any): string | null => {
     const key = `${m?.id||''} ${m?.name||''} ${m?.rawId||''}`.toLowerCase()
@@ -133,13 +150,15 @@ export function SystemModelsPage() {
     const caps = new Set<CapKey>(CAP_KEYS.filter((kk)=>has(m, kk)) as CapKey[])
     if (v) caps.add(k); else caps.delete(k)
     const newTags = base.concat(Array.from(caps).map(n => ({ name: n })))
-    return newTags
+    const capabilityState = capabilityStateOf(m)
+    capabilityState[k] = v
+    return { tags: newTags, capabilities: capabilityState }
   }
 
-  const saveCaps = async (m:any, newTags:Array<{name:string}>) => {
+  const saveCaps = async (m:any, payload:{ tags:Array<{name:string}>, capabilities:Record<CapKey, boolean> }) => {
     try {
       setSaving(`${m.connectionId}:${m.id}`)
-      await apiClient.updateModelTags(m.connectionId, m.rawId, newTags)
+      await apiClient.updateModelTags(m.connectionId, m.rawId, payload.tags, payload.capabilities)
       await fetchAll()
       toast({ title: '能力已更新', description: `${m.name || m.id} 的能力配置已保存` })
     } catch (e: any) {
@@ -217,8 +236,20 @@ export function SystemModelsPage() {
           const capTags = CAP_KEYS.filter((k)=>Boolean(caps[k])).map((k)=>({ name: k }))
           tags = capTags
         }
+        let capPayload: Record<CapKey, boolean> | undefined
+        if (it?.capabilities && typeof it.capabilities === 'object') {
+          capPayload = CAP_KEYS.reduce((acc, key) => {
+            if (typeof it.capabilities[key] === 'boolean') {
+              acc[key] = Boolean(it.capabilities[key])
+            }
+            return acc
+          }, {} as Record<CapKey, boolean>)
+          if (Object.keys(capPayload).length === 0) {
+            capPayload = undefined
+          }
+        }
         if (it?.connectionId && it?.rawId) {
-          await apiClient.updateModelTags(Number(it.connectionId), String(it.rawId), tags)
+          await apiClient.updateModelTags(Number(it.connectionId), String(it.rawId), tags, capPayload)
         }
       }
       await fetchAll()
@@ -238,7 +269,13 @@ export function SystemModelsPage() {
 
   const handleExport = () => {
     const src = (models||[]).filter((m:any)=> m.overridden)
-    const items = src.map((m:any)=>({ connectionId: m.connectionId, rawId: m.rawId, tags: m.tags || [] }))
+    const items = src.map((m:any)=>({
+      connectionId: m.connectionId,
+      rawId: m.rawId,
+      tags: m.tags || [],
+      capabilities: m.capabilities || {},
+      capabilitySource: m.capabilitySource || null,
+    }))
     const blob = new Blob([JSON.stringify({ items }, null, 2)], { type: 'application/json;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'model-capabilities-overrides.json';
@@ -527,6 +564,11 @@ export function SystemModelsPage() {
                                 {m.provider}
                               </Badge>
                             )}
+                            {m.capabilitySource && (
+                              <Badge variant="secondary" className="text-[10px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                                {CAP_SOURCE_LABELS[m.capabilitySource] || `来源:${m.capabilitySource}`}
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         {CAP_KEYS.map((k)=>{
@@ -534,17 +576,17 @@ export function SystemModelsPage() {
                           const sid = `${m.connectionId}-${m.id}-${k}`
                           return (
                             <TableCell key={k} className="py-3 px-3 text-center">
-                              <Switch
-                                id={sid}
-                                className="scale-75 mx-auto"
-                                checked={checked}
-                                disabled={isBusy}
-                                onCheckedChange={(v)=>{
-                                  const newTags = onToggle(m, k, v);
-                                  saveCaps(m, newTags)
+                          <Switch
+                            id={sid}
+                            className="scale-75 mx-auto"
+                            checked={checked}
+                            disabled={isBusy}
+                            onCheckedChange={(v)=>{
+                                  const payload = onToggle(m, k, v);
+                                  saveCaps(m, payload)
                                 }}
-                                aria-label={`${CAP_LABELS[k]}开关`}
-                              />
+                            aria-label={`${CAP_LABELS[k]}开关`}
+                          />
                             </TableCell>
                           )
                         })}

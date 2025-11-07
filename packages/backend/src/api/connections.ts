@@ -8,6 +8,15 @@ import { AuthUtils } from '../utils/auth'
 import { verifyConnection } from '../utils/providers'
 import { refreshModelCatalogForConnection } from '../utils/model-catalog'
 import { BackendLogger as log } from '../utils/logger'
+import { normalizeCapabilityFlags } from '../utils/capabilities'
+
+const capabilitySchema = z.object({
+  vision: z.boolean().optional(),
+  file_upload: z.boolean().optional(),
+  web_search: z.boolean().optional(),
+  image_generation: z.boolean().optional(),
+  code_interpreter: z.boolean().optional(),
+})
 
 const connections = new Hono()
 
@@ -23,6 +32,7 @@ const connectionSchema = z.object({
   tags: z.array(z.object({ name: z.string() })).optional(),
   modelIds: z.array(z.string()).optional(),
   connectionType: z.enum(['external','local']).optional(),
+  defaultCapabilities: capabilitySchema.partial().optional(),
 })
 
 connections.use('*', actorMiddleware)
@@ -48,6 +58,7 @@ connections.post('/', requireUserActor, adminOnlyMiddleware, zValidator('json', 
       prefixId: body.prefixId,
       tagsJson: JSON.stringify(body.tags || []),
       modelIdsJson: JSON.stringify(body.modelIds || []),
+      defaultCapabilitiesJson: JSON.stringify(normalizeCapabilityFlags(body.defaultCapabilities) || {}),
       connectionType: body.connectionType || 'external',
     },
   })
@@ -73,6 +84,7 @@ connections.put('/:id', requireUserActor, adminOnlyMiddleware, zValidator('json'
   if (body.prefixId != null) updates.prefixId = body.prefixId
   if (body.tags) updates.tagsJson = JSON.stringify(body.tags)
   if (body.modelIds) updates.modelIdsJson = JSON.stringify(body.modelIds)
+  if (body.defaultCapabilities) updates.defaultCapabilitiesJson = JSON.stringify(normalizeCapabilityFlags(body.defaultCapabilities) || {})
   if (body.connectionType) updates.connectionType = body.connectionType
   updates.ownerUserId = null
   const row = await prisma.connection.update({ where: { id }, data: updates })
@@ -106,6 +118,7 @@ connections.post('/verify', requireUserActor, zValidator('json', connectionSchem
       tags: body.tags,
       modelIds: body.modelIds,
       connectionType: body.connectionType,
+      defaultCapabilities: normalizeCapabilityFlags(body.defaultCapabilities),
     })
     return c.json<ApiResponse>({ success: true, message: 'Connection verified' })
   } catch (e: any) {

@@ -7,9 +7,20 @@ import {
   type CatalogItem,
   type ConnectionConfig,
   buildHeaders,
+  computeCapabilities,
 } from './providers'
 import { BackendLogger as log } from './logger'
 import { guessKnownContextWindow, invalidateContextWindowCache } from './context-window'
+import {
+  createCapabilityEnvelope,
+  mergeCapabilityLayers,
+  parseCapabilityEnvelope,
+  serializeCapabilityEnvelope,
+  normalizeCapabilityFlags,
+  hasDefinedCapability,
+  type CapabilityFlags,
+  type CapabilityEnvelope,
+} from './capabilities'
 
 const parseJsonArray = <T>(raw: string | null | undefined, fallback: T[]): T[] => {
   if (!raw) return fallback
@@ -34,6 +45,17 @@ const parseJsonRecord = (raw: string | null | undefined): Record<string, string>
   }
 }
 
+const parseCapabilitiesFromJson = (raw: string | null | undefined): CapabilityFlags | undefined => {
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw)
+    const flags = normalizeCapabilityFlags(parsed)
+    return hasDefinedCapability(flags) ? flags : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const buildConfigFromConnection = (conn: Connection): ConnectionConfig => ({
   provider: conn.provider as ConnectionConfig['provider'],
   baseUrl: conn.baseUrl,
@@ -46,6 +68,7 @@ const buildConfigFromConnection = (conn: Connection): ConnectionConfig => ({
   tags: parseJsonArray(conn.tagsJson, []),
   modelIds: parseJsonArray(conn.modelIdsJson, []),
   connectionType: (conn.connectionType as any) || 'external',
+  defaultCapabilities: parseCapabilitiesFromJson(conn.defaultCapabilitiesJson),
 })
 
 const DEFAULT_TTL_S = 600
@@ -84,6 +107,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     return { connectionId: conn.id, total: 0 }
   }
   const cfg = buildConfigFromConnection(conn)
+  const connectionCapabilityLayer = createCapabilityEnvelope(cfg.defaultCapabilities, 'connection_default')
   if (!cfg.enable) {
     await expireManual(conn.id)
     return { connectionId: conn.id, total: 0 }
@@ -186,6 +210,13 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     const tagsJson = JSON.stringify(item.tags || [])
     const contextWindow = await resolveContextWindowForItem(item)
     const metaInput = row ? parseMeta(metaCache.get(key)) : {}
+    const capabilityLayers = ([
+      connectionCapabilityLayer,
+      createCapabilityEnvelope(item.capabilities, item.capabilitySource || 'provider'),
+      createCapabilityEnvelope(computeCapabilities(item.rawId, item.tags), 'heuristic'),
+    ].filter((layer): layer is CapabilityEnvelope => Boolean(layer)))
+    const resolvedCapabilities = mergeCapabilityLayers(capabilityLayers)
+    const capabilitiesJson = serializeCapabilityEnvelope(resolvedCapabilities)
 
     if (contextWindow && (!row?.manualOverride || metaInput.context_window == null)) {
       metaInput.context_window = contextWindow
@@ -204,13 +235,14 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
           name: item.name,
           provider: item.provider,
           connectionType: item.connectionType,
-          tagsJson,
-          metaJson,
-          manualOverride: false,
-          lastFetchedAt: now,
-          expiresAt,
-        },
-      })
+      tagsJson,
+      metaJson,
+      capabilitiesJson,
+      manualOverride: false,
+      lastFetchedAt: now,
+      expiresAt,
+    },
+  })
       invalidateContextWindowCache(conn.id, item.rawId)
       continue
     }
@@ -227,6 +259,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
 
     if (!row.manualOverride) {
       updateData.tagsJson = tagsJson
+      updateData.capabilitiesJson = capabilitiesJson
     }
 
     await prisma.modelCatalog.update({ where: { id: row.id }, data: updateData })

@@ -162,8 +162,8 @@ class ApiClient {
     return response.data
   }
 
-  async updateModelTags(connectionId: number, rawId: string, tags: Array<{ name: string }>) {
-    const response = await this.client.put<ApiResponse<any>>('/catalog/models/tags', { connectionId, rawId, tags })
+  async updateModelTags(connectionId: number, rawId: string, tags: Array<{ name: string }>, capabilities?: Record<string, boolean>) {
+    const response = await this.client.put<ApiResponse<any>>('/catalog/models/tags', { connectionId, rawId, tags, capabilities })
     return response.data
   }
 
