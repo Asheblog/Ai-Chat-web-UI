@@ -41,6 +41,11 @@ const systemSettingSchema = z.object({
   anonymous_retention_days: z.number().int().min(0).max(15).optional(),
   anonymous_daily_quota: z.number().int().min(0).optional(),
   default_user_daily_quota: z.number().int().min(0).optional(),
+  web_search_agent_enable: z.boolean().optional(),
+  web_search_default_engine: z.string().min(1).max(32).optional(),
+  web_search_api_key: z.string().min(1).optional(),
+  web_search_result_limit: z.number().int().min(1).max(10).optional(),
+  web_search_domain_filter: z.array(z.string().min(1)).optional(),
 });
 
 const resetAnonymousQuotaSchema = z.object({
@@ -112,6 +117,26 @@ settings.get('/system', actorMiddleware, async (c) => {
       anonymous_retention_days: quotaPolicy.anonymousRetentionDays,
       anonymous_daily_quota: quotaPolicy.anonymousDailyQuota,
       default_user_daily_quota: quotaPolicy.defaultUserDailyQuota,
+      web_search_agent_enable: (settingsObj.web_search_agent_enable ?? (process.env.WEB_SEARCH_AGENT_ENABLE ?? 'false')).toString().toLowerCase() === 'true',
+      web_search_default_engine: (settingsObj.web_search_default_engine || process.env.WEB_SEARCH_DEFAULT_ENGINE || 'tavily'),
+      web_search_result_limit: (() => {
+        const raw = settingsObj.web_search_result_limit ?? process.env.WEB_SEARCH_RESULT_LIMIT ?? '4'
+        const parsed = Number.parseInt(String(raw), 10)
+        return Number.isFinite(parsed) ? Math.max(1, Math.min(10, parsed)) : 4
+      })(),
+      web_search_domain_filter: (() => {
+        try {
+          const raw = settingsObj.web_search_domain_filter
+          if (typeof raw === 'string' && raw.trim() !== '') {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) {
+              return parsed.map((d: string) => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
+            }
+          }
+        } catch {}
+        return []
+      })(),
+      web_search_has_api_key: Boolean(settingsObj.web_search_api_key || process.env.WEB_SEARCH_API_KEY),
     };
 
     if (!isAdmin) {
@@ -121,6 +146,11 @@ settings.get('/system', actorMiddleware, async (c) => {
         anonymous_retention_days: formattedSettings.anonymous_retention_days,
         anonymous_daily_quota: formattedSettings.anonymous_daily_quota,
         default_user_daily_quota: formattedSettings.default_user_daily_quota,
+        web_search_agent_enable: formattedSettings.web_search_agent_enable,
+        web_search_default_engine: formattedSettings.web_search_default_engine,
+        web_search_result_limit: formattedSettings.web_search_result_limit,
+        web_search_domain_filter: formattedSettings.web_search_domain_filter,
+        web_search_has_api_key: formattedSettings.web_search_has_api_key,
       };
       return c.json<ApiResponse>({
         success: true,
@@ -145,7 +175,7 @@ settings.get('/system', actorMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url, anonymous_retention_days, anonymous_daily_quota, default_user_daily_quota } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url, anonymous_retention_days, anonymous_daily_quota, default_user_daily_quota, web_search_agent_enable, web_search_default_engine, web_search_api_key, web_search_result_limit, web_search_domain_filter } = c.req.valid('json');
     let anonymousQuotaUpdated = false;
 
     // 条件更新：仅对传入的字段做 upsert
@@ -346,6 +376,60 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         update: { value: String(sanitized) },
         create: { key: 'default_user_daily_quota', value: String(sanitized) },
       })
+    }
+
+    if (typeof web_search_agent_enable === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'web_search_agent_enable' },
+        update: { value: web_search_agent_enable.toString() },
+        create: { key: 'web_search_agent_enable', value: web_search_agent_enable.toString() },
+      })
+    }
+
+    if (typeof web_search_default_engine === 'string') {
+      const normalized = web_search_default_engine.trim().toLowerCase()
+      if (normalized) {
+        await prisma.systemSetting.upsert({
+          where: { key: 'web_search_default_engine' },
+          update: { value: normalized },
+          create: { key: 'web_search_default_engine', value: normalized },
+        })
+      }
+    }
+
+    if (typeof web_search_api_key === 'string') {
+      const trimmed = web_search_api_key.trim()
+      if (trimmed) {
+        await prisma.systemSetting.upsert({
+          where: { key: 'web_search_api_key' },
+          update: { value: trimmed },
+          create: { key: 'web_search_api_key', value: trimmed },
+        })
+      } else {
+        await prisma.systemSetting.deleteMany({ where: { key: 'web_search_api_key' } })
+      }
+    }
+
+    if (typeof web_search_result_limit === 'number') {
+      const sanitized = Math.max(1, Math.min(10, web_search_result_limit))
+      await prisma.systemSetting.upsert({
+        where: { key: 'web_search_result_limit' },
+        update: { value: String(sanitized) },
+        create: { key: 'web_search_result_limit', value: String(sanitized) },
+      })
+    }
+
+    if (Array.isArray(web_search_domain_filter)) {
+      const normalized = web_search_domain_filter.map((d) => d.trim()).filter(Boolean)
+      if (normalized.length > 0) {
+        await prisma.systemSetting.upsert({
+          where: { key: 'web_search_domain_filter' },
+          update: { value: JSON.stringify(normalized) },
+          create: { key: 'web_search_domain_filter', value: JSON.stringify(normalized) },
+        })
+      } else {
+        await prisma.systemSetting.deleteMany({ where: { key: 'web_search_domain_filter' } })
+      }
     }
 
     if (anonymousQuotaUpdated) {

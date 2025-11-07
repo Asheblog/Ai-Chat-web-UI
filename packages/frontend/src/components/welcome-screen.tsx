@@ -3,7 +3,7 @@
 // 全新欢迎页：模仿 ChatGPT 着陆面板（大标题 + 大输入框），并保持响应式
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, ImagePlus, X } from 'lucide-react'
+import { Plus, ImagePlus, X, Globe } from 'lucide-react'
 import NextImage from 'next/image'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -53,6 +53,8 @@ export function WelcomeScreen() {
   // 跟踪是否被用户修改过（未修改则沿用系统设置）
   const [thinkingTouched, setThinkingTouched] = useState(false)
   const [effortTouched, setEffortTouched] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [webSearchTouched, setWebSearchTouched] = useState(false)
 
   // 图片上传（与聊天页保持一致的限制）
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -120,12 +122,25 @@ export function WelcomeScreen() {
     if (!effortTouched) setEffort(sysEffort)
   }, [systemSettings?.reasoningEnabled, systemSettings?.openaiReasoningEffort, thinkingTouched, effortTouched])
 
+  const selectedModel = useMemo(() => {
+    return (models || []).find((mm) => mm.id === selectedModelId) ?? null
+  }, [models, selectedModelId])
+
   // 当前选择的模型是否支持图片（Vision）
   const isVisionEnabled = useMemo(() => {
-    const m = (models || []).find((mm) => mm.id === selectedModelId)
+    const m = selectedModel
     const cap = m?.capabilities?.vision
     return typeof cap === 'boolean' ? cap : true
-  }, [models, selectedModelId])
+  }, [selectedModel])
+
+  const isWebSearchCapable = useMemo(() => {
+    const cap = selectedModel?.capabilities?.web_search
+    return typeof cap === 'boolean' ? cap : true
+  }, [selectedModel])
+
+  const canUseWebSearch = Boolean(
+    systemSettings?.webSearchAgentEnable && systemSettings?.webSearchHasApiKey && isWebSearchCapable,
+  )
 
   // 切换到不支持图片的模型时清空图片
   useEffect(() => {
@@ -135,6 +150,14 @@ export function WelcomeScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisionEnabled])
+
+  useEffect(() => {
+    if (!webSearchTouched) {
+      setWebSearchEnabled(canUseWebSearch)
+    } else if (!canUseWebSearch && webSearchEnabled) {
+      setWebSearchEnabled(false)
+    }
+  }, [canUseWebSearch, webSearchTouched, webSearchEnabled])
 
   const validateImage = (file: File): Promise<{ ok: boolean; reason?: string; dataUrl?: string; mime?: string; size?: number }> => {
     return new Promise((resolve) => {
@@ -239,9 +262,12 @@ export function WelcomeScreen() {
             ? selectedImages.map(img => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
             : undefined
           const opts: any = {}
-          if (thinkingTouched) opts.reasoningEnabled = thinkingEnabled
-          if (effortTouched && effort !== 'unset') opts.reasoningEffort = effort as any
-          await streamMessage(session.id, text, imgs, Object.keys(opts).length ? opts : undefined)
+      if (thinkingTouched) opts.reasoningEnabled = thinkingEnabled
+      if (effortTouched && effort !== 'unset') opts.reasoningEffort = effort as any
+      if ((webSearchTouched || canUseWebSearch) && webSearchEnabled && canUseWebSearch) {
+        opts.features = { web_search: true }
+      }
+      await streamMessage(session.id, text, imgs, Object.keys(opts).length ? opts : undefined)
           setSelectedImages([])
           if (fileInputRef.current) fileInputRef.current.value = ''
         }
@@ -337,6 +363,23 @@ export function WelcomeScreen() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">联网搜索</span>
+                    <Switch
+                      checked={webSearchEnabled && canUseWebSearch}
+                      disabled={!canUseWebSearch}
+                      onCheckedChange={(v) => {
+                        setWebSearchTouched(true)
+                        setWebSearchEnabled(canUseWebSearch && !!v)
+                      }}
+                      aria-label="联网搜索开关"
+                    />
+                  </div>
+                  {!systemSettings?.webSearchHasApiKey && (
+                    <p className="text-[11px] text-muted-foreground">
+                      管理员未配置搜索 API Key，暂不可用
+                    </p>
+                  )}
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -371,6 +414,29 @@ export function WelcomeScreen() {
                   <Maximize2 className="h-4 w-4" />
                 </Button>
               )}
+
+              <Button
+                type="button"
+                variant={webSearchEnabled ? 'default' : 'outline'}
+                size="icon"
+                className={`h-10 w-10 rounded-full ${webSearchEnabled ? '' : ''}`}
+                onClick={() => {
+                  if (!canUseWebSearch) return
+                  setWebSearchTouched(true)
+                  setWebSearchEnabled((prev) => !prev)
+                }}
+                disabled={!canUseWebSearch || creationDisabled}
+                aria-label="联网搜索开关"
+                title={
+                  canUseWebSearch
+                    ? webSearchEnabled
+                      ? '已启用联网搜索'
+                      : '启用联网搜索'
+                    : '当前模型或系统未启用联网搜索'
+                }
+              >
+                <Globe className={`h-4 w-4 ${webSearchEnabled ? 'text-primary-foreground' : ''}`} />
+              </Button>
 
               <Button
                 type="button"

@@ -321,13 +321,31 @@ class ApiClient {
               } else if (parsed.type === 'usage' && parsed.usage) {
                 yield { type: 'usage', usage: parsed.usage }
               } else if (parsed.type === 'reasoning') {
-                // 可能是增量或结束事件
+                const chunk: import('@/types').ChatStreamChunk = { type: 'reasoning', meta: parsed.meta }
                 if (parsed.done) {
-                  yield { type: 'reasoning', done: true, duration: parsed.duration }
+                  chunk.done = true
+                  if (typeof parsed.duration === 'number') chunk.duration = parsed.duration
                 } else if (parsed.keepalive) {
-                  yield { type: 'reasoning', keepalive: true, idleMs: typeof parsed.idle_ms === 'number' ? parsed.idle_ms : undefined }
-                } else if (parsed.content) {
-                  yield { type: 'reasoning', content: parsed.content }
+                  chunk.keepalive = true
+                  if (typeof parsed.idle_ms === 'number') {
+                    chunk.idleMs = parsed.idle_ms
+                  }
+                } else if (typeof parsed.content === 'string') {
+                  chunk.content = parsed.content
+                }
+                if (chunk.done || chunk.keepalive || chunk.content) {
+                  yield chunk
+                }
+              } else if (parsed.type === 'tool') {
+                yield {
+                  type: 'tool',
+                  tool: parsed.tool,
+                  stage: parsed.stage,
+                  id: parsed.id,
+                  query: parsed.query,
+                  hits: parsed.hits,
+                  error: parsed.error,
+                  meta: parsed.meta,
                 }
               } else if (parsed.type === 'start') {
                 yield { type: 'start' }
@@ -425,6 +443,11 @@ class ApiClient {
         anonymous_retention_days?: number | string,
         anonymous_daily_quota?: number | string,
         default_user_daily_quota?: number | string,
+        web_search_agent_enable?: boolean,
+        web_search_default_engine?: string,
+        web_search_result_limit?: number | string,
+        web_search_domain_filter?: string[] | string,
+        web_search_has_api_key?: boolean,
       }>>('/settings/system')
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
     const brandText = settingsRes.data.data?.brand_text || 'AIChat'
@@ -484,7 +507,14 @@ class ApiClient {
       return 200
     })()
     const siteBaseUrl = typeof settingsRes.data.data?.site_base_url === 'string' ? settingsRes.data.data?.site_base_url : ''
-    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl, anonymousRetentionDays, anonymousDailyQuota, defaultUserDailyQuota } }
+    const webSearchAgentEnable = Boolean(settingsRes.data.data?.web_search_agent_enable ?? false)
+    const webSearchDefaultEngine = settingsRes.data.data?.web_search_default_engine || 'tavily'
+    const webSearchResultLimit = Number(settingsRes.data.data?.web_search_result_limit ?? 4)
+    const webSearchDomainFilter = Array.isArray(settingsRes.data.data?.web_search_domain_filter)
+      ? (settingsRes.data.data?.web_search_domain_filter as string[])
+      : []
+    const webSearchHasApiKey = Boolean(settingsRes.data.data?.web_search_has_api_key ?? false)
+    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl, anonymousRetentionDays, anonymousDailyQuota, defaultUserDailyQuota, webSearchAgentEnable, webSearchDefaultEngine, webSearchResultLimit, webSearchDomainFilter, webSearchHasApiKey } }
   }
 
   async updateSystemSettings(settings: any) {
@@ -513,6 +543,11 @@ class ApiClient {
     if (typeof settings.anonymousRetentionDays === 'number') payload.anonymous_retention_days = settings.anonymousRetentionDays
     if (typeof settings.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = settings.anonymousDailyQuota
     if (typeof settings.defaultUserDailyQuota === 'number') payload.default_user_daily_quota = settings.defaultUserDailyQuota
+    if (typeof settings.webSearchAgentEnable === 'boolean') payload.web_search_agent_enable = settings.webSearchAgentEnable
+    if (typeof settings.webSearchDefaultEngine === 'string') payload.web_search_default_engine = settings.webSearchDefaultEngine
+    if (typeof settings.webSearchResultLimit === 'number') payload.web_search_result_limit = settings.webSearchResultLimit
+    if (Array.isArray(settings.webSearchDomainFilter)) payload.web_search_domain_filter = settings.webSearchDomainFilter
+    if (typeof (settings as any).webSearchApiKey === 'string') payload.web_search_api_key = (settings as any).webSearchApiKey
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()

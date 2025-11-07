@@ -2,7 +2,7 @@
 
 import { Copy } from 'lucide-react'
 import Image from 'next/image'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { MarkdownRenderer } from './markdown-renderer'
@@ -55,6 +55,21 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
   const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
+  const toolTimeline = useChatStore(
+    useCallback(
+      (state) =>
+        state.toolEvents.filter(
+          (event) =>
+            event.sessionId === meta.sessionId && messageKey(event.messageId) === messageKey(meta.id),
+        ),
+      [meta.id, meta.sessionId],
+    ),
+  )
+  const sortedToolTimeline = useMemo(
+    () => toolTimeline.slice().sort((a, b) => a.createdAt - b.createdAt),
+    [toolTimeline],
+  )
+  const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
   const { toast } = useToast()
 
   const isUser = meta.role === 'user'
@@ -264,6 +279,72 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                       ) : (
                         <div className="text-xs text-muted-foreground">
                           {meta.reasoningStatus === 'streaming' ? '推理内容接收中…' : '正在思考中…'}
+                        </div>
+                      )}
+                      {sortedToolTimeline.length > 0 && (
+                        <div className="mt-3 border border-dashed border-muted-foreground/50 rounded-lg bg-muted/30">
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-[11px] text-muted-foreground flex items-center justify-between font-medium"
+                            onClick={() => setToolTimelineOpen((prev) => !prev)}
+                          >
+                            <span>
+                              联网搜索（{sortedToolTimeline.length} 次）
+                              {toolTimelineOpen ? '' : ' · 点击展开'}
+                            </span>
+                            <span>{toolTimelineOpen ? '▲' : '▼'}</span>
+                          </button>
+                          {toolTimelineOpen && (
+                            <div className="px-3 pb-3 space-y-2 text-[11px]">
+                              {sortedToolTimeline.map((event) => {
+                                const statusLabel =
+                                  event.stage === 'start'
+                                    ? '检索中'
+                                    : event.stage === 'result'
+                                      ? `${event.hits?.length ?? 0} 条结果`
+                                      : event.error || '搜索失败'
+                                const statusClass =
+                                  event.stage === 'start'
+                                    ? 'text-amber-600'
+                                    : event.stage === 'result'
+                                      ? 'text-emerald-600'
+                                      : 'text-destructive'
+                                return (
+                                  <div key={event.id} className="rounded-md border border-muted-foreground/40 bg-background px-2 py-2">
+                                    <div className="flex items-center justify-between gap-2 font-semibold text-muted-foreground">
+                                      <span>{event.query || '未提供查询'}</span>
+                                      <span className={statusClass}>{statusLabel}</span>
+                                    </div>
+                                    {event.hits && event.hits.length > 0 && (
+                                      <ul className="mt-2 space-y-1">
+                                        {event.hits.slice(0, 3).map((hit, idx) => (
+                                          <li key={`${event.id}-${idx}`}>
+                                            <a
+                                              href={hit.url}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="text-primary hover:underline"
+                                            >
+                                              {hit.title || hit.url}
+                                            </a>
+                                            {hit.snippet && (
+                                              <p className="text-muted-foreground">{hit.snippet}</p>
+                                            )}
+                                          </li>
+                                        ))}
+                                        {event.hits.length > 3 && (
+                                          <li className="text-muted-foreground">……</li>
+                                        )}
+                                      </ul>
+                                    )}
+                                    {event.error && (
+                                      <p className="mt-2 text-destructive">{event.error}</p>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

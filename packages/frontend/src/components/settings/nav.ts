@@ -28,6 +28,7 @@ export const settingsNav: SettingsNavItem[] = [
       { key: 'system.general', label: '通用' },
       { key: 'system.reasoning', label: '推理链（CoT）' },
       { key: 'system.network', label: '网络与流式' },
+      { key: 'system.web-search', label: '联网搜索' },
       { key: 'system.connections', label: '连接管理' },
       { key: 'system.models', label: '模型管理' },
       { key: 'system.users', label: '用户管理' },

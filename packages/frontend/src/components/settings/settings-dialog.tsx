@@ -17,6 +17,7 @@ import { SystemModelsPage } from "./pages/SystemModels"
 // import { SystemModelsPage } from "./pages/SystemModels"
 import { SystemUsersPage } from "./pages/SystemUsers"
 import { SystemConnectionsPage } from "./pages/SystemConnections"
+import { SystemWebSearchPage } from "./pages/SystemWebSearch"
 
 interface SettingsDialogProps {
   open: boolean
@@ -188,6 +189,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
                 case 'system.general': return <SystemGeneralPage />
                 case 'system.network': return <SystemNetworkPage />
                 case 'system.reasoning': return <SystemReasoningPage />
+                case 'system.web-search': return <SystemWebSearchPage />
                 case 'system.connections': return <SystemConnectionsPage />
                 case 'system.models': return <SystemModelsPage />
                 case 'system.users': return <SystemUsersPage />

@@ -111,6 +111,7 @@ export interface Message {
   reasoningIdleMs?: number | null;
   // 可选图片：可能为 data URL（本地预览）或服务端返回的可访问 URL
   images?: string[];
+  toolEvents?: ToolEvent[];
 }
 
 export interface MessageMeta {
@@ -181,6 +182,12 @@ export interface SystemSettings {
   anonymousRetentionDays?: number;
   anonymousDailyQuota?: number;
   defaultUserDailyQuota?: number;
+  webSearchAgentEnable?: boolean;
+  webSearchDefaultEngine?: string;
+  webSearchResultLimit?: number;
+  webSearchDomainFilter?: string[];
+  webSearchHasApiKey?: boolean;
+  webSearchApiKey?: string;
 }
 
 // UI 状态类型
@@ -201,6 +208,27 @@ export interface ChatState {
   usageLastRound?: UsageStats | null;
   usageTotals?: UsageTotals | null;
   sessionUsageTotalsMap: Record<number, UsageTotals>;
+  toolEvents: ToolEvent[];
+}
+
+export interface WebSearchHit {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
+export interface ToolEvent {
+  id: string;
+  sessionId: number;
+  messageId: number | string;
+  tool: string;
+  stage: 'start' | 'result' | 'error';
+  status: 'running' | 'success' | 'error';
+  query?: string;
+  hits?: WebSearchHit[];
+  error?: string;
+  summary?: string;
+  createdAt: number;
 }
 
 export interface AuthState {
@@ -231,7 +259,7 @@ export interface ApiResponse<T = any> {
 
 // 流式响应类型
 export interface ChatStreamChunk {
-  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning' | 'quota';
+  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning' | 'quota' | 'tool';
   content?: string;
   usage?: UsageStats;
   done?: boolean;
@@ -240,6 +268,12 @@ export interface ChatStreamChunk {
   keepalive?: boolean;
   idleMs?: number;
   quota?: ActorQuota;
+  tool?: string;
+  id?: string;
+  stage?: 'start' | 'result' | 'error';
+  query?: string;
+  hits?: WebSearchHit[];
+  meta?: Record<string, unknown>;
 }
 
 // Usage 统计类型（OpenAI 兼容字段为主）

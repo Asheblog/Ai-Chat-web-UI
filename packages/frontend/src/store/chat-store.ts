@@ -6,6 +6,7 @@ import {
   MessageBody,
   MessageMeta,
   MessageRenderCacheEntry,
+  ToolEvent,
 } from '@/types'
 import { apiClient } from '@/lib/api'
 import type { ModelItem } from '@/store/models-store'
@@ -69,6 +70,12 @@ const mergeImages = (message: Message, cache: Record<string, string[]>): Message
   return message
 }
 
+const inferToolStatus = (stage: ToolEvent['stage']): ToolEvent['status'] => {
+  if (stage === 'result') return 'success'
+  if (stage === 'error') return 'error'
+  return 'running'
+}
+
 interface ChatStore extends ChatState {
   fetchSessions: () => Promise<void>
   fetchSessionsUsage: () => Promise<void>
@@ -85,7 +92,13 @@ interface ChatStore extends ChatState {
     sessionId: number,
     content: string,
     images?: Array<{ data: string; mime: string }>,
-    options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean }
+    options?: {
+      reasoningEnabled?: boolean;
+      reasoningEffort?: 'low' | 'medium' | 'high';
+      ollamaThink?: boolean;
+      saveReasoning?: boolean;
+      features?: { web_search?: boolean };
+    }
   ) => Promise<void>
   stopStreaming: () => void
   addMessage: (message: Message) => void
@@ -228,6 +241,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
     usageLastRound: null,
     usageTotals: null,
     sessionUsageTotalsMap: {} as Record<number, import('@/types').UsageTotals>,
+    toolEvents: [],
 
     fetchSessions: async () => {
       set({ isSessionsLoading: true, error: null })
@@ -277,6 +291,40 @@ export const useChatStore = create<ChatStore>((set, get) => {
           bodies[messageKey(msg.id)] = createBody(msg)
         })
 
+        const historicalToolEvents: ToolEvent[] = normalized.flatMap((msg) => {
+          if (!Array.isArray(msg.toolEvents) || msg.toolEvents.length === 0) return []
+          const baseTimestamp = (() => {
+            const ts = Date.parse(msg.createdAt)
+            return Number.isFinite(ts) ? ts : Date.now()
+          })()
+          return msg.toolEvents.map((evt, idx) => {
+            const stage =
+              evt.stage === 'result' || evt.stage === 'error' || evt.stage === 'start'
+                ? evt.stage
+                : 'start'
+            const id =
+              typeof evt.id === 'string' && evt.id.trim().length > 0
+                ? evt.id
+                : `${msg.id}-${stage}-${idx}`
+            const createdAt =
+              typeof evt.createdAt === 'number' && Number.isFinite(evt.createdAt)
+                ? evt.createdAt
+                : baseTimestamp + idx
+            return {
+              id,
+              sessionId: msg.sessionId,
+              messageId: msg.id,
+              tool: evt.tool || 'web_search',
+              stage,
+              status: inferToolStatus(stage),
+              query: evt.query,
+              hits: Array.isArray(evt.hits) ? evt.hits : undefined,
+              error: evt.error,
+              createdAt,
+            }
+          })
+        })
+
         const nextCache = { ...cache }
         normalized.forEach((msg) => {
           if (msg.clientMessageId && msg.images && msg.images.length > 0) {
@@ -291,6 +339,10 @@ export const useChatStore = create<ChatStore>((set, get) => {
           messageImageCache: nextCache,
           messagesHydrated: { ...state.messagesHydrated, [sessionId]: true },
           isMessagesLoading: false,
+          toolEvents: [
+            ...historicalToolEvents,
+            ...get().toolEvents.filter((event) => event.sessionId !== sessionId),
+          ],
         }))
       } catch (error: any) {
         set({
@@ -613,6 +665,48 @@ export const useChatStore = create<ChatStore>((set, get) => {
           const active = streamState.active
           if (!active) break
 
+          if (evt?.type === 'tool') {
+            set((state) => {
+              const list = state.toolEvents.slice()
+              const eventId = (evt.id as string) || `${sessionId}-${Date.now()}`
+              const idx = list.findIndex((item) => item.id === eventId && item.sessionId === sessionId)
+              const next: ToolEvent = {
+                id: eventId,
+                sessionId,
+                messageId: active.assistantId,
+                tool: (evt.tool as string) || 'web_search',
+                stage: (evt.stage as 'start' | 'result' | 'error') || 'start',
+                status:
+                  evt.stage === 'error'
+                    ? 'error'
+                    : evt.stage === 'result'
+                      ? 'success'
+                      : 'running',
+                query: evt.query as string | undefined,
+                hits: (Array.isArray(evt.hits) ? evt.hits : undefined) as ToolEvent['hits'],
+                error: evt.error as string | undefined,
+                createdAt: idx === -1 ? Date.now() : list[idx].createdAt,
+              }
+              if (idx === -1) {
+                list.push(next)
+              } else {
+                list[idx] = { ...list[idx], ...next }
+              }
+              return { toolEvents: list }
+            })
+            continue
+          }
+
+          if (evt?.type === 'error') {
+            const agentError = new Error(
+              typeof evt.error === 'string' && evt.error.trim()
+                ? evt.error
+                : '联网搜索失败，请稍后重试',
+            )
+            ;(agentError as any).handled = 'agent_error'
+            throw agentError
+          }
+
           if (evt?.type === 'content' && evt.content) {
             active.pendingContent += evt.content
             scheduleFlush()
@@ -700,6 +794,24 @@ export const useChatStore = create<ChatStore>((set, get) => {
         const quotaPayload = error?.payload?.quota ?? null
         if (quotaPayload) {
           useAuthStore.getState().updateQuota(quotaPayload)
+        }
+
+        if (error?.handled === 'agent_error') {
+          const message = error?.message || '联网搜索失败，请稍后重试'
+          set({ error: message, isStreaming: false })
+          set((state) => {
+            const metas = state.messageMetas.filter((meta) => meta.id !== assistantPlaceholder.id)
+            const bodies = { ...state.messageBodies }
+            delete bodies[messageKey(assistantPlaceholder.id)]
+            const renderCache = { ...state.messageRenderCache }
+            delete renderCache[messageKey(assistantPlaceholder.id)]
+            return {
+              messageMetas: metas,
+              messageBodies: bodies,
+              messageRenderCache: renderCache,
+            }
+          })
+          return
         }
 
         if (error?.status === 429) {
@@ -810,6 +922,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
     },
 
     stopStreaming: () => {
+      const activeSessionId = streamState.active?.sessionId
       try {
         apiClient.cancelStream()
       } catch {
@@ -817,7 +930,12 @@ export const useChatStore = create<ChatStore>((set, get) => {
       }
       flushActiveStream(true)
       resetStreamState()
-      set({ isStreaming: false })
+      set((state) => ({
+        isStreaming: false,
+        toolEvents: activeSessionId
+          ? state.toolEvents.filter((event) => event.sessionId !== activeSessionId)
+          : state.toolEvents,
+      }))
     },
 
     addMessage: (message: Message) => {

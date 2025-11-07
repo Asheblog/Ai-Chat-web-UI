@@ -44,6 +44,7 @@ export function useChatComposer() {
   const MAX_IMAGE_COUNT = 4
   const MAX_IMAGE_MB = 5
   const MAX_IMAGE_EDGE = 4096
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
 
   const modelsCount = allModels.length
   useEffect(() => {
@@ -98,18 +99,44 @@ export function useChatComposer() {
     textareaRef.current.focus()
   }, [isStreaming])
 
-  const isVisionEnabled = useMemo(() => {
-    if (!currentSession) return true
+  const activeModel = useMemo(() => {
+    if (!currentSession) return null
     const cid = currentSession.connectionId ?? null
     const rid = currentSession.modelRawId ?? currentSession.modelLabel ?? null
-    const match = allModels.find((m) => {
-      const cidMatch = cid != null ? m.connectionId === cid : true
-      const ridMatch = rid ? m.rawId === rid || m.id === rid : false
-      return cidMatch && ridMatch
-    })
-    const cap = match?.capabilities?.vision
-    return typeof cap === 'boolean' ? cap : true
+    return (
+      allModels.find((m) => {
+        const cidMatch = cid != null ? m.connectionId === cid : true
+        const ridMatch = rid ? m.rawId === rid || m.id === rid : false
+        return cidMatch && ridMatch
+      }) ?? null
+    )
   }, [allModels, currentSession])
+
+  const isVisionEnabled = useMemo(() => {
+    if (!currentSession) return true
+    const cap = activeModel?.capabilities?.vision
+    return typeof cap === 'boolean' ? cap : true
+  }, [activeModel, currentSession])
+
+  const isWebSearchCapable = useMemo(() => {
+    if (!currentSession) return false
+    const cap = activeModel?.capabilities?.web_search
+    return typeof cap === 'boolean' ? cap : true
+  }, [activeModel, currentSession])
+
+  const canUseWebSearch = Boolean(systemSettings?.webSearchAgentEnable) && isWebSearchCapable
+
+  useEffect(() => {
+    if (!canUseWebSearch && webSearchEnabled) {
+      setWebSearchEnabled(false)
+    }
+  }, [canUseWebSearch, webSearchEnabled])
+
+  useEffect(() => {
+    if (canUseWebSearch) {
+      setWebSearchEnabled(true)
+    }
+  }, [canUseWebSearch, currentSession?.id])
 
   useEffect(() => {
     if (!isVisionEnabled && selectedImages.length > 0) {
@@ -176,6 +203,12 @@ export function useChatComposer() {
         reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
         ollamaThink: thinkingEnabled ? ollamaThink : undefined,
         saveReasoning: !noSaveThisRound,
+        features:
+          webSearchEnabled && canUseWebSearch
+            ? {
+                web_search: true,
+              }
+            : undefined,
       }
       await streamMessage(currentSession.id, message, imagesPayload, options)
       setNoSaveThisRound(false)
@@ -203,6 +236,8 @@ export function useChatComposer() {
     noSaveThisRound,
     streamMessage,
     toast,
+    webSearchEnabled,
+    canUseWebSearch,
   ])
 
   const handleStop = useCallback(() => {
@@ -304,5 +339,8 @@ export function useChatComposer() {
     removeImage,
     validateImage,
     clearError,
+    webSearchEnabled,
+    setWebSearchEnabled,
+    canUseWebSearch,
   }
 }

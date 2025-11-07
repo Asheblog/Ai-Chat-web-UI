@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { zValidator } from '@hono/zod-validator';
@@ -24,6 +25,7 @@ import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 import { consumeActorQuota, inspectActorQuota, serializeQuotaSnapshot } from '../utils/quota';
 import { cleanupAnonymousSessions } from '../utils/anonymous-cleanup';
 import { resolveContextLimit } from '../utils/context-window';
+import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../utils/web-search';
 
 type ProviderChatCompletionResponse = {
   choices?: Array<{ message?: { content?: string; reasoning_content?: string } | null }>;
@@ -70,11 +72,659 @@ const extendAnonymousSession = async (actor: Actor, sessionId: number | null) =>
   });
 };
 
+type AgentResponseParams = {
+  session: typeof prisma.chatSession.$inferSelect;
+  requestData: Record<string, any>;
+  messagesPayload: any[];
+  promptTokens: number;
+  contextLimit: number;
+  contextRemaining: number;
+  quotaSnapshot: UsageQuotaSnapshot | null;
+  userMessageRecord: any;
+  sseHeaders: Record<string, string>;
+  agentConfig: AgentWebSearchConfig;
+  provider: string;
+  baseUrl: string;
+  authHeader: Record<string, string>;
+  extraHeaders: Record<string, string>;
+  reasoningEnabled: boolean;
+  reasoningSaveToDb: boolean;
+};
+
+type ToolLogStage = 'start' | 'result' | 'error';
+type ToolLogEntry = {
+  id: string;
+  tool: string;
+  stage: ToolLogStage;
+  query?: string;
+  hits?: WebSearchHit[];
+  error?: string;
+  createdAt: number;
+};
+
+const extractReasoningText = (reasoning: any): string => {
+  if (!reasoning) return '';
+  if (typeof reasoning === 'string') return reasoning;
+  if (Array.isArray(reasoning)) {
+    return reasoning
+      .map((chunk) => {
+        if (typeof chunk === 'string') return chunk;
+        if (chunk && typeof chunk === 'object') {
+          if (typeof chunk.text === 'string') return chunk.text;
+          if (typeof chunk.content === 'string') return chunk.content;
+        }
+        return '';
+      })
+      .join('');
+  }
+  if (typeof reasoning === 'object') {
+    if (typeof reasoning.text === 'string') return reasoning.text;
+    if (typeof reasoning.content === 'string') return reasoning.content;
+  }
+  try {
+    return JSON.stringify(reasoning);
+  } catch {
+    return '';
+  }
+};
+
+const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const stage = entry.stage;
+        if (stage !== 'start' && stage !== 'result' && stage !== 'error') return null;
+        const tool = typeof entry.tool === 'string' && entry.tool.trim() ? entry.tool : 'unknown';
+        const id =
+          typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : randomUUID();
+        const log: ToolLogEntry = {
+          id,
+          tool,
+          stage,
+          query: typeof entry.query === 'string' ? entry.query : undefined,
+          createdAt:
+            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+              ? entry.createdAt
+              : Date.now(),
+        };
+        if (Array.isArray(entry.hits)) {
+          log.hits = entry.hits
+            .map((hit: any) => {
+              if (!hit || typeof hit !== 'object') return null;
+              const title = typeof hit.title === 'string' ? hit.title : '';
+              const url = typeof hit.url === 'string' ? hit.url : '';
+              if (!title && !url) return null;
+              const normalized: WebSearchHit = {
+                title,
+                url,
+              };
+              if (typeof hit.snippet === 'string') normalized.snippet = hit.snippet;
+              if (typeof hit.content === 'string') normalized.content = hit.content;
+              return normalized;
+            })
+            .filter((hit): hit is WebSearchHit => Boolean(hit));
+        }
+        if (typeof entry.error === 'string' && entry.error.trim()) {
+          log.error = entry.error;
+        }
+        return log;
+      })
+      .filter((entry): entry is ToolLogEntry => Boolean(entry));
+  } catch {
+    return [];
+  }
+};
+
+const createAgentWebSearchResponse = async (params: AgentResponseParams): Promise<Response> => {
+  const {
+    session,
+    sessionId,
+    requestData,
+    messagesPayload,
+    promptTokens,
+    contextLimit,
+    contextRemaining,
+    quotaSnapshot,
+    userMessageRecord,
+    sseHeaders,
+    agentConfig,
+    provider,
+    baseUrl,
+    authHeader,
+    extraHeaders,
+    reasoningEnabled,
+    reasoningSaveToDb,
+  } = params;
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const safeEnqueue = (payload: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      };
+
+      const toolLogs: ToolLogEntry[] = [];
+
+      const recordToolLog = (payload: Record<string, unknown>) => {
+        const stage = payload.stage;
+        if (stage !== 'start' && stage !== 'result' && stage !== 'error') return;
+        const tool = typeof payload.tool === 'string' && payload.tool.trim() ? payload.tool : null;
+        if (!tool) return;
+        const entry: ToolLogEntry = {
+          id: typeof payload.id === 'string' && payload.id.trim() ? payload.id : randomUUID(),
+          tool,
+          stage,
+          query: typeof payload.query === 'string' ? payload.query : undefined,
+          createdAt: Date.now(),
+        };
+        if (Array.isArray(payload.hits)) {
+          entry.hits = (payload.hits as WebSearchHit[]).slice(0, 10);
+        }
+        if (typeof payload.error === 'string' && payload.error.trim()) {
+          entry.error = payload.error;
+        }
+        toolLogs.push(entry);
+      };
+
+      const sendToolEvent = (payload: Record<string, unknown>) => {
+        safeEnqueue({ type: 'tool', ...payload });
+        recordToolLog(payload);
+      };
+
+      const emitReasoning = (content: string, meta?: Record<string, unknown>) => {
+        const text = (content || '').trim();
+        if (!text) return;
+        const payload: Record<string, unknown> = { type: 'reasoning', content: text };
+        if (meta && Object.keys(meta).length > 0) {
+          payload.meta = meta;
+        }
+        safeEnqueue(payload);
+      };
+
+      safeEnqueue({ type: 'start', messageId: userMessageRecord?.id ?? null });
+      if (quotaSnapshot) {
+        safeEnqueue({ type: 'quota', quota: serializeQuotaSnapshot(quotaSnapshot) });
+      }
+      safeEnqueue({
+        type: 'usage',
+        usage: {
+          prompt_tokens: promptTokens,
+          total_tokens: promptTokens,
+          context_limit: contextLimit,
+          context_remaining: contextRemaining,
+        },
+      });
+
+      const workingMessages = JSON.parse(JSON.stringify(messagesPayload));
+      const maxIterations = 4;
+
+      const callProvider = async (messages: any[]) => {
+        const body = convertOpenAIReasoningPayload({
+          ...requestData,
+          stream: true,
+          messages,
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'web_search',
+                description:
+                  'Use this tool to search the live web for up-to-date information before responding. Return queries in the same language as the conversation.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    query: {
+                      type: 'string',
+                      description: 'Search query describing the missing information',
+                    },
+                    num_results: {
+                      type: 'integer',
+                      minimum: 1,
+                      maximum: agentConfig.resultLimit,
+                      description: 'Desired number of results',
+                    },
+                  },
+                  required: ['query'],
+                },
+              },
+            },
+          ],
+          tool_choice: 'auto',
+        });
+
+        let url = '';
+        if (provider === 'openai') {
+          url = `${baseUrl}/chat/completions`;
+        } else if (provider === 'azure_openai') {
+          const v = session.connection?.azureApiVersion || '2024-02-15-preview';
+          url = `${baseUrl}/openai/deployments/${encodeURIComponent(
+            session.modelRawId!,
+          )}/chat/completions?api-version=${encodeURIComponent(v)}`;
+        } else {
+          throw new Error(`Provider ${provider} does not support agent web search`);
+        }
+
+        const headers = {
+          'Content-Type': 'application/json',
+          ...authHeader,
+          ...extraHeaders,
+        };
+
+        const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`AI provider request failed (${response.status}): ${text}`);
+        }
+        return response;
+      };
+
+      const reasoningChunks: string[] = [];
+      let reasoningText = '';
+      let reasoningStartedAt: number | null = null;
+      let reasoningDurationSeconds = 0;
+      let finalUsageSnapshot: any = null;
+      let finalContent = '';
+      let providerUsageSeen = false;
+
+      try {
+        let iterations = 0;
+        while (iterations < maxIterations) {
+          iterations += 1;
+          const response = await callProvider(workingMessages);
+          const reader = response.body?.getReader();
+          if (!reader) {
+            throw new Error('AI provider returned no response body');
+          }
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let finishReason: string | null = null;
+          let providerUsage: any = null;
+          let iterationContent = '';
+          let iterationReasoning = '';
+          let iterationReasoningStartedAt: number | null = null;
+          const toolCallBuffers = new Map<
+            number,
+            { id?: string; type?: string; function: { name?: string; arguments: string } }
+          >();
+
+          const aggregateToolCalls = () =>
+            Array.from(toolCallBuffers.entries())
+              .sort((a, b) => a[0] - b[0])
+              .map(([_, entry]) => ({
+                id: entry.id || randomUUID(),
+                type: entry.type || 'function',
+                function: {
+                  name: entry.function.name || 'web_search',
+                  arguments: entry.function.arguments || '{}',
+                },
+              }));
+
+          let streamFinished = false;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              const normalized = line.replace(/\r$/, '');
+              if (!normalized.startsWith('data: ')) continue;
+              const data = normalized.slice(6);
+              if (data === '[DONE]') {
+                buffer = '';
+                streamFinished = true;
+                break;
+              }
+              let parsed: any;
+              try {
+                parsed = JSON.parse(data);
+              } catch {
+                continue;
+              }
+              const choice = parsed.choices?.[0];
+              if (!choice) continue;
+              const delta = choice.delta ?? {};
+              if (delta.reasoning_content) {
+                if (!reasoningStartedAt) reasoningStartedAt = Date.now();
+                if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
+                iterationReasoning += delta.reasoning_content;
+                emitReasoning(delta.reasoning_content, { kind: 'model', stage: 'stream' });
+              }
+              if (delta.content) {
+                iterationContent += delta.content;
+                safeEnqueue({ type: 'content', content: delta.content });
+              }
+              if (Array.isArray(delta.tool_calls)) {
+                for (const toolDelta of delta.tool_calls) {
+                  const idx = typeof toolDelta.index === 'number' ? toolDelta.index : 0;
+                  const existing =
+                    toolCallBuffers.get(idx) || { function: { name: undefined, arguments: '' } };
+                  if (toolDelta.id) existing.id = toolDelta.id;
+                  if (toolDelta.type) existing.type = toolDelta.type;
+                  if (toolDelta.function?.name) existing.function.name = toolDelta.function.name;
+                  if (toolDelta.function?.arguments) {
+                    existing.function.arguments = `${existing.function.arguments || ''}${
+                      toolDelta.function.arguments
+                    }`;
+                  }
+                  toolCallBuffers.set(idx, existing);
+                }
+              }
+              if (choice.finish_reason) {
+                finishReason = choice.finish_reason;
+              }
+              if (parsed.usage) {
+                providerUsage = parsed.usage;
+                providerUsageSeen = true;
+                safeEnqueue({ type: 'usage', usage: parsed.usage });
+              }
+            }
+            if (streamFinished) break;
+          }
+          await reader.cancel().catch(() => {});
+
+          const aggregatedToolCalls = aggregateToolCalls();
+
+          if (iterationReasoning.trim()) {
+            reasoningChunks.push(iterationReasoning.trim());
+          }
+
+          if (finishReason === 'tool_calls' && aggregatedToolCalls.length > 0) {
+            workingMessages.push({
+              role: 'assistant',
+              content: iterationContent,
+              tool_calls: aggregatedToolCalls,
+            });
+
+            for (const toolCall of aggregatedToolCalls) {
+              if (toolCall?.function?.name !== 'web_search') {
+                sendToolEvent({
+                  id: toolCall.id || randomUUID(),
+                  tool: toolCall?.function?.name ?? 'unknown',
+                  stage: 'error',
+                  error: 'Unsupported tool requested by the model',
+                });
+                continue;
+              }
+              let args: { query?: string; num_results?: number } = {};
+              try {
+                args = JSON.parse(toolCall.function?.arguments ?? '{}');
+              } catch {
+                args = {};
+              }
+              const query = (args?.query || '').trim();
+              const callId = toolCall.id || randomUUID();
+              const reasoningMetaBase = { kind: 'tool', tool: 'web_search', query, callId };
+              if (!query) {
+                emitReasoning('模型请求了空的联网搜索参数，已忽略。', {
+                  ...reasoningMetaBase,
+                  stage: 'error',
+                });
+                sendToolEvent({
+                  id: callId,
+                  tool: 'web_search',
+                  stage: 'error',
+                  query: '',
+                  error: 'Model requested web_search without a query',
+                });
+                workingMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  name: 'web_search',
+                  content: JSON.stringify({ error: 'Missing query parameter' }),
+                });
+                continue;
+              }
+
+              emitReasoning(`联网搜索：${query}`, { ...reasoningMetaBase, stage: 'start' });
+              sendToolEvent({ id: callId, tool: 'web_search', stage: 'start', query });
+              try {
+                const hits = await runWebSearch(query, {
+                  engine: agentConfig.engine,
+                  apiKey: agentConfig.apiKey,
+                  limit: args?.num_results || agentConfig.resultLimit,
+                  domains: agentConfig.domains,
+                  endpoint: agentConfig.endpoint,
+                });
+                emitReasoning(`获得 ${hits.length} 条结果，准备综合。`, {
+                  ...reasoningMetaBase,
+                  stage: 'result',
+                  hits: hits.length,
+                });
+                sendToolEvent({
+                  id: callId,
+                  tool: 'web_search',
+                  stage: 'result',
+                  query,
+                  hits,
+                });
+                const summary = formatHitsForModel(query, hits);
+                workingMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  name: 'web_search',
+                  content: JSON.stringify({ query, hits, summary }),
+                });
+              } catch (searchError: any) {
+                const message = searchError?.message || 'Web search failed';
+                emitReasoning(`联网搜索失败：${message}`, {
+                  ...reasoningMetaBase,
+                  stage: 'error',
+                });
+                sendToolEvent({
+                  id: callId,
+                  tool: 'web_search',
+                  stage: 'error',
+                  query,
+                  error: message,
+                });
+                workingMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  name: 'web_search',
+                  content: JSON.stringify({ query, error: message }),
+                });
+              }
+            }
+
+            continue;
+          }
+
+          finalContent = iterationContent.trim();
+          if (!finalContent) {
+            throw new Error('Model finished without producing a final answer');
+          }
+
+          if (iterationReasoningStartedAt && reasoningStartedAt) {
+            reasoningDurationSeconds = Math.max(0, Math.round((Date.now() - reasoningStartedAt) / 1000));
+          }
+
+          finalUsageSnapshot = providerUsage;
+          break;
+        }
+
+        if (!finalContent) {
+          throw new Error('AI provider did not return a response');
+        }
+
+        reasoningText = reasoningChunks.join('\n\n').trim();
+        if (reasoningText) {
+          safeEnqueue({
+            type: 'reasoning',
+            done: true,
+            duration: reasoningDurationSeconds,
+            meta: { kind: 'model', stage: 'final' },
+          });
+        }
+
+        const completionTokensFallback = await Tokenizer.countTokens(finalContent);
+        const finalUsage = {
+          prompt_tokens: finalUsageSnapshot?.prompt_tokens ?? promptTokens,
+          completion_tokens: finalUsageSnapshot?.completion_tokens ?? completionTokensFallback,
+          total_tokens:
+            finalUsageSnapshot?.total_tokens ??
+            ((finalUsageSnapshot?.prompt_tokens ?? promptTokens) +
+              (finalUsageSnapshot?.completion_tokens ?? completionTokensFallback)),
+        };
+
+        if (!providerUsageSeen) {
+          safeEnqueue({ type: 'usage', usage: finalUsage });
+        }
+        safeEnqueue({ type: 'complete' });
+
+        try {
+          const sessionStillExists = async () => {
+            const count = await prisma.chatSession.count({ where: { id: sessionId } });
+            return count > 0;
+          };
+
+          let assistantMessageId: number | null = null;
+          if (finalContent && (await sessionStillExists())) {
+            const data: any = {
+              sessionId,
+              role: 'assistant',
+              content: finalContent,
+            };
+            if (reasoningEnabled && reasoningSaveToDb && reasoningText.trim()) {
+              data.reasoning = reasoningText.trim();
+              data.reasoningDurationSeconds = reasoningDurationSeconds;
+            }
+            if (toolLogs.length > 0) {
+              data.toolLogsJson = JSON.stringify(toolLogs);
+            }
+            const saved = await prisma.message.create({ data });
+            assistantMessageId = saved?.id ?? null;
+          } else if (!finalContent) {
+            log.warn('Agent response empty, skip persistence');
+          } else {
+            log.debug('Session missing when persisting agent response, skip insert', { sessionId });
+          }
+
+          const providerHost = (() => {
+            try {
+              const u = new URL(baseUrl);
+              return u.hostname;
+            } catch {
+              return null;
+            }
+          })();
+
+          if (await sessionStillExists()) {
+            await (prisma as any).usageMetric.create({
+              data: {
+                sessionId,
+                messageId: assistantMessageId ?? undefined,
+                model: session.modelRawId || 'unknown',
+                provider: providerHost ?? undefined,
+                promptTokens: finalUsage.prompt_tokens ?? promptTokens,
+                completionTokens: finalUsage.completion_tokens ?? completionTokensFallback,
+                totalTokens:
+                  finalUsage.total_tokens ??
+                  ((finalUsage.prompt_tokens ?? promptTokens) +
+                    (finalUsage.completion_tokens ?? completionTokensFallback)),
+                contextLimit: contextLimit,
+              },
+            });
+          } else {
+            log.debug('Session missing when persisting usage metric, skip insert', { sessionId });
+          }
+        } catch (persistErr) {
+          console.warn('Persist agent response failed', persistErr);
+        }
+      } catch (error: any) {
+        log.error('Agent web search failed', error);
+        safeEnqueue({
+          type: 'error',
+          error: error?.message || 'Web search agent failed',
+        });
+        const agentError =
+          error instanceof Error ? error : new Error(error?.message || 'Web search agent failed');
+        (agentError as any).handled = 'agent_error';
+        (agentError as any).status = error?.status ?? 500;
+        throw agentError;
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, { headers: sseHeaders });
+};
 // 429 退避（毫秒）与 5xx/超时 退避（毫秒）
 const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
 // 前端出现失败重试/降级时，避免同一条用户消息被重复写入数据库
 const MESSAGE_DEDUPE_WINDOW_MS = parseInt(process.env.MESSAGE_DEDUPE_WINDOW_MS || '30000');
+
+interface AgentWebSearchConfig {
+  enabled: boolean;
+  engine: string;
+  apiKey?: string;
+  resultLimit: number;
+  domains: string[];
+  endpoint?: string;
+}
+
+const truthyValues = new Set(['true', '1', 'yes', 'y', 'on']);
+const falsyValues = new Set(['false', '0', 'no', 'n', 'off']);
+
+const parseBooleanSetting = (value: string | undefined, fallback: boolean) => {
+  if (value === undefined || value === null) return fallback;
+  const normalized = value.toString().trim().toLowerCase();
+  if (truthyValues.has(normalized)) return true;
+  if (falsyValues.has(normalized)) return false;
+  return fallback;
+};
+
+const parseDomainListSetting = (raw?: string | null): string[] => {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed.map((d) => (typeof d === 'string' ? d.trim() : '')).filter(Boolean);
+    }
+  } catch {
+    // ignore json parse error
+  }
+  return trimmed
+    .split(',')
+    .map((d) => d.trim())
+    .filter(Boolean);
+};
+
+const buildAgentWebSearchConfig = (sysMap: Record<string, string>): AgentWebSearchConfig => {
+  const enabled = parseBooleanSetting(
+    sysMap.web_search_agent_enable ?? process.env.WEB_SEARCH_AGENT_ENABLE,
+    false,
+  );
+  const engine = (
+    sysMap.web_search_default_engine ||
+    process.env.WEB_SEARCH_DEFAULT_ENGINE ||
+    'tavily'
+  ).toLowerCase();
+  const apiKey = sysMap.web_search_api_key || process.env.WEB_SEARCH_API_KEY || '';
+  const limitRaw = sysMap.web_search_result_limit ?? process.env.WEB_SEARCH_RESULT_LIMIT ?? '4';
+  const parsedLimit = Number.parseInt(String(limitRaw), 10);
+  const resultLimit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(10, parsedLimit)) : 4;
+  const sysDomains = parseDomainListSetting(sysMap.web_search_domain_filter);
+  const envDomains = parseDomainListSetting(process.env.WEB_SEARCH_DOMAIN_FILTER);
+  const domainList = sysDomains.length > 0 ? sysDomains : envDomains;
+  const endpoint = sysMap.web_search_endpoint || process.env.WEB_SEARCH_ENDPOINT;
+  return {
+    enabled,
+    engine,
+    apiKey,
+    resultLimit,
+    domains: domainList,
+    endpoint,
+  };
+};
 
 class QuotaExceededError extends Error {
   snapshot: UsageQuotaSnapshot
@@ -100,6 +750,11 @@ const sendMessageSchema = z.object({
   // 幂等ID：前端生成的 nonce，用于去重
   clientMessageId: z.string().min(1).max(128).optional(),
   contextEnabled: z.boolean().optional(),
+  features: z
+    .object({
+      web_search: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 // 获取会话消息历史
@@ -149,6 +804,7 @@ chat.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
           clientMessageId: true,
           reasoning: true,
           reasoningDurationSeconds: true,
+          toolLogsJson: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'asc' },
@@ -169,18 +825,22 @@ chat.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
       siteBaseUrl: siteBaseSetting?.value ?? null,
     });
     const normalizedMessages = messages.map((msg) => {
-      const { attachments, ...rest } = msg as typeof msg & { attachments?: Array<{ relativePath: string }> }
+      const { attachments, toolLogsJson, ...rest } = msg as typeof msg & {
+        attachments?: Array<{ relativePath: string }>;
+        toolLogsJson?: string | null;
+      }
       const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
       return {
         ...rest,
         images: resolveChatImageUrls(rel, baseUrl),
+        toolEvents: parseToolLogsJson(toolLogsJson),
       }
     });
 
     await extendAnonymousSession(actor, sessionId)
 
     return c.json<ApiResponse<{
-      messages: Array<{ id: number; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date; images?: string[] }>;
+      messages: Array<{ id: number; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date; images?: string[]; toolEvents?: ToolLogEntry[] }>;
       pagination: {
         page: number;
         limit: number;
@@ -271,6 +931,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const userId = actor.type === 'user' ? actor.id : null;
     const payload = c.req.valid('json') as any;
     const { sessionId, content, images } = payload;
+    const requestedFeatures = payload?.features || {};
 
     await logTraffic({
       category: 'client-request',
@@ -513,6 +1174,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     // 读取系统设置以支持推理/思考等开关的默认值（需在使用 sysMap 前初始化）
     const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+    const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
     const retentionDaysRaw = sysMap.chat_image_retention_days || process.env.CHAT_IMAGE_RETENTION_DAYS || `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
     const retentionDaysParsed = Number.parseInt(retentionDaysRaw, 10)
     cleanupExpiredChatImages(Number.isFinite(retentionDaysParsed) ? retentionDaysParsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS).catch((error) => {
@@ -531,6 +1193,12 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const effectiveOllamaThink = typeof reqOllamaThink === 'boolean'
       ? reqOllamaThink
       : ((sessionDefaults?.ollamaThink ?? ((sysMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean)
+
+    const defaultReasoningSaveToDb = (sysMap.reasoning_save_to_db ?? (process.env.REASONING_SAVE_TO_DB ?? 'true'))
+      .toString()
+      .toLowerCase() === 'true';
+    const effectiveReasoningSaveToDb =
+      typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : defaultReasoningSaveToDb;
 
     if (effectiveReasoningEnabled && effectiveReasoningEffort) {
       requestData.reasoning_effort = effectiveReasoningEffort
@@ -555,6 +1223,36 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       'Access-Control-Allow-Headers': 'Cache-Control',
     };
 
+    const webSearchFeatureRequested = requestedFeatures?.web_search === true;
+    const providerSupportsTools = provider === 'openai' || provider === 'azure_openai';
+    const agentWebSearchActive =
+      webSearchFeatureRequested &&
+      agentWebSearchConfig.enabled &&
+      providerSupportsTools &&
+      Boolean(agentWebSearchConfig.apiKey);
+
+    if (agentWebSearchActive) {
+      return await createAgentWebSearchResponse({
+        session,
+        sessionId,
+        requestData,
+        messagesPayload,
+        promptTokens,
+        contextLimit,
+        contextRemaining,
+        quotaSnapshot,
+        userMessageRecord,
+        sseHeaders,
+        agentConfig: agentWebSearchConfig,
+        provider,
+        baseUrl,
+        authHeader,
+        extraHeaders,
+        reasoningEnabled: effectiveReasoningEnabled,
+        reasoningSaveToDb: effectiveReasoningSaveToDb,
+      });
+    }
+
     let aiResponseContent = '';
     // 推理相关累积
     let reasoningBuffer = '';
@@ -573,7 +1271,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
     // 推理链（CoT）配置
     const REASONING_ENABLED = (sysMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false';
-    const REASONING_SAVE_TO_DB = (sysMap.reasoning_save_to_db ?? (process.env.REASONING_SAVE_TO_DB ?? 'true')).toString().toLowerCase() === 'true';
+    const REASONING_SAVE_TO_DB = effectiveReasoningSaveToDb;
     const REASONING_TAGS_MODE = (sysMap.reasoning_tags_mode ?? (process.env.REASONING_TAGS_MODE ?? 'default')).toString();
     const REASONING_CUSTOM_TAGS = (() => {
       try {
@@ -1508,7 +2206,11 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
     };
 
     let assistantMsgId: number | null = null;
-    if (text) {
+    const sessionStillExists = async () => {
+      const count = await prisma.chatSession.count({ where: { id: sessionId } });
+      return count > 0;
+    };
+    if (text && (await sessionStillExists())) {
       const saveFlag = (() => {
         if (typeof payload?.saveReasoning === 'boolean') return payload.saveReasoning
         return true
@@ -1526,20 +2228,26 @@ chat.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema),
       } catch (persistErr) {
         console.warn('Persist assistant message failed:', persistErr);
       }
+    } else if (text) {
+      console.warn('Skip persisting assistant message because session no longer exists', { sessionId });
     }
     try {
-      await (prisma as any).usageMetric.create({
-        data: {
-          sessionId,
-          messageId: assistantMsgId ?? undefined,
-          model: session.modelRawId || 'unknown',
-          provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
-          promptTokens: usage.prompt_tokens,
-          completionTokens: usage.completion_tokens,
-          totalTokens: usage.total_tokens,
-          contextLimit: contextLimit,
-        },
-      });
+      if (await sessionStillExists()) {
+        await (prisma as any).usageMetric.create({
+          data: {
+            sessionId,
+            messageId: assistantMsgId ?? undefined,
+            model: session.modelRawId || 'unknown',
+            provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            totalTokens: usage.total_tokens,
+            contextLimit: contextLimit,
+          },
+        });
+      } else {
+        console.warn('Skip persisting usage metric because session no longer exists', { sessionId });
+      }
     } catch (persistErr) {
       console.warn('Persist usage metric failed:', persistErr);
     }
@@ -1775,7 +2483,14 @@ chat.get('/usage', actorMiddleware, async (c) => {
       include: { connection: true },
     });
     if (!session) {
-      return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404);
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          totals: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          last_round: null,
+          current: { prompt_tokens: 0, context_limit: null, context_remaining: null },
+        },
+      });
     }
 
     // 聚合

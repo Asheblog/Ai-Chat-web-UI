@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
-import { Send, Square, ImagePlus, X, Plus, Maximize2, Brain } from 'lucide-react'
+import { Send, Square, ImagePlus, X, Plus, Maximize2, Brain, Globe } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -57,6 +57,9 @@ export function ChatInterface() {
     pickImages,
     onFilesSelected,
     removeImage,
+    webSearchEnabled,
+    setWebSearchEnabled,
+    canUseWebSearch,
   } = useChatComposer()
 
   const [showExpand, setShowExpand] = useState(false)
@@ -109,6 +112,15 @@ export function ChatInterface() {
     ? (quotaExhausted ? '额度已用尽，请登录或等待次日重置' : `本日消息发送额度剩余 ${quotaLabel}`)
     : '输入消息（Shift+Enter 换行）'
 
+  const runningToolEvents = useChatStore((state) =>
+    currentSession
+      ? state.toolEvents.filter(
+          (event) => event.sessionId === currentSession.id && event.status === 'running',
+        )
+      : [],
+  )
+  const visibleToolEvents = runningToolEvents.slice(-3).reverse()
+
   const imagePreview = selectedImages.length > 0 && (
     <div className="mb-2 flex flex-wrap gap-2">
       <AnimatePresence mode="popLayout">
@@ -154,6 +166,11 @@ export function ChatInterface() {
     useChatStore.getState().updateSessionPrefs(currentSession.id, { reasoningEnabled: value })
   }
 
+  const toggleWebSearch = (value: boolean) => {
+    if (!canUseWebSearch) return
+    setWebSearchEnabled(value)
+  }
+
   const updateEffort = (value: 'low' | 'medium' | 'high' | 'unset') => {
     setEffort(value)
     useChatStore.getState().updateSessionPrefs(currentSession.id, {
@@ -186,6 +203,62 @@ export function ChatInterface() {
           {error && (
             <div className="mb-3 text-sm text-destructive bg-destructive/10 p-3 rounded-md">
               {String(error)}
+            </div>
+          )}
+          {visibleToolEvents.length > 0 && (
+            <div className="mb-4 space-y-2">
+              {visibleToolEvents.map((event) => {
+                const statusLabel =
+                  event.status === 'running'
+                    ? '检索中'
+                    : event.status === 'success'
+                      ? `${event.hits?.length ?? 0} 条结果`
+                      : event.error || '搜索失败'
+                const statusClass =
+                  event.status === 'running'
+                    ? 'text-amber-500'
+                    : event.status === 'success'
+                      ? 'text-emerald-500'
+                      : 'text-destructive'
+                return (
+                  <div
+                    key={event.id}
+                    className="rounded-2xl border border-dashed border-muted-foreground/40 bg-muted/30 p-3 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-muted-foreground">
+                        联网搜索 · {event.query || '未提供查询'}
+                      </div>
+                      <span className={`text-[11px] font-semibold ${statusClass}`}>{statusLabel}</span>
+                    </div>
+                    {event.hits && event.hits.length > 0 && (
+                      <ul className="mt-2 space-y-1 text-[11px]">
+                        {event.hits.slice(0, 3).map((hit, idx) => (
+                          <li key={`${event.id}-${idx}`}>
+                            <a
+                              href={hit.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              {hit.title || hit.url}
+                            </a>
+                            {hit.snippet && (
+                              <p className="text-muted-foreground">{hit.snippet}</p>
+                            )}
+                          </li>
+                        ))}
+                        {event.hits.length > 3 && (
+                          <li className="text-muted-foreground">……</li>
+                        )}
+                      </ul>
+                    )}
+                    {event.error && (
+                      <p className="mt-2 text-destructive">{event.error}</p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
           <MessageList
@@ -270,6 +343,33 @@ export function ChatInterface() {
                   <span className="text-xs font-medium">{thinkingEnabled ? '深度思考中' : '深度思考'}</span>
                 </Button>
 
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${
+                    webSearchEnabled
+                      ? 'bg-sky-100 border-sky-200 text-sky-700 dark:bg-sky-900/40 dark:border-sky-800 dark:text-sky-200'
+                      : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                  }`}
+                  onClick={() => toggleWebSearch(!webSearchEnabled)}
+                  aria-pressed={webSearchEnabled}
+                  disabled={!canUseWebSearch || isStreaming}
+                  aria-label="联网搜索"
+                >
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                      webSearchEnabled
+                        ? 'bg-sky-600 text-white shadow-sm'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-xs font-medium">
+                    {webSearchEnabled ? '联网搜索开启' : '联网搜索'}
+                  </span>
+                </Button>
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -313,6 +413,14 @@ export function ChatInterface() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">思考模式</span>
                       <Switch checked={thinkingEnabled} onCheckedChange={(checked) => toggleReasoning(!!checked)} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">联网搜索</span>
+                      <Switch
+                        checked={webSearchEnabled && canUseWebSearch}
+                        onCheckedChange={(checked) => toggleWebSearch(!!checked)}
+                        disabled={!canUseWebSearch}
+                      />
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">思考深度</span>
