@@ -19,7 +19,7 @@ interface ModelSelectorProps {
   variant?: "default" | "inline"
 }
 
-type CapabilityFilter = "all" | "vision" | "code_interpreter" | "image_generation"
+type CapabilityFilter = "all" | "vision" | "web_search" | "code_interpreter" | "image_generation"
 
 // 本地存储键名
 const RECENT_MODELS_KEY = "recent-models"
@@ -369,12 +369,12 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
                 多模态
               </Button>
               <Button
-                variant={capabilityFilter === "code_interpreter" ? "default" : "outline"}
+                variant={capabilityFilter === "web_search" ? "default" : "outline"}
                 size="sm"
                 className="h-7 text-xs"
-                onClick={() => setCapabilityFilter("code_interpreter")}
+                onClick={() => setCapabilityFilter("web_search")}
               >
-                推理
+                联网搜索
               </Button>
               <Button
                 variant={capabilityFilter === "image_generation" ? "default" : "outline"}
@@ -383,6 +383,14 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
                 onClick={() => setCapabilityFilter("image_generation")}
               >
                 图像生成
+              </Button>
+              <Button
+                variant={capabilityFilter === "code_interpreter" ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setCapabilityFilter("code_interpreter")}
+              >
+                编程
               </Button>
             </div>
           </div>
