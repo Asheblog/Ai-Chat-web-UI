@@ -213,8 +213,9 @@ function SettingsShellNestedImpl({
       <div
         className={cn(
           "flex-1 min-h-0 min-w-0 overflow-auto px-4 py-4 md:px-6 md:py-6 transition-opacity scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground",
-          readOnly ? "pointer-events-none opacity-60" : ""
+          readOnly ? "opacity-60" : ""
         )}
+        aria-readonly={readOnly || undefined}
       >
         {children}
       </div>
