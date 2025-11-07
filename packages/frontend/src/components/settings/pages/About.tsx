@@ -52,38 +52,50 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">86da2fc</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">14d99d5</span>
               <span className="text-muted-foreground leading-relaxed">
-                模型选择器加入搜索、能力筛选与分组折叠，支持收藏与最近使用，显著提升模型定位效率。
+                上线联网搜索智能体：新增工具日志字段、实时工具事件流与设置页配置，支持多家供应商调用。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">010f345</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">11b459a</span>
               <span className="text-muted-foreground leading-relaxed">
-                提供模型上下文信息，前后端同步暴露能力标签，方便前端呈现更多提示。
+                引入模型/连接能力元数据体系，统一解析、合并与展示多来源能力标签。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bbdd3fe</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d05ccaf</span>
               <span className="text-muted-foreground leading-relaxed">
-                拆分会话与消息加载状态，避免重复请求并让界面反馈更精准。
+                模型筛选面板新增「联网搜索」能力按钮并调整标签顺序，便于快速定位可联网模型。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">55474f2</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bf8d1e0</span>
               <span className="text-muted-foreground leading-relaxed">
-                更新全局字体栈，改善中文字符的渲染效果与跨平台一致性。
+                规范工具事件合并流程并改进推理文本排版（涉及 BREAKING 结构调整）。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">26f1c02</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d62f4e2</span>
               <span className="text-muted-foreground leading-relaxed">
-                修复设置页连接管理的 lint 报错，保持代码质量基线。
+                优化 Markdown 行距、响应式排版与联网搜索设置卡片的视觉层次。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">352491a</span>
+              <span className="text-muted-foreground leading-relaxed">
+                简化推理文本判定逻辑，提取布尔状态以提升可读性与稳定性。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0940d1b</span>
+              <span className="text-muted-foreground leading-relaxed">
+                设置壳层移除 pointer-events 并补充 aria-readonly，修正辅助技术体验。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-06 推送变更摘要
+            以上为 2025-11-07 推送变更摘要
           </p>
         </Card>
       </div>

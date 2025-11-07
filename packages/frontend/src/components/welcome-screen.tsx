@@ -417,29 +417,6 @@ export function WelcomeScreen() {
 
               <Button
                 type="button"
-                variant={webSearchEnabled ? 'default' : 'outline'}
-                size="icon"
-                className={`h-10 w-10 rounded-full ${webSearchEnabled ? '' : ''}`}
-                onClick={() => {
-                  if (!canUseWebSearch) return
-                  setWebSearchTouched(true)
-                  setWebSearchEnabled((prev) => !prev)
-                }}
-                disabled={!canUseWebSearch || creationDisabled}
-                aria-label="联网搜索开关"
-                title={
-                  canUseWebSearch
-                    ? webSearchEnabled
-                      ? '已启用联网搜索'
-                      : '启用联网搜索'
-                    : '当前模型或系统未启用联网搜索'
-                }
-              >
-                <Globe className={`h-4 w-4 ${webSearchEnabled ? 'text-primary-foreground' : ''}`} />
-              </Button>
-
-              <Button
-                type="button"
                 variant="outline"
                 size="icon"
                 className="h-10 w-10 rounded-full"
