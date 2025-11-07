@@ -101,10 +101,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
     renderCache.contentVersion === body.version &&
     renderCache.reasoningVersion === body.reasoningVersion
   const contentHtml = cacheMatches ? renderCache?.contentHtml ?? '' : ''
-  const reasoningHtml =
-    cacheMatches && renderCache?.reasoningHtml && reasoningText.length > 0
-      ? renderCache.reasoningHtml
-      : ''
+  const reasoningHtml = cacheMatches && renderCache?.reasoningHtml ? renderCache.reasoningHtml : ''
 
   useEffect(() => {
     if (reasoningManuallyToggled) return
@@ -129,16 +126,17 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
 
   useEffect(() => {
     if (isUser) return
-    if (!body.content && !body.reasoning) return
-    if (body.version === 0 && body.reasoningVersion === 0) return
+    const hasContent = Boolean(body.content)
+    const hasReasoning = Boolean(body.reasoning && body.reasoning.trim().length > 0)
+    if (!hasContent && !hasReasoning) return
+    if (!hasContent && body.reasoningVersion === 0) return
     if (cacheMatches) return
 
     let cancelled = false
     const delay = isStreaming ? 160 : 40
     const timer = window.setTimeout(() => {
       setIsRendering(true)
-      const reasoningMarkdown =
-        body.reasoning && body.reasoning.trim().length > 0 ? toReasoningMarkdown(body.reasoning) : ''
+      const reasoningMarkdown = hasReasoning ? toReasoningMarkdown(body.reasoning!) : ''
       requestMarkdownRender({
         messageId: meta.id,
         content: body.content,
