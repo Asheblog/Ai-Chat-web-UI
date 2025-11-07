@@ -88,9 +88,8 @@ export function TypewriterReasoning({
   }, [text, isStreaming, speed, charsPerFrame]) // displayText intentionally omitted to prevent infinite loop
 
   return (
-    <span className="inline-block">
+    <span className="block w-full break-words whitespace-pre-wrap">
       {displayText}
-      {/* 流式传输中且未完全显示时显示光标 */}
       {isStreaming && indexRef.current < text.length && (
         <span className="typewriter-cursor ml-0.5 inline-block w-[2px] h-[1em] bg-current align-middle animate-blink" />
       )}

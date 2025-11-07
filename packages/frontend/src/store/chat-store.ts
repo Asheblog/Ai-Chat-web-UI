@@ -54,6 +54,7 @@ const createBody = (message: Message): MessageBody => ({
   reasoning: message.reasoning || '',
   version: message.content ? 1 : 0,
   reasoningVersion: message.reasoning ? 1 : 0,
+  toolEvents: normalizeToolEvents(message),
 })
 
 const ensureBody = (body: MessageBody | undefined, id: MessageId): MessageBody =>
@@ -74,6 +75,40 @@ const inferToolStatus = (stage: ToolEvent['stage']): ToolEvent['status'] => {
   if (stage === 'result') return 'success'
   if (stage === 'error') return 'error'
   return 'running'
+}
+
+const normalizeToolEvents = (message: Message): ToolEvent[] => {
+  if (!Array.isArray(message.toolEvents) || message.toolEvents.length === 0) return []
+  const baseTimestamp = (() => {
+    const ts = Date.parse(message.createdAt)
+    return Number.isFinite(ts) ? ts : Date.now()
+  })()
+  return message.toolEvents.map((evt, idx) => {
+    const stage =
+      evt.stage === 'start' || evt.stage === 'result' || evt.stage === 'error'
+        ? evt.stage
+        : 'start'
+    const id =
+      typeof evt.id === 'string' && evt.id.trim().length > 0
+        ? evt.id
+        : `${message.id}-${stage}-${idx}`
+    const createdAt =
+      typeof (evt as any).createdAt === 'number' && Number.isFinite((evt as any).createdAt)
+        ? ((evt as any).createdAt as number)
+        : baseTimestamp + idx
+    return {
+      id,
+      sessionId: message.sessionId,
+      messageId: message.id,
+      tool: evt.tool || 'web_search',
+      stage,
+      status: inferToolStatus(stage),
+      query: evt.query,
+      hits: Array.isArray(evt.hits) ? evt.hits : undefined,
+      error: evt.error,
+      createdAt,
+    }
+  })
 }
 
 interface ChatStore extends ChatState {
@@ -291,40 +326,6 @@ export const useChatStore = create<ChatStore>((set, get) => {
           bodies[messageKey(msg.id)] = createBody(msg)
         })
 
-        const historicalToolEvents: ToolEvent[] = normalized.flatMap((msg) => {
-          if (!Array.isArray(msg.toolEvents) || msg.toolEvents.length === 0) return []
-          const baseTimestamp = (() => {
-            const ts = Date.parse(msg.createdAt)
-            return Number.isFinite(ts) ? ts : Date.now()
-          })()
-          return msg.toolEvents.map((evt, idx) => {
-            const stage =
-              evt.stage === 'result' || evt.stage === 'error' || evt.stage === 'start'
-                ? evt.stage
-                : 'start'
-            const id =
-              typeof evt.id === 'string' && evt.id.trim().length > 0
-                ? evt.id
-                : `${msg.id}-${stage}-${idx}`
-            const createdAt =
-              typeof evt.createdAt === 'number' && Number.isFinite(evt.createdAt)
-                ? evt.createdAt
-                : baseTimestamp + idx
-            return {
-              id,
-              sessionId: msg.sessionId,
-              messageId: msg.id,
-              tool: evt.tool || 'web_search',
-              stage,
-              status: inferToolStatus(stage),
-              query: evt.query,
-              hits: Array.isArray(evt.hits) ? evt.hits : undefined,
-              error: evt.error,
-              createdAt,
-            }
-          })
-        })
-
         const nextCache = { ...cache }
         normalized.forEach((msg) => {
           if (msg.clientMessageId && msg.images && msg.images.length > 0) {
@@ -339,10 +340,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           messageImageCache: nextCache,
           messagesHydrated: { ...state.messagesHydrated, [sessionId]: true },
           isMessagesLoading: false,
-          toolEvents: [
-            ...historicalToolEvents,
-            ...get().toolEvents.filter((event) => event.sessionId !== sessionId),
-          ],
+          toolEvents: state.toolEvents.filter((event) => event.sessionId !== sessionId),
         }))
       } catch (error: any) {
         set({

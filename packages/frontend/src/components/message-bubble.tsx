@@ -55,7 +55,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
   const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
-  const toolTimeline = useChatStore(
+  const streamingToolEvents = useChatStore(
     useCallback(
       (state) =>
         state.toolEvents.filter(
@@ -65,10 +65,21 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
       [meta.id, meta.sessionId],
     ),
   )
-  const sortedToolTimeline = useMemo(
-    () => toolTimeline.slice().sort((a, b) => a.createdAt - b.createdAt),
-    [toolTimeline],
-  )
+  const historicalToolEvents = useMemo(() => {
+    const list = Array.isArray(body.toolEvents) ? body.toolEvents : []
+    return list
+  }, [body.toolEvents])
+
+  const sortedToolTimeline = useMemo(() => {
+    const merged: Record<string, ToolEvent> = {}
+    for (const evt of historicalToolEvents) {
+      merged[evt.id] = evt
+    }
+    for (const evt of streamingToolEvents) {
+      merged[evt.id] = evt
+    }
+    return Object.values(merged).sort((a, b) => a.createdAt - b.createdAt)
+  }, [historicalToolEvents, streamingToolEvents])
   const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
   const { toast } = useToast()
 
@@ -252,7 +263,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                     <span className="ml-2">{showReasoning ? '▼' : '▶'}</span>
                   </button>
                   {showReasoning && (
-                    <div className="px-3 pb-2">
+                    <div className="px-3 pb-2 space-y-2 w-full break-words">
                       {meta.reasoningStatus === 'idle' && (
                         <div className="text-xs text-muted-foreground mb-1">
                           模型正在思考…
@@ -268,7 +279,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                             dangerouslySetInnerHTML={{ __html: reasoningHtml }}
                           />
                         ) : (
-                          <div className="whitespace-pre-wrap text-xs text-muted-foreground">
+                          <div className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
                             <TypewriterReasoning
                               text={reasoningRaw}
                               isStreaming={meta.reasoningStatus === 'streaming'}

@@ -133,6 +133,7 @@ export interface MessageBody {
   reasoning?: string | null;
   version: number;
   reasoningVersion: number;
+  toolEvents?: ToolEvent[];
 }
 
 export interface MessageRenderCacheEntry {
