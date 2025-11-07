@@ -106,6 +106,26 @@
 .markdown-body {
   contain: content paint;
   will-change: contents;
+  line-height: 1.6; /* 默认行距与主流产品一致 */
+}
+
+.markdown-body--reasoning {
+  line-height: 1.6; /* 推理链行距对齐正文 */
+}
+
+.markdown-body p,
+.markdown-body li,
+.markdown-body blockquote,
+.markdown-body td,
+.markdown-body th {
+  line-height: inherit;
+}
+
+@media (max-width: 640px) {
+  .markdown-body,
+  .markdown-body--reasoning {
+    line-height: 1.5; /* 小屏更紧凑 */
+  }
 }
 
 .markdown-body--pending {

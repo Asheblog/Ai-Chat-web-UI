@@ -102,12 +102,14 @@ export function SystemWebSearchPage() {
   }
 
   return (
-    <Card className="p-5 space-y-5">
-      <div className="flex items-center gap-2">
-        <Globe className="h-5 w-5 text-primary" />
-        <div>
-          <CardTitle>联网搜索（Agent）</CardTitle>
-          <CardDescription>当模型具备工具调用能力时，可实时检索网页并返回最新信息。</CardDescription>
+    <Card className="p-5 space-y-5 border-0">
+      <div className="flex items-center gap-3 pb-3 border-b border-border/60">
+        <Globe className="w-5 h-5 text-primary flex-shrink-0" />
+        <div className="space-y-1">
+          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">联网搜索（Agent）</CardTitle>
+          <CardDescription className="text-sm text-muted-foreground">
+            当模型具备工具调用能力时，可实时检索网页并返回最新信息。
+          </CardDescription>
         </div>
       </div>
 

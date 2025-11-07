@@ -56,7 +56,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     return (
       <div
         className={cn(
-          'prose prose-zinc dark:prose-invert max-w-none break-words',
+          'markdown-body prose prose-zinc dark:prose-invert max-w-none break-words',
           '[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:whitespace-pre-wrap',
           (isStreaming || isRendering) && 'typing-cursor'
         )}

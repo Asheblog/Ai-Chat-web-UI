@@ -234,7 +234,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                   ))}
                 </div>
               )}
-              <p className="whitespace-pre-wrap text-left">{content}</p>
+              <p className="whitespace-pre-wrap text-left leading-[1.5] sm:leading-[1.6]">{content}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -277,7 +277,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                             dangerouslySetInnerHTML={{ __html: reasoningHtml }}
                           />
                         ) : (
-                          <div className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                          <div className="whitespace-pre-wrap break-words text-xs text-muted-foreground leading-[1.5] sm:leading-[1.6]">
                             <TypewriterReasoning
                               text={reasoningRaw}
                               isStreaming={meta.reasoningStatus === 'streaming'}
