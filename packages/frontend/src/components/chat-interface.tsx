@@ -340,7 +340,7 @@ export function ChatInterface() {
                   >
                     <Brain className="h-3.5 w-3.5" />
                   </span>
-                  <span className="text-xs font-medium">{thinkingEnabled ? '深度思考中' : '深度思考'}</span>
+                  <span className="text-xs font-medium">思考</span>
                 </Button>
 
                 <Button
@@ -366,7 +366,7 @@ export function ChatInterface() {
                     <Globe className="h-3.5 w-3.5" />
                   </span>
                   <span className="text-xs font-medium">
-                    {webSearchEnabled ? '联网搜索开启' : '联网搜索'}
+                    {'联网（Agent）'}
                   </span>
                 </Button>
 
