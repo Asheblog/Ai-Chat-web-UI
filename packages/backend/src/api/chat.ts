@@ -671,17 +671,41 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         }
 
         const completionTokensFallback = await Tokenizer.countTokens(finalContent);
-        const finalUsage = {
-          prompt_tokens: finalUsageSnapshot?.prompt_tokens ?? promptTokens,
-          completion_tokens: finalUsageSnapshot?.completion_tokens ?? completionTokensFallback,
-          total_tokens:
-            finalUsageSnapshot?.total_tokens ??
-            ((finalUsageSnapshot?.prompt_tokens ?? promptTokens) +
-              (finalUsageSnapshot?.completion_tokens ?? completionTokensFallback)),
+        const toUsageNumbers = (usage: any) => {
+          const prompt =
+            Number(
+              usage?.prompt_tokens ?? usage?.prompt_eval_count ?? usage?.input_tokens ?? 0
+            ) || 0;
+          const completion =
+            Number(usage?.completion_tokens ?? usage?.eval_count ?? usage?.output_tokens ?? 0) ||
+            0;
+          const total =
+            Number(usage?.total_tokens ?? (prompt + completion)) || prompt + completion;
+          return { prompt, completion, total };
+        };
+        const providerUsageNumbers =
+          providerUsageSeen && finalUsageSnapshot ? toUsageNumbers(finalUsageSnapshot) : null;
+        const providerUsageValid =
+          providerUsageNumbers != null &&
+          (providerUsageNumbers.prompt > 0 ||
+            providerUsageNumbers.completion > 0 ||
+            providerUsageNumbers.total > 0);
+        const fallbackUsageNumbers = {
+          prompt: promptTokens,
+          completion: completionTokensFallback,
+          total: promptTokens + completionTokensFallback,
+        };
+        const finalUsageNumbers = providerUsageValid ? providerUsageNumbers : fallbackUsageNumbers;
+        const finalUsagePayload = {
+          prompt_tokens: finalUsageNumbers.prompt,
+          completion_tokens: finalUsageNumbers.completion,
+          total_tokens: finalUsageNumbers.total,
+          context_limit: contextLimit,
+          context_remaining: Math.max(0, contextLimit - promptTokens),
         };
 
-        if (!providerUsageSeen) {
-          safeEnqueue({ type: 'usage', usage: finalUsage });
+        if (!providerUsageSeen || !providerUsageValid) {
+          safeEnqueue({ type: 'usage', usage: finalUsagePayload });
         }
         safeEnqueue({ type: 'complete' });
 
@@ -729,12 +753,9 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
                 messageId: assistantMessageId ?? undefined,
                 model: session.modelRawId || 'unknown',
                 provider: providerHost ?? undefined,
-                promptTokens: finalUsage.prompt_tokens ?? promptTokens,
-                completionTokens: finalUsage.completion_tokens ?? completionTokensFallback,
-                totalTokens:
-                  finalUsage.total_tokens ??
-                  ((finalUsage.prompt_tokens ?? promptTokens) +
-                    (finalUsage.completion_tokens ?? completionTokensFallback)),
+                promptTokens: finalUsageNumbers.prompt,
+                completionTokens: finalUsageNumbers.completion,
+                totalTokens: finalUsageNumbers.total,
                 contextLimit: contextLimit,
               },
             });
