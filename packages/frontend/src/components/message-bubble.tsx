@@ -80,6 +80,33 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
     }
     return Object.values(merged).sort((a, b) => a.createdAt - b.createdAt)
   }, [historicalToolEvents, streamingToolEvents])
+
+  const toolSummary = useMemo(() => {
+    if (sortedToolTimeline.length === 0) {
+      return null
+    }
+    let running = 0
+    let success = 0
+    let error = 0
+    sortedToolTimeline.forEach((event) => {
+      if (event.stage === 'result') {
+        success += 1
+      } else if (event.stage === 'error') {
+        error += 1
+      } else {
+        running += 1
+      }
+    })
+    const parts: string[] = []
+    if (success > 0) parts.push(`完成 ${success} 次`)
+    if (running > 0) parts.push(`进行中 ${running} 次`)
+    if (error > 0) parts.push(`失败 ${error} 次`)
+    return {
+      total: sortedToolTimeline.length,
+      summaryText: parts.join(' · ') || '等待搜索结果',
+    }
+  }, [sortedToolTimeline])
+
   const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
   const { toast } = useToast()
 
@@ -290,21 +317,27 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                           {meta.reasoningStatus === 'streaming' ? '推理内容接收中…' : '正在思考中…'}
                         </div>
                       )}
-                      {sortedToolTimeline.length > 0 && (
-                        <div className="mt-3 border border-dashed border-muted-foreground/50 rounded-lg bg-muted/30">
-                          <button
-                            type="button"
-                            className="w-full px-3 py-2 text-[11px] text-muted-foreground flex items-center justify-between font-medium"
-                            onClick={() => setToolTimelineOpen((prev) => !prev)}
-                          >
-                            <span>
-                              联网搜索（{sortedToolTimeline.length} 次）
-                              {toolTimelineOpen ? '' : ' · 点击展开'}
-                            </span>
-                            <span>{toolTimelineOpen ? '▲' : '▼'}</span>
-                          </button>
+                      {toolSummary && (
+                        <div className="mt-3 border border-dashed border-muted-foreground/50 rounded-lg bg-muted/30 text-[11px] text-muted-foreground">
+                          <div className="px-3 py-2 flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-semibold text-xs text-foreground">
+                                联网搜索 · {toolSummary.total} 次
+                              </div>
+                              <p className="text-muted-foreground/80 mt-1">
+                                {toolSummary.summaryText}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              className="text-primary text-[11px] font-medium"
+                              onClick={() => setToolTimelineOpen((prev) => !prev)}
+                            >
+                              {toolTimelineOpen ? '收起详情' : '展开详情'}
+                            </button>
+                          </div>
                           {toolTimelineOpen && (
-                            <div className="px-3 pb-3 space-y-2 text-[11px]">
+                            <div className="px-3 pb-3 space-y-2">
                               {sortedToolTimeline.map((event) => {
                                 const statusLabel =
                                   event.stage === 'start'
