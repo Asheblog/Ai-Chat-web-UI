@@ -357,6 +357,12 @@ class ApiClient {
                 yield { type: 'complete' }
               } else if (parsed.type === 'quota' && parsed.quota) {
                 yield { type: 'quota', quota: parsed.quota }
+              } else if (parsed.type === 'error') {
+                const message =
+                  typeof parsed.error === 'string' && parsed.error.trim()
+                    ? parsed.error
+                    : '联网搜索失败，请稍后重试'
+                yield { type: 'error', error: message }
               } else if (parsed.error) {
                 throw new Error(parsed.error)
               }
