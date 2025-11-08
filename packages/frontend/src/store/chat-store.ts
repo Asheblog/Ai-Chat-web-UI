@@ -26,6 +26,8 @@ interface StreamAccumulator {
   flushTimer: ReturnType<typeof setTimeout> | null
   reasoningDesired: boolean
   reasoningActivated: boolean
+  clientMessageId: string | null
+  webSearchRequested: boolean
 }
 
 // 优化为实时刷新，支持逐字显示效果
@@ -648,6 +650,8 @@ export const useChatStore = create<ChatStore>((set, get) => {
         flushTimer: null,
         reasoningDesired,
         reasoningActivated: false,
+        clientMessageId: userClientMessageId,
+        webSearchRequested: Boolean(options?.features?.web_search),
       }
 
       const startStream = () =>
@@ -921,6 +925,11 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
     stopStreaming: () => {
       const activeSessionId = streamState.active?.sessionId
+      const activeClientMessageId = streamState.active?.clientMessageId
+      const requestedWebSearch = streamState.active?.webSearchRequested
+      if (activeSessionId && requestedWebSearch) {
+        apiClient.cancelAgentStream(activeSessionId, activeClientMessageId).catch(() => {})
+      }
       try {
         apiClient.cancelStream()
       } catch {

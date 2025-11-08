@@ -382,6 +382,20 @@ class ApiClient {
     this.currentStreamController = null
   }
 
+  async cancelAgentStream(sessionId: number, clientMessageId?: string | null) {
+    try {
+      await this.client.post('/chat/stream/cancel', {
+        sessionId,
+        clientMessageId: clientMessageId || undefined,
+      })
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.debug('[cancelAgentStream] ignore error', (error as any)?.message || error)
+      }
+    }
+  }
+
   // 非流式接口：失败退避策略同上
   async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string }): Promise<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>> {
     const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>>('/chat/completion', { sessionId, content, images, ...(options||{}) })

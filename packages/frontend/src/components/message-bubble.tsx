@@ -214,7 +214,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
               ? 'bg-muted text-foreground ml-auto'
               : isCodeOnly
               ? 'bg-transparent border-0 text-foreground'
-              : 'bg-background border text-foreground'
+              : 'bg-background text-foreground'
           }`}
         >
           {isUser ? (

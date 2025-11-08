@@ -89,6 +89,9 @@ type AgentResponseParams = {
   extraHeaders: Record<string, string>;
   reasoningEnabled: boolean;
   reasoningSaveToDb: boolean;
+  clientMessageId?: string | null;
+  actorIdentifier: string;
+  requestSignal?: AbortSignal;
 };
 
 type ToolLogStage = 'start' | 'result' | 'error';
@@ -100,6 +103,29 @@ type ToolLogEntry = {
   hits?: WebSearchHit[];
   error?: string;
   createdAt: number;
+};
+
+type AgentStreamMeta = {
+  sessionId: number;
+  actorId: string;
+  controller: AbortController | null;
+  cancelled: boolean;
+};
+
+const agentStreamControllers = new Map<string, AgentStreamMeta>();
+
+const buildAgentStreamKey = (
+  sessionId: number,
+  clientMessageId?: string | null,
+  messageId?: number | string | null,
+) => {
+  if (clientMessageId && clientMessageId.trim()) {
+    return `client:${clientMessageId.trim()}`;
+  }
+  if (typeof messageId === 'number' || typeof messageId === 'string') {
+    return `session:${sessionId}:${messageId}`;
+  }
+  return `session:${sessionId}`;
 };
 
 const extractReasoningText = (reasoning: any): string => {
@@ -198,13 +224,71 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
     extraHeaders,
     reasoningEnabled,
     reasoningSaveToDb,
+    clientMessageId,
+    actorIdentifier,
+    requestSignal,
   } = params;
+
+  const resolvedClientMessageId =
+    clientMessageId ??
+    userMessageRecord?.clientMessageId ??
+    requestData?.client_message_id ??
+    requestData?.clientMessageId ??
+    null;
+  const streamKey = buildAgentStreamKey(
+    sessionId,
+    resolvedClientMessageId,
+    userMessageRecord?.id ?? null,
+  );
+
+  let streamMeta: AgentStreamMeta | null = null;
+  if (streamKey) {
+    streamMeta =
+      agentStreamControllers.get(streamKey) ?? {
+        sessionId,
+        actorId: actorIdentifier,
+        controller: null,
+        cancelled: false,
+      };
+    streamMeta.sessionId = sessionId;
+    streamMeta.actorId = actorIdentifier;
+    streamMeta.controller = null;
+    streamMeta.cancelled = false;
+    agentStreamControllers.set(streamKey, streamMeta);
+  }
+
+  const setStreamController = (controller: AbortController | null) => {
+    if (!streamMeta || !streamKey) return;
+    streamMeta.controller = controller;
+    agentStreamControllers.set(streamKey, streamMeta);
+  };
+
+  const releaseStreamMeta = () => {
+    if (streamKey) {
+      agentStreamControllers.delete(streamKey);
+    }
+    if (streamMeta) {
+      streamMeta.controller = null;
+    }
+  };
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let downstreamClosed = false;
+
       const safeEnqueue = (payload: Record<string, unknown>) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        if (!downstreamClosed && requestSignal?.aborted) {
+          downstreamClosed = true;
+        }
+        if (downstreamClosed) return false;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          return true;
+        } catch {
+          downstreamClosed = true;
+          return false;
+        }
       };
 
       const toolLogs: ToolLogEntry[] = [];
@@ -261,6 +345,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
 
       const workingMessages = JSON.parse(JSON.stringify(messagesPayload));
       const maxIterations = 4;
+      let currentProviderController: AbortController | null = null;
 
       const callProvider = async (messages: any[]) => {
         const body = convertOpenAIReasoningPayload({
@@ -314,12 +399,26 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           ...extraHeaders,
         };
 
-        const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`AI provider request failed (${response.status}): ${text}`);
+        currentProviderController = new AbortController();
+        setStreamController(currentProviderController);
+
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: currentProviderController.signal,
+          });
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`AI provider request failed (${response.status}): ${text}`);
+          }
+          return response;
+        } catch (error) {
+          setStreamController(null);
+          currentProviderController = null;
+          throw error;
         }
-        return response;
       };
 
       const reasoningChunks: string[] = [];
@@ -426,6 +525,8 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             if (streamFinished) break;
           }
           await reader.cancel().catch(() => {});
+          currentProviderController = null;
+          setStreamController(null);
 
           const aggregatedToolCalls = aggregateToolCalls();
 
@@ -547,6 +648,14 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           break;
         }
 
+        if (streamMeta?.cancelled) {
+          log.debug('Agent stream cancelled by client', {
+            sessionId,
+            streamKey,
+          });
+          return;
+        }
+
         if (!finalContent) {
           throw new Error('AI provider did not return a response');
         }
@@ -636,6 +745,13 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           console.warn('Persist agent response failed', persistErr);
         }
       } catch (error: any) {
+        if (streamMeta?.cancelled) {
+          log.debug('Agent stream aborted after client cancellation', {
+            sessionId,
+            streamKey,
+          });
+          return;
+        }
         log.error('Agent web search failed', error);
         safeEnqueue({
           type: 'error',
@@ -647,7 +763,11 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         (agentError as any).status = error?.status ?? 500;
         throw agentError;
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {}
+        setStreamController(null);
+        releaseStreamMeta();
       }
     },
   });
@@ -755,6 +875,11 @@ const sendMessageSchema = z.object({
       web_search: z.boolean().optional(),
     })
     .optional(),
+});
+
+const cancelStreamSchema = z.object({
+  sessionId: z.number().int().positive(),
+  clientMessageId: z.string().min(1).max(128).optional(),
 });
 
 // 获取会话消息历史
@@ -1250,6 +1375,9 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         extraHeaders,
         reasoningEnabled: effectiveReasoningEnabled,
         reasoningSaveToDb: effectiveReasoningSaveToDb,
+        clientMessageId,
+        actorIdentifier: actor.identifier,
+        requestSignal: c.req.raw.signal,
       });
     }
 
@@ -1897,6 +2025,25 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       error: 'Failed to process chat request',
     }, 500);
   }
+});
+
+chat.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSchema), async (c) => {
+  const actor = c.get('actor') as Actor;
+  const payload = c.req.valid('json');
+  const { sessionId, clientMessageId } = payload;
+  const key = buildAgentStreamKey(sessionId, clientMessageId ?? null);
+  if (!key) {
+    return c.json<ApiResponse>({ success: true });
+  }
+  const meta = agentStreamControllers.get(key);
+  if (!meta || meta.actorId !== actor.identifier || meta.sessionId !== sessionId) {
+    return c.json<ApiResponse>({ success: true });
+  }
+  meta.cancelled = true;
+  try {
+    meta.controller?.abort();
+  } catch {}
+  return c.json<ApiResponse>({ success: true });
 });
 
 // 非流式：同步返回完整回复
