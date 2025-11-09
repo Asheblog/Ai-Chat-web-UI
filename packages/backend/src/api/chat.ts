@@ -493,6 +493,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
       let reasoningDurationSeconds = 0;
       let finalUsageSnapshot: any = null;
       let finalContent = '';
+      let aiResponseContent = '';
       let providerUsageSeen = false;
 
       try {
