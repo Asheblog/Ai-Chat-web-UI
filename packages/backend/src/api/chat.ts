@@ -159,23 +159,64 @@ const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
+    const legacyPending = new Map<string, Array<{ id: string; createdAt: number }>>();
+    let legacyCounter = 0;
+    const LEGACY_WINDOW = 15_000;
+
+    const legacyKey = (tool: string, query?: string) =>
+      `${tool}::${(query || '').trim().toLowerCase()}`;
+
+    const allocateLegacyId = (
+      key: string,
+      stage: ToolLogStage,
+      createdAt: number,
+    ): string => {
+      if (stage === 'start') {
+        const id = `legacy:${key}:${legacyCounter++}`;
+        const queue = legacyPending.get(key) ?? [];
+        queue.push({ id, createdAt });
+        legacyPending.set(key, queue);
+        return id;
+      }
+      const queue = legacyPending.get(key);
+      if (queue && queue.length > 0) {
+        while (queue.length > 0 && createdAt - queue[0].createdAt > LEGACY_WINDOW) {
+          queue.shift();
+        }
+        if (queue.length > 0) {
+          const match = queue.shift()!;
+          if (queue.length === 0) {
+            legacyPending.delete(key);
+          } else {
+            legacyPending.set(key, queue);
+          }
+          return match.id;
+        }
+      }
+      return `legacy:${key}:${legacyCounter++}`;
+    };
+
     return parsed
       .map((entry) => {
         if (!entry || typeof entry !== 'object') return null;
         const stage = entry.stage;
         if (stage !== 'start' && stage !== 'result' && stage !== 'error') return null;
         const tool = typeof entry.tool === 'string' && entry.tool.trim() ? entry.tool : 'unknown';
+        const createdAtRaw =
+          typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+            ? entry.createdAt
+            : Date.now();
+        const query = typeof entry.query === 'string' ? entry.query : undefined;
         const id =
-          typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : randomUUID();
+          typeof entry.id === 'string' && entry.id.trim()
+            ? entry.id.trim()
+            : allocateLegacyId(legacyKey(tool, query), stage, createdAtRaw);
         const log: ToolLogEntry = {
           id,
           tool,
           stage,
-          query: typeof entry.query === 'string' ? entry.query : undefined,
-          createdAt:
-            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
-              ? entry.createdAt
-              : Date.now(),
+          query,
+          createdAt: createdAtRaw,
         };
         if (Array.isArray(entry.hits)) {
           log.hits = entry.hits
@@ -292,6 +333,18 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
       };
 
       const toolLogs: ToolLogEntry[] = [];
+      let toolLogSequence = 0;
+
+      const ensureToolLogId = (payload: Record<string, unknown>) => {
+        if (typeof payload.id === 'string' && payload.id.trim()) {
+          return (payload.id as string).trim();
+        }
+        if (typeof payload.callId === 'string' && payload.callId.trim()) {
+          return (payload.callId as string).trim();
+        }
+        toolLogSequence += 1;
+        return `session:${sessionId}:tool:${toolLogSequence}`;
+      };
 
       const recordToolLog = (payload: Record<string, unknown>) => {
         const stage = payload.stage;
@@ -299,7 +352,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         const tool = typeof payload.tool === 'string' && payload.tool.trim() ? payload.tool : null;
         if (!tool) return;
         const entry: ToolLogEntry = {
-          id: typeof payload.id === 'string' && payload.id.trim() ? payload.id : randomUUID(),
+          id: ensureToolLogId(payload),
           tool,
           stage,
           query: typeof payload.query === 'string' ? payload.query : undefined,
@@ -311,7 +364,20 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         if (typeof payload.error === 'string' && payload.error.trim()) {
           entry.error = payload.error;
         }
-        toolLogs.push(entry);
+        const existingIndex = toolLogs.findIndex((log) => log.id === entry.id);
+        if (existingIndex === -1) {
+          toolLogs.push(entry);
+          return;
+        }
+        const existing = toolLogs[existingIndex];
+        toolLogs[existingIndex] = {
+          ...existing,
+          stage: entry.stage,
+          query: entry.query ?? existing.query,
+          hits: entry.hits ?? existing.hits,
+          error: entry.error ?? existing.error,
+          createdAt: existing.createdAt,
+        };
       };
 
       const sendToolEvent = (payload: Record<string, unknown>) => {

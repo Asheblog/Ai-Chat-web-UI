@@ -85,24 +85,66 @@ const normalizeToolEvents = (message: Message): ToolEvent[] => {
     const ts = Date.parse(message.createdAt)
     return Number.isFinite(ts) ? ts : Date.now()
   })()
+  const pendingByKey = new Map<string, Array<{ id: string; createdAt: number }>>()
+  let legacyCounter = 0
+  const LEGACY_WINDOW = 15000
+  const buildKey = (tool?: string | null, query?: string | null) =>
+    `${tool || 'tool'}::${(query || '').trim().toLowerCase()}`
+  const purgeStale = (key: string, timestamp: number) => {
+    const queue = pendingByKey.get(key)
+    if (!queue || queue.length === 0) return
+    while (queue.length > 0 && timestamp - queue[0].createdAt > LEGACY_WINDOW) {
+      queue.shift()
+    }
+    if (queue.length === 0) {
+      pendingByKey.delete(key)
+    } else {
+      pendingByKey.set(key, queue)
+    }
+  }
+  const allocateLegacyId = (key: string, stage: ToolEvent['stage'], createdAt: number) => {
+    purgeStale(key, createdAt)
+    if (stage !== 'start') {
+      const queue = pendingByKey.get(key)
+      if (queue && queue.length > 0) {
+        const match = queue.shift()!
+        if (queue.length === 0) {
+          pendingByKey.delete(key)
+        } else {
+          pendingByKey.set(key, queue)
+        }
+        return match.id
+      }
+    }
+    const id = `${message.id}-legacy-tool-${legacyCounter++}`
+    if (stage === 'start') {
+      const queue = pendingByKey.get(key) ?? []
+      queue.push({ id, createdAt })
+      pendingByKey.set(key, queue)
+    }
+    return id
+  }
+
   return message.toolEvents.map((evt, idx) => {
     const stage =
       evt.stage === 'start' || evt.stage === 'result' || evt.stage === 'error'
         ? evt.stage
         : 'start'
-    const id =
-      typeof evt.id === 'string' && evt.id.trim().length > 0
-        ? evt.id
-        : `${message.id}-${stage}-${idx}`
     const createdAt =
       typeof (evt as any).createdAt === 'number' && Number.isFinite((evt as any).createdAt)
         ? ((evt as any).createdAt as number)
         : baseTimestamp + idx
+    const tool = evt.tool || 'web_search'
+    const key = buildKey(tool, typeof evt.query === 'string' ? evt.query : undefined)
+    const id =
+      typeof evt.id === 'string' && evt.id.trim().length > 0
+        ? evt.id.trim()
+        : allocateLegacyId(key, stage, createdAt)
     return {
       id,
       sessionId: message.sessionId,
       messageId: message.id,
-      tool: evt.tool || 'web_search',
+      tool,
       stage,
       status: inferToolStatus(stage),
       query: evt.query,
