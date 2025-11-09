@@ -72,6 +72,11 @@ export interface Message {
   reasoning?: string | null;
   reasoningDurationSeconds?: number | null;
   createdAt: Date;
+  updatedAt?: Date;
+  streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
+  streamCursor?: number;
+  streamReasoning?: string | null;
+  streamError?: string | null;
 }
 
 export interface SystemSetting {

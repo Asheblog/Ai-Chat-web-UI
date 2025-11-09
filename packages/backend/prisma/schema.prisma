@@ -77,6 +77,11 @@ model Message {
   reasoningDurationSeconds Int?
   toolLogsJson            String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  streamStatus String @default("done")
+  streamCursor Int @default(0)
+  streamReasoning String?
+  streamError String?
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   attachments MessageAttachment[]

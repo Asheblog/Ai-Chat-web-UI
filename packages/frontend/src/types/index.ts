@@ -109,6 +109,10 @@ export interface Message {
   reasoningDurationSeconds?: number | null;
   reasoningStatus?: 'idle' | 'streaming' | 'done';
   reasoningIdleMs?: number | null;
+  streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
+  streamCursor?: number;
+  streamReasoning?: string | null;
+  streamError?: string | null;
   // 可选图片：可能为 data URL（本地预览）或服务端返回的可访问 URL
   images?: string[];
   toolEvents?: ToolEvent[];
@@ -125,6 +129,8 @@ export interface MessageMeta {
   reasoningIdleMs?: number | null;
   images?: string[];
   isPlaceholder?: boolean;
+  streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
+  streamError?: string | null;
 }
 
 export interface MessageBody {
@@ -262,6 +268,9 @@ export interface ApiResponse<T = any> {
 export interface ChatStreamChunk {
   type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning' | 'quota' | 'tool';
   content?: string;
+  messageId?: number | null;
+  assistantMessageId?: number | null;
+  assistantClientMessageId?: string | null;
   usage?: UsageStats;
   done?: boolean;
   duration?: number;

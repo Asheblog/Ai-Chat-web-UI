@@ -4,7 +4,7 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig
 } from 'axios'
-import type { AuthResponse, RegisterResponse, User, ApiResponse, ActorContextDTO, ActorQuota } from '@/types'
+import type { AuthResponse, RegisterResponse, User, ApiResponse, ActorContextDTO, ActorQuota, Message } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
@@ -231,6 +231,13 @@ class ApiClient {
     const response = await this.client.get<ApiResponse<{ messages: any[] }>>(`/chat/sessions/${sessionId}/messages`)
     const { data } = response.data
     return { data: data?.messages || [] }
+  }
+
+  async getMessageProgress(sessionId: number, messageId: number) {
+    const response = await this.client.get<ApiResponse<{ message: Message }>>(
+      `/chat/sessions/${sessionId}/messages/${messageId}/progress`
+    )
+    return response.data
   }
 
   async sendMessage(sessionId: number, content: string) {

@@ -130,6 +130,14 @@ const buildAgentStreamKey = (
   return `session:${sessionId}`;
 };
 
+const deriveAssistantClientMessageId = (clientMessageId?: string | null) => {
+  if (typeof clientMessageId === 'string' && clientMessageId.trim().length > 0) {
+    const candidate = `${clientMessageId.trim()}:assistant`;
+    return candidate.length > 120 ? candidate.slice(0, 120) : candidate;
+  }
+  return `assistant:${randomUUID()}`;
+};
+
 const extractReasoningText = (reasoning: any): string => {
   if (!reasoning) return '';
   if (typeof reasoning === 'string') return reasoning;
@@ -821,6 +829,10 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           if (finalContent && (await sessionStillExists())) {
             const updateData: any = {
               content: finalContent,
+              streamStatus: 'done',
+              streamCursor: finalContent.length,
+              streamReasoning: reasoningText && reasoningText.trim().length > 0 ? reasoningText.trim() : (reasoningBuffer.trim().length > 0 ? reasoningBuffer.trim() : null),
+              streamError: null,
             };
             if (reasoningEnabled && reasoningSaveToDb && reasoningText.trim()) {
               updateData.reasoning = reasoningText.trim();
@@ -860,6 +872,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
                 data: {
                   sessionId,
                   role: 'assistant',
+                  clientMessageId: assistantClientMessageId,
                   ...updateData,
                 },
               });
@@ -1086,6 +1099,11 @@ chat.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
           reasoningDurationSeconds: true,
           toolLogsJson: true,
           createdAt: true,
+          updatedAt: true,
+          streamStatus: true,
+          streamCursor: true,
+          streamReasoning: true,
+          streamError: true,
         },
         orderBy: { createdAt: 'asc' },
         skip: (page - 1) * limit,
@@ -1146,6 +1164,77 @@ chat.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
       success: false,
       error: 'Failed to fetch messages',
     }, 500);
+  }
+});
+
+chat.get('/sessions/:sessionId/messages/:messageId/progress', actorMiddleware, async (c) => {
+  try {
+    const actor = c.get('actor') as Actor;
+    const sessionId = parseInt(c.req.param('sessionId'));
+    const messageId = parseInt(c.req.param('messageId'));
+
+    if (Number.isNaN(sessionId) || Number.isNaN(messageId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400);
+    }
+
+    const message = await prisma.message.findFirst({
+      where: {
+        id: messageId,
+        sessionId,
+        session: sessionOwnershipClause(actor),
+      },
+      select: {
+        id: true,
+        sessionId: true,
+        role: true,
+        content: true,
+        clientMessageId: true,
+        reasoning: true,
+        reasoningDurationSeconds: true,
+        streamStatus: true,
+        streamCursor: true,
+        streamReasoning: true,
+        streamError: true,
+        toolLogsJson: true,
+        createdAt: true,
+        updatedAt: true,
+        attachments: {
+          select: { relativePath: true },
+        },
+      },
+    });
+
+    if (!message) {
+      return c.json<ApiResponse>({ success: false, error: 'Message not found' }, 404);
+    }
+
+    const siteBaseSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'site_base_url' },
+      select: { value: true },
+    });
+    const baseUrl = determineChatImageBaseUrl({
+      request: c.req.raw,
+      siteBaseUrl: siteBaseSetting?.value ?? null,
+    });
+    const rel = Array.isArray(message.attachments)
+      ? message.attachments.map((att) => att.relativePath)
+      : [];
+    const normalized = {
+      ...message,
+      attachments: undefined,
+      images: resolveChatImageUrls(rel, baseUrl),
+      toolEvents: parseToolLogsJson(message.toolLogsJson as string | null | undefined),
+    };
+
+    await extendAnonymousSession(actor, sessionId);
+
+    return c.json<ApiResponse<{ message: typeof normalized }>>({
+      success: true,
+      data: { message: normalized },
+    });
+  } catch (error) {
+    console.error('Get message progress error:', error);
+    return c.json<ApiResponse>({ success: false, error: 'Failed to fetch progress' }, 500);
   }
 });
 
@@ -1336,12 +1425,18 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       });
     }
 
+    const assistantClientMessageId = deriveAssistantClientMessageId(clientMessageId);
+
     try {
       const placeholder = await prisma.message.create({
         data: {
           sessionId,
           role: 'assistant',
           content: '',
+          clientMessageId: assistantClientMessageId,
+          streamStatus: 'streaming',
+          streamCursor: 0,
+          streamReasoning: null,
         },
       });
       assistantMessageId = placeholder.id;
@@ -1601,23 +1696,38 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
     let assistantProgressLastPersistAt = 0;
     let assistantProgressLastPersistedLength = 0;
-    const persistAssistantProgress = async (force = false) => {
+    let assistantReasoningPersistLength = 0;
+    const persistAssistantProgress = async (options?: { force?: boolean; includeReasoning?: boolean; status?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled'; errorMessage?: string | null }) => {
       if (!assistantMessageId) return;
-      if (!aiResponseContent && !force) return;
+      const force = options?.force === true;
+      const includeReasoning = options?.includeReasoning !== false;
+      const currentReasoning = includeReasoning ? reasoningBuffer : null;
       const now = Date.now();
       const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
+      const reasoningDelta = includeReasoning ? (reasoningBuffer.length - assistantReasoningPersistLength) : 0;
       if (!force) {
-        if (deltaLength < 24 && now - assistantProgressLastPersistAt < STREAM_PROGRESS_PERSIST_INTERVAL_MS) {
+        const keepaliveExceeded = now - assistantProgressLastPersistAt >= STREAM_PROGRESS_PERSIST_INTERVAL_MS;
+        const hasContentDelta = deltaLength >= 8;
+        const hasReasoningDelta = includeReasoning && reasoningDelta >= 8;
+        if (!hasContentDelta && !hasReasoningDelta && !keepaliveExceeded) {
           return;
         }
       }
       assistantProgressLastPersistAt = now;
       assistantProgressLastPersistedLength = aiResponseContent.length;
+      if (includeReasoning) {
+        assistantReasoningPersistLength = reasoningBuffer.length;
+      }
+      const nextStatus = options?.status ?? 'streaming';
       try {
         await prisma.message.update({
           where: { id: assistantMessageId },
           data: {
             content: aiResponseContent,
+            streamCursor: aiResponseContent.length,
+            streamStatus: nextStatus,
+            streamReasoning: currentReasoning && currentReasoning.trim().length > 0 ? currentReasoning : null,
+            streamError: options?.errorMessage ?? null,
           },
         });
       } catch (error) {
@@ -1731,16 +1841,6 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
     const stream = new ReadableStream({
       async start(controller) {
-        class DownstreamClosedError extends Error {
-          constructor(cause?: unknown) {
-            super('SSE downstream closed');
-            this.name = 'DownstreamClosedError';
-            if (cause !== undefined) {
-              (this as any).cause = cause;
-            }
-          }
-        }
-
         let heartbeat: ReturnType<typeof setInterval> | null = null;
         const stopHeartbeat = () => {
           if (heartbeat) {
@@ -1757,13 +1857,6 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           if (downstreamAborted) return;
           downstreamAborted = true;
           stopHeartbeat();
-          if (reader) {
-            try {
-              const cancelled = reader.cancel();
-              cancelled?.catch?.(() => {});
-            } catch {}
-            reader = null;
-          }
         };
 
         const safeEnqueue = (payload: string) => {
@@ -1771,14 +1864,15 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             markDownstreamClosed();
           }
           if (downstreamAborted) {
-            throw new DownstreamClosedError();
+            return false;
           }
           try {
             controller.enqueue(encoder.encode(payload));
+            return true;
           } catch (err) {
             markDownstreamClosed();
             console.warn('SSE downstream closed, stop streaming', err);
-            throw new DownstreamClosedError(err);
+            return false;
           }
         };
 
@@ -1798,6 +1892,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           const startEvent = `data: ${JSON.stringify({
             type: 'start',
             messageId: userMessageRecord?.id ?? null,
+            assistantMessageId,
+            assistantClientMessageId,
           })}\n\n`;
           safeEnqueue(startEvent);
 
@@ -1863,12 +1959,13 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             visibleDeltaCount = 0;
           };
 
-          const flushReasoningDelta = (force = false) => {
+          const flushReasoningDelta = async (force = false) => {
             if (!pendingReasoningDelta) return;
             if (!force && reasoningDeltaCount < STREAM_DELTA_CHUNK_SIZE) return;
             reasoningBuffer += pendingReasoningDelta;
             const reasoningEvent = `data: ${JSON.stringify({ type: 'reasoning', content: pendingReasoningDelta })}\n\n`;
             safeEnqueue(reasoningEvent);
+            await persistAssistantProgress({ includeReasoning: true });
             pendingReasoningDelta = '';
             reasoningDeltaCount = 0;
           };
@@ -1900,7 +1997,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             }
             if (reasoningKeepaliveIntervalMs > 0 && idleMs > reasoningKeepaliveIntervalMs && now - lastKeepaliveSentAt > reasoningKeepaliveIntervalMs) {
               try {
-                flushReasoningDelta(true);
+                void flushReasoningDelta(true).catch(() => {});
                 void flushVisibleDelta(true).catch(() => {});
                 emitReasoningKeepalive(idleMs);
               } catch {}
@@ -1927,7 +2024,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
               log.debug('SSE line', data?.slice(0, 120));
 
               if (data === '[DONE]') {
-                flushReasoningDelta(true);
+                await flushReasoningDelta(true);
                 await flushVisibleDelta(true);
                 // 流结束
                 const endEvent = `data: ${JSON.stringify({
@@ -1955,7 +2052,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                 if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
                 pendingReasoningDelta += deltaReasoning;
                 reasoningDeltaCount += 1;
-                flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
+                await flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
               }
 
               if (deltaContent) {
@@ -1968,7 +2065,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                     if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
                     pendingReasoningDelta += reasoningDelta;
                     reasoningDeltaCount += 1;
-                    flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
+                    await flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
                   }
                 }
 
@@ -2011,12 +2108,12 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
               }
             }
 
-            if (providerDone || downstreamAborted) {
+            if (providerDone) {
               break;
             }
           }
 
-          flushReasoningDelta(true);
+          await flushReasoningDelta(true);
           await flushVisibleDelta(true);
           stopHeartbeat();
 
@@ -2084,6 +2181,15 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             if (aiResponseContent.trim()) {
               const updateData: any = {
                 content: aiResponseContent.trim(),
+                streamStatus: 'done',
+                streamCursor: aiResponseContent.trim().length,
+                streamReasoning:
+                  REASONING_ENABLED &&
+                  (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
+                  reasoningBuffer.trim()
+                    ? reasoningBuffer.trim()
+                    : null,
+                streamError: null,
               };
               if (
                 REASONING_ENABLED &&
@@ -2148,9 +2254,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }
 
         } catch (error) {
-          if (error instanceof DownstreamClosedError || downstreamAborted) {
+          if (downstreamAborted) {
             log.debug('Streaming aborted: SSE downstream closed');
-            return;
           }
 
           console.error('Streaming error:', error);
@@ -2200,10 +2305,16 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                   await persistAssistantProgress(true);
                   if (assistantMessageId) {
                     try {
-                      await prisma.message.update({
-                        where: { id: assistantMessageId },
-                        data: { content: text },
-                      });
+                  await prisma.message.update({
+                    where: { id: assistantMessageId },
+                    data: {
+                      content: text,
+                      streamStatus: 'done',
+                      streamCursor: text.length,
+                      streamReasoning: reasoningBuffer.trim().length > 0 ? reasoningBuffer : null,
+                      streamError: null,
+                    },
+                  });
                     } catch {}
                   } else {
                     try {
@@ -2212,6 +2323,10 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                           sessionId,
                           role: 'assistant',
                           content: text,
+                          clientMessageId: assistantClientMessageId,
+                          streamStatus: 'done',
+                          streamCursor: text.length,
+                          streamReasoning: reasoningBuffer.trim().length > 0 ? reasoningBuffer : null,
                         },
                       });
                       assistantMessageId = saved?.id ?? assistantMessageId;
@@ -2226,17 +2341,17 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }
 
           // 发送错误事件
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           const errorEvent = `data: ${JSON.stringify({
             type: 'error',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: errorMessage,
           })}\n\n`;
           safeEnqueue(errorEvent);
-          if (!aiResponseContent && assistantMessageId) {
-            try {
-              await prisma.message.delete({ where: { id: assistantMessageId } });
-            } catch {}
-            assistantMessageId = null;
-          }
+          await persistAssistantProgress({
+            force: true,
+            status: 'error',
+            errorMessage,
+          });
         } finally {
           if (requestSignal) {
             try {
@@ -2307,6 +2422,15 @@ chat.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSche
   try {
     meta.controller?.abort();
   } catch {}
+  if (clientMessageId) {
+    const assistantClientId = deriveAssistantClientMessageId(clientMessageId);
+    try {
+      await prisma.message.updateMany({
+        where: { sessionId, clientMessageId: assistantClientId },
+        data: { streamStatus: 'cancelled', streamError: 'Cancelled by user' },
+      });
+    } catch {}
+  }
   return c.json<ApiResponse>({ success: true });
 });
 

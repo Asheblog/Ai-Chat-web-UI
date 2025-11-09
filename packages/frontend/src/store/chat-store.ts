@@ -28,6 +28,7 @@ interface StreamAccumulator {
   reasoningActivated: boolean
   clientMessageId: string | null
   webSearchRequested: boolean
+  assistantClientMessageId?: string | null
 }
 
 // 优化为实时刷新，支持逐字显示效果
@@ -47,15 +48,17 @@ const createMeta = (message: Message, overrides: Partial<MessageMeta> = {}): Mes
   reasoningIdleMs: message.reasoningIdleMs ?? null,
   images: message.images,
   isPlaceholder: false,
+  streamStatus: message.streamStatus ?? 'done',
+  streamError: message.streamError ?? null,
   ...overrides,
 })
 
 const createBody = (message: Message): MessageBody => ({
   id: message.id,
   content: message.content || '',
-  reasoning: message.reasoning || '',
+  reasoning: message.reasoning ?? message.streamReasoning ?? '',
   version: message.content ? 1 : 0,
-  reasoningVersion: message.reasoning ? 1 : 0,
+  reasoningVersion: message.reasoning || message.streamReasoning ? 1 : 0,
   toolEvents: normalizeToolEvents(message),
 })
 
@@ -268,6 +271,134 @@ interface ChatStore extends ChatState {
 
 export const useChatStore = create<ChatStore>((set, get) => {
   const streamState: { active: StreamAccumulator | null } = { active: null }
+  const streamingPollers = new Map<number, ReturnType<typeof setInterval>>()
+
+  const stopMessagePoller = (messageId: number) => {
+    const timer = streamingPollers.get(messageId)
+    if (timer) {
+      clearInterval(timer)
+      streamingPollers.delete(messageId)
+    }
+  }
+
+  const stopAllMessagePollers = () => {
+    streamingPollers.forEach((timer) => clearInterval(timer))
+    streamingPollers.clear()
+  }
+
+  const recomputeStreamingState = () => {
+    const snapshot = get()
+    const hasStreaming = snapshot.messageMetas.some((meta) => meta.streamStatus === 'streaming')
+    if (snapshot.isStreaming !== hasStreaming) {
+      set({ isStreaming: hasStreaming })
+    }
+  }
+
+  const applyServerMessageSnapshot = (message: Message) => {
+    set((state) => {
+      const key = messageKey(message.id)
+      const prevBody = ensureBody(state.messageBodies[key], message.id)
+      const nextContent = message.content || ''
+      const nextReasoning = message.reasoning ?? message.streamReasoning ?? ''
+      const contentChanged = prevBody.content !== nextContent
+      const reasoningChanged = (prevBody.reasoning ?? '') !== nextReasoning
+      const nextBody: MessageBody = {
+        id: message.id,
+        content: nextContent,
+        reasoning: nextReasoning,
+        version: prevBody.version + (contentChanged ? 1 : 0),
+        reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
+        toolEvents: message.toolEvents?.length ? message.toolEvents : prevBody.toolEvents,
+      }
+      const nextBodies = { ...state.messageBodies, [key]: nextBody }
+      const serverMeta = createMeta(message)
+      const metaIndex = state.messageMetas.findIndex((meta) => messageKey(meta.id) === key)
+      const nextMetas =
+        metaIndex === -1
+          ? [...state.messageMetas, serverMeta]
+          : state.messageMetas.map((meta, idx) =>
+              idx === metaIndex
+                ? {
+                    ...meta,
+                    ...serverMeta,
+                    isPlaceholder: false,
+                    streamStatus: message.streamStatus ?? meta.streamStatus,
+                    streamError: message.streamError ?? meta.streamError,
+                  }
+                : meta
+            )
+      const nextRenderCache = { ...state.messageRenderCache }
+      delete nextRenderCache[key]
+      return {
+        messageBodies: nextBodies,
+        messageMetas: nextMetas,
+        messageRenderCache: nextRenderCache,
+      }
+    })
+    recomputeStreamingState()
+  }
+
+  const updateMetaStreamStatus = (
+    messageId: MessageId,
+    status: MessageMeta['streamStatus'],
+    streamError?: string | null
+  ) => {
+    const key = messageKey(messageId)
+    set((state) => {
+      const idx = state.messageMetas.findIndex((meta) => messageKey(meta.id) === key)
+      if (idx === -1) return state
+      const nextMetas = state.messageMetas.slice()
+      nextMetas[idx] = { ...nextMetas[idx], streamStatus: status, streamError: streamError ?? null }
+      return { messageMetas: nextMetas }
+    })
+    if (status && status !== 'streaming' && typeof messageId === 'number' && Number.isFinite(messageId)) {
+      stopMessagePoller(messageId)
+    }
+    recomputeStreamingState()
+  }
+
+  const activeWatchers = new Set<number>()
+
+  const startMessageProgressWatcher = (sessionId: number, messageId: number) => {
+    if (typeof messageId !== 'number' || Number.isNaN(messageId)) return
+    if (streamState.active?.assistantId === messageId) return
+    if (activeWatchers.has(messageId)) return
+    activeWatchers.add(messageId)
+
+    const poll = async () => {
+      const snapshot = get()
+      if (snapshot.currentSession?.id !== sessionId) {
+        if (activeWatchers.has(messageId)) {
+          setTimeout(poll, 500)
+        }
+        return
+      }
+      try {
+        const response = await apiClient.getMessageProgress(sessionId, messageId)
+        const payload = response?.data?.message ?? (response?.data as Message | undefined)
+        if (payload) {
+          applyServerMessageSnapshot(payload)
+          if (payload.streamStatus && payload.streamStatus !== 'streaming') {
+            stopMessagePoller(messageId)
+            activeWatchers.delete(messageId)
+            return
+          }
+        }
+      } catch (error: any) {
+        const status = error?.response?.status
+        if (status === 404 || status === 403) {
+          stopMessagePoller(messageId)
+          activeWatchers.delete(messageId)
+          return
+        }
+      }
+      if (activeWatchers.has(messageId)) {
+        setTimeout(poll, 1500)
+      }
+    }
+
+    poll()
+  }
 
   const flushActiveStream = (force = false) => {
     const active = streamState.active
@@ -463,6 +594,20 @@ export const useChatStore = create<ChatStore>((set, get) => {
           isMessagesLoading: false,
           toolEvents: state.toolEvents.filter((event) => event.sessionId !== sessionId),
         }))
+        normalized.forEach((msg) => {
+          if (
+            msg.role === 'assistant' &&
+            msg.streamStatus === 'streaming' &&
+            typeof msg.id === 'number'
+          ) {
+            startMessageProgressWatcher(sessionId, Number(msg.id))
+          }
+        })
+        if (normalized.some((msg) => msg.streamStatus === 'streaming')) {
+          set({ isStreaming: true })
+        } else {
+          recomputeStreamingState()
+        }
       } catch (error: any) {
         set({
           error: error?.response?.data?.error || error?.message || '获取消息列表失败',
@@ -489,6 +634,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
     },
 
     createSession: async (modelId: string, title?: string, connectionId?: number, rawId?: string) => {
+      stopAllMessagePollers()
       set({ isSessionsLoading: true, error: null })
       try {
         const response = await apiClient.createSessionByModelId(modelId, title, connectionId, rawId)
@@ -514,6 +660,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
     },
 
     selectSession: (sessionId: number) => {
+      stopAllMessagePollers()
       const { sessions, messagesHydrated } = get()
       const session = sessions.find((s) => s.id === sessionId)
       if (session) {
@@ -755,7 +902,11 @@ export const useChatStore = create<ChatStore>((set, get) => {
           userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
             ? { ...state.messageImageCache, [userMessage.clientMessageId]: userMessage.images }
             : state.messageImageCache
-        const metas = [...state.messageMetas, createMeta(userMessage), createMeta(assistantPlaceholder, { isPlaceholder: true })]
+        const metas = [
+          ...state.messageMetas,
+          createMeta(userMessage),
+          createMeta(assistantPlaceholder, { isPlaceholder: true, streamStatus: 'streaming' }),
+        ]
         const bodies = {
           ...state.messageBodies,
           [messageKey(userMessage.id)]: createBody(userMessage),
@@ -802,6 +953,50 @@ export const useChatStore = create<ChatStore>((set, get) => {
           const active = streamState.active
           if (!active) break
 
+          if (evt?.type === 'start') {
+            if (typeof evt.assistantMessageId === 'number') {
+              const nextId = evt.assistantMessageId
+              if (messageKey(active.assistantId) !== messageKey(nextId)) {
+                const prevKey = messageKey(active.assistantId)
+                const nextKey = messageKey(nextId)
+                set((state) => {
+                  const metaIndex = state.messageMetas.findIndex((meta) => messageKey(meta.id) === prevKey)
+                  const nextMetas = metaIndex === -1 ? state.messageMetas : state.messageMetas.slice()
+                  if (metaIndex !== -1) {
+                    nextMetas[metaIndex] = {
+                      ...nextMetas[metaIndex],
+                      id: nextId,
+                      streamStatus: 'streaming',
+                      isPlaceholder: false,
+                    }
+                  }
+                  const prevBody = state.messageBodies[prevKey]
+                  const nextBodies = { ...state.messageBodies }
+                  if (prevBody) {
+                    delete nextBodies[prevKey]
+                    nextBodies[nextKey] = { ...prevBody, id: nextId }
+                  }
+                  const nextRenderCache = { ...state.messageRenderCache }
+                  if (nextRenderCache[prevKey]) {
+                    nextRenderCache[nextKey] = nextRenderCache[prevKey]
+                    delete nextRenderCache[prevKey]
+                  }
+                  const partial: Partial<ChatState> = {}
+                  if (metaIndex !== -1) partial.messageMetas = nextMetas
+                  if (prevBody) partial.messageBodies = nextBodies
+                  if (nextRenderCache[nextKey]) partial.messageRenderCache = nextRenderCache
+                  return Object.keys(partial).length > 0 ? partial : state
+                })
+                active.assistantId = nextId
+                assistantPlaceholder.id = nextId
+              }
+            }
+            if (typeof evt.assistantClientMessageId === 'string') {
+              active.assistantClientMessageId = evt.assistantClientMessageId
+            }
+            continue
+          }
+
           if (evt?.type === 'tool') {
             set((state) => {
               const list = state.toolEvents.slice()
@@ -842,6 +1037,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
             const friendlyMessage = resolveProviderSafetyMessage(evt.error) ?? fallback
             const agentError = new Error(friendlyMessage)
             ;(agentError as any).handled = 'agent_error'
+            updateMetaStreamStatus(active.assistantId, 'error', friendlyMessage)
             throw agentError
           }
 
@@ -920,8 +1116,13 @@ export const useChatStore = create<ChatStore>((set, get) => {
           }
         }
 
+        const completedAssistantId = streamState.active?.assistantId
         flushActiveStream(true)
+        if (typeof completedAssistantId !== 'undefined' && completedAssistantId !== null) {
+          updateMetaStreamStatus(completedAssistantId, 'done')
+        }
         resetStreamState()
+        recomputeStreamingState()
         set({ isStreaming: false })
         get().fetchUsage(sessionId).catch(() => {})
         get().fetchSessionsUsage().catch(() => {})
@@ -937,6 +1138,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         if (error?.handled === 'agent_error') {
           const message =
             resolveProviderSafetyMessage(error) || error?.message || '联网搜索失败，请稍后重试'
+          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
           set({ error: message, isStreaming: false })
           removeAssistantPlaceholder()
           return
@@ -944,6 +1146,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
         if (error?.status === 429) {
           const message = error?.payload?.error || '额度不足，请登录或等待次日重置'
+          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
           set({ error: message, isStreaming: false })
           removeAssistantPlaceholder()
           return
@@ -951,6 +1154,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
         const providerSafetyMessage = resolveProviderSafetyMessage(error)
         if (providerSafetyMessage) {
+          updateMetaStreamStatus(assistantPlaceholder.id, 'error', providerSafetyMessage)
           set({ error: providerSafetyMessage, isStreaming: false })
           removeAssistantPlaceholder()
           return
@@ -999,6 +1203,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
             })
             await get().fetchUsage(sessionId)
             get().fetchSessionsUsage().catch(() => {})
+            updateMetaStreamStatus(assistantPlaceholder.id, 'done')
             return
           }
         } catch (fallbackError: any) {
@@ -1009,6 +1214,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           }
           if (fallbackError?.response?.status === 429) {
             const message = fallbackError?.response?.data?.error || '额度不足，请登录或等待次日重置'
+            updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
             set({ error: message, isStreaming: false })
             removeAssistantPlaceholder()
             return
@@ -1016,14 +1222,17 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
           const fallbackSafetyMessage = resolveProviderSafetyMessage(fallbackError)
           if (fallbackSafetyMessage) {
+            updateMetaStreamStatus(assistantPlaceholder.id, 'error', fallbackSafetyMessage)
             set({ error: fallbackSafetyMessage, isStreaming: false })
             removeAssistantPlaceholder()
             return
           }
         }
 
+        const genericError = resolveProviderSafetyMessage(error) || error?.message || '发送消息失败'
+        updateMetaStreamStatus(assistantPlaceholder.id, 'error', genericError)
         set({
-          error: resolveProviderSafetyMessage(error) || error?.message || '发送消息失败',
+          error: genericError,
           isStreaming: false,
         })
         removeAssistantPlaceholder()
@@ -1034,6 +1243,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
       const activeSessionId = streamState.active?.sessionId
       const activeClientMessageId = streamState.active?.clientMessageId
       const requestedWebSearch = streamState.active?.webSearchRequested
+      const cancelledAssistantId = streamState.active?.assistantId
       if (activeSessionId && requestedWebSearch) {
         apiClient.cancelAgentStream(activeSessionId, activeClientMessageId).catch(() => {})
       }
@@ -1050,6 +1260,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
           ? state.toolEvents.filter((event) => event.sessionId !== activeSessionId)
           : state.toolEvents,
       }))
+      if (typeof cancelledAssistantId !== 'undefined' && cancelledAssistantId !== null) {
+        updateMetaStreamStatus(cancelledAssistantId, 'cancelled', '已停止生成')
+      }
     },
 
     addMessage: (message: Message) => {
