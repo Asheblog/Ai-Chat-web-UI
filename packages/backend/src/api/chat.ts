@@ -1865,7 +1865,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             if (reasoningKeepaliveIntervalMs > 0 && idleMs > reasoningKeepaliveIntervalMs && now - lastKeepaliveSentAt > reasoningKeepaliveIntervalMs) {
               try {
                 flushReasoningDelta(true);
-                await flushVisibleDelta(true);
+                void flushVisibleDelta(true).catch(() => {});
                 emitReasoningKeepalive(idleMs);
               } catch {}
             }
