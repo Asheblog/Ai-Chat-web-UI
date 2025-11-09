@@ -92,6 +92,8 @@ type AgentResponseParams = {
   clientMessageId?: string | null;
   actorIdentifier: string;
   requestSignal?: AbortSignal;
+  assistantMessageId: number | null;
+  streamProgressPersistIntervalMs: number;
 };
 
 type ToolLogStage = 'start' | 'result' | 'error';
@@ -268,6 +270,8 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
     clientMessageId,
     actorIdentifier,
     requestSignal,
+    assistantMessageId,
+    streamProgressPersistIntervalMs,
   } = params;
 
   const resolvedClientMessageId =
@@ -317,6 +321,35 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
   const stream = new ReadableStream({
     async start(controller) {
       let downstreamClosed = false;
+      let assistantProgressLastPersistAt = 0;
+      let assistantProgressLastPersistedLength = 0;
+
+      const persistAssistantProgress = async (force = false) => {
+        if (!assistantMessageId) return;
+        if (!aiResponseContent && !force) return;
+        const now = Date.now();
+        const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
+        if (!force) {
+          if (deltaLength < 24 && now - assistantProgressLastPersistAt < streamProgressPersistIntervalMs) {
+            return;
+          }
+        }
+        assistantProgressLastPersistAt = now;
+        assistantProgressLastPersistedLength = aiResponseContent.length;
+        try {
+          await prisma.message.update({
+            where: { id: assistantMessageId },
+            data: {
+              content: aiResponseContent,
+            },
+          });
+        } catch (error) {
+          log.warn('Persist assistant progress failed', {
+            sessionId,
+            error: error instanceof Error ? error.message : error,
+          });
+        }
+      };
 
       const safeEnqueue = (payload: Record<string, unknown>) => {
         if (!downstreamClosed && requestSignal?.aborted) {
@@ -1495,6 +1528,11 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       providerSupportsTools &&
       Boolean(agentWebSearchConfig.apiKey);
 
+    const STREAM_PROGRESS_PERSIST_INTERVAL_MS = Math.max(
+      250,
+      parseInt(sysMap.stream_progress_persist_interval_ms || process.env.STREAM_PROGRESS_PERSIST_INTERVAL_MS || '800'),
+    );
+
     if (agentWebSearchActive) {
       return await createAgentWebSearchResponse({
         session,
@@ -1517,6 +1555,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         clientMessageId,
         actorIdentifier: actor.identifier,
         requestSignal: c.req.raw.signal,
+        assistantMessageId,
+        streamProgressPersistIntervalMs: STREAM_PROGRESS_PERSIST_INTERVAL_MS,
       });
     }
 
@@ -1552,11 +1592,6 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const providerInitialGraceMs = Math.max(0, parseInt(sysMap.provider_initial_grace_ms || process.env.PROVIDER_INITIAL_GRACE_MS || '120000'));
     const providerReasoningIdleMs = Math.max(0, parseInt(sysMap.provider_reasoning_idle_ms || process.env.PROVIDER_REASONING_IDLE_MS || '300000'));
     const reasoningKeepaliveIntervalMs = Math.max(0, parseInt(sysMap.reasoning_keepalive_interval_ms || process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0'));
-    const STREAM_PROGRESS_PERSIST_INTERVAL_MS = Math.max(
-      250,
-      parseInt(sysMap.stream_progress_persist_interval_ms || process.env.STREAM_PROGRESS_PERSIST_INTERVAL_MS || '800'),
-    );
-
     // 提前记录是否已收到厂商 usage（优先使用）
     let providerUsageSeen = false as boolean;
     let providerUsageSnapshot: any = null;
