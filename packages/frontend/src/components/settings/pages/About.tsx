@@ -3,7 +3,7 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 
-// 关于页面：展示版本信息与更新日志（v1.4.1）
+// 关于页面：展示版本信息与更新日志（v1.4.2）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.4.1</Badge>
+          <Badge variant="secondary" className="font-mono">v1.4.2</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
@@ -52,50 +52,50 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">14d99d5</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">98a19b4</span>
               <span className="text-muted-foreground leading-relaxed">
-                上线联网搜索智能体：新增工具日志字段、实时工具事件流与设置页配置，支持多家供应商调用。
+                新增消息流状态字段、进度轮询接口与前端状态管理，实时呈现流式进度与异常。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">11b459a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">9b13b00</span>
               <span className="text-muted-foreground leading-relaxed">
-                引入模型/连接能力元数据体系，统一解析、合并与展示多来源能力标签。
+                推出代理流取消能力：服务端会话控制器、前端 API 与清理逻辑协同，支持随时中断。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d05ccaf</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8d87679</span>
               <span className="text-muted-foreground leading-relaxed">
-                模型筛选面板新增「联网搜索」能力按钮并调整标签顺序，便于快速定位可联网模型。
+                流水线持久化升级：助手消息即时落库、失败兜底与最终强制写入，防止断流丢字。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bf8d1e0</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">00c913f</span>
               <span className="text-muted-foreground leading-relaxed">
-                规范工具事件合并流程并改进推理文本排版（涉及 BREAKING 结构调整）。
+                统一工具日志 ID 生成与去重策略，兼容旧事件并消除重复/排序错乱。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d62f4e2</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7851445</span>
               <span className="text-muted-foreground leading-relaxed">
-                优化 Markdown 行距、响应式排版与联网搜索设置卡片的视觉层次。
+                将工具执行摘要折叠进消息气泡，按运行/成功/失败计数展示，移除旧版侧栏列表。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">352491a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">140afb6</span>
               <span className="text-muted-foreground leading-relaxed">
-                简化推理文本判定逻辑，提取布尔状态以提升可读性与稳定性。
+                加入供应商安全检测与敏感内容提示，统一处理上游安全策略导致的错误。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0940d1b</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">330ae81</span>
               <span className="text-muted-foreground leading-relaxed">
-                设置壳层移除 pointer-events 并补充 aria-readonly，修正辅助技术体验。
+                代理流解析器支持 error 类型信号，实时反馈联网搜索与工具执行的异常原因。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-07 推送变更摘要
+            以上为 2025-11-09 推送变更摘要
           </p>
         </Card>
       </div>
