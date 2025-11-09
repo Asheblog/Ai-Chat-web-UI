@@ -301,7 +301,7 @@ export function ChatInterface() {
                     <Globe className="h-3.5 w-3.5" />
                   </span>
                   <span className="text-xs font-medium">
-                    {'联网（Agent）'}
+                    {'联网'}
                   </span>
                 </Button>
 
