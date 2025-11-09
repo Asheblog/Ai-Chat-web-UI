@@ -561,7 +561,9 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
               }
               if (delta.content) {
                 iterationContent += delta.content;
+                aiResponseContent += delta.content;
                 safeEnqueue({ type: 'content', content: delta.content });
+                await persistAssistantProgress();
               }
               if (Array.isArray(delta.tool_calls)) {
                 for (const toolDelta of delta.tool_calls) {
@@ -781,22 +783,54 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             return count > 0;
           };
 
-          let assistantMessageId: number | null = null;
+          let persistedAssistantMessageId: number | null = assistantMessageId;
           if (finalContent && (await sessionStillExists())) {
-            const data: any = {
-              sessionId,
-              role: 'assistant',
+            const updateData: any = {
               content: finalContent,
             };
             if (reasoningEnabled && reasoningSaveToDb && reasoningText.trim()) {
-              data.reasoning = reasoningText.trim();
-              data.reasoningDurationSeconds = reasoningDurationSeconds;
+              updateData.reasoning = reasoningText.trim();
+              updateData.reasoningDurationSeconds = reasoningDurationSeconds;
+            } else {
+              updateData.reasoning = null;
+              updateData.reasoningDurationSeconds = null;
             }
             if (toolLogs.length > 0) {
-              data.toolLogsJson = JSON.stringify(toolLogs);
+              updateData.toolLogsJson = JSON.stringify(toolLogs);
+            } else {
+              updateData.toolLogsJson = null;
             }
-            const saved = await prisma.message.create({ data });
-            assistantMessageId = saved?.id ?? null;
+            if (assistantMessageId) {
+              try {
+                await prisma.message.update({
+                  where: { id: assistantMessageId },
+                  data: updateData,
+                });
+                persistedAssistantMessageId = assistantMessageId;
+              } catch (error) {
+                log.warn('Failed to update assistant placeholder, fallback to create', {
+                  sessionId,
+                  error: error instanceof Error ? error.message : error,
+                });
+                const saved = await prisma.message.create({
+                  data: {
+                    sessionId,
+                    role: 'assistant',
+                    ...updateData,
+                  },
+                });
+                persistedAssistantMessageId = saved?.id ?? null;
+              }
+            } else {
+              const saved = await prisma.message.create({
+                data: {
+                  sessionId,
+                  role: 'assistant',
+                  ...updateData,
+                },
+              });
+              persistedAssistantMessageId = saved?.id ?? null;
+            }
           } else if (!finalContent) {
             log.warn('Agent response empty, skip persistence');
           } else {
@@ -816,7 +850,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             await (prisma as any).usageMetric.create({
               data: {
                 sessionId,
-                messageId: assistantMessageId ?? undefined,
+                messageId: persistedAssistantMessageId ?? undefined,
                 model: session.modelRawId || 'unknown',
                 provider: providerHost ?? undefined,
                 promptTokens: finalUsageNumbers.prompt,
@@ -1191,6 +1225,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const now = new Date()
 
     let userMessageRecord: any = null
+    let assistantMessageId: number | null = null
     let messageWasReused = false
     let quotaSnapshot: UsageQuotaSnapshot | null = null
 
@@ -1264,6 +1299,22 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         messageId: userMessageRecord.id,
         userId: userId ?? 0,
         clientMessageId,
+      });
+    }
+
+    try {
+      const placeholder = await prisma.message.create({
+        data: {
+          sessionId,
+          role: 'assistant',
+          content: '',
+        },
+      });
+      assistantMessageId = placeholder.id;
+    } catch (error) {
+      log.warn('Failed to create assistant placeholder', {
+        sessionId,
+        error: error instanceof Error ? error.message : error,
       });
     }
 
@@ -1500,6 +1551,10 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const providerInitialGraceMs = Math.max(0, parseInt(sysMap.provider_initial_grace_ms || process.env.PROVIDER_INITIAL_GRACE_MS || '120000'));
     const providerReasoningIdleMs = Math.max(0, parseInt(sysMap.provider_reasoning_idle_ms || process.env.PROVIDER_REASONING_IDLE_MS || '300000'));
     const reasoningKeepaliveIntervalMs = Math.max(0, parseInt(sysMap.reasoning_keepalive_interval_ms || process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0'));
+    const STREAM_PROGRESS_PERSIST_INTERVAL_MS = Math.max(
+      250,
+      parseInt(sysMap.stream_progress_persist_interval_ms || process.env.STREAM_PROGRESS_PERSIST_INTERVAL_MS || '800'),
+    );
 
     // 提前记录是否已收到厂商 usage（优先使用）
     let providerUsageSeen = false as boolean;
@@ -1507,6 +1562,35 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     // 兜底：在结束前可统计 completion_tokens
     let completionTokensFallback = 0 as number;
     const encoder = new TextEncoder();
+
+    let assistantProgressLastPersistAt = 0;
+    let assistantProgressLastPersistedLength = 0;
+    const persistAssistantProgress = async (force = false) => {
+      if (!assistantMessageId) return;
+      if (!aiResponseContent && !force) return;
+      const now = Date.now();
+      const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
+      if (!force) {
+        if (deltaLength < 24 && now - assistantProgressLastPersistAt < STREAM_PROGRESS_PERSIST_INTERVAL_MS) {
+          return;
+        }
+      }
+      assistantProgressLastPersistAt = now;
+      assistantProgressLastPersistedLength = aiResponseContent.length;
+      try {
+        await prisma.message.update({
+          where: { id: assistantMessageId },
+          data: {
+            content: aiResponseContent,
+          },
+        });
+      } catch (error) {
+        log.warn('Persist assistant progress failed', {
+          sessionId,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    };
 
     // 单次厂商请求（支持 429/5xx 退避一次）
     const providerRequestOnce = async (signal: AbortSignal): Promise<Response> => {
@@ -1732,12 +1816,13 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           let reasoningDeltaCount = 0;
           let providerDone = false;
 
-          const flushVisibleDelta = (force = false) => {
+          const flushVisibleDelta = async (force = false) => {
             if (!pendingVisibleDelta) return;
             if (!force && visibleDeltaCount < STREAM_DELTA_CHUNK_SIZE) return;
             aiResponseContent += pendingVisibleDelta;
             const contentEvent = `data: ${JSON.stringify({ type: 'content', content: pendingVisibleDelta })}\n\n`;
             safeEnqueue(contentEvent);
+            await persistAssistantProgress();
             pendingVisibleDelta = '';
             visibleDeltaCount = 0;
           };
@@ -1780,7 +1865,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             if (reasoningKeepaliveIntervalMs > 0 && idleMs > reasoningKeepaliveIntervalMs && now - lastKeepaliveSentAt > reasoningKeepaliveIntervalMs) {
               try {
                 flushReasoningDelta(true);
-                flushVisibleDelta(true);
+                await flushVisibleDelta(true);
                 emitReasoningKeepalive(idleMs);
               } catch {}
             }
@@ -1807,7 +1892,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
               if (data === '[DONE]') {
                 flushReasoningDelta(true);
-                flushVisibleDelta(true);
+                await flushVisibleDelta(true);
                 // 流结束
                 const endEvent = `data: ${JSON.stringify({
                   type: 'end',
@@ -1854,7 +1939,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                 if (visible) {
                   pendingVisibleDelta += visible;
                   visibleDeltaCount += 1;
-                  flushVisibleDelta(visibleDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
+                  await flushVisibleDelta(visibleDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
                 }
               }
 
@@ -1896,7 +1981,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }
 
           flushReasoningDelta(true);
-          flushVisibleDelta(true);
+          await flushVisibleDelta(true);
           stopHeartbeat();
 
           // 推理结束事件（若产生过推理）
@@ -1959,22 +2044,52 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
               : { prompt: promptTokens, completion: completionTokensFallback, total: promptTokens + completionTokensFallback };
 
             // 保存AI完整回复（若尚未保存）并记录 messageId
-            let assistantMessageId: number | null = null;
+            let persistedAssistantMessageId: number | null = assistantMessageId;
             if (aiResponseContent.trim()) {
-              try {
+              const updateData: any = {
+                content: aiResponseContent.trim(),
+              };
+              if (
+                REASONING_ENABLED &&
+                (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
+                reasoningBuffer.trim()
+              ) {
+                updateData.reasoning = reasoningBuffer.trim();
+                updateData.reasoningDurationSeconds = reasoningDurationSeconds;
+              } else {
+                updateData.reasoning = null;
+                updateData.reasoningDurationSeconds = null;
+              }
+              if (assistantMessageId) {
+                try {
+                  await prisma.message.update({
+                    where: { id: assistantMessageId },
+                    data: updateData,
+                  });
+                  persistedAssistantMessageId = assistantMessageId;
+                } catch (e) {
+                  log.warn('Failed to update assistant placeholder for default stream, fallback to create', {
+                    sessionId,
+                    error: e instanceof Error ? e.message : e,
+                  });
+                  const saved = await prisma.message.create({
+                    data: {
+                      sessionId,
+                      role: 'assistant',
+                      ...updateData,
+                    },
+                  });
+                  persistedAssistantMessageId = saved?.id ?? null;
+                }
+              } else {
                 const saved = await prisma.message.create({
                   data: {
                     sessionId,
                     role: 'assistant',
-                    content: aiResponseContent.trim(),
-                    ...(REASONING_ENABLED && (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) && reasoningBuffer.trim()
-                      ? { reasoning: reasoningBuffer.trim(), reasoningDurationSeconds }
-                      : {}),
+                    ...updateData,
                   },
                 });
-                assistantMessageId = saved?.id ?? null;
-              } catch (e) {
-                // 若已保存过则忽略错误
+                persistedAssistantMessageId = saved?.id ?? null;
               }
             }
 
@@ -1982,7 +2097,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
               await (prisma as any).usageMetric.create({
                 data: {
                   sessionId,
-                  messageId: assistantMessageId ?? undefined,
+                  messageId: persistedAssistantMessageId ?? undefined,
                   model: session.modelRawId || 'unknown',
                   provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
                   promptTokens: finalUsage.prompt,
@@ -2046,6 +2161,26 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                   aiResponseContent = text;
                   safeEnqueue(`data: ${JSON.stringify({ type: 'content', content: text })}\n\n`);
                   safeEnqueue(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
+                  await persistAssistantProgress(true);
+                  if (assistantMessageId) {
+                    try {
+                      await prisma.message.update({
+                        where: { id: assistantMessageId },
+                        data: { content: text },
+                      });
+                    } catch {}
+                  } else {
+                    try {
+                      const saved = await prisma.message.create({
+                        data: {
+                          sessionId,
+                          role: 'assistant',
+                          content: text,
+                        },
+                      });
+                      assistantMessageId = saved?.id ?? assistantMessageId;
+                    } catch {}
+                  }
                   return;
                 }
               }
@@ -2060,6 +2195,12 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             error: error instanceof Error ? error.message : 'Unknown error',
           })}\n\n`;
           safeEnqueue(errorEvent);
+          if (!aiResponseContent && assistantMessageId) {
+            try {
+              await prisma.message.delete({ where: { id: assistantMessageId } });
+            } catch {}
+            assistantMessageId = null;
+          }
         } finally {
           if (requestSignal) {
             try {
