@@ -155,6 +155,83 @@ const normalizeToolEvents = (message: Message): ToolEvent[] => {
   })
 }
 
+const PROVIDER_SAFETY_HINT =
+  '提问内容包含敏感或未脱敏信息，被上游模型拦截。请调整措辞或移除相关内容后再试。'
+const PROVIDER_SAFETY_MARKERS = [
+  'data_inspection_failed',
+  'input data may contain inappropriate content',
+]
+
+const containsProviderSafetyMarker = (text: string) => {
+  const lower = text.toLowerCase()
+  return PROVIDER_SAFETY_MARKERS.some((marker) => lower.includes(marker))
+}
+
+const stringifyCandidate = (candidate: unknown): string | null => {
+  if (typeof candidate === 'string') return candidate
+  if (typeof candidate === 'number' || typeof candidate === 'boolean') {
+    return String(candidate)
+  }
+  if (candidate && typeof candidate === 'object') {
+    if (typeof (candidate as any).message === 'string') {
+      return (candidate as any).message
+    }
+    if (typeof (candidate as any).code === 'string') {
+      return (candidate as any).code
+    }
+    try {
+      return JSON.stringify(candidate)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+const resolveProviderSafetyMessage = (error: unknown): string | null => {
+  const inspected: unknown[] = []
+  const pushCandidate = (value: unknown) => {
+    if (value == null) return
+    if (Array.isArray(value)) {
+      value.forEach(pushCandidate)
+      return
+    }
+    inspected.push(value)
+  }
+
+  pushCandidate(error)
+  if (error && typeof error === 'object') {
+    const errObj = error as Record<string, unknown>
+    pushCandidate(errObj.message)
+    if ('payload' in errObj) {
+      const payload = errObj.payload as Record<string, unknown> | undefined
+      pushCandidate(payload)
+      if (payload && 'error' in payload) {
+        pushCandidate(payload.error)
+      }
+    }
+    if ('response' in errObj) {
+      const resp = errObj.response as Record<string, unknown> | undefined
+      pushCandidate(resp)
+      if (resp && 'data' in resp) {
+        const data = resp.data as Record<string, unknown> | undefined
+        pushCandidate(data)
+        if (data && 'error' in data) {
+          pushCandidate(data.error)
+        }
+      }
+    }
+  }
+
+  for (const candidate of inspected) {
+    const text = stringifyCandidate(candidate)
+    if (text && containsProviderSafetyMarker(text)) {
+      return PROVIDER_SAFETY_HINT
+    }
+  }
+  return null
+}
+
 interface ChatStore extends ChatState {
   fetchSessions: () => Promise<void>
   fetchSessionsUsage: () => Promise<void>
@@ -657,6 +734,22 @@ export const useChatStore = create<ChatStore>((set, get) => {
         createdAt: now,
       }
 
+      const removeAssistantPlaceholder = () => {
+        set((state) => {
+          const key = messageKey(assistantPlaceholder.id)
+          const metas = state.messageMetas.filter((meta) => meta.id !== assistantPlaceholder.id)
+          const bodies = { ...state.messageBodies }
+          delete bodies[key]
+          const renderCache = { ...state.messageRenderCache }
+          delete renderCache[key]
+          return {
+            messageMetas: metas,
+            messageBodies: bodies,
+            messageRenderCache: renderCache,
+          }
+        })
+      }
+
       set((state) => {
         const nextCache =
           userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
@@ -742,11 +835,12 @@ export const useChatStore = create<ChatStore>((set, get) => {
           }
 
           if (evt?.type === 'error') {
-            const agentError = new Error(
+            const fallback =
               typeof evt.error === 'string' && evt.error.trim()
                 ? evt.error
-                : '联网搜索失败，请稍后重试',
-            )
+                : '联网搜索失败，请稍后重试'
+            const friendlyMessage = resolveProviderSafetyMessage(evt.error) ?? fallback
+            const agentError = new Error(friendlyMessage)
             ;(agentError as any).handled = 'agent_error'
             throw agentError
           }
@@ -841,38 +935,24 @@ export const useChatStore = create<ChatStore>((set, get) => {
         }
 
         if (error?.handled === 'agent_error') {
-          const message = error?.message || '联网搜索失败，请稍后重试'
+          const message =
+            resolveProviderSafetyMessage(error) || error?.message || '联网搜索失败，请稍后重试'
           set({ error: message, isStreaming: false })
-          set((state) => {
-            const metas = state.messageMetas.filter((meta) => meta.id !== assistantPlaceholder.id)
-            const bodies = { ...state.messageBodies }
-            delete bodies[messageKey(assistantPlaceholder.id)]
-            const renderCache = { ...state.messageRenderCache }
-            delete renderCache[messageKey(assistantPlaceholder.id)]
-            return {
-              messageMetas: metas,
-              messageBodies: bodies,
-              messageRenderCache: renderCache,
-            }
-          })
+          removeAssistantPlaceholder()
           return
         }
 
         if (error?.status === 429) {
           const message = error?.payload?.error || '额度不足，请登录或等待次日重置'
           set({ error: message, isStreaming: false })
-          set((state) => {
-            const metas = state.messageMetas.filter((meta) => meta.id !== assistantPlaceholder.id)
-            const bodies = { ...state.messageBodies }
-            delete bodies[messageKey(assistantPlaceholder.id)]
-            const renderCache = { ...state.messageRenderCache }
-            delete renderCache[messageKey(assistantPlaceholder.id)]
-            return {
-              messageMetas: metas,
-              messageBodies: bodies,
-              messageRenderCache: renderCache,
-            }
-          })
+          removeAssistantPlaceholder()
+          return
+        }
+
+        const providerSafetyMessage = resolveProviderSafetyMessage(error)
+        if (providerSafetyMessage) {
+          set({ error: providerSafetyMessage, isStreaming: false })
+          removeAssistantPlaceholder()
           return
         }
 
@@ -930,38 +1010,23 @@ export const useChatStore = create<ChatStore>((set, get) => {
           if (fallbackError?.response?.status === 429) {
             const message = fallbackError?.response?.data?.error || '额度不足，请登录或等待次日重置'
             set({ error: message, isStreaming: false })
-            set((state) => {
-              const metas = state.messageMetas.filter((meta) => meta.id !== assistantPlaceholder.id)
-              const bodies = { ...state.messageBodies }
-              delete bodies[messageKey(assistantPlaceholder.id)]
-              const renderCache = { ...state.messageRenderCache }
-              delete renderCache[messageKey(assistantPlaceholder.id)]
-              return {
-                messageMetas: metas,
-                messageBodies: bodies,
-                messageRenderCache: renderCache,
-              }
-            })
+            removeAssistantPlaceholder()
+            return
+          }
+
+          const fallbackSafetyMessage = resolveProviderSafetyMessage(fallbackError)
+          if (fallbackSafetyMessage) {
+            set({ error: fallbackSafetyMessage, isStreaming: false })
+            removeAssistantPlaceholder()
             return
           }
         }
 
         set({
-          error: error?.message || '发送消息失败',
+          error: resolveProviderSafetyMessage(error) || error?.message || '发送消息失败',
           isStreaming: false,
         })
-        set((state) => {
-          const metas = state.messageMetas.filter((meta) => meta.id !== assistantPlaceholder.id)
-          const bodies = { ...state.messageBodies }
-          delete bodies[messageKey(assistantPlaceholder.id)]
-          const renderCache = { ...state.messageRenderCache }
-          delete renderCache[messageKey(assistantPlaceholder.id)]
-          return {
-            messageMetas: metas,
-            messageBodies: bodies,
-            messageRenderCache: renderCache,
-          }
-        })
+        removeAssistantPlaceholder()
       }
     },
 
