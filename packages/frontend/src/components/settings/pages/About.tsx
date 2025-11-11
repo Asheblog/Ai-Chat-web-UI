@@ -3,7 +3,7 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 
-// 关于页面：展示版本信息与更新日志（v1.4.2）
+// 关于页面：展示版本信息与更新日志（v1.4.3）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.4.2</Badge>
+          <Badge variant="secondary" className="font-mono">v1.4.3</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
@@ -52,50 +52,44 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">98a19b4</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c330d44</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增消息流状态字段、进度轮询接口与前端状态管理，实时呈现流式进度与异常。
+                恢复流过程中会同步助手消息 ID 与元数据，修复占位记录补写时的错乱问题，保证消息接续。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">9b13b00</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b420f14</span>
               <span className="text-muted-foreground leading-relaxed">
-                推出代理流取消能力：服务端会话控制器、前端 API 与清理逻辑协同，支持随时中断。
+                流取消 API 换成 options 入口，支持 messageId/clientMessageId 双轨定位并清理陈旧占位，提高中止可靠性。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8d87679</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c78f9e3</span>
               <span className="text-muted-foreground leading-relaxed">
-                流水线持久化升级：助手消息即时落库、失败兜底与最终强制写入，防止断流丢字。
+                进度持久化若发现消息缺失会自动重建并写入当前状态，避免长流过程中断导致的提示丢失。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">00c913f</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f511376</span>
               <span className="text-muted-foreground leading-relaxed">
-                统一工具日志 ID 生成与去重策略，兼容旧事件并消除重复/排序错乱。
+                Chat 界面抽象为 view model 与子组件，消息视窗、配额提示、错误条幅分离，逻辑从主组件剥离。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7851445</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bb56399</span>
               <span className="text-muted-foreground leading-relaxed">
-                将工具执行摘要折叠进消息气泡，按运行/成功/失败计数展示，移除旧版侧栏列表。
+                工具栏、输入面板、图片预览与文本框自适应拆成独立模块并新增 hook，开发模式禁用冗余 DB 日志。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">140afb6</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e43c0ca</span>
               <span className="text-muted-foreground leading-relaxed">
-                加入供应商安全检测与敏感内容提示，统一处理上游安全策略导致的错误。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">330ae81</span>
-              <span className="text-muted-foreground leading-relaxed">
-                代理流解析器支持 error 类型信号，实时反馈联网搜索与工具执行的异常原因。
+                Stream 状态迁移脚本调整默认值与冗余语句，清理数据库变更流程。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-09 推送变更摘要
+            以上为 2025-11-11 推送变更摘要
           </p>
         </Card>
       </div>
