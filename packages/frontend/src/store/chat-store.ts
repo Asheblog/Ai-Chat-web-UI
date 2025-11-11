@@ -1240,12 +1240,29 @@ export const useChatStore = create<ChatStore>((set, get) => {
     },
 
     stopStreaming: () => {
+      const snapshot = get()
       const activeSessionId = streamState.active?.sessionId
-      const activeClientMessageId = streamState.active?.clientMessageId
       const requestedWebSearch = streamState.active?.webSearchRequested
-      const cancelledAssistantId = streamState.active?.assistantId
-      if (activeSessionId && requestedWebSearch) {
-        apiClient.cancelAgentStream(activeSessionId, activeClientMessageId).catch(() => {})
+      const activeClientMessageId = streamState.active?.clientMessageId ?? null
+      const activeAssistantId =
+        typeof streamState.active?.assistantId === 'number' ? streamState.active.assistantId : null
+      const streamingMeta =
+        snapshot.messageMetas.find(
+          (meta) => meta.role === 'assistant' && meta.streamStatus === 'streaming',
+        ) ?? null
+      const targetSessionId = activeSessionId ?? snapshot.currentSession?.id ?? null
+      const fallbackClientMessageId = streamingMeta?.clientMessageId ?? null
+      const fallbackAssistantId =
+        typeof streamingMeta?.id === 'number' ? streamingMeta.id : null
+      const targetClientMessageId = activeClientMessageId ?? fallbackClientMessageId ?? null
+      const targetAssistantId = activeAssistantId ?? fallbackAssistantId ?? null
+      if (targetSessionId && (targetClientMessageId || targetAssistantId || requestedWebSearch)) {
+        apiClient
+          .cancelAgentStream(targetSessionId, {
+            clientMessageId: targetClientMessageId ?? undefined,
+            messageId: targetAssistantId ?? undefined,
+          })
+          .catch(() => {})
       }
       try {
         apiClient.cancelStream()
@@ -1260,8 +1277,8 @@ export const useChatStore = create<ChatStore>((set, get) => {
           ? state.toolEvents.filter((event) => event.sessionId !== activeSessionId)
           : state.toolEvents,
       }))
-      if (typeof cancelledAssistantId !== 'undefined' && cancelledAssistantId !== null) {
-        updateMetaStreamStatus(cancelledAssistantId, 'cancelled', '已停止生成')
+      if (typeof targetAssistantId !== 'undefined' && targetAssistantId !== null) {
+        updateMetaStreamStatus(targetAssistantId, 'cancelled', '已停止生成')
       }
     },
 

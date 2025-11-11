@@ -114,9 +114,78 @@ type AgentStreamMeta = {
   actorId: string;
   controller: AbortController | null;
   cancelled: boolean;
+  clientMessageId: string | null;
+  assistantClientMessageId: string | null;
+  assistantMessageId: number | string | null;
+  streamKey: string;
 };
 
 const agentStreamControllers = new Map<string, AgentStreamMeta>();
+
+type StreamMetaRegistrationParams = {
+  sessionId: number;
+  actorIdentifier: string;
+  clientMessageId?: string | null;
+  assistantClientMessageId?: string | null;
+  assistantMessageId?: number | string | null;
+};
+
+const registerStreamMeta = (params: StreamMetaRegistrationParams): AgentStreamMeta | null => {
+  const { sessionId, actorIdentifier, clientMessageId, assistantClientMessageId, assistantMessageId } = params;
+  const key = buildAgentStreamKey(sessionId, clientMessageId ?? null, assistantMessageId ?? null);
+  if (!key) return null;
+  const meta: AgentStreamMeta = {
+    sessionId,
+    actorId: actorIdentifier,
+    controller: null,
+    cancelled: false,
+    clientMessageId: clientMessageId ?? null,
+    assistantClientMessageId: assistantClientMessageId ?? null,
+    assistantMessageId: assistantMessageId ?? null,
+    streamKey: key,
+  };
+  agentStreamControllers.set(key, meta);
+  return meta;
+};
+
+const updateStreamMetaController = (meta: AgentStreamMeta | null, controller: AbortController | null) => {
+  if (!meta) return;
+  meta.controller = controller;
+  agentStreamControllers.set(meta.streamKey, meta);
+};
+
+const releaseStreamMeta = (meta: AgentStreamMeta | null) => {
+  if (!meta) return;
+  agentStreamControllers.delete(meta.streamKey);
+  meta.controller = null;
+};
+
+const findStreamMetaByMessageId = (
+  sessionId: number,
+  messageId?: number | string | null,
+): AgentStreamMeta | null => {
+  if (messageId == null) return null;
+  const target = String(messageId);
+  for (const meta of agentStreamControllers.values()) {
+    if (meta.sessionId === sessionId && meta.assistantMessageId != null && String(meta.assistantMessageId) === target) {
+      return meta;
+    }
+  }
+  return null;
+};
+
+const findStreamMetaByClientMessageId = (
+  sessionId: number,
+  clientMessageId?: string | null,
+): AgentStreamMeta | null => {
+  if (!clientMessageId) return null;
+  for (const meta of agentStreamControllers.values()) {
+    if (meta.sessionId === sessionId && meta.clientMessageId === clientMessageId) {
+      return meta;
+    }
+  }
+  return null;
+};
 
 const buildAgentStreamKey = (
   sessionId: number,
@@ -138,6 +207,103 @@ const deriveAssistantClientMessageId = (clientMessageId?: string | null) => {
     return candidate.length > 120 ? candidate.slice(0, 120) : candidate;
   }
   return `assistant:${randomUUID()}`;
+};
+
+const STREAMING_PLACEHOLDER_STATUSES: Array<NonNullable<Message['streamStatus']>> = ['pending', 'streaming'];
+
+const ensureAssistantClientMessageId = (value?: string | null): string => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed.length > 120 ? trimmed.slice(0, 120) : trimmed;
+    }
+  }
+  return deriveAssistantClientMessageId(null);
+};
+
+type AssistantMessageWriteData = Omit<
+  Prisma.MessageUncheckedCreateInput,
+  'id' | 'sessionId' | 'role' | 'clientMessageId'
+>;
+
+const cleanupStaleAssistantPlaceholders = async ({
+  sessionId,
+  keepMessageId,
+  clientMessageId,
+}: {
+  sessionId: number;
+  keepMessageId: number;
+  clientMessageId: string;
+}) => {
+  try {
+    const { count } = await prisma.message.deleteMany({
+      where: {
+        sessionId,
+        role: 'assistant',
+        id: { not: keepMessageId },
+        streamStatus: { in: STREAMING_PLACEHOLDER_STATUSES },
+        OR: [
+          { clientMessageId },
+          { clientMessageId: null },
+        ],
+      },
+    });
+    if (count > 0) {
+      log.warn('Removed stale assistant placeholders', {
+        sessionId,
+        clientMessageId,
+        removed: count,
+      });
+    }
+  } catch (cleanupError) {
+    log.warn('Failed to cleanup assistant placeholders', {
+      sessionId,
+      clientMessageId,
+      error: cleanupError instanceof Error ? cleanupError.message : cleanupError,
+    });
+  }
+};
+
+const upsertAssistantMessageByClientId = async ({
+  sessionId,
+  clientMessageId,
+  data,
+}: {
+  sessionId: number;
+  clientMessageId?: string | null;
+  data: AssistantMessageWriteData;
+}): Promise<number | null> => {
+  const normalizedClientMessageId = ensureAssistantClientMessageId(clientMessageId);
+  try {
+    const upserted = await prisma.message.upsert({
+      where: {
+        sessionId_clientMessageId: {
+          sessionId,
+          clientMessageId: normalizedClientMessageId,
+        },
+      },
+      update: data,
+      create: {
+        sessionId,
+        role: 'assistant',
+        clientMessageId: normalizedClientMessageId,
+        ...data,
+      },
+    });
+    await cleanupStaleAssistantPlaceholders({
+      sessionId,
+      keepMessageId: upserted.id,
+      clientMessageId: normalizedClientMessageId,
+    });
+    return upserted.id;
+  } catch (error) {
+    log.warn('Upsert assistant message failed', {
+      sessionId,
+      clientMessageId: normalizedClientMessageId,
+      error: error instanceof Error ? error.message : error,
+    });
+    return null;
+  }
 };
 
 const extractReasoningText = (reasoning: any): string => {
@@ -291,41 +457,27 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
     requestData?.client_message_id ??
     requestData?.clientMessageId ??
     null;
-  const streamKey = buildAgentStreamKey(
+  const streamMeta = registerStreamMeta({
     sessionId,
-    resolvedClientMessageId,
-    userMessageRecord?.id ?? null,
-  );
-
-  let streamMeta: AgentStreamMeta | null = null;
-  if (streamKey) {
-    streamMeta =
-      agentStreamControllers.get(streamKey) ?? {
-        sessionId,
-        actorId: actorIdentifier,
-        controller: null,
-        cancelled: false,
-      };
-    streamMeta.sessionId = sessionId;
-    streamMeta.actorId = actorIdentifier;
-    streamMeta.controller = null;
-    streamMeta.cancelled = false;
-    agentStreamControllers.set(streamKey, streamMeta);
-  }
+    actorIdentifier,
+    clientMessageId: resolvedClientMessageId,
+    assistantMessageId: userMessageRecord?.id ?? null,
+    assistantClientMessageId: assistantClientMessageId ?? null,
+  });
+  const streamKey =
+    streamMeta?.streamKey ??
+    buildAgentStreamKey(sessionId, resolvedClientMessageId, userMessageRecord?.id ?? null);
+  const assistantPlaceholderClientMessageId =
+    typeof assistantClientMessageId === 'string' && assistantClientMessageId.trim().length > 0
+      ? assistantClientMessageId
+      : deriveAssistantClientMessageId(resolvedClientMessageId);
 
   const setStreamController = (controller: AbortController | null) => {
-    if (!streamMeta || !streamKey) return;
-    streamMeta.controller = controller;
-    agentStreamControllers.set(streamKey, streamMeta);
+    updateStreamMetaController(streamMeta, controller);
   };
 
-  const releaseStreamMeta = () => {
-    if (streamKey) {
-      agentStreamControllers.delete(streamKey);
-    }
-    if (streamMeta) {
-      streamMeta.controller = null;
-    }
+  const releaseStreamMetaHandle = () => {
+    releaseStreamMeta(streamMeta);
   };
 
   const encoder = new TextEncoder();
@@ -358,32 +510,24 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           const isRecordMissing =
             error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
           if (isRecordMissing) {
-            const fallbackClientMessageId =
-              assistantClientMessageId ?? deriveAssistantClientMessageId(resolvedClientMessageId);
-            try {
-              const recreated = await prisma.message.create({
-                data: {
-                  sessionId,
-                  role: 'assistant',
-                  clientMessageId: fallbackClientMessageId,
-                  content: aiResponseContent,
-                  streamStatus: 'streaming',
-                  streamCursor: aiResponseContent.length,
-                  streamReasoning: null,
-                  streamError: null,
-                },
-              });
-              assistantMessageId = recreated.id;
-              log.warn('Assistant progress target missing, recreated message record', {
+            const recoveredId = await upsertAssistantMessageByClientId({
+              sessionId,
+              clientMessageId: assistantPlaceholderClientMessageId,
+              data: {
+                content: aiResponseContent,
+                streamCursor: aiResponseContent.length,
+                streamStatus: 'streaming',
+                streamReasoning: null,
+                streamError: null,
+              },
+            });
+            if (recoveredId) {
+              assistantMessageId = recoveredId;
+              log.warn('Assistant progress target missing, upserted placeholder record', {
                 sessionId,
-                recreatedId: recreated.id,
+                recoveredId,
               });
               return;
-            } catch (recreateError) {
-              log.warn('Failed to recreate assistant message during progress persist', {
-                sessionId,
-                error: recreateError instanceof Error ? recreateError.message : recreateError,
-              });
             }
           }
           log.warn('Persist assistant progress failed', {
@@ -888,18 +1032,16 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
                 });
                 persistedAssistantMessageId = assistantMessageId;
               } catch (error) {
-                log.warn('Failed to update assistant placeholder, fallback to create', {
+                log.warn('Failed to update assistant placeholder, fallback to upsert', {
                   sessionId,
                   error: error instanceof Error ? error.message : error,
                 });
-                const saved = await prisma.message.create({
-                  data: {
-                    sessionId,
-                    role: 'assistant',
-                    ...updateData,
-                  },
+                const recoveredId = await upsertAssistantMessageByClientId({
+                  sessionId,
+                  clientMessageId: assistantClientMessageId,
+                  data: updateData,
                 });
-                persistedAssistantMessageId = saved?.id ?? null;
+                persistedAssistantMessageId = recoveredId ?? null;
               }
             } else {
               const saved = await prisma.message.create({
@@ -969,7 +1111,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           controller.close();
         } catch {}
         setStreamController(null);
-        releaseStreamMeta();
+        releaseStreamMetaHandle();
       }
     },
   });
@@ -1082,6 +1224,7 @@ const sendMessageSchema = z.object({
 const cancelStreamSchema = z.object({
   sessionId: z.number().int().positive(),
   clientMessageId: z.string().min(1).max(128).optional(),
+  messageId: z.number().int().positive().optional(),
 });
 
 // 获取会话消息历史
@@ -1690,6 +1833,18 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       });
     }
 
+    const activeStreamMeta = registerStreamMeta({
+      sessionId,
+      actorIdentifier: actor.identifier,
+      clientMessageId,
+      assistantMessageId,
+      assistantClientMessageId,
+    });
+
+    const bindProviderController = (controller: AbortController | null) => {
+      updateStreamMetaController(activeStreamMeta, controller);
+    };
+
     let aiResponseContent = '';
     // 推理相关累积
     let reasoningBuffer = '';
@@ -1769,30 +1924,24 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         const isRecordMissing =
           error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
         if (isRecordMissing) {
-          try {
-            const recreated = await prisma.message.create({
-              data: {
-                sessionId,
-                role: 'assistant',
-                clientMessageId: assistantClientMessageId,
-                content: aiResponseContent,
-                streamCursor: aiResponseContent.length,
-                streamStatus: nextStatus,
-                streamReasoning: currentReasoning && currentReasoning.trim().length > 0 ? currentReasoning : null,
-                streamError: options?.errorMessage ?? null,
-              },
-            });
-            assistantMessageId = recreated.id;
-            log.warn('Assistant progress target missing, recreated message record', {
+          const recoveredId = await upsertAssistantMessageByClientId({
+            sessionId,
+            clientMessageId: assistantClientMessageId,
+            data: {
+              content: aiResponseContent,
+              streamCursor: aiResponseContent.length,
+              streamStatus: nextStatus,
+              streamReasoning: currentReasoning && currentReasoning.trim().length > 0 ? currentReasoning : null,
+              streamError: options?.errorMessage ?? null,
+            },
+          });
+          if (recoveredId) {
+            assistantMessageId = recoveredId;
+            log.warn('Assistant progress target missing, upserted placeholder record', {
               sessionId,
-              recreatedId: recreated.id,
+              recoveredId,
             });
             return;
-          } catch (recreateError) {
-            log.warn('Failed to recreate assistant message during progress persist', {
-              sessionId,
-              error: recreateError instanceof Error ? recreateError.message : recreateError,
-            });
           }
         }
         log.warn('Persist assistant progress failed', {
@@ -1801,6 +1950,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         });
       }
     };
+
+    let currentProviderController: AbortController | null = null;
 
     // 单次厂商请求（支持 429/5xx 退避一次）
     const providerRequestOnce = async (signal: AbortSignal): Promise<Response> => {
@@ -1885,6 +2036,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const providerRequestWithBackoff = async (): Promise<Response> => {
       // 控制超时与空闲的 AbortController
       const ac = new AbortController();
+      currentProviderController = ac;
+      bindProviderController(ac);
       const timeout = setTimeout(() => ac.abort(new Error('provider request timeout')), providerTimeoutMs);
       try {
         let response = await providerRequestOnce(ac.signal);
@@ -1898,6 +2051,10 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           response = await providerRequestOnce(ac.signal);
         }
         return response;
+      } catch (error) {
+        bindProviderController(null);
+        currentProviderController = null;
+        throw error;
       } finally {
         clearTimeout(timeout);
       }
@@ -2180,6 +2337,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           await flushReasoningDelta(true);
           await flushVisibleDelta(true);
           stopHeartbeat();
+          bindProviderController(null);
+          currentProviderController = null;
 
           // 推理结束事件（若产生过推理）
           if (REASONING_ENABLED && !reasoningDoneEmitted && reasoningBuffer.trim()) {
@@ -2274,28 +2433,24 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                   });
                   persistedAssistantMessageId = assistantMessageId;
                 } catch (e) {
-                  log.warn('Failed to update assistant placeholder for default stream, fallback to create', {
+                  log.warn('Failed to update assistant placeholder for default stream, fallback to upsert', {
                     sessionId,
                     error: e instanceof Error ? e.message : e,
                   });
-                  const saved = await prisma.message.create({
-                    data: {
-                      sessionId,
-                      role: 'assistant',
-                      ...updateData,
-                    },
+                  const recoveredId = await upsertAssistantMessageByClientId({
+                    sessionId,
+                    clientMessageId: assistantClientMessageId,
+                    data: updateData,
                   });
-                  persistedAssistantMessageId = saved?.id ?? null;
+                  persistedAssistantMessageId = recoveredId ?? null;
                 }
               } else {
-                const saved = await prisma.message.create({
-                  data: {
-                    sessionId,
-                    role: 'assistant',
-                    ...updateData,
-                  },
+                const recoveredId = await upsertAssistantMessageByClientId({
+                  sessionId,
+                  clientMessageId: assistantClientMessageId,
+                  data: updateData,
                 });
-                persistedAssistantMessageId = saved?.id ?? null;
+                persistedAssistantMessageId = recoveredId ?? null;
               }
             }
 
@@ -2318,6 +2473,20 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }
 
         } catch (error) {
+          bindProviderController(null);
+          currentProviderController = null;
+          if (activeStreamMeta?.cancelled) {
+            log.debug('Streaming cancelled by client request', {
+              sessionId,
+              assistantMessageId,
+            });
+            await persistAssistantProgress({
+              force: true,
+              status: 'cancelled',
+              errorMessage: 'Cancelled by user',
+            });
+            return;
+          }
           if (downstreamAborted) {
             log.debug('Streaming aborted: SSE downstream closed');
           }
@@ -2426,6 +2595,9 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             stopHeartbeat();
             controller.close();
           } catch {}
+          bindProviderController(null);
+          currentProviderController = null;
+          releaseStreamMeta(activeStreamMeta);
         }
       },
     });
@@ -2473,28 +2645,71 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 chat.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSchema), async (c) => {
   const actor = c.get('actor') as Actor;
   const payload = c.req.valid('json');
-  const { sessionId, clientMessageId } = payload;
-  const key = buildAgentStreamKey(sessionId, clientMessageId ?? null);
-  if (!key) {
-    return c.json<ApiResponse>({ success: true });
+  const { sessionId, clientMessageId, messageId } = payload;
+  const keyCandidates = [
+    buildAgentStreamKey(sessionId, clientMessageId ?? null),
+    typeof messageId === 'number' && Number.isFinite(messageId)
+      ? buildAgentStreamKey(sessionId, null, messageId)
+      : null,
+  ].filter(Boolean) as string[];
+
+  let meta: AgentStreamMeta | null = null;
+  for (const key of keyCandidates) {
+    const candidate = agentStreamControllers.get(key);
+    if (candidate) {
+      meta = candidate;
+      break;
+    }
   }
-  const meta = agentStreamControllers.get(key);
+  if (!meta && typeof messageId === 'number' && Number.isFinite(messageId)) {
+    meta = findStreamMetaByMessageId(sessionId, messageId);
+  }
+  if (!meta && clientMessageId) {
+    meta = findStreamMetaByClientMessageId(sessionId, clientMessageId);
+  }
   if (!meta || meta.actorId !== actor.identifier || meta.sessionId !== sessionId) {
     return c.json<ApiResponse>({ success: true });
   }
+
   meta.cancelled = true;
   try {
     meta.controller?.abort();
   } catch {}
-  if (clientMessageId) {
-    const assistantClientId = deriveAssistantClientMessageId(clientMessageId);
-    try {
-      await prisma.message.updateMany({
+
+  const cancellationUpdate = { streamStatus: 'cancelled', streamError: 'Cancelled by user' };
+  const updateTasks: Array<Promise<any>> = [];
+
+  const assistantClientId =
+    meta.assistantClientMessageId ??
+    (clientMessageId ? deriveAssistantClientMessageId(clientMessageId) : null);
+  if (assistantClientId) {
+    updateTasks.push(
+      prisma.message.updateMany({
         where: { sessionId, clientMessageId: assistantClientId },
-        data: { streamStatus: 'cancelled', streamError: 'Cancelled by user' },
-      });
-    } catch {}
+        data: cancellationUpdate,
+      }),
+    );
   }
+
+  const targetMessageId =
+    typeof messageId === 'number' && Number.isFinite(messageId)
+      ? messageId
+      : typeof meta.assistantMessageId === 'number'
+        ? (meta.assistantMessageId as number)
+        : null;
+  if (targetMessageId) {
+    updateTasks.push(
+      prisma.message.updateMany({
+        where: { sessionId, id: targetMessageId },
+        data: cancellationUpdate,
+      }),
+    );
+  }
+
+  if (updateTasks.length > 0) {
+    await Promise.allSettled(updateTasks);
+  }
+
   return c.json<ApiResponse>({ success: true });
 });
 

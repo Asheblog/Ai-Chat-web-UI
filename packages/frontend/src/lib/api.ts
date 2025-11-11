@@ -395,12 +395,29 @@ class ApiClient {
     this.currentStreamController = null
   }
 
-  async cancelAgentStream(sessionId: number, clientMessageId?: string | null) {
+  async cancelAgentStream(
+    sessionId: number,
+    options?: { clientMessageId?: string | null; messageId?: number | string | null },
+  ) {
+    const payload: Record<string, unknown> = { sessionId }
+    const clientMessageId = options?.clientMessageId
+    const messageIdRaw = options?.messageId
+    if (clientMessageId) {
+      payload.clientMessageId = clientMessageId
+    }
+    if (typeof messageIdRaw === 'number' && Number.isFinite(messageIdRaw)) {
+      payload.messageId = messageIdRaw
+    } else if (typeof messageIdRaw === 'string' && messageIdRaw.trim()) {
+      const numeric = Number(messageIdRaw)
+      if (Number.isFinite(numeric)) {
+        payload.messageId = numeric
+      }
+    }
+    if (!payload.clientMessageId && typeof payload.messageId !== 'number') {
+      return
+    }
     try {
-      await this.client.post('/chat/stream/cancel', {
-        sessionId,
-        clientMessageId: clientMessageId || undefined,
-      })
+      await this.client.post('/chat/stream/cancel', payload)
     } catch (error) {
       if (process.env.NODE_ENV !== 'production') {
         // eslint-disable-next-line no-console
