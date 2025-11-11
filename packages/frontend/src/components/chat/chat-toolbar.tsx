@@ -4,7 +4,7 @@ import type { ModelItem } from '@/store/models-store'
 import { ModelSelector } from '@/components/model-selector'
 import { UserMenu } from '@/components/user-menu'
 
-interface ChatToolbarProps {
+export interface ChatToolbarProps {
   selectedModelId: string | null
   onModelChange: (model: ModelItem) => void
 }

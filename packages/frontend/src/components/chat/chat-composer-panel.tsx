@@ -12,7 +12,7 @@ interface ImageLimitConfig {
   maxEdge: number
 }
 
-interface ChatComposerPanelProps {
+export interface ChatComposerPanelProps {
   input: string
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   showExpand: boolean
