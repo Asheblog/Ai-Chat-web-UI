@@ -50,7 +50,9 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - ai-chat-web-ui-network
+      ai-chat-web-ui-network:
+        aliases:
+          - backend
 
   frontend:
     image: ghcr.io/asheblog/aichat-frontend:latest
