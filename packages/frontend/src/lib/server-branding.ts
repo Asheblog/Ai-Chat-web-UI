@@ -14,7 +14,12 @@ const buildBrandingEndpoint = () => {
   return `http://${backendHost}:${backendPort}/api/settings/branding`
 }
 
-export const getServerBrandText = async (): Promise<string> => {
+export interface ServerBrandingResult {
+  text: string
+  isFallback: boolean
+}
+
+export const getServerBranding = async (): Promise<ServerBrandingResult> => {
   const endpoint = buildBrandingEndpoint()
   try {
     const response = await fetch(endpoint, {
@@ -26,9 +31,17 @@ export const getServerBrandText = async (): Promise<string> => {
     }
     const payload = (await response.json()) as ApiResponse<{ brand_text?: string }>
     const resolved = (payload.data?.brand_text || '').trim()
-    return resolved || DEFAULT_BRAND
+    if (resolved) {
+      return { text: resolved, isFallback: false }
+    }
+    return { text: DEFAULT_BRAND, isFallback: true }
   } catch (error) {
     console.warn('[branding] fallback to default due to error:', error)
-    return DEFAULT_BRAND
+    return { text: DEFAULT_BRAND, isFallback: true }
   }
+}
+
+export const getServerBrandText = async (): Promise<string> => {
+  const { text } = await getServerBranding()
+  return text
 }

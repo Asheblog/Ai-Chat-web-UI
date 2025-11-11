@@ -6,7 +6,7 @@ import { apiClient } from '@/lib/api'
 interface SettingsStore extends SettingsState {
   fetchSystemSettings: () => Promise<void>
   updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>
-  fetchPublicBranding: () => Promise<void>
+  fetchPublicBranding: () => Promise<boolean>
   bootstrapBrandText: (brandText?: string | null) => void
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setMaxTokens: (maxTokens: number) => void
@@ -93,15 +93,17 @@ export const useSettingsStore = create<SettingsStore>()(
         try {
           const response = await apiClient.getPublicBranding()
           const normalized = normalizeBrandText(response.data?.brand_text)
-          if (!normalized) return
+          if (!normalized) return false
           set((state) => ({
             publicBrandText: normalized,
             systemSettings: state.systemSettings
               ? { ...state.systemSettings, brandText: normalized }
               : state.systemSettings,
           }))
+          return true
         } catch (error) {
           console.warn('[settings-store] failed to fetch branding:', error)
+          return false
         }
       },
 
