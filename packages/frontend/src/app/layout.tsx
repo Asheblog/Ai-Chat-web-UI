@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import ConsoleSilencer from '@/components/console-silencer'
 import { TitleSync } from '@/components/title-sync'
+import { getServerBrandText } from '@/lib/server-branding'
 
 const notoSansSC = Noto_Sans_SC({
   weight: ['400', '500', '600', '700'],
@@ -22,16 +23,20 @@ const notoSansSC = Noto_Sans_SC({
   ],
 })
 
-export const metadata: Metadata = {
-  title: 'AIChat',
-  description: '一个轻量级、易部署的AI聊天应用',
+export async function generateMetadata(): Promise<Metadata> {
+  const brandText = await getServerBrandText()
+  return {
+    title: brandText,
+    description: '一个轻量级、易部署的AI聊天应用',
+  }
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const brandText = await getServerBrandText()
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body className={notoSansSC.className}>
@@ -43,7 +48,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <TitleSync />
+          <TitleSync initialBrandText={brandText} />
           {children}
           <Toaster />
         </ThemeProvider>

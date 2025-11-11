@@ -6,13 +6,22 @@ import { useSettingsStore } from '@/store/settings-store'
 
 const DEFAULT_TITLE = 'AIChat'
 
-export function TitleSync() {
-  const brandText = useSettingsStore((state) => state.systemSettings?.brandText)
+interface TitleSyncProps {
+  initialBrandText?: string
+}
+
+export function TitleSync({ initialBrandText }: TitleSyncProps) {
+  const brandText = useSettingsStore(
+    (state) => state.systemSettings?.brandText ?? state.publicBrandText ?? null,
+  )
   const fetchSystemSettings = useSettingsStore((state) => state.fetchSystemSettings)
+  const fetchPublicBranding = useSettingsStore((state) => state.fetchPublicBranding)
+  const bootstrapBrandText = useSettingsStore((state) => state.bootstrapBrandText)
   const actorState = useAuthStore((state) => state.actorState)
   const fetchActor = useAuthStore((state) => state.fetchActor)
-  const hasRequested = useRef(false)
-  const lastBrandRef = useRef<string>('')
+  const hasRequestedSystem = useRef(false)
+  const hasRequestedBrand = useRef(false)
+  const lastBrandRef = useRef<string>((initialBrandText ?? '').trim())
 
   useEffect(() => {
     if (actorState === 'loading') {
@@ -21,17 +30,28 @@ export function TitleSync() {
   }, [actorState, fetchActor])
 
   useEffect(() => {
-    // 仅在已登录后请求系统设置，避免未认证状态触发 401 重定向
-    if (actorState !== 'authenticated') {
-      hasRequested.current = false
+    const trimmedInitial = (initialBrandText ?? '').trim()
+    if (trimmedInitial) {
+      bootstrapBrandText(trimmedInitial)
+      hasRequestedBrand.current = true
       return
     }
-    const effectiveBrand = (brandText ?? '').trim() || lastBrandRef.current
-    if (!hasRequested.current && !effectiveBrand) {
-      hasRequested.current = true
+    if (!brandText && !hasRequestedBrand.current) {
+      hasRequestedBrand.current = true
+      fetchPublicBranding().catch(() => {})
+    }
+  }, [initialBrandText, brandText, bootstrapBrandText, fetchPublicBranding])
+
+  useEffect(() => {
+    if (actorState !== 'authenticated') {
+      hasRequestedSystem.current = false
+      return
+    }
+    if (!hasRequestedSystem.current) {
+      hasRequestedSystem.current = true
       fetchSystemSettings().catch(() => {})
     }
-  }, [actorState, brandText, fetchSystemSettings])
+  }, [actorState, fetchSystemSettings])
 
   useEffect(() => {
     const trimmed = (brandText ?? '').trim()

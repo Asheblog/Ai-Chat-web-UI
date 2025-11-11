@@ -561,6 +561,11 @@ class ApiClient {
     return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl, anonymousRetentionDays, anonymousDailyQuota, defaultUserDailyQuota, webSearchAgentEnable, webSearchDefaultEngine, webSearchResultLimit, webSearchDomainFilter, webSearchHasApiKey } }
   }
 
+  async getPublicBranding() {
+    const response = await this.client.get<ApiResponse<{ brand_text?: string }>>('/settings/branding')
+    return response.data
+  }
+
   async updateSystemSettings(settings: any) {
     // 支持 allowRegistration/brandText 以及流式稳定性设置
     const payload: any = {}

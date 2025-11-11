@@ -6,6 +6,8 @@ import { apiClient } from '@/lib/api'
 interface SettingsStore extends SettingsState {
   fetchSystemSettings: () => Promise<void>
   updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>
+  fetchPublicBranding: () => Promise<void>
+  bootstrapBrandText: (brandText?: string | null) => void
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setMaxTokens: (maxTokens: number) => void
   setContextEnabled: (enabled: boolean) => void
@@ -29,6 +31,11 @@ const mergeSystemSettings = (current: SystemSettings | null, incoming: SystemSet
   brandText: pickBrandText(incoming.brandText, current?.brandText),
 })
 
+const normalizeBrandText = (value?: string | null) => {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  return trimmed || null
+}
+
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => ({
@@ -39,6 +46,7 @@ export const useSettingsStore = create<SettingsStore>()(
       systemSettings: null,
       isLoading: false,
       error: null,
+      publicBrandText: null,
 
       fetchSystemSettings: async () => {
         set({ isLoading: true, error: null })
@@ -46,10 +54,12 @@ export const useSettingsStore = create<SettingsStore>()(
           const response = await apiClient.getSystemSettings()
           const prevSettings = get().systemSettings
           const merged = mergeSystemSettings(prevSettings, response.data)
-          set({
+          const normalizedBrand = normalizeBrandText(merged.brandText)
+          set((state) => ({
             systemSettings: merged,
+            publicBrandText: normalizedBrand ?? state.publicBrandText,
             isLoading: false,
-          })
+          }))
         } catch (error: any) {
           set({
             error: error.response?.data?.error || error.message || '获取系统设置失败',
@@ -64,17 +74,49 @@ export const useSettingsStore = create<SettingsStore>()(
           const response = await apiClient.updateSystemSettings(settings)
           const prevSettings = get().systemSettings
           const updatedSettings = mergeSystemSettings(prevSettings, response.data)
+          const normalizedBrand = normalizeBrandText(updatedSettings.brandText)
 
-          set({
+          set((state) => ({
             systemSettings: updatedSettings,
+            publicBrandText: normalizedBrand ?? state.publicBrandText,
             isLoading: false,
-          })
+          }))
         } catch (error: any) {
           set({
             error: error.response?.data?.error || error.message || '更新系统设置失败',
             isLoading: false,
           })
         }
+      },
+
+      fetchPublicBranding: async () => {
+        try {
+          const response = await apiClient.getPublicBranding()
+          const normalized = normalizeBrandText(response.data?.brand_text)
+          if (!normalized) return
+          set((state) => ({
+            publicBrandText: normalized,
+            systemSettings: state.systemSettings
+              ? { ...state.systemSettings, brandText: normalized }
+              : state.systemSettings,
+          }))
+        } catch (error) {
+          console.warn('[settings-store] failed to fetch branding:', error)
+        }
+      },
+
+      bootstrapBrandText: (brandText?: string | null) => {
+        const normalized = normalizeBrandText(brandText)
+        if (!normalized) return
+        const state = get()
+        const currentNormalized = normalizeBrandText(state.systemSettings?.brandText ?? state.publicBrandText)
+        if (currentNormalized === normalized) return
+        set((state) => ({
+          publicBrandText: normalized,
+          systemSettings: state.systemSettings
+            ? { ...state.systemSettings, brandText: normalized }
+            : state.systemSettings,
+        }))
       },
 
       setTheme: (theme: 'light' | 'dark' | 'system') => {

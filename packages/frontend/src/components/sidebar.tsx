@@ -46,7 +46,7 @@ export function Sidebar() {
     sessionUsageTotalsMap,
     isSessionsLoading,
   } = useChatStore()
-  const { systemSettings, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
+  const { systemSettings, sidebarCollapsed, setSidebarCollapsed, publicBrandText } = useSettingsStore()
   const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
   const { models, fetchAll } = useModelsStore()
   const preferredModel = useModelPreferenceStore((state) => state.preferred)
@@ -180,7 +180,7 @@ export function Sidebar() {
       <div className="px-4 pt-[10px] pb-2 flex items-center justify-between">
         <Link href="/main" className="block flex-1 select-none text-center">
           <span className="text-lg font-semibold tracking-tight">
-            {systemSettings?.brandText || 'AIChat'}
+            {(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
           </span>
         </Link>
         <div className="flex items-center gap-2">

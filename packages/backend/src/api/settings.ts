@@ -10,6 +10,46 @@ import { syncSharedAnonymousQuota } from '../utils/quota';
 
 const settings = new Hono();
 
+const BRAND_TEXT_CACHE_TTL_MS = 30_000;
+let cachedBrandText: { value: string; expiresAt: number } | null = null;
+
+const resolveBrandText = async () => {
+  const now = Date.now();
+  if (cachedBrandText && cachedBrandText.expiresAt > now) {
+    return cachedBrandText.value;
+  }
+  const record = await prisma.systemSetting.findUnique({
+    where: { key: 'brand_text' },
+    select: { value: true },
+  });
+  const normalized = (record?.value || '').trim() || 'AIChat';
+  cachedBrandText = {
+    value: normalized,
+    expiresAt: now + BRAND_TEXT_CACHE_TTL_MS,
+  };
+  return normalized;
+};
+
+const invalidateBrandTextCache = () => {
+  cachedBrandText = null;
+};
+
+settings.get('/branding', async (c) => {
+  try {
+    const brandText = await resolveBrandText();
+    return c.json<ApiResponse>({
+      success: true,
+      data: { brand_text: brandText },
+    });
+  } catch (error) {
+    console.error('Get branding error:', error);
+    return c.json<ApiResponse>({
+      success: false,
+      error: 'Failed to fetch branding info',
+    }, 500);
+  }
+});
+
 // 系统设置schema（允许部分字段更新）
 const systemSettingSchema = z.object({
   registration_enabled: z.boolean().optional(),
@@ -193,6 +233,7 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         update: { value: brand_text },
         create: { key: 'brand_text', value: brand_text },
       });
+      invalidateBrandTextCache();
     }
 
     // 以下为流式/稳定性配置（仅对传入字段进行 upsert）

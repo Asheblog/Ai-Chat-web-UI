@@ -25,7 +25,7 @@ import { useModelPreferenceStore, persistPreferredModel, findPreferredModel } fr
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
-  const { systemSettings } = useSettingsStore()
+  const { systemSettings, publicBrandText } = useSettingsStore()
   const { toast } = useToast()
   const router = useRouter()
   const { actorState, quota } = useAuthStore((state) => ({
@@ -108,7 +108,7 @@ export function WelcomeScreen() {
 
   const canCreate = useMemo(() => !!selectedModelId, [selectedModelId])
   const creationDisabled = !canCreate || isCreating || quotaExhausted
-  const brandText = (systemSettings?.brandText ?? '').trim() || 'AIChat'
+  const brandText = (systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'
   const basePlaceholder = quota
     ? (quotaExhausted ? '额度已用尽，请登录或等待次日重置' : `本日消息发送额度剩余 ${quotaLabel}`)
     : '输入消息（Shift+Enter 换行）'

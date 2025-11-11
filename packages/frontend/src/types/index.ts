@@ -254,6 +254,7 @@ export interface SettingsState {
   systemSettings: SystemSettings | null;
   isLoading: boolean;
   error: string | null;
+  publicBrandText: string | null;
 }
 
 // API 响应类型
