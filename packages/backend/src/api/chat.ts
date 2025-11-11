@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { AuthUtils } from '../utils/auth';
 import { convertOpenAIReasoningPayload } from '../utils/providers'
@@ -93,6 +94,7 @@ type AgentResponseParams = {
   actorIdentifier: string;
   requestSignal?: AbortSignal;
   assistantMessageId: number | null;
+  assistantClientMessageId?: string | null;
   streamProgressPersistIntervalMs: number;
 };
 
@@ -279,6 +281,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
     actorIdentifier,
     requestSignal,
     assistantMessageId,
+    assistantClientMessageId,
     streamProgressPersistIntervalMs,
   } = params;
 
@@ -352,6 +355,37 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             },
           });
         } catch (error) {
+          const isRecordMissing =
+            error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
+          if (isRecordMissing) {
+            const fallbackClientMessageId =
+              assistantClientMessageId ?? deriveAssistantClientMessageId(resolvedClientMessageId);
+            try {
+              const recreated = await prisma.message.create({
+                data: {
+                  sessionId,
+                  role: 'assistant',
+                  clientMessageId: fallbackClientMessageId,
+                  content: aiResponseContent,
+                  streamStatus: 'streaming',
+                  streamCursor: aiResponseContent.length,
+                  streamReasoning: null,
+                  streamError: null,
+                },
+              });
+              assistantMessageId = recreated.id;
+              log.warn('Assistant progress target missing, recreated message record', {
+                sessionId,
+                recreatedId: recreated.id,
+              });
+              return;
+            } catch (recreateError) {
+              log.warn('Failed to recreate assistant message during progress persist', {
+                sessionId,
+                error: recreateError instanceof Error ? recreateError.message : recreateError,
+              });
+            }
+          }
           log.warn('Persist assistant progress failed', {
             sessionId,
             error: error instanceof Error ? error.message : error,
@@ -1651,6 +1685,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         actorIdentifier: actor.identifier,
         requestSignal: c.req.raw.signal,
         assistantMessageId,
+        assistantClientMessageId,
         streamProgressPersistIntervalMs: STREAM_PROGRESS_PERSIST_INTERVAL_MS,
       });
     }
@@ -1731,6 +1766,35 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           },
         });
       } catch (error) {
+        const isRecordMissing =
+          error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
+        if (isRecordMissing) {
+          try {
+            const recreated = await prisma.message.create({
+              data: {
+                sessionId,
+                role: 'assistant',
+                clientMessageId: assistantClientMessageId,
+                content: aiResponseContent,
+                streamCursor: aiResponseContent.length,
+                streamStatus: nextStatus,
+                streamReasoning: currentReasoning && currentReasoning.trim().length > 0 ? currentReasoning : null,
+                streamError: options?.errorMessage ?? null,
+              },
+            });
+            assistantMessageId = recreated.id;
+            log.warn('Assistant progress target missing, recreated message record', {
+              sessionId,
+              recreatedId: recreated.id,
+            });
+            return;
+          } catch (recreateError) {
+            log.warn('Failed to recreate assistant message during progress persist', {
+              sessionId,
+              error: recreateError instanceof Error ? recreateError.message : recreateError,
+            });
+          }
+        }
         log.warn('Persist assistant progress failed', {
           sessionId,
           error: error instanceof Error ? error.message : error,
