@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useSettingsStore } from "@/store/settings-store"
+import { useSystemSettings } from "@/hooks/use-system-settings"
 import { useToast } from "@/components/ui/use-toast"
 import { Globe } from "lucide-react"
 import {
@@ -19,7 +19,13 @@ import {
 } from "@/components/ui/select"
 
 export function SystemWebSearchPage() {
-  const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading, error } = useSettingsStore()
+  const {
+    settings: systemSettings,
+    refresh: fetchSystemSettings,
+    update: updateSystemSettings,
+    isLoading,
+    error,
+  } = useSystemSettings()
   const { toast } = useToast()
   const [enabled, setEnabled] = useState(false)
   const [engine, setEngine] = useState("tavily")

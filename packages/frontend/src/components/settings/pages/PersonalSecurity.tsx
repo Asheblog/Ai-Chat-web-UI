@@ -55,7 +55,7 @@ export function PersonalSecurityPage() {
           </div>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3 max-w-2xl">
+        <form onSubmit={onSubmit} className="space-y-3">
           <Card className="px-4 py-4 sm:px-5 sm:py-5">
             <Label htmlFor="currentPassword" className="font-medium">当前密码</Label>
             <Input
@@ -122,4 +122,3 @@ export function PersonalSecurityPage() {
     </div>
   )
 }
-

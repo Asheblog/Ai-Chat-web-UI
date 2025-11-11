@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useSettingsStore } from "@/store/settings-store"
+import { useSystemSettings } from "@/hooks/use-system-settings"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { apiClient } from "@/lib/api"
@@ -24,7 +24,13 @@ import { useAuthStore } from "@/store/auth-store"
 import { UserPlus, Palette, Clock } from "lucide-react"
 
 export function SystemGeneralPage() {
-  const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading, error } = useSettingsStore()
+  const {
+    settings: systemSettings,
+    refresh: fetchSystemSettings,
+    update: updateSystemSettings,
+    isLoading,
+    error,
+  } = useSystemSettings()
   const { toast } = useToast()
   const { actorState, user } = useAuthStore((state) => ({
     actorState: state.actorState,

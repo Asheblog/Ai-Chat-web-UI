@@ -132,7 +132,7 @@ src/
 
 ### 设置页面
 - **PersonalSettings**: 个人设置，包括模型配置和界面偏好
-- **SystemSettings**: 系统设置，管理员专用
+- **System Settings 分区**: 系统设置子页（/system/general、/system/network 等），管理员专用
 - **ModelSelector**: 模型选择器，支持系统和个人模型
 
 ## API集成

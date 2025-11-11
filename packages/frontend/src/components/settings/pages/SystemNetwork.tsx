@@ -5,13 +5,19 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
-import { useSettingsStore } from "@/store/settings-store"
+import { useSystemSettings } from "@/hooks/use-system-settings"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { Zap } from "lucide-react"
 
 export function SystemNetworkPage() {
-  const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading, error } = useSettingsStore()
+  const {
+    settings: systemSettings,
+    refresh: fetchSystemSettings,
+    update: updateSystemSettings,
+    isLoading,
+    error,
+  } = useSystemSettings()
   const { toast } = useToast()
   const [hbMs, setHbMs] = useState(15000)
   const [idleMs, setIdleMs] = useState(60000)

@@ -6,12 +6,17 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
-import { useSettingsStore } from "@/store/settings-store"
+import { useSystemSettings } from "@/hooks/use-system-settings"
 import { Brain } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 
 export function SystemReasoningPage() {
-  const { systemSettings, fetchSystemSettings, updateSystemSettings, isLoading } = useSettingsStore()
+  const {
+    settings: systemSettings,
+    refresh: fetchSystemSettings,
+    update: updateSystemSettings,
+    isLoading,
+  } = useSystemSettings()
   const { toast } = useToast()
 
   const [reasoningEnabled, setReasoningEnabled] = useState(true)
