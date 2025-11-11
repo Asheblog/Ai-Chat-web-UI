@@ -381,6 +381,8 @@ export const useChatStore = create<ChatStore>((set, get) => {
           if (payload.streamStatus && payload.streamStatus !== 'streaming') {
             stopMessagePoller(messageId)
             activeWatchers.delete(messageId)
+            get().fetchUsage(sessionId).catch(() => {})
+            get().fetchSessionsUsage().catch(() => {})
             return
           }
         }
@@ -1150,17 +1152,16 @@ export const useChatStore = create<ChatStore>((set, get) => {
         }
 
         if (isStreamIncomplete) {
-          if (interruptedContext?.sessionId && (interruptedContext.clientMessageId || interruptedContext.assistantId)) {
-            apiClient
-              .cancelAgentStream(interruptedContext.sessionId, {
-                clientMessageId: interruptedContext.clientMessageId ?? undefined,
-                messageId: typeof interruptedContext.assistantId === 'number' ? interruptedContext.assistantId : undefined,
-              })
-              .catch(() => {})
+          const messageId =
+            typeof interruptedContext?.assistantId === 'number'
+              ? interruptedContext.assistantId
+              : typeof assistantPlaceholder.id === 'number'
+                ? assistantPlaceholder.id
+                : null
+          if (messageId !== null) {
+            startMessageProgressWatcher(sessionId, messageId)
           }
-          const message = '生成被中断，已尝试终止任务，请稍后重试'
-          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
-          set({ error: message, isStreaming: false })
+          set({ isStreaming: false })
           return
         }
 
