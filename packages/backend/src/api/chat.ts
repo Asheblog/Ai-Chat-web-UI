@@ -451,6 +451,8 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
     streamProgressPersistIntervalMs,
   } = params;
 
+  let activeAssistantMessageId = assistantMessageId ?? null;
+
   const resolvedClientMessageId =
     clientMessageId ??
     userMessageRecord?.clientMessageId ??
@@ -461,7 +463,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
     sessionId,
     actorIdentifier,
     clientMessageId: resolvedClientMessageId,
-    assistantMessageId: userMessageRecord?.id ?? null,
+    assistantMessageId: activeAssistantMessageId,
     assistantClientMessageId: assistantClientMessageId ?? null,
   });
   const streamKey =
@@ -488,7 +490,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
       let assistantProgressLastPersistedLength = 0;
 
       const persistAssistantProgress = async (force = false) => {
-        if (!assistantMessageId) return;
+        if (!activeAssistantMessageId) return;
         if (!aiResponseContent && !force) return;
         const now = Date.now();
         const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
@@ -501,7 +503,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         assistantProgressLastPersistedLength = aiResponseContent.length;
         try {
           await prisma.message.update({
-            where: { id: assistantMessageId },
+            where: { id: activeAssistantMessageId },
             data: {
               content: aiResponseContent,
             },
@@ -522,7 +524,11 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
               },
             });
             if (recoveredId) {
-              assistantMessageId = recoveredId;
+              activeAssistantMessageId = recoveredId;
+              if (streamMeta) {
+                streamMeta.assistantMessageId = recoveredId;
+                agentStreamControllers.set(streamMeta.streamKey, streamMeta);
+              }
               log.warn('Assistant progress target missing, upserted placeholder record', {
                 sessionId,
                 recoveredId,
@@ -1003,7 +1009,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             return count > 0;
           };
 
-          let persistedAssistantMessageId: number | null = assistantMessageId;
+          let persistedAssistantMessageId: number | null = activeAssistantMessageId;
           if (finalContent && (await sessionStillExists())) {
             const updateData: any = {
               content: finalContent,
@@ -1024,13 +1030,13 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             } else {
               updateData.toolLogsJson = null;
             }
-            if (assistantMessageId) {
+            if (activeAssistantMessageId) {
               try {
                 await prisma.message.update({
-                  where: { id: assistantMessageId },
+                  where: { id: activeAssistantMessageId },
                   data: updateData,
                 });
-                persistedAssistantMessageId = assistantMessageId;
+                persistedAssistantMessageId = activeAssistantMessageId;
               } catch (error) {
                 log.warn('Failed to update assistant placeholder, fallback to upsert', {
                   sessionId,
@@ -1042,6 +1048,13 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
                   data: updateData,
                 });
                 persistedAssistantMessageId = recoveredId ?? null;
+                if (recoveredId) {
+                  activeAssistantMessageId = recoveredId;
+                  if (streamMeta) {
+                    streamMeta.assistantMessageId = recoveredId;
+                    agentStreamControllers.set(streamMeta.streamKey, streamMeta);
+                  }
+                }
               }
             } else {
               const saved = await prisma.message.create({
@@ -1053,6 +1066,13 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
                 },
               });
               persistedAssistantMessageId = saved?.id ?? null;
+              if (persistedAssistantMessageId) {
+                activeAssistantMessageId = persistedAssistantMessageId;
+                if (streamMeta) {
+                  streamMeta.assistantMessageId = persistedAssistantMessageId;
+                  agentStreamControllers.set(streamMeta.streamKey, streamMeta);
+                }
+              }
             }
           } else if (!finalContent) {
             log.warn('Agent response empty, skip persistence');
