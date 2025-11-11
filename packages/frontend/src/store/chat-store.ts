@@ -1127,12 +1127,41 @@ export const useChatStore = create<ChatStore>((set, get) => {
         get().fetchUsage(sessionId).catch(() => {})
         get().fetchSessionsUsage().catch(() => {})
       } catch (error: any) {
+        const interruptedContext = streamState.active
         flushActiveStream(true)
         resetStreamState()
 
         const quotaPayload = error?.payload?.quota ?? null
         if (quotaPayload) {
           useAuthStore.getState().updateQuota(quotaPayload)
+        }
+
+        const isStreamIncomplete =
+          error?.code === 'STREAM_INCOMPLETE' ||
+          (typeof error?.message === 'string' && error.message.includes('Stream closed before completion'))
+        const isAbortError =
+          error?.name === 'AbortError' ||
+          error?.code === 20 ||
+          (typeof error?.message === 'string' && error.message.toLowerCase().includes('aborted'))
+
+        if (isAbortError) {
+          // 用户手动停止或浏览器主动中断，状态已在 stopStreaming 中处理
+          return
+        }
+
+        if (isStreamIncomplete) {
+          if (interruptedContext?.sessionId && (interruptedContext.clientMessageId || interruptedContext.assistantId)) {
+            apiClient
+              .cancelAgentStream(interruptedContext.sessionId, {
+                clientMessageId: interruptedContext.clientMessageId ?? undefined,
+                messageId: typeof interruptedContext.assistantId === 'number' ? interruptedContext.assistantId : undefined,
+              })
+              .catch(() => {})
+          }
+          const message = '生成被中断，已尝试终止任务，请稍后重试'
+          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
+          set({ error: message, isStreaming: false })
+          return
         }
 
         if (error?.handled === 'agent_error') {

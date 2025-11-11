@@ -302,27 +302,37 @@ class ApiClient {
       throw new Error('Response body is not readable')
     }
 
+    let buffer = ''
+    let completed = false
+
     try {
-      while (true) {
+      let terminated = false
+      while (!terminated) {
         const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
-        if (process.env.NODE_ENV !== 'production') {
-          // eslint-disable-next-line no-console
-          console.debug('[streamChat] chunk', chunk.slice(0, 120))
-        }
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6)
-          if (data === '[DONE]') {
-            return
+        if (value) {
+          const decoded = decoder.decode(value, { stream: true })
+          buffer += decoded
+          if (process.env.NODE_ENV !== 'production') {
+            // eslint-disable-next-line no-console
+            console.debug('[streamChat] chunk', decoded.slice(0, 120))
+          }
+          while (true) {
+            const newlineIndex = buffer.indexOf('\n')
+            if (newlineIndex === -1) break
+            const rawLine = buffer.slice(0, newlineIndex)
+            buffer = buffer.slice(newlineIndex + 1)
+            const line = rawLine.replace(/\r$/, '')
+            if (!line || line.startsWith(':')) continue
+            if (!line.startsWith('data:')) continue
+            const payload = line.slice(5).trimStart()
+            if (!payload) continue
+            if (payload === '[DONE]') {
+              completed = true
+              terminated = true
+              break
             }
             try {
-              const parsed = JSON.parse(data)
-              // 标准化事件
+              const parsed = JSON.parse(payload)
               if (parsed.type === 'content' && parsed.content) {
                 yield { type: 'content', content: parsed.content }
               } else if (parsed.type === 'usage' && parsed.usage) {
@@ -359,8 +369,9 @@ class ApiClient {
               } else if (parsed.type === 'end') {
                 yield { type: 'end' }
               } else if (parsed.type === 'stop') {
-                // 可用于前端识别结束原因，不强制处理
+                // ignore
               } else if (parsed.type === 'complete') {
+                completed = true
                 yield { type: 'complete' }
               } else if (parsed.type === 'quota' && parsed.quota) {
                 yield { type: 'quota', quota: parsed.quota }
@@ -374,7 +385,6 @@ class ApiClient {
                 throw new Error(parsed.error)
               }
             } catch (e) {
-              // 忽略解析错误，但在开发模式打印
               if (process.env.NODE_ENV !== 'production') {
                 // eslint-disable-next-line no-console
                 console.debug('[streamChat] JSON parse ignore:', e)
@@ -382,11 +392,17 @@ class ApiClient {
             }
           }
         }
+        if (done) break
       }
     } finally {
       reader.releaseLock()
-      // 释放当前控制器
       this.currentStreamController = null
+    }
+
+    if (!completed) {
+      const error: any = new Error('Stream closed before completion')
+      error.code = 'STREAM_INCOMPLETE'
+      throw error
     }
   }
 

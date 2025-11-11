@@ -543,9 +543,20 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         }
       };
 
+      const abortUpstream = () => {
+        if (currentProviderController) {
+          try {
+            currentProviderController.abort();
+          } catch {}
+          setStreamController(null);
+          currentProviderController = null;
+        }
+      };
+
       const safeEnqueue = (payload: Record<string, unknown>) => {
         if (!downstreamClosed && requestSignal?.aborted) {
           downstreamClosed = true;
+          abortUpstream();
         }
         if (downstreamClosed) return false;
         try {
@@ -553,6 +564,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           return true;
         } catch {
           downstreamClosed = true;
+          abortUpstream();
           return false;
         }
       };
@@ -756,6 +768,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
 
           let streamFinished = false;
           while (true) {
+            if (downstreamAborted) break;
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
@@ -2094,10 +2107,26 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         const requestSignal = c.req.raw.signal;
 
+        const abortUpstream = () => {
+          if (reader) {
+            try {
+              reader.cancel().catch(() => {});
+            } catch {}
+          }
+          if (currentProviderController) {
+            try {
+              currentProviderController.abort();
+            } catch {}
+            bindProviderController(null);
+            currentProviderController = null;
+          }
+        };
+
         const markDownstreamClosed = () => {
           if (downstreamAborted) return;
           downstreamAborted = true;
           stopHeartbeat();
+          abortUpstream();
         };
 
         const safeEnqueue = (payload: string) => {
@@ -2246,6 +2275,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }, Math.max(1000, heartbeatIntervalMs));
 
           while (true) {
+            if (downstreamAborted) break;
             const { done, value } = await reader.read();
             if (done) break;
 
