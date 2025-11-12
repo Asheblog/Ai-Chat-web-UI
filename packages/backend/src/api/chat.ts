@@ -2006,6 +2006,13 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const reasoningState = createReasoningState();
     let reasoningDoneEmitted = false;
     let reasoningDurationSeconds = 0;
+    let streamCancelled = false;
+    const isStreamCancelled = () => {
+      if (!streamCancelled && activeStreamMeta?.cancelled) {
+        streamCancelled = true;
+      }
+      return streamCancelled;
+    };
     // 读取系统设置（若存在则覆盖环境变量），用于网络稳定性与 usage 行为
 
     // usage 透出与透传
@@ -2050,6 +2057,10 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       const now = Date.now();
       const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
       const reasoningDelta = includeReasoning ? (reasoningBuffer.length - assistantReasoningPersistLength) : 0;
+      const cancelled = isStreamCancelled();
+      if (cancelled && !force && !options?.status) {
+        return;
+      }
       if (!force) {
         const keepaliveExceeded = now - assistantProgressLastPersistAt >= STREAM_PROGRESS_PERSIST_INTERVAL_MS;
         const hasContentDelta = deltaLength >= 8;
@@ -2063,7 +2074,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       if (includeReasoning) {
         assistantReasoningPersistLength = reasoningBuffer.length;
       }
-      const nextStatus = options?.status ?? 'streaming';
+      const nextStatus = options?.status ?? (cancelled ? 'cancelled' : 'streaming');
       try {
         await prisma.message.update({
           where: { id: assistantMessageId },
@@ -2690,6 +2701,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           bindProviderController(null);
           currentProviderController = null;
           if (activeStreamMeta?.cancelled) {
+            streamCancelled = true;
             log.debug('Streaming cancelled by client request', {
               sessionId,
               assistantMessageId,
