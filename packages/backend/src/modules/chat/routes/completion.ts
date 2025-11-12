@@ -3,8 +3,8 @@ import { zValidator } from '@hono/zod-validator';
 import { prisma } from '../../../db';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { Actor, ApiResponse, UsageQuotaSnapshot } from '../../../types';
-import { persistChatImages, cleanupExpiredChatImages } from '../../../utils/chat-images';
-import { consumeActorQuota, inspectActorQuota, serializeQuotaSnapshot } from '../../../utils/quota';
+import { cleanupExpiredChatImages } from '../../../utils/chat-images';
+import { serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
 import { resolveContextLimit } from '../../../utils/context-window';
 import { Tokenizer } from '../../../utils/tokenizer';
@@ -14,20 +14,19 @@ import { logTraffic } from '../../../utils/traffic-logger';
 import {
   BACKOFF_429_MS,
   BACKOFF_5XX_MS,
-  MESSAGE_DEDUPE_WINDOW_MS,
   ProviderChatCompletionResponse,
   QuotaExceededError,
   extendAnonymousSession,
   sendMessageSchema,
   sessionOwnershipClause,
 } from '../chat-common';
+import { createUserMessageWithQuota } from '../services/message-service';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
 
 export const registerChatCompletionRoutes = (router: Hono) => {
   router.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor;
-      const userId = actor.type === 'user' ? actor.id : null;
       const payload = c.req.valid('json') as any;
       const { sessionId, content, images } = payload;
 
@@ -72,50 +71,17 @@ export const registerChatCompletionRoutes = (router: Hono) => {
       let quotaSnapshot: UsageQuotaSnapshot | null = null;
 
       try {
-        await prisma.$transaction(async (tx) => {
-          if (clientMessageId) {
-            const existing = await tx.message.findUnique({
-              where: { sessionId_clientMessageId: { sessionId, clientMessageId } },
-            });
-            if (existing) {
-              userMessageRecord = existing;
-              messageWasReused = true;
-              quotaSnapshot = await inspectActorQuota(actor, { tx, now });
-              return;
-            }
-          } else {
-            const existing = await tx.message.findFirst({
-              where: { sessionId, role: 'user', content },
-              orderBy: { createdAt: 'desc' },
-            });
-            if (existing) {
-              const createdAt = existing.createdAt instanceof Date
-                ? existing.createdAt
-                : new Date(existing.createdAt as any);
-              if (now.getTime() - createdAt.getTime() <= MESSAGE_DEDUPE_WINDOW_MS) {
-                userMessageRecord = existing;
-                messageWasReused = true;
-                quotaSnapshot = await inspectActorQuota(actor, { tx, now });
-                return;
-              }
-            }
-          }
-
-          const consumeResult = await consumeActorQuota(actor, { tx, now });
-          if (!consumeResult.success) {
-            throw new QuotaExceededError(consumeResult.snapshot);
-          }
-          quotaSnapshot = consumeResult.snapshot;
-
-          userMessageRecord = await tx.message.create({
-            data: {
-              sessionId,
-              role: 'user',
-              content,
-              ...(clientMessageId ? { clientMessageId } : {}),
-            },
-          });
+        const result = await createUserMessageWithQuota({
+          actor,
+          sessionId,
+          content,
+          clientMessageId,
+          images,
+          now,
         });
+        userMessageRecord = result.userMessage;
+        messageWasReused = result.messageWasReused;
+        quotaSnapshot = result.quotaSnapshot;
       } catch (error) {
         if (error instanceof QuotaExceededError) {
           return c.json({
@@ -126,19 +92,6 @@ export const registerChatCompletionRoutes = (router: Hono) => {
           }, 429);
         }
         throw error;
-      }
-
-      if (!userMessageRecord) {
-        return c.json<ApiResponse>({ success: false, error: 'Failed to persist user message' }, 500);
-      }
-
-      if (images && images.length > 0 && userMessageRecord?.id && !messageWasReused) {
-        await persistChatImages(images, {
-          sessionId,
-          messageId: userMessageRecord.id,
-          userId: userId ?? 0,
-          clientMessageId,
-        });
       }
 
       if (actor.type === 'anonymous') {
