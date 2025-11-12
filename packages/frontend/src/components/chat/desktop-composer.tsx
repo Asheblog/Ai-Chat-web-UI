@@ -33,6 +33,9 @@ interface DesktopComposerProps {
   webSearchEnabled: boolean
   onToggleWebSearch: (value: boolean) => void
   canUseWebSearch: boolean
+  traceEnabled: boolean
+  canUseTrace: boolean
+  onToggleTrace: (value: boolean) => void
   effort: 'low' | 'medium' | 'high' | 'unset'
   onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
   showExpand: boolean
@@ -62,6 +65,9 @@ export function DesktopComposer({
   webSearchEnabled,
   onToggleWebSearch,
   canUseWebSearch,
+  traceEnabled,
+  canUseTrace,
+  onToggleTrace,
   effort,
   onEffortChange,
   showExpand,
@@ -90,17 +96,29 @@ export function DesktopComposer({
                   <span className="text-xs text-muted-foreground">思考模式</span>
                   <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">联网搜索</span>
-                  <Switch
-                    checked={webSearchEnabled && canUseWebSearch}
-                    onCheckedChange={(checked) => onToggleWebSearch(Boolean(checked))}
-                    disabled={!canUseWebSearch}
-                  />
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">联网搜索</span>
+                <Switch
+                  checked={webSearchEnabled && canUseWebSearch}
+                  onCheckedChange={(checked) => onToggleWebSearch(Boolean(checked))}
+                  disabled={!canUseWebSearch}
+                />
+              </div>
+              {canUseTrace ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">任务追踪</span>
+                    <Switch
+                      checked={traceEnabled}
+                      onCheckedChange={(checked) => onToggleTrace(Boolean(checked))}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">仅管理员可见，用于临时关闭某次追踪。</p>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">思考深度</span>
-                  <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
+              ) : null}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">思考深度</span>
+                <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
                     <SelectTrigger className="h-8 w-32">
                       <SelectValue placeholder="不设置" />
                     </SelectTrigger>

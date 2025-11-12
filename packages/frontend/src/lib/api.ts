@@ -4,7 +4,7 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig
 } from 'axios'
-import type { AuthResponse, RegisterResponse, User, ApiResponse, ActorContextDTO, ActorQuota, Message } from '@/types'
+import type { AuthResponse, RegisterResponse, User, ApiResponse, ActorContextDTO, ActorQuota, Message, TaskTraceSummary, TaskTraceEventRecord } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
@@ -247,7 +247,7 @@ class ApiClient {
 
   // 流式聊天API
   // 流式聊天（带退避+可取消）。429 退避 15s、5xx/超时 退避 2s，最多重试 1 次
-  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string }): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
+  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string; traceEnabled?: boolean }): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
     const doOnce = async (signal: AbortSignal) => fetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
@@ -574,7 +574,39 @@ class ApiClient {
       ? (settingsRes.data.data?.web_search_domain_filter as string[])
       : []
     const webSearchHasApiKey = Boolean(settingsRes.data.data?.web_search_has_api_key ?? false)
-    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl, anonymousRetentionDays, anonymousDailyQuota, defaultUserDailyQuota, webSearchAgentEnable, webSearchDefaultEngine, webSearchResultLimit, webSearchDomainFilter, webSearchHasApiKey } }
+    const taskTraceEnabled = Boolean(settingsRes.data.data?.task_trace_enabled ?? false)
+    const taskTraceDefaultOn = Boolean(settingsRes.data.data?.task_trace_default_on ?? false)
+    const taskTraceAdminOnly = (settingsRes.data.data?.task_trace_admin_only ?? true) as boolean
+    const rawEnv = (settingsRes.data.data?.task_trace_env || '').toLowerCase()
+    const taskTraceEnv: 'dev' | 'prod' | 'both' = rawEnv === 'prod' || rawEnv === 'both' ? (rawEnv as 'prod' | 'both') : 'dev'
+    const taskTraceRetentionDays = (() => {
+      const raw = settingsRes.data.data?.task_trace_retention_days
+      if (typeof raw === 'number') return Math.max(1, Math.min(365, raw))
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number.parseInt(raw, 10)
+        if (Number.isFinite(parsed)) return Math.max(1, Math.min(365, parsed))
+      }
+      return 7
+    })()
+    const taskTraceMaxEvents = (() => {
+      const raw = settingsRes.data.data?.task_trace_max_events
+      if (typeof raw === 'number') return Math.max(100, Math.min(200000, raw))
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number.parseInt(raw, 10)
+        if (Number.isFinite(parsed)) return Math.max(100, Math.min(200000, parsed))
+      }
+      return 2000
+    })()
+    const taskTraceIdleTimeoutMs = (() => {
+      const raw = settingsRes.data.data?.task_trace_idle_timeout_ms
+      if (typeof raw === 'number') return Math.max(1000, Math.min(600000, raw))
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        const parsed = Number.parseInt(raw, 10)
+        if (Number.isFinite(parsed)) return Math.max(1000, Math.min(600000, parsed))
+      }
+      return 30000
+    })()
+    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl, anonymousRetentionDays, anonymousDailyQuota, defaultUserDailyQuota, webSearchAgentEnable, webSearchDefaultEngine, webSearchResultLimit, webSearchDomainFilter, webSearchHasApiKey, taskTraceEnabled, taskTraceDefaultOn, taskTraceAdminOnly, taskTraceEnv, taskTraceRetentionDays, taskTraceMaxEvents, taskTraceIdleTimeoutMs } }
   }
 
   async getPublicBranding() {
@@ -613,6 +645,13 @@ class ApiClient {
     if (typeof settings.webSearchResultLimit === 'number') payload.web_search_result_limit = settings.webSearchResultLimit
     if (Array.isArray(settings.webSearchDomainFilter)) payload.web_search_domain_filter = settings.webSearchDomainFilter
     if (typeof (settings as any).webSearchApiKey === 'string') payload.web_search_api_key = (settings as any).webSearchApiKey
+    if (typeof settings.taskTraceEnabled === 'boolean') payload.task_trace_enabled = settings.taskTraceEnabled
+    if (typeof settings.taskTraceDefaultOn === 'boolean') payload.task_trace_default_on = settings.taskTraceDefaultOn
+    if (typeof settings.taskTraceAdminOnly === 'boolean') payload.task_trace_admin_only = settings.taskTraceAdminOnly
+    if (typeof settings.taskTraceEnv === 'string') payload.task_trace_env = settings.taskTraceEnv
+    if (typeof settings.taskTraceRetentionDays === 'number') payload.task_trace_retention_days = settings.taskTraceRetentionDays
+    if (typeof settings.taskTraceMaxEvents === 'number') payload.task_trace_max_events = settings.taskTraceMaxEvents
+    if (typeof settings.taskTraceIdleTimeoutMs === 'number') payload.task_trace_idle_timeout_ms = settings.taskTraceIdleTimeoutMs
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()
@@ -691,6 +730,36 @@ class ApiClient {
 
   async updateUserQuota(userId: number, options: { dailyLimit: number | null; resetUsed?: boolean }) {
     const response = await this.client.put<ApiResponse<{ quota: ActorQuota }>>(`/users/${userId}/quota`, options)
+    return response.data
+  }
+
+  async getTaskTraces(params?: { page?: number; pageSize?: number; sessionId?: number; status?: string; keyword?: string }) {
+    const response = await this.client.get<ApiResponse<{ items: TaskTraceSummary[]; total: number; page: number; pageSize: number }>>('/task-trace', {
+      params,
+    })
+    return response.data
+  }
+
+  async getTaskTrace(id: number) {
+    const response = await this.client.get<ApiResponse<{ trace: TaskTraceSummary; events: TaskTraceEventRecord[]; truncated: boolean }>>(`/task-trace/${id}`)
+    return response.data
+  }
+
+  async exportTaskTrace(id: number) {
+    const response = await this.client.get(`/task-trace/${id}/export`, {
+      responseType: 'blob',
+    })
+    return response.data as Blob
+  }
+
+  async cleanupTaskTraces(retentionDays?: number) {
+    const payload = typeof retentionDays === 'number' ? { retentionDays } : {}
+    const response = await this.client.post<ApiResponse<{ deleted: number; retentionDays: number }>>('/task-trace/cleanup', payload)
+    return response.data
+  }
+
+  async deleteTaskTrace(id: number) {
+    const response = await this.client.delete<ApiResponse<any>>(`/task-trace/${id}`)
     return response.data
   }
 

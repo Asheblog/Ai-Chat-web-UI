@@ -57,6 +57,7 @@ model ChatSession {
   connection  Connection?  @relation(fields: [connectionId], references: [id])
   messages    Message[]
   usageMetrics UsageMetric[]
+  taskTraces  TaskTrace[]
 
   @@index([expiresAt])
   @@index([anonymousKey])
@@ -86,6 +87,7 @@ model Message {
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   attachments MessageAttachment[]
   usageMetrics UsageMetric[]
+  taskTraces TaskTrace[]
 
   // 若提供了 clientMessageId，则 (sessionId, clientMessageId) 必须唯一；
   // clientMessageId 为空时不受限（SQLite 下 NULL 不参与唯一比较）。
@@ -197,4 +199,45 @@ model ModelCatalog {
   @@unique([connectionId, modelId])
   @@index([connectionId])
   @@map("model_catalog")
+}
+
+model TaskTrace {
+  id              Int       @id @default(autoincrement())
+  sessionId       Int?
+  messageId       Int?
+  clientMessageId String?
+  actor           String
+  status          String    @default("running")
+  traceLevel      String    @default("standard")
+  metadata        String    @default("{}")
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  durationMs      Int?
+  eventCount      Int       @default(0)
+  logFilePath     String?
+
+  session ChatSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  message Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  events  TaskTraceEvent[]
+
+  @@index([sessionId])
+  @@index([messageId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("task_traces")
+}
+
+model TaskTraceEvent {
+  id        Int      @id @default(autoincrement())
+  traceId   Int
+  seq       Int
+  eventType String
+  payload   String
+  timestamp DateTime @default(now())
+
+  trace TaskTrace @relation(fields: [traceId], references: [id], onDelete: Cascade)
+
+  @@unique([traceId, seq])
+  @@index([traceId, timestamp])
+  @@map("task_trace_events")
 }

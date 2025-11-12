@@ -2,7 +2,7 @@
 
 import type { KeyboardEventHandler, MutableRefObject } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Square, ImagePlus, Brain, Globe } from 'lucide-react'
+import { Send, Square, ImagePlus, Brain, Globe, ScrollText } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -30,6 +30,9 @@ interface MobileComposerProps {
   canUseWebSearch: boolean
   isVisionEnabled: boolean
   placeholder: string
+  traceEnabled: boolean
+  canUseTrace: boolean
+  onToggleTrace: (value: boolean) => void
 }
 
 export function MobileComposer({
@@ -52,6 +55,9 @@ export function MobileComposer({
   canUseWebSearch,
   isVisionEnabled,
   placeholder,
+  traceEnabled,
+  canUseTrace,
+  onToggleTrace,
 }: MobileComposerProps) {
   const disabled = !input.trim() && selectedImages.length === 0
 
@@ -147,6 +153,31 @@ export function MobileComposer({
               </span>
               <span className="text-xs font-medium">联网</span>
             </Button>
+
+            {canUseTrace ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${
+                  traceEnabled
+                    ? 'bg-amber-100 border-amber-200 text-amber-800 dark:bg-amber-900/40 dark:border-amber-800 dark:text-amber-200'
+                    : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                }`}
+                onClick={() => onToggleTrace(!traceEnabled)}
+                aria-pressed={traceEnabled}
+                disabled={isStreaming}
+                aria-label="任务追踪"
+              >
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                    traceEnabled ? 'bg-amber-500 text-white shadow-sm' : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  <ScrollText className="h-3.5 w-3.5" />
+                </span>
+                <span className="text-xs font-medium">追踪</span>
+              </Button>
+            ) : null}
 
             <TooltipProvider>
               <Tooltip>

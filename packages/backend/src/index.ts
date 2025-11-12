@@ -15,6 +15,7 @@ import connections from './api/connections';
 import catalog from './api/catalog';
 import openaiCompat from './api/openai-compatible';
 import { scheduleModelCatalogAutoRefresh } from './utils/model-catalog';
+import taskTrace from './api/task-trace';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -62,6 +63,7 @@ app.route('/api/catalog', catalog);
 app.route('/api/sessions', sessions);
 app.route('/api/chat', chat);
 app.route('/api/settings', settings);
+app.route('/api/task-trace', taskTrace);
 app.route('/v1', openaiCompat);
 
 // 根路径

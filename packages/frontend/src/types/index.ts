@@ -195,6 +195,13 @@ export interface SystemSettings {
   webSearchDomainFilter?: string[];
   webSearchHasApiKey?: boolean;
   webSearchApiKey?: string;
+  taskTraceEnabled?: boolean;
+  taskTraceDefaultOn?: boolean;
+  taskTraceAdminOnly?: boolean;
+  taskTraceEnv?: 'dev' | 'prod' | 'both';
+  taskTraceRetentionDays?: number;
+  taskTraceMaxEvents?: number;
+  taskTraceIdleTimeoutMs?: number;
 }
 
 // UI 状态类型
@@ -316,6 +323,29 @@ export interface MessageProps {
   isStreaming?: boolean;
   onCopy?: (content: string) => void;
   onRegenerate?: (messageId: number | string) => void;
+}
+
+export interface TaskTraceSummary {
+  id: number;
+  sessionId: number | null;
+  messageId: number | null;
+  clientMessageId: string | null;
+  actor: string;
+  status: string;
+  traceLevel: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  metadata?: Record<string, unknown> | null;
+  eventCount: number;
+}
+
+export interface TaskTraceEventRecord {
+  id: number;
+  seq: number;
+  eventType: string;
+  payload: any;
+  timestamp: string;
 }
 
 export interface SessionItemProps {

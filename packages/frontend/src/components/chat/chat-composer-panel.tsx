@@ -22,6 +22,8 @@ export interface ChatComposerPanelProps {
   webSearchEnabled: boolean
   canUseWebSearch: boolean
   isVisionEnabled: boolean
+  traceEnabled: boolean
+  canUseTrace: boolean
   effort: 'low' | 'medium' | 'high' | 'unset'
   basePlaceholder: string
   mobilePlaceholder: string
@@ -37,6 +39,7 @@ export interface ChatComposerPanelProps {
   onStop: () => void
   onToggleThinking: (value: boolean) => void
   onToggleWebSearch: (value: boolean) => void
+  onToggleTrace: (value: boolean) => void
   onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
   fileInputRef: MutableRefObject<HTMLInputElement | null>
   onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
@@ -53,6 +56,8 @@ export function ChatComposerPanel({
   webSearchEnabled,
   canUseWebSearch,
   isVisionEnabled,
+  traceEnabled,
+  canUseTrace,
   effort,
   basePlaceholder,
   mobilePlaceholder,
@@ -68,6 +73,7 @@ export function ChatComposerPanel({
   onStop,
   onToggleThinking,
   onToggleWebSearch,
+  onToggleTrace,
   onEffortChange,
   fileInputRef,
   onFilesSelected,
@@ -110,6 +116,9 @@ export function ChatComposerPanel({
         canUseWebSearch={canUseWebSearch}
         isVisionEnabled={isVisionEnabled}
         placeholder={mobilePlaceholder}
+        traceEnabled={traceEnabled}
+        canUseTrace={canUseTrace}
+        onToggleTrace={onToggleTrace}
       />
 
       <DesktopComposer
@@ -132,6 +141,9 @@ export function ChatComposerPanel({
         webSearchEnabled={webSearchEnabled}
         onToggleWebSearch={onToggleWebSearch}
         canUseWebSearch={canUseWebSearch}
+        traceEnabled={traceEnabled}
+        canUseTrace={canUseTrace}
+        onToggleTrace={onToggleTrace}
         effort={effort}
         onEffortChange={onEffortChange}
         showExpand={showExpand}

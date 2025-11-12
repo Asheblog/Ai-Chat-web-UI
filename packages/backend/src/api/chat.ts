@@ -27,6 +27,7 @@ import { consumeActorQuota, inspectActorQuota, serializeQuotaSnapshot } from '..
 import { cleanupAnonymousSessions } from '../utils/anonymous-cleanup';
 import { resolveContextLimit } from '../utils/context-window';
 import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../utils/web-search';
+import { TaskTraceRecorder, shouldEnableTaskTrace, summarizeSseLine, summarizeSsePayload, type TaskTraceStatus } from '../utils/task-trace';
 
 type ProviderChatCompletionResponse = {
   choices?: Array<{ message?: { content?: string; reasoning_content?: string } | null }>;
@@ -96,6 +97,8 @@ type AgentResponseParams = {
   assistantMessageId: number | null;
   assistantClientMessageId?: string | null;
   streamProgressPersistIntervalMs: number;
+  traceRecorder: TaskTraceRecorder;
+  idleTimeoutMs: number;
 };
 
 type ToolLogStage = 'start' | 'result' | 'error';
@@ -449,7 +452,19 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
     assistantMessageId,
     assistantClientMessageId,
     streamProgressPersistIntervalMs,
+    traceRecorder,
+    idleTimeoutMs,
   } = params;
+
+  const traceMetadataExtras: Record<string, unknown> = {};
+  let traceStatus: TaskTraceStatus = 'running';
+  let traceErrorMessage: string | null = null;
+  traceRecorder.log('agent:activated', {
+    provider,
+    baseUrl,
+    engine: agentConfig.engine,
+    model: session.modelRawId,
+  });
 
   let activeAssistantMessageId = assistantMessageId ?? null;
 
@@ -488,6 +503,10 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
       let downstreamClosed = false;
       let assistantProgressLastPersistAt = 0;
       let assistantProgressLastPersistedLength = 0;
+      const idleTimeout = idleTimeoutMs > 0 ? idleTimeoutMs : null;
+      let idleWatchTimer: ReturnType<typeof setInterval> | null = null;
+      let lastChunkAt = Date.now();
+      let idleWarned = false;
 
       const persistAssistantProgress = async (force = false) => {
         if (!activeAssistantMessageId) return;
@@ -507,6 +526,11 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             data: {
               content: aiResponseContent,
             },
+          });
+          traceRecorder.log('db:persist_progress', {
+            messageId: activeAssistantMessageId,
+            length: aiResponseContent.length,
+            force,
           });
         } catch (error) {
           const isRecordMissing =
@@ -533,6 +557,12 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
                 sessionId,
                 recoveredId,
               });
+              traceRecorder.log('db:persist_progress', {
+                messageId: recoveredId,
+                length: aiResponseContent.length,
+                force,
+                recovered: true,
+              });
               return;
             }
           }
@@ -550,6 +580,7 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         if (downstreamClosed) return false;
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          traceRecorder.log('sse:dispatch', summarizeSsePayload(payload));
           return true;
         } catch {
           downstreamClosed = true;
@@ -606,9 +637,24 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
       };
 
       const sendToolEvent = (payload: Record<string, unknown>) => {
-        safeEnqueue({ type: 'tool', ...payload });
+        const enriched = { type: 'tool', ...payload };
+        safeEnqueue(enriched);
         recordToolLog(payload);
+        traceRecorder.log('tool:event', summarizeSsePayload(enriched));
       };
+
+      const startIdleWatch = () => {
+        if (!idleTimeout || idleWatchTimer) return;
+        idleWatchTimer = setInterval(() => {
+          if (!idleTimeout || downstreamClosed) return;
+          const idleFor = Date.now() - lastChunkAt;
+          if (idleFor >= idleTimeout && !idleWarned) {
+            traceRecorder.log('stream.keepalive_timeout', { idleMs: idleFor });
+            idleWarned = true;
+          }
+        }, Math.min(Math.max(1000, idleTimeout / 2), 5000));
+      };
+      startIdleWatch();
 
       const emitReasoning = (content: string, meta?: Record<string, unknown>) => {
         const text = (content || '').trim();
@@ -758,6 +804,8 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            lastChunkAt = Date.now();
+            idleWarned = false;
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
@@ -1002,14 +1050,16 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           safeEnqueue({ type: 'usage', usage: finalUsagePayload });
         }
         safeEnqueue({ type: 'complete' });
+        traceMetadataExtras.finalUsage = finalUsagePayload;
+        traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
 
+        let persistedAssistantMessageId: number | null = activeAssistantMessageId;
         try {
           const sessionStillExists = async () => {
             const count = await prisma.chatSession.count({ where: { id: sessionId } });
             return count > 0;
           };
 
-          let persistedAssistantMessageId: number | null = activeAssistantMessageId;
           if (finalContent && (await sessionStillExists())) {
             const updateData: any = {
               content: finalContent,
@@ -1105,8 +1155,18 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
           } else {
             log.debug('Session missing when persisting usage metric, skip insert', { sessionId });
           }
+          traceStatus = 'completed';
+          traceMetadataExtras.toolEvents = toolLogs.length;
+          traceMetadataExtras.reasoningDurationSeconds = reasoningDurationSeconds;
         } catch (persistErr) {
           console.warn('Persist agent response failed', persistErr);
+        }
+
+        if (persistedAssistantMessageId) {
+          traceRecorder.setMessageContext(
+            persistedAssistantMessageId,
+            assistantClientMessageId ?? clientMessageId,
+          );
         }
       } catch (error: any) {
         if (streamMeta?.cancelled) {
@@ -1114,8 +1174,13 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
             sessionId,
             streamKey,
           });
+          traceStatus = 'cancelled';
+          traceRecorder.log('stream:cancelled', { sessionId, streamKey });
           return;
         }
+        traceStatus = 'error';
+        traceErrorMessage = error?.message || 'Web search agent failed';
+        traceRecorder.log('stream:error', { message: traceErrorMessage });
         log.error('Agent web search failed', error);
         safeEnqueue({
           type: 'error',
@@ -1130,8 +1195,33 @@ const createAgentWebSearchResponse = async (params: AgentResponseParams): Promis
         try {
           controller.close();
         } catch {}
+        if (idleWatchTimer) {
+          clearInterval(idleWatchTimer);
+          idleWatchTimer = null;
+        }
         setStreamController(null);
         releaseStreamMetaHandle();
+        const toolLogSummary = toolLogs.slice(0, 50).map((item) => ({
+          id: item.id,
+          tool: item.tool,
+          stage: item.stage,
+          query: item.query,
+          hits: Array.isArray(item.hits) ? item.hits.length : undefined,
+          error: item.error,
+          createdAt: new Date(item.createdAt).toISOString(),
+        }));
+        const finalMetadata = {
+          ...traceMetadataExtras,
+          toolLogs: toolLogSummary,
+          messageId: activeAssistantMessageId,
+        };
+        if (traceErrorMessage) {
+          (finalMetadata as any).error = traceErrorMessage;
+        }
+        const finalStatus = traceStatus === 'running'
+          ? (traceErrorMessage ? 'error' : 'completed')
+          : traceStatus;
+        await traceRecorder.finalize(finalStatus, { metadata: finalMetadata });
       }
     },
   });
@@ -1239,6 +1329,7 @@ const sendMessageSchema = z.object({
       web_search: z.boolean().optional(),
     })
     .optional(),
+  traceEnabled: z.boolean().optional(),
 });
 
 const cancelStreamSchema = z.object({
@@ -1498,6 +1589,7 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const payload = c.req.valid('json') as any;
     const { sessionId, content, images } = payload;
     const requestedFeatures = payload?.features || {};
+    const traceToggle = typeof payload?.traceEnabled === 'boolean' ? payload.traceEnabled : undefined;
 
     await logTraffic({
       category: 'client-request',
@@ -1763,6 +1855,12 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     // 读取系统设置以支持推理/思考等开关的默认值（需在使用 sysMap 前初始化）
     const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
+    const traceDecision = await shouldEnableTaskTrace({
+      actor,
+      requestFlag: traceToggle,
+      sysMap,
+      env: process.env.NODE_ENV,
+    });
     const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
     const retentionDaysRaw = sysMap.chat_image_retention_days || process.env.CHAT_IMAGE_RETENTION_DAYS || `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
     const retentionDaysParsed = Number.parseInt(retentionDaysRaw, 10)
@@ -1824,6 +1922,36 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       250,
       parseInt(sysMap.stream_progress_persist_interval_ms || process.env.STREAM_PROGRESS_PERSIST_INTERVAL_MS || '800'),
     );
+    const traceRecorder = await TaskTraceRecorder.create({
+      enabled: traceDecision.enabled,
+      sessionId,
+      messageId: assistantMessageId ?? undefined,
+      clientMessageId: assistantClientMessageId ?? clientMessageId,
+      actorIdentifier: actor.identifier,
+      traceLevel: traceDecision.traceLevel,
+      metadata: {
+        provider,
+        model: session.modelRawId,
+        connectionId: session.connectionId,
+        features: requestedFeatures,
+        agentWebSearchActive,
+        reasoningEnabled: effectiveReasoningEnabled,
+        reasoningEffort: effectiveReasoningEffort,
+        ollamaThink: effectiveOllamaThink,
+        contextLimit,
+      },
+      maxEvents: traceDecision.config.maxEvents,
+    });
+    traceRecorder.log('request:init', {
+      sessionId,
+      clientMessageId,
+      promptTokens,
+      contextLimit,
+      contextEnabled,
+      hasImages: Boolean(images?.length),
+      messageReused: messageWasReused,
+      quota: quotaSnapshot ? serializeQuotaSnapshot(quotaSnapshot) : null,
+    });
 
     if (agentWebSearchActive) {
       return await createAgentWebSearchResponse({
@@ -1850,6 +1978,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         assistantMessageId,
         assistantClientMessageId,
         streamProgressPersistIntervalMs: STREAM_PROGRESS_PERSIST_INTERVAL_MS,
+        traceRecorder,
+        idleTimeoutMs: traceDecision.config.idleTimeoutMs,
       });
     }
 
@@ -1864,6 +1994,11 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     const bindProviderController = (controller: AbortController | null) => {
       updateStreamMetaController(activeStreamMeta, controller);
     };
+
+    const traceMetadataExtras: Record<string, unknown> = {};
+    let traceStatus: TaskTraceStatus = 'running';
+    let traceErrorMessage: string | null = null;
+    traceRecorder.log('stream:started', { mode: 'standard', provider, baseUrl });
 
     let aiResponseContent = '';
     // 推理相关累积
@@ -1940,6 +2075,13 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             streamError: options?.errorMessage ?? null,
           },
         });
+        traceRecorder.log('db:persist_progress', {
+          messageId: assistantMessageId,
+          length: aiResponseContent.length,
+          reasoningLength: currentReasoning?.length ?? 0,
+          status: nextStatus,
+          force,
+        });
       } catch (error) {
         const isRecordMissing =
           error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
@@ -1960,6 +2102,14 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             log.warn('Assistant progress target missing, upserted placeholder record', {
               sessionId,
               recoveredId,
+            });
+            traceRecorder.log('db:persist_progress', {
+              messageId: recoveredId,
+              length: aiResponseContent.length,
+              reasoningLength: currentReasoning?.length ?? 0,
+              status: nextStatus,
+              force,
+              recovered: true,
             });
             return;
           }
@@ -2080,8 +2230,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
       }
     };
 
-    const stream = new ReadableStream({
-      async start(controller) {
+      const stream = new ReadableStream({
+        async start(controller) {
         let heartbeat: ReturnType<typeof setInterval> | null = null;
         const stopHeartbeat = () => {
           if (heartbeat) {
@@ -2093,6 +2243,10 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
         let downstreamAborted = false;
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         const requestSignal = c.req.raw.signal;
+        const idleTimeout = traceDecision.config.idleTimeoutMs > 0 ? traceDecision.config.idleTimeoutMs : null;
+        let idleWatchTimer: ReturnType<typeof setInterval> | null = null;
+        let lastChunkTimestamp = Date.now();
+        let idleWarned = false;
 
         const markDownstreamClosed = () => {
           if (downstreamAborted) return;
@@ -2109,6 +2263,10 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }
           try {
             controller.enqueue(encoder.encode(payload));
+            const summary = summarizeSseLine(payload.trim());
+            if (summary) {
+              traceRecorder.log('sse:dispatch', summary);
+            }
             return true;
           } catch (err) {
             markDownstreamClosed();
@@ -2128,7 +2286,20 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           }
         }
 
+        const startIdleWatch = () => {
+          if (!idleTimeout || idleWatchTimer) return
+          idleWatchTimer = setInterval(() => {
+            if (!idleTimeout || downstreamAborted) return
+            const idleFor = Date.now() - lastChunkTimestamp
+            if (idleFor >= idleTimeout && !idleWarned) {
+              traceRecorder.log('stream.keepalive_timeout', { idleMs: idleFor })
+              idleWarned = true
+            }
+          }, Math.min(Math.max(1000, idleTimeout / 2), 5000))
+        }
+
         try {
+          startIdleWatch()
           // 发送开始事件
           const startEvent = `data: ${JSON.stringify({
             type: 'start',
@@ -2183,6 +2354,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           let firstChunkAt: number | null = null;
           let lastChunkAt: number | null = null;
           let lastKeepaliveSentAt = 0;
+          const traceIdleTimeoutMs = traceDecision.config.idleTimeoutMs > 0 ? traceDecision.config.idleTimeoutMs : null;
+          let traceIdleWarned = false;
           let pendingVisibleDelta = '';
           let visibleDeltaCount = 0;
           let pendingReasoningDelta = '';
@@ -2232,6 +2405,10 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             }
             const last = lastChunkAt ?? firstChunkAt;
             const idleMs = now - last;
+            if (traceIdleTimeoutMs && idleMs > traceIdleTimeoutMs && !traceIdleWarned) {
+              traceRecorder.log('stream.keepalive_timeout', { idleMs });
+              traceIdleWarned = true;
+            }
             if (providerReasoningIdleMs > 0 && idleMs > providerReasoningIdleMs) {
               try { (response as any)?.body?.cancel?.(); } catch {}
               return;
@@ -2251,6 +2428,9 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
             const now = Date.now();
             lastChunkAt = now;
+            lastChunkTimestamp = now;
+            idleWarned = false;
+            traceIdleWarned = false;
             if (!firstChunkAt) firstChunkAt = now;
             lastKeepaliveSentAt = now;
             buffer += decoder.decode(value, { stream: true });
@@ -2340,6 +2520,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
                 if (valid) {
                   providerUsageSeen = true;
                   providerUsageSnapshot = parsed.usage;
+                  traceMetadataExtras.finalUsage = parsed.usage;
+                  traceMetadataExtras.providerUsageSource = 'provider';
                 }
                 const providerUsageEvent = `data: ${JSON.stringify({
                   type: 'usage',
@@ -2380,17 +2562,20 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             } catch (_) {
               completionTokensFallback = 0;
             }
+            const fallbackUsagePayload = {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokensFallback,
+              total_tokens: promptTokens + completionTokensFallback,
+              context_limit: contextLimit,
+              context_remaining: Math.max(0, contextLimit - promptTokens),
+            };
             const finalUsageEvent = `data: ${JSON.stringify({
               type: 'usage',
-              usage: {
-                prompt_tokens: promptTokens,
-                completion_tokens: completionTokensFallback,
-                total_tokens: promptTokens + completionTokensFallback,
-                context_limit: contextLimit,
-                context_remaining: Math.max(0, contextLimit - promptTokens),
-              },
+              usage: fallbackUsagePayload,
             })}\n\n`;
             safeEnqueue(finalUsageEvent);
+            traceMetadataExtras.finalUsage = fallbackUsagePayload;
+            traceMetadataExtras.providerUsageSource = providerUsageSeen ? 'provider' : 'fallback';
           }
 
           // 发送完成事件
@@ -2398,6 +2583,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             type: 'complete',
           })}\n\n`;
           safeEnqueue(completeEvent);
+          traceStatus = 'completed';
+          traceMetadataExtras.reasoningDurationSeconds = reasoningDurationSeconds;
 
           // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
           try {
@@ -2474,6 +2661,13 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
               }
             }
 
+            if (persistedAssistantMessageId) {
+              traceRecorder.setMessageContext(
+                persistedAssistantMessageId,
+                assistantClientMessageId ?? clientMessageId,
+              );
+            }
+
             if (USAGE_EMIT) {
               await (prisma as any).usageMetric.create({
                 data: {
@@ -2505,6 +2699,8 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
               status: 'cancelled',
               errorMessage: 'Cancelled by user',
             });
+            traceStatus = 'cancelled';
+            traceRecorder.log('stream:cancelled', { sessionId, assistantMessageId });
             return;
           }
           if (downstreamAborted) {
@@ -2513,6 +2709,9 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
 
           console.error('Streaming error:', error);
           log.error('Streaming error detail', (error as Error)?.message, (error as Error)?.stack)
+          traceStatus = 'error';
+          traceErrorMessage = error instanceof Error ? error.message : 'Streaming error';
+          traceRecorder.log('stream:error', { message: traceErrorMessage });
 
           // 若尚未输出内容，尝试降级为非流式一次
           if (!aiResponseContent) {
@@ -2615,9 +2814,24 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
             stopHeartbeat();
             controller.close();
           } catch {}
+          if (idleWatchTimer) {
+            clearInterval(idleWatchTimer);
+            idleWatchTimer = null;
+          }
           bindProviderController(null);
           currentProviderController = null;
           releaseStreamMeta(activeStreamMeta);
+          const finalMetadata = {
+            ...traceMetadataExtras,
+            messageId: assistantMessageId,
+          };
+          if (traceErrorMessage) {
+            (finalMetadata as any).error = traceErrorMessage;
+          }
+          const finalStatus = traceStatus === 'running'
+            ? (traceErrorMessage ? 'error' : 'completed')
+            : traceStatus;
+          await traceRecorder.finalize(finalStatus, { metadata: finalMetadata });
         }
       },
     });

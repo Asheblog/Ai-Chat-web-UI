@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useModelsStore } from '@/store/models-store'
+import { useAuthStore } from '@/store/auth-store'
 
 export interface ChatComposerImage {
   dataUrl: string
@@ -40,11 +41,15 @@ export function useChatComposer() {
   const { systemSettings } = useSettingsStore()
   const { toast } = useToast()
   const { models: allModels, fetchAll: fetchModels } = useModelsStore()
+  const { actorState, user } = useAuthStore((state) => ({ actorState: state.actorState, user: state.user }))
+  const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
 
   const MAX_IMAGE_COUNT = 4
   const MAX_IMAGE_MB = 5
   const MAX_IMAGE_EDGE = 4096
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [traceEnabled, setTraceEnabled] = useState(false)
+  const tracePreferenceRef = useRef<Record<number, boolean>>({})
 
   const modelsCount = allModels.length
   useEffect(() => {
@@ -125,6 +130,7 @@ export function useChatComposer() {
   }, [activeModel, currentSession])
 
   const canUseWebSearch = Boolean(systemSettings?.webSearchAgentEnable) && isWebSearchCapable
+  const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
 
   useEffect(() => {
     if (!canUseWebSearch && webSearchEnabled) {
@@ -137,6 +143,20 @@ export function useChatComposer() {
       setWebSearchEnabled(true)
     }
   }, [canUseWebSearch, currentSession?.id])
+
+  useEffect(() => {
+    if (!canUseTrace) {
+      setTraceEnabled(false)
+      return
+    }
+    if (!currentSession) return
+    const stored = tracePreferenceRef.current[currentSession.id]
+    if (typeof stored === 'boolean') {
+      setTraceEnabled(stored)
+    } else {
+      setTraceEnabled(Boolean(systemSettings?.taskTraceDefaultOn))
+    }
+  }, [canUseTrace, currentSession, currentSession?.id, systemSettings?.taskTraceDefaultOn])
 
   useEffect(() => {
     if (!isVisionEnabled && selectedImages.length > 0) {
@@ -209,6 +229,7 @@ export function useChatComposer() {
                 web_search: true,
               }
             : undefined,
+        traceEnabled: canUseTrace ? traceEnabled : undefined,
       }
       await streamMessage(currentSession.id, message, imagesPayload, options)
       setNoSaveThisRound(false)
@@ -238,11 +259,19 @@ export function useChatComposer() {
     toast,
     webSearchEnabled,
     canUseWebSearch,
+    canUseTrace,
+    traceEnabled,
   ])
 
   const handleStop = useCallback(() => {
     stopStreaming()
   }, [stopStreaming])
+
+  const handleTraceToggle = useCallback((value: boolean) => {
+    if (!currentSession) return
+    tracePreferenceRef.current[currentSession.id] = value
+    setTraceEnabled(value)
+  }, [currentSession])
 
   const pickImages = useCallback(() => {
     if (!isVisionEnabled) {
@@ -342,5 +371,8 @@ export function useChatComposer() {
     webSearchEnabled,
     setWebSearchEnabled,
     canUseWebSearch,
+    traceEnabled,
+    onToggleTrace: handleTraceToggle,
+    canUseTrace,
   }
 }

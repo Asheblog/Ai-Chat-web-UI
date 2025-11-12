@@ -12,6 +12,7 @@ const SYSTEM_SECTIONS: Array<{ key: string; label: string; description: string; 
   { key: "connections", label: "连接管理", description: "Upstream 连接与凭据", href: "/main/settings/system/connections" },
   { key: "models", label: "模型管理", description: "聚合模型编排", href: "/main/settings/system/models" },
   { key: "users", label: "用户管理", description: "审批、额度与角色", href: "/main/settings/system/users" },
+  { key: "logging", label: "日志与监控", description: "任务追踪与清理", href: "/main/settings/system/logging" },
   { key: "about", label: "关于", description: "版本与许可信息", href: "/main/settings/system/about" },
 ]
 

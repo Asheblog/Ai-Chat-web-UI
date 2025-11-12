@@ -6,6 +6,7 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import type { ApiResponse, Actor } from '../types';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 import { getQuotaPolicy, invalidateQuotaPolicyCache } from '../utils/system-settings';
+import { invalidateTaskTraceConfig } from '../utils/task-trace';
 import { syncSharedAnonymousQuota } from '../utils/quota';
 
 const settings = new Hono();
@@ -86,6 +87,13 @@ const systemSettingSchema = z.object({
   web_search_api_key: z.string().min(1).optional(),
   web_search_result_limit: z.number().int().min(1).max(10).optional(),
   web_search_domain_filter: z.array(z.string().min(1)).optional(),
+  task_trace_enabled: z.boolean().optional(),
+  task_trace_default_on: z.boolean().optional(),
+  task_trace_admin_only: z.boolean().optional(),
+  task_trace_env: z.enum(['dev', 'prod', 'both']).optional(),
+  task_trace_retention_days: z.number().int().min(1).max(365).optional(),
+  task_trace_max_events: z.number().int().min(100).max(200000).optional(),
+  task_trace_idle_timeout_ms: z.number().int().min(1000).max(600000).optional(),
 });
 
 const resetAnonymousQuotaSchema = z.object({
@@ -177,6 +185,37 @@ settings.get('/system', actorMiddleware, async (c) => {
         return []
       })(),
       web_search_has_api_key: Boolean(settingsObj.web_search_api_key || process.env.WEB_SEARCH_API_KEY),
+      task_trace_enabled: (settingsObj.task_trace_enabled ?? 'false').toString().toLowerCase() === 'true',
+      task_trace_default_on: (settingsObj.task_trace_default_on ?? 'false').toString().toLowerCase() === 'true',
+      task_trace_admin_only: (settingsObj.task_trace_admin_only ?? 'true').toString().toLowerCase() !== 'false',
+      task_trace_env: (() => {
+        const value = (settingsObj.task_trace_env || '').toString().toLowerCase()
+        return value === 'both' || value === 'prod' ? value : 'dev'
+      })(),
+      task_trace_retention_days: (() => {
+        const raw = settingsObj.task_trace_retention_days || process.env.TASK_TRACE_RETENTION_DAYS || '7'
+        const parsed = Number.parseInt(String(raw), 10)
+        if (Number.isFinite(parsed)) {
+          return Math.max(1, Math.min(365, parsed))
+        }
+        return 7
+      })(),
+      task_trace_max_events: (() => {
+        const raw = settingsObj.task_trace_max_events || process.env.TASK_TRACE_MAX_EVENTS || '2000'
+        const parsed = Number.parseInt(String(raw), 10)
+        if (Number.isFinite(parsed)) {
+          return Math.max(100, Math.min(200000, parsed))
+        }
+        return 2000
+      })(),
+      task_trace_idle_timeout_ms: (() => {
+        const raw = settingsObj.task_trace_idle_timeout_ms || process.env.TASK_TRACE_IDLE_TIMEOUT_MS || '30000'
+        const parsed = Number.parseInt(String(raw), 10)
+        if (Number.isFinite(parsed)) {
+          return Math.max(1000, Math.min(600000, parsed))
+        }
+        return 30000
+      })(),
     };
 
     if (!isAdmin) {
@@ -215,8 +254,9 @@ settings.get('/system', actorMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url, anonymous_retention_days, anonymous_daily_quota, default_user_daily_quota, web_search_agent_enable, web_search_default_engine, web_search_api_key, web_search_result_limit, web_search_domain_filter } = c.req.valid('json');
+    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url, anonymous_retention_days, anonymous_daily_quota, default_user_daily_quota, web_search_agent_enable, web_search_default_engine, web_search_api_key, web_search_result_limit, web_search_domain_filter, task_trace_enabled, task_trace_default_on, task_trace_admin_only, task_trace_env, task_trace_retention_days, task_trace_max_events, task_trace_idle_timeout_ms } = c.req.valid('json');
     let anonymousQuotaUpdated = false;
+    let taskTraceSettingsUpdated = false;
 
     // 条件更新：仅对传入的字段做 upsert
     if (typeof registration_enabled === 'boolean') {
@@ -473,11 +513,81 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
       }
     }
 
+    if (typeof task_trace_enabled === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'task_trace_enabled' },
+        update: { value: task_trace_enabled.toString() },
+        create: { key: 'task_trace_enabled', value: task_trace_enabled.toString() },
+      })
+      taskTraceSettingsUpdated = true;
+    }
+
+    if (typeof task_trace_default_on === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'task_trace_default_on' },
+        update: { value: task_trace_default_on.toString() },
+        create: { key: 'task_trace_default_on', value: task_trace_default_on.toString() },
+      })
+      taskTraceSettingsUpdated = true;
+    }
+
+    if (typeof task_trace_admin_only === 'boolean') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'task_trace_admin_only' },
+        update: { value: task_trace_admin_only.toString() },
+        create: { key: 'task_trace_admin_only', value: task_trace_admin_only.toString() },
+      })
+      taskTraceSettingsUpdated = true;
+    }
+
+    if (typeof task_trace_env === 'string') {
+      const normalized = ['dev', 'prod', 'both'].includes(task_trace_env) ? task_trace_env : 'dev'
+      await prisma.systemSetting.upsert({
+        where: { key: 'task_trace_env' },
+        update: { value: normalized },
+        create: { key: 'task_trace_env', value: normalized },
+      })
+      taskTraceSettingsUpdated = true;
+    }
+
+    if (typeof task_trace_retention_days === 'number') {
+      const sanitized = Math.max(1, Math.min(365, task_trace_retention_days))
+      await prisma.systemSetting.upsert({
+        where: { key: 'task_trace_retention_days' },
+        update: { value: String(sanitized) },
+        create: { key: 'task_trace_retention_days', value: String(sanitized) },
+      })
+      taskTraceSettingsUpdated = true;
+    }
+
+    if (typeof task_trace_max_events === 'number') {
+      const sanitized = Math.max(100, Math.min(200000, task_trace_max_events))
+      await prisma.systemSetting.upsert({
+        where: { key: 'task_trace_max_events' },
+        update: { value: String(sanitized) },
+        create: { key: 'task_trace_max_events', value: String(sanitized) },
+      })
+      taskTraceSettingsUpdated = true;
+    }
+
+    if (typeof task_trace_idle_timeout_ms === 'number') {
+      const sanitized = Math.max(1000, Math.min(600000, task_trace_idle_timeout_ms))
+      await prisma.systemSetting.upsert({
+        where: { key: 'task_trace_idle_timeout_ms' },
+        update: { value: String(sanitized) },
+        create: { key: 'task_trace_idle_timeout_ms', value: String(sanitized) },
+      })
+      taskTraceSettingsUpdated = true;
+    }
+
     if (anonymousQuotaUpdated) {
       await syncSharedAnonymousQuota({ resetUsed: false })
     }
 
     invalidateQuotaPolicyCache();
+    if (taskTraceSettingsUpdated) {
+      invalidateTaskTraceConfig();
+    }
 
     return c.json<ApiResponse>({
       success: true,

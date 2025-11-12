@@ -1,4 +1,4 @@
-# AI Chat Platform
+# AI Chat Platform（未完成开发）
 ---
 
 轻量级 AI 聊天平台（后端 Hono + SQLite，前端 Next.js）。本文档仅保留两种最简部署方式：
@@ -193,6 +193,19 @@ sequenceDiagram
 - 首次注册失败：请在系统设置「通用」页确认“允许注册”开关已开启；默认情况下首个注册者会成为管理员，其余用户需管理员审批。
 - 图片 URL 指向 localhost：在系统设置「通用」页填写“图片访问域名”并保存，随后点击“刷新图片链接”即可生成新域名样例；如留空则会根据请求头或局域网 IP 自动推断（便于本地调试）。
 - 文字 LOGO 仍显示默认 `AIChat`：确保系统设置中已保存“文字 LOGO”，若容器刚更新，前端会自动轮询 `/api/settings/branding`，无需手动重启即可恢复自定义名称。
+
+## 任务追踪（Task Trace）
+
+后台可选记录 `/api/chat/stream` 生命周期，全链路追踪请求/工具事件/错误，辅助排障：
+
+1. **执行数据库迁移**：`pnpm --filter backend prisma migrate deploy`（或 `prisma migrate deploy`）以创建 `task_traces` / `task_trace_events` 表。
+2. **开启开关**：管理员登录前端后进入 `设置 → 系统 → 日志与监控`，配置“启用任务追踪 / 默认开启 / 仅限管理员 / 可用环境 / 保留天数”。
+3. **查看与导出**：`/main/logs/task-trace` 列出所有追踪，支持筛选、详情（首 2000 条事件）与 TXT 导出，对应 API：
+   - `GET /api/task-trace`：分页列表
+   - `GET /api/task-trace/:id`：详情 + 事件
+   - `GET /api/task-trace/:id/export`：TXT 导出
+   - `POST /api/task-trace/cleanup`：按保留天数批量清理
+4. **输入框快速开关**：管理员在聊天输入框侧栏可通过“任务追踪”按钮临时开启/关闭单次追踪。
 
 ---
 
