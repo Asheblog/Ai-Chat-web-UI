@@ -124,6 +124,7 @@ type AgentStreamMeta = {
 };
 
 const agentStreamControllers = new Map<string, AgentStreamMeta>();
+const pendingStreamCancels = new Set<string>();
 
 type StreamMetaRegistrationParams = {
   sessionId: number;
@@ -190,6 +191,21 @@ const findStreamMetaByClientMessageId = (
   return null;
 };
 
+const findStreamMetaByAssistantClientMessageId = (
+  sessionId: number,
+  assistantClientMessageId?: string | null,
+): AgentStreamMeta | null => {
+  if (!assistantClientMessageId) return null;
+  const target = assistantClientMessageId.trim();
+  if (!target) return null;
+  for (const meta of agentStreamControllers.values()) {
+    if (meta.sessionId === sessionId && meta.assistantClientMessageId === target) {
+      return meta;
+    }
+  }
+  return null;
+};
+
 const buildAgentStreamKey = (
   sessionId: number,
   clientMessageId?: string | null,
@@ -222,6 +238,85 @@ const ensureAssistantClientMessageId = (value?: string | null): string => {
     }
   }
   return deriveAssistantClientMessageId(null);
+};
+
+const resolveAssistantClientIdFromRequest = (value?: string | null) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.endsWith(':assistant')) {
+    return trimmed.length > 120 ? trimmed.slice(0, 120) : trimmed;
+  }
+  return deriveAssistantClientMessageId(trimmed);
+};
+
+const buildPendingCancelKeyByClientId = (sessionId: number, clientMessageId?: string | null) => {
+  if (typeof clientMessageId === 'string') {
+    const trimmed = clientMessageId.trim();
+    if (trimmed.length > 0) {
+      return `session:${sessionId}:client:${trimmed}`;
+    }
+  }
+  return null;
+};
+
+const buildPendingCancelKeyByMessageId = (sessionId: number, messageId?: number | string | null) => {
+  if (typeof messageId === 'number' || typeof messageId === 'string') {
+    return `session:${sessionId}:message:${messageId}`;
+  }
+  return null;
+};
+
+const registerPendingCancelMarker = (params: {
+  sessionId: number;
+  messageId?: number | string | null;
+  clientMessageId?: string | null;
+  assistantClientMessageId?: string | null;
+}) => {
+  const { sessionId, messageId, clientMessageId, assistantClientMessageId } = params;
+  let registered = false;
+  const keyByMessage = buildPendingCancelKeyByMessageId(sessionId, messageId);
+  if (keyByMessage) {
+    pendingStreamCancels.add(keyByMessage);
+    registered = true;
+  }
+  const rawClientKey = buildPendingCancelKeyByClientId(sessionId, clientMessageId);
+  if (rawClientKey) {
+    pendingStreamCancels.add(rawClientKey);
+    registered = true;
+  }
+  const assistantKey = buildPendingCancelKeyByClientId(sessionId, assistantClientMessageId);
+  if (assistantKey) {
+    pendingStreamCancels.add(assistantKey);
+    registered = true;
+  } else if (clientMessageId) {
+    const derivedAssistant = resolveAssistantClientIdFromRequest(clientMessageId);
+    if (derivedAssistant) {
+      const derivedKey = buildPendingCancelKeyByClientId(sessionId, derivedAssistant);
+      if (derivedKey) {
+        pendingStreamCancels.add(derivedKey);
+        registered = true;
+      }
+    }
+  }
+  return registered;
+};
+
+const clearPendingCancelMarkers = (params: {
+  sessionId: number;
+  messageId?: number | string | null;
+  clientMessageId?: string | null;
+  assistantClientMessageId?: string | null;
+}) => {
+  const { sessionId, messageId, clientMessageId, assistantClientMessageId } = params;
+  const keys = [
+    buildPendingCancelKeyByMessageId(sessionId, messageId),
+    buildPendingCancelKeyByClientId(sessionId, clientMessageId),
+    buildPendingCancelKeyByClientId(sessionId, assistantClientMessageId),
+  ].filter(Boolean) as string[];
+  for (const key of keys) {
+    pendingStreamCancels.delete(key);
+  }
 };
 
 type AssistantMessageWriteData = Omit<
@@ -2007,9 +2102,42 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
     let reasoningDoneEmitted = false;
     let reasoningDurationSeconds = 0;
     let streamCancelled = false;
+    const pendingCancelKeys = () => {
+      const keys: string[] = [];
+      const messageKey = buildPendingCancelKeyByMessageId(sessionId, assistantMessageId);
+      if (messageKey) keys.push(messageKey);
+      const assistantClientKey = buildPendingCancelKeyByClientId(sessionId, assistantClientMessageId);
+      if (assistantClientKey) keys.push(assistantClientKey);
+      const userClientKey = buildPendingCancelKeyByClientId(sessionId, clientMessageId);
+      if (userClientKey) keys.push(userClientKey);
+      return keys;
+    };
+    const consumePendingCancelMarker = () => {
+      let matched = false;
+      for (const key of pendingCancelKeys()) {
+        if (pendingStreamCancels.has(key)) {
+          pendingStreamCancels.delete(key);
+          matched = true;
+        }
+      }
+      return matched;
+    };
+    const markStreamCancelled = () => {
+      if (streamCancelled) return;
+      streamCancelled = true;
+      if (currentProviderController) {
+        try {
+          currentProviderController.abort();
+        } catch {}
+        currentProviderController = null;
+      }
+    };
     const isStreamCancelled = () => {
       if (!streamCancelled && activeStreamMeta?.cancelled) {
-        streamCancelled = true;
+        markStreamCancelled();
+      }
+      if (!streamCancelled && consumePendingCancelMarker()) {
+        markStreamCancelled();
       }
       return streamCancelled;
     };
@@ -2833,6 +2961,12 @@ chat.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), asy
           bindProviderController(null);
           currentProviderController = null;
           releaseStreamMeta(activeStreamMeta);
+          clearPendingCancelMarkers({
+            sessionId,
+            messageId: assistantMessageId,
+            clientMessageId,
+            assistantClientMessageId,
+          });
           const finalMetadata = {
             ...traceMetadataExtras,
             messageId: assistantMessageId,
@@ -2892,8 +3026,12 @@ chat.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSche
   const actor = c.get('actor') as Actor;
   const payload = c.req.valid('json');
   const { sessionId, clientMessageId, messageId } = payload;
+  const normalizedClientMessageId =
+    typeof clientMessageId === 'string' && clientMessageId.trim().length > 0
+      ? clientMessageId.trim()
+      : null;
   const keyCandidates = [
-    buildAgentStreamKey(sessionId, clientMessageId ?? null),
+    buildAgentStreamKey(sessionId, normalizedClientMessageId ?? null),
     typeof messageId === 'number' && Number.isFinite(messageId)
       ? buildAgentStreamKey(sessionId, null, messageId)
       : null,
@@ -2910,28 +3048,46 @@ chat.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSche
   if (!meta && typeof messageId === 'number' && Number.isFinite(messageId)) {
     meta = findStreamMetaByMessageId(sessionId, messageId);
   }
-  if (!meta && clientMessageId) {
-    meta = findStreamMetaByClientMessageId(sessionId, clientMessageId);
-  }
-  if (!meta || meta.actorId !== actor.identifier || meta.sessionId !== sessionId) {
-    return c.json<ApiResponse>({ success: true });
+  if (!meta && normalizedClientMessageId) {
+    meta = findStreamMetaByClientMessageId(sessionId, normalizedClientMessageId);
+    if (!meta) {
+      meta = findStreamMetaByAssistantClientMessageId(sessionId, normalizedClientMessageId);
+    }
   }
 
-  meta.cancelled = true;
-  try {
-    meta.controller?.abort();
-  } catch {}
+  const matchedMeta =
+    meta && meta.actorId === actor.identifier && meta.sessionId === sessionId ? meta : null;
+  const assistantClientIdFromRequest = resolveAssistantClientIdFromRequest(normalizedClientMessageId);
+  const effectiveAssistantClientId =
+    matchedMeta?.assistantClientMessageId ?? assistantClientIdFromRequest ?? normalizedClientMessageId ?? null;
+
+  if (matchedMeta) {
+    matchedMeta.cancelled = true;
+    try {
+      matchedMeta.controller?.abort();
+    } catch {}
+    clearPendingCancelMarkers({
+      sessionId,
+      messageId: matchedMeta.assistantMessageId,
+      clientMessageId: normalizedClientMessageId,
+      assistantClientMessageId: matchedMeta.assistantClientMessageId ?? effectiveAssistantClientId,
+    });
+  } else {
+    registerPendingCancelMarker({
+      sessionId,
+      messageId: typeof messageId === 'number' || typeof messageId === 'string' ? messageId : null,
+      clientMessageId: normalizedClientMessageId,
+      assistantClientMessageId: effectiveAssistantClientId,
+    });
+  }
 
   const cancellationUpdate = { streamStatus: 'cancelled', streamError: 'Cancelled by user' };
   const updateTasks: Array<Promise<any>> = [];
 
-  const assistantClientId =
-    meta.assistantClientMessageId ??
-    (clientMessageId ? deriveAssistantClientMessageId(clientMessageId) : null);
-  if (assistantClientId) {
+  if (effectiveAssistantClientId) {
     updateTasks.push(
       prisma.message.updateMany({
-        where: { sessionId, clientMessageId: assistantClientId },
+        where: { sessionId, clientMessageId: effectiveAssistantClientId },
         data: cancellationUpdate,
       }),
     );
@@ -2940,8 +3096,8 @@ chat.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSche
   const targetMessageId =
     typeof messageId === 'number' && Number.isFinite(messageId)
       ? messageId
-      : typeof meta.assistantMessageId === 'number'
-        ? (meta.assistantMessageId as number)
+      : typeof matchedMeta?.assistantMessageId === 'number'
+        ? (matchedMeta.assistantMessageId as number)
         : null;
   if (targetMessageId) {
     updateTasks.push(
