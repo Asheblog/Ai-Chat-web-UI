@@ -5,7 +5,7 @@ import { useSystemSettings } from "@/hooks/use-system-settings"
 import { useAuthStore } from "@/store/auth-store"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Card, CardDescription, CardTitle } from "@/components/ui/card"
+import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -95,12 +95,14 @@ export function SystemMonitoringPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="h-6 w-6 text-primary" />
+      <div className="space-y-5">
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <ShieldCheck className="w-5 h-5 text-primary" />
           <div>
-            <CardTitle>任务追踪（Task Trace）</CardTitle>
-            <CardDescription>记录 /api/chat/stream 生命周期，辅助排障与性能诊断</CardDescription>
+            <CardTitle className="text-lg font-semibold tracking-tight">任务追踪（Task Trace）</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              记录 /api/chat/stream 生命周期，辅助排障与性能诊断
+            </CardDescription>
           </div>
         </div>
 
@@ -282,7 +284,7 @@ export function SystemMonitoringPage() {
             </div>
           </div>
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

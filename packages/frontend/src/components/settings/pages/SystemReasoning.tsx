@@ -119,8 +119,10 @@ export function SystemReasoningPage() {
         <div className="flex items-center gap-3 pb-3 border-b">
           <Brain className="w-5 h-5 text-primary" />
           <div>
-            <CardTitle className="text-lg">推理链配置</CardTitle>
-            <CardDescription>控制思维过程的识别、展示和存储</CardDescription>
+            <CardTitle className="text-lg font-semibold tracking-tight">推理链配置</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              控制思维过程的识别、展示和存储
+            </CardDescription>
           </div>
         </div>
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">

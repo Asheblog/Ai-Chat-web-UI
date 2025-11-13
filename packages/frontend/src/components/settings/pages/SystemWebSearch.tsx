@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardDescription, CardTitle } from "@/components/ui/card"
+import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -108,7 +108,7 @@ export function SystemWebSearchPage() {
   }
 
   return (
-    <Card className="p-5 space-y-5 border-0">
+    <div className="space-y-5">
       <div className="flex items-center gap-3 pb-3 border-b border-border/60">
         <Globe className="w-5 h-5 text-primary flex-shrink-0" />
         <div className="space-y-1">
@@ -214,6 +214,6 @@ export function SystemWebSearchPage() {
           保存联网搜索设置
         </Button>
       </div>
-    </Card>
+    </div>
   )
 }
