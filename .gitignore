@@ -35,6 +35,10 @@ logs/
 *.log
 *.pid
 
+# 保留前端 app router 下的 /main/logs 页面目录用于任务追踪 UI
+!packages/frontend/src/app/main/logs/
+!packages/frontend/src/app/main/logs/**
+
 # --- OS / Editor ---
 .DS_Store
 Thumbs.db
