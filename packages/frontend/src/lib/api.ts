@@ -509,6 +509,17 @@ class ApiClient {
         web_search_domain_filter?: string[] | string,
         web_search_has_api_key?: boolean,
       }>>('/settings/system')
+    const parseOptionalInt = (value: unknown): number | undefined => {
+      if (value === null || typeof value === 'undefined') return undefined
+      if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed === '') return undefined
+        const parsed = Number.parseInt(trimmed, 10)
+        if (Number.isFinite(parsed)) return parsed
+      }
+      return undefined
+    }
     const allowRegistration = !!settingsRes.data.data?.registration_enabled
     const brandText = settingsRes.data.data?.brand_text || 'AIChat'
     const systemModels: any[] = []
@@ -526,6 +537,18 @@ class ApiClient {
     const reasoningTagsMode = (settingsRes.data.data?.reasoning_tags_mode ?? 'default') as any
     const reasoningCustomTags = (settingsRes.data.data?.reasoning_custom_tags ?? '') as string
     const streamDeltaChunkSize = Number(settingsRes.data.data?.stream_delta_chunk_size ?? 1)
+    const streamDeltaFlushIntervalMs = (() => {
+      const parsed = parseOptionalInt(settingsRes.data.data?.stream_delta_flush_interval_ms)
+      return typeof parsed === 'number' ? Math.max(0, parsed) : undefined
+    })()
+    const streamReasoningFlushIntervalMs = (() => {
+      const parsed = parseOptionalInt(settingsRes.data.data?.stream_reasoning_flush_interval_ms)
+      return typeof parsed === 'number' ? Math.max(0, parsed) : undefined
+    })()
+    const streamKeepaliveIntervalMs = (() => {
+      const parsed = parseOptionalInt(settingsRes.data.data?.stream_keepalive_interval_ms)
+      return typeof parsed === 'number' ? Math.max(0, parsed) : undefined
+    })()
     const openaiReasoningEffort = (settingsRes.data.data?.openai_reasoning_effort ?? '') as any
     const ollamaThink = Boolean(settingsRes.data.data?.ollama_think ?? false)
     const chatImageRetentionDays = (() => {
@@ -606,7 +629,49 @@ class ApiClient {
       }
       return 30000
     })()
-    return { data: { allowRegistration, brandText, systemModels, sseHeartbeatIntervalMs, providerMaxIdleMs, providerTimeoutMs, providerInitialGraceMs, providerReasoningIdleMs, reasoningKeepaliveIntervalMs, usageEmit, usageProviderOnly, reasoningEnabled, reasoningDefaultExpand, reasoningSaveToDb, reasoningTagsMode, reasoningCustomTags, streamDeltaChunkSize, openaiReasoningEffort, ollamaThink, chatImageRetentionDays, siteBaseUrl, anonymousRetentionDays, anonymousDailyQuota, defaultUserDailyQuota, webSearchAgentEnable, webSearchDefaultEngine, webSearchResultLimit, webSearchDomainFilter, webSearchHasApiKey, taskTraceEnabled, taskTraceDefaultOn, taskTraceAdminOnly, taskTraceEnv, taskTraceRetentionDays, taskTraceMaxEvents, taskTraceIdleTimeoutMs } }
+    return {
+      data: {
+        allowRegistration,
+        brandText,
+        systemModels,
+        sseHeartbeatIntervalMs,
+        providerMaxIdleMs,
+        providerTimeoutMs,
+        providerInitialGraceMs,
+        providerReasoningIdleMs,
+        reasoningKeepaliveIntervalMs,
+        usageEmit,
+        usageProviderOnly,
+        reasoningEnabled,
+        reasoningDefaultExpand,
+        reasoningSaveToDb,
+        reasoningTagsMode,
+        reasoningCustomTags,
+        streamDeltaChunkSize,
+        streamDeltaFlushIntervalMs,
+        streamReasoningFlushIntervalMs,
+        streamKeepaliveIntervalMs,
+        openaiReasoningEffort,
+        ollamaThink,
+        chatImageRetentionDays,
+        siteBaseUrl,
+        anonymousRetentionDays,
+        anonymousDailyQuota,
+        defaultUserDailyQuota,
+        webSearchAgentEnable,
+        webSearchDefaultEngine,
+        webSearchResultLimit,
+        webSearchDomainFilter,
+        webSearchHasApiKey,
+        taskTraceEnabled,
+        taskTraceDefaultOn,
+        taskTraceAdminOnly,
+        taskTraceEnv,
+        taskTraceRetentionDays,
+        taskTraceMaxEvents,
+        taskTraceIdleTimeoutMs,
+      },
+    }
   }
 
   async getPublicBranding() {
@@ -633,6 +698,9 @@ class ApiClient {
     if (typeof settings.reasoningTagsMode === 'string') payload.reasoning_tags_mode = settings.reasoningTagsMode
     if (typeof settings.reasoningCustomTags === 'string') payload.reasoning_custom_tags = settings.reasoningCustomTags
     if (typeof settings.streamDeltaChunkSize === 'number') payload.stream_delta_chunk_size = settings.streamDeltaChunkSize
+    if (typeof settings.streamDeltaFlushIntervalMs === 'number') payload.stream_delta_flush_interval_ms = settings.streamDeltaFlushIntervalMs
+    if (typeof settings.streamReasoningFlushIntervalMs === 'number') payload.stream_reasoning_flush_interval_ms = settings.streamReasoningFlushIntervalMs
+    if (typeof settings.streamKeepaliveIntervalMs === 'number') payload.stream_keepalive_interval_ms = settings.streamKeepaliveIntervalMs
     if (typeof settings.openaiReasoningEffort === 'string') payload.openai_reasoning_effort = settings.openaiReasoningEffort
     if (typeof settings.ollamaThink === 'boolean') payload.ollama_think = !!settings.ollamaThink
     if (typeof settings.chatImageRetentionDays === 'number') payload.chat_image_retention_days = settings.chatImageRetentionDays

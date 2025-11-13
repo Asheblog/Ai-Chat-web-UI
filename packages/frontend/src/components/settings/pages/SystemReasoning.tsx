@@ -25,6 +25,9 @@ export function SystemReasoningPage() {
   const [reasoningTagsMode, setReasoningTagsMode] = useState<'default'|'custom'|'off'>('default')
   const [reasoningCustomTags, setReasoningCustomTags] = useState('')
   const [streamDeltaChunkSize, setStreamDeltaChunkSize] = useState(1)
+  const [streamDeltaFlushIntervalMs, setStreamDeltaFlushIntervalMs] = useState('')
+  const [streamReasoningFlushIntervalMs, setStreamReasoningFlushIntervalMs] = useState('')
+  const [streamKeepaliveIntervalMs, setStreamKeepaliveIntervalMs] = useState('')
   const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<'unset'|'low'|'medium'|'high'>('unset')
   const [ollamaThink, setOllamaThink] = useState(false)
 
@@ -37,6 +40,15 @@ export function SystemReasoningPage() {
     setReasoningTagsMode((systemSettings.reasoningTagsMode as any) || 'default')
     setReasoningCustomTags(systemSettings.reasoningCustomTags || '')
     setStreamDeltaChunkSize(Number(systemSettings.streamDeltaChunkSize ?? 1))
+    setStreamDeltaFlushIntervalMs(
+      systemSettings.streamDeltaFlushIntervalMs != null ? String(systemSettings.streamDeltaFlushIntervalMs) : ''
+    )
+    setStreamReasoningFlushIntervalMs(
+      systemSettings.streamReasoningFlushIntervalMs != null ? String(systemSettings.streamReasoningFlushIntervalMs) : ''
+    )
+    setStreamKeepaliveIntervalMs(
+      systemSettings.streamKeepaliveIntervalMs != null ? String(systemSettings.streamKeepaliveIntervalMs) : ''
+    )
     setOpenaiReasoningEffort((((systemSettings as any).openaiReasoningEffort || 'unset')) as any)
     setOllamaThink(Boolean((systemSettings as any).ollamaThink ?? false))
   }, [systemSettings])
@@ -57,6 +69,30 @@ export function SystemReasoningPage() {
         return
       }
     }
+    const parseInterval = (raw: string, label: string) => {
+      const trimmed = raw.trim()
+      if (trimmed === '') return 0
+      const parsed = Number.parseInt(trimmed, 10)
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        toast({
+          title: `${label}无效`,
+          description: '请输入大于等于 0 的整数',
+          variant: 'destructive',
+        })
+        throw new Error('invalid')
+      }
+      return parsed
+    }
+    let deltaFlushMs: number
+    let reasoningFlushMs: number
+    let keepaliveMs: number
+    try {
+      deltaFlushMs = parseInterval(streamDeltaFlushIntervalMs, '正文 flush 间隔')
+      reasoningFlushMs = parseInterval(streamReasoningFlushIntervalMs, '推理 flush 间隔')
+      keepaliveMs = parseInterval(streamKeepaliveIntervalMs, 'Keepalive 间隔')
+    } catch {
+      return
+    }
     await updateSystemSettings({
       reasoningEnabled,
       reasoningDefaultExpand,
@@ -64,6 +100,9 @@ export function SystemReasoningPage() {
       reasoningTagsMode,
       reasoningCustomTags,
       streamDeltaChunkSize,
+      streamDeltaFlushIntervalMs: deltaFlushMs,
+      streamReasoningFlushIntervalMs: reasoningFlushMs,
+      streamKeepaliveIntervalMs: keepaliveMs,
       openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : 'unset',
       ollamaThink,
     } as any)
@@ -141,6 +180,57 @@ export function SystemReasoningPage() {
           </div>
           <div className="shrink-0 self-start sm:self-auto">
             <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-24 text-right" />
+          </div>
+        </Card>
+
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <CardTitle className="text-lg">正文 flush 间隔（毫秒）</CardTitle>
+            <CardDescription>推荐 800ms；0 表示仅按分片大小触发</CardDescription>
+          </div>
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              placeholder="800"
+              value={streamDeltaFlushIntervalMs}
+              onChange={(e)=>setStreamDeltaFlushIntervalMs(e.target.value)}
+              className="w-32 text-right"
+            />
+          </div>
+        </Card>
+
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <CardTitle className="text-lg">推理 flush 间隔（毫秒）</CardTitle>
+            <CardDescription>推荐 1000ms；0 表示仅当标签闭合时推送</CardDescription>
+          </div>
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              placeholder="1000"
+              value={streamReasoningFlushIntervalMs}
+              onChange={(e)=>setStreamReasoningFlushIntervalMs(e.target.value)}
+              className="w-32 text-right"
+            />
+          </div>
+        </Card>
+
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
+          <div className="flex-1">
+            <CardTitle className="text-lg">Keepalive 间隔（毫秒）</CardTitle>
+            <CardDescription>推荐 5000ms；0 表示仅在推理 keepalive 触发</CardDescription>
+          </div>
+          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              placeholder="5000"
+              value={streamKeepaliveIntervalMs}
+              onChange={(e)=>setStreamKeepaliveIntervalMs(e.target.value)}
+              className="w-32 text-right"
+            />
           </div>
         </Card>
 

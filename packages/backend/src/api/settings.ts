@@ -63,6 +63,9 @@ const systemSettingSchema = z.object({
   provider_initial_grace_ms: z.number().int().min(0).max(3600000).optional(),
   provider_reasoning_idle_ms: z.number().int().min(0).max(3600000).optional(),
   reasoning_keepalive_interval_ms: z.number().int().min(0).max(3600000).optional(),
+  stream_delta_flush_interval_ms: z.number().int().min(0).max(3600000).optional(),
+  stream_reasoning_flush_interval_ms: z.number().int().min(0).max(3600000).optional(),
+  stream_keepalive_interval_ms: z.number().int().min(0).max(3600000).optional(),
   usage_emit: z.boolean().optional(),
   usage_provider_only: z.boolean().optional(),
   // 推理链（思维链）相关
@@ -154,6 +157,9 @@ settings.get('/system', actorMiddleware, async (c) => {
       reasoning_tags_mode: (settingsObj.reasoning_tags_mode ?? (process.env.REASONING_TAGS_MODE ?? 'default')).toString(),
       reasoning_custom_tags: settingsObj.reasoning_custom_tags || process.env.REASONING_CUSTOM_TAGS || '',
       stream_delta_chunk_size: parseInt(settingsObj.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'),
+      stream_delta_flush_interval_ms: parseInt(settingsObj.stream_delta_flush_interval_ms || process.env.STREAM_DELTA_FLUSH_INTERVAL_MS || '0'),
+      stream_reasoning_flush_interval_ms: parseInt(settingsObj.stream_reasoning_flush_interval_ms || process.env.STREAM_REASONING_FLUSH_INTERVAL_MS || '0'),
+      stream_keepalive_interval_ms: parseInt(settingsObj.stream_keepalive_interval_ms || process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'),
       openai_reasoning_effort: (settingsObj.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || ''),
       ollama_think: (settingsObj.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true',
       chat_image_retention_days: (() => {
@@ -254,7 +260,46 @@ settings.get('/system', actorMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
-    const { registration_enabled, brand_text, sse_heartbeat_interval_ms, provider_max_idle_ms, provider_timeout_ms, provider_initial_grace_ms, provider_reasoning_idle_ms, reasoning_keepalive_interval_ms, usage_emit, usage_provider_only, reasoning_enabled, reasoning_default_expand, reasoning_save_to_db, reasoning_tags_mode, reasoning_custom_tags, stream_delta_chunk_size, openai_reasoning_effort, ollama_think, chat_image_retention_days, site_base_url, anonymous_retention_days, anonymous_daily_quota, default_user_daily_quota, web_search_agent_enable, web_search_default_engine, web_search_api_key, web_search_result_limit, web_search_domain_filter, task_trace_enabled, task_trace_default_on, task_trace_admin_only, task_trace_env, task_trace_retention_days, task_trace_max_events, task_trace_idle_timeout_ms } = c.req.valid('json');
+    const {
+      registration_enabled,
+      brand_text,
+      sse_heartbeat_interval_ms,
+      provider_max_idle_ms,
+      provider_timeout_ms,
+      provider_initial_grace_ms,
+      provider_reasoning_idle_ms,
+      reasoning_keepalive_interval_ms,
+      stream_delta_flush_interval_ms,
+      stream_reasoning_flush_interval_ms,
+      stream_keepalive_interval_ms,
+      usage_emit,
+      usage_provider_only,
+      reasoning_enabled,
+      reasoning_default_expand,
+      reasoning_save_to_db,
+      reasoning_tags_mode,
+      reasoning_custom_tags,
+      stream_delta_chunk_size,
+      openai_reasoning_effort,
+      ollama_think,
+      chat_image_retention_days,
+      site_base_url,
+      anonymous_retention_days,
+      anonymous_daily_quota,
+      default_user_daily_quota,
+      web_search_agent_enable,
+      web_search_default_engine,
+      web_search_api_key,
+      web_search_result_limit,
+      web_search_domain_filter,
+      task_trace_enabled,
+      task_trace_default_on,
+      task_trace_admin_only,
+      task_trace_env,
+      task_trace_retention_days,
+      task_trace_max_events,
+      task_trace_idle_timeout_ms,
+    } = c.req.valid('json');
     let anonymousQuotaUpdated = false;
     let taskTraceSettingsUpdated = false;
 
@@ -322,6 +367,30 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         where: { key: 'reasoning_keepalive_interval_ms' },
         update: { value: String(reasoning_keepalive_interval_ms) },
         create: { key: 'reasoning_keepalive_interval_ms', value: String(reasoning_keepalive_interval_ms) },
+      });
+    }
+
+    if (typeof stream_delta_flush_interval_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'stream_delta_flush_interval_ms' },
+        update: { value: String(stream_delta_flush_interval_ms) },
+        create: { key: 'stream_delta_flush_interval_ms', value: String(stream_delta_flush_interval_ms) },
+      });
+    }
+
+    if (typeof stream_reasoning_flush_interval_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'stream_reasoning_flush_interval_ms' },
+        update: { value: String(stream_reasoning_flush_interval_ms) },
+        create: { key: 'stream_reasoning_flush_interval_ms', value: String(stream_reasoning_flush_interval_ms) },
+      });
+    }
+
+    if (typeof stream_keepalive_interval_ms === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'stream_keepalive_interval_ms' },
+        update: { value: String(stream_keepalive_interval_ms) },
+        create: { key: 'stream_keepalive_interval_ms', value: String(stream_keepalive_interval_ms) },
       });
     }
 

@@ -181,6 +181,9 @@ export interface SystemSettings {
   reasoningTagsMode?: 'default' | 'custom' | 'off';
   reasoningCustomTags?: string;
   streamDeltaChunkSize?: number;
+  streamDeltaFlushIntervalMs?: number;
+  streamReasoningFlushIntervalMs?: number;
+  streamKeepaliveIntervalMs?: number;
   // 供应商参数（可选）
   openaiReasoningEffort?: 'low' | 'medium' | 'high' | '' | 'unset';
   ollamaThink?: boolean;

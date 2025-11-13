@@ -497,6 +497,22 @@ export const registerChatStreamRoutes = (router: Hono) => {
         return null;
       })();
       const STREAM_DELTA_CHUNK_SIZE = Math.max(1, parseInt(sysMap.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'));
+      const streamDeltaFlushIntervalMs = Math.max(
+        0,
+        parseInt(sysMap.stream_delta_flush_interval_ms || process.env.STREAM_DELTA_FLUSH_INTERVAL_MS || '0'),
+      );
+      const streamReasoningFlushIntervalMs = Math.max(
+        0,
+        parseInt(
+          sysMap.stream_reasoning_flush_interval_ms ||
+            process.env.STREAM_REASONING_FLUSH_INTERVAL_MS ||
+            `${streamDeltaFlushIntervalMs}`,
+        ),
+      );
+      const streamKeepaliveIntervalMs = Math.max(
+        0,
+        parseInt(sysMap.stream_keepalive_interval_ms || process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'),
+      );
       const providerInitialGraceMs = Math.max(0, parseInt(sysMap.provider_initial_grace_ms || process.env.PROVIDER_INITIAL_GRACE_MS || '120000'));
       const providerReasoningIdleMs = Math.max(0, parseInt(sysMap.provider_reasoning_idle_ms || process.env.PROVIDER_REASONING_IDLE_MS || '300000'));
       const reasoningKeepaliveIntervalMs = Math.max(0, parseInt(sysMap.reasoning_keepalive_interval_ms || process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0'));
@@ -701,6 +717,74 @@ export const registerChatStreamRoutes = (router: Hono) => {
           clearTimeout(timeout);
         }
       };
+      type NonStreamFallbackResult = {
+        text: string;
+        reasoning?: string | null;
+        usage?: ProviderChatCompletionResponse['usage'] | null;
+      };
+
+      const performNonStreamingFallback = async (): Promise<NonStreamFallbackResult | null> => {
+        const nonStreamData = { ...requestData, stream: false } as any;
+        const ac = new AbortController();
+        const fallbackTimeout = setTimeout(() => ac.abort(new Error('provider non-stream timeout')), providerTimeoutMs);
+        try {
+          let url = '';
+          let body: any = { ...nonStreamData };
+          let headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            ...authHeader,
+            ...extraHeaders,
+          };
+          if (provider === 'openai') {
+            body = convertOpenAIReasoningPayload(body);
+            url = `${baseUrl}/chat/completions`;
+          } else if (provider === 'azure_openai') {
+            const v = session.connection?.azureApiVersion || '2024-02-15-preview';
+            body = convertOpenAIReasoningPayload(body);
+            url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`;
+          } else if (provider === 'ollama') {
+            url = `${baseUrl}/api/chat`;
+            body = {
+              model: session.modelRawId,
+              messages: messagesPayload.map((m: any) => ({
+                role: m.role,
+                content: typeof m.content === 'string' ? m.content : m.content?.map((p: any) => p.text).filter(Boolean).join('\n'),
+              })),
+              stream: false,
+            };
+          } else {
+            url = `${baseUrl}`;
+          }
+
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: ac.signal,
+          });
+          if (!resp.ok) return null;
+          const json = await resp.json() as ProviderChatCompletionResponse;
+          const text = (json?.choices?.[0]?.message?.content || '').trim();
+          if (!text) return null;
+          const reasoningText =
+            json?.choices?.[0]?.message?.reasoning_content ||
+            (json as any)?.message?.thinking ||
+            null;
+          return {
+            text,
+            reasoning: reasoningText,
+            usage: json?.usage ?? null,
+          };
+        } catch (error) {
+          log.warn('Non-stream fallback request failed', {
+            sessionId,
+            error: error instanceof Error ? error.message : error,
+          });
+          return null;
+        } finally {
+          clearTimeout(fallbackTimeout);
+        }
+      };
 
         const stream = new ReadableStream({
           async start(controller) {
@@ -758,6 +842,96 @@ export const registerChatStreamRoutes = (router: Hono) => {
               });
             }
             return delivered;
+          };
+          const completeWithNonStreamingFallback = async (
+            origin: 'stream_error' | 'reasoning_only',
+          ): Promise<boolean> => {
+            const fallbackResult = await performNonStreamingFallback();
+            const trimmedText = fallbackResult?.text?.trim();
+            if (!fallbackResult || !trimmedText) {
+              return false;
+            }
+
+            const appendReasoning = (value?: string | null) => {
+              if (!value) return;
+              const trimmed = value.trim();
+              if (!trimmed) return;
+              reasoningBuffer = reasoningBuffer
+                ? `${reasoningBuffer}${reasoningBuffer.endsWith('\n') ? '' : '\n'}${trimmed}`
+                : trimmed;
+            };
+            appendReasoning(fallbackResult.reasoning);
+
+            if (fallbackResult.usage) {
+              providerUsageSeen = true;
+              providerUsageSnapshot = fallbackResult.usage;
+              traceMetadataExtras.finalUsage = fallbackResult.usage;
+              traceMetadataExtras.providerUsageSource = 'fallback_non_stream';
+              const usageEvent = `data: ${JSON.stringify({ type: 'usage', usage: fallbackResult.usage })}\n\n`;
+              safeEnqueue(usageEvent);
+            }
+
+            aiResponseContent = trimmedText;
+            const contentEvent = `data: ${JSON.stringify({ type: 'content', content: trimmedText })}\n\n`;
+            safeEnqueue(contentEvent);
+            const completeEvent = `data: ${JSON.stringify({ type: 'complete', origin: 'fallback' })}\n\n`;
+            safeEnqueue(completeEvent);
+            traceStatus = 'completed';
+            traceRecorder.log('stream:fallback_non_stream', { origin });
+
+            await persistAssistantProgress({ force: true, status: 'done' });
+            const updateData: any = {
+              content: trimmedText,
+              streamStatus: 'done',
+              streamCursor: trimmedText.length,
+              streamReasoning:
+                REASONING_ENABLED &&
+                (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
+                reasoningBuffer.trim()
+                  ? reasoningBuffer.trim()
+                  : null,
+              streamError: null,
+            };
+            if (
+              REASONING_ENABLED &&
+              (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
+              reasoningBuffer.trim()
+            ) {
+              updateData.reasoning = reasoningBuffer.trim();
+              updateData.reasoningDurationSeconds = reasoningDurationSeconds;
+            } else {
+              updateData.reasoning = null;
+              updateData.reasoningDurationSeconds = null;
+            }
+
+            if (assistantMessageId) {
+              try {
+                await prisma.message.update({
+                  where: { id: assistantMessageId },
+                  data: updateData,
+                });
+              } catch {
+                const recoveredId = await upsertAssistantMessageByClientId({
+                  sessionId,
+                  clientMessageId: assistantClientMessageId,
+                  data: updateData,
+                });
+                if (recoveredId) assistantMessageId = recoveredId;
+              }
+            } else {
+              const saved = await prisma.message.create({
+                data: {
+                  sessionId,
+                  role: 'assistant',
+                  content: trimmedText,
+                  clientMessageId: assistantClientMessageId,
+                  ...updateData,
+                },
+              });
+              assistantMessageId = saved?.id ?? assistantMessageId;
+            }
+
+            return true;
           };
 
           const handleAbort = () => {
@@ -843,34 +1017,57 @@ export const registerChatStreamRoutes = (router: Hono) => {
             let traceIdleWarned = false;
             let pendingVisibleDelta = '';
             let visibleDeltaCount = 0;
+            let lastVisibleFlushAt = Date.now();
             let pendingReasoningDelta = '';
             let reasoningDeltaCount = 0;
+            let lastReasoningFlushAt = Date.now();
             let providerDone = false;
 
             const flushVisibleDelta = async (force = false) => {
               if (!pendingVisibleDelta) return;
-              if (!force && visibleDeltaCount < STREAM_DELTA_CHUNK_SIZE) return;
+              const elapsed = Date.now() - lastVisibleFlushAt;
+              if (
+                !force &&
+                visibleDeltaCount < STREAM_DELTA_CHUNK_SIZE &&
+                (!streamDeltaFlushIntervalMs || elapsed < streamDeltaFlushIntervalMs)
+              ) {
+                return;
+              }
               aiResponseContent += pendingVisibleDelta;
               const contentEvent = `data: ${JSON.stringify({ type: 'content', content: pendingVisibleDelta })}\n\n`;
               safeEnqueue(contentEvent);
               await persistAssistantProgress();
               pendingVisibleDelta = '';
               visibleDeltaCount = 0;
+              lastVisibleFlushAt = Date.now();
             };
 
             const flushReasoningDelta = async (force = false) => {
               if (!pendingReasoningDelta) return;
-              if (!force && reasoningDeltaCount < STREAM_DELTA_CHUNK_SIZE) return;
+              const elapsed = Date.now() - lastReasoningFlushAt;
+              if (
+                !force &&
+                reasoningDeltaCount < STREAM_DELTA_CHUNK_SIZE &&
+                (!streamReasoningFlushIntervalMs || elapsed < streamReasoningFlushIntervalMs)
+              ) {
+                return;
+              }
               reasoningBuffer += pendingReasoningDelta;
               const reasoningEvent = `data: ${JSON.stringify({ type: 'reasoning', content: pendingReasoningDelta })}\n\n`;
               safeEnqueue(reasoningEvent);
               await persistAssistantProgress({ includeReasoning: true });
               pendingReasoningDelta = '';
               reasoningDeltaCount = 0;
+              lastReasoningFlushAt = Date.now();
             };
 
             const emitReasoningKeepalive = (idleMs: number) => {
               const keepaliveEvent = `data: ${JSON.stringify({ type: 'reasoning', keepalive: true, idle_ms: idleMs })}\n\n`;
+              safeEnqueue(keepaliveEvent);
+              lastKeepaliveSentAt = Date.now();
+            };
+            const emitStreamKeepalive = (idleMs: number) => {
+              const keepaliveEvent = `data: ${JSON.stringify({ type: 'keepalive', idle_ms: idleMs })}\n\n`;
               safeEnqueue(keepaliveEvent);
               lastKeepaliveSentAt = Date.now();
             };
@@ -903,6 +1100,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   void flushReasoningDelta(true).catch(() => {});
                   void flushVisibleDelta(true).catch(() => {});
                   emitReasoningKeepalive(idleMs);
+                } catch {}
+              } else if (streamKeepaliveIntervalMs > 0 && idleMs > streamKeepaliveIntervalMs && now - lastKeepaliveSentAt > streamKeepaliveIntervalMs) {
+                try {
+                  emitStreamKeepalive(idleMs);
                 } catch {}
               }
             }, Math.max(1000, heartbeatIntervalMs));
@@ -1026,6 +1227,30 @@ export const registerChatStreamRoutes = (router: Hono) => {
             stopHeartbeat();
             bindProviderController(null);
             currentProviderController = null;
+            if (!aiResponseContent.trim()) {
+              const handledByFallback = await completeWithNonStreamingFallback('reasoning_only');
+              if (handledByFallback) {
+                return;
+              }
+              if (reasoningBuffer.trim()) {
+                const errorMessage = '模型仅返回推理，未生成正文';
+                const errorEvent = `data: ${JSON.stringify({
+                  type: 'error',
+                  error: errorMessage,
+                })}\n\n`;
+                safeEnqueue(errorEvent);
+                traceStatus = 'error';
+                traceErrorMessage = errorMessage;
+                traceRecorder.log('stream:error', { message: errorMessage, reason: 'reasoning_only_without_content' });
+                await persistAssistantProgress({
+                  force: true,
+                  includeReasoning: true,
+                  status: 'error',
+                  errorMessage,
+                });
+                return;
+              }
+            }
 
             // 推理结束事件（若产生过推理）
             if (REASONING_ENABLED && !reasoningDoneEmitted && reasoningBuffer.trim()) {
@@ -1201,80 +1426,9 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
             // 若尚未输出内容，尝试降级为非流式一次
             if (!aiResponseContent) {
-              try {
-                const nonStreamData = { ...requestData, stream: false } as any;
-                const ac = new AbortController();
-                const timeout = setTimeout(() => ac.abort(new Error('provider non-stream timeout')), providerTimeoutMs);
-                // 构造非流式请求 URL/Body 与上面一致
-                let url = ''
-                let body: any = { ...nonStreamData }
-                let headers: Record<string, string> = {
-                  'Content-Type': 'application/json',
-                  ...authHeader,
-                  ...extraHeaders,
-                }
-                if (provider === 'openai') {
-                  url = `${baseUrl}/chat/completions`
-                } else if (provider === 'azure_openai') {
-                  const v = session.connection?.azureApiVersion || '2024-02-15-preview'
-                  url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`
-                } else if (provider === 'ollama') {
-                  url = `${baseUrl}/api/chat`
-                  body = {
-                    model: session.modelRawId,
-                    messages: messagesPayload.map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : m.content?.map((p: any) => p.text).filter(Boolean).join('\n') })),
-                    stream: false,
-                  }
-                }
-                const resp = await fetch(url, {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify(body),
-                  signal: ac.signal,
-                });
-                clearTimeout(timeout);
-                if (resp.ok) {
-                  const j = await resp.json() as ProviderChatCompletionResponse;
-                  const text = j?.choices?.[0]?.message?.content || '';
-                  if (text) {
-                    aiResponseContent = text;
-                    safeEnqueue(`data: ${JSON.stringify({ type: 'content', content: text })}\n\n`);
-                    safeEnqueue(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
-                    await persistAssistantProgress(true);
-                    if (assistantMessageId) {
-                      try {
-                    await prisma.message.update({
-                      where: { id: assistantMessageId },
-                      data: {
-                        content: text,
-                        streamStatus: 'done',
-                        streamCursor: text.length,
-                        streamReasoning: reasoningBuffer.trim().length > 0 ? reasoningBuffer : null,
-                        streamError: null,
-                      },
-                    });
-                      } catch {}
-                    } else {
-                      try {
-                        const saved = await prisma.message.create({
-                          data: {
-                            sessionId,
-                            role: 'assistant',
-                            content: text,
-                            clientMessageId: assistantClientMessageId,
-                            streamStatus: 'done',
-                            streamCursor: text.length,
-                            streamReasoning: reasoningBuffer.trim().length > 0 ? reasoningBuffer : null,
-                          },
-                        });
-                        assistantMessageId = saved?.id ?? assistantMessageId;
-                      } catch {}
-                    }
-                    return;
-                  }
-                }
-              } catch (e) {
-                // ignore
+              const handledByFallback = await completeWithNonStreamingFallback('stream_error');
+              if (handledByFallback) {
+                return;
               }
             }
 
