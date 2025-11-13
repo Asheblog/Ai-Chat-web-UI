@@ -411,6 +411,14 @@ export const registerChatStreamRoutes = (router: Hono) => {
         assistantClientMessageId,
       });
 
+      const streamLogBase = () => ({
+        sessionId,
+        actor: actor.identifier,
+        clientMessageId,
+        assistantMessageId,
+        assistantClientMessageId,
+      });
+
       const bindProviderController = (controller: AbortController | null) => {
         updateStreamMetaController(activeStreamMeta, controller);
       };
@@ -712,39 +720,52 @@ export const registerChatStreamRoutes = (router: Hono) => {
           let lastChunkTimestamp = Date.now();
           let idleWarned = false;
 
-          const markDownstreamClosed = () => {
+          const markDownstreamClosed = (reason?: string, meta?: Record<string, unknown>) => {
             if (downstreamAborted) return;
             downstreamAborted = true;
             stopHeartbeat();
+            const payload = {
+              ...streamLogBase(),
+              reason: reason ?? 'unknown',
+              ...(meta ?? {}),
+            };
+            log.warn('SSE downstream closed', payload);
+            traceRecorder.log('stream:downstream_closed', payload);
           };
 
           const safeEnqueue = (payload: string) => {
             if (!downstreamAborted && requestSignal?.aborted) {
-              markDownstreamClosed();
+              markDownstreamClosed('request-signal-aborted');
             }
-            if (downstreamAborted) {
-              return false;
-            }
-            try {
-              controller.enqueue(encoder.encode(payload));
-              const summary = summarizeSseLine(payload.trim());
-              if (summary) {
-                traceRecorder.log('sse:dispatch', summary);
+
+            let delivered = false;
+            if (!downstreamAborted) {
+              try {
+                controller.enqueue(encoder.encode(payload));
+                delivered = true;
+              } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                markDownstreamClosed('enqueue-error', { error: errorMessage });
               }
-              return true;
-            } catch (err) {
-              markDownstreamClosed();
-              console.warn('SSE downstream closed, stop streaming', err);
-              return false;
             }
+
+            const summary = summarizeSseLine(payload.trim());
+            if (summary) {
+              traceRecorder.log('sse:dispatch', {
+                ...summary,
+                delivered,
+                downstreamClosed: downstreamAborted,
+              });
+            }
+            return delivered;
           };
 
           const handleAbort = () => {
-            markDownstreamClosed();
+            markDownstreamClosed('request-signal-abort');
           };
           if (requestSignal) {
             if (requestSignal.aborted) {
-              markDownstreamClosed();
+              markDownstreamClosed('request-already-aborted');
             } else {
               requestSignal.addEventListener('abort', handleAbort);
             }
