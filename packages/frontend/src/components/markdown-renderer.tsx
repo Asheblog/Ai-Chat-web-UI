@@ -1,15 +1,18 @@
 'use client'
 
-import { memo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Button } from '@/components/ui/button'
 import { Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ensureKatexResources } from '@/lib/load-katex'
+
+const mathLikePattern =
+  /(\$\$?|\\\[|\\\(|\\begin\{|\\end\{|\\ce\{|\\pu\{|\\frac|\\sum|\\int|\\sqrt|\\alpha|\\beta|\\gamma)/i
 
 interface MarkdownRendererProps {
   html?: string | null
@@ -25,6 +28,38 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   isRendering,
 }: MarkdownRendererProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [rehypeKatexPlugin, setRehypeKatexPlugin] = useState<any>(null)
+  const trimmedHtml = html?.trim() ?? ''
+
+  const needsMathSupport = useMemo(() => {
+    if (trimmedHtml && /katex/i.test(trimmedHtml)) {
+      return true
+    }
+    if (!fallback) {
+      return false
+    }
+    return mathLikePattern.test(fallback)
+  }, [trimmedHtml, fallback])
+
+  useEffect(() => {
+    let active = true
+    if (!needsMathSupport || rehypeKatexPlugin) {
+      return () => {
+        active = false
+      }
+    }
+    ensureKatexResources()
+      .then(({ rehypeKatex }) => {
+        if (!active || !rehypeKatex) return
+        setRehypeKatexPlugin(() => rehypeKatex)
+      })
+      .catch((error) => {
+        console.error('Failed to load KaTeX resources', error)
+      })
+    return () => {
+      active = false
+    }
+  }, [needsMathSupport, rehypeKatexPlugin])
 
   const handleCopyCode = async (code: string) => {
     try {
@@ -65,7 +100,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeKatex]}
+          rehypePlugins={rehypeKatexPlugin ? [rehypeKatexPlugin] : undefined}
           components={{
             pre({ children }: any) {
               return <pre style={{ display: 'contents' }}>{children}</pre>
@@ -228,7 +263,6 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     )
   }
 
-  const trimmedHtml = html?.trim() ?? ''
   if (trimmedHtml.length === 0) {
     return renderFallback()
   }
