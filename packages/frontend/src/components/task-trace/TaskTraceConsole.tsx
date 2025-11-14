@@ -4,6 +4,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { useAuthStore } from "@/store/auth-store"
 import { apiClient } from "@/lib/api"
 import type { TaskTraceSummary, TaskTraceEventRecord } from "@/types"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -141,43 +142,45 @@ export function TaskTraceConsole() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 rounded-2xl border bg-card p-4 md:flex-row md:items-end">
-        <div className="flex-1 space-y-1">
-          <label className="text-sm text-muted-foreground" htmlFor="sessionFilter">会话 ID</label>
-          <Input id="sessionFilter" value={sessionFilter} onChange={(e) => setSessionFilter(e.target.value)} placeholder="输入数字 ID" />
+      <Card className="px-5 py-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="flex-1 space-y-1">
+            <label className="text-sm text-muted-foreground" htmlFor="sessionFilter">会话 ID</label>
+            <Input id="sessionFilter" value={sessionFilter} onChange={(e) => setSessionFilter(e.target.value)} placeholder="输入数字 ID" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <label className="text-sm text-muted-foreground" htmlFor="keyword">关键字</label>
+            <Input id="keyword" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="支持 Actor / Client ID" />
+          </div>
+          <div className="w-full space-y-1 md:w-48">
+            <label className="text-sm text-muted-foreground">状态</label>
+            <Select value={status || undefined} onValueChange={(value) => setStatus(value === '__all' ? '' : value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="全部" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all">全部</SelectItem>
+                <SelectItem value="running">进行中</SelectItem>
+                <SelectItem value="completed">已完成</SelectItem>
+                <SelectItem value="error">失败</SelectItem>
+                <SelectItem value="cancelled">已取消</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2">
+            <Button className="flex items-center gap-2" onClick={() => { setPage(1); fetchList() }}>
+              <Search className="h-4 w-4" />
+              搜索
+            </Button>
+            <Button variant="outline" onClick={() => { setKeyword(''); setSessionFilter(''); setStatus(''); setPage(1) }}>
+              重置
+            </Button>
+          </div>
         </div>
-        <div className="flex-1 space-y-1">
-          <label className="text-sm text-muted-foreground" htmlFor="keyword">关键字</label>
-          <Input id="keyword" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="支持 Actor / Client ID" />
-        </div>
-        <div className="w-full space-y-1 md:w-48">
-          <label className="text-sm text-muted-foreground">状态</label>
-          <Select value={status || undefined} onValueChange={(value) => setStatus(value === '__all' ? '' : value)}>
-            <SelectTrigger>
-              <SelectValue placeholder="全部" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">全部</SelectItem>
-              <SelectItem value="running">进行中</SelectItem>
-              <SelectItem value="completed">已完成</SelectItem>
-              <SelectItem value="error">失败</SelectItem>
-              <SelectItem value="cancelled">已取消</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex gap-2">
-          <Button className="flex items-center gap-2" onClick={() => { setPage(1); fetchList() }}>
-            <Search className="h-4 w-4" />
-            搜索
-          </Button>
-          <Button variant="outline" onClick={() => { setKeyword(''); setSessionFilter(''); setStatus(''); setPage(1) }}>
-            重置
-          </Button>
-        </div>
-      </div>
+      </Card>
 
-      <div className="rounded-2xl border bg-card">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="rounded-2xl border bg-card transition-all hover:shadow-sm">
+        <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
             <div className="text-sm font-semibold">追踪记录</div>
             <div className="text-xs text-muted-foreground">共 {total} 条</div>
@@ -186,74 +189,77 @@ export function TaskTraceConsole() {
             <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>会话</TableHead>
-              <TableHead>Actor</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>开始时间</TableHead>
-              <TableHead>耗时</TableHead>
-              <TableHead>事件数</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && (
+
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={8}>
-                  <Skeleton className="h-10 w-full" />
-                </TableCell>
+                <TableHead>ID</TableHead>
+                <TableHead>会话</TableHead>
+                <TableHead>Actor</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>开始时间</TableHead>
+                <TableHead>耗时</TableHead>
+                <TableHead>事件数</TableHead>
+                <TableHead className="text-right">操作</TableHead>
               </TableRow>
-            )}
-            {!loading && items.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
-                  暂无记录
-                </TableCell>
-              </TableRow>
-            )}
-            {items.map((item) => (
-              <TableRow key={item.id} className="cursor-pointer hover:bg-muted/40" onClick={() => handleOpenDetail(item)}>
-                <TableCell>{item.id}</TableCell>
-                <TableCell>{item.sessionId ?? '-'}</TableCell>
-                <TableCell className="max-w-[180px] truncate text-muted-foreground">{item.actor}</TableCell>
-                <TableCell>
-                  <Badge variant={item.status === 'completed' ? 'default' : item.status === 'error' ? 'destructive' : 'secondary'}>
-                    {statusLabels[item.status] ?? item.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{formatDateTime(item.startedAt)}</TableCell>
-                <TableCell>{formatDuration(item.durationMs)}</TableCell>
-                <TableCell>{item.eventCount}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="sm" className="text-primary" onClick={(e) => { e.stopPropagation(); handleExport(item.id) }}>
-                      <Download className="mr-1 h-4 w-4" />导出
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive"
-                      disabled={deletingId === item.id}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(item)
-                      }}
-                    >
-                      <Trash2 className="mr-1 h-4 w-4" />
-                      {deletingId === item.id ? '删除中' : '删除'}
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={8}>
+                    <Skeleton className="h-10 w-full" />
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading && items.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                    暂无记录
+                  </TableCell>
+                </TableRow>
+              )}
+              {items.map((item) => (
+                <TableRow key={item.id} className="cursor-pointer hover:bg-muted/40" onClick={() => handleOpenDetail(item)}>
+                  <TableCell>{item.id}</TableCell>
+                  <TableCell>{item.sessionId ?? '-'}</TableCell>
+                  <TableCell className="max-w-[180px] truncate text-muted-foreground">{item.actor}</TableCell>
+                  <TableCell>
+                    <Badge variant={item.status === 'completed' ? 'default' : item.status === 'error' ? 'destructive' : 'secondary'}>
+                      {statusLabels[item.status] ?? item.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{formatDateTime(item.startedAt)}</TableCell>
+                  <TableCell>{formatDuration(item.durationMs)}</TableCell>
+                  <TableCell>{item.eventCount}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" className="text-primary" onClick={(e) => { e.stopPropagation(); handleExport(item.id) }}>
+                        <Download className="mr-1 h-4 w-4" />导出
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        disabled={deletingId === item.id}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(item)
+                        }}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        {deletingId === item.id ? '删除中' : '删除'}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between border-t px-5 py-4 text-sm text-muted-foreground">
             <div>第 {page} / {totalPages} 页</div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((prev) => Math.max(1, prev - 1))}>上一页</Button>
@@ -264,40 +270,62 @@ export function TaskTraceConsole() {
       </div>
 
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) { setSelected(null); setDetail(null) } }}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>追踪详情 #{selected?.id}</DialogTitle>
           </DialogHeader>
           {detailLoading && <Skeleton className="h-24 w-full" />}
           {!detailLoading && detail && (
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3 text-sm">
-                <div><span className="text-muted-foreground">会话：</span>{detail.trace.sessionId ?? '-'}</div>
-                <div><span className="text-muted-foreground">Actor：</span>{detail.trace.actor}</div>
-                <div><span className="text-muted-foreground">状态：</span>{statusLabels[detail.trace.status] ?? detail.trace.status}</div>
-                <div><span className="text-muted-foreground">开始：</span>{formatDateTime(detail.trace.startedAt)}</div>
-                <div><span className="text-muted-foreground">结束：</span>{formatDateTime(detail.trace.endedAt)}</div>
-                <div><span className="text-muted-foreground">耗时：</span>{formatDuration(detail.trace.durationMs)}</div>
+            <div className="space-y-4 overflow-y-auto">
+              <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                <div className="truncate">
+                  <span className="text-muted-foreground">会话：</span>
+                  <span>{detail.trace.sessionId ?? '-'}</span>
+                </div>
+                <div className="truncate">
+                  <span className="text-muted-foreground">Actor：</span>
+                  <span className="text-xs">{detail.trace.actor}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">状态：</span>
+                  <Badge variant={detail.trace.status === 'completed' ? 'default' : detail.trace.status === 'error' ? 'destructive' : 'secondary'} className="ml-2">
+                    {statusLabels[detail.trace.status] ?? detail.trace.status}
+                  </Badge>
+                </div>
+                <div className="truncate">
+                  <span className="text-muted-foreground">开始：</span>
+                  <span className="text-xs">{formatDateTime(detail.trace.startedAt)}</span>
+                </div>
+                <div className="truncate">
+                  <span className="text-muted-foreground">结束：</span>
+                  <span className="text-xs">{formatDateTime(detail.trace.endedAt)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">耗时：</span>
+                  <span>{formatDuration(detail.trace.durationMs)}</span>
+                </div>
               </div>
-              <div>
-                <div className="text-sm font-semibold mb-2">事件时间线</div>
-                <ScrollArea className="h-[360px] rounded-xl border p-3">
+              <div className="space-y-2">
+                <div className="text-sm font-semibold">事件时间线</div>
+                <ScrollArea className="h-[50vh] rounded-xl border bg-muted/30 p-4">
                   <div className="space-y-3">
                     {detail.events.map((evt) => (
-                      <div key={evt.id} className="rounded-lg border p-3">
+                      <div key={evt.id} className="rounded-lg border bg-card p-3 transition-all hover:shadow-sm">
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>#{evt.seq}</span>
+                          <span className="font-mono">#{evt.seq}</span>
                           <span>{formatDateTime(evt.timestamp)}</span>
                         </div>
                         <div className="mt-1 font-semibold text-sm">{evt.eventType}</div>
-                        <pre className="mt-2 overflow-x-auto rounded bg-muted/50 p-2 text-xs">{JSON.stringify(evt.payload ?? {}, null, 2)}</pre>
+                        <pre className="mt-2 overflow-x-auto rounded bg-muted/50 p-2 text-xs font-mono">{JSON.stringify(evt.payload ?? {}, null, 2)}</pre>
                       </div>
                     ))}
                     {detail.events.length === 0 && (
-                      <div className="text-sm text-muted-foreground">暂无事件</div>
+                      <div className="py-8 text-center text-sm text-muted-foreground">暂无事件</div>
                     )}
                     {detail.truncated && (
-                      <div className="text-xs text-muted-foreground">仅显示前 2000 条事件，其余请使用导出</div>
+                      <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+                        ⚠️ 仅显示前 2000 条事件，完整记录请使用导出功能
+                      </div>
                     )}
                   </div>
                 </ScrollArea>
