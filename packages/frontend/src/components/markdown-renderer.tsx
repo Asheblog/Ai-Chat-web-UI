@@ -10,9 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ensureKatexResources } from '@/lib/load-katex'
-
-const mathLikePattern =
-  /(\$\$?|\\\[|\\\(|\\begin\{|\\end\{|\\ce\{|\\pu\{|\\frac|\\sum|\\int|\\sqrt|\\alpha|\\beta|\\gamma)/i
+import { wrapBareMathBlocks, containsBareMath } from '@/lib/math-normalizer'
 
 interface MarkdownRendererProps {
   html?: string | null
@@ -30,6 +28,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [rehypeKatexPlugin, setRehypeKatexPlugin] = useState<any>(null)
   const trimmedHtml = html?.trim() ?? ''
+  const normalizedFallback = useMemo(() => wrapBareMathBlocks(fallback || ''), [fallback])
 
   const needsMathSupport = useMemo(() => {
     if (trimmedHtml && /katex/i.test(trimmedHtml)) {
@@ -38,7 +37,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     if (!fallback) {
       return false
     }
-    return mathLikePattern.test(fallback)
+    if (containsBareMath(fallback)) return true
+    return /(\$\$?|\\\[|\\\(|\\begin\{|\\end\{|\\ce\{|\\pu\{|\\frac|\\sum|\\int|\\sqrt|\\alpha|\\beta|\\gamma)/i.test(
+      fallback
+    )
   }, [trimmedHtml, fallback])
 
   useEffect(() => {
@@ -257,7 +259,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             },
           }}
         >
-          {fallback}
+          {normalizedFallback}
         </ReactMarkdown>
       </div>
     )

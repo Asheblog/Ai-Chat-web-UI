@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
@@ -38,6 +38,7 @@ export function SystemGeneralPage() {
     user: state.user,
   }))
   const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
+  const [allowRegistrationDraft, setAllowRegistrationDraft] = useState(true)
   const [brandTextDraft, setBrandTextDraft] = useState("")
   const [, setIsIMEComposing] = useState(false)
   const [retentionDraft, setRetentionDraft] = useState('30')
@@ -47,24 +48,23 @@ export function SystemGeneralPage() {
   const [anonymousRetentionDraft, setAnonymousRetentionDraft] = useState('15')
   const [syncingAnonymousQuota, setSyncingAnonymousQuota] = useState(false)
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
-  useEffect(() => {
-    if (systemSettings) {
-      setBrandTextDraft(systemSettings.brandText || '')
-      setRetentionDraft(String(systemSettings.chatImageRetentionDays ?? 30))
-      setSiteBaseDraft(systemSettings.siteBaseUrl || '')
-      if (typeof systemSettings.anonymousDailyQuota === 'number') {
-        setAnonymousQuotaDraft(String(systemSettings.anonymousDailyQuota))
-      }
-      if (typeof systemSettings.defaultUserDailyQuota === 'number') {
-        setDefaultUserQuotaDraft(String(systemSettings.defaultUserDailyQuota))
-      }
-      if (typeof systemSettings.anonymousRetentionDays === 'number') {
-        setAnonymousRetentionDraft(String(systemSettings.anonymousRetentionDays))
-      }
-    }
+  const resetDrafts = useCallback(() => {
+    if (!systemSettings) return
+    setAllowRegistrationDraft(Boolean(systemSettings.allowRegistration))
+    setBrandTextDraft(systemSettings.brandText || '')
+    setRetentionDraft(String(systemSettings.chatImageRetentionDays ?? 30))
+    setSiteBaseDraft(systemSettings.siteBaseUrl || '')
+    setAnonymousQuotaDraft(String(systemSettings.anonymousDailyQuota ?? 20))
+    setDefaultUserQuotaDraft(String(systemSettings.defaultUserDailyQuota ?? 200))
+    setAnonymousRetentionDraft(String(systemSettings.anonymousRetentionDays ?? 15))
   }, [systemSettings])
+
+  useEffect(() => {
+    resetDrafts()
+  }, [resetDrafts])
 
   if (isLoading && !systemSettings) {
     return (
@@ -115,6 +115,70 @@ export function SystemGeneralPage() {
     }
   }
 
+  const normalizedInitials = systemSettings
+    ? {
+        allowRegistration: Boolean(systemSettings.allowRegistration),
+        anonymousQuota: String(systemSettings.anonymousDailyQuota ?? 20),
+        defaultUserQuota: String(systemSettings.defaultUserDailyQuota ?? 200),
+        brandText: systemSettings.brandText || '',
+        siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
+        chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
+        anonymousRetentionDays: String(systemSettings.anonymousRetentionDays ?? 15),
+      }
+    : null
+
+  const fieldChanged =
+    normalizedInitials != null &&
+    (
+      allowRegistrationDraft !== normalizedInitials.allowRegistration ||
+      anonymousQuotaDraft !== normalizedInitials.anonymousQuota ||
+      defaultUserQuotaDraft !== normalizedInitials.defaultUserQuota ||
+      brandTextDraft !== normalizedInitials.brandText ||
+      siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
+      retentionDraft !== normalizedInitials.chatImageRetentionDays ||
+      anonymousRetentionDraft !== normalizedInitials.anonymousRetentionDays
+    )
+
+  const handleSaveGeneral = async () => {
+    if (!systemSettings || !isAdmin || saving) return
+    const parsedAnonymousQuota = Number.parseInt(anonymousQuotaDraft, 10)
+    if (Number.isNaN(parsedAnonymousQuota) || parsedAnonymousQuota < 0) {
+      toast({ title: '输入无效', description: '匿名访客额度需为不小于 0 的整数', variant: 'destructive' })
+      return
+    }
+    const parsedDefaultQuota = Number.parseInt(defaultUserQuotaDraft, 10)
+    if (Number.isNaN(parsedDefaultQuota) || parsedDefaultQuota < 0) {
+      toast({ title: '输入无效', description: '注册用户额度需为不小于 0 的整数', variant: 'destructive' })
+      return
+    }
+    const parsedRetention = Number.parseInt(retentionDraft, 10)
+    if (Number.isNaN(parsedRetention) || parsedRetention < 0) {
+      toast({ title: '输入无效', description: '图片保留天数需为不小于 0 的整数', variant: 'destructive' })
+      return
+    }
+    const parsedAnonymousRetention = Number.parseInt(anonymousRetentionDraft, 10)
+    if (Number.isNaN(parsedAnonymousRetention) || parsedAnonymousRetention < 0 || parsedAnonymousRetention > 15) {
+      toast({ title: '输入无效', description: '匿名访客数据保留天数需在 0 到 15 之间', variant: 'destructive' })
+      return
+    }
+
+    setSaving(true)
+    try {
+      await updateSystemSettings({
+        allowRegistration: allowRegistrationDraft,
+        anonymousDailyQuota: parsedAnonymousQuota,
+        defaultUserDailyQuota: parsedDefaultQuota,
+        brandText: brandTextDraft,
+        siteBaseUrl: siteBaseDraft.trim(),
+        chatImageRetentionDays: parsedRetention,
+        anonymousRetentionDays: parsedAnonymousRetention,
+      })
+      toast({ title: '已保存通用配置' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
 
@@ -139,13 +203,9 @@ export function SystemGeneralPage() {
         >
           <Switch
             id="allowRegistration"
-            checked={systemSettings.allowRegistration}
+            checked={allowRegistrationDraft}
             disabled={!isAdmin}
-            onCheckedChange={async (checked) => {
-              if (!isAdmin) return
-              await updateSystemSettings({ allowRegistration: checked })
-              toast({ title: '已保存' })
-            }}
+            onCheckedChange={(checked) => setAllowRegistrationDraft(Boolean(checked))}
           />
         </SettingRow>
 
@@ -165,25 +225,6 @@ export function SystemGeneralPage() {
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground whitespace-nowrap">次/天</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (!isAdmin) return
-                const parsed = Number.parseInt(anonymousQuotaDraft, 10)
-                if (Number.isNaN(parsed) || parsed < 0) {
-                  toast({ title: '输入无效', description: '请输入不小于 0 的整数', variant: 'destructive' })
-                  return
-                }
-                await updateSystemSettings({ anonymousDailyQuota: parsed })
-                toast({ title: '已保存' })
-              }}
-              disabled={!isAdmin || (() => {
-                const parsed = Number.parseInt(anonymousQuotaDraft, 10)
-                if (Number.isNaN(parsed)) return true
-                return parsed === (systemSettings.anonymousDailyQuota ?? 20)
-              })()}
-            >保存</Button>
             <AlertDialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
               <AlertDialogTrigger asChild>
                 <Button
@@ -226,25 +267,6 @@ export function SystemGeneralPage() {
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground whitespace-nowrap">次/天</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (!isAdmin) return
-                const parsed = Number.parseInt(defaultUserQuotaDraft, 10)
-                if (Number.isNaN(parsed) || parsed < 0) {
-                  toast({ title: '输入无效', description: '请输入不小于 0 的整数', variant: 'destructive' })
-                  return
-                }
-                await updateSystemSettings({ defaultUserDailyQuota: parsed })
-                toast({ title: '已保存' })
-              }}
-              disabled={!isAdmin || (() => {
-                const parsed = Number.parseInt(defaultUserQuotaDraft, 10)
-                if (Number.isNaN(parsed)) return true
-                return parsed === (systemSettings.defaultUserDailyQuota ?? 200)
-              })()}
-            >保存</Button>
           </div>
         </SettingRow>
       </div>
@@ -276,16 +298,6 @@ export function SystemGeneralPage() {
               className="w-full sm:w-[320px]"
               disabled={!isAdmin}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async()=>{
-                if (!isAdmin) return
-                await updateSystemSettings({ brandText: brandTextDraft })
-                toast({ title: '已保存' })
-              }}
-              disabled={!isAdmin || brandTextDraft === (systemSettings.brandText||'')}
-            >保存</Button>
           </div>
         </SettingRow>
 
@@ -304,16 +316,6 @@ export function SystemGeneralPage() {
               className="w-full sm:w-[320px]"
               disabled={!isAdmin}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (!isAdmin) return
-                await updateSystemSettings({ siteBaseUrl: siteBaseDraft.trim() })
-                toast({ title: '已保存', description: '新域名将用于生成图片链接' })
-              }}
-              disabled={!isAdmin || siteBaseDraft.trim() === (systemSettings.siteBaseUrl || '').trim()}
-            >保存</Button>
             <Button
               size="sm"
               variant="secondary"
@@ -369,25 +371,6 @@ export function SystemGeneralPage() {
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground">天</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (!isAdmin) return
-                const parsed = Number.parseInt(retentionDraft, 10)
-                if (Number.isNaN(parsed) || parsed < 0) {
-                  toast({ title: '输入无效', description: '请输入不小于 0 的整数', variant: 'destructive' })
-                  return
-                }
-                await updateSystemSettings({ chatImageRetentionDays: parsed })
-                toast({ title: '已保存' })
-              }}
-              disabled={!isAdmin || (() => {
-                const parsed = Number.parseInt(retentionDraft, 10)
-                if (Number.isNaN(parsed) || parsed < 0) return true
-                return parsed === (systemSettings.chatImageRetentionDays ?? 30)
-              })()}
-            >保存</Button>
           </div>
         </SettingRow>
 
@@ -408,27 +391,24 @@ export function SystemGeneralPage() {
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground">天</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (!isAdmin) return
-                const parsed = Number.parseInt(anonymousRetentionDraft, 10)
-                if (Number.isNaN(parsed) || parsed < 0 || parsed > 15) {
-                  toast({ title: '输入无效', description: '请输入 0 到 15 之间的整数', variant: 'destructive' })
-                  return
-                }
-                await updateSystemSettings({ anonymousRetentionDays: parsed })
-                toast({ title: '已保存' })
-              }}
-              disabled={!isAdmin || (() => {
-                const parsed = Number.parseInt(anonymousRetentionDraft, 10)
-                if (Number.isNaN(parsed)) return true
-                return parsed === (systemSettings.anonymousRetentionDays ?? 15)
-              })()}
-            >保存</Button>
           </div>
         </SettingRow>
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:justify-end">
+        <Button
+          variant="outline"
+          onClick={resetDrafts}
+          disabled={!fieldChanged || saving || !systemSettings}
+        >
+          还原更改
+        </Button>
+        <Button
+          onClick={handleSaveGeneral}
+          disabled={!fieldChanged || !isAdmin || saving || !systemSettings}
+        >
+          {saving ? '保存中...' : '保存通用设置'}
+        </Button>
       </div>
     </div>
   )
