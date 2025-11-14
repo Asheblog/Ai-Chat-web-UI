@@ -4,11 +4,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Card, CardTitle, CardDescription } from "@/components/ui/card"
+import { CardTitle, CardDescription } from "@/components/ui/card"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { Zap } from "lucide-react"
+import { SettingRow } from "../components/setting-row"
 
 export function SystemNetworkPage() {
   const {
@@ -125,97 +126,85 @@ export function SystemNetworkPage() {
             <CardDescription>管理网络连接的时间参数</CardDescription>
           </div>
         </div>
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">SSE 心跳间隔</CardTitle>
-            <CardDescription>推荐 10–15 秒，当前约 {msToSec(hbMs)}</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
-            <Input id="sseHeartbeat" type="number" value={hbMs} onChange={(e)=>setHbMs(Number(e.target.value||0))} className="w-28 text-right" />
+        <SettingRow
+          title="SSE 心跳间隔"
+          description={`推荐 10–15 秒，当前约 ${msToSec(hbMs)}`}
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input id="sseHeartbeat" type="number" value={hbMs} onChange={(e)=>setHbMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setHbMs(15000)}>重置</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">上游最大空闲</CardTitle>
-            <CardDescription>建议 ≥ 心跳间隔，当前约 {msToSec(idleMs)}</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
-            <Input id="providerMaxIdle" type="number" value={idleMs} onChange={(e)=>setIdleMs(Number(e.target.value||0))} className="w-28 text-right" />
+        <SettingRow
+          title="上游最大空闲"
+          description={`建议 ≥ 心跳间隔，当前约 ${msToSec(idleMs)}`}
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input id="providerMaxIdle" type="number" value={idleMs} onChange={(e)=>setIdleMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setIdleMs(60000)}>重置</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">推理初始宽限</CardTitle>
-            <CardDescription>等待模型首帧前的最大空闲，当前约 {msToSec(initialGraceMs)}</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
-            <Input id="initialGrace" type="number" value={initialGraceMs} onChange={(e)=>setInitialGraceMs(Number(e.target.value||0))} className="w-28 text-right" />
+        <SettingRow
+          title="推理初始宽限"
+          description={`等待模型首帧前的最大空闲，当前约 ${msToSec(initialGraceMs)}`}
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input id="initialGrace" type="number" value={initialGraceMs} onChange={(e)=>setInitialGraceMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setInitialGraceMs(120000)}>重置</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">推理阶段空闲上限</CardTitle>
-            <CardDescription>收到首帧后思考阶段的最长静默，当前约 {msToSec(reasoningIdleMs)}</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
-            <Input id="reasoningIdle" type="number" value={reasoningIdleMs} onChange={(e)=>setReasoningIdleMs(Number(e.target.value||0))} className="w-28 text-right" />
+        <SettingRow
+          title="推理阶段空闲上限"
+          description={`收到首帧后思考阶段的最长静默，当前约 ${msToSec(reasoningIdleMs)}`}
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input id="reasoningIdle" type="number" value={reasoningIdleMs} onChange={(e)=>setReasoningIdleMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setReasoningIdleMs(300000)}>重置</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">推理保活提示间隔</CardTitle>
-            <CardDescription>大于 0 时在推理静默期间周期性发送&ldquo;思考中&rdquo;事件</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
-            <Input id="keepalive" type="number" value={keepaliveMs} onChange={(e)=>setKeepaliveMs(Number(e.target.value||0))} className="w-28 text-right" />
+        <SettingRow
+          title="推理保活提示间隔"
+          description='大于 0 时在推理静默期间周期性发送“思考中”事件'
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input id="keepalive" type="number" value={keepaliveMs} onChange={(e)=>setKeepaliveMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setKeepaliveMs(0)}>禁用</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">上游总体超时</CardTitle>
-            <CardDescription>整个请求的最长等待时间，当前约 {msToSec(timeoutMs)}</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
-            <Input id="providerTimeout" type="number" value={timeoutMs} onChange={(e)=>setTimeoutMs(Number(e.target.value||0))} className="w-28 text-right" />
+        <SettingRow
+          title="上游总体超时"
+          description={`整个请求的最长等待时间，当前约 ${msToSec(timeoutMs)}`}
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input id="providerTimeout" type="number" value={timeoutMs} onChange={(e)=>setTimeoutMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setTimeoutMs(300000)}>重置</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">推送用量（usage）</CardTitle>
-            <CardDescription>开启后在流式过程中向前端发送 usage 事件</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto">
-            <Switch checked={usageEmit} onCheckedChange={(v)=>setUsageEmit(!!v)} />
-          </div>
-        </Card>
+        <SettingRow
+          title="推送用量（usage）"
+          description="开启后在流式过程中向前端发送 usage 事件"
+        >
+          <Switch checked={usageEmit} onCheckedChange={(v)=>setUsageEmit(!!v)} />
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <CardTitle className="text-lg">仅透传厂商 usage</CardTitle>
-            <CardDescription>关闭时会在结束前估算 completion/total</CardDescription>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto">
-            <Switch checked={usageProviderOnly} onCheckedChange={(v)=>setUsageProviderOnly(!!v)} disabled={!usageEmit} />
-          </div>
-        </Card>
+        <SettingRow
+          title="仅透传厂商 usage"
+          description="关闭时会在结束前估算 completion/total"
+        >
+          <Switch checked={usageProviderOnly} onCheckedChange={(v)=>setUsageProviderOnly(!!v)} disabled={!usageEmit} />
+        </SettingRow>
 
         <div className="flex justify-end pt-4">
           <Button onClick={save} disabled={!hbValid||!idleValid||!toutValid||!initialValid||!reasoningIdleValid||!keepaliveValid||!changed}>保存设置</Button>

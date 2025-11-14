@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardTitle, CardDescription } from "@/components/ui/card"
+import { CardTitle, CardDescription } from "@/components/ui/card"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { apiClient } from "@/lib/api"
 import { useAuthStore } from "@/store/auth-store"
 import { UserPlus, Palette, Clock } from "lucide-react"
+import { SettingRow } from "../components/setting-row"
 
 export function SystemGeneralPage() {
   const {
@@ -127,41 +128,40 @@ export function SystemGeneralPage() {
           </div>
         </div>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <div className="font-medium flex items-center gap-2">
+        <SettingRow
+          title={(
+            <div className="flex items-center gap-2">
               开放用户注册
               <Badge variant="secondary">推荐</Badge>
             </div>
-            <div className="text-sm text-muted-foreground mt-1.5">允许新用户自行注册账号，关闭后只能由管理员手动创建用户</div>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto">
-            <Switch
-              id="allowRegistration"
-              checked={systemSettings.allowRegistration}
-              disabled={!isAdmin}
-              onCheckedChange={async (checked) => {
-                if (!isAdmin) return
-                await updateSystemSettings({ allowRegistration: checked })
-                toast({ title: '已保存' })
-              }}
-            />
-          </div>
-        </Card>
+          )}
+          description="允许新用户自行注册账号，关闭后只能由管理员手动创建用户"
+        >
+          <Switch
+            id="allowRegistration"
+            checked={systemSettings.allowRegistration}
+            disabled={!isAdmin}
+            onCheckedChange={async (checked) => {
+              if (!isAdmin) return
+              await updateSystemSettings({ allowRegistration: checked })
+              toast({ title: '已保存' })
+            }}
+          />
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <div className="font-medium">匿名访客每日额度</div>
-            <div className="text-sm text-muted-foreground mt-1.5">未登录用户每天可使用的对话次数（设置为 0 表示禁用匿名访问）</div>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+        <SettingRow
+          title="匿名访客每日额度"
+          description="未登录用户每天可使用的对话次数（设置为 0 表示禁用匿名访问）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="anonymousDailyQuota"
               type="number"
               min={0}
               value={anonymousQuotaDraft}
               onChange={(e) => setAnonymousQuotaDraft(e.target.value)}
-              className="w-20 text-right"
+              className="w-full sm:w-28 text-right"
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground whitespace-nowrap">次/天</span>
@@ -208,21 +208,21 @@ export function SystemGeneralPage() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <div className="font-medium">注册用户默认每日额度</div>
-            <div className="text-sm text-muted-foreground mt-1.5">新注册用户的初始每日对话额度，可在用户管理中单独调整</div>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+        <SettingRow
+          title="注册用户默认每日额度"
+          description="新注册用户的初始每日对话额度，可在用户管理中单独调整"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="defaultUserDailyQuota"
               type="number"
               min={0}
               value={defaultUserQuotaDraft}
               onChange={(e) => setDefaultUserQuotaDraft(e.target.value)}
-              className="w-20 text-right"
+              className="w-full sm:w-28 text-right"
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground whitespace-nowrap">次/天</span>
@@ -246,7 +246,7 @@ export function SystemGeneralPage() {
               })()}
             >保存</Button>
           </div>
-        </Card>
+        </SettingRow>
       </div>
 
       {/* 品牌定制区块 */}
@@ -259,12 +259,12 @@ export function SystemGeneralPage() {
           </div>
         </div>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <div className="font-medium">文字 LOGO</div>
-            <div className="text-sm text-muted-foreground mt-1.5">显示在页面顶部的品牌名称，最多 40 个字符</div>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+        <SettingRow
+          title="文字 LOGO"
+          description="显示在页面顶部的品牌名称，最多 40 个字符"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="brandText"
               maxLength={40}
@@ -273,7 +273,7 @@ export function SystemGeneralPage() {
               onChange={(e)=>setBrandTextDraft(e.target.value)}
               onCompositionStart={()=>setIsIMEComposing(true)}
               onCompositionEnd={()=>setIsIMEComposing(false)}
-              className="w-60"
+              className="w-full sm:w-[320px]"
               disabled={!isAdmin}
             />
             <Button
@@ -287,21 +287,21 @@ export function SystemGeneralPage() {
               disabled={!isAdmin || brandTextDraft === (systemSettings.brandText||'')}
             >保存</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <div className="font-medium">图片访问域名</div>
-            <div className="text-sm text-muted-foreground mt-1.5">用户上传图片的公开访问地址前缀（需包含协议）</div>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+        <SettingRow
+          title="图片访问域名"
+          description="用户上传图片的公开访问地址前缀（需包含协议）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="chatImageDomain"
               type="text"
               value={siteBaseDraft}
               onChange={(e) => setSiteBaseDraft(e.target.value)}
               placeholder="例如：https://chat.example.com"
-              className="w-80"
+              className="w-full sm:w-[320px]"
               disabled={!isAdmin}
             />
             <Button
@@ -333,7 +333,7 @@ export function SystemGeneralPage() {
               disabled={!isAdmin}
             >刷新</Button>
           </div>
-        </Card>
+        </SettingRow>
       </div>
 
       {/* 数据保留策略区块 */}
@@ -346,15 +346,17 @@ export function SystemGeneralPage() {
           </div>
         </div>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <div className="font-medium flex items-center gap-2">
+        <SettingRow
+          title={(
+            <div className="flex items-center gap-2">
               聊天图片保留天数
               <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">存储优化</Badge>
             </div>
-            <div className="text-sm text-muted-foreground mt-1.5">超过此天数的聊天图片将被自动清理（设置为 0 表示永久保留）</div>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+          )}
+          description="超过此天数的聊天图片将被自动清理（设置为 0 表示永久保留）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="chatImageRetentionDays"
               type="number"
@@ -363,7 +365,7 @@ export function SystemGeneralPage() {
               max={3650}
               value={retentionDraft}
               onChange={(e) => setRetentionDraft(e.target.value)}
-              className="w-20 text-right"
+              className="w-full sm:w-28 text-right"
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground">天</span>
@@ -387,14 +389,14 @@ export function SystemGeneralPage() {
               })()}
             >保存</Button>
           </div>
-        </Card>
+        </SettingRow>
 
-        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="flex-1">
-            <div className="font-medium">匿名访客数据保留天数</div>
-            <div className="text-sm text-muted-foreground mt-1.5">匿名用户的聊天记录保留时长（设置为 0 表示永久保留）</div>
-          </div>
-          <div className="shrink-0 self-start sm:self-auto flex items-center gap-2">
+        <SettingRow
+          title="匿名访客数据保留天数"
+          description="匿名用户的聊天记录保留时长（设置为 0 表示永久保留）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="anonymousRetentionDays"
               type="number"
@@ -402,7 +404,7 @@ export function SystemGeneralPage() {
               max={15}
               value={anonymousRetentionDraft}
               onChange={(e) => setAnonymousRetentionDraft(e.target.value)}
-              className="w-20 text-right"
+              className="w-full sm:w-28 text-right"
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground">天</span>
@@ -426,7 +428,7 @@ export function SystemGeneralPage() {
               })()}
             >保存</Button>
           </div>
-        </Card>
+        </SettingRow>
       </div>
     </div>
   )

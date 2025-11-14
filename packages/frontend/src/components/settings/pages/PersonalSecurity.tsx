@@ -1,12 +1,12 @@
 "use client"
 import { useState } from "react"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { Card, CardTitle, CardDescription } from "@/components/ui/card"
+import { CardTitle, CardDescription } from "@/components/ui/card"
 import { apiClient } from "@/lib/api"
 import { Lock, Check } from "lucide-react"
+import { SettingRow } from "../components/setting-row"
 
 export function PersonalSecurityPage() {
   const { toast } = useToast()
@@ -56,8 +56,11 @@ export function PersonalSecurityPage() {
         </div>
 
         <form onSubmit={onSubmit} className="space-y-3">
-          <Card className="px-4 py-4 sm:px-5 sm:py-5">
-            <Label htmlFor="currentPassword" className="font-medium">当前密码</Label>
+          <SettingRow
+            title="当前密码"
+            description="用于验证当前身份，请输入正在使用的密码"
+            align="start"
+          >
             <Input
               id="currentPassword"
               type="password"
@@ -65,13 +68,16 @@ export function PersonalSecurityPage() {
               onChange={(e)=>setCurrentPassword(e.target.value)}
               required
               disabled={submitting}
-              className="mt-2"
               placeholder="请输入当前密码"
+              className="w-full sm:w-[320px]"
             />
-          </Card>
+          </SettingRow>
 
-          <Card className="px-4 py-4 sm:px-5 sm:py-5">
-            <Label htmlFor="newPassword" className="font-medium">新密码</Label>
+          <SettingRow
+            title="新密码"
+            description="至少 8 位，并包含字母与数字"
+            align="start"
+          >
             <Input
               id="newPassword"
               type="password"
@@ -79,14 +85,16 @@ export function PersonalSecurityPage() {
               onChange={(e)=>setNewPassword(e.target.value)}
               required
               disabled={submitting}
-              className="mt-2"
               placeholder="至少8位，且包含字母与数字"
+              className="w-full sm:w-[320px]"
             />
-            <p className="text-xs text-muted-foreground mt-2">密码强度要求：至少 8 位，包含字母与数字</p>
-          </Card>
+          </SettingRow>
 
-          <Card className="px-4 py-4 sm:px-5 sm:py-5">
-            <Label htmlFor="confirmPassword" className="font-medium">确认新密码</Label>
+          <SettingRow
+            title="确认新密码"
+            description="再次输入，确保没有输入错误"
+            align="start"
+          >
             <Input
               id="confirmPassword"
               type="password"
@@ -94,10 +102,10 @@ export function PersonalSecurityPage() {
               onChange={(e)=>setConfirmPassword(e.target.value)}
               required
               disabled={submitting}
-              className="mt-2"
               placeholder="再次输入新密码"
+              className="w-full sm:w-[320px]"
             />
-          </Card>
+          </SettingRow>
 
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 px-4 py-3 rounded-lg border border-destructive/20">
@@ -105,8 +113,11 @@ export function PersonalSecurityPage() {
             </div>
           )}
 
-          <div className="pt-2 flex justify-end">
-            <Button type="submit" disabled={submitting} className="w-32">
+          <SettingRow
+            title="保存更改"
+            description="提交后立即更新您的账号密码"
+          >
+            <Button type="submit" disabled={submitting} className="w-full sm:w-[200px] justify-center">
               {submitting ? (
                 '保存中...'
               ) : (
@@ -116,7 +127,7 @@ export function PersonalSecurityPage() {
                 </>
               )}
             </Button>
-          </div>
+          </SettingRow>
         </form>
       </div>
     </div>
