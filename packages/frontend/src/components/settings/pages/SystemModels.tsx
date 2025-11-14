@@ -1,5 +1,5 @@
 "use client"
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,16 +65,38 @@ export function SystemModelsPage() {
     handleExport,
     handleImportFile,
     handleToggleCapability,
-    maxTokenInputs,
-    setMaxTokenInput,
     handleSaveMaxTokens,
     resetModel,
     handleBatchReset,
     hasCapability,
     recommendTag,
   } = useSystemModels()
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
+  const [tokenDialogModel, setTokenDialogModel] = useState<any | null>(null)
+  const [tokenDialogValue, setTokenDialogValue] = useState('')
+
+  const openTokenDialog = (model: any) => {
+    setTokenDialogModel(model)
+    setTokenDialogValue(typeof model.maxOutputTokens === 'number' ? String(model.maxOutputTokens) : '')
+    setTokenDialogOpen(true)
+  }
+
+  const closeTokenDialog = () => {
+    setTokenDialogOpen(false)
+    setTokenDialogModel(null)
+    setTokenDialogValue('')
+  }
+
+  const dialogSaving = tokenDialogModel ? savingKey === modelKey(tokenDialogModel) : false
+
+  const handleTokenDialogSave = async () => {
+    if (!tokenDialogModel) return
+    await handleSaveMaxTokens(tokenDialogModel, tokenDialogValue)
+    closeTokenDialog()
+  }
   return (
-    <div className="space-y-6 min-w-0">
+    <>
+      <div className="space-y-6 min-w-0">
 
       {/* 搜索筛选区块 */}
       <div className="space-y-4">
@@ -291,7 +314,6 @@ export function SystemModelsPage() {
                         </TableHead>
                       )
                     })}
-                    <TableHead className="text-center w-[180px]">生成 Tokens</TableHead>
                     <TableHead className="text-center w-[56px]">手动</TableHead>
                     <TableHead className="text-center w-[64px]">操作</TableHead>
                   </TableRow>
@@ -300,11 +322,6 @@ export function SystemModelsPage() {
                   {list.map((m:any)=>{
                     const key = modelKey(m)
                     const isBusy = savingKey === key
-                    const currentMax =
-                      typeof m.maxOutputTokens === 'number' ? String(m.maxOutputTokens) : ''
-                    const draftMaxTokens = Object.prototype.hasOwnProperty.call(maxTokenInputs, key)
-                      ? maxTokenInputs[key]
-                      : currentMax
                     return (
                       <TableRow key={key} className="hover:bg-muted/30 transition-colors">
                         <TableCell className="text-center">
@@ -347,40 +364,6 @@ export function SystemModelsPage() {
                             </TableCell>
                           )
                         })}
-                        <TableCell className="py-3 px-3">
-                          <div className="flex flex-col gap-2 items-end">
-                            <Input
-                              type="number"
-                              min={1}
-                              max={256000}
-                              placeholder="默认"
-                              value={draftMaxTokens}
-                              onChange={(e)=>setMaxTokenInput(key, e.target.value)}
-                              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-32 text-right"
-                              disabled={isBusy}
-                            />
-                            <div className="flex items-center justify-end gap-2 w-full">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusy}
-                                onClick={()=>handleSaveMaxTokens(m, draftMaxTokens)}
-                                className="h-7"
-                              >
-                                保存
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={isBusy}
-                                onClick={()=>handleSaveMaxTokens(m, '')}
-                                className="h-7 text-xs"
-                              >
-                                默认
-                              </Button>
-                            </div>
-                          </div>
-                        </TableCell>
                         <TableCell className="py-3 px-3 text-center">
                           {m.overridden ? (
                             <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs">
@@ -391,20 +374,30 @@ export function SystemModelsPage() {
                           )}
                         </TableCell>
                         <TableCell className="py-3 px-3 text-center">
-                          {m.overridden ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={()=>resetModel(m)}
-                              className="h-7 text-xs"
-                              disabled={isBusy}
-                            >
-                              <RotateCcw className="w-3 h-3 mr-1" />
-                              重置
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-full"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                                <span className="sr-only">更多操作</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem onClick={()=>openTokenDialog(m)}>
+                                修改生成 Tokens
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                disabled={!m.overridden || isBusy}
+                                onClick={()=>resetModel(m)}
+                              >
+                                重置覆写
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     )
@@ -415,6 +408,51 @@ export function SystemModelsPage() {
           )}
         </Card>
       </div>
-    </div>
+      </div>
+
+      <Dialog
+        open={tokenDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (dialogSaving) return
+            closeTokenDialog()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>修改生成 Tokens</DialogTitle>
+            <DialogDescription>
+              {tokenDialogModel?.name || tokenDialogModel?.id || '未选择模型'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="number"
+              min={1}
+              max={256000}
+              placeholder="32000"
+              value={tokenDialogValue}
+              onChange={(e)=>setTokenDialogValue(e.target.value)}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={dialogSaving}
+            />
+            <p className="text-sm text-muted-foreground">留空表示恢复供应商默认（通常 32K）。允许 1~256000。</p>
+          </div>
+          <DialogFooter className="pt-4">
+            <Button
+              variant="outline"
+              onClick={closeTokenDialog}
+              disabled={dialogSaving}
+            >
+              取消
+            </Button>
+            <Button onClick={handleTokenDialogSave} disabled={dialogSaving}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

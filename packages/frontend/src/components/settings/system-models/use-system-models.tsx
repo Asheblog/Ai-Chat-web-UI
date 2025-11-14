@@ -1,5 +1,5 @@
 "use client"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { useModelsStore } from "@/store/models-store"
 import {
@@ -51,7 +51,6 @@ export function useSystemModels() {
   const [refreshing, setRefreshing] = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
-  const [maxTokenInputs, setMaxTokenInputs] = useState<Record<string, string>>({})
 
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase()
@@ -76,19 +75,6 @@ export function useSystemModels() {
 
     return filtered
   }, [models, q, onlyOverridden, sortField, sortOrder])
-
-  useEffect(() => {
-    setMaxTokenInputs((prev) => {
-      const next: Record<string, string> = {}
-      const keys = new Set(list.map((model: any) => keyOf(model)))
-      keys.forEach((key) => {
-        if (Object.prototype.hasOwnProperty.call(prev, key)) {
-          next[key] = prev[key]
-        }
-      })
-      return next
-    })
-  }, [list])
 
   const toggleSort = (field: ModelSortField) => {
     if (sortField === field) {
@@ -134,18 +120,6 @@ export function useSystemModels() {
     }
   }
 
-  const setMaxTokenInput = useCallback((key: string, value: string) => {
-    setMaxTokenInputs((prev) => ({ ...prev, [key]: value }))
-  }, [])
-
-  const resetMaxTokenInput = useCallback((key: string) => {
-    setMaxTokenInputs((prev) => {
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
-  }, [])
-
   const handleSaveMaxTokens = async (model: any, rawValue: string) => {
     const key = modelKey(model)
     const trimmed = rawValue.trim()
@@ -168,7 +142,6 @@ export function useSystemModels() {
       setSavingKey(key)
       await updateModelCapabilities(model.connectionId, model.rawId, { maxOutputTokens: payloadValue })
       await fetchAll()
-      resetMaxTokenInput(key)
       toast({
         title: '生成 Tokens 已更新',
         description: payloadValue ? `已限制为 ${payloadValue} tokens` : '已恢复供应商默认值',
@@ -362,8 +335,6 @@ export function useSystemModels() {
     handleExport,
     handleImportFile,
     handleToggleCapability,
-    maxTokenInputs,
-    setMaxTokenInput,
     handleSaveMaxTokens,
     resetModel,
     handleBatchReset,
