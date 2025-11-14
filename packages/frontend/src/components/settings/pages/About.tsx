@@ -3,7 +3,7 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 
-// 关于页面：展示版本信息与更新日志（v1.4.3）
+// 关于页面：展示版本信息与更新日志（v1.4.4）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.4.3</Badge>
+          <Badge variant="secondary" className="font-mono">v1.4.4</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
@@ -52,44 +52,44 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c330d44</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6ec04d4</span>
               <span className="text-muted-foreground leading-relaxed">
-                恢复流过程中会同步助手消息 ID 与元数据，修复占位记录补写时的错乱问题，保证消息接续。
+                设置页面统一采用 SettingRow 组件，卡片布局与排版同步更新，移动端间距也重新适配。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b420f14</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7352f4c</span>
               <span className="text-muted-foreground leading-relaxed">
-                流取消 API 换成 options 入口，支持 messageId/clientMessageId 双轨定位并清理陈旧占位，提高中止可靠性。
+                侧边栏的 Token 使用量展示改为紧凑视图并接入格式化逻辑，读数更清晰且支持实时刷新。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c78f9e3</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f46cd0c</span>
               <span className="text-muted-foreground leading-relaxed">
-                进度持久化若发现消息缺失会自动重建并写入当前状态，避免长流过程中断导致的提示丢失。
+                新增 Task Trace 日志页，允许按任务过滤诊断数据，辅助排查长链路执行的瓶颈与异常。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f511376</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7261b50</span>
               <span className="text-muted-foreground leading-relaxed">
-                Chat 界面抽象为 view model 与子组件，消息视窗、配额提示、错误条幅分离，逻辑从主组件剥离。
+                Streaming 管线支持自定义 flush 间隔与 keepalive 心跳，在弱网下维持连接并降低服务端负载。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bb56399</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">dd1970c</span>
               <span className="text-muted-foreground leading-relaxed">
-                工具栏、输入面板、图片预览与文本框自适应拆成独立模块并新增 hook，开发模式禁用冗余 DB 日志。
+                SSE 流错误处理与日志串联收敛到统一模块，异常回退与重试路径更明确，便于定位问题。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e43c0ca</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">46b9afb</span>
               <span className="text-muted-foreground leading-relaxed">
-                Stream 状态迁移脚本调整默认值与冗余语句，清理数据库变更流程。
+                动态品牌渲染管线支持服务端回退与多方案渲染，确保白标站点在生产环境稳定展示。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-11 推送变更摘要
+            以上为 2025-11-14 推送变更摘要
           </p>
         </Card>
       </div>
