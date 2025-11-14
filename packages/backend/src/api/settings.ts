@@ -5,7 +5,7 @@ import { prisma } from '../db';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Actor } from '../types';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
-import { getQuotaPolicy, invalidateQuotaPolicyCache } from '../utils/system-settings';
+import { getQuotaPolicy, invalidateQuotaPolicyCache, invalidateReasoningMaxOutputTokensDefaultCache } from '../utils/system-settings';
 import { invalidateTaskTraceConfig } from '../utils/task-trace';
 import { syncSharedAnonymousQuota } from '../utils/quota';
 
@@ -79,6 +79,7 @@ const systemSettingSchema = z.object({
   stream_delta_chunk_size: z.number().int().min(1).max(100).optional(),
   // 供应商参数（可选）
   openai_reasoning_effort: z.enum(['low', 'medium', 'high', 'unset']).optional(),
+  reasoning_max_output_tokens_default: z.number().int().min(1).max(256000).nullable().optional(),
   ollama_think: z.boolean().optional(),
   chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
   site_base_url: z.string().max(200).optional(),
@@ -161,6 +162,14 @@ settings.get('/system', actorMiddleware, async (c) => {
       stream_reasoning_flush_interval_ms: parseInt(settingsObj.stream_reasoning_flush_interval_ms || process.env.STREAM_REASONING_FLUSH_INTERVAL_MS || '0'),
       stream_keepalive_interval_ms: parseInt(settingsObj.stream_keepalive_interval_ms || process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'),
       openai_reasoning_effort: (settingsObj.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || ''),
+      reasoning_max_output_tokens_default: (() => {
+        const raw = settingsObj.reasoning_max_output_tokens_default ?? process.env.REASONING_MAX_OUTPUT_TOKENS_DEFAULT ?? '32000';
+        const parsed = Number.parseInt(String(raw), 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return Math.min(256000, parsed);
+        }
+        return 32000;
+      })(),
       ollama_think: (settingsObj.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true',
       chat_image_retention_days: (() => {
         const raw = settingsObj.chat_image_retention_days ?? process.env.CHAT_IMAGE_RETENTION_DAYS ?? `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
@@ -281,6 +290,7 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
       reasoning_custom_tags,
       stream_delta_chunk_size,
       openai_reasoning_effort,
+      reasoning_max_output_tokens_default,
       ollama_think,
       chat_image_retention_days,
       site_base_url,
@@ -469,6 +479,18 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
           create: { key: 'openai_reasoning_effort', value: openai_reasoning_effort },
         });
       }
+    }
+
+    if (typeof reasoning_max_output_tokens_default === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'reasoning_max_output_tokens_default' },
+        update: { value: String(reasoning_max_output_tokens_default) },
+        create: { key: 'reasoning_max_output_tokens_default', value: String(reasoning_max_output_tokens_default) },
+      });
+      invalidateReasoningMaxOutputTokensDefaultCache();
+    } else if (reasoning_max_output_tokens_default === null) {
+      await prisma.systemSetting.deleteMany({ where: { key: 'reasoning_max_output_tokens_default' } });
+      invalidateReasoningMaxOutputTokensDefaultCache();
     }
 
     if (typeof ollama_think === 'boolean') {

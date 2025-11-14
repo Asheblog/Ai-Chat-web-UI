@@ -11,7 +11,7 @@ import { cleanupExpiredChatImages } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
 import { serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
-import { resolveContextLimit } from '../../../utils/context-window';
+import { resolveContextLimit, resolveCompletionLimit } from '../../../utils/context-window';
 import { TaskTraceRecorder, shouldEnableTaskTrace, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../../../utils/reasoning-tags';
 import { createAgentWebSearchResponse, buildAgentWebSearchConfig } from '../../chat/agent-web-search-response';
@@ -202,6 +202,12 @@ export const registerChatStreamRoutes = (router: Hono) => {
       // 统计上下文使用量（估算）
       const promptTokens = await Tokenizer.countConversationTokens(truncatedContext);
       const contextRemaining = Math.max(0, contextLimit - promptTokens);
+      const completionLimit = await resolveCompletionLimit({
+        connectionId: session.connectionId,
+        rawModelId: session.modelRawId,
+        provider: session.connection.provider,
+      });
+      const appliedMaxTokens = Math.max(1, Math.min(completionLimit, Math.max(1, contextRemaining)));
 
       // 解密API Key（仅 bearer 时需要）
       const decryptedApiKey = session.connection.authType === 'bearer' && session.connection.apiKey
@@ -268,6 +274,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         stream: true,
         temperature: 0.7,
       };
+      requestData.max_tokens = appliedMaxTokens;
 
       // 供应商参数透传（系统设置控制）
       // 即时与会话/系统优先级：request > session > system/env

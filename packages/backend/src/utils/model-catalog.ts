@@ -10,7 +10,7 @@ import {
   computeCapabilities,
 } from './providers'
 import { BackendLogger as log } from './logger'
-import { guessKnownContextWindow, invalidateContextWindowCache } from './context-window'
+import { guessKnownContextWindow, invalidateCompletionLimitCache, invalidateContextWindowCache } from './context-window'
 import {
   createCapabilityEnvelope,
   mergeCapabilityLayers,
@@ -244,6 +244,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     },
   })
       invalidateContextWindowCache(conn.id, item.rawId)
+      invalidateCompletionLimitCache(conn.id, item.rawId)
       continue
     }
 
@@ -264,6 +265,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
 
     await prisma.modelCatalog.update({ where: { id: row.id }, data: updateData })
     invalidateContextWindowCache(conn.id, item.rawId)
+    invalidateCompletionLimitCache(conn.id, item.rawId)
   }
 
   const staleIds = existing

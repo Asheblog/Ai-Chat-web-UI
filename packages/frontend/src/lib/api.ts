@@ -162,8 +162,26 @@ class ApiClient {
     return response.data
   }
 
-  async updateModelTags(connectionId: number, rawId: string, tags: Array<{ name: string }>, capabilities?: Record<string, boolean>) {
-    const response = await this.client.put<ApiResponse<any>>('/catalog/models/tags', { connectionId, rawId, tags, capabilities })
+  async updateModelTags(
+    connectionId: number,
+    rawId: string,
+    payload: {
+      tags?: Array<{ name: string }>
+      capabilities?: Record<string, boolean>
+      maxOutputTokens?: number | null
+    }
+  ) {
+    const body: Record<string, any> = { connectionId, rawId }
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'tags')) {
+      body.tags = payload.tags
+    }
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'capabilities')) {
+      body.capabilities = payload.capabilities
+    }
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'maxOutputTokens')) {
+      body.max_output_tokens = payload.maxOutputTokens
+    }
+    const response = await this.client.put<ApiResponse<any>>('/catalog/models/tags', body)
     return response.data
   }
 
@@ -550,6 +568,13 @@ class ApiClient {
       return typeof parsed === 'number' ? Math.max(0, parsed) : undefined
     })()
     const openaiReasoningEffort = (settingsRes.data.data?.openai_reasoning_effort ?? '') as any
+    const reasoningMaxOutputTokensDefault = (() => {
+      const parsed = parseOptionalInt(settingsRes.data.data?.reasoning_max_output_tokens_default as any)
+      if (typeof parsed === 'number' && parsed > 0) {
+        return Math.min(256000, parsed)
+      }
+      return undefined
+    })()
     const ollamaThink = Boolean(settingsRes.data.data?.ollama_think ?? false)
     const chatImageRetentionDays = (() => {
       const raw = settingsRes.data.data?.chat_image_retention_days
@@ -652,6 +677,7 @@ class ApiClient {
         streamReasoningFlushIntervalMs,
         streamKeepaliveIntervalMs,
         openaiReasoningEffort,
+        reasoningMaxOutputTokensDefault,
         ollamaThink,
         chatImageRetentionDays,
         siteBaseUrl,
@@ -702,6 +728,13 @@ class ApiClient {
     if (typeof settings.streamReasoningFlushIntervalMs === 'number') payload.stream_reasoning_flush_interval_ms = settings.streamReasoningFlushIntervalMs
     if (typeof settings.streamKeepaliveIntervalMs === 'number') payload.stream_keepalive_interval_ms = settings.streamKeepaliveIntervalMs
     if (typeof settings.openaiReasoningEffort === 'string') payload.openai_reasoning_effort = settings.openaiReasoningEffort
+    if (Object.prototype.hasOwnProperty.call(settings, 'reasoningMaxOutputTokensDefault')) {
+      if (typeof settings.reasoningMaxOutputTokensDefault === 'number') {
+        payload.reasoning_max_output_tokens_default = settings.reasoningMaxOutputTokensDefault
+      } else if (settings.reasoningMaxOutputTokensDefault === null) {
+        payload.reasoning_max_output_tokens_default = null
+      }
+    }
     if (typeof settings.ollamaThink === 'boolean') payload.ollama_think = !!settings.ollamaThink
     if (typeof settings.chatImageRetentionDays === 'number') payload.chat_image_retention_days = settings.chatImageRetentionDays
     if (typeof settings.siteBaseUrl === 'string') payload.site_base_url = settings.siteBaseUrl

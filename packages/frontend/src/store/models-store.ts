@@ -15,6 +15,7 @@ export type ModelItem = {
   capabilitySource?: string
   overridden?: boolean
   contextWindow?: number | null
+  maxOutputTokens?: number | null
 }
 
 interface ModelsStoreState {

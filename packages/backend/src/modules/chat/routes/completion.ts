@@ -6,7 +6,7 @@ import type { Actor, ApiResponse, UsageQuotaSnapshot } from '../../../types';
 import { cleanupExpiredChatImages } from '../../../utils/chat-images';
 import { serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
-import { resolveContextLimit } from '../../../utils/context-window';
+import { resolveContextLimit, resolveCompletionLimit } from '../../../utils/context-window';
 import { Tokenizer } from '../../../utils/tokenizer';
 import { AuthUtils } from '../../../utils/auth';
 import { BackendLogger as log } from '../../../utils/logger';
@@ -123,6 +123,13 @@ export const registerChatCompletionRoutes = (router: Hono) => {
         truncated = [{ role: 'user', content }];
       }
       const promptTokens = await Tokenizer.countConversationTokens(truncated);
+      const contextRemaining = Math.max(0, contextLimit - promptTokens);
+      const completionLimit = await resolveCompletionLimit({
+        connectionId: session.connectionId,
+        rawModelId: session.modelRawId,
+        provider: session.connection.provider,
+      });
+      const appliedMaxTokens = Math.max(1, Math.min(completionLimit, Math.max(1, contextRemaining)));
 
       const decryptedApiKey = session.connection.authType === 'bearer' && session.connection.apiKey
         ? AuthUtils.decryptApiKey(session.connection.apiKey)
@@ -160,6 +167,7 @@ export const registerChatCompletionRoutes = (router: Hono) => {
         : ((sess?.ollamaThink ?? ((settingsMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean);
       if (ren && ref) body.reasoning_effort = ref;
       if (ren && otk) body.think = true;
+      body.max_tokens = appliedMaxTokens;
 
       let url = '';
       if (provider === 'openai') {
@@ -282,7 +290,7 @@ export const registerChatCompletionRoutes = (router: Hono) => {
         completion_tokens: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
         total_tokens: Number(u?.total_tokens ?? 0) || (promptTokens + (Number(u?.completion_tokens ?? 0) || 0)),
         context_limit: contextLimit,
-        context_remaining: Math.max(0, contextLimit - promptTokens),
+        context_remaining: contextRemaining,
       };
 
       let assistantMsgId: number | null = null;

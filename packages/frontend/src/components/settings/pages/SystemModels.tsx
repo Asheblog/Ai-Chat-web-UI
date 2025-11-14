@@ -64,6 +64,9 @@ export function SystemModelsPage() {
     handleExport,
     handleImportFile,
     handleToggleCapability,
+    maxTokenInputs,
+    setMaxTokenInput,
+    handleSaveMaxTokens,
     resetModel,
     handleBatchReset,
     hasCapability,
@@ -288,6 +291,7 @@ export function SystemModelsPage() {
                         </TableHead>
                       )
                     })}
+                    <TableHead className="text-center w-[180px]">生成 Tokens</TableHead>
                     <TableHead className="text-center w-[56px]">手动</TableHead>
                     <TableHead className="text-center w-[64px]">操作</TableHead>
                   </TableRow>
@@ -296,6 +300,11 @@ export function SystemModelsPage() {
                   {list.map((m:any)=>{
                     const key = modelKey(m)
                     const isBusy = savingKey === key
+                    const currentMax =
+                      typeof m.maxOutputTokens === 'number' ? String(m.maxOutputTokens) : ''
+                    const draftMaxTokens = Object.prototype.hasOwnProperty.call(maxTokenInputs, key)
+                      ? maxTokenInputs[key]
+                      : currentMax
                     return (
                       <TableRow key={key} className="hover:bg-muted/30 transition-colors">
                         <TableCell className="text-center">
@@ -338,6 +347,40 @@ export function SystemModelsPage() {
                             </TableCell>
                           )
                         })}
+                        <TableCell className="py-3 px-3">
+                          <div className="flex flex-col gap-2 items-end">
+                            <Input
+                              type="number"
+                              min={1}
+                              max={256000}
+                              placeholder="默认"
+                              value={draftMaxTokens}
+                              onChange={(e)=>setMaxTokenInput(key, e.target.value)}
+                              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-32 text-right"
+                              disabled={isBusy}
+                            />
+                            <div className="flex items-center justify-end gap-2 w-full">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusy}
+                                onClick={()=>handleSaveMaxTokens(m, draftMaxTokens)}
+                                className="h-7"
+                              >
+                                保存
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={isBusy}
+                                onClick={()=>handleSaveMaxTokens(m, '')}
+                                className="h-7 text-xs"
+                              >
+                                默认
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell className="py-3 px-3 text-center">
                           {m.overridden ? (
                             <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs">

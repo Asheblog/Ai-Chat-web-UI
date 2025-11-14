@@ -11,6 +11,7 @@ import {
   hasDefinedCapability,
   serializeCapabilityEnvelope,
 } from '../utils/capabilities'
+import { invalidateCompletionLimitCache } from '../utils/context-window'
 
 const extractContextWindow = (metaJson: string | null | undefined): number | null => {
   if (!metaJson) return null
@@ -28,6 +29,45 @@ const extractContextWindow = (metaJson: string | null | undefined): number | nul
     // ignore malformed payload
   }
   return null
+}
+
+const extractMaxOutputTokens = (metaJson: string | null | undefined): number | null => {
+  if (!metaJson) return null
+  try {
+    const parsed = JSON.parse(metaJson)
+    const candidates = [
+      (parsed as any)?.custom_max_output_tokens,
+      (parsed as any)?.max_output_tokens,
+      (parsed as any)?.max_completion_tokens,
+      (parsed as any)?.completion_limit,
+    ]
+    for (const candidate of candidates) {
+      const num = typeof candidate === 'number' ? candidate : Number.parseInt(String(candidate ?? ''), 10)
+      if (Number.isFinite(num) && num > 0) {
+        return num
+      }
+    }
+  } catch {
+    // ignore invalid metaJson
+  }
+  return null
+}
+
+const clampMaxOutputTokens = (value: number): number => {
+  if (!Number.isFinite(value)) return 0
+  if (value < 1) return 0
+  if (value > 256_000) return 256_000
+  return Math.floor(value)
+}
+
+const parseMetaObject = (metaJson: string | null | undefined): Record<string, any> => {
+  if (!metaJson) return {}
+  try {
+    const parsed = JSON.parse(metaJson)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
 }
 
 const catalog = new Hono()
@@ -82,6 +122,7 @@ catalog.get('/models', async (c) => {
         tags = []
       }
       const contextWindow = extractContextWindow(row.metaJson)
+      const maxOutputTokens = extractMaxOutputTokens(row.metaJson)
       const storedCaps = parseCapabilityEnvelope(row.capabilitiesJson)
       let capabilities = storedCaps?.flags
       let capabilitySource = storedCaps?.source ?? null
@@ -110,6 +151,7 @@ catalog.get('/models', async (c) => {
         capabilitySource: capabilitySource || undefined,
         overridden: row.manualOverride,
         contextWindow,
+        maxOutputTokens,
       }
     })
 
@@ -135,10 +177,29 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     const body = await c.req.json()
     const connectionId = parseInt(String(body.connectionId || '0'))
     const rawId = String(body.rawId || '')
-    const tags: Array<{ name: string }> = Array.isArray(body.tags) ? body.tags : []
+    const hasTagsPayload = Array.isArray(body.tags)
+    const tags: Array<{ name: string }> | undefined = hasTagsPayload ? body.tags : undefined
     const hasCapabilitiesPayload = body.capabilities != null
     const capabilityFlags = hasCapabilitiesPayload ? normalizeCapabilityFlags(body.capabilities) : undefined
     const capabilitiesJson = hasCapabilitiesPayload ? serializeCapabilityEnvelope({ flags: capabilityFlags || {}, source: 'manual' }) : undefined
+    const hasMaxTokensPayload = Object.prototype.hasOwnProperty.call(body, 'max_output_tokens')
+    let maxOutputTokens: number | null | undefined = undefined
+    if (hasMaxTokensPayload) {
+      const rawTokens = body.max_output_tokens
+      if (rawTokens === null) {
+        maxOutputTokens = null
+      } else {
+        const numeric = typeof rawTokens === 'number'
+          ? rawTokens
+          : typeof rawTokens === 'string'
+          ? Number.parseInt(rawTokens.trim(), 10)
+          : NaN
+        if (!Number.isFinite(numeric) || numeric <= 0) {
+          return c.json<ApiResponse>({ success: false, error: 'max_output_tokens must be a positive integer or null' }, 400)
+        }
+        maxOutputTokens = clampMaxOutputTokens(numeric)
+      }
+    }
     if (!connectionId || !rawId) return c.json<ApiResponse>({ success: false, error: 'connectionId/rawId required' }, 400)
 
     const conn = await prisma.connection.findUnique({ where: { id: connectionId } })
@@ -149,6 +210,15 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     const ttlSec = parseInt(process.env.MODELS_TTL_S || '120')
     const exists = await prisma.modelCatalog.findFirst({ where: { connectionId, modelId } })
     const expiresAt = new Date(now.getTime() + ttlSec * 1000)
+    const metaPayload = parseMetaObject(exists?.metaJson)
+    if (hasMaxTokensPayload) {
+      if (maxOutputTokens === null) {
+        delete metaPayload.custom_max_output_tokens
+      } else {
+        metaPayload.custom_max_output_tokens = maxOutputTokens
+      }
+    }
+    const metaJson = JSON.stringify(metaPayload)
     if (!exists) {
       await prisma.modelCatalog.create({
         data: {
@@ -160,6 +230,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
           connectionType: (conn.connectionType as any) || 'external',
           tagsJson: JSON.stringify(tags || []),
           capabilitiesJson: capabilitiesJson || '{}',
+          metaJson,
           manualOverride: true,
           lastFetchedAt: now,
           expiresAt,
@@ -169,8 +240,9 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
       await prisma.modelCatalog.update({
         where: { id: exists.id },
         data: {
-          tagsJson: JSON.stringify(tags || []),
+          ...(hasTagsPayload ? { tagsJson: JSON.stringify(tags || []) } : {}),
           ...(capabilitiesJson ? { capabilitiesJson } : {}),
+          metaJson,
           manualOverride: true,
           lastFetchedAt: now,
           expiresAt,
@@ -178,6 +250,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
       })
     }
 
+    invalidateCompletionLimitCache(connectionId, rawId)
     return c.json<ApiResponse>({ success: true, message: 'Saved' })
   } catch (e) {
     return c.json<ApiResponse>({ success: false, error: 'Failed to save tags' }, 500)

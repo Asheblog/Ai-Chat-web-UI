@@ -23,6 +23,7 @@ const parseIntSafe = (input: string | undefined, fallback: number) => {
 }
 
 let cachedContextLimit: { value: number; expiresAt: number } | null = null
+let cachedReasoningMaxTokens: { value: number; expiresAt: number } | null = null
 
 export const getSystemContextTokenLimit = async (): Promise<number> => {
   const now = Date.now()
@@ -49,6 +50,41 @@ export const getSystemContextTokenLimit = async (): Promise<number> => {
 
 export const invalidateSystemContextTokenLimitCache = () => {
   cachedContextLimit = null
+}
+
+const clampReasoningMaxTokens = (value: number): number => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0
+  }
+  if (value > 256_000) {
+    return 256_000
+  }
+  return Math.floor(value)
+}
+
+export const getReasoningMaxOutputTokensDefault = async (): Promise<number> => {
+  const now = Date.now()
+  if (cachedReasoningMaxTokens && cachedReasoningMaxTokens.expiresAt > now) {
+    return cachedReasoningMaxTokens.value
+  }
+
+  const record = await prisma.systemSetting.findUnique({
+    where: { key: 'reasoning_max_output_tokens_default' },
+    select: { value: true },
+  })
+  const envDefault = process.env.REASONING_MAX_OUTPUT_TOKENS_DEFAULT
+  const parsed = parseIntSafe(record?.value ?? envDefault, 32_000)
+  const value = clampReasoningMaxTokens(parsed) || 32_000
+
+  cachedReasoningMaxTokens = {
+    value,
+    expiresAt: now + CACHE_TTL_MS,
+  }
+  return value
+}
+
+export const invalidateReasoningMaxOutputTokensDefaultCache = () => {
+  cachedReasoningMaxTokens = null
 }
 
 export const getQuotaPolicy = async (): Promise<SystemQuotaPolicy> => {

@@ -1,5 +1,5 @@
 import { prisma } from '../db'
-import { getSystemContextTokenLimit } from './system-settings'
+import { getReasoningMaxOutputTokensDefault, getSystemContextTokenLimit } from './system-settings'
 
 type Provider = 'openai' | 'azure_openai' | 'ollama' | 'google_genai' | string | null | undefined
 
@@ -8,6 +8,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000
 type CacheKey = `${number | 'none'}:${string | 'none'}`
 
 const contextCache = new Map<CacheKey, { value: number; expiresAt: number }>()
+const completionCache = new Map<CacheKey, { value: number; expiresAt: number }>()
 
 const KNOWN_OPENAI_CONTEXT_WINDOWS: Array<{ match: RegExp; tokens: number }> = [
   { match: /^gpt-4o-mini(-.*)?$/i, tokens: 64_000 },
@@ -46,6 +47,28 @@ const parseMetaContextWindow = (metaJson: string | null | undefined): number | n
     const num = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10)
     if (Number.isFinite(num) && num > 0) {
       return num
+    }
+  } catch {
+    // ignore invalid metaJson
+  }
+  return null
+}
+
+const parseMetaCompletionLimit = (metaJson: string | null | undefined): number | null => {
+  if (!metaJson) return null
+  try {
+    const parsed = JSON.parse(metaJson)
+    const candidates = [
+      parsed?.custom_max_output_tokens,
+      parsed?.max_output_tokens,
+      parsed?.max_completion_tokens,
+      parsed?.completion_limit,
+    ]
+    for (const candidate of candidates) {
+      const num = typeof candidate === 'number' ? candidate : Number.parseInt(String(candidate ?? ''), 10)
+      if (Number.isFinite(num) && num > 0) {
+        return num
+      }
     }
   } catch {
     // ignore invalid metaJson
@@ -120,4 +143,46 @@ export const invalidateContextWindowCache = (connectionId?: number | null, rawMo
   }
   const key: CacheKey = `${connectionId ?? 'none'}:${rawModelId ?? 'none'}`
   contextCache.delete(key)
+}
+
+export const resolveCompletionLimit = async (options: ResolveContextLimitOptions): Promise<number> => {
+  const connectionId = options.connectionId ?? null
+  const rawId = options.rawModelId ?? null
+  const cacheKey: CacheKey = `${connectionId ?? 'none'}:${rawId ?? 'none'}`
+  const now = Date.now()
+  const cached = completionCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
+    return cached.value
+  }
+
+  let completionLimit = 0
+
+  if (connectionId !== null && rawId) {
+    const catalog = await prisma.modelCatalog.findFirst({
+      where: {
+        connectionId,
+        rawId,
+      },
+      select: {
+        metaJson: true,
+      },
+    })
+    completionLimit = coercePositive(parseMetaCompletionLimit(catalog?.metaJson) ?? 0)
+  }
+
+  if (!completionLimit) {
+    completionLimit = await getReasoningMaxOutputTokensDefault()
+  }
+
+  completionCache.set(cacheKey, { value: completionLimit, expiresAt: now + CACHE_TTL_MS })
+  return completionLimit
+}
+
+export const invalidateCompletionLimitCache = (connectionId?: number | null, rawModelId?: string | null) => {
+  if (connectionId === undefined && rawModelId === undefined) {
+    completionCache.clear()
+    return
+  }
+  const key: CacheKey = `${connectionId ?? 'none'}:${rawModelId ?? 'none'}`
+  completionCache.delete(key)
 }

@@ -186,6 +186,7 @@ export interface SystemSettings {
   streamKeepaliveIntervalMs?: number;
   // 供应商参数（可选）
   openaiReasoningEffort?: 'low' | 'medium' | 'high' | '' | 'unset';
+  reasoningMaxOutputTokensDefault?: number | null;
   ollamaThink?: boolean;
   chatImageRetentionDays?: number;
   siteBaseUrl?: string;

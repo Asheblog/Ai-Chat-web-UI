@@ -1,5 +1,5 @@
 "use client"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { useModelsStore } from "@/store/models-store"
 import {
@@ -51,6 +51,7 @@ export function useSystemModels() {
   const [refreshing, setRefreshing] = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [maxTokenInputs, setMaxTokenInputs] = useState<Record<string, string>>({})
 
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase()
@@ -75,6 +76,19 @@ export function useSystemModels() {
 
     return filtered
   }, [models, q, onlyOverridden, sortField, sortOrder])
+
+  useEffect(() => {
+    setMaxTokenInputs((prev) => {
+      const next: Record<string, string> = {}
+      const keys = new Set(list.map((model: any) => keyOf(model)))
+      keys.forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(prev, key)) {
+          next[key] = prev[key]
+        }
+      })
+      return next
+    })
+  }, [list])
 
   const toggleSort = (field: ModelSortField) => {
     if (sortField === field) {
@@ -103,13 +117,66 @@ export function useSystemModels() {
     const payload = buildCapabilityPayload(model, key, value)
     try {
       setSavingKey(`${model.connectionId}:${model.id}`)
-      await updateModelCapabilities(model.connectionId, model.rawId, payload.tags, payload.capabilities)
+      await updateModelCapabilities(model.connectionId, model.rawId, {
+        tags: payload.tags,
+        capabilities: payload.capabilities,
+      })
       await fetchAll()
       toast({ title: '能力已更新', description: `${model.name || model.id} 的能力配置已保存` })
     } catch (err: any) {
       toast({
         title: '更新失败',
         description: err?.message || '保存失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingKey('')
+    }
+  }
+
+  const setMaxTokenInput = useCallback((key: string, value: string) => {
+    setMaxTokenInputs((prev) => ({ ...prev, [key]: value }))
+  }, [])
+
+  const resetMaxTokenInput = useCallback((key: string) => {
+    setMaxTokenInputs((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  const handleSaveMaxTokens = async (model: any, rawValue: string) => {
+    const key = modelKey(model)
+    const trimmed = rawValue.trim()
+    let payloadValue: number | null
+    if (trimmed === '') {
+      payloadValue = null
+    } else {
+      const parsed = Number.parseInt(trimmed, 10)
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        toast({
+          title: 'max_tokens 无效',
+          description: '请输入 1~256000 的整数，或留空使用默认值',
+          variant: 'destructive',
+        })
+        return
+      }
+      payloadValue = Math.min(256000, parsed)
+    }
+    try {
+      setSavingKey(key)
+      await updateModelCapabilities(model.connectionId, model.rawId, { maxOutputTokens: payloadValue })
+      await fetchAll()
+      resetMaxTokenInput(key)
+      toast({
+        title: '生成 Tokens 已更新',
+        description: payloadValue ? `已限制为 ${payloadValue} tokens` : '已恢复供应商默认值',
+      })
+    } catch (err: any) {
+      toast({
+        title: '保存失败',
+        description: err?.message || '更新生成 Tokens 失败',
         variant: 'destructive',
       })
     } finally {
@@ -214,7 +281,10 @@ export function useSystemModels() {
             capPayload = undefined
           }
         }
-        await updateModelCapabilities(Number(item.connectionId), String(item.rawId), tags, capPayload)
+        await updateModelCapabilities(Number(item.connectionId), String(item.rawId), {
+          tags,
+          capabilities: capPayload,
+        })
       }
       await fetchAll()
       toast({ title: '导入完成', description: `共应用 ${items.length} 项覆写。` })
@@ -292,6 +362,9 @@ export function useSystemModels() {
     handleExport,
     handleImportFile,
     handleToggleCapability,
+    maxTokenInputs,
+    setMaxTokenInput,
+    handleSaveMaxTokens,
     resetModel,
     handleBatchReset,
     hasCapability,

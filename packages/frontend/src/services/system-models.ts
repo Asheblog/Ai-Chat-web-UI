@@ -1,7 +1,15 @@
 import { apiClient } from "@/lib/api"
 
-export async function updateModelCapabilities(connectionId: number, rawId: string, tags: Array<{ name: string }>, capabilities?: Record<string, boolean>) {
-  return apiClient.updateModelTags(connectionId, rawId, tags, capabilities)
+export async function updateModelCapabilities(
+  connectionId: number,
+  rawId: string,
+  options: {
+    tags?: Array<{ name: string }>
+    capabilities?: Record<string, boolean>
+    maxOutputTokens?: number | null
+  }
+) {
+  return apiClient.updateModelTags(connectionId, rawId, options)
 }
 
 export async function refreshModelCatalog() {

@@ -31,6 +31,7 @@ export function SystemReasoningPage() {
   const [streamKeepaliveIntervalMs, setStreamKeepaliveIntervalMs] = useState('')
   const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<'unset'|'low'|'medium'|'high'>('unset')
   const [ollamaThink, setOllamaThink] = useState(false)
+  const [reasoningMaxTokens, setReasoningMaxTokens] = useState('')
 
   useEffect(()=>{ fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(()=>{
@@ -52,6 +53,8 @@ export function SystemReasoningPage() {
     )
     setOpenaiReasoningEffort((((systemSettings as any).openaiReasoningEffort || 'unset')) as any)
     setOllamaThink(Boolean((systemSettings as any).ollamaThink ?? false))
+    const sysMaxTokens = systemSettings?.reasoningMaxOutputTokensDefault
+    setReasoningMaxTokens(typeof sysMaxTokens === 'number' ? String(sysMaxTokens) : '')
   }, [systemSettings])
 
   const handleSave = async () => {
@@ -94,6 +97,23 @@ export function SystemReasoningPage() {
     } catch {
       return
     }
+    let maxTokensValue: number | null
+    const trimmedMaxTokens = reasoningMaxTokens.trim()
+    if (trimmedMaxTokens === '') {
+      maxTokensValue = null
+    } else {
+      const parsed = Number.parseInt(trimmedMaxTokens, 10)
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        toast({
+          title: '默认生成 Tokens 无效',
+          description: '请输入 1~256000 的整数，或留空表示使用默认值（32K）',
+          variant: 'destructive',
+        })
+        return
+      }
+      maxTokensValue = Math.min(256000, parsed)
+    }
+
     await updateSystemSettings({
       reasoningEnabled,
       reasoningDefaultExpand,
@@ -105,6 +125,7 @@ export function SystemReasoningPage() {
       streamReasoningFlushIntervalMs: reasoningFlushMs,
       streamKeepaliveIntervalMs: keepaliveMs,
       openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : 'unset',
+      reasoningMaxOutputTokensDefault: maxTokensValue,
       ollamaThink,
     } as any)
     toast({ title: '已保存推理链设置' })
@@ -145,6 +166,31 @@ export function SystemReasoningPage() {
           description="可能包含中间推断过程，请按需开启"
         >
           <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v)=>setReasoningSaveToDb(!!v)} />
+        </SettingRow>
+
+        <SettingRow
+          title="默认生成 Tokens"
+          description="为空表示沿用供应商默认（通常 32K），可根据模型能力设置 1~256000"
+        >
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <Input
+              type="number"
+              min={1}
+              max={256000}
+              placeholder="32000"
+              value={reasoningMaxTokens}
+              onChange={(e)=>setReasoningMaxTokens(e.target.value)}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-32 text-right"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={()=>setReasoningMaxTokens('')}
+            >
+              恢复默认
+            </Button>
+          </div>
         </SettingRow>
 
         <SettingRow
