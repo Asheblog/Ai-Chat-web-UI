@@ -22,12 +22,19 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import type { UsageTotals } from '@/types'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
 import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
 import { sessionItemVariants, sessionListVariants } from '@/lib/animations'
+
+const formatUsageLine = (usage?: UsageTotals) => {
+  if (!usage) return ''
+  const formatTokens = (value?: number) => Number(value ?? 0).toLocaleString()
+  return `输入${formatTokens(usage.prompt_tokens)} | 输出${formatTokens(usage.completion_tokens)}`
+}
 
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -309,7 +316,7 @@ export function Sidebar() {
                       </p>
                       {sessionUsageTotalsMap?.[session.id] && (
                         <p className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          总计{sessionUsageTotalsMap[session.id].total_tokens}
+                          {formatUsageLine(sessionUsageTotalsMap[session.id])}
                         </p>
                       )}
                     </div>
