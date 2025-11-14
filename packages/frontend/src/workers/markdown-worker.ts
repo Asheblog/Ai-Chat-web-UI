@@ -1,9 +1,11 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
 import rehypeStringify from 'rehype-stringify'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
 import { visit } from 'unist-util-visit'
 
 interface WorkerRequest {
@@ -58,7 +60,12 @@ const enhanceNodes = () => (tree: any) => {
 }
 
 const createProcessor = (skipHighlight: boolean) => {
-  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkRehype)
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .use(remarkRehype)
+    .use(rehypeKatex, { strict: false })
   if (!skipHighlight) {
     processor.use(rehypeHighlight as any, { ignoreMissing: true })
   }

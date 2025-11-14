@@ -206,6 +206,29 @@
   background: hsl(var(--muted));
 }
 
+/* KaTeX 渲染区域样式，避免大公式溢出 */
+.markdown-body .katex {
+  font-size: 1em;
+  color: inherit;
+}
+
+.markdown-body .katex-display {
+  margin: 1.25rem 0;
+  padding: 0.75rem 0.5rem;
+  overflow-x: auto;
+  border-radius: 0.6rem;
+  background: hsl(var(--muted) / 0.35);
+}
+
+.dark .markdown-body .katex-display {
+  background: hsl(var(--muted) / 0.25);
+}
+
+.markdown-body .katex-display > .katex {
+  display: inline-block;
+  min-width: fit-content;
+}
+
 .markdown-body blockquote {
   border-left: 3px solid hsl(var(--primary));
   padding-left: 1rem;
