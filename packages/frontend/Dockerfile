@@ -86,14 +86,14 @@ WORKDIR /app
 
 # 不在运行阶段再次安装依赖：Next.js standalone 已包含所需 node_modules，避免 CI 内存不足（exit 134）
 
-# 复制构建产物
+# 复制构建产物（保持与monorepo目录一致，避免 Next.js 找不到 .next/static）
 COPY --from=builder --chown=nextjs:nextjs /app/packages/frontend/public ./public
 COPY --from=builder --chown=nextjs:nextjs /app/packages/frontend/.next/standalone ./
-COPY --from=builder --chown=nextjs:nextjs /app/packages/frontend/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nextjs /app/packages/frontend/.next/static ./packages/frontend/.next/static
 
-# 创建必要的目录
-RUN mkdir -p /app/.next/cache && \
-    chown -R nextjs:nextjs /app/.next
+# 创建 Next.js 运行期缓存目录
+RUN mkdir -p /app/packages/frontend/.next/cache && \
+    chown -R nextjs:nextjs /app/packages/frontend/.next
 
 # 切换到非root用户
 USER nextjs
