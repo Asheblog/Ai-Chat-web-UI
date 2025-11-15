@@ -60,7 +60,6 @@ packages/backend/prisma/*.sqlite
 # --- Third-party reference source (ignored) ---
 vendor/open-webui/
 packages/frontend/previews
-pnpm-lock.yaml
 构建命令.txt
 aichat-20251025184548.txt
 packages/backend/storage/chat-images/
