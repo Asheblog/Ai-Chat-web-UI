@@ -292,6 +292,10 @@ export class TaskTraceRecorder {
     return this.enabled && this.traceId != null
   }
 
+  getTraceId() {
+    return this.traceId
+  }
+
   setMessageContext(messageId?: number | null, clientMessageId?: string | null) {
     this.messageId = messageId ?? this.messageId ?? null
     this.clientMessageId = clientMessageId ?? this.clientMessageId ?? null

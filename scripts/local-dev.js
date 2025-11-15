@@ -108,8 +108,8 @@ function detectPackageManager() {
   const hasYarnLock = fs.existsSync(path.join(cwd, 'yarn.lock'))
 
   // 优先根据锁文件选择，避免跨管理器冲突
-  if (hasNpmLock) return 'npm'
   if (hasPnpmLock || hasPnpmWs) return 'pnpm'
+  if (hasNpmLock) return 'npm'
   if (hasYarnLock) return 'yarn'
 
   // 无锁文件时按可用性优先

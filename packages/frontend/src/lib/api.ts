@@ -4,7 +4,19 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig
 } from 'axios'
-import type { AuthResponse, RegisterResponse, User, ApiResponse, ActorContextDTO, ActorQuota, Message, TaskTraceSummary, TaskTraceEventRecord } from '@/types'
+import type {
+  AuthResponse,
+  RegisterResponse,
+  User,
+  ApiResponse,
+  ActorContextDTO,
+  ActorQuota,
+  Message,
+  TaskTraceSummary,
+  TaskTraceEventRecord,
+  LatexTraceSummary,
+  LatexTraceEventRecord,
+} from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
@@ -842,14 +854,14 @@ class ApiClient {
   }
 
   async getTaskTrace(id: number) {
-    const response = await this.client.get<ApiResponse<{ trace: TaskTraceSummary; events: TaskTraceEventRecord[]; truncated: boolean }>>(`/task-trace/${id}`)
+    const response = await this.client.get<ApiResponse<{ trace: TaskTraceSummary; latexTrace: LatexTraceSummary | null; events: TaskTraceEventRecord[]; truncated: boolean }>>(
+      `/task-trace/${id}`
+    )
     return response.data
   }
 
   async exportTaskTrace(id: number) {
-    const response = await this.client.get(`/task-trace/${id}/export`, {
-      responseType: 'blob',
-    })
+    const response = await this.client.get(`/task-trace/${id}/export`, { responseType: 'blob' })
     return response.data as Blob
   }
 
@@ -861,6 +873,26 @@ class ApiClient {
 
   async deleteTaskTrace(id: number) {
     const response = await this.client.delete<ApiResponse<any>>(`/task-trace/${id}`)
+    return response.data
+  }
+
+  async getLatexTrace(taskTraceId: number) {
+    const response = await this.client.get<ApiResponse<{ latexTrace: LatexTraceSummary }>>(`/task-trace/${taskTraceId}/latex`)
+    return response.data
+  }
+
+  async getLatexTraceEvents(taskTraceId: number) {
+    const response = await this.client.get<ApiResponse<{ events: LatexTraceEventRecord[]; truncated: boolean }>>(`/task-trace/${taskTraceId}/latex/events`)
+    return response.data
+  }
+
+  async exportLatexTrace(taskTraceId: number) {
+    const response = await this.client.get(`/task-trace/${taskTraceId}/latex/export`, { responseType: 'blob' })
+    return response.data as Blob
+  }
+
+  async deleteLatexTrace(taskTraceId: number) {
+    const response = await this.client.delete<ApiResponse<any>>(`/task-trace/${taskTraceId}/latex`)
     return response.data
   }
 

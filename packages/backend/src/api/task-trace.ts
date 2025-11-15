@@ -76,6 +76,48 @@ const readTraceEventsFromFile = async (filePath: string | null | undefined, limi
   return { events, truncated }
 }
 
+const readLatexEventsFromFile = async (filePath: string | null | undefined, limit = 2000) => {
+  const items: Array<{ seq: number; matched: boolean; reason: string; raw: string; normalized: string; trimmed: string }> = []
+  if (!filePath) {
+    return { events: items, truncated: false }
+  }
+  try {
+    await access(filePath)
+  } catch {
+    return { events: items, truncated: false }
+  }
+  const stream = createReadStream(filePath, { encoding: 'utf8' })
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
+  let truncated = false
+  const maxLines = Math.max(1, limit)
+  try {
+    for await (const line of rl) {
+      if (!line.trim()) continue
+      try {
+        const parsed = JSON.parse(line)
+        items.push({
+          seq: typeof parsed.seq === 'number' ? parsed.seq : items.length + 1,
+          matched: Boolean(parsed.matched),
+          reason: typeof parsed.reason === 'string' ? parsed.reason : '',
+          raw: typeof parsed.raw === 'string' ? parsed.raw : '',
+          normalized: typeof parsed.normalized === 'string' ? parsed.normalized : '',
+          trimmed: typeof parsed.trimmed === 'string' ? parsed.trimmed : '',
+        })
+      } catch {
+        continue
+      }
+      if (items.length >= maxLines) {
+        truncated = true
+        break
+      }
+    }
+  } finally {
+    rl.close()
+    stream.destroy()
+  }
+  return { events: items, truncated }
+}
+
 taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const page = Math.max(1, parseIntParam(c.req.query('page'), 1))
@@ -120,6 +162,15 @@ taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async
           durationMs: true,
           metadata: true,
           eventCount: true,
+          latexTrace: {
+            select: {
+              id: true,
+              status: true,
+              matchedBlocks: true,
+              unmatchedBlocks: true,
+              updatedAt: true,
+            },
+          },
         },
       }),
       prisma.taskTrace.count({ where }),
@@ -138,6 +189,15 @@ taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async
       durationMs: item.durationMs,
       metadata: parseJsonColumn(item.metadata),
       eventCount: item.eventCount,
+      latexTrace: item.latexTrace
+        ? {
+            id: item.latexTrace.id,
+            status: item.latexTrace.status,
+            matchedBlocks: item.latexTrace.matchedBlocks,
+            unmatchedBlocks: item.latexTrace.unmatchedBlocks,
+            updatedAt: item.latexTrace.updatedAt,
+          }
+        : null,
     }))
 
     return c.json<ApiResponse>({
@@ -177,6 +237,18 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
         metadata: true,
         eventCount: true,
         logFilePath: true,
+        latexTrace: {
+          select: {
+            id: true,
+            status: true,
+            matchedBlocks: true,
+            unmatchedBlocks: true,
+            metadata: true,
+            logFilePath: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
       },
     })
     if (!trace) {
@@ -200,6 +272,17 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
           metadata: parseJsonColumn(trace.metadata),
           eventCount: trace.eventCount,
         },
+        latexTrace: trace.latexTrace
+          ? {
+              id: trace.latexTrace.id,
+              status: trace.latexTrace.status,
+              matchedBlocks: trace.latexTrace.matchedBlocks,
+              unmatchedBlocks: trace.latexTrace.unmatchedBlocks,
+              metadata: parseJsonColumn(trace.latexTrace.metadata),
+              createdAt: trace.latexTrace.createdAt,
+              updatedAt: trace.latexTrace.updatedAt,
+            }
+          : null,
         events,
         truncated: truncated || (trace.eventCount ?? 0) > events.length,
       },
@@ -288,6 +371,145 @@ taskTrace.get('/:id/export', actorMiddleware, requireUserActor, adminOnlyMiddlew
   }
 })
 
+taskTrace.get('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+  try {
+    const id = Number.parseInt(c.req.param('id'), 10)
+    if (!Number.isFinite(id)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
+    }
+    const latex = await prisma.latexTrace.findUnique({
+      where: { taskTraceId: id },
+      select: {
+        id: true,
+        taskTraceId: true,
+        matchedBlocks: true,
+        unmatchedBlocks: true,
+        status: true,
+        metadata: true,
+        logFilePath: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+    if (!latex) {
+      return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
+    }
+    return c.json<ApiResponse>({
+      success: true,
+      data: {
+        latexTrace: {
+          ...latex,
+          metadata: parseJsonColumn(latex.metadata),
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Get latex trace failed', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to fetch latex trace' }, 500)
+  }
+})
+
+taskTrace.get('/:id/latex/events', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+  try {
+    const id = Number.parseInt(c.req.param('id'), 10)
+    if (!Number.isFinite(id)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
+    }
+    const latex = await prisma.latexTrace.findUnique({
+      where: { taskTraceId: id },
+      select: { logFilePath: true },
+    })
+    if (!latex) {
+      return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
+    }
+    const { events, truncated } = await readLatexEventsFromFile(latex.logFilePath, 2000)
+    return c.json<ApiResponse>({
+      success: true,
+      data: { events, truncated },
+    })
+  } catch (error) {
+    console.error('Get latex events failed', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to fetch latex events' }, 500)
+  }
+})
+
+taskTrace.get('/:id/latex/export', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+  try {
+    const id = Number.parseInt(c.req.param('id'), 10)
+    if (!Number.isFinite(id)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
+    }
+    const latex = await prisma.latexTrace.findUnique({
+      where: { taskTraceId: id },
+      select: {
+        id: true,
+        taskTraceId: true,
+        matchedBlocks: true,
+        unmatchedBlocks: true,
+        status: true,
+        metadata: true,
+        logFilePath: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+    if (!latex) {
+      return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
+    }
+    const { events } = await readLatexEventsFromFile(latex.logFilePath, Number.MAX_SAFE_INTEGER)
+    const lines: string[] = []
+    lines.push(`Latex Trace #${latex.id} (Task Trace #${latex.taskTraceId})`)
+    lines.push(`Status: ${latex.status}`)
+    lines.push(`Matched Blocks: ${latex.matchedBlocks}`)
+    lines.push(`Unmatched Blocks: ${latex.unmatchedBlocks}`)
+    lines.push(`Created At: ${latex.createdAt?.toISOString?.() ?? latex.createdAt}`)
+    lines.push(`Updated At: ${latex.updatedAt?.toISOString?.() ?? latex.updatedAt}`)
+    lines.push('--- Metadata ---')
+    lines.push(JSON.stringify(parseJsonColumn(latex.metadata) ?? {}, null, 2))
+    lines.push('--- Segments ---')
+    for (const event of events) {
+      lines.push(JSON.stringify(event))
+    }
+    const body = lines.join('\n')
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': `attachment; filename="latex-trace-${latex.id}.txt"`,
+      },
+    })
+  } catch (error) {
+    console.error('Export latex trace failed', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to export latex trace' }, 500)
+  }
+})
+
+taskTrace.delete('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+  try {
+    const id = Number.parseInt(c.req.param('id'), 10)
+    if (!Number.isFinite(id)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
+    }
+    const latex = await prisma.latexTrace.findUnique({
+      where: { taskTraceId: id },
+      select: { id: true, logFilePath: true },
+    })
+    if (!latex) {
+      return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
+    }
+    await prisma.latexTrace.delete({ where: { taskTraceId: id } })
+    if (latex.logFilePath) {
+      try {
+        await unlink(latex.logFilePath)
+      } catch {}
+    }
+    return c.json<ApiResponse>({ success: true })
+  } catch (error) {
+    console.error('Delete latex trace failed', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to delete latex trace' }, 500)
+  }
+})
+
 taskTrace.delete('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const id = Number.parseInt(c.req.param('id'), 10)
@@ -296,7 +518,7 @@ taskTrace.delete('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware,
     }
     const trace = await prisma.taskTrace.findUnique({
       where: { id },
-      select: { logFilePath: true },
+      select: { logFilePath: true, latexTrace: { select: { logFilePath: true } } },
     })
     if (!trace) {
       return c.json<ApiResponse>({ success: true, message: 'Trace removed' })
@@ -305,6 +527,11 @@ taskTrace.delete('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware,
     if (trace.logFilePath) {
       try {
         await unlink(trace.logFilePath)
+      } catch {}
+    }
+    if (trace.latexTrace?.logFilePath) {
+      try {
+        await unlink(trace.latexTrace.logFilePath)
       } catch {}
     }
     return c.json<ApiResponse>({ success: true, message: 'Trace removed' })
@@ -323,7 +550,7 @@ taskTrace.post('/cleanup', actorMiddleware, requireUserActor, adminOnlyMiddlewar
     const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000)
     const targets = await prisma.taskTrace.findMany({
       where: { startedAt: { lt: cutoff } },
-      select: { id: true, logFilePath: true },
+      select: { id: true, logFilePath: true, latexTrace: { select: { logFilePath: true } } },
     })
     if (targets.length === 0) {
       return c.json<ApiResponse>({
@@ -335,9 +562,13 @@ taskTrace.post('/cleanup', actorMiddleware, requireUserActor, adminOnlyMiddlewar
       })
     }
     await prisma.taskTrace.deleteMany({ where: { id: { in: targets.map((t) => t.id) } } })
+    const filesToRemove = targets.flatMap((item) => {
+      const list: Array<string | null | undefined> = [item.logFilePath]
+      if (item.latexTrace?.logFilePath) list.push(item.latexTrace.logFilePath)
+      return list
+    })
     await Promise.all(
-      targets
-        .map((item) => item.logFilePath)
+      filesToRemove
         .filter((p): p is string => typeof p === 'string' && p.length > 0)
         .map(async (file) => {
           try {

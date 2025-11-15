@@ -13,6 +13,8 @@ import { serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
 import { resolveContextLimit, resolveCompletionLimit } from '../../../utils/context-window';
 import { TaskTraceRecorder, shouldEnableTaskTrace, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
+import { LatexTraceRecorder } from '../../../utils/latex-trace';
+import { analyzeLatexBlocks } from '@aichat/shared/latex-normalizer';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../../../utils/reasoning-tags';
 import { createAgentWebSearchResponse, buildAgentWebSearchConfig } from '../../chat/agent-web-search-response';
 import { upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
@@ -433,6 +435,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const traceMetadataExtras: Record<string, unknown> = {};
       let traceStatus: TaskTraceStatus = 'running';
       let traceErrorMessage: string | null = null;
+      let latexTraceRecorder: LatexTraceRecorder | null = null;
+      let latexAuditSummary: { matched: number; unmatched: number } | null = null;
       traceRecorder.log('stream:started', { mode: 'standard', provider, baseUrl });
 
       let aiResponseContent = '';
@@ -1326,10 +1330,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
               // 保存AI完整回复（若尚未保存）并记录 messageId
               let persistedAssistantMessageId: number | null = assistantMessageId;
               if (aiResponseContent.trim()) {
+                const trimmedContent = aiResponseContent.trim();
                 const updateData: any = {
-                  content: aiResponseContent.trim(),
+                  content: trimmedContent,
                   streamStatus: 'done',
-                  streamCursor: aiResponseContent.trim().length,
+                  streamCursor: trimmedContent.length,
                   streamReasoning:
                     REASONING_ENABLED &&
                     (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
@@ -1375,6 +1380,33 @@ export const registerChatStreamRoutes = (router: Hono) => {
                     data: updateData,
                   });
                   persistedAssistantMessageId = recoveredId ?? null;
+                }
+
+                if (!latexTraceRecorder && traceRecorder.isEnabled()) {
+                  const traceId = traceRecorder.getTraceId();
+                  if (traceId) {
+                    try {
+                      const audit = analyzeLatexBlocks(trimmedContent);
+                      if (audit.segments.length > 0) {
+                        latexAuditSummary = { matched: audit.matchedCount, unmatched: audit.unmatchedCount };
+                        latexTraceRecorder = await LatexTraceRecorder.create({
+                          taskTraceId: traceId,
+                          matchedBlocks: audit.matchedCount,
+                          unmatchedBlocks: audit.unmatchedCount,
+                          metadata: {
+                            segmentsSample: audit.segments.slice(0, 3).map((segment) => ({
+                              matched: segment.matched,
+                              reason: segment.reason,
+                              preview: segment.trimmed.slice(0, 80),
+                            })),
+                          },
+                        });
+                        latexTraceRecorder?.logSegments(audit.segments);
+                      }
+                    } catch (error) {
+                      log.warn('Latex trace creation failed', error);
+                    }
+                  }
                 }
               }
 
@@ -1474,6 +1506,16 @@ export const registerChatStreamRoutes = (router: Hono) => {
               clientMessageId,
               assistantClientMessageId,
             });
+            if (latexTraceRecorder) {
+              try {
+                await latexTraceRecorder.finalize(traceErrorMessage ? 'error' : 'completed', traceErrorMessage ? { error: traceErrorMessage } : undefined);
+              } catch (error) {
+                log.warn('Finalize latex trace failed', error);
+              }
+            }
+            if (latexAuditSummary) {
+              traceMetadataExtras.latexAudit = latexAuditSummary;
+            }
             const finalMetadata = {
               ...traceMetadataExtras,
               messageId: assistantMessageId,

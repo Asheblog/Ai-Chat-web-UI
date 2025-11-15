@@ -10,7 +10,12 @@ import { Button } from '@/components/ui/button'
 import { Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ensureKatexResources } from '@/lib/load-katex'
-import { wrapBareMathBlocks, containsBareMath } from '@/lib/math-normalizer'
+import {
+  remarkKatexTokenizer,
+  containsLatexTokens,
+  defaultRemarkMathOptions,
+  encodeLatexPlaceholders,
+} from '@aichat/shared/latex-normalizer'
 
 interface MarkdownRendererProps {
   html?: string | null
@@ -28,8 +33,6 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [rehypeKatexPlugin, setRehypeKatexPlugin] = useState<any>(null)
   const trimmedHtml = html?.trim() ?? ''
-  const normalizedFallback = useMemo(() => wrapBareMathBlocks(fallback || ''), [fallback])
-
   const needsMathSupport = useMemo(() => {
     if (trimmedHtml && /katex/i.test(trimmedHtml)) {
       return true
@@ -37,7 +40,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     if (!fallback) {
       return false
     }
-    if (containsBareMath(fallback)) return true
+    if (containsLatexTokens(fallback)) return true
     return /(\$\$?|\\\[|\\\(|\\begin\{|\\end\{|\\ce\{|\\pu\{|\\frac|\\sum|\\int|\\sqrt|\\alpha|\\beta|\\gamma)/i.test(
       fallback
     )
@@ -62,6 +65,8 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       active = false
     }
   }, [needsMathSupport, rehypeKatexPlugin])
+
+  const preparedFallback = useMemo(() => encodeLatexPlaceholders(fallback || ''), [fallback])
 
   const handleCopyCode = async (code: string) => {
     try {
@@ -101,7 +106,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         )}
       >
         <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
+          remarkPlugins={[remarkKatexTokenizer, [remarkMath, defaultRemarkMathOptions], remarkGfm]}
           rehypePlugins={rehypeKatexPlugin ? [rehypeKatexPlugin] : undefined}
           components={{
             pre({ children }: any) {
@@ -259,7 +264,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             },
           }}
         >
-          {normalizedFallback}
+          {preparedFallback}
         </ReactMarkdown>
       </div>
     )

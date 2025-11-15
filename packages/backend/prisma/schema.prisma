@@ -219,6 +219,7 @@ model TaskTrace {
   session ChatSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   message Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
   events  TaskTraceEvent[]
+  latexTrace LatexTrace?
 
   @@index([sessionId])
   @@index([messageId])
@@ -240,4 +241,21 @@ model TaskTraceEvent {
   @@unique([traceId, seq])
   @@index([traceId, timestamp])
   @@map("task_trace_events")
+}
+
+model LatexTrace {
+  id              Int      @id @default(autoincrement())
+  taskTraceId     Int      @unique
+  matchedBlocks   Int      @default(0)
+  unmatchedBlocks Int      @default(0)
+  status          String   @default("pending")
+  metadata        String   @default("{}")
+  logFilePath     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  taskTrace TaskTrace @relation(fields: [taskTraceId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("latex_traces")
 }

@@ -20,6 +20,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aichat/shared": "workspace:*",
     "@hono/node-server": "^1.13.5",
     "@hono/zod-validator": "^0.4.1",
     "@prisma/client": "^5.22.0",

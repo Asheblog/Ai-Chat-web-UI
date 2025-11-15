@@ -8,7 +8,11 @@ import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import { visit } from 'unist-util-visit'
 import 'katex/contrib/mhchem'
-import { wrapBareMathBlocks } from '../lib/math-normalizer'
+import {
+  remarkKatexTokenizer,
+  defaultRemarkMathOptions,
+  encodeLatexPlaceholders,
+} from '@aichat/shared/latex-normalizer'
 
 interface WorkerRequest {
   jobId: string
@@ -64,8 +68,9 @@ const enhanceNodes = () => (tree: any) => {
 const createProcessor = (skipHighlight: boolean) => {
   const processor = unified()
     .use(remarkParse)
+    .use(remarkKatexTokenizer)
+    .use(remarkMath, defaultRemarkMathOptions)
     .use(remarkGfm)
-    .use(remarkMath)
     .use(remarkRehype)
     .use(rehypeKatex, { strict: false })
   if (!skipHighlight) {
@@ -84,8 +89,8 @@ const renderMarkdown = async (markdown: string): Promise<{ html: string; skipHig
   const skipHighlight = trimmed.length > 20000 || lineCount > 400
   try {
     const processor = createProcessor(skipHighlight)
-    const normalized = wrapBareMathBlocks(trimmed)
-    const file = await processor.process(normalized)
+    const prepared = encodeLatexPlaceholders(trimmed)
+    const file = await processor.process(prepared)
     return { html: String(file), skipHighlight }
   } catch (error) {
     // eslint-disable-next-line no-console

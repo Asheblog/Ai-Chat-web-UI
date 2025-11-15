@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuthStore } from "@/store/auth-store"
 import { apiClient } from "@/lib/api"
-import type { TaskTraceSummary, TaskTraceEventRecord } from "@/types"
+import type { TaskTraceSummary, TaskTraceEventRecord, LatexTraceSummary, LatexTraceEventRecord } from "@/types"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -54,9 +54,13 @@ export function TaskTraceConsole() {
   const [items, setItems] = useState<TaskTraceSummary[]>([])
   const [total, setTotal] = useState(0)
   const [selected, setSelected] = useState<TaskTraceSummary | null>(null)
-  const [detail, setDetail] = useState<{ trace: TaskTraceSummary; events: TaskTraceEventRecord[]; truncated: boolean } | null>(null)
+  const [detail, setDetail] = useState<{ trace: TaskTraceSummary; latexTrace: LatexTraceSummary | null; events: TaskTraceEventRecord[]; truncated: boolean } | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [detailTab, setDetailTab] = useState<'trace' | 'latex'>('trace')
+  const [latexEvents, setLatexEvents] = useState<LatexTraceEventRecord[]>([])
+  const [latexTruncated, setLatexTruncated] = useState(false)
+  const [latexLoading, setLatexLoading] = useState(false)
 
   const fetchList = useCallback(async () => {
     setLoading(true)
@@ -87,6 +91,9 @@ export function TaskTraceConsole() {
   const handleOpenDetail = async (trace: TaskTraceSummary) => {
     setSelected(trace)
     setDetail(null)
+    setDetailTab('trace')
+    setLatexEvents([])
+    setLatexTruncated(false)
     setDetailLoading(true)
     try {
       const res = await apiClient.getTaskTrace(trace.id)
@@ -113,6 +120,54 @@ export function TaskTraceConsole() {
       toast({ title: '导出失败', description: error?.message || '无法导出日志', variant: 'destructive' })
     }
   }
+
+  const handleExportLatex = async (traceId: number) => {
+    try {
+      const blob = await apiClient.exportLatexTrace(traceId)
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `latex-trace-${traceId}.txt`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      toast({ title: '导出 LaTeX 日志失败', description: error?.message || '无法导出 LaTeX 日志', variant: 'destructive' })
+    }
+  }
+
+  const handleDeleteLatex = async (traceId: number) => {
+    if (!window.confirm(`确定要删除 #${traceId} 的 LaTeX 日志吗？`)) {
+      return
+    }
+    try {
+      await apiClient.deleteLatexTrace(traceId)
+      toast({ title: '已删除 LaTeX 日志' })
+      setLatexEvents([])
+      setLatexTruncated(false)
+      setDetail((prev) => (prev ? { ...prev, latexTrace: null } : prev))
+      fetchList()
+    } catch (error: any) {
+      toast({ title: '删除失败', description: error?.response?.data?.error || error?.message || '未知错误', variant: 'destructive' })
+    }
+  }
+
+  const ensureLatexEvents = useCallback(
+    async (traceId: number) => {
+      try {
+        setLatexLoading(true)
+        const res = await apiClient.getLatexTraceEvents(traceId)
+        setLatexEvents(res.data?.events ?? [])
+        setLatexTruncated(Boolean(res.data?.truncated))
+      } catch (error: any) {
+        toast({ title: '读取 LaTeX 日志失败', description: error?.response?.data?.error || error?.message || '未知错误', variant: 'destructive' })
+      } finally {
+        setLatexLoading(false)
+      }
+    },
+    [toast],
+  )
 
   const handleDelete = async (trace: TaskTraceSummary) => {
     if (!window.confirm(`确定要删除追踪 #${trace.id} 吗？该操作无法恢复。`)) {
@@ -201,20 +256,21 @@ export function TaskTraceConsole() {
                 <TableHead>开始时间</TableHead>
                 <TableHead>耗时</TableHead>
                 <TableHead>事件数</TableHead>
+                <TableHead>LaTeX</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={9}>
                     <Skeleton className="h-10 w-full" />
                   </TableCell>
                 </TableRow>
               )}
               {!loading && items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={9} className="py-6 text-center text-sm text-muted-foreground">
                     暂无记录
                   </TableCell>
                 </TableRow>
@@ -232,6 +288,16 @@ export function TaskTraceConsole() {
                   <TableCell>{formatDateTime(item.startedAt)}</TableCell>
                   <TableCell>{formatDuration(item.durationMs)}</TableCell>
                   <TableCell>{item.eventCount}</TableCell>
+                  <TableCell>
+                    {item.latexTrace ? (
+                      <div className="text-xs text-muted-foreground">
+                        <div>匹配 {item.latexTrace.matchedBlocks}</div>
+                        <div>遗漏 {item.latexTrace.unmatchedBlocks}</div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="sm" className="text-primary" onClick={(e) => { e.stopPropagation(); handleExport(item.id) }}>
@@ -305,30 +371,102 @@ export function TaskTraceConsole() {
                   <span>{formatDuration(detail.trace.durationMs)}</span>
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="text-sm font-semibold">事件时间线</div>
-                <ScrollArea className="h-[50vh] rounded-xl border bg-muted/30 p-4">
-                  <div className="space-y-3">
-                    {detail.events.map((evt) => (
-                      <div key={evt.id} className="rounded-lg border bg-card p-3 transition-all hover:shadow-sm">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span className="font-mono">#{evt.seq}</span>
-                          <span>{formatDateTime(evt.timestamp)}</span>
-                        </div>
-                        <div className="mt-1 font-semibold text-sm">{evt.eventType}</div>
-                        <pre className="mt-2 overflow-x-auto rounded bg-muted/50 p-2 text-xs font-mono">{JSON.stringify(evt.payload ?? {}, null, 2)}</pre>
-                      </div>
-                    ))}
-                    {detail.events.length === 0 && (
-                      <div className="py-8 text-center text-sm text-muted-foreground">暂无事件</div>
-                    )}
-                    {detail.truncated && (
-                      <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
-                        ⚠️ 仅显示前 2000 条事件，完整记录请使用导出功能
-                      </div>
+              <div className="text-sm text-muted-foreground">
+                LaTeX 日志：{detail.latexTrace ? `${detail.latexTrace.matchedBlocks} / ${detail.latexTrace.unmatchedBlocks}` : '未记录'}
+              </div>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex gap-2">
+                    <Button size="sm" variant={detailTab === 'trace' ? 'default' : 'outline'} onClick={() => setDetailTab('trace')}>
+                      主日志
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={detailTab === 'latex' ? 'default' : 'outline'}
+                      disabled={!detail.latexTrace}
+                      onClick={() => {
+                        setDetailTab('latex')
+                        if (detail.latexTrace && latexEvents.length === 0 && !latexLoading) {
+                          ensureLatexEvents(detail.trace.id)
+                        }
+                      }}
+                    >
+                      LaTeX 日志
+                    </Button>
+                  </div>
+                  <div className="ml-auto flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleExport(detail.trace.id)}>
+                      导出主日志
+                    </Button>
+                    {detail.latexTrace && (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => handleExportLatex(detail.trace.id)}>
+                          导出 LaTeX
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteLatex(detail.trace.id)}>
+                          删除 LaTeX
+                        </Button>
+                      </>
                     )}
                   </div>
-                </ScrollArea>
+                </div>
+                {detailTab === 'trace' && (
+                  <ScrollArea className="h-[50vh] rounded-xl border bg-muted/30 p-4">
+                    <div className="space-y-3">
+                      {detail.events.map((evt) => (
+                        <div key={evt.id} className="rounded-lg border bg-card p-3 transition-all hover:shadow-sm">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-mono">#{evt.seq}</span>
+                            <span>{formatDateTime(evt.timestamp)}</span>
+                          </div>
+                          <div className="mt-1 font-semibold text-sm">{evt.eventType}</div>
+                          <pre className="mt-2 overflow-x-auto rounded bg-muted/50 p-2 text-xs font-mono">{JSON.stringify(evt.payload ?? {}, null, 2)}</pre>
+                        </div>
+                      ))}
+                      {detail.events.length === 0 && (
+                        <div className="py-8 text-center text-sm text-muted-foreground">暂无事件</div>
+                      )}
+                      {detail.truncated && (
+                        <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+                          ⚠️ 仅显示前 2000 条事件，完整记录请使用导出功能
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                )}
+                {detailTab === 'latex' && detail.latexTrace && (
+                  <ScrollArea className="h-[50vh] rounded-xl border bg-muted/30 p-4">
+                    {latexLoading && <Skeleton className="h-16 w-full" />}
+                    {!latexLoading && (
+                      <div className="space-y-3">
+                        {latexEvents.map((evt) => (
+                          <div key={evt.seq} className="rounded-lg border bg-card p-3 transition-all hover:shadow-sm">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span className="font-mono">#{evt.seq}</span>
+                              <Badge variant={evt.matched ? 'default' : 'secondary'}>{evt.matched ? '命中' : '未匹配'}</Badge>
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">原因：{evt.reason}</div>
+                            <div className="mt-2 text-xs font-semibold">原始：</div>
+                            <pre className="mb-2 mt-1 overflow-x-auto rounded bg-muted/40 p-2 text-xs font-mono">{evt.raw}</pre>
+                            <div className="text-xs font-semibold">转换：</div>
+                            <pre className="mt-1 overflow-x-auto rounded bg-muted/40 p-2 text-xs font-mono">{evt.normalized}</pre>
+                          </div>
+                        ))}
+                        {latexEvents.length === 0 && (
+                          <div className="py-8 text-center text-sm text-muted-foreground">暂无 LaTeX 记录</div>
+                        )}
+                        {latexTruncated && (
+                          <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+                            ⚠️ 内容较多，仅展示部分段落
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </ScrollArea>
+                )}
+                {detailTab === 'latex' && !detail.latexTrace && (
+                  <div className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">该任务未记录 LaTeX 日志</div>
+                )}
               </div>
             </div>
           )}

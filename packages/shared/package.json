@@ -1,0 +1,27 @@
+{
+  "name": "@aichat/shared",
+  "version": "1.0.0",
+  "description": "Shared utilities for AIChat (frontend + backend)",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./latex-normalizer": "./dist/latex-normalizer.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
+    "prepare": "pnpm run build"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.10",
+    "typescript": "^5.6.3"
+  },
+  "license": "MIT",
+  "private": true
+}
