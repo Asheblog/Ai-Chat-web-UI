@@ -112,8 +112,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 # 使用dumb-init作为PID 1
 ENTRYPOINT ["dumb-init", "--"]
 
-# 启动应用（使用standalone构建）
-CMD ["node", "server.js"]
+# 启动应用（使用standalone构建，monorepo 输出位于 packages/frontend/server.js）
+CMD ["node", "packages/frontend/server.js"]
 
 # 开发阶段（可选）
 FROM base AS development
