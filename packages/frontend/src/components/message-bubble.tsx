@@ -12,7 +12,7 @@ import { MessageBody, MessageMeta, MessageRenderCacheEntry, ToolEvent } from '@/
 import { requestMarkdownRender } from '@/lib/markdown-worker-client'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { TypewriterReasoning } from './typewriter-reasoning'
+import { ReasoningPanel } from './reasoning-panel'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
 
@@ -107,7 +107,6 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
     }
   }, [sortedToolTimeline])
 
-  const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
   const { toast } = useToast()
 
   const isUser = meta.role === 'user'
@@ -266,132 +265,21 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
           ) : (
             <div className="space-y-2">
               {shouldShowReasoningSection && (
-                <div className="border rounded bg-background/60">
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-xs text-muted-foreground flex items-center justify-between"
-                    onClick={() => {
-                      setReasoningManuallyToggled(true)
-                      setShowReasoning((v) => !v)
-                    }}
-                    title="思维过程（可折叠）"
-                  >
-                    <span>
-                      {meta.reasoningStatus === 'idle'
-                        ? '思维过程 · 正在思考'
-                        : meta.reasoningStatus === 'streaming'
-                        ? '思维过程 · 输出中'
-                        : meta.reasoningDurationSeconds && !isStreaming
-                        ? `思维过程 · 用时 ${meta.reasoningDurationSeconds}s`
-                        : '思维过程'}
-                    </span>
-                    <span className="ml-2">{showReasoning ? '▼' : '▶'}</span>
-                  </button>
-                  {showReasoning && (
-                    <div className="px-3 pb-2 space-y-2 w-full break-words">
-                      {meta.reasoningStatus === 'idle' && (
-                        <div className="text-xs text-muted-foreground mb-1">
-                          模型正在思考…
-                          {typeof meta.reasoningIdleMs === 'number' && meta.reasoningIdleMs > 0
-                            ? `（静默 ${Math.round(meta.reasoningIdleMs / 1000)}s）`
-                            : null}
-                        </div>
-                      )}
-                      {reasoningText ? (
-                        reasoningHtml ? (
-                          <div
-                            className="markdown-body markdown-body--reasoning text-xs text-muted-foreground"
-                            dangerouslySetInnerHTML={{ __html: reasoningHtml }}
-                          />
-                        ) : (
-                          <div className="whitespace-pre-wrap break-words text-xs text-muted-foreground leading-[1.5] sm:leading-[1.6]">
-                            <TypewriterReasoning
-                              text={reasoningRaw}
-                              isStreaming={meta.reasoningStatus === 'streaming'}
-                              speed={20}
-                            />
-                          </div>
-                        )
-                      ) : (
-                        <div className="text-xs text-muted-foreground">
-                          {meta.reasoningStatus === 'streaming' ? '推理内容接收中…' : '正在思考中…'}
-                        </div>
-                      )}
-                      {toolSummary && (
-                        <div className="mt-3 border border-dashed border-muted-foreground/50 rounded-lg bg-muted/30 text-[11px] text-muted-foreground">
-                          <div className="px-3 py-2 flex items-start justify-between gap-3">
-                            <div>
-                              <div className="font-semibold text-xs text-foreground">
-                                联网搜索 · {toolSummary.total} 次
-                              </div>
-                              <p className="text-muted-foreground/80 mt-1">
-                                {toolSummary.summaryText}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              className="text-primary text-[11px] font-medium"
-                              onClick={() => setToolTimelineOpen((prev) => !prev)}
-                            >
-                              {toolTimelineOpen ? '收起详情' : '展开详情'}
-                            </button>
-                          </div>
-                          {toolTimelineOpen && (
-                            <div className="px-3 pb-3 space-y-2">
-                              {sortedToolTimeline.map((event) => {
-                                const statusLabel =
-                                  event.stage === 'start'
-                                    ? '检索中'
-                                    : event.stage === 'result'
-                                      ? `${event.hits?.length ?? 0} 条结果`
-                                      : event.error || '搜索失败'
-                                const statusClass =
-                                  event.stage === 'start'
-                                    ? 'text-amber-600'
-                                    : event.stage === 'result'
-                                      ? 'text-emerald-600'
-                                      : 'text-destructive'
-                                return (
-                                  <div key={event.id} className="rounded-md border border-muted-foreground/40 bg-background px-2 py-2">
-                                    <div className="flex items-center justify-between gap-2 font-semibold text-muted-foreground">
-                                      <span>{event.query || '未提供查询'}</span>
-                                      <span className={statusClass}>{statusLabel}</span>
-                                    </div>
-                                    {event.hits && event.hits.length > 0 && (
-                                      <ul className="mt-2 space-y-1">
-                                        {event.hits.slice(0, 3).map((hit, idx) => (
-                                          <li key={`${event.id}-${idx}`}>
-                                            <a
-                                              href={hit.url}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              className="text-primary hover:underline"
-                                            >
-                                              {hit.title || hit.url}
-                                            </a>
-                                            {hit.snippet && (
-                                              <p className="text-muted-foreground">{hit.snippet}</p>
-                                            )}
-                                          </li>
-                                        ))}
-                                        {event.hits.length > 3 && (
-                                          <li className="text-muted-foreground">……</li>
-                                        )}
-                                      </ul>
-                                    )}
-                                    {event.error && (
-                                      <p className="mt-2 text-destructive">{event.error}</p>
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <ReasoningPanel
+                  status={meta.reasoningStatus}
+                  durationSeconds={meta.reasoningDurationSeconds}
+                  idleMs={meta.reasoningIdleMs}
+                  expanded={showReasoning}
+                  onToggle={() => {
+                    setReasoningManuallyToggled(true)
+                    setShowReasoning((v) => !v)
+                  }}
+                  reasoningRaw={reasoningRaw}
+                  reasoningHtml={reasoningHtml || undefined}
+                  isStreaming={meta.reasoningStatus === 'streaming'}
+                  toolSummary={toolSummary}
+                  toolTimeline={sortedToolTimeline}
+                />
               )}
               {shouldShowStreamingPlaceholder ? (
                 <div className="flex items-center gap-1">
