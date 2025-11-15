@@ -96,6 +96,8 @@ jobs:
 
       - name: Build & Push Frontend
         uses: docker/build-push-action@v6
+        env:
+          BRANDING_FETCH_DISABLED: '1'
         with:
           context: .
           file: packages/frontend/Dockerfile
@@ -108,6 +110,8 @@ jobs:
             NEXT_PUBLIC_API_URL=/api
             BACKEND_HOST=backend
             BACKEND_INTERNAL_PORT=8001
+            BRANDING_FETCH_DISABLED=1
+          progress: plain
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE_LC }}/${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE_LC }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
