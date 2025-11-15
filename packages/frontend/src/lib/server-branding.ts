@@ -11,7 +11,8 @@ const BRANDING_REVALIDATE_SECONDS = (() => {
   }
   return 300
 })()
-const BRANDING_FETCH_DISABLED = process.env.BRANDING_FETCH_DISABLED === '1'
+const IS_PRODUCTION_BUILD_PHASE = process.env.NEXT_PHASE === 'phase-production-build'
+const BRANDING_FETCH_DISABLED = IS_PRODUCTION_BUILD_PHASE || process.env.BRANDING_FETCH_DISABLED === '1'
 
 const buildBrandingEndpoint = () => {
   const publicApi = process.env.NEXT_PUBLIC_API_URL
