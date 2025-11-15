@@ -102,18 +102,11 @@ RUN groupadd --gid 1001 nodejs && \
 # 设置工作目录
 WORKDIR /app
 
-# 复制生产依赖（包含 workspace 链接）
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=build /app/packages/shared ./packages/shared
-
-# 复制构建产物和必要文件（保持与原目录结构一致）
-COPY --from=build --chown=backend:nodejs /app/packages/backend/dist ./dist
-COPY --from=build --chown=backend:nodejs /app/packages/backend/scripts ./scripts
-COPY --from=build --chown=backend:nodejs /app/packages/backend/src ./src
-COPY --from=build --chown=backend:nodejs /app/packages/backend/tsconfig.json ./tsconfig.json
-COPY --from=build --chown=backend:nodejs /app/packages/backend/prisma ./prisma
-COPY --from=build --chown=backend:nodejs /app/packages/backend/package.json ./package.json
+# 保留 workspace 依赖结构，避免 pnpm 软链失效
+COPY --from=build --chown=backend:nodejs /app/node_modules /app/node_modules
+COPY --from=build --chown=backend:nodejs /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
+COPY --from=build --chown=backend:nodejs /app/packages/shared /app/packages/shared
+COPY --from=build --chown=backend:nodejs /app/packages/backend /app/packages/backend
 
 # 创建数据和日志目录
 RUN mkdir -p /app/data /app/logs && \

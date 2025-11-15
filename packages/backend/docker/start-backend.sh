@@ -6,9 +6,13 @@ set -euo pipefail
 # - 若 /app/data/app.db 不存在则自动初始化数据库 (prisma db push)
 # - 以 backend 用户启动应用
 
+# 应用根目录（保持与 pnpm workspace 同步）
+APP_ROOT="/app/packages/backend"
 DATA_DIR="/app/data"
 LOG_DIR="/app/logs"
 DEFAULT_DB_NAME="app.db"
+
+cd "$APP_ROOT"
 
 normalize_database_url() {
   local raw="${DATABASE_URL:-file:./data/$DEFAULT_DB_NAME}"
@@ -43,8 +47,8 @@ if [ "$DB_DIR" != "$DATA_DIR" ]; then
 fi
 
 SHOULD_INIT_DB=0
-PRISMA_SCHEMA_PATH="${PRISMA_SCHEMA_PATH:-/app/prisma/schema.prisma}"
-PRISMA_BIN="./node_modules/.bin/prisma"
+PRISMA_SCHEMA_PATH="${PRISMA_SCHEMA_PATH:-$APP_ROOT/prisma/schema.prisma}"
+PRISMA_BIN="$APP_ROOT/node_modules/.bin/prisma"
 
 run_prisma_command() {
   local subcommand="$1"
