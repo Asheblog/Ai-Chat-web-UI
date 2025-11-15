@@ -37,7 +37,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # 复制依赖与源代码
-COPY --from=deps /app/packages/frontend/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 COPY packages ./packages
 
 WORKDIR /app/packages/frontend

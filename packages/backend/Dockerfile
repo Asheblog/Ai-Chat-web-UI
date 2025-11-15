@@ -27,6 +27,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/*/package.json packages/*/
 COPY packages/shared ./packages/shared
+RUN mkdir -p /app/data
 
 # 开发阶段
 FROM base AS development
@@ -99,8 +100,8 @@ RUN groupadd --gid 1001 nodejs && \
 # 设置工作目录
 WORKDIR /app
 
-# 复制生产依赖（来自 backend 包）
-COPY --from=build /app/packages/backend/node_modules ./node_modules
+# 复制生产依赖（包含 workspace 链接）
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=build /app/packages/shared ./packages/shared
 
@@ -112,7 +113,7 @@ COPY --from=build --chown=backend:nodejs /app/packages/backend/tsconfig.json ./t
 COPY --from=build --chown=backend:nodejs /app/packages/backend/prisma ./prisma
 COPY --from=build --chown=backend:nodejs /app/packages/backend/package.json ./package.json
 # 保留 Prisma 引擎缓存以避免生成阶段重新下载
-COPY --from=build --chown=backend:nodejs /app/packages/backend/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build --chown=backend:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 # 创建数据和日志目录
 RUN mkdir -p /app/data /app/logs && \
