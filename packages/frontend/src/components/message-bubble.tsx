@@ -222,6 +222,16 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
     }
   }
 
+  const bubbleClass = `inline-block max-w-full box-border rounded-lg ${
+    isUser ? 'px-4 py-3' : isCodeOnly ? 'p-0' : 'px-4 py-3'
+  } ${
+    isUser
+      ? 'bg-muted text-foreground ml-auto'
+      : isCodeOnly
+      ? 'bg-transparent border-0 text-foreground'
+      : 'bg-background text-foreground'
+  }`
+
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
@@ -232,18 +242,8 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
       </Avatar>
 
       <div className={`flex-1 min-w-0 max-w-full lg:max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
-        <div
-          className={`inline-block max-w-full box-border rounded-lg ${
-            isUser ? 'px-4 py-3' : isCodeOnly ? 'p-0' : 'px-4 py-3'
-          } ${
-            isUser
-              ? 'bg-muted text-foreground ml-auto'
-              : isCodeOnly
-              ? 'bg-transparent border-0 text-foreground'
-              : 'bg-background text-foreground'
-          }`}
-        >
-          {isUser ? (
+        {isUser ? (
+          <div className={bubbleClass}>
             <div className="text-left">
               {meta.images && meta.images.length > 0 && (
                 <div className="mb-2 grid grid-cols-2 gap-2">
@@ -262,9 +262,11 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
               )}
               <p className="whitespace-pre-wrap text-left leading-[1.5] sm:leading-[1.6]">{content}</p>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {shouldShowReasoningSection && (
+          </div>
+        ) : (
+          <>
+            {shouldShowReasoningSection && (
+              <div className="mb-3">
                 <ReasoningPanel
                   status={meta.reasoningStatus}
                   durationSeconds={meta.reasoningDurationSeconds}
@@ -280,7 +282,9 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                   toolSummary={toolSummary}
                   toolTimeline={sortedToolTimeline}
                 />
-              )}
+              </div>
+            )}
+            <div className={bubbleClass}>
               {shouldShowStreamingPlaceholder ? (
                 <div className="flex items-center gap-1">
                   <div className="flex space-x-1">
@@ -299,8 +303,8 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                 />
               )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
         {!isUser && (
           <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
