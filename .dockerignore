@@ -1,0 +1,25 @@
+# Global ignores to keep Docker build context small
+node_modules
+**/node_modules
+.git
+.gitignore
+.husky
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Local caches & build outputs
+dist
+build
+.next
+coverage
+logs
+*.log
+tmp
+temp
+
+# Environment & lock caches copied explicitly via Dockerfile
+.env
+.env.*
+*.tsbuildinfo

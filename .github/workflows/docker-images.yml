@@ -52,7 +52,7 @@ jobs:
       - name: Build & Push Backend
         uses: docker/build-push-action@v6
         with:
-          context: packages/backend
+          context: .
           file: packages/backend/Dockerfile
           target: production
           push: true
@@ -97,7 +97,7 @@ jobs:
       - name: Build & Push Frontend
         uses: docker/build-push-action@v6
         with:
-          context: packages/frontend
+          context: .
           file: packages/frontend/Dockerfile
           target: runner
           push: true

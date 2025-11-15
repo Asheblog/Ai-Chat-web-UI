@@ -22,24 +22,28 @@ RUN corepack enable
 # 设置工作目录
 WORKDIR /app
 
-# 复制 package 文件（安装移至后续阶段，避免在基础层内存压力导致安装失败）
-COPY package.json pnpm-lock.yaml* package-lock.json* ./
+# 复制 workspace 元数据（仅 package.json 与 lock 文件，用于缓存依赖安装层）
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/*/package.json packages/*/
+COPY packages/shared ./packages/shared
 
 # 开发阶段
 FROM base AS development
 
+# 安装依赖需要完整开发环境
+ENV NODE_ENV=development
+
 # 安装所有依赖
-RUN if [ -f pnpm-lock.yaml ]; then \
-        pnpm install --frozen-lockfile; \
-    else \
-        if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
-    fi
+RUN pnpm install --frozen-lockfile --filter @aichat/backend...
 
 # 复制源代码
-COPY . .
+COPY packages ./packages
+
+# 切换到 backend 包目录运行脚本
+WORKDIR /app/packages/backend
 
 # 生成Prisma客户端
-RUN npm run db:generate
+RUN pnpm run db:generate
 
 # 暴露端口
 EXPOSE 8001
@@ -54,20 +58,18 @@ FROM base AS build
 ENV NODE_ENV=development
 
 # 安装所有依赖（包括开发依赖用于构建）
-RUN if [ -f pnpm-lock.yaml ]; then \
-        pnpm install --frozen-lockfile; \
-    else \
-        if [ -f package-lock.json ]; then npm ci --include=dev; else npm install; fi; \
-    fi
+RUN pnpm install --frozen-lockfile --filter @aichat/backend...
 
 # 复制源代码
-COPY . .
+COPY packages ./packages
+
+WORKDIR /app/packages/backend
 
 # 生成Prisma客户端
-RUN npm run db:generate
+RUN pnpm run db:generate
 
 # 构建TypeScript
-RUN npm run build
+RUN pnpm run build
 
 # 生产阶段 - 优化内存占用
 FROM node:20-slim AS production
@@ -95,28 +97,20 @@ RUN groupadd --gid 1001 nodejs && \
 # 设置工作目录
 WORKDIR /app
 
-# 先复制 Prisma schema，确保 @prisma/client 在安装时能找到 schema 并生成客户端
-COPY --from=build /app/prisma ./prisma
+# 复制生产依赖（包含 workspace 链接）
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=build /app/packages/shared ./packages/shared
+RUN mkdir -p /app/packages && ln -s .. /app/packages/backend
 
-# 复制 package 文件并安装生产依赖（确保最小依赖）
-COPY package.json pnpm-lock.yaml* package-lock.json* ./
-
-RUN if [ -f pnpm-lock.yaml ]; then \
-        npm install -g pnpm && \
-        pnpm install --frozen-lockfile --prod && \
-        pnpm store prune; \
-    else \
-        if [ -f package-lock.json ]; then npm ci --only=production; else npm install --only=production; fi && \
-        npm cache clean --force && \
-        rm -rf ~/.npm; \
-    fi
-
-# 复制构建产物和必要文件
-COPY --from=build --chown=backend:nodejs /app/dist ./dist
-COPY --from=build --chown=backend:nodejs /app/scripts ./scripts
-COPY --from=build --chown=backend:nodejs /app/src ./src
-COPY --from=build --chown=backend:nodejs /app/tsconfig.json ./tsconfig.json
-# 可选复制 Prisma 引擎缓存（安装已生成时可省略）
+# 复制构建产物和必要文件（保持与原目录结构一致）
+COPY --from=build --chown=backend:nodejs /app/packages/backend/dist ./dist
+COPY --from=build --chown=backend:nodejs /app/packages/backend/scripts ./scripts
+COPY --from=build --chown=backend:nodejs /app/packages/backend/src ./src
+COPY --from=build --chown=backend:nodejs /app/packages/backend/tsconfig.json ./tsconfig.json
+COPY --from=build --chown=backend:nodejs /app/packages/backend/prisma ./prisma
+COPY --from=build --chown=backend:nodejs /app/packages/backend/package.json ./package.json
+# 保留 Prisma 引擎缓存以避免生成阶段重新下载
 COPY --from=build --chown=backend:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 # 创建数据和日志目录
@@ -124,7 +118,7 @@ RUN mkdir -p /app/data /app/logs && \
     chown -R backend:nodejs /app/data /app/logs
 
 # 复制启动脚本（以 root 运行修复权限，随后降权运行）
-COPY --chown=backend:nodejs docker/start-backend.sh /usr/local/bin/start-backend.sh
+COPY --chown=backend:nodejs packages/backend/docker/start-backend.sh /usr/local/bin/start-backend.sh
 RUN chmod +x /usr/local/bin/start-backend.sh
 
 # 运行期以 root 进入，entrypoint 内会降权到 backend 用户

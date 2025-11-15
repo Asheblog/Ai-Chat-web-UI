@@ -8,30 +8,25 @@ RUN apk add --no-cache \
     make \
     g++
 
+# 启用 corepack，统一使用 pnpm
+RUN corepack enable
+
 # 设置工作目录
 WORKDIR /app
 
-# 复制package文件
-COPY package.json pnpm-lock.yaml* package-lock.json* ./
-
-# 检测使用pnpm还是npm
-RUN if [ -f pnpm-lock.yaml ]; then \
-        npm install -g pnpm; \
-    fi
+# 复制 workspace 元数据，提前包含 shared 包以支持 workspace:*
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/*/package.json packages/*/
+COPY packages/shared ./packages/shared
 
 # 依赖安装阶段
 FROM base AS deps
 
-# 设置环境变量优化Next.js构建（安装 devDependencies）
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 安装依赖
-RUN if [ -f pnpm-lock.yaml ]; then \
-        pnpm install --frozen-lockfile; \
-    else \
-        if [ -f package-lock.json ]; then npm ci --include=dev; else npm install; fi; \
-    fi
+# 安装 workspace 依赖（仅保留前端所需依赖，加速安装）
+RUN pnpm install --frozen-lockfile --filter @aichat/frontend...
 
 # 构建阶段
 FROM base AS builder
@@ -41,11 +36,11 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# 复制依赖
+# 复制依赖与源代码
 COPY --from=deps /app/node_modules ./node_modules
+COPY packages ./packages
 
-# 复制源代码
-COPY . .
+WORKDIR /app/packages/frontend
 
 # 设置构建参数（浏览器端 API 基址默认相对路径；服务端反代目标用于 Next rewrites）
 ARG NEXT_PUBLIC_API_URL=/api
@@ -59,11 +54,7 @@ ENV BACKEND_INTERNAL_PORT=$BACKEND_INTERNAL_PORT
 # RUN npm run db:generate
 
 # 构建应用
-RUN if [ -f pnpm-lock.yaml ]; then \
-        pnpm run build; \
-    else \
-        npm run build; \
-    fi
+RUN pnpm run build
 
 # 运行阶段 - 最小化镜像
 FROM node:20-alpine AS runner
@@ -90,9 +81,9 @@ WORKDIR /app
 # 不在运行阶段再次安装依赖：Next.js standalone 已包含所需 node_modules，避免 CI 内存不足（exit 134）
 
 # 复制构建产物
-COPY --from=builder --chown=nextjs:nextjs /app/public ./public
-COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nextjs /app/packages/frontend/public ./public
+COPY --from=builder --chown=nextjs:nextjs /app/packages/frontend/.next/standalone ./
+COPY --from=builder --chown=nextjs:nextjs /app/packages/frontend/.next/static ./.next/static
 
 # 创建必要的目录
 RUN mkdir -p /app/.next/cache && \
@@ -121,21 +112,14 @@ CMD ["node", "server.js"]
 # 开发阶段（可选）
 FROM base AS development
 
-# 设置开发环境变量
 ENV NODE_ENV=development
 
-# 安装所有依赖
-RUN if [ -f pnpm-lock.yaml ]; then \
-        pnpm install --frozen-lockfile; \
-    else \
-        if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
-    fi
+RUN pnpm install --frozen-lockfile --filter @aichat/frontend...
 
-# 复制源代码
-COPY . .
+COPY packages ./packages
 
-# 暴露端口
+WORKDIR /app/packages/frontend
+
 EXPOSE 3000
 
-# 启动开发服务器
-CMD ["dumb-init", "npm", "run", "dev"]
+CMD ["dumb-init", "pnpm", "run", "dev"]
