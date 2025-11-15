@@ -246,14 +246,14 @@ model TaskTraceEvent {
 
 model LatexTrace {
   id              Int      @id @default(autoincrement())
-  taskTraceId     Int      @unique
-  matchedBlocks   Int      @default(0)
-  unmatchedBlocks Int      @default(0)
+  taskTraceId     Int      @unique @map("task_trace_id")
+  matchedBlocks   Int      @default(0) @map("matched_blocks")
+  unmatchedBlocks Int      @default(0) @map("unmatched_blocks")
   status          String   @default("pending")
   metadata        String   @default("{}")
-  logFilePath     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  logFilePath     String?  @map("log_file_path")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   taskTrace TaskTrace @relation(fields: [taskTraceId], references: [id], onDelete: Cascade)
 

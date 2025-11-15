@@ -1,0 +1,3 @@
+-- Restored placeholder for historical migration "add_chat_stream_logs".
+-- The original SQL was lost; this file keeps the migration chain intact.
+-- No schema changes are performed here.
