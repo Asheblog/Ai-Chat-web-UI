@@ -4,8 +4,9 @@ services:
   # 后端服务 (Hono API)
   backend:
     build:
-      context: ./packages/backend
-      dockerfile: Dockerfile
+      # 使用仓库根目录作为构建上下文，确保可访问根级的 pnpm-lock/package.json 等工作区文件
+      context: .
+      dockerfile: packages/backend/Dockerfile
       target: production
     container_name: ai-chat-web-ui-backend
     ports:
@@ -47,8 +48,9 @@ services:
   # 前端服务 (Next.js)
   frontend:
     build:
-      context: ./packages/frontend
-      dockerfile: Dockerfile
+      # 同样使用根构建上下文，避免无法访问 lock 文件导致依赖缺失
+      context: .
+      dockerfile: packages/frontend/Dockerfile
       target: runner
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}

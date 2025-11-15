@@ -4,8 +4,9 @@ services:
   # 后端服务 (开发环境)
   backend:
     build:
-      context: ./packages/backend
-      dockerfile: Dockerfile
+      # 使用根上下文，以便 Dockerfile 可访问 workspace 的锁文件/配置
+      context: .
+      dockerfile: packages/backend/Dockerfile
       target: development
     container_name: ai-chat-web-ui-backend-dev
     ports:
@@ -47,8 +48,8 @@ services:
   # 前端服务 (开发环境)
   frontend:
     build:
-      context: ./packages/frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: packages/frontend/Dockerfile
       target: development
     container_name: ai-chat-web-ui-frontend-dev
     ports:
@@ -84,8 +85,8 @@ services:
   # 可通过 http://localhost:5555 访问
   prisma-studio:
     build:
-      context: ./packages/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: packages/backend/Dockerfile
       target: development
     container_name: ai-chat-web-ui-prisma-studio
     ports:
