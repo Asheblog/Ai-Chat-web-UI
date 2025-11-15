@@ -4,6 +4,7 @@ FROM node:20-slim AS base
 # 基础镜像阶段仅做系统依赖与依赖安装，不限制 Node 堆内存，避免安装阶段内存不足
 ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
+ENV DATABASE_URL="file:./data/app.db"
 
 # 安装必要的系统依赖（最小化安装）
 RUN apt-get update && \
@@ -34,7 +35,7 @@ FROM base AS development
 ENV NODE_ENV=development
 
 # 安装所有依赖
-RUN pnpm install --frozen-lockfile --filter @aichat/backend...
+RUN pnpm install --frozen-lockfile
 
 # 复制源代码
 COPY packages ./packages
@@ -58,7 +59,7 @@ FROM base AS build
 ENV NODE_ENV=development
 
 # 安装所有依赖（包括开发依赖用于构建）
-RUN pnpm install --frozen-lockfile --filter @aichat/backend...
+RUN pnpm install --frozen-lockfile
 
 # 复制源代码
 COPY packages ./packages
@@ -78,6 +79,7 @@ FROM node:20-slim AS production
 ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
+ENV DATABASE_URL="file:./data/app.db"
 
 # 只安装运行时必需的系统依赖
 RUN apt-get update && \
