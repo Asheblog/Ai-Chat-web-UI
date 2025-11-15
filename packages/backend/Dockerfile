@@ -114,8 +114,6 @@ COPY --from=build --chown=backend:nodejs /app/packages/backend/src ./src
 COPY --from=build --chown=backend:nodejs /app/packages/backend/tsconfig.json ./tsconfig.json
 COPY --from=build --chown=backend:nodejs /app/packages/backend/prisma ./prisma
 COPY --from=build --chown=backend:nodejs /app/packages/backend/package.json ./package.json
-# 保留 Prisma 引擎缓存以避免生成阶段重新下载
-COPY --from=build --chown=backend:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
 # 创建数据和日志目录
 RUN mkdir -p /app/data /app/logs && \
