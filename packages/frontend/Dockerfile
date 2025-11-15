@@ -37,6 +37,7 @@ FROM base AS builder
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV BRANDING_FETCH_DISABLED=1
 
 # 复制依赖与源代码
 COPY --from=deps /app/node_modules ./node_modules

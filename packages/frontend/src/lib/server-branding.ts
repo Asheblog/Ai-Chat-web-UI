@@ -11,6 +11,7 @@ const BRANDING_REVALIDATE_SECONDS = (() => {
   }
   return 300
 })()
+const BRANDING_FETCH_DISABLED = process.env.BRANDING_FETCH_DISABLED === '1'
 
 const buildBrandingEndpoint = () => {
   const publicApi = process.env.NEXT_PUBLIC_API_URL
@@ -28,6 +29,10 @@ export interface ServerBrandingResult {
 }
 
 export const getServerBranding = async (): Promise<ServerBrandingResult> => {
+  if (BRANDING_FETCH_DISABLED) {
+    return { text: DEFAULT_BRAND, isFallback: true }
+  }
+
   const endpoint = buildBrandingEndpoint()
   try {
     const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
