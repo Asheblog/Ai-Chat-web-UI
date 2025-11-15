@@ -4,7 +4,7 @@ FROM node:20-slim AS base
 # 基础镜像阶段仅做系统依赖与依赖安装，不限制 Node 堆内存，避免安装阶段内存不足
 ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
-ENV DATABASE_URL="file:./data/app.db"
+ENV DATABASE_URL="file:/app/data/app.db"
 
 # 安装必要的系统依赖（最小化安装）
 RUN apt-get update && \
@@ -79,7 +79,7 @@ FROM node:20-slim AS production
 ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
-ENV DATABASE_URL="file:./data/app.db"
+ENV DATABASE_URL="file:/app/data/app.db"
 
 # 只安装运行时必需的系统依赖
 RUN apt-get update && \
@@ -99,11 +99,10 @@ RUN groupadd --gid 1001 nodejs && \
 # 设置工作目录
 WORKDIR /app
 
-# 复制生产依赖（包含 workspace 链接）
-COPY --from=build /app/node_modules ./node_modules
+# 复制生产依赖（来自 backend 包）
+COPY --from=build /app/packages/backend/node_modules ./node_modules
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=build /app/packages/shared ./packages/shared
-RUN mkdir -p /app/packages && ln -s .. /app/packages/backend
 
 # 复制构建产物和必要文件（保持与原目录结构一致）
 COPY --from=build --chown=backend:nodejs /app/packages/backend/dist ./dist
@@ -113,7 +112,7 @@ COPY --from=build --chown=backend:nodejs /app/packages/backend/tsconfig.json ./t
 COPY --from=build --chown=backend:nodejs /app/packages/backend/prisma ./prisma
 COPY --from=build --chown=backend:nodejs /app/packages/backend/package.json ./package.json
 # 保留 Prisma 引擎缓存以避免生成阶段重新下载
-COPY --from=build --chown=backend:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build --chown=backend:nodejs /app/packages/backend/node_modules/.prisma ./node_modules/.prisma
 
 # 创建数据和日志目录
 RUN mkdir -p /app/data /app/logs && \
