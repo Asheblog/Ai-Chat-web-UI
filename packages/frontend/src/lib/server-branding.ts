@@ -3,6 +3,14 @@
 import type { ApiResponse } from '@/types'
 
 const DEFAULT_BRAND = 'AIChat'
+const BRANDING_REVALIDATE_SECONDS = (() => {
+  const raw = process.env.BRANDING_REVALIDATE_SECONDS
+  const parsed = raw ? Number.parseInt(raw, 10) : null
+  if (parsed !== null && Number.isFinite(parsed) && parsed >= 0) {
+    return parsed
+  }
+  return 300
+})()
 
 const buildBrandingEndpoint = () => {
   const publicApi = process.env.NEXT_PUBLIC_API_URL
@@ -22,10 +30,16 @@ export interface ServerBrandingResult {
 export const getServerBranding = async (): Promise<ServerBrandingResult> => {
   const endpoint = buildBrandingEndpoint()
   try {
-    const response = await fetch(endpoint, {
-      cache: 'no-store',
+    const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
       headers: { Accept: 'application/json' },
-    })
+    }
+    if (BRANDING_REVALIDATE_SECONDS === 0) {
+      fetchOptions.cache = 'no-store'
+    } else {
+      fetchOptions.next = { revalidate: BRANDING_REVALIDATE_SECONDS }
+    }
+
+    const response = await fetch(endpoint, fetchOptions)
     if (!response.ok) {
       throw new Error(`Branding request failed with status ${response.status}`)
     }
