@@ -17,8 +17,8 @@ RUN apt-get update && \
         gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# 启用 corepack，确保 pnpm 在各阶段可用
-RUN corepack enable
+# 启用 corepack 并固定 pnpm 版本，确保锁文件兼容
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 # 设置工作目录
 WORKDIR /app

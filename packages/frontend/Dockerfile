@@ -8,8 +8,8 @@ RUN apk add --no-cache \
     make \
     g++
 
-# 启用 corepack，统一使用 pnpm
-RUN corepack enable
+# 启用 corepack 并锁定 pnpm 版本
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 # 设置工作目录
 WORKDIR /app
