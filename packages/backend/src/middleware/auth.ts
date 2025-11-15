@@ -6,6 +6,10 @@ import { AuthUtils } from '../utils/auth'
 import { prisma } from '../db'
 import { getQuotaPolicy } from '../utils/system-settings'
 import type { Actor, AnonymousActor, UserActor } from '../types'
+import {
+  determineProfileImageBaseUrl,
+  resolveProfileImageUrl,
+} from '../utils/profile-images'
 
 const ANON_COOKIE_KEY = 'anon_key'
 const COOKIE_PATH_ROOT: Parameters<typeof deleteCookie>[2] = { path: '/' }
@@ -33,7 +37,7 @@ const resolveTokenFromRequest = (c: Context) => {
   return token
 }
 
-const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' | 'USER'; status: 'PENDING' | 'ACTIVE' | 'DISABLED'; preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null }): UserActor => ({
+const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' | 'USER'; status: 'PENDING' | 'ACTIVE' | 'DISABLED'; preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null; avatarPath?: string | null }): UserActor => ({
   type: 'user',
   id: payload.id,
   username: payload.username,
@@ -41,6 +45,7 @@ const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' |
   status: payload.status,
   identifier: `user:${payload.id}`,
   preferredModel: payload.preferredModel ?? null,
+  avatarPath: payload.avatarPath ?? null,
 })
 
 const buildAnonymousActor = (key: string, retentionDays: number): AnonymousActor => {
@@ -91,7 +96,7 @@ const resolveActor = async (c: Context): Promise<{ actor: Actor | null; status?:
     }
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, username: true, role: true, status: true, preferredModelId: true, preferredConnectionId: true, preferredModelRawId: true },
+      select: { id: true, username: true, role: true, status: true, preferredModelId: true, preferredConnectionId: true, preferredModelRawId: true, avatarPath: true },
     })
     if (!user) {
       return { actor: null, status: 401, error: 'User not found', clearAuth: true }
@@ -110,6 +115,7 @@ const resolveActor = async (c: Context): Promise<{ actor: Actor | null; status?:
           connectionId: user.preferredConnectionId ?? null,
           rawId: user.preferredModelRawId ?? null,
         },
+        avatarPath: user.avatarPath ?? null,
       }),
     }
   }
@@ -166,11 +172,14 @@ export const actorMiddleware = async (c: Context, next: Next) => {
   c.set('actor', result.actor)
 
   if (result.actor.type === 'user') {
+    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
+    const avatarUrl = resolveProfileImageUrl(result.actor.avatarPath ?? null, baseUrl)
     c.set('user', {
       id: result.actor.id,
       username: result.actor.username,
       role: result.actor.role,
       status: result.actor.status,
+      avatarUrl: avatarUrl ?? null,
     })
   }
 

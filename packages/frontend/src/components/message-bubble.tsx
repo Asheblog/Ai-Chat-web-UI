@@ -12,6 +12,7 @@ import { MessageBody, MessageMeta, MessageRenderCacheEntry, ToolEvent } from '@/
 import { requestMarkdownRender } from '@/lib/markdown-worker-client'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useAuthStore } from '@/store/auth-store'
 import { ReasoningPanel } from './reasoning-panel'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
@@ -37,9 +38,11 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
   const [isCopied, setIsCopied] = useState(false)
   const reasoningRaw = body.reasoning || ''
   const reasoningText = reasoningRaw.trim()
-  const reasoningDefaultExpand = useSettingsStore(
-    (state) => Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
-  )
+  const currentUser = useAuthStore((state) => state.user)
+  const { reasoningDefaultExpand, assistantAvatarUrl } = useSettingsStore((state) => ({
+    reasoningDefaultExpand: Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
+    assistantAvatarUrl: state.systemSettings?.assistantAvatarUrl ?? null,
+  }))
   const defaultShouldShow = useMemo(() => {
     if (meta.role !== 'assistant') return false
     if (typeof meta.reasoningStatus === 'string') {
@@ -232,12 +235,17 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
       : 'bg-background text-foreground'
   }`
 
+  const avatarSrc = isUser ? currentUser?.avatarUrl ?? undefined : assistantAvatarUrl ?? undefined
+  const avatarFallbackText = isUser
+    ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
+    : 'A'
+
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
-        <AvatarImage src={undefined} />
+        <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
         <AvatarFallback className={isUser ? 'text-muted-foreground' : 'text-muted-foreground'}>
-          {isUser ? 'U' : 'A'}
+          {avatarFallbackText}
         </AvatarFallback>
       </Avatar>
 

@@ -121,12 +121,14 @@ export const useAuthStore = create<AuthStore>()(
           const profile = context.user ?? null
           const createdAtSource = profile?.createdAt ?? null
           const createdAt = createdAtSource ? new Date(createdAtSource).toISOString() : new Date().toISOString()
+          const actorAvatar = context.actor.type === 'user' ? context.actor.avatarUrl ?? null : null
           user = {
             id: profile?.id ?? context.actor.id,
             username: profile?.username ?? context.actor.username,
             role: profile?.role ?? context.actor.role,
             status: profile?.status ?? context.actor.status,
             createdAt,
+            avatarUrl: profile?.avatarUrl ?? actorAvatar ?? null,
           }
         }
         set({

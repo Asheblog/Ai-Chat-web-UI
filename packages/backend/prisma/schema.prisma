@@ -28,6 +28,7 @@ model User {
   preferredModelId       String?
   preferredConnectionId  Int?
   preferredModelRawId    String?
+  avatarPath             String? @map("avatar_path")
 
   chatSessions  ChatSession[]
   connections   Connection[]

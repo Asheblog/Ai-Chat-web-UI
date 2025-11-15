@@ -8,6 +8,11 @@ import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
 import { getQuotaPolicy, invalidateQuotaPolicyCache, invalidateReasoningMaxOutputTokensDefaultCache } from '../utils/system-settings';
 import { invalidateTaskTraceConfig } from '../utils/task-trace';
 import { syncSharedAnonymousQuota } from '../utils/quota';
+import {
+  replaceProfileImage,
+  resolveProfileImageUrl,
+  determineProfileImageBaseUrl,
+} from '../utils/profile-images';
 
 const settings = new Hono();
 
@@ -52,6 +57,11 @@ settings.get('/branding', async (c) => {
 });
 
 // 系统设置schema（允许部分字段更新）
+const imagePayloadSchema = z.object({
+  data: z.string().min(1),
+  mime: z.string().min(1),
+})
+
 const systemSettingSchema = z.object({
   registration_enabled: z.boolean().optional(),
   // 文字LOGO，最多40字符
@@ -91,6 +101,7 @@ const systemSettingSchema = z.object({
   web_search_api_key: z.string().min(1).optional(),
   web_search_result_limit: z.number().int().min(1).max(10).optional(),
   web_search_domain_filter: z.array(z.string().min(1)).optional(),
+  assistant_avatar: z.union([imagePayloadSchema, z.null()]).optional(),
   task_trace_enabled: z.boolean().optional(),
   task_trace_default_on: z.boolean().optional(),
   task_trace_admin_only: z.boolean().optional(),
@@ -233,6 +244,13 @@ settings.get('/system', actorMiddleware, async (c) => {
       })(),
     };
 
+    const assistantAvatarBase = determineProfileImageBaseUrl({
+      request: c.req.raw,
+      siteBaseUrl: formattedSettings.site_base_url,
+    })
+    const assistantAvatarPath = settingsObj.assistant_avatar_path || null
+    formattedSettings.assistant_avatar_url = resolveProfileImageUrl(assistantAvatarPath, assistantAvatarBase)
+
     if (!isAdmin) {
       const publicSettings = {
         brand_text: formattedSettings.brand_text,
@@ -245,6 +263,7 @@ settings.get('/system', actorMiddleware, async (c) => {
         web_search_result_limit: formattedSettings.web_search_result_limit,
         web_search_domain_filter: formattedSettings.web_search_domain_filter,
         web_search_has_api_key: formattedSettings.web_search_has_api_key,
+        assistant_avatar_url: formattedSettings.assistant_avatar_url,
       };
       return c.json<ApiResponse>({
         success: true,
@@ -269,6 +288,7 @@ settings.get('/system', actorMiddleware, async (c) => {
 // 更新系统设置（仅管理员）
 settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
   try {
+    const payload = c.req.valid('json');
     const {
       registration_enabled,
       brand_text,
@@ -302,6 +322,7 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
       web_search_api_key,
       web_search_result_limit,
       web_search_domain_filter,
+      assistant_avatar,
       task_trace_enabled,
       task_trace_default_on,
       task_trace_admin_only,
@@ -309,7 +330,8 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
       task_trace_retention_days,
       task_trace_max_events,
       task_trace_idle_timeout_ms,
-    } = c.req.valid('json');
+      assistant_avatar,
+    } = payload;
     let anonymousQuotaUpdated = false;
     let taskTraceSettingsUpdated = false;
 
@@ -522,6 +544,27 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'assistant_avatar')) {
+      const existing = await prisma.systemSetting.findUnique({
+        where: { key: 'assistant_avatar_path' },
+        select: { value: true },
+      })
+      const currentPath = existing?.value ?? null
+      if (assistant_avatar === null) {
+        await replaceProfileImage(null, { currentPath })
+        await prisma.systemSetting.deleteMany({ where: { key: 'assistant_avatar_path' } })
+      } else if (assistant_avatar) {
+        const nextPath = await replaceProfileImage(assistant_avatar, { currentPath })
+        if (nextPath) {
+          await prisma.systemSetting.upsert({
+            where: { key: 'assistant_avatar_path' },
+            update: { value: nextPath },
+            create: { key: 'assistant_avatar_path', value: nextPath },
+          })
+        }
+      }
+    }
+
     if (typeof anonymous_retention_days === 'number') {
       const clamped = Math.max(0, Math.min(15, anonymous_retention_days))
       await prisma.systemSetting.upsert({
@@ -726,8 +769,10 @@ settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
         preferredModelId: true,
         preferredConnectionId: true,
         preferredModelRawId: true,
+        avatarPath: true,
       },
     });
+    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
 
     const personalSettings = {
       context_token_limit: parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000'),
@@ -737,6 +782,7 @@ settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
         connectionId: record?.preferredConnectionId ?? null,
         rawId: record?.preferredModelRawId ?? null,
       },
+      avatar_url: resolveProfileImageUrl(record?.avatarPath ?? null, baseUrl),
     };
 
     return c.json<ApiResponse>({
@@ -758,6 +804,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
   context_token_limit: z.number().int().min(1000).max(32000).optional(),
   theme: z.enum(['light', 'dark']).optional(),
   preferred_model: modelPreferenceSchema.optional(),
+  avatar: z.union([imagePayloadSchema, z.null()]).optional(),
 })), async (c) => {
   try {
     const user = c.get('user');
@@ -766,7 +813,17 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
       return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
     }
 
+    const currentProfile = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        preferredModelId: true,
+        preferredConnectionId: true,
+        preferredModelRawId: true,
+        avatarPath: true,
+      },
+    });
     const updates: any = {};
+    let avatarPathResult = currentProfile?.avatarPath ?? null;
     if (Object.prototype.hasOwnProperty.call(updateData, 'preferred_model')) {
       const pref = updateData.preferred_model || null;
       updates.preferredModelId = pref?.modelId ?? null;
@@ -774,19 +831,35 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
       updates.preferredModelRawId = pref?.rawId ?? null;
     }
 
+    if (Object.prototype.hasOwnProperty.call(updateData, 'avatar')) {
+      const nextPath = await replaceProfileImage(updateData.avatar ?? null, {
+        currentPath: currentProfile?.avatarPath ?? null,
+      })
+      updates.avatarPath = nextPath
+      avatarPathResult = nextPath
+    }
+
     if (Object.keys(updates).length > 0) {
       await prisma.user.update({ where: { id: user.id }, data: updates });
+    }
+
+    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
+
+    const responseData: Record<string, any> = { ...updateData }
+    if (Object.prototype.hasOwnProperty.call(responseData, 'avatar')) {
+      delete responseData.avatar
     }
 
     return c.json<ApiResponse>({
       success: true,
       data: {
-        ...updateData,
+        ...responseData,
         preferred_model: {
-          modelId: updates.preferredModelId ?? null,
-          connectionId: updates.preferredConnectionId ?? null,
-          rawId: updates.preferredModelRawId ?? null,
+          modelId: updates.preferredModelId ?? currentProfile?.preferredModelId ?? null,
+          connectionId: updates.preferredConnectionId ?? currentProfile?.preferredConnectionId ?? null,
+          rawId: updates.preferredModelRawId ?? currentProfile?.preferredModelRawId ?? null,
         },
+        avatar_url: resolveProfileImageUrl(avatarPathResult, baseUrl),
       },
       message: 'Personal settings updated successfully',
     });

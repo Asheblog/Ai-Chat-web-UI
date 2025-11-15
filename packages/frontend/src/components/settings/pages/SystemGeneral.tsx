@@ -23,6 +23,7 @@ import { apiClient } from "@/lib/api"
 import { useAuthStore } from "@/store/auth-store"
 import { UserPlus, Palette, Clock } from "lucide-react"
 import { SettingRow } from "../components/setting-row"
+import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
 
 export function SystemGeneralPage() {
   const {
@@ -49,6 +50,8 @@ export function SystemGeneralPage() {
   const [syncingAnonymousQuota, setSyncingAnonymousQuota] = useState(false)
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [assistantAvatarPreview, setAssistantAvatarPreview] = useState<string | null>(null)
+  const [assistantAvatarSaving, setAssistantAvatarSaving] = useState(false)
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   const resetDrafts = useCallback(() => {
@@ -60,6 +63,7 @@ export function SystemGeneralPage() {
     setAnonymousQuotaDraft(String(systemSettings.anonymousDailyQuota ?? 20))
     setDefaultUserQuotaDraft(String(systemSettings.defaultUserDailyQuota ?? 200))
     setAnonymousRetentionDraft(String(systemSettings.anonymousRetentionDays ?? 15))
+    setAssistantAvatarPreview(systemSettings.assistantAvatarUrl || null)
   }, [systemSettings])
 
   useEffect(() => {
@@ -112,6 +116,46 @@ export function SystemGeneralPage() {
     } finally {
       setSyncingAnonymousQuota(false)
       setSyncDialogOpen(false)
+    }
+  }
+
+  const handleAssistantAvatarUpload = async ({ data, mime, previewUrl }: AvatarUploadResult) => {
+    if (!isAdmin || assistantAvatarSaving) return
+    const previous = assistantAvatarPreview
+    setAssistantAvatarPreview(previewUrl)
+    setAssistantAvatarSaving(true)
+    try {
+      await updateSystemSettings({ assistantAvatarUpload: { data, mime } })
+      toast({ title: 'AI 头像已更新' })
+    } catch (error: any) {
+      setAssistantAvatarPreview(previous)
+      toast({
+        title: '上传失败',
+        description: error?.response?.data?.error || error?.message || '更新 AI 头像失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setAssistantAvatarSaving(false)
+    }
+  }
+
+  const handleAssistantAvatarClear = async () => {
+    if (!isAdmin || assistantAvatarSaving) return
+    const previous = assistantAvatarPreview
+    setAssistantAvatarPreview(null)
+    setAssistantAvatarSaving(true)
+    try {
+      await updateSystemSettings({ assistantAvatarRemove: true })
+      toast({ title: '已恢复默认 AI 头像' })
+    } catch (error: any) {
+      setAssistantAvatarPreview(previous)
+      toast({
+        title: '操作失败',
+        description: error?.response?.data?.error || error?.message || '恢复默认 AI 头像失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setAssistantAvatarSaving(false)
     }
   }
 
@@ -181,6 +225,32 @@ export function SystemGeneralPage() {
 
   return (
     <div className="space-y-6">
+
+      {/* 用户注册区块 */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <Palette className="w-5 h-5 text-primary" />
+          <div>
+            <CardTitle className="text-lg">AI 头像</CardTitle>
+            <CardDescription>设置全局生效的 AI 回复头像</CardDescription>
+          </div>
+        </div>
+        <SettingRow
+          title="AI 回复头像"
+          description="修改后对所有用户立即生效，最大 1MB"
+        >
+          <AvatarUploadField
+            imageUrl={assistantAvatarPreview}
+            fallbackText="A"
+            uploading={assistantAvatarSaving}
+            disabled={!isAdmin}
+            clearDisabled={!assistantAvatarPreview}
+            onUpload={handleAssistantAvatarUpload}
+            onClear={handleAssistantAvatarClear}
+            onError={(message) => toast({ title: '上传失败', description: message, variant: 'destructive' })}
+          />
+        </SettingRow>
+      </div>
 
       {/* 用户注册区块 */}
       <div className="space-y-4">

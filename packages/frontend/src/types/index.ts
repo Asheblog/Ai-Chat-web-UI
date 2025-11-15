@@ -5,6 +5,7 @@ export interface User {
   role: 'ADMIN' | 'USER';
   createdAt: string;
   status: 'PENDING' | 'ACTIVE' | 'DISABLED';
+  avatarUrl?: string | null;
 }
 
 export interface ModelPreferenceDTO {
@@ -52,6 +53,7 @@ export type UserActorProfile = {
   status: 'PENDING' | 'ACTIVE' | 'DISABLED';
   identifier: string;
   preferredModel?: ModelPreferenceDTO | null;
+  avatarUrl?: string | null;
 };
 
 export type ActorProfile = AnonymousActorProfile | UserActorProfile;
@@ -61,6 +63,7 @@ export interface ActorContextDTO {
   quota: ActorQuota | null;
   user?: User | null;
   preferredModel?: ModelPreferenceDTO | null;
+  assistantAvatarUrl?: string | null;
 }
 
 export interface LoginRequest {
@@ -198,6 +201,7 @@ export interface SystemSettings {
   webSearchResultLimit?: number;
   webSearchDomainFilter?: string[];
   webSearchHasApiKey?: boolean;
+  assistantAvatarUrl?: string | null;
   webSearchApiKey?: string;
   taskTraceEnabled?: boolean;
   taskTraceDefaultOn?: boolean;

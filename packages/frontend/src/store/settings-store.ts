@@ -3,9 +3,15 @@ import { persist } from 'zustand/middleware'
 import { SettingsState, SystemSettings } from '@/types'
 import { apiClient } from '@/lib/api'
 
+type AvatarUploadPayload = { data: string; mime: string }
+type SystemSettingsUpdatePayload = Partial<SystemSettings> & {
+  assistantAvatarUpload?: AvatarUploadPayload | null
+  assistantAvatarRemove?: boolean
+}
+
 interface SettingsStore extends SettingsState {
   fetchSystemSettings: () => Promise<void>
-  updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>
+  updateSystemSettings: (settings: SystemSettingsUpdatePayload) => Promise<void>
   fetchPublicBranding: () => Promise<boolean>
   bootstrapBrandText: (brandText?: string | null) => void
   setTheme: (theme: 'light' | 'dark' | 'system') => void
@@ -68,7 +74,7 @@ export const useSettingsStore = create<SettingsStore>()(
         }
       },
 
-      updateSystemSettings: async (settings: Partial<SystemSettings>) => {
+      updateSystemSettings: async (settings: SystemSettingsUpdatePayload) => {
         set({ isLoading: true, error: null })
         try {
           const response = await apiClient.updateSystemSettings(settings)

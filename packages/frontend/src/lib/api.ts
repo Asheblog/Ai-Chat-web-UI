@@ -16,11 +16,17 @@ import type {
   TaskTraceEventRecord,
   LatexTraceSummary,
   LatexTraceEventRecord,
+  SystemSettings,
 } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
+
+type ImageUploadPayload = {
+  data: string
+  mime: string
+}
 
 class ApiClient {
   private client: AxiosInstance
@@ -634,6 +640,12 @@ class ApiClient {
       ? (settingsRes.data.data?.web_search_domain_filter as string[])
       : []
     const webSearchHasApiKey = Boolean(settingsRes.data.data?.web_search_has_api_key ?? false)
+    const assistantAvatarUrl = (() => {
+      const raw = settingsRes.data.data?.assistant_avatar_url
+      if (typeof raw === 'string' && raw.trim().length > 0) return raw
+      if (raw === null) return null
+      return null
+    })()
     const taskTraceEnabled = Boolean(settingsRes.data.data?.task_trace_enabled ?? false)
     const taskTraceDefaultOn = Boolean(settingsRes.data.data?.task_trace_default_on ?? false)
     const taskTraceAdminOnly = (settingsRes.data.data?.task_trace_admin_only ?? true) as boolean
@@ -701,6 +713,7 @@ class ApiClient {
         webSearchResultLimit,
         webSearchDomainFilter,
         webSearchHasApiKey,
+        assistantAvatarUrl,
         taskTraceEnabled,
         taskTraceDefaultOn,
         taskTraceAdminOnly,
@@ -717,61 +730,77 @@ class ApiClient {
     return response.data
   }
 
-  async updateSystemSettings(settings: any) {
-    // 支持 allowRegistration/brandText 以及流式稳定性设置
+  async updateSystemSettings(
+    settings: Partial<SystemSettings> & {
+      assistantAvatarUpload?: ImageUploadPayload | null
+      assistantAvatarRemove?: boolean
+    },
+  ) {
+    const { assistantAvatarUpload, assistantAvatarRemove, ...rest } = settings
     const payload: any = {}
-    if (typeof settings.allowRegistration === 'boolean') payload.registration_enabled = !!settings.allowRegistration
-    if (typeof settings.brandText === 'string') payload.brand_text = settings.brandText
-    if (typeof settings.sseHeartbeatIntervalMs === 'number') payload.sse_heartbeat_interval_ms = settings.sseHeartbeatIntervalMs
-    if (typeof settings.providerMaxIdleMs === 'number') payload.provider_max_idle_ms = settings.providerMaxIdleMs
-    if (typeof settings.providerTimeoutMs === 'number') payload.provider_timeout_ms = settings.providerTimeoutMs
-    if (typeof settings.providerInitialGraceMs === 'number') payload.provider_initial_grace_ms = settings.providerInitialGraceMs
-    if (typeof settings.providerReasoningIdleMs === 'number') payload.provider_reasoning_idle_ms = settings.providerReasoningIdleMs
-    if (typeof settings.reasoningKeepaliveIntervalMs === 'number') payload.reasoning_keepalive_interval_ms = settings.reasoningKeepaliveIntervalMs
-    if (typeof settings.usageEmit === 'boolean') payload.usage_emit = !!settings.usageEmit
-    if (typeof settings.usageProviderOnly === 'boolean') payload.usage_provider_only = !!settings.usageProviderOnly
-    if (typeof settings.reasoningEnabled === 'boolean') payload.reasoning_enabled = !!settings.reasoningEnabled
-    if (typeof settings.reasoningDefaultExpand === 'boolean') payload.reasoning_default_expand = !!settings.reasoningDefaultExpand
-    if (typeof settings.reasoningSaveToDb === 'boolean') payload.reasoning_save_to_db = !!settings.reasoningSaveToDb
-    if (typeof settings.reasoningTagsMode === 'string') payload.reasoning_tags_mode = settings.reasoningTagsMode
-    if (typeof settings.reasoningCustomTags === 'string') payload.reasoning_custom_tags = settings.reasoningCustomTags
-    if (typeof settings.streamDeltaChunkSize === 'number') payload.stream_delta_chunk_size = settings.streamDeltaChunkSize
-    if (typeof settings.streamDeltaFlushIntervalMs === 'number') payload.stream_delta_flush_interval_ms = settings.streamDeltaFlushIntervalMs
-    if (typeof settings.streamReasoningFlushIntervalMs === 'number') payload.stream_reasoning_flush_interval_ms = settings.streamReasoningFlushIntervalMs
-    if (typeof settings.streamKeepaliveIntervalMs === 'number') payload.stream_keepalive_interval_ms = settings.streamKeepaliveIntervalMs
-    if (typeof settings.openaiReasoningEffort === 'string') payload.openai_reasoning_effort = settings.openaiReasoningEffort
-    if (Object.prototype.hasOwnProperty.call(settings, 'reasoningMaxOutputTokensDefault')) {
-      if (typeof settings.reasoningMaxOutputTokensDefault === 'number') {
-        payload.reasoning_max_output_tokens_default = settings.reasoningMaxOutputTokensDefault
-      } else if (settings.reasoningMaxOutputTokensDefault === null) {
+    if (typeof rest.allowRegistration === 'boolean') payload.registration_enabled = !!rest.allowRegistration
+    if (typeof rest.brandText === 'string') payload.brand_text = rest.brandText
+    if (typeof rest.sseHeartbeatIntervalMs === 'number') payload.sse_heartbeat_interval_ms = rest.sseHeartbeatIntervalMs
+    if (typeof rest.providerMaxIdleMs === 'number') payload.provider_max_idle_ms = rest.providerMaxIdleMs
+    if (typeof rest.providerTimeoutMs === 'number') payload.provider_timeout_ms = rest.providerTimeoutMs
+    if (typeof rest.providerInitialGraceMs === 'number') payload.provider_initial_grace_ms = rest.providerInitialGraceMs
+    if (typeof rest.providerReasoningIdleMs === 'number') payload.provider_reasoning_idle_ms = rest.providerReasoningIdleMs
+    if (typeof rest.reasoningKeepaliveIntervalMs === 'number') payload.reasoning_keepalive_interval_ms = rest.reasoningKeepaliveIntervalMs
+    if (typeof rest.usageEmit === 'boolean') payload.usage_emit = !!rest.usageEmit
+    if (typeof rest.usageProviderOnly === 'boolean') payload.usage_provider_only = !!rest.usageProviderOnly
+    if (typeof rest.reasoningEnabled === 'boolean') payload.reasoning_enabled = !!rest.reasoningEnabled
+    if (typeof rest.reasoningDefaultExpand === 'boolean') payload.reasoning_default_expand = !!rest.reasoningDefaultExpand
+    if (typeof rest.reasoningSaveToDb === 'boolean') payload.reasoning_save_to_db = !!rest.reasoningSaveToDb
+    if (typeof rest.reasoningTagsMode === 'string') payload.reasoning_tags_mode = rest.reasoningTagsMode
+    if (typeof rest.reasoningCustomTags === 'string') payload.reasoning_custom_tags = rest.reasoningCustomTags
+    if (typeof rest.streamDeltaChunkSize === 'number') payload.stream_delta_chunk_size = rest.streamDeltaChunkSize
+    if (typeof rest.streamDeltaFlushIntervalMs === 'number') payload.stream_delta_flush_interval_ms = rest.streamDeltaFlushIntervalMs
+    if (typeof rest.streamReasoningFlushIntervalMs === 'number') payload.stream_reasoning_flush_interval_ms = rest.streamReasoningFlushIntervalMs
+    if (typeof rest.streamKeepaliveIntervalMs === 'number') payload.stream_keepalive_interval_ms = rest.streamKeepaliveIntervalMs
+    if (typeof rest.openaiReasoningEffort === 'string') payload.openai_reasoning_effort = rest.openaiReasoningEffort
+    if (Object.prototype.hasOwnProperty.call(rest, 'reasoningMaxOutputTokensDefault')) {
+      if (typeof rest.reasoningMaxOutputTokensDefault === 'number') {
+        payload.reasoning_max_output_tokens_default = rest.reasoningMaxOutputTokensDefault
+      } else if (rest.reasoningMaxOutputTokensDefault === null) {
         payload.reasoning_max_output_tokens_default = null
       }
     }
-    if (typeof settings.ollamaThink === 'boolean') payload.ollama_think = !!settings.ollamaThink
-    if (typeof settings.chatImageRetentionDays === 'number') payload.chat_image_retention_days = settings.chatImageRetentionDays
-    if (typeof settings.siteBaseUrl === 'string') payload.site_base_url = settings.siteBaseUrl
-    if (typeof settings.anonymousRetentionDays === 'number') payload.anonymous_retention_days = settings.anonymousRetentionDays
-    if (typeof settings.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = settings.anonymousDailyQuota
-    if (typeof settings.defaultUserDailyQuota === 'number') payload.default_user_daily_quota = settings.defaultUserDailyQuota
-    if (typeof settings.webSearchAgentEnable === 'boolean') payload.web_search_agent_enable = settings.webSearchAgentEnable
-    if (typeof settings.webSearchDefaultEngine === 'string') payload.web_search_default_engine = settings.webSearchDefaultEngine
-    if (typeof settings.webSearchResultLimit === 'number') payload.web_search_result_limit = settings.webSearchResultLimit
-    if (Array.isArray(settings.webSearchDomainFilter)) payload.web_search_domain_filter = settings.webSearchDomainFilter
-    if (typeof (settings as any).webSearchApiKey === 'string') payload.web_search_api_key = (settings as any).webSearchApiKey
-    if (typeof settings.taskTraceEnabled === 'boolean') payload.task_trace_enabled = settings.taskTraceEnabled
-    if (typeof settings.taskTraceDefaultOn === 'boolean') payload.task_trace_default_on = settings.taskTraceDefaultOn
-    if (typeof settings.taskTraceAdminOnly === 'boolean') payload.task_trace_admin_only = settings.taskTraceAdminOnly
-    if (typeof settings.taskTraceEnv === 'string') payload.task_trace_env = settings.taskTraceEnv
-    if (typeof settings.taskTraceRetentionDays === 'number') payload.task_trace_retention_days = settings.taskTraceRetentionDays
-    if (typeof settings.taskTraceMaxEvents === 'number') payload.task_trace_max_events = settings.taskTraceMaxEvents
-    if (typeof settings.taskTraceIdleTimeoutMs === 'number') payload.task_trace_idle_timeout_ms = settings.taskTraceIdleTimeoutMs
+    if (typeof rest.ollamaThink === 'boolean') payload.ollama_think = !!rest.ollamaThink
+    if (typeof rest.chatImageRetentionDays === 'number') payload.chat_image_retention_days = rest.chatImageRetentionDays
+    if (typeof rest.siteBaseUrl === 'string') payload.site_base_url = rest.siteBaseUrl
+    if (typeof rest.anonymousRetentionDays === 'number') payload.anonymous_retention_days = rest.anonymousRetentionDays
+    if (typeof rest.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = rest.anonymousDailyQuota
+    if (typeof rest.defaultUserDailyQuota === 'number') payload.default_user_daily_quota = rest.defaultUserDailyQuota
+    if (typeof rest.webSearchAgentEnable === 'boolean') payload.web_search_agent_enable = rest.webSearchAgentEnable
+    if (typeof rest.webSearchDefaultEngine === 'string') payload.web_search_default_engine = rest.webSearchDefaultEngine
+    if (typeof rest.webSearchResultLimit === 'number') payload.web_search_result_limit = rest.webSearchResultLimit
+    if (Array.isArray(rest.webSearchDomainFilter)) payload.web_search_domain_filter = rest.webSearchDomainFilter
+    if (typeof (rest as any).webSearchApiKey === 'string') payload.web_search_api_key = (rest as any).webSearchApiKey
+    if (typeof rest.taskTraceEnabled === 'boolean') payload.task_trace_enabled = rest.taskTraceEnabled
+    if (typeof rest.taskTraceDefaultOn === 'boolean') payload.task_trace_default_on = rest.taskTraceDefaultOn
+    if (typeof rest.taskTraceAdminOnly === 'boolean') payload.task_trace_admin_only = rest.taskTraceAdminOnly
+    if (typeof rest.taskTraceEnv === 'string') payload.task_trace_env = rest.taskTraceEnv
+    if (typeof rest.taskTraceRetentionDays === 'number') payload.task_trace_retention_days = rest.taskTraceRetentionDays
+    if (typeof rest.taskTraceMaxEvents === 'number') payload.task_trace_max_events = rest.taskTraceMaxEvents
+    if (typeof rest.taskTraceIdleTimeoutMs === 'number') payload.task_trace_idle_timeout_ms = rest.taskTraceIdleTimeoutMs
+    if (assistantAvatarUpload) {
+      payload.assistant_avatar = assistantAvatarUpload
+    } else if (assistantAvatarRemove) {
+      payload.assistant_avatar = null
+    }
     await this.client.put<ApiResponse<any>>('/settings/system', payload)
     // 返回更新后的设置（与 getSystemSettings 保持一致）
     const current = await this.getSystemSettings()
     return current
   }
 
-  async updatePersonalSettings(settings: { preferredModel?: { modelId: string; connectionId: number | null; rawId: string | null } | null }, signal?: AbortSignal) {
+  async updatePersonalSettings(
+    settings: {
+      preferredModel?: { modelId: string; connectionId: number | null; rawId: string | null } | null
+      avatar?: ImageUploadPayload | null
+    },
+    signal?: AbortSignal,
+  ) {
     const payload: any = {}
     if (Object.prototype.hasOwnProperty.call(settings, 'preferredModel')) {
       const pref = settings.preferredModel
@@ -782,6 +811,9 @@ class ApiClient {
             rawId: pref.rawId,
           }
         : null
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'avatar')) {
+      payload.avatar = settings.avatar ?? null
     }
     const response = await this.client.put<ApiResponse<any>>('/settings/personal', payload, { signal })
     return response.data?.data

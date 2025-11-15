@@ -7,6 +7,10 @@ import { AuthUtils } from '../utils/auth';
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import type { AuthResponse, RegisterResponse, ApiResponse, ActorContext, Actor } from '../types';
 import { inspectActorQuota, serializeQuotaSnapshot } from '../utils/quota';
+import {
+  determineProfileImageBaseUrl,
+  resolveProfileImageUrl,
+} from '../utils/profile-images';
 
 const auth = new Hono();
 
@@ -94,15 +98,16 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         role: user.role,
       });
 
-      const registerResponse: RegisterResponse = {
-        user: {
-          id: user.id,
-          username: user.username,
-          role: user.role as 'ADMIN' | 'USER',
-          status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
-        },
-        token,
-      };
+    const registerResponse: RegisterResponse = {
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role as 'ADMIN' | 'USER',
+        status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
+        avatarUrl: null,
+      },
+      token,
+    };
 
       try {
         const secure = (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || (process.env.NODE_ENV === 'production');
@@ -128,6 +133,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         username: user.username,
         role: user.role as 'ADMIN' | 'USER',
         status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
+        avatarUrl: null,
       },
     };
 
@@ -161,6 +167,7 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
         role: true,
         status: true,
         rejectionReason: true,
+        avatarPath: true,
       },
     });
 
@@ -194,12 +201,15 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
       return c.json(response, locked ? 423 : 403);
     }
 
-  // 生成JWT
-  const token = AuthUtils.generateToken({
-    userId: user.id,
-    username: user.username,
-    role: user.role,
-  });
+    // 生成JWT
+    const token = AuthUtils.generateToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    });
+
+    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
+    const avatarUrl = resolveProfileImageUrl(user.avatarPath ?? null, baseUrl)
 
     const response: AuthResponse = {
       user: {
@@ -207,6 +217,7 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
         username: user.username,
         role: user.role as 'ADMIN' | 'USER',
         status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
+        avatarUrl: avatarUrl ?? null,
       },
       token,
     };
@@ -252,6 +263,13 @@ auth.get('/actor', actorMiddleware, async (c) => {
     let userProfile: ActorContext['user'] = null;
 
     let preference: { modelId: string | null; connectionId: number | null; rawId: string | null } | null = null;
+    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw });
+    const actorPayload: Actor = actor.type === 'user'
+      ? {
+          ...actor,
+          avatarUrl: resolveProfileImageUrl(actor.avatarPath ?? null, baseUrl) ?? null,
+        } as Actor
+      : actor;
 
     if (actor.type === 'user') {
       const profile = await prisma.user.findUnique({
@@ -265,6 +283,7 @@ auth.get('/actor', actorMiddleware, async (c) => {
           preferredModelId: true,
           preferredConnectionId: true,
           preferredModelRawId: true,
+          avatarPath: true,
         },
       });
       if (profile) {
@@ -272,6 +291,7 @@ auth.get('/actor', actorMiddleware, async (c) => {
           ...profile,
           role: profile.role === 'ADMIN' ? 'ADMIN' : 'USER',
           status: profile.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
+          avatarUrl: resolveProfileImageUrl(profile.avatarPath ?? null, baseUrl) ?? null,
         };
         preference = {
           modelId: profile.preferredModelId ?? null,
@@ -284,7 +304,7 @@ auth.get('/actor', actorMiddleware, async (c) => {
     return c.json<ApiResponse<ActorContext>>({
       success: true,
       data: {
-        actor,
+        actor: actorPayload,
         quota: serializeQuotaSnapshot(quota),
         user: userProfile,
         preferredModel: actor.type === 'user'
@@ -294,6 +314,7 @@ auth.get('/actor', actorMiddleware, async (c) => {
               rawId: actor.preferredModel?.rawId ?? preference?.rawId ?? null,
             }
           : null,
+        assistantAvatarUrl: null,
       },
     });
   } catch (error) {
