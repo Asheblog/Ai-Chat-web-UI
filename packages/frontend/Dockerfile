@@ -25,8 +25,8 @@ FROM base AS deps
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 安装 workspace 依赖（仅保留前端所需依赖，加速安装）
-RUN pnpm install --frozen-lockfile --filter @aichat/frontend...
+# 安装 workspace 依赖
+RUN pnpm install --frozen-lockfile
 
 # 构建阶段
 FROM base AS builder
@@ -114,7 +114,7 @@ FROM base AS development
 
 ENV NODE_ENV=development
 
-RUN pnpm install --frozen-lockfile --filter @aichat/frontend...
+RUN pnpm install --frozen-lockfile
 
 COPY packages ./packages
 

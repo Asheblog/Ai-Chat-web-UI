@@ -35,8 +35,8 @@ FROM base AS development
 # 安装依赖需要完整开发环境
 ENV NODE_ENV=development
 
-# 安装所有依赖（仅 backend 相关，连同依赖树）
-RUN pnpm install --frozen-lockfile --filter @aichat/backend...
+# 安装所有依赖
+RUN pnpm install --frozen-lockfile
 
 # 复制源代码
 COPY packages ./packages
@@ -60,7 +60,7 @@ FROM base AS build
 ENV NODE_ENV=development
 
 # 安装所有依赖（包括开发依赖用于构建）
-RUN pnpm install --frozen-lockfile --filter @aichat/backend...
+RUN pnpm install --frozen-lockfile
 
 # 复制源代码
 COPY packages ./packages
