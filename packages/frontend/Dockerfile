@@ -16,7 +16,9 @@ WORKDIR /app
 
 # 复制 workspace 元数据，提前包含 shared 包以支持 workspace:*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/*/package.json packages/*/
+COPY packages/backend/package.json packages/backend/
+COPY packages/frontend/package.json packages/frontend/
+COPY packages/shared/package.json packages/shared/
 COPY packages/shared ./packages/shared
 
 # 依赖安装阶段
