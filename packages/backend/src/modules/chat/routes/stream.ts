@@ -316,6 +316,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const effectiveReasoningSaveToDb =
         typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : defaultReasoningSaveToDb;
 
+      delete requestData.reasoning_effort
+      delete requestData.think
       if (effectiveReasoningEnabled && effectiveReasoningEffort) {
         requestData.reasoning_effort = effectiveReasoningEffort
       }

@@ -165,8 +165,15 @@ export const registerChatCompletionRoutes = (router: Hono) => {
       const otk = typeof payload?.ollamaThink === 'boolean'
         ? payload.ollamaThink
         : ((sess?.ollamaThink ?? ((settingsMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean);
-      if (ren && ref) body.reasoning_effort = ref;
-      if (ren && otk) body.think = true;
+      if (ren) {
+        if (ref) body.reasoning_effort = ref;
+        else delete body.reasoning_effort;
+        if (otk) body.think = true;
+        else delete body.think;
+      } else {
+        delete body.reasoning_effort;
+        delete body.think;
+      }
       body.max_tokens = appliedMaxTokens;
 
       let url = '';
