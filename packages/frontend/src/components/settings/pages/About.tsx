@@ -3,7 +3,7 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 
-// 关于页面：展示版本信息与更新日志（v1.4.4）
+// 关于页面：展示版本信息与更新日志（v1.4.5）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.4.4</Badge>
+          <Badge variant="secondary" className="font-mono">v1.4.5</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
@@ -52,44 +52,44 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6ec04d4</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">420fb46</span>
               <span className="text-muted-foreground leading-relaxed">
-                设置页面统一采用 SettingRow 组件，卡片布局与排版同步更新，移动端间距也重新适配。
+                推理面板全新上线，独立组件化并强化样式，让推理细节与消息气泡的状态展示更直观。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7352f4c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">01cdf74</span>
               <span className="text-muted-foreground leading-relaxed">
-                侧边栏的 Token 使用量展示改为紧凑视图并接入格式化逻辑，读数更清晰且支持实时刷新。
+                推理模型配置支持最大输出 Tokens 与上下文窗口，后端接口与设置页联动，便于按模型精细化管控。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f46cd0c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d1500b5</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增 Task Trace 日志页，允许按任务过滤诊断数据，辅助排查长链路执行的瓶颈与异常。
+                用户与助手头像全链路打通，新增头像上传字段、个人偏好同步以及消息气泡的头像渲染。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7261b50</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">fbbbef5</span>
               <span className="text-muted-foreground leading-relaxed">
-                Streaming 管线支持自定义 flush 间隔与 keepalive 心跳，在弱网下维持连接并降低服务端负载。
+                头像上传接入 Sharp 压缩裁剪，并完善格式校验，生成的存储文件更轻量、兼容性更好。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">dd1970c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b42c222</span>
               <span className="text-muted-foreground leading-relaxed">
-                SSE 流错误处理与日志串联收敛到统一模块，异常回退与重试路径更明确，便于定位问题。
+                模型目录增加 Context Window 能力并强化补全额度校验，调用限制与窗口配置保持一致。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">46b9afb</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a13a969</span>
               <span className="text-muted-foreground leading-relaxed">
-                动态品牌渲染管线支持服务端回退与多方案渲染，确保白标站点在生产环境稳定展示。
+                数学渲染管线重构并补充规范化处理，KaTeX 加载更稳健，LaTeX 展示兼容性提升。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-14 推送变更摘要
+            以上为 2025-11-16 推送变更摘要
           </p>
         </Card>
       </div>
