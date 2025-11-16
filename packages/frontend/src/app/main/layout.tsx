@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSettingsStore } from '@/store/settings-store'
 import { useChatStore } from '@/store/chat-store'
@@ -18,7 +18,7 @@ export default function MainLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { theme, setTheme, sidebarCollapsed, setSidebarCollapsed } = useSettingsStore()
+  const { theme, setTheme, sidebarCollapsed, setSidebarCollapsed, fetchSystemSettings } = useSettingsStore()
   const { currentSession } = useChatStore()
   const actorState = useAuthStore((state) => state.actorState)
   const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
@@ -28,6 +28,20 @@ export default function MainLayout({
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  const hasRequestedSettings = useRef(false)
+  useEffect(() => {
+    if (!mounted) return
+    if (actorState !== 'authenticated') {
+      hasRequestedSettings.current = false
+      return
+    }
+    if (hasRequestedSettings.current) return
+    hasRequestedSettings.current = true
+    fetchSystemSettings().catch(() => {
+      hasRequestedSettings.current = false
+    })
+  }, [actorState, fetchSystemSettings, mounted])
 
   useEffect(() => {
     // 应用主题设置
