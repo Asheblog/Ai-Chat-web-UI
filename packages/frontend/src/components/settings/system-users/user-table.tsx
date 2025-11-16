@@ -102,12 +102,12 @@ export function UserTable({
                   />
                 </TableHead>
                 <TableHead
-                  className="w-[200px] cursor-pointer hover:bg-muted/80 transition-colors"
+                  className="w-[180px] cursor-pointer hover:bg-muted/80 transition-colors"
                   onClick={() => toggleSort('username')}
                 >
                   用户名 {sortField === 'username' && (sortOrder === 'asc' ? '↑' : '↓')}
                 </TableHead>
-                <TableHead className="text-center w-[96px]">角色</TableHead>
+                <TableHead className="text-center w-[140px] whitespace-nowrap">角色</TableHead>
                 <TableHead
                   className="text-center w-[96px] cursor-pointer hover:bg-muted/80 transition-colors"
                   onClick={() => toggleSort('status')}
@@ -139,10 +139,10 @@ export function UserTable({
                         onCheckedChange={() => toggleSelectRow(r.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-medium truncate" title={r.username}>
+                    <TableCell className="font-medium truncate w-[180px]" title={r.username}>
                       <span className="block truncate">{r.username}</span>
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center whitespace-nowrap w-[140px]">
                       {r.role === 'ADMIN' ? (
                         <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                           <Shield className="w-3 h-3 mr-1" />
