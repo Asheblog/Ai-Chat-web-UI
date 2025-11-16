@@ -181,7 +181,7 @@ sequenceDiagram
 
 <img width="1920" height="861" alt="微信图片_20251029144356_346_176" src="https://github.com/user-attachments/assets/26757bae-78de-4cf4-9e6a-584c4b2101db" />
 <img width="1920" height="870" alt="微信图片_20251029144331_345_176" src="https://github.com/user-attachments/assets/48179c04-afda-46e4-b74f-ffd29431934d" />
-<img width="1920" height="868" alt="34743ff6e60f5e86424887bf8dba0daf" src="https://github.com/user-attachments/assets/59714062-e7d2-4198-b245-7c353f040941" />
+<img width="1920" height="870" alt="image" src="https://github.com/user-attachments/assets/13d407f8-40df-4fb4-9140-af068a2cd850" />
 
 
 ---
