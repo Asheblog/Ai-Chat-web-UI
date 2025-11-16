@@ -27,11 +27,30 @@ const KNOWN_GOOGLE_CONTEXT_WINDOWS: Array<{ match: RegExp; tokens: number }> = [
   { match: /^gemini-1\.5-flash(-.*)?$/i, tokens: 1_000_000 },
 ]
 
+const KNOWN_COMPLETION_LIMITS: Array<{ provider?: Provider; match: RegExp; tokens: number }> = [
+  // DeepSeek chat 接口官方建议 4K 输出
+  { provider: 'openai', match: /^deepseek-chat(-.*)?$/i, tokens: 4_096 },
+  // Reasoner/推理模型默认 32K（与系统设置保持一致，但仍提供显式命中，防止被其它兜底覆盖）
+  { provider: 'openai', match: /^deepseek-reasoner(-.*)?$/i, tokens: 32_000 },
+]
+
 export const guessKnownContextWindow = (provider: Provider, rawId: string | null | undefined): number | null => {
   if (!rawId) return null
   const target = rawId.toLowerCase()
   const rules = provider === 'google_genai' ? KNOWN_GOOGLE_CONTEXT_WINDOWS : KNOWN_OPENAI_CONTEXT_WINDOWS
   for (const item of rules) {
+    if (item.match.test(target)) {
+      return item.tokens
+    }
+  }
+  return null
+}
+
+export const guessKnownCompletionLimit = (provider: Provider, rawId: string | null | undefined): number | null => {
+  if (!rawId) return null
+  const target = rawId.toLowerCase()
+  for (const item of KNOWN_COMPLETION_LIMITS) {
+    if (item.provider && provider && item.provider !== provider) continue
     if (item.match.test(target)) {
       return item.tokens
     }
@@ -148,6 +167,7 @@ export const invalidateContextWindowCache = (connectionId?: number | null, rawMo
 export const resolveCompletionLimit = async (options: ResolveContextLimitOptions): Promise<number> => {
   const connectionId = options.connectionId ?? null
   const rawId = options.rawModelId ?? null
+  const provider = options.provider ?? null
   const cacheKey: CacheKey = `${connectionId ?? 'none'}:${rawId ?? 'none'}`
   const now = Date.now()
   const cached = completionCache.get(cacheKey)
@@ -171,7 +191,20 @@ export const resolveCompletionLimit = async (options: ResolveContextLimitOptions
   }
 
   if (!completionLimit) {
+    const guessed = guessKnownCompletionLimit(provider, rawId)
+    if (guessed) {
+      completionLimit = guessed
+    }
+  }
+
+  if (!completionLimit) {
     completionLimit = await getReasoningMaxOutputTokensDefault()
+    completionLimit = coercePositive(completionLimit)
+  }
+
+  if (!completionLimit) {
+    // fallback：确保至少返回 1，避免上游出现 0 导致厂商拒绝
+    completionLimit = 1
   }
 
   completionCache.set(cacheKey, { value: completionLimit, expiresAt: now + CACHE_TTL_MS })

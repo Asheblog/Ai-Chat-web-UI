@@ -11,7 +11,7 @@ import {
   hasDefinedCapability,
   serializeCapabilityEnvelope,
 } from '../utils/capabilities'
-import { invalidateCompletionLimitCache } from '../utils/context-window'
+import { invalidateCompletionLimitCache, invalidateContextWindowCache } from '../utils/context-window'
 
 const extractContextWindow = (metaJson: string | null | undefined): number | null => {
   if (!metaJson) return null
@@ -200,6 +200,24 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
         maxOutputTokens = clampMaxOutputTokens(numeric)
       }
     }
+    const hasContextWindowPayload = Object.prototype.hasOwnProperty.call(body, 'context_window')
+    let contextWindow: number | null | undefined = undefined
+    if (hasContextWindowPayload) {
+      const rawCtx = body.context_window
+      if (rawCtx === null) {
+        contextWindow = null
+      } else {
+        const numeric = typeof rawCtx === 'number'
+          ? rawCtx
+          : typeof rawCtx === 'string'
+          ? Number.parseInt(rawCtx.trim(), 10)
+          : NaN
+        if (!Number.isFinite(numeric) || numeric <= 0) {
+          return c.json<ApiResponse>({ success: false, error: 'context_window must be a positive integer or null' }, 400)
+        }
+        contextWindow = Math.floor(numeric)
+      }
+    }
     if (!connectionId || !rawId) return c.json<ApiResponse>({ success: false, error: 'connectionId/rawId required' }, 400)
 
     const conn = await prisma.connection.findUnique({ where: { id: connectionId } })
@@ -216,6 +234,13 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
         delete metaPayload.custom_max_output_tokens
       } else {
         metaPayload.custom_max_output_tokens = maxOutputTokens
+      }
+    }
+    if (hasContextWindowPayload) {
+      if (contextWindow === null) {
+        delete metaPayload.context_window
+      } else {
+        metaPayload.context_window = contextWindow
       }
     }
     const metaJson = JSON.stringify(metaPayload)
@@ -251,6 +276,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     }
 
     invalidateCompletionLimitCache(connectionId, rawId)
+    invalidateContextWindowCache(connectionId, rawId)
     return c.json<ApiResponse>({ success: true, message: 'Saved' })
   } catch (e) {
     return c.json<ApiResponse>({ success: false, error: 'Failed to save tags' }, 500)

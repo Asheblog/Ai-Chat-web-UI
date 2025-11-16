@@ -10,7 +10,7 @@ import {
   computeCapabilities,
 } from './providers'
 import { BackendLogger as log } from './logger'
-import { guessKnownContextWindow, invalidateCompletionLimitCache, invalidateContextWindowCache } from './context-window'
+import { guessKnownContextWindow, guessKnownCompletionLimit, invalidateCompletionLimitCache, invalidateContextWindowCache } from './context-window'
 import {
   createCapabilityEnvelope,
   mergeCapabilityLayers,
@@ -134,6 +134,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
   }, new Map<string, string>())
 
   const memoContext = new Map<string, number | null>()
+  const memoCompletion = new Map<string, number | null>()
 
   const resolveContextWindowForItem = async (item: CatalogItem): Promise<number | null> => {
     const cacheKey = `${item.rawId}`
@@ -193,6 +194,22 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     return contextWindow
   }
 
+  const resolveCompletionLimitForItem = (item: CatalogItem): number | null => {
+    const cacheKey = `${item.rawId}`
+    if (memoCompletion.has(cacheKey)) {
+      return memoCompletion.get(cacheKey) ?? null
+    }
+    let completionLimit: number | null = null
+    if (item.rawId) {
+      const guessed = guessKnownCompletionLimit(cfg.provider, item.rawId)
+      if (guessed) {
+        completionLimit = guessed
+      }
+    }
+    memoCompletion.set(cacheKey, completionLimit ?? null)
+    return completionLimit
+  }
+
   const parseMeta = (raw: string | null | undefined) => {
     if (!raw) return {}
     try {
@@ -209,6 +226,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     const row = existingMap.get(key)
     const tagsJson = JSON.stringify(item.tags || [])
     const contextWindow = await resolveContextWindowForItem(item)
+    const completionLimit = resolveCompletionLimitForItem(item)
     const metaInput = row ? parseMeta(metaCache.get(key)) : {}
     const capabilityLayers = ([
       connectionCapabilityLayer,
@@ -222,6 +240,11 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
       metaInput.context_window = contextWindow
     } else if (!('context_window' in metaInput)) {
       metaInput.context_window = null
+    }
+    if (completionLimit && (!row?.manualOverride || metaInput.max_output_tokens == null)) {
+      metaInput.max_output_tokens = completionLimit
+    } else if (!('max_output_tokens' in metaInput)) {
+      metaInput.max_output_tokens = null
     }
     metaInput.fetched_at = now.toISOString()
     const metaJson = JSON.stringify(metaInput)
