@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import sharp from 'sharp'
 import {
   CHAT_IMAGE_STORAGE_ROOT,
   CHAT_IMAGE_PUBLIC_PATH,
@@ -17,17 +18,14 @@ const MAX_AVATAR_BYTES = (() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024 * 1024
 })()
 
-const MIME_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/jpg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'image/bmp': 'bmp',
-  'image/svg+xml': 'svg',
-  'image/heic': 'heic',
-  'image/heif': 'heif',
-}
+const TARGET_AVATAR_SIZE = (() => {
+  const raw = process.env.PROFILE_IMAGE_SIZE
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN
+  if (Number.isFinite(parsed) && parsed >= 64 && parsed <= 1024) {
+    return parsed
+  }
+  return 512
+})()
 
 const ensureDir = async (dir: string) => {
   await fs.mkdir(dir, { recursive: true })
@@ -35,19 +33,40 @@ const ensureDir = async (dir: string) => {
 
 const normaliseRelative = (value: string) => value.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/^\/+/, '')
 
-const getExtFromMime = (mime: string) => {
+const resolveOutputFormat = (mime: string): 'png' | 'jpeg' | 'webp' => {
   const lower = (mime || '').toLowerCase()
-  if (MIME_EXT[lower]) return MIME_EXT[lower]
-  if (lower.startsWith('image/')) {
-    return lower.split('/')[1]?.replace(/[^a-z0-9]+/g, '') || 'bin'
-  }
-  return 'bin'
+  if (lower === 'image/webp') return 'webp'
+  if (lower === 'image/jpeg' || lower === 'image/jpg') return 'jpeg'
+  return 'png'
 }
 
 const withinStorageRoot = (target: string) => {
   const root = path.resolve(CHAT_IMAGE_STORAGE_ROOT)
   const resolved = path.resolve(target)
   return resolved.startsWith(root)
+}
+
+const processAvatarBuffer = async (buffer: Buffer, mime: string) => {
+  const format = resolveOutputFormat(mime)
+  const pipeline = sharp(buffer, { failOnError: false })
+    .rotate()
+    .resize(TARGET_AVATAR_SIZE, TARGET_AVATAR_SIZE, {
+      fit: 'cover',
+      position: 'attention',
+    })
+
+  if (format === 'jpeg') {
+    const data = await pipeline.jpeg({ quality: 90, mozjpeg: true }).toBuffer()
+    return { data, ext: 'jpg' as const }
+  }
+
+  if (format === 'webp') {
+    const data = await pipeline.webp({ quality: 95 }).toBuffer()
+    return { data, ext: 'webp' as const }
+  }
+
+  const data = await pipeline.png({ compressionLevel: 9 }).toBuffer()
+  return { data, ext: 'png' as const }
 }
 
 export type AvatarUploadPayload = {
@@ -67,16 +86,17 @@ export async function persistProfileImage(payload: AvatarUploadPayload): Promise
     throw new Error('头像大小超出限制 (≤1MB)')
   }
 
+  const processed = await processAvatarBuffer(buffer, payload.mime)
+
   const now = new Date()
   const year = String(now.getUTCFullYear())
   const month = String(now.getUTCMonth() + 1).padStart(2, '0')
   const day = String(now.getUTCDate()).padStart(2, '0')
-  const ext = getExtFromMime(payload.mime)
-  const fileName = `${now.getTime()}-${crypto.randomUUID()}.${ext}`
+  const fileName = `${now.getTime()}-${crypto.randomUUID()}.${processed.ext}`
   const relative = path.join(AVATAR_DIR, year, month, day, fileName)
   const absolute = path.join(CHAT_IMAGE_STORAGE_ROOT, relative)
   await ensureDir(path.dirname(absolute))
-  await fs.writeFile(absolute, buffer)
+  await fs.writeFile(absolute, processed.data)
   return normaliseRelative(relative)
 }
 
