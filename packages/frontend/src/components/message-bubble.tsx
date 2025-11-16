@@ -268,7 +268,9 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
                   ))}
                 </div>
               )}
-              <p className="whitespace-pre-wrap text-left leading-[1.5] sm:leading-[1.6]">{content}</p>
+              <p className="whitespace-pre-wrap break-words text-left leading-[1.5] sm:leading-[1.6]">
+                {content}
+              </p>
             </div>
           </div>
         ) : (
