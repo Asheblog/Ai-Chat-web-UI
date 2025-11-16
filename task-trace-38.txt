@@ -1,0 +1,399 @@
+Trace #38
+Status: completed
+Actor: user:1
+Session: 43
+Message: 100
+Client ID: 3a860b7c-32a6-44c3-8eef-8572f8447f0f:assistant
+Level: explicit
+Started: 2025-11-16T13:48:35.090Z
+Ended: 2025-11-16T13:48:37.533Z
+Duration(ms): 2444
+--- Metadata ---
+{
+  "provider": "openai",
+  "model": "deepseek-chat",
+  "connectionId": 2,
+  "features": {
+    "web_search": true
+  },
+  "agentWebSearchActive": true,
+  "reasoningEnabled": true,
+  "reasoningEffort": "high",
+  "ollamaThink": false,
+  "contextLimit": 120000,
+  "finalUsage": {
+    "prompt_tokens": 853,
+    "completion_tokens": 44,
+    "total_tokens": 897,
+    "context_limit": 120000,
+    "context_remaining": 119185
+  },
+  "providerUsageSource": "provider",
+  "toolLogs": [],
+  "messageId": 100
+}
+--- Events ---
+[0001] 2025-11-16T13:48:35.102Z request:init
+{
+  "sessionId": 43,
+  "clientMessageId": "3a860b7c-32a6-44c3-8eef-8572f8447f0f",
+  "promptTokens": 815,
+  "contextLimit": 120000,
+  "contextEnabled": true,
+  "hasImages": false,
+  "messageReused": false,
+  "quota": {
+    "scope": "USER",
+    "identifier": "user:1",
+    "dailyLimit": 200,
+    "usedCount": 23,
+    "remaining": 177,
+    "lastResetAt": "2025-11-16T05:58:28.811Z",
+    "unlimited": false,
+    "customDailyLimit": null,
+    "usingDefaultLimit": true
+  }
+}
+[0002] 2025-11-16T13:48:35.102Z agent:activated
+{
+  "provider": "openai",
+  "baseUrl": "https://api.deepseek.com/v1",
+  "engine": "tavily",
+  "model": "deepseek-chat"
+}
+[0003] 2025-11-16T13:48:35.102Z sse:dispatch
+{
+  "type": "start",
+  "messageId": 99
+}
+[0004] 2025-11-16T13:48:35.102Z sse:dispatch
+{
+  "type": "quota",
+  "quota": {
+    "scope": "USER",
+    "identifier": "user:1",
+    "dailyLimit": 200,
+    "usedCount": 23,
+    "remaining": 177,
+    "lastResetAt": "2025-11-16T05:58:28.811Z",
+    "unlimited": false,
+    "customDailyLimit": null,
+    "usingDefaultLimit": true
+  }
+}
+[0005] 2025-11-16T13:48:35.102Z sse:dispatch
+{
+  "type": "usage",
+  "usage": {
+    "prompt_tokens": 815,
+    "total_tokens": 815,
+    "context_limit": 120000,
+    "context_remaining": 119185
+  }
+}
+[0006] 2025-11-16T13:48:35.889Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "您"
+}
+[0007] 2025-11-16T13:48:35.896Z db:persist_progress
+{
+  "messageId": 100,
+  "length": 1,
+  "force": false
+}
+[0008] 2025-11-16T13:48:36.082Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "之前"
+}
+[0009] 2025-11-16T13:48:36.149Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "问"
+}
+[0010] 2025-11-16T13:48:36.149Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "了我"
+}
+[0011] 2025-11-16T13:48:36.208Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "两个"
+}
+[0012] 2025-11-16T13:48:36.208Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "问题"
+}
+[0013] 2025-11-16T13:48:36.275Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "：\n\n"
+}
+[0014] 2025-11-16T13:48:36.275Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "1"
+}
+[0015] 2025-11-16T13:48:36.336Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "."
+}
+[0016] 2025-11-16T13:48:36.336Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": " "
+}
+[0017] 2025-11-16T13:48:36.405Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "第一个"
+}
+[0018] 2025-11-16T13:48:36.405Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "问题是"
+}
+[0019] 2025-11-16T13:48:36.468Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "：\""
+}
+[0020] 2025-11-16T13:48:36.468Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "今天是"
+}
+[0021] 2025-11-16T13:48:36.476Z db:persist_progress
+{
+  "messageId": 100,
+  "length": 27,
+  "force": false
+}
+[0022] 2025-11-16T13:48:36.534Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "几"
+}
+[0023] 2025-11-16T13:48:36.534Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "月"
+}
+[0024] 2025-11-16T13:48:36.602Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "几日"
+}
+[0025] 2025-11-16T13:48:36.602Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "星期"
+}
+[0026] 2025-11-16T13:48:36.665Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "几"
+}
+[0027] 2025-11-16T13:48:36.665Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "？"
+}
+[0028] 2025-11-16T13:48:36.735Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "\"\n"
+}
+[0029] 2025-11-16T13:48:36.735Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "2"
+}
+[0030] 2025-11-16T13:48:36.800Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "."
+}
+[0031] 2025-11-16T13:48:36.801Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": " "
+}
+[0032] 2025-11-16T13:48:36.879Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "第二个"
+}
+[0033] 2025-11-16T13:48:36.879Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "问题是"
+}
+[0034] 2025-11-16T13:48:36.942Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "：\""
+}
+[0035] 2025-11-16T13:48:36.942Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "搜索"
+}
+[0036] 2025-11-16T13:48:37.014Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "日期"
+}
+[0037] 2025-11-16T13:48:37.019Z db:persist_progress
+{
+  "messageId": 100,
+  "length": 52,
+  "force": false
+}
+[0038] 2025-11-16T13:48:37.019Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "附近的"
+}
+[0039] 2025-11-16T13:48:37.080Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "日本"
+}
+[0040] 2025-11-16T13:48:37.080Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "与"
+}
+[0041] 2025-11-16T13:48:37.141Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "韩国"
+}
+[0042] 2025-11-16T13:48:37.141Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "的最新"
+}
+[0043] 2025-11-16T13:48:37.208Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "新闻"
+}
+[0044] 2025-11-16T13:48:37.208Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": "\"\n\n"
+}
+[0045] 2025-11-16T13:48:37.273Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "所以"
+}
+[0046] 2025-11-16T13:48:37.273Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "总共"
+}
+[0047] 2025-11-16T13:48:37.343Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "是"
+}
+[0048] 2025-11-16T13:48:37.343Z sse:dispatch
+{
+  "type": "content",
+  "length": 3,
+  "preview": " **"
+}
+[0049] 2025-11-16T13:48:37.348Z db:persist_progress
+{
+  "messageId": 100,
+  "length": 76,
+  "force": false
+}
+[0050] 2025-11-16T13:48:37.403Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "两个"
+}
+[0051] 2025-11-16T13:48:37.403Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "问题"
+}
+[0052] 2025-11-16T13:48:37.468Z sse:dispatch
+{
+  "type": "content",
+  "length": 2,
+  "preview": "**"
+}
+[0053] 2025-11-16T13:48:37.468Z sse:dispatch
+{
+  "type": "content",
+  "length": 1,
+  "preview": "。"
+}
+[0054] 2025-11-16T13:48:37.529Z sse:dispatch
+{
+  "type": "usage",
+  "usage": {
+    "prompt_tokens": 853,
+    "completion_tokens": 44,
+    "total_tokens": 897,
+    "prompt_tokens_details": {
+      "cached_tokens": 256
+    },
+    "prompt_cache_hit_tokens": 256,
+    "prompt_cache_miss_tokens": 597
+  }
+}
+[0055] 2025-11-16T13:48:37.530Z sse:dispatch
+{
+  "type": "complete"
+}

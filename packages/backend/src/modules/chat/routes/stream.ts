@@ -17,7 +17,7 @@ import { LatexTraceRecorder } from '../../../utils/latex-trace';
 import { analyzeLatexBlocks } from '@aichat/shared/latex-normalizer';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../../../utils/reasoning-tags';
 import { createAgentWebSearchResponse, buildAgentWebSearchConfig } from '../../chat/agent-web-search-response';
-import { upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
+import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
 import {
   buildAgentStreamKey,
   buildPendingCancelKeyByClientId,
@@ -218,6 +218,14 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       const provider = session.connection.provider as 'openai' | 'azure_openai' | 'ollama'
       const baseUrl = session.connection.baseUrl.replace(/\/$/, '')
+      const providerHost = (() => {
+        try {
+          const parsed = new URL(baseUrl);
+          return parsed.hostname;
+        } catch {
+          return null;
+        }
+      })();
       const extraHeaders = session.connection.headersJson ? JSON.parse(session.connection.headersJson) : {}
       const authHeader: Record<string,string> = {}
       if (session.connection.authType === 'bearer' && decryptedApiKey) {
@@ -535,6 +543,17 @@ export const registerChatStreamRoutes = (router: Hono) => {
       // 兜底：在结束前可统计 completion_tokens
       let completionTokensFallback = 0 as number;
       const encoder = new TextEncoder();
+      const extractUsageNumbers = (u: any): { prompt: number; completion: number; total: number } => {
+        try {
+          const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0;
+          const completion = Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0;
+          const total =
+            Number(u?.total_tokens ?? (prompt + completion)) || (prompt + completion);
+          return { prompt, completion, total };
+        } catch {
+          return { prompt: 0, completion: 0, total: 0 };
+        }
+      };
 
       let assistantProgressLastPersistAt = 0;
       let assistantProgressLastPersistedLength = 0;
@@ -893,55 +912,66 @@ export const registerChatStreamRoutes = (router: Hono) => {
             traceRecorder.log('stream:fallback_non_stream', { origin });
 
             await persistAssistantProgress({ force: true, status: 'done' });
-            const updateData: any = {
-              content: trimmedText,
-              streamStatus: 'done',
-              streamCursor: trimmedText.length,
-              streamReasoning:
-                REASONING_ENABLED &&
-                (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
-                reasoningBuffer.trim()
-                  ? reasoningBuffer.trim()
-                  : null,
-              streamError: null,
-            };
-            if (
+            let fallbackCompletionTokens = 0;
+            try {
+              fallbackCompletionTokens = await Tokenizer.countTokens(trimmedText);
+            } catch {
+              fallbackCompletionTokens = 0;
+            }
+            const fallbackUsageNumbers = fallbackResult.usage
+              ? extractUsageNumbers(fallbackResult.usage)
+              : {
+                  prompt: promptTokens,
+                  completion: fallbackCompletionTokens,
+                  total: promptTokens + fallbackCompletionTokens,
+                };
+            if (!fallbackResult.usage) {
+              traceMetadataExtras.finalUsage = {
+                prompt_tokens: fallbackUsageNumbers.prompt,
+                completion_tokens: fallbackUsageNumbers.completion,
+                total_tokens: fallbackUsageNumbers.total,
+                context_limit: contextLimit,
+              };
+              traceMetadataExtras.providerUsageSource = 'fallback_non_stream';
+            }
+            const shouldPersistReasoning =
               REASONING_ENABLED &&
               (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
-              reasoningBuffer.trim()
-            ) {
-              updateData.reasoning = reasoningBuffer.trim();
-              updateData.reasoningDurationSeconds = reasoningDurationSeconds;
-            } else {
-              updateData.reasoning = null;
-              updateData.reasoningDurationSeconds = null;
-            }
+              reasoningBuffer.trim().length > 0;
 
-            if (assistantMessageId) {
-              try {
-                await prisma.message.update({
-                  where: { id: assistantMessageId },
-                  data: updateData,
-                });
-              } catch {
-                const recoveredId = await upsertAssistantMessageByClientId({
-                  sessionId,
-                  clientMessageId: assistantClientMessageId,
-                  data: updateData,
-                });
-                if (recoveredId) assistantMessageId = recoveredId;
-              }
-            } else {
-              const saved = await prisma.message.create({
-                data: {
-                  sessionId,
-                  role: 'assistant',
-                  content: trimmedText,
-                  clientMessageId: assistantClientMessageId,
-                  ...updateData,
-                },
+            const persistedId = await persistAssistantFinalResponse({
+              sessionId,
+              existingMessageId: assistantMessageId,
+              assistantClientMessageId,
+              fallbackClientMessageId: clientMessageId,
+              content: trimmedText,
+              streamReasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
+              reasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
+              reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
+              streamError: null,
+              usage: {
+                promptTokens: fallbackUsageNumbers.prompt,
+                completionTokens: fallbackUsageNumbers.completion,
+                totalTokens: fallbackUsageNumbers.total,
+                contextLimit,
+              },
+              model: session.modelRawId,
+              provider: providerHost ?? undefined,
+            });
+            if (persistedId) {
+              assistantMessageId = persistedId;
+              traceRecorder.setMessageContext(
+                persistedId,
+                assistantClientMessageId ?? clientMessageId,
+              );
+              traceRecorder.log('db:persist_final', {
+                messageId: persistedId,
+                length: trimmedText.length,
+                promptTokens: fallbackUsageNumbers.prompt,
+                completionTokens: fallbackUsageNumbers.completion,
+                totalTokens: fallbackUsageNumbers.total,
+                source: 'non_stream_fallback',
               });
-              assistantMessageId = saved?.id ?? assistantMessageId;
             }
 
             return true;
@@ -1311,77 +1341,56 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
             // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
             try {
-              const extractNumbers = (u: any): { prompt: number; completion: number; total: number } => {
-                try {
-                  const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0;
-                  const completion = Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0;
-                  const total = Number(u?.total_tokens ?? (prompt + completion)) || (prompt + completion);
-                  return { prompt, completion, total };
-                } catch {
-                  return { prompt: 0, completion: 0, total: 0 };
-                }
-              };
-
-              // 若厂商 usage 无效（全0/空），则回退到本地估算
-              const providerNums = providerUsageSeen ? extractNumbers(providerUsageSnapshot) : { prompt: 0, completion: 0, total: 0 }
-              const providerValid = (providerNums.prompt > 0) || (providerNums.completion > 0) || (providerNums.total > 0)
+              const providerNums = providerUsageSeen
+                ? extractUsageNumbers(providerUsageSnapshot)
+                : { prompt: 0, completion: 0, total: 0 };
+              const providerValid =
+                providerNums.prompt > 0 || providerNums.completion > 0 || providerNums.total > 0;
               const finalUsage = providerValid
                 ? providerNums
-                : { prompt: promptTokens, completion: completionTokensFallback, total: promptTokens + completionTokensFallback };
+                : {
+                    prompt: promptTokens,
+                    completion: completionTokensFallback,
+                    total: promptTokens + completionTokensFallback,
+                  };
 
-              // 保存AI完整回复（若尚未保存）并记录 messageId
               let persistedAssistantMessageId: number | null = assistantMessageId;
-              if (aiResponseContent.trim()) {
-                const trimmedContent = aiResponseContent.trim();
-                const updateData: any = {
-                  content: trimmedContent,
-                  streamStatus: 'done',
-                  streamCursor: trimmedContent.length,
-                  streamReasoning:
-                    REASONING_ENABLED &&
-                    (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
-                    reasoningBuffer.trim()
-                      ? reasoningBuffer.trim()
-                      : null,
-                  streamError: null,
-                };
-                if (
+              const trimmedContent = aiResponseContent.trim();
+              if (trimmedContent) {
+                const shouldPersistReasoning =
                   REASONING_ENABLED &&
                   (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
-                  reasoningBuffer.trim()
-                ) {
-                  updateData.reasoning = reasoningBuffer.trim();
-                  updateData.reasoningDurationSeconds = reasoningDurationSeconds;
-                } else {
-                  updateData.reasoning = null;
-                  updateData.reasoningDurationSeconds = null;
-                }
-                if (assistantMessageId) {
-                  try {
-                    await prisma.message.update({
-                      where: { id: assistantMessageId },
-                      data: updateData,
-                    });
-                    persistedAssistantMessageId = assistantMessageId;
-                  } catch (e) {
-                    log.warn('Failed to update assistant placeholder for default stream, fallback to upsert', {
-                      sessionId,
-                      error: e instanceof Error ? e.message : e,
-                    });
-                    const recoveredId = await upsertAssistantMessageByClientId({
-                      sessionId,
-                      clientMessageId: assistantClientMessageId,
-                      data: updateData,
-                    });
-                    persistedAssistantMessageId = recoveredId ?? null;
-                  }
-                } else {
-                  const recoveredId = await upsertAssistantMessageByClientId({
-                    sessionId,
-                    clientMessageId: assistantClientMessageId,
-                    data: updateData,
+                  reasoningBuffer.trim().length > 0;
+                const persistedId = await persistAssistantFinalResponse({
+                  sessionId,
+                  existingMessageId: assistantMessageId,
+                  assistantClientMessageId,
+                  fallbackClientMessageId: clientMessageId,
+                  content: trimmedContent,
+                  streamReasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
+                  reasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
+                  reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
+                  streamError: null,
+                  usage: {
+                    promptTokens: finalUsage.prompt,
+                    completionTokens: finalUsage.completion,
+                    totalTokens: finalUsage.total,
+                    contextLimit,
+                  },
+                  model: session.modelRawId,
+                  provider: providerHost ?? undefined,
+                });
+                if (persistedId) {
+                  persistedAssistantMessageId = persistedId;
+                  assistantMessageId = persistedId;
+                  traceRecorder.log('db:persist_final', {
+                    messageId: persistedId,
+                    length: trimmedContent.length,
+                    promptTokens: finalUsage.prompt,
+                    completionTokens: finalUsage.completion,
+                    totalTokens: finalUsage.total,
+                    source: 'stream_final',
                   });
-                  persistedAssistantMessageId = recoveredId ?? null;
                 }
 
                 if (!latexTraceRecorder && traceRecorder.isEnabled()) {
@@ -1410,31 +1419,16 @@ export const registerChatStreamRoutes = (router: Hono) => {
                     }
                   }
                 }
-              }
 
-              if (persistedAssistantMessageId) {
-                traceRecorder.setMessageContext(
-                  persistedAssistantMessageId,
-                  assistantClientMessageId ?? clientMessageId,
-                );
-              }
-
-              if (USAGE_EMIT) {
-                await (prisma as any).usageMetric.create({
-                  data: {
-                    sessionId,
-                    messageId: persistedAssistantMessageId ?? undefined,
-                    model: session.modelRawId || 'unknown',
-                    provider: (() => { try { const u = new URL(baseUrl); return u.hostname; } catch { return null; } })() ?? undefined,
-                    promptTokens: finalUsage.prompt,
-                    completionTokens: finalUsage.completion,
-                    totalTokens: finalUsage.total,
-                    contextLimit: contextLimit,
-                  },
-                });
+                if (persistedAssistantMessageId) {
+                  traceRecorder.setMessageContext(
+                    persistedAssistantMessageId,
+                    assistantClientMessageId ?? clientMessageId,
+                  );
+                }
               }
             } catch (persistErr) {
-              console.warn('Persist usage failed:', persistErr);
+              console.warn('Persist final assistant response failed:', persistErr);
             }
 
           } catch (error) {

@@ -29,11 +29,136 @@ interface StreamAccumulator {
   clientMessageId: string | null
   webSearchRequested: boolean
   assistantClientMessageId?: string | null
+  lastUsage?: StreamUsageSnapshot | null
 }
 
 // 优化为实时刷新，支持逐字显示效果
 // 原值: 70ms批量更新 -> 现值: 0ms立即更新
 const STREAM_FLUSH_INTERVAL = 0
+
+interface StreamUsageSnapshot {
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  context_limit?: number | null
+  context_remaining?: number | null
+}
+
+interface StreamCompletionSnapshot {
+  sessionId: number
+  messageId: number | null
+  clientMessageId: string | null
+  content: string
+  reasoning: string
+  usage?: StreamUsageSnapshot | null
+  completedAt: number
+}
+
+const STREAM_SNAPSHOT_STORAGE_KEY = 'aichat:stream-completions'
+const STREAM_SNAPSHOT_TTL_MS = 2 * 60 * 1000
+
+const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.sessionStorage.getItem(STREAM_SNAPSHOT_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const now = Date.now()
+    const sanitized = parsed
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null
+        const sessionId = Number((item as any).sessionId)
+        if (!Number.isFinite(sessionId)) return null
+        const completedAt = Number((item as any).completedAt)
+        if (!Number.isFinite(completedAt)) return null
+        return {
+          sessionId,
+          messageId:
+            typeof (item as any).messageId === 'number' && Number.isFinite((item as any).messageId)
+              ? Number((item as any).messageId)
+              : null,
+          clientMessageId: typeof (item as any).clientMessageId === 'string'
+            ? (item as any).clientMessageId
+            : null,
+          content: typeof (item as any).content === 'string' ? (item as any).content : '',
+          reasoning: typeof (item as any).reasoning === 'string' ? (item as any).reasoning : '',
+          usage: (item as any).usage && typeof (item as any).usage === 'object'
+            ? (item as any).usage as StreamUsageSnapshot
+            : undefined,
+          completedAt,
+        } as StreamCompletionSnapshot
+      })
+      .filter((item): item is StreamCompletionSnapshot => Boolean(item && now - item.completedAt <= STREAM_SNAPSHOT_TTL_MS))
+    if (sanitized.length !== parsed.length) {
+      window.sessionStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(sanitized))
+    }
+    return sanitized
+  } catch {
+    return []
+  }
+}
+
+const writeCompletionSnapshots = (records: StreamCompletionSnapshot[]) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(records))
+  } catch {
+    // ignore quota errors
+  }
+}
+
+const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
+  if (typeof window === 'undefined') return
+  const entries = readCompletionSnapshots()
+  const index = entries.findIndex((item) => {
+    if (item.sessionId !== snapshot.sessionId) return false
+    if (snapshot.messageId != null && item.messageId === snapshot.messageId) {
+      return true
+    }
+    if (snapshot.messageId == null && item.messageId == null && snapshot.clientMessageId && item.clientMessageId) {
+      return item.clientMessageId === snapshot.clientMessageId
+    }
+    return false
+  })
+  if (index === -1) {
+    entries.push(snapshot)
+  } else {
+    entries[index] = snapshot
+  }
+  writeCompletionSnapshots(entries)
+}
+
+const removeCompletionSnapshot = (
+  sessionId: number,
+  opts: { messageId?: number | null; clientMessageId?: string | null },
+) => {
+  if (typeof window === 'undefined') return
+  const entries = readCompletionSnapshots()
+  const filtered = entries.filter((item) => {
+    if (item.sessionId !== sessionId) return true
+    if (opts.messageId != null && item.messageId === opts.messageId) {
+      return false
+    }
+    if (
+      opts.messageId == null &&
+      item.messageId == null &&
+      opts.clientMessageId &&
+      item.clientMessageId === opts.clientMessageId
+    ) {
+      return false
+    }
+    return true
+  })
+  if (filtered.length !== entries.length) {
+    writeCompletionSnapshots(filtered)
+  }
+}
+
+const getSessionCompletionSnapshots = (sessionId: number): StreamCompletionSnapshot[] => {
+  if (typeof window === 'undefined') return []
+  return readCompletionSnapshots().filter((item) => item.sessionId === sessionId)
+}
 
 const messageKey = (id: MessageId) => (typeof id === 'string' ? id : String(id))
 
@@ -50,6 +175,7 @@ const createMeta = (message: Message, overrides: Partial<MessageMeta> = {}): Mes
   isPlaceholder: false,
   streamStatus: message.streamStatus ?? 'done',
   streamError: message.streamError ?? null,
+  pendingSync: false,
   ...overrides,
 })
 
@@ -294,6 +420,80 @@ export const useChatStore = create<ChatStore>((set, get) => {
     }
   }
 
+  const applyBufferedSnapshots = (sessionId: number) => {
+    if (typeof window === 'undefined') return
+    const snapshots = getSessionCompletionSnapshots(sessionId)
+    if (!snapshots.length) return
+    set((state) => {
+      const nextMetas = state.messageMetas.slice()
+      const nextBodies = { ...state.messageBodies }
+      const nextRenderCache = { ...state.messageRenderCache }
+      let metaChanged = false
+      let bodyChanged = false
+
+      snapshots.forEach((snapshot) => {
+        const idx = nextMetas.findIndex((meta) => {
+          if (meta.sessionId !== sessionId) return false
+          if (snapshot.messageId != null && Number(meta.id) === snapshot.messageId) {
+            return true
+          }
+          if (
+            snapshot.messageId == null &&
+            meta.clientMessageId &&
+            snapshot.clientMessageId &&
+            meta.clientMessageId === snapshot.clientMessageId
+          ) {
+            return true
+          }
+          return false
+        })
+        if (idx === -1) return
+        const meta = nextMetas[idx]
+        if (meta.streamStatus === 'done' && !meta.pendingSync) {
+          return
+        }
+        const key = messageKey(meta.id)
+        const prevBody = ensureBody(nextBodies[key], meta.id)
+        const contentChanged = snapshot.content && snapshot.content !== prevBody.content
+        const reasoningChanged =
+          snapshot.reasoning && snapshot.reasoning !== (prevBody.reasoning ?? '')
+
+        nextBodies[key] = {
+          id: prevBody.id,
+          content: contentChanged ? snapshot.content : prevBody.content,
+          reasoning: reasoningChanged ? snapshot.reasoning : prevBody.reasoning,
+          version: prevBody.version + (contentChanged ? 1 : 0),
+          reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
+          toolEvents: prevBody.toolEvents,
+        }
+        delete nextRenderCache[key]
+
+        nextMetas[idx] = {
+          ...meta,
+          streamStatus: 'done',
+          streamError: null,
+          isPlaceholder: false,
+          pendingSync: true,
+        }
+        metaChanged = true
+        bodyChanged = bodyChanged || contentChanged || reasoningChanged
+      })
+
+      if (!metaChanged && !bodyChanged) {
+        return state
+      }
+
+      const partial: Partial<ChatState> = {
+        messageBodies: nextBodies,
+        messageRenderCache: nextRenderCache,
+      }
+      if (metaChanged) {
+        partial.messageMetas = nextMetas
+      }
+      return partial
+    })
+  }
+
   const applyServerMessageSnapshot = (message: Message) => {
     set((state) => {
       const key = messageKey(message.id)
@@ -322,9 +522,10 @@ export const useChatStore = create<ChatStore>((set, get) => {
                     ...meta,
                     ...serverMeta,
                     isPlaceholder: false,
-                    streamStatus: message.streamStatus ?? meta.streamStatus,
-                    streamError: message.streamError ?? meta.streamError,
-                  }
+                  streamStatus: message.streamStatus ?? meta.streamStatus,
+                  streamError: message.streamError ?? meta.streamError,
+                  pendingSync: false,
+                }
                 : meta
             )
       const nextRenderCache = { ...state.messageRenderCache }
@@ -334,6 +535,10 @@ export const useChatStore = create<ChatStore>((set, get) => {
         messageMetas: nextMetas,
         messageRenderCache: nextRenderCache,
       }
+    })
+    removeCompletionSnapshot(message.sessionId, {
+      messageId: typeof message.id === 'number' ? Number(message.id) : null,
+      clientMessageId: message.clientMessageId ?? null,
     })
     recomputeStreamingState()
   }
@@ -348,7 +553,12 @@ export const useChatStore = create<ChatStore>((set, get) => {
       const idx = state.messageMetas.findIndex((meta) => messageKey(meta.id) === key)
       if (idx === -1) return state
       const nextMetas = state.messageMetas.slice()
-      nextMetas[idx] = { ...nextMetas[idx], streamStatus: status, streamError: streamError ?? null }
+      nextMetas[idx] = {
+        ...nextMetas[idx],
+        streamStatus: status,
+        streamError: streamError ?? null,
+        pendingSync: status === 'done' ? false : nextMetas[idx].pendingSync,
+      }
       return { messageMetas: nextMetas }
     })
     if (status && status !== 'streaming' && typeof messageId === 'number' && Number.isFinite(messageId)) {
@@ -610,6 +820,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         } else {
           recomputeStreamingState()
         }
+        applyBufferedSnapshots(sessionId)
       } catch (error: any) {
         set({
           error: error?.response?.data?.error || error?.message || '获取消息列表失败',
@@ -940,6 +1151,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         reasoningActivated: false,
         clientMessageId: userClientMessageId,
         webSearchRequested: Boolean(options?.features?.web_search),
+        lastUsage: null,
       }
 
       const startStream = () =>
@@ -1100,6 +1312,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
                   ? usage
                   : state.usageLastRound,
             }))
+            if (active) {
+              active.lastUsage = usage as StreamUsageSnapshot
+            }
             continue
           }
 
@@ -1118,8 +1333,38 @@ export const useChatStore = create<ChatStore>((set, get) => {
           }
         }
 
+        const completedSnapshot = streamState.active
+          ? {
+              assistantId: streamState.active.assistantId,
+              assistantClientMessageId: streamState.active.assistantClientMessageId ?? streamState.active.clientMessageId,
+              content: streamState.active.content,
+              reasoning: streamState.active.reasoning,
+              usage: streamState.active.lastUsage,
+              sessionId,
+            }
+          : null
         const completedAssistantId = streamState.active?.assistantId
         flushActiveStream(true)
+        if (
+          completedSnapshot &&
+          (completedSnapshot.content.length > 0 || completedSnapshot.reasoning.length > 0)
+        ) {
+          persistCompletionSnapshot({
+            sessionId: completedSnapshot.sessionId,
+            messageId:
+              typeof completedSnapshot.assistantId === 'number'
+                ? Number(completedSnapshot.assistantId)
+                : null,
+            clientMessageId:
+              typeof completedSnapshot.assistantClientMessageId === 'string'
+                ? completedSnapshot.assistantClientMessageId
+                : null,
+            content: completedSnapshot.content,
+            reasoning: completedSnapshot.reasoning,
+            usage: completedSnapshot.usage,
+            completedAt: Date.now(),
+          })
+        }
         if (typeof completedAssistantId !== 'undefined' && completedAssistantId !== null) {
           updateMetaStreamStatus(completedAssistantId, 'done')
         }

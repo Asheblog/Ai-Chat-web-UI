@@ -632,99 +632,62 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           };
 
           if (finalContent && (await sessionStillExists())) {
-            const updateData: any = {
-              content: finalContent,
-              streamStatus: 'done',
-              streamCursor: finalContent.length,
-              streamReasoning: reasoningText && reasoningText.trim().length > 0 ? reasoningText.trim() : (reasoningBuffer.trim().length > 0 ? reasoningBuffer.trim() : null),
-              streamError: null,
-            };
-            if (reasoningEnabled && reasoningSaveToDb && reasoningText.trim()) {
-              updateData.reasoning = reasoningText.trim();
-              updateData.reasoningDurationSeconds = reasoningDurationSeconds;
-            } else {
-              updateData.reasoning = null;
-              updateData.reasoningDurationSeconds = null;
-            }
-            if (toolLogs.length > 0) {
-              updateData.toolLogsJson = JSON.stringify(toolLogs);
-            } else {
-              updateData.toolLogsJson = null;
-            }
-            if (activeAssistantMessageId) {
+            const streamReasoningPayload =
+              reasoningText && reasoningText.trim().length > 0
+                ? reasoningText.trim()
+                : reasoningBuffer.trim().length > 0
+                  ? reasoningBuffer.trim()
+                  : null;
+            const shouldPersistReasoning =
+              reasoningEnabled && reasoningSaveToDb && reasoningText.trim().length > 0;
+            const providerHost = (() => {
               try {
-                await prisma.message.update({
-                  where: { id: activeAssistantMessageId },
-                  data: updateData,
-                });
-                persistedAssistantMessageId = activeAssistantMessageId;
-              } catch (error) {
-                log.warn('Failed to update assistant placeholder, fallback to upsert', {
-                  sessionId,
-                  error: error instanceof Error ? error.message : error,
-                });
-                const recoveredId = await upsertAssistantMessageByClientId({
-                  sessionId,
-                  clientMessageId: assistantClientMessageId,
-                  data: updateData,
-                });
-                persistedAssistantMessageId = recoveredId ?? null;
-                if (recoveredId) {
-                  activeAssistantMessageId = recoveredId;
-                  if (streamMeta) {
-                    streamMeta.assistantMessageId = recoveredId;
-                    persistStreamMeta(streamMeta);
-                  }
-                }
+                const u = new URL(baseUrl);
+                return u.hostname;
+              } catch {
+                return null;
               }
-            } else {
-              const saved = await prisma.message.create({
-                data: {
-                  sessionId,
-                  role: 'assistant',
-                  clientMessageId: assistantClientMessageId,
-                  ...updateData,
-                },
+            })();
+            const persistedId = await persistAssistantFinalResponse({
+              sessionId,
+              existingMessageId: activeAssistantMessageId,
+              assistantClientMessageId,
+              fallbackClientMessageId: clientMessageId,
+              content: finalContent,
+              streamReasoning: streamReasoningPayload,
+              reasoning: shouldPersistReasoning ? reasoningText.trim() : null,
+              reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
+              streamError: null,
+              toolLogsJson: toolLogs.length > 0 ? JSON.stringify(toolLogs) : null,
+              usage: {
+                promptTokens: finalUsageNumbers.prompt,
+                completionTokens: finalUsageNumbers.completion,
+                totalTokens: finalUsageNumbers.total,
+                contextLimit,
+              },
+              model: session.modelRawId,
+              provider: providerHost ?? undefined,
+            });
+            if (persistedId) {
+              persistedAssistantMessageId = persistedId;
+              activeAssistantMessageId = persistedId;
+              if (streamMeta) {
+                streamMeta.assistantMessageId = persistedId;
+                persistStreamMeta(streamMeta);
+              }
+              traceRecorder.log('db:persist_final', {
+                messageId: persistedId,
+                length: finalContent.length,
+                promptTokens: finalUsageNumbers.prompt,
+                completionTokens: finalUsageNumbers.completion,
+                totalTokens: finalUsageNumbers.total,
+                source: 'agent_web_search',
               });
-              persistedAssistantMessageId = saved?.id ?? null;
-              if (persistedAssistantMessageId) {
-                activeAssistantMessageId = persistedAssistantMessageId;
-                if (streamMeta) {
-                  streamMeta.assistantMessageId = persistedAssistantMessageId;
-                  persistStreamMeta(streamMeta);
-                }
-              }
             }
           } else if (!finalContent) {
             log.warn('Agent response empty, skip persistence');
           } else {
             log.debug('Session missing when persisting agent response, skip insert', { sessionId });
-          }
-
-          const providerHost = (() => {
-            try {
-              const u = new URL(baseUrl);
-              return u.hostname;
-            } catch {
-              return null;
-            }
-          })();
-
-          if (await sessionStillExists()) {
-            await (prisma as any).usageMetric.create({
-              data: {
-                sessionId,
-                messageId: persistedAssistantMessageId ?? undefined,
-                model: session.modelRawId || 'unknown',
-                provider: providerHost ?? undefined,
-                promptTokens: finalUsageNumbers.prompt,
-                completionTokens: finalUsageNumbers.completion,
-                totalTokens: finalUsageNumbers.total,
-                contextLimit: contextLimit,
-              },
-            });
-          } else {
-            log.debug('Session missing when persisting usage metric, skip insert', { sessionId });
           }
           traceStatus = 'completed';
           traceMetadataExtras.toolEvents = toolLogs.length;
@@ -868,7 +831,7 @@ import type { UsageQuotaSnapshot } from '../../types';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
 import type { ToolLogEntry } from './tool-logs';
-import { upsertAssistantMessageByClientId } from './assistant-message-service';
+import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from './assistant-message-service';
 import {
   buildAgentStreamKey,
   deriveAssistantClientMessageId,

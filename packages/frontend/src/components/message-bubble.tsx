@@ -331,6 +331,10 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
           </div>
         )}
 
+        {!isUser && meta.pendingSync && (
+          <div className="text-xs text-amber-600 mt-1">等待后端同步</div>
+        )}
+
         {isUser && (
           <div className="text-xs text-muted-foreground mt-2">
             {formatDate(meta.createdAt)}

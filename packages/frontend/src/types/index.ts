@@ -134,6 +134,7 @@ export interface MessageMeta {
   isPlaceholder?: boolean;
   streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
   streamError?: string | null;
+  pendingSync?: boolean;
 }
 
 export interface MessageBody {
