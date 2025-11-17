@@ -641,14 +641,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           };
 
           if (finalContent && (await sessionStillExists())) {
-            const streamReasoningPayload =
-              reasoningText && reasoningText.trim().length > 0
-                ? reasoningText.trim()
-                : reasoningBuffer.trim().length > 0
-                  ? reasoningBuffer.trim()
-                  : null;
+            const reasoningTrimmed = reasoningText.trim();
+            const streamReasoningPayload = reasoningTrimmed.length > 0 ? reasoningTrimmed : null;
             const shouldPersistReasoning =
-              reasoningEnabled && reasoningSaveToDb && reasoningText.trim().length > 0;
+              reasoningEnabled && reasoningSaveToDb && reasoningTrimmed.length > 0;
             const providerHost = (() => {
               try {
                 const u = new URL(baseUrl);
