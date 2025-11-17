@@ -23,9 +23,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     assistantMessageId,
     assistantClientMessageId,
     streamProgressPersistIntervalMs,
-    traceRecorder,
-    idleTimeoutMs,
-  } = params;
+  traceRecorder,
+  idleTimeoutMs,
+  assistantReplyHistoryLimit,
+} = params;
 
   const traceMetadataExtras: Record<string, unknown> = {};
   let traceStatus: TaskTraceStatus = 'running';
@@ -658,6 +659,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               existingMessageId: activeAssistantMessageId,
               assistantClientMessageId,
               fallbackClientMessageId: clientMessageId,
+              parentMessageId: userMessageRecord?.id ?? null,
+              replyHistoryLimit: assistantReplyHistoryLimit,
               content: finalContent,
               streamReasoning: streamReasoningPayload,
               reasoning: shouldPersistReasoning ? reasoningText.trim() : null,
@@ -881,4 +884,5 @@ export type AgentResponseParams = {
   streamProgressPersistIntervalMs: number;
   traceRecorder: TaskTraceRecorder;
   idleTimeoutMs: number;
+  assistantReplyHistoryLimit: number;
 };

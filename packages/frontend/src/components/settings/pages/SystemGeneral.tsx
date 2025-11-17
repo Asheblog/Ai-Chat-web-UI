@@ -43,6 +43,7 @@ export function SystemGeneralPage() {
   const [brandTextDraft, setBrandTextDraft] = useState("")
   const [, setIsIMEComposing] = useState(false)
   const [retentionDraft, setRetentionDraft] = useState('30')
+  const [replyHistoryLimitDraft, setReplyHistoryLimitDraft] = useState('5')
   const [siteBaseDraft, setSiteBaseDraft] = useState('')
   const [anonymousQuotaDraft, setAnonymousQuotaDraft] = useState('20')
   const [defaultUserQuotaDraft, setDefaultUserQuotaDraft] = useState('200')
@@ -59,6 +60,7 @@ export function SystemGeneralPage() {
     setAllowRegistrationDraft(Boolean(systemSettings.allowRegistration))
     setBrandTextDraft(systemSettings.brandText || '')
     setRetentionDraft(String(systemSettings.chatImageRetentionDays ?? 30))
+    setReplyHistoryLimitDraft(String(systemSettings.assistantReplyHistoryLimit ?? 5))
     setSiteBaseDraft(systemSettings.siteBaseUrl || '')
     setAnonymousQuotaDraft(String(systemSettings.anonymousDailyQuota ?? 20))
     setDefaultUserQuotaDraft(String(systemSettings.defaultUserDailyQuota ?? 200))
@@ -165,10 +167,11 @@ export function SystemGeneralPage() {
         anonymousQuota: String(systemSettings.anonymousDailyQuota ?? 20),
         defaultUserQuota: String(systemSettings.defaultUserDailyQuota ?? 200),
         brandText: systemSettings.brandText || '',
-        siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
-        chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
-        anonymousRetentionDays: String(systemSettings.anonymousRetentionDays ?? 15),
-      }
+      siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
+      chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
+      assistantReplyHistoryLimit: String(systemSettings.assistantReplyHistoryLimit ?? 5),
+      anonymousRetentionDays: String(systemSettings.anonymousRetentionDays ?? 15),
+    }
     : null
 
   const fieldChanged =
@@ -180,6 +183,7 @@ export function SystemGeneralPage() {
       brandTextDraft !== normalizedInitials.brandText ||
       siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
       retentionDraft !== normalizedInitials.chatImageRetentionDays ||
+      replyHistoryLimitDraft !== normalizedInitials.assistantReplyHistoryLimit ||
       anonymousRetentionDraft !== normalizedInitials.anonymousRetentionDays
     )
 
@@ -200,6 +204,11 @@ export function SystemGeneralPage() {
       toast({ title: '输入无效', description: '图片保留天数需为不小于 0 的整数', variant: 'destructive' })
       return
     }
+    const parsedReplyHistoryLimit = Number.parseInt(replyHistoryLimitDraft, 10)
+    if (Number.isNaN(parsedReplyHistoryLimit) || parsedReplyHistoryLimit < 1 || parsedReplyHistoryLimit > 20) {
+      toast({ title: '输入无效', description: 'AI 回答历史上限需在 1 到 20 之间', variant: 'destructive' })
+      return
+    }
     const parsedAnonymousRetention = Number.parseInt(anonymousRetentionDraft, 10)
     if (Number.isNaN(parsedAnonymousRetention) || parsedAnonymousRetention < 0 || parsedAnonymousRetention > 15) {
       toast({ title: '输入无效', description: '匿名访客数据保留天数需在 0 到 15 之间', variant: 'destructive' })
@@ -215,6 +224,7 @@ export function SystemGeneralPage() {
         brandText: brandTextDraft,
         siteBaseUrl: siteBaseDraft.trim(),
         chatImageRetentionDays: parsedRetention,
+        assistantReplyHistoryLimit: parsedReplyHistoryLimit,
         anonymousRetentionDays: parsedAnonymousRetention,
       })
       toast({ title: '已保存通用配置' })
@@ -441,6 +451,27 @@ export function SystemGeneralPage() {
               disabled={!isAdmin}
             />
             <span className="text-sm text-muted-foreground">天</span>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="单条消息 AI 回答上限"
+          description="同一条用户消息最多保留的 AI 回答数量，超过后自动删除最旧的回答"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="assistantReplyHistoryLimit"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={20}
+              value={replyHistoryLimitDraft}
+              onChange={(e) => setReplyHistoryLimitDraft(e.target.value)}
+              className="w-full sm:w-28 text-right"
+              disabled={!isAdmin}
+            />
+            <span className="text-sm text-muted-foreground">条</span>
           </div>
         </SettingRow>
 

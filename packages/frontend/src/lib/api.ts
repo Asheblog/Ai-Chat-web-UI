@@ -283,19 +283,49 @@ class ApiClient {
 
   // 流式聊天API
   // 流式聊天（带退避+可取消）。429 退避 15s、5xx/超时 退避 2s，最多重试 1 次
-  async *streamChat(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string; traceEnabled?: boolean }): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
+  async *streamChat(
+    sessionId: number,
+    content: string,
+    images?: Array<{ data: string; mime: string }>,
+    options?: {
+      reasoningEnabled?: boolean
+      reasoningEffort?: 'low' | 'medium' | 'high'
+      ollamaThink?: boolean
+      saveReasoning?: boolean
+      contextEnabled?: boolean
+      clientMessageId?: string
+      traceEnabled?: boolean
+      replyToMessageId?: number | string
+      replyToClientMessageId?: string
+    }
+  ): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
-    const doOnce = async (signal: AbortSignal) => fetch(`${API_BASE_URL}/chat/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // 明确声明期望 SSE，有助于代理/中间层正确处理为流式
-        'Accept': 'text/event-stream',
-      },
-      body: JSON.stringify({ sessionId, content, images, ...(options||{}) }),
-      signal,
-      credentials: 'include',
-    })
+    const doOnce = async (signal: AbortSignal) => {
+      const { replyToMessageId, replyToClientMessageId, ...rest } = options || {}
+      const payload: Record<string, any> = {
+        sessionId,
+        content,
+        ...(images ? { images } : {}),
+        ...rest,
+      }
+      if (typeof replyToMessageId === 'number') {
+        payload.replyToMessageId = replyToMessageId
+      }
+      if (typeof replyToClientMessageId === 'string' && replyToClientMessageId.trim().length > 0) {
+        payload.replyToClientMessageId = replyToClientMessageId.trim()
+      }
+      return fetch(`${API_BASE_URL}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // 明确声明期望 SSE，有助于代理/中间层正确处理为流式
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify(payload),
+        signal,
+        credentials: 'include',
+      })
+    }
 
     // 建立带退避的请求
     this.currentStreamController?.abort();
@@ -704,6 +734,7 @@ class ApiClient {
         reasoningMaxOutputTokensDefault,
         ollamaThink,
         chatImageRetentionDays,
+        assistantReplyHistoryLimit: Number(settingsRes.data.data?.assistant_reply_history_limit ?? 5),
         siteBaseUrl,
         anonymousRetentionDays,
         anonymousDailyQuota,
@@ -767,6 +798,7 @@ class ApiClient {
     }
     if (typeof rest.ollamaThink === 'boolean') payload.ollama_think = !!rest.ollamaThink
     if (typeof rest.chatImageRetentionDays === 'number') payload.chat_image_retention_days = rest.chatImageRetentionDays
+    if (typeof rest.assistantReplyHistoryLimit === 'number') payload.assistant_reply_history_limit = rest.assistantReplyHistoryLimit
     if (typeof rest.siteBaseUrl === 'string') payload.site_base_url = rest.siteBaseUrl
     if (typeof rest.anonymousRetentionDays === 'number') payload.anonymous_retention_days = rest.anonymousRetentionDays
     if (typeof rest.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = rest.anonymousDailyQuota

@@ -47,6 +47,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     webSearchEnabled,
     setWebSearchEnabled,
     canUseWebSearch,
+    assistantVariantSelections,
   } = useChatComposer()
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
@@ -84,6 +85,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     renderCache: messageRenderCache,
     isStreaming,
     isLoading: isMessagesLoading,
+    variantSelections: assistantVariantSelections,
   }
 
   const composer: ChatComposerPanelProps = {

@@ -100,6 +100,8 @@ export interface PersistAssistantFinalResponseParams {
   existingMessageId: number | null;
   assistantClientMessageId?: string | null;
   fallbackClientMessageId?: string | null;
+  parentMessageId?: number | null;
+  replyHistoryLimit?: number | null;
   content: string;
   streamReasoning?: string | null;
   reasoning?: string | null;
@@ -116,11 +118,85 @@ export interface PersistAssistantFinalResponseParams {
   provider?: string | null;
 }
 
+const clampReplyHistoryLimit = (value?: number | null) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = Math.floor(value)
+    return Math.max(1, Math.min(20, normalized))
+  }
+  return 5
+}
+
+const ensureVariantWindow = async ({
+  db,
+  sessionId,
+  parentMessageId,
+  targetMessageId,
+  replyHistoryLimit,
+}: {
+  db: DbClient
+  sessionId: number
+  parentMessageId: number
+  targetMessageId: number
+  replyHistoryLimit?: number | null
+}) => {
+  const limit = clampReplyHistoryLimit(replyHistoryLimit)
+  const siblings = await db.message.findMany({
+    where: { sessionId, parentMessageId },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, createdAt: true, variantIndex: true },
+  })
+
+  if (!siblings.some((msg) => msg.id === targetMessageId)) {
+    const target = await db.message.findUnique({
+      where: { id: targetMessageId },
+      select: { id: true, createdAt: true, variantIndex: true },
+    })
+    if (target) {
+      siblings.push(target)
+      siblings.sort((a, b) => {
+        const diff = a.createdAt.getTime() - b.createdAt.getTime()
+        if (diff !== 0) return diff
+        return a.id - b.id
+      })
+    }
+  }
+
+  if (siblings.length === 0) {
+    return
+  }
+
+  const overflow = Math.max(0, siblings.length - limit)
+  const removalIds: number[] = []
+  if (overflow > 0) {
+    const removable = siblings.filter((s) => s.id !== targetMessageId).slice(0, overflow)
+    removalIds.push(...removable.map((s) => s.id))
+  }
+
+  const survivors = siblings.filter((s) => !removalIds.includes(s.id))
+  let index = 1
+  for (const survivor of survivors) {
+    if (survivor.variantIndex !== index) {
+      await db.message.update({
+        where: { id: survivor.id },
+        data: { variantIndex: index },
+      })
+    }
+    index += 1
+  }
+
+  if (removalIds.length > 0) {
+    await db.usageMetric.deleteMany({ where: { messageId: { in: removalIds } } })
+    await db.message.deleteMany({ where: { id: { in: removalIds } } })
+  }
+}
+
 export const persistAssistantFinalResponse = async ({
   sessionId,
   existingMessageId,
   assistantClientMessageId,
   fallbackClientMessageId,
+  parentMessageId,
+  replyHistoryLimit,
   content,
   streamReasoning,
   reasoning,
@@ -146,6 +222,7 @@ export const persistAssistantFinalResponse = async ({
     reasoningDurationSeconds:
       reasoning && reasoning.trim().length ? reasoningDurationSeconds ?? null : null,
     toolLogsJson: toolLogsJson ?? null,
+    parentMessageId: parentMessageId ?? null,
   };
 
   try {
@@ -196,6 +273,21 @@ export const persistAssistantFinalResponse = async ({
             typeof usage.contextLimit === 'number' ? usage.contextLimit : usage.contextLimit ?? null,
         },
       });
+
+      if (parentMessageId) {
+        await ensureVariantWindow({
+          db: tx,
+          sessionId,
+          parentMessageId,
+          targetMessageId: targetId,
+          replyHistoryLimit,
+        });
+      } else {
+        await tx.message.update({
+          where: { id: targetId },
+          data: { variantIndex: null, parentMessageId: null },
+        });
+      }
 
       return targetId;
     });

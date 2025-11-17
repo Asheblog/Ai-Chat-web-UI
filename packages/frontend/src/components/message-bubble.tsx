@@ -1,6 +1,6 @@
 'use client'
 
-import { Copy } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, RefreshCw } from 'lucide-react'
 import Image from 'next/image'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -32,9 +32,16 @@ interface MessageBubbleProps {
   body: MessageBody
   renderCache?: MessageRenderCacheEntry
   isStreaming?: boolean
+  variantInfo?: {
+    total: number
+    index: number
+    onPrev: () => void
+    onNext: () => void
+    onRegenerate: () => void
+  }
 }
 
-function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: MessageBubbleProps) {
+function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantInfo }: MessageBubbleProps) {
   const [isCopied, setIsCopied] = useState(false)
   const reasoningRaw = body.reasoning || ''
   const reasoningText = reasoningRaw.trim()
@@ -239,6 +246,8 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
   const avatarFallbackText = isUser
     ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
     : 'A'
+  const showVariantControls = Boolean(variantInfo)
+  const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -317,7 +326,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
         )}
 
         {!isUser && (
-          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-1 mt-2 text-xs text-muted-foreground">
             <Button
               variant="ghost"
               size="icon"
@@ -327,7 +336,46 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
             >
               {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
             </Button>
-            <span className="ml-2">{formatDate(meta.createdAt)}</span>
+            {showVariantControls && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                title="重新生成回答"
+                onClick={() => variantInfo?.onRegenerate()}
+                disabled={Boolean(isStreaming)}
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            )}
+            {showVariantNavigation && (
+              <div className="flex items-center gap-1 ml-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => variantInfo?.onPrev()}
+                  title="查看更早的回答"
+                  disabled={Boolean(isStreaming)}
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+                <span className="w-12 text-center">
+                  {(variantInfo?.index ?? 0) + 1}/{variantInfo?.total ?? 1}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => variantInfo?.onNext()}
+                  title="查看最新回答"
+                  disabled={Boolean(isStreaming)}
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+            <span className="ml-auto">{formatDate(meta.createdAt)}</span>
           </div>
         )}
 
@@ -336,8 +384,17 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming }: Messag
         )}
 
         {isUser && (
-          <div className="text-xs text-muted-foreground mt-2">
-            {formatDate(meta.createdAt)}
+          <div className="flex items-center justify-end gap-1 mt-2 text-xs text-muted-foreground">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={handleCopy}
+              title="复制消息"
+            >
+              {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
+            </Button>
+            <span>{formatDate(meta.createdAt)}</span>
           </div>
         )}
       </div>

@@ -70,6 +70,8 @@ model ChatSession {
 model Message {
   id        Int      @id @default(autoincrement())
   sessionId Int
+  parentMessageId Int?
+  variantIndex Int? @default(1)
   role      String   // 'user' or 'assistant'
   content   String
   // 客户端生成的幂等ID（可选）。与 sessionId 组成唯一键，用于避免重复写入
@@ -89,10 +91,13 @@ model Message {
   attachments MessageAttachment[]
   usageMetrics UsageMetric[]
   taskTraces TaskTrace[]
+  parent Message? @relation("MessageVariants", fields: [parentMessageId], references: [id])
+  variants Message[] @relation("MessageVariants")
 
   // 若提供了 clientMessageId，则 (sessionId, clientMessageId) 必须唯一；
   // clientMessageId 为空时不受限（SQLite 下 NULL 不参与唯一比较）。
   @@unique([sessionId, clientMessageId])
+  @@index([parentMessageId])
   @@map("messages")
 }
 

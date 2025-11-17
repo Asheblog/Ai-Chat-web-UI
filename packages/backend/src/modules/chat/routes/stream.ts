@@ -9,7 +9,7 @@ import { convertOpenAIReasoningPayload } from '../../../utils/providers';
 import { Tokenizer } from '../../../utils/tokenizer';
 import { cleanupExpiredChatImages } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
-import { serializeQuotaSnapshot } from '../../../utils/quota';
+import { consumeActorQuota, serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
 import { resolveContextLimit, resolveCompletionLimit } from '../../../utils/context-window';
 import { TaskTraceRecorder, shouldEnableTaskTrace, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
@@ -56,7 +56,16 @@ export const registerChatStreamRoutes = (router: Hono) => {
     try {
       const actor = c.get('actor') as Actor;
       const payload = c.req.valid('json') as any;
-      const { sessionId, content, images } = payload;
+      const { sessionId } = payload;
+      const replyToMessageId =
+        typeof payload?.replyToMessageId === 'number' ? payload.replyToMessageId : null
+      const replyToClientMessageIdRaw =
+        typeof payload?.replyToClientMessageId === 'string'
+          ? payload.replyToClientMessageId.trim()
+          : ''
+      const replyToClientMessageId = replyToClientMessageIdRaw || null
+      let content = typeof payload?.content === 'string' ? payload.content : ''
+      const images = replyToMessageId || replyToClientMessageId ? undefined : payload.images;
       const requestedFeatures = payload?.features || {};
       const traceToggle = typeof payload?.traceEnabled === 'boolean' ? payload.traceEnabled : undefined;
 
@@ -110,31 +119,79 @@ export const registerChatStreamRoutes = (router: Hono) => {
       let messageWasReused = false
       let quotaSnapshot: UsageQuotaSnapshot | null = null
 
-      try {
-        const result = await createUserMessageWithQuota({
-          actor,
-          sessionId,
-          content,
-          clientMessageId,
-          images,
-          now,
+      if (replyToMessageId) {
+        const existingUserMessage = await prisma.message.findFirst({
+          where: { id: replyToMessageId, sessionId, role: 'user' },
         })
-        userMessageRecord = result.userMessage as Message
-        messageWasReused = result.messageWasReused
-        quotaSnapshot = result.quotaSnapshot
-      } catch (error) {
-        if (error instanceof QuotaExceededError) {
+        if (!existingUserMessage) {
+          return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404)
+        }
+        content = existingUserMessage.content
+        userMessageRecord = existingUserMessage as Message
+        messageWasReused = true
+        const quotaResult = await consumeActorQuota(actor, { now })
+        if (!quotaResult.success) {
           return c.json({
             success: false,
             error: 'Daily quota exhausted',
-            quota: serializeQuotaSnapshot(error.snapshot),
+            quota: serializeQuotaSnapshot(quotaResult.snapshot),
             requiredLogin: actor.type !== 'user',
           }, 429)
         }
-        throw error
+        quotaSnapshot = quotaResult.snapshot
+      } else if (replyToClientMessageId) {
+        const existingUserMessage = await prisma.message.findFirst({
+          where: {
+            sessionId,
+            clientMessageId: replyToClientMessageId,
+            role: 'user',
+          },
+        })
+        if (!existingUserMessage) {
+          return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404)
+        }
+        content = existingUserMessage.content
+        userMessageRecord = existingUserMessage as Message
+        messageWasReused = true
+        const quotaResult = await consumeActorQuota(actor, { now })
+        if (!quotaResult.success) {
+          return c.json({
+            success: false,
+            error: 'Daily quota exhausted',
+            quota: serializeQuotaSnapshot(quotaResult.snapshot),
+            requiredLogin: actor.type !== 'user',
+          }, 429)
+        }
+        quotaSnapshot = quotaResult.snapshot
+      } else {
+        try {
+          const result = await createUserMessageWithQuota({
+            actor,
+            sessionId,
+            content,
+            clientMessageId,
+            images,
+            now,
+          })
+          userMessageRecord = result.userMessage as Message
+          messageWasReused = result.messageWasReused
+          quotaSnapshot = result.quotaSnapshot
+        } catch (error) {
+          if (error instanceof QuotaExceededError) {
+            return c.json({
+              success: false,
+              error: 'Daily quota exhausted',
+              quota: serializeQuotaSnapshot(error.snapshot),
+              requiredLogin: actor.type !== 'user',
+            }, 429)
+          }
+          throw error
+        }
       }
 
-      const assistantClientMessageId = deriveAssistantClientMessageId(clientMessageId);
+      const assistantClientMessageId = deriveAssistantClientMessageId(
+        replyToMessageId ? `${clientMessageId ?? ''}${clientMessageId ? ':' : ''}regen:${replyToMessageId}:${Date.now()}` : clientMessageId
+      );
 
       try {
         const placeholderId = await upsertAssistantMessageByClientId({
@@ -145,6 +202,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
             streamStatus: 'streaming',
             streamCursor: 0,
             streamReasoning: null,
+            parentMessageId: userMessageRecord?.id ?? null,
+            variantIndex: null,
           },
         });
         assistantMessageId = placeholderId ?? assistantMessageId;
@@ -175,7 +234,12 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       if (contextEnabled) {
         const recentMessages = await prisma.message.findMany({
-          where: { sessionId },
+          where: {
+            sessionId,
+            ...(replyToMessageId && userMessageRecord?.createdAt
+              ? { createdAt: { lte: userMessageRecord.createdAt } }
+              : {}),
+          },
           select: {
             role: true,
             content: true,
@@ -304,6 +368,17 @@ export const registerChatStreamRoutes = (router: Hono) => {
       cleanupExpiredChatImages(Number.isFinite(retentionDaysParsed) ? retentionDaysParsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS).catch((error) => {
         console.warn('[chat] cleanupExpiredChatImages', error)
       })
+      const assistantReplyHistoryLimit = (() => {
+        const raw =
+          sysMap.assistant_reply_history_limit ||
+          process.env.ASSISTANT_REPLY_HISTORY_LIMIT ||
+          '5'
+        const parsed = Number.parseInt(String(raw), 10)
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return Math.min(20, parsed)
+        }
+        return 5
+      })()
       const reqReasoningEnabled = payload.reasoningEnabled
       const reqReasoningEffort = payload.reasoningEffort
       const reqOllamaThink = payload.ollamaThink
@@ -419,6 +494,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           streamProgressPersistIntervalMs: STREAM_PROGRESS_PERSIST_INTERVAL_MS,
           traceRecorder,
           idleTimeoutMs: traceDecision.config.idleTimeoutMs,
+          assistantReplyHistoryLimit,
         });
       }
 
@@ -944,6 +1020,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
               existingMessageId: assistantMessageId,
               assistantClientMessageId,
               fallbackClientMessageId: clientMessageId,
+              parentMessageId: userMessageRecord?.id ?? null,
+              replyHistoryLimit: assistantReplyHistoryLimit,
               content: trimmedText,
               streamReasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
               reasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
@@ -1366,6 +1444,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   existingMessageId: assistantMessageId,
                   assistantClientMessageId,
                   fallbackClientMessageId: clientMessageId,
+                  parentMessageId: userMessageRecord?.id ?? null,
+                  replyHistoryLimit: assistantReplyHistoryLimit,
                   content: trimmedContent,
                   streamReasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
                   reasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,

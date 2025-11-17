@@ -9,7 +9,9 @@ export const MESSAGE_DEDUPE_WINDOW_MS = parseInt(process.env.MESSAGE_DEDUPE_WIND
 
 export const sendMessageSchema = z.object({
   sessionId: z.number().int().positive(),
-  content: z.string().min(1).max(10000),
+  content: z.string().max(10000).optional(),
+  replyToMessageId: z.number().int().positive().optional(),
+  replyToClientMessageId: z.string().min(1).max(128).optional(),
   images: z.array(z.object({ data: z.string().min(1), mime: z.string().min(1) })).max(4).optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
@@ -23,7 +25,13 @@ export const sendMessageSchema = z.object({
     })
     .optional(),
   traceEnabled: z.boolean().optional(),
-});
+}).refine((value) => {
+  const hasContent = typeof value.content === 'string' && value.content.trim().length > 0
+  const hasReference =
+    typeof value.replyToMessageId === 'number' ||
+    (typeof value.replyToClientMessageId === 'string' && value.replyToClientMessageId.trim().length > 0)
+  return hasContent || hasReference
+}, { message: 'content or replyToMessageId is required' });
 
 export const cancelStreamSchema = z.object({
   sessionId: z.number().int().positive(),

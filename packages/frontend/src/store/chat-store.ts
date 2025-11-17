@@ -162,12 +162,93 @@ const getSessionCompletionSnapshots = (sessionId: number): StreamCompletionSnaps
 
 const messageKey = (id: MessageId) => (typeof id === 'string' ? id : String(id))
 
+const parseDateValue = (value: string | number | Date | null | undefined) => {
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
+const compareVariantMeta = (a: MessageMeta, b: MessageMeta) => {
+  const aIndex = typeof a.variantIndex === 'number' ? a.variantIndex : null
+  const bIndex = typeof b.variantIndex === 'number' ? b.variantIndex : null
+  if (aIndex !== null && bIndex !== null && aIndex !== bIndex) {
+    return aIndex - bIndex
+  }
+  const aTime = parseDateValue(a.createdAt)
+  const bTime = parseDateValue(b.createdAt)
+  if (aTime !== bTime) return aTime - bTime
+  return messageKey(a.id).localeCompare(messageKey(b.id))
+}
+
+const buildVariantSelections = (metas: MessageMeta[]): Record<string, MessageId> => {
+  const selections: Record<string, MessageId> = {}
+  metas
+    .filter((meta) => meta.role === 'assistant' && meta.parentMessageId != null)
+    .sort(compareVariantMeta)
+    .forEach((meta) => {
+      const parentKey = messageKey(meta.parentMessageId!)
+      selections[parentKey] = meta.id
+    })
+  return selections
+}
+
+const getAssistantVariantLimit = () => {
+  const settings = useSettingsStore.getState().systemSettings
+  const raw = settings?.assistantReplyHistoryLimit
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.max(1, Math.min(20, Math.floor(raw)))
+  }
+  return 5
+}
+
+const enforceVariantLimitLocally = (
+  metas: MessageMeta[],
+  parentToken: MessageId,
+): { metas: MessageMeta[]; removedIds: MessageId[] } => {
+  const limit = getAssistantVariantLimit()
+  if (limit <= 0) {
+    return { metas, removedIds: [] }
+  }
+  const parentKey = messageKey(parentToken)
+  const variants = metas
+    .filter(
+      (meta) =>
+        meta.role === 'assistant' &&
+        meta.parentMessageId != null &&
+        messageKey(meta.parentMessageId) === parentKey,
+    )
+    .sort(compareVariantMeta)
+  if (variants.length <= limit) {
+    return { metas, removedIds: [] }
+  }
+  const removeCount = variants.length - limit
+  const toRemove = variants.slice(0, removeCount).map((meta) => meta.id)
+  if (toRemove.length === 0) {
+    return { metas, removedIds: [] }
+  }
+  const removeKeys = new Set(toRemove.map((id) => messageKey(id)))
+  const nextMetas = metas.filter((meta) => !removeKeys.has(messageKey(meta.id)))
+  return { metas: nextMetas, removedIds: toRemove }
+}
+
 const createMeta = (message: Message, overrides: Partial<MessageMeta> = {}): MessageMeta => ({
   id: message.id,
   sessionId: message.sessionId,
   role: message.role,
   createdAt: message.createdAt,
   clientMessageId: message.clientMessageId ?? null,
+  parentMessageId:
+    typeof (message as any).parentMessageId === 'number'
+      ? (message as any).parentMessageId
+      : null,
+  variantIndex:
+    typeof (message as any).variantIndex === 'number'
+      ? (message as any).variantIndex
+      : null,
   reasoningStatus: message.reasoningStatus,
   reasoningDurationSeconds: message.reasoningDurationSeconds ?? null,
   reasoningIdleMs: message.reasoningIdleMs ?? null,
@@ -383,6 +464,7 @@ interface ChatStore extends ChatState {
       ollamaThink?: boolean;
       saveReasoning?: boolean;
       features?: { web_search?: boolean };
+      replyToMessageId?: number;
     }
   ) => Promise<void>
   stopStreaming: () => void
@@ -393,6 +475,8 @@ interface ChatStore extends ChatState {
     payload: { contentHtml?: string | null; reasoningHtml?: string | null; contentVersion?: number; reasoningVersion?: number }
   ) => void
   invalidateRenderedContent: (messageId?: MessageId) => void
+  regenerateAssistantMessage: (messageId: MessageId) => Promise<void>
+  cycleAssistantVariant: (parentKey: string, direction: 'prev' | 'next') => void
 }
 
 export const useChatStore = create<ChatStore>((set, get) => {
@@ -489,6 +573,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
       }
       if (metaChanged) {
         partial.messageMetas = nextMetas
+        partial.assistantVariantSelections = buildVariantSelections(nextMetas)
       }
       return partial
     })
@@ -700,6 +785,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         const nextMetas = state.messageMetas.slice()
         nextMetas[metaIndex] = nextMeta
         partial.messageMetas = nextMetas
+        partial.assistantVariantSelections = buildVariantSelections(nextMetas)
       }
 
       return partial
@@ -741,6 +827,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
     usageTotals: null,
     sessionUsageTotalsMap: {} as Record<number, import('@/types').UsageTotals>,
     toolEvents: [],
+    assistantVariantSelections: {},
 
     fetchSessions: async () => {
       set({ isSessionsLoading: true, error: null })
@@ -799,6 +886,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
         set((state) => ({
           messageMetas: metas,
+          assistantVariantSelections: buildVariantSelections(metas),
           messageBodies: bodies,
           messageRenderCache: {},
           messageImageCache: nextCache,
@@ -856,6 +944,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           sessions: [newSession, ...state.sessions],
           currentSession: newSession,
           messageMetas: [],
+          assistantVariantSelections: {},
           messageBodies: {},
           messageRenderCache: {},
           messagesHydrated: { ...state.messagesHydrated, [newSession.id]: true },
@@ -884,6 +973,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         set({
           currentSession: session,
           messageMetas: [],
+          assistantVariantSelections: {},
           messageBodies: {},
           messageRenderCache: {},
           usageCurrent: null,
@@ -906,6 +996,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
             sessions: newSessions,
             currentSession: shouldClear ? null : state.currentSession,
             messageMetas: shouldClear ? [] : state.messageMetas,
+            assistantVariantSelections: shouldClear ? {} : state.assistantVariantSelections,
             messageBodies: shouldClear ? {} : state.messageBodies,
             messageRenderCache: shouldClear ? {} : state.messageRenderCache,
           }
@@ -996,84 +1087,110 @@ export const useChatStore = create<ChatStore>((set, get) => {
         set({ error: '会话不存在或未选中' })
         return
       }
-
-      try {
-        const isTarget = snapshot.currentSession?.id === sessionId
-        const isDefaultTitle =
-          isTarget &&
-          (!!snapshot.currentSession?.title === false ||
-            snapshot.currentSession?.title === '新的对话' ||
-            snapshot.currentSession?.title === 'New Chat')
-        const userMessageCount = snapshot.messageMetas.filter(
-          (meta) => meta.sessionId === sessionId && meta.role === 'user'
-        ).length
-        const noUserMessagesYet = userMessageCount === 0
-
-        if (isTarget && isDefaultTitle && noUserMessagesYet && content) {
-          const deriveTitle = (text: string) => {
-            let s = text
-              .replace(/```[\s\S]*?```/g, ' ')
-              .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
-              .replace(/^[#>\-\*\s]+/gm, '')
-              .replace(/\n+/g, ' ')
-              .trim()
-            const limit = 30
-            return s.length > limit ? s.slice(0, limit) : s
-          }
-          const titleCandidate = deriveTitle(content)
-          if (titleCandidate) {
-            const prevTitle = snapshot.currentSession?.title || '新的对话'
-            set((state) => ({
-              sessions: state.sessions.map((s) =>
-                s.id === sessionId ? { ...s, title: titleCandidate } : s
-              ),
-              currentSession:
-                state.currentSession?.id === sessionId
-                  ? { ...state.currentSession, title: titleCandidate }
-                  : state.currentSession,
-            }))
-            get()
-              .updateSessionTitle(sessionId, titleCandidate)
-              .catch(() => {
-                set((state) => ({
-                  sessions: state.sessions.map((s) =>
-                    s.id === sessionId ? { ...s, title: prevTitle } : s
-                  ),
-                  currentSession:
-                    state.currentSession?.id === sessionId
-                      ? { ...state.currentSession, title: prevTitle }
-                      : state.currentSession,
-                }))
-              })
-          }
+      const replyToMessageId =
+        typeof options?.replyToMessageId === 'number' || typeof options?.replyToMessageId === 'string'
+          ? (options?.replyToMessageId as MessageId)
+          : null
+      const isRegenerate = replyToMessageId !== null
+      let parentUserMeta: MessageMeta | null = null
+      if (isRegenerate) {
+        parentUserMeta =
+          snapshot.messageMetas.find(
+            (meta) =>
+              meta.sessionId === sessionId &&
+              meta.role === 'user' &&
+              messageKey(meta.id) === messageKey(replyToMessageId!),
+          ) ?? null
+        if (!parentUserMeta) {
+          set({ error: '未找到关联的用户消息，无法重新生成回答' })
+          return
         }
-      } catch {
-        // 忽略自动改名异常
+      }
+
+      if (!isRegenerate) {
+        try {
+          const isTarget = snapshot.currentSession?.id === sessionId
+          const isDefaultTitle =
+            isTarget &&
+            (!!snapshot.currentSession?.title === false ||
+              snapshot.currentSession?.title === '新的对话' ||
+              snapshot.currentSession?.title === 'New Chat')
+          const userMessageCount = snapshot.messageMetas.filter(
+            (meta) => meta.sessionId === sessionId && meta.role === 'user'
+          ).length
+          const noUserMessagesYet = userMessageCount === 0
+
+          if (isTarget && isDefaultTitle && noUserMessagesYet && content) {
+            const deriveTitle = (text: string) => {
+              let s = text
+                .replace(/```[\s\S]*?```/g, ' ')
+                .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
+                .replace(/^[#>\-\*\s]+/gm, '')
+                .replace(/\n+/g, ' ')
+                .trim()
+              const limit = 30
+              return s.length > limit ? s.slice(0, limit) : s
+            }
+            const titleCandidate = deriveTitle(content)
+            if (titleCandidate) {
+              const prevTitle = snapshot.currentSession?.title || '新的对话'
+              set((state) => ({
+                sessions: state.sessions.map((s) =>
+                  s.id === sessionId ? { ...s, title: titleCandidate } : s
+                ),
+                currentSession:
+                  state.currentSession?.id === sessionId
+                    ? { ...state.currentSession, title: titleCandidate }
+                    : state.currentSession,
+              }))
+              get()
+                .updateSessionTitle(sessionId, titleCandidate)
+                .catch(() => {
+                  set((state) => ({
+                    sessions: state.sessions.map((s) =>
+                      s.id === sessionId ? { ...s, title: prevTitle } : s
+                    ),
+                    currentSession:
+                      state.currentSession?.id === sessionId
+                        ? { ...state.currentSession, title: prevTitle }
+                        : state.currentSession,
+                  }))
+                })
+            }
+          }
+        } catch {
+          // 忽略自动改名异常
+        }
       }
 
       const userClientMessageId =
-        (() => {
-          try {
-            return (crypto as any)?.randomUUID?.() ?? ''
-          } catch {
-            return ''
-          }
-        })() || `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+        isRegenerate
+          ? null
+          : (() => {
+              try {
+                return (crypto as any)?.randomUUID?.() ?? ''
+              } catch {
+                return ''
+              }
+            })() || `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
 
       const now = new Date().toISOString()
-      const userMessageId: number = Date.now()
-      const assistantMessageId: number = userMessageId + 1
-      const userMessage: Message = {
-        id: userMessageId,
-        sessionId,
-        role: 'user',
-        content,
-        createdAt: now,
-        clientMessageId: userClientMessageId,
-        images: images?.length
-          ? images.map((img) => `data:${img.mime};base64,${img.data}`)
-          : undefined,
-      }
+      const baseId = Date.now()
+      const userMessageId: number = baseId
+      const assistantMessageId: number = baseId + 1
+      const userMessage: Message | null = isRegenerate
+        ? null
+        : {
+            id: userMessageId,
+            sessionId,
+            role: 'user',
+            content,
+            createdAt: now,
+            clientMessageId: userClientMessageId || undefined,
+            images: images?.length
+              ? images.map((img) => `data:${img.mime};base64,${img.data}`)
+              : undefined,
+          }
 
       const reasoningPreference =
         snapshot.currentSession?.id === sessionId
@@ -1086,12 +1203,24 @@ export const useChatStore = create<ChatStore>((set, get) => {
       const reasoningDesired = Boolean(resolvedReasoningEnabled)
       const { contextEnabled } = useSettingsStore.getState()
 
+      const parentMessageId: MessageId | null = isRegenerate ? replyToMessageId : userMessage?.id ?? null
+      const existingVariantCount = parentMessageId
+        ? snapshot.messageMetas.filter(
+            (meta) =>
+              meta.role === 'assistant' &&
+              meta.parentMessageId != null &&
+              messageKey(meta.parentMessageId) === messageKey(parentMessageId),
+          ).length
+        : 0
+
       const assistantPlaceholder: Message = {
         id: assistantMessageId,
         sessionId,
         role: 'assistant',
         content: '',
         createdAt: now,
+        parentMessageId: parentMessageId ?? undefined,
+        variantIndex: parentMessageId ? existingVariantCount + 1 : undefined,
       }
 
       const removeAssistantPlaceholder = () => {
@@ -1104,6 +1233,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           delete renderCache[key]
           return {
             messageMetas: metas,
+            assistantVariantSelections: buildVariantSelections(metas),
             messageBodies: bodies,
             messageRenderCache: renderCache,
           }
@@ -1112,24 +1242,41 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
       set((state) => {
         const nextCache =
-          userMessage.clientMessageId && userMessage.images && userMessage.images.length > 0
+          !isRegenerate &&
+          userMessage?.clientMessageId &&
+          userMessage.images &&
+          userMessage.images.length > 0
             ? { ...state.messageImageCache, [userMessage.clientMessageId]: userMessage.images }
             : state.messageImageCache
         const metas = [
           ...state.messageMetas,
-          createMeta(userMessage),
+          ...(userMessage ? [createMeta(userMessage)] : []),
           createMeta(assistantPlaceholder, { isPlaceholder: true, streamStatus: 'streaming' }),
         ]
         const bodies = {
           ...state.messageBodies,
-          [messageKey(userMessage.id)]: createBody(userMessage),
+          ...(userMessage ? { [messageKey(userMessage.id)]: createBody(userMessage) } : {}),
           [messageKey(assistantPlaceholder.id)]: createBody(assistantPlaceholder),
         }
         const renderCache = { ...state.messageRenderCache }
         delete renderCache[messageKey(assistantPlaceholder.id)]
 
+        let limitedMetas = metas
+        let removedVariantIds: MessageId[] = []
+        if (parentMessageId != null) {
+          const result = enforceVariantLimitLocally(metas, parentMessageId)
+          limitedMetas = result.metas
+          removedVariantIds = result.removedIds
+        }
+        removedVariantIds.forEach((id) => {
+          const key = messageKey(id)
+          delete bodies[key]
+          delete renderCache[key]
+        })
+
         return {
-          messageMetas: metas,
+          messageMetas: limitedMetas,
+          assistantVariantSelections: buildVariantSelections(limitedMetas),
           messageBodies: bodies,
           messageRenderCache: renderCache,
           messageImageCache: nextCache,
@@ -1149,16 +1296,25 @@ export const useChatStore = create<ChatStore>((set, get) => {
         flushTimer: null,
         reasoningDesired,
         reasoningActivated: false,
-        clientMessageId: userClientMessageId,
+        clientMessageId: userClientMessageId ?? null,
         webSearchRequested: Boolean(options?.features?.web_search),
         lastUsage: null,
       }
 
+      const { replyToMessageId: _ignoredReply, replyToClientMessageId: _ignoredReplyClient, ...forwardOptions } =
+        options || {}
+
       const startStream = () =>
-        apiClient.streamChat(sessionId, content, images, {
-          ...(options || {}),
+        apiClient.streamChat(sessionId, content, isRegenerate ? undefined : images, {
+          ...forwardOptions,
           contextEnabled,
-          clientMessageId: userClientMessageId,
+          clientMessageId: userClientMessageId ?? undefined,
+          replyToMessageId:
+            isRegenerate && typeof replyToMessageId === 'number' ? replyToMessageId : undefined,
+          replyToClientMessageId: isRegenerate
+            ? parentUserMeta?.clientMessageId ??
+              (typeof replyToMessageId === 'string' ? replyToMessageId : undefined)
+            : undefined,
         })
 
       try {
@@ -1197,6 +1353,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
                   }
                   const partial: Partial<ChatState> = {}
                   if (metaIndex !== -1) partial.messageMetas = nextMetas
+                  if (metaIndex !== -1) {
+                    partial.assistantVariantSelections = buildVariantSelections(nextMetas)
+                  }
                   if (prevBody) partial.messageBodies = nextBodies
                   if (nextRenderCache[nextKey]) partial.messageRenderCache = nextRenderCache
                   return Object.keys(partial).length > 0 ? partial : state
@@ -1627,6 +1786,68 @@ export const useChatStore = create<ChatStore>((set, get) => {
         const next = { ...state.messageRenderCache }
         delete next[key]
         return { messageRenderCache: next }
+      })
+    },
+
+    regenerateAssistantMessage: async (messageId: MessageId) => {
+      const snapshot = get()
+      if (snapshot.isStreaming) {
+        set({ error: '正在生成新的回答，请稍后重试' })
+        return
+      }
+      const meta = snapshot.messageMetas.find(
+        (item) => messageKey(item.id) === messageKey(messageId),
+      )
+      if (!meta || meta.role !== 'assistant' || meta.parentMessageId == null) {
+        set({ error: '无法重新生成该回答' })
+        return
+      }
+      const parentKey = messageKey(meta.parentMessageId)
+      const parentMeta =
+        snapshot.messageMetas.find(
+          (item) =>
+            item.sessionId === meta.sessionId &&
+            item.role === 'user' &&
+            messageKey(item.id) === parentKey,
+        ) ?? null
+      await snapshot.streamMessage(meta.sessionId, '', undefined, {
+        replyToMessageId: typeof meta.parentMessageId === 'number' ? meta.parentMessageId : undefined,
+        replyToClientMessageId:
+          parentMeta?.clientMessageId ??
+          (typeof meta.parentMessageId === 'string' ? meta.parentMessageId : undefined),
+      })
+    },
+
+    cycleAssistantVariant: (parentKey: string, direction: 'prev' | 'next') => {
+      set((state) => {
+        if (!parentKey) return state
+        const variants = state.messageMetas
+          .filter(
+            (meta) =>
+              meta.role === 'assistant' &&
+              meta.parentMessageId != null &&
+              messageKey(meta.parentMessageId) === parentKey,
+          )
+          .sort(compareVariantMeta)
+        if (variants.length <= 1) {
+          return state
+        }
+        const currentSelection = state.assistantVariantSelections[parentKey]
+        let idx = variants.findIndex(
+          (meta) => messageKey(meta.id) === messageKey(currentSelection ?? variants[variants.length - 1].id),
+        )
+        if (idx === -1) {
+          idx = variants.length - 1
+        }
+        const delta = direction === 'next' ? 1 : -1
+        const nextIndex = (idx + delta + variants.length) % variants.length
+        const nextVariant = variants[nextIndex]
+        return {
+          assistantVariantSelections: {
+            ...state.assistantVariantSelections,
+            [parentKey]: nextVariant.id,
+          },
+        }
       })
     },
   }

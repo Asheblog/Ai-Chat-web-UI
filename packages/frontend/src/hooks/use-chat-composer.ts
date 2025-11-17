@@ -37,6 +37,7 @@ export function useChatComposer() {
     stopStreaming,
     clearError,
     error,
+    assistantVariantSelections,
   } = useChatStore()
 
   const { systemSettings } = useSettingsStore()
@@ -355,6 +356,7 @@ export function useChatComposer() {
     messageMetas,
     messageBodies,
     messageRenderCache,
+    assistantVariantSelections,
     isMessagesLoading,
     isStreaming,
     currentSession,
@@ -386,5 +388,6 @@ export function useChatComposer() {
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,
+    assistantVariantSelections,
   }
 }

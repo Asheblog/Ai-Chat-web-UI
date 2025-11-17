@@ -1,11 +1,34 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { MessageBubble } from './message-bubble'
 import { TypingIndicator } from './typing-indicator'
+import { useChatStore } from '@/store/chat-store'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
+
+const parseTimestamp = (value: string | number | Date | undefined) => {
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
+const compareVariants = (a: MessageMeta, b: MessageMeta) => {
+  const aIndex = typeof a.variantIndex === 'number' ? a.variantIndex : null
+  const bIndex = typeof b.variantIndex === 'number' ? b.variantIndex : null
+  if (aIndex !== null && bIndex !== null && aIndex !== bIndex) {
+    return aIndex - bIndex
+  }
+  const aTime = parseTimestamp(a.createdAt)
+  const bTime = parseTimestamp(b.createdAt)
+  if (aTime !== bTime) return aTime - bTime
+  return messageKey(a.id).localeCompare(messageKey(b.id))
+}
 
 interface MessageListProps {
   metas: MessageMeta[]
@@ -14,6 +37,7 @@ interface MessageListProps {
   isStreaming: boolean
   isLoading?: boolean
   scrollRootRef?: RefObject<HTMLElement | null>
+  variantSelections?: Record<string, number | string>
 }
 
 function MessageListComponent({
@@ -23,7 +47,10 @@ function MessageListComponent({
   isStreaming,
   isLoading,
   scrollRootRef,
+  variantSelections,
 }: MessageListProps) {
+  const regenerateAssistantMessage = useChatStore((state) => state.regenerateAssistantMessage)
+  const cycleAssistantVariant = useChatStore((state) => state.cycleAssistantVariant)
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
 
@@ -44,8 +71,35 @@ function MessageListComponent({
     }
   }, [scrollRootRef, metas.length, scrollElement])
 
+  const variantGroups = useMemo(() => {
+    const groups = new Map<string, MessageMeta[]>()
+    metas.forEach((meta) => {
+      if (meta.role === 'assistant' && meta.parentMessageId != null) {
+        const parentKey = messageKey(meta.parentMessageId)
+        const list = groups.get(parentKey) ?? []
+        list.push(meta)
+        groups.set(parentKey, list)
+      }
+    })
+    groups.forEach((list, key) => {
+      list.sort(compareVariants)
+      groups.set(key, list)
+    })
+    return groups
+  }, [metas])
+
+  const displayMetas = metas.filter((meta) => {
+    if (!variantSelections || meta.role !== 'assistant' || meta.parentMessageId == null) {
+      return true
+    }
+    const parentKey = messageKey(meta.parentMessageId)
+    const selected = variantSelections[parentKey]
+    if (selected == null) return false
+    return messageKey(selected) === messageKey(meta.id)
+  })
+
   const virtualizer = useVirtualizer({
-    count: metas.length,
+    count: displayMetas.length,
     getScrollElement: () => scrollElement,
     estimateSize: () => 180,
     overscan: 8,
@@ -53,7 +107,7 @@ function MessageListComponent({
     paddingEnd: 16,
   })
 
-  if (isLoading && metas.length === 0) {
+  if (isLoading && displayMetas.length === 0) {
     return (
       <div className="space-y-4">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -69,7 +123,7 @@ function MessageListComponent({
     )
   }
 
-  if (metas.length === 0 && !isStreaming) {
+  if (displayMetas.length === 0 && !isStreaming) {
     return (
       <div className="text-center text-muted-foreground py-8">
         <p>开始你的第一次对话吧</p>
@@ -77,7 +131,7 @@ function MessageListComponent({
     )
   }
 
-  const lastMeta = metas[metas.length - 1]
+  const lastMeta = displayMetas[displayMetas.length - 1]
   const virtualItems = virtualizer.getVirtualItems()
   const virtualSize = virtualizer.getTotalSize()
   const indicatorVisible = isStreaming && (!lastMeta || lastMeta.role !== 'assistant')
@@ -87,11 +141,27 @@ function MessageListComponent({
   return (
     <div ref={containerRef} style={{ height: totalSize, position: 'relative' }}>
       {virtualItems.map((virtualRow) => {
-        const meta = metas[virtualRow.index]
+        const meta = displayMetas[virtualRow.index]
         const key = messageKey(meta.id)
         const body = bodies[key]
         if (!body) return null
         const cache = renderCache[key]
+        const parentKey = meta.parentMessageId != null ? messageKey(meta.parentMessageId) : null
+        const siblings = parentKey ? variantGroups.get(parentKey) || [] : []
+        const siblingIndex = parentKey
+          ? siblings.findIndex((entry) => messageKey(entry.id) === key)
+          : -1
+        const variantInfo =
+          parentKey != null
+            ? {
+                parentKey,
+                total: siblings.length || 1,
+                index: siblingIndex >= 0 ? siblingIndex : 0,
+                onPrev: () => cycleAssistantVariant(parentKey, 'prev'),
+                onNext: () => cycleAssistantVariant(parentKey, 'next'),
+                onRegenerate: () => regenerateAssistantMessage(meta.id),
+              }
+            : undefined
         const streamingForMessage =
           isStreaming &&
           meta.role === 'assistant' &&
@@ -116,6 +186,7 @@ function MessageListComponent({
               body={body}
               renderCache={cache}
               isStreaming={streamingForMessage}
+              variantInfo={variantInfo}
             />
           </div>
         )
@@ -146,5 +217,6 @@ export const MessageList = memo(
     prev.metas === next.metas &&
     prev.bodies === next.bodies &&
     prev.renderCache === next.renderCache &&
-    prev.scrollRootRef === next.scrollRootRef
+    prev.scrollRootRef === next.scrollRootRef &&
+    prev.variantSelections === next.variantSelections
 )

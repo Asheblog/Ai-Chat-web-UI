@@ -69,6 +69,8 @@ export interface ChatSession {
 export interface Message {
   id: number;
   sessionId: number;
+  parentMessageId?: number | null;
+  variantIndex?: number | null;
   role: 'user' | 'assistant';
   content: string;
   clientMessageId?: string | null;

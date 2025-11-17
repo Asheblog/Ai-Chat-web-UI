@@ -47,6 +47,8 @@ export const registerChatMessageRoutes = (router: Hono) => {
             sessionId: true,
             role: true,
             content: true,
+            parentMessageId: true,
+            variantIndex: true,
             attachments: {
               select: {
                 relativePath: true,
@@ -88,6 +90,8 @@ export const registerChatMessageRoutes = (router: Hono) => {
         const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : [];
         return {
           ...rest,
+          parentMessageId: rest.parentMessageId,
+          variantIndex: rest.variantIndex,
           images: resolveChatImageUrls(rel, baseUrl),
           toolEvents: parseToolLogsJson(toolLogsJson),
         };

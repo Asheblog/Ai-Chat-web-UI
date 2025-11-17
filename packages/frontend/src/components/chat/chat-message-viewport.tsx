@@ -14,6 +14,7 @@ export interface ChatMessageViewportProps {
   renderCache: Record<string, MessageRenderCacheEntry>
   isStreaming: boolean
   isLoading: boolean
+  variantSelections: Record<string, number | string>
 }
 
 export function ChatMessageViewport({
@@ -24,6 +25,7 @@ export function ChatMessageViewport({
   renderCache,
   isStreaming,
   isLoading,
+  variantSelections,
 }: ChatMessageViewportProps) {
   return (
     <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 md:px-6">
@@ -36,6 +38,7 @@ export function ChatMessageViewport({
           isStreaming={isStreaming}
           isLoading={isLoading}
           scrollRootRef={scrollAreaRef}
+          variantSelections={variantSelections}
         />
       </div>
     </ScrollArea>

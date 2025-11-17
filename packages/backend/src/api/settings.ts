@@ -92,6 +92,7 @@ const systemSettingSchema = z.object({
   reasoning_max_output_tokens_default: z.number().int().min(1).max(256000).nullable().optional(),
   ollama_think: z.boolean().optional(),
   chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
+  assistant_reply_history_limit: z.number().int().min(1).max(20).optional(),
   site_base_url: z.string().max(200).optional(),
   anonymous_retention_days: z.number().int().min(0).max(15).optional(),
   anonymous_daily_quota: z.number().int().min(0).optional(),
@@ -148,7 +149,7 @@ settings.get('/system', actorMiddleware, async (c) => {
     const quotaPolicy = await getQuotaPolicy();
 
     // 转换布尔值
-    const formattedSettings = {
+  const formattedSettings = {
       registration_enabled: settingsObj.registration_enabled === 'true',
       max_context_tokens: parseInt(settingsObj.max_context_tokens || '4000'),
       brand_text: settingsObj.brand_text || 'AIChat',
@@ -186,6 +187,14 @@ settings.get('/system', actorMiddleware, async (c) => {
         const raw = settingsObj.chat_image_retention_days ?? process.env.CHAT_IMAGE_RETENTION_DAYS ?? `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
         const parsed = Number.parseInt(String(raw), 10)
         return Number.isFinite(parsed) && parsed >= 0 ? parsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
+      })(),
+      assistant_reply_history_limit: (() => {
+        const raw = settingsObj.assistant_reply_history_limit ?? process.env.ASSISTANT_REPLY_HISTORY_LIMIT ?? '5'
+        const parsed = Number.parseInt(String(raw), 10)
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return Math.min(20, parsed)
+        }
+        return 5
       })(),
       site_base_url: settingsObj.site_base_url || process.env.CHAT_IMAGE_BASE_URL || '',
       anonymous_retention_days: quotaPolicy.anonymousRetentionDays,
@@ -313,6 +322,7 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
       reasoning_max_output_tokens_default,
       ollama_think,
       chat_image_retention_days,
+      assistant_reply_history_limit,
       site_base_url,
       anonymous_retention_days,
       anonymous_daily_quota,
@@ -528,6 +538,14 @@ settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, 
         update: { value: String(chat_image_retention_days) },
         create: { key: 'chat_image_retention_days', value: String(chat_image_retention_days) },
       });
+    }
+
+    if (typeof assistant_reply_history_limit === 'number') {
+      await prisma.systemSetting.upsert({
+        where: { key: 'assistant_reply_history_limit' },
+        update: { value: String(Math.max(1, Math.min(20, assistant_reply_history_limit))) },
+        create: { key: 'assistant_reply_history_limit', value: String(Math.max(1, Math.min(20, assistant_reply_history_limit))) },
+      })
     }
 
     if (typeof site_base_url === 'string') {

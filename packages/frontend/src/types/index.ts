@@ -104,6 +104,8 @@ export interface CreateSessionRequest {
 export interface Message {
   id: number | string;
   sessionId: number;
+  parentMessageId?: number | string | null;
+  variantIndex?: number | null;
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
@@ -124,6 +126,8 @@ export interface Message {
 export interface MessageMeta {
   id: number | string;
   sessionId: number;
+  parentMessageId?: number | string | null;
+  variantIndex?: number | null;
   role: 'user' | 'assistant';
   createdAt: string;
   clientMessageId?: string | null;
@@ -193,6 +197,7 @@ export interface SystemSettings {
   reasoningMaxOutputTokensDefault?: number | null;
   ollamaThink?: boolean;
   chatImageRetentionDays?: number;
+  assistantReplyHistoryLimit?: number | null;
   siteBaseUrl?: string;
   anonymousRetentionDays?: number;
   anonymousDailyQuota?: number;
@@ -232,6 +237,7 @@ export interface ChatState {
   usageTotals?: UsageTotals | null;
   sessionUsageTotalsMap: Record<number, UsageTotals>;
   toolEvents: ToolEvent[];
+  assistantVariantSelections: Record<string, number | string>;
 }
 
 export interface WebSearchHit {
