@@ -22,6 +22,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { UserMenu } from '@/components/user-menu'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelPreferenceStore, persistPreferredModel, findPreferredModel } from '@/store/model-preference-store'
+import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
@@ -55,6 +56,8 @@ export function WelcomeScreen() {
   const [effortTouched, setEffortTouched] = useState(false)
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [webSearchTouched, setWebSearchTouched] = useState(false)
+  const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
+  const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
 
   // 图片上传（与聊天页保持一致的限制）
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -152,12 +155,25 @@ export function WelcomeScreen() {
   }, [isVisionEnabled])
 
   useEffect(() => {
-    if (!webSearchTouched) {
-      setWebSearchEnabled(canUseWebSearch)
-    } else if (!canUseWebSearch && webSearchEnabled) {
-      setWebSearchEnabled(false)
+    if (!canUseWebSearch) {
+      if (webSearchEnabled) {
+        setWebSearchEnabled(false)
+      }
+      return
     }
-  }, [canUseWebSearch, webSearchTouched, webSearchEnabled])
+    if (typeof storedWebSearchPreference === 'boolean') {
+      if (webSearchEnabled !== storedWebSearchPreference) {
+        setWebSearchEnabled(storedWebSearchPreference)
+      }
+      if (!webSearchTouched) {
+        setWebSearchTouched(true)
+      }
+      return
+    }
+    if (!webSearchTouched && !webSearchEnabled) {
+      setWebSearchEnabled(true)
+    }
+  }, [canUseWebSearch, storedWebSearchPreference, webSearchEnabled, webSearchTouched])
 
   const validateImage = (file: File): Promise<{ ok: boolean; reason?: string; dataUrl?: string; mime?: string; size?: number }> => {
     return new Promise((resolve) => {
@@ -369,8 +385,10 @@ export function WelcomeScreen() {
                       checked={webSearchEnabled && canUseWebSearch}
                       disabled={!canUseWebSearch}
                       onCheckedChange={(v) => {
+                        const nextValue = canUseWebSearch && !!v
                         setWebSearchTouched(true)
-                        setWebSearchEnabled(canUseWebSearch && !!v)
+                        setWebSearchEnabled(nextValue)
+                        persistWebSearchPreference(nextValue)
                       }}
                       aria-label="联网搜索开关"
                     />

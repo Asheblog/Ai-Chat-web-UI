@@ -6,6 +6,7 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
+import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 
 export interface ChatComposerImage {
   dataUrl: string
@@ -47,9 +48,18 @@ export function useChatComposer() {
   const MAX_IMAGE_COUNT = 4
   const MAX_IMAGE_MB = 5
   const MAX_IMAGE_EDGE = 4096
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
   const [traceEnabled, setTraceEnabled] = useState(false)
   const tracePreferenceRef = useRef<Record<number, boolean>>({})
+  const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
+  const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
+  const setWebSearchEnabled = useCallback(
+    (value: boolean) => {
+      setWebSearchEnabledState(value)
+      persistWebSearchPreference(value)
+    },
+    [persistWebSearchPreference],
+  )
 
   const modelsCount = allModels.length
   useEffect(() => {
@@ -133,16 +143,18 @@ export function useChatComposer() {
   const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
 
   useEffect(() => {
-    if (!canUseWebSearch && webSearchEnabled) {
-      setWebSearchEnabled(false)
+    if (!canUseWebSearch) {
+      if (webSearchEnabled) {
+        setWebSearchEnabledState(false)
+      }
+      return
     }
-  }, [canUseWebSearch, webSearchEnabled])
-
-  useEffect(() => {
-    if (canUseWebSearch) {
-      setWebSearchEnabled(true)
+    const desired =
+      typeof storedWebSearchPreference === 'boolean' ? storedWebSearchPreference : true
+    if (webSearchEnabled !== desired) {
+      setWebSearchEnabledState(desired)
     }
-  }, [canUseWebSearch, currentSession?.id])
+  }, [canUseWebSearch, storedWebSearchPreference, webSearchEnabled])
 
   useEffect(() => {
     if (!canUseTrace) {
