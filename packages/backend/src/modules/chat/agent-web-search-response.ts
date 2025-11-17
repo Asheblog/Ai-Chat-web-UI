@@ -583,7 +583,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           });
         }
 
-        const completionTokensFallback = await Tokenizer.countTokens(finalContent);
+        let completionTokensFallback = 0;
+        try {
+          completionTokensFallback = await Tokenizer.countTokens(finalContent);
+        } catch (error) {
+          log.warn('Tokenizer countTokens failed in agent web search, fallback to 0', {
+            sessionId,
+            error: error instanceof Error ? error.message : error,
+          });
+          completionTokensFallback = 0;
+        }
         const toUsageNumbers = (usage: any) => {
           const prompt =
             Number(
