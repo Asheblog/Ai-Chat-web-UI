@@ -279,6 +279,17 @@ export const registerChatStreamRoutes = (router: Hono) => {
         truncatedContext = [{ role: 'user', content }];
       }
 
+      if (requestedFeatures?.web_search === true) {
+        truncatedContext = [
+          {
+            role: 'system',
+            content:
+              '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。',
+          },
+          ...truncatedContext,
+        ];
+      }
+
       // 统计上下文使用量（估算）
       const promptTokens = await Tokenizer.countConversationTokens(truncatedContext);
       const contextRemaining = Math.max(0, contextLimit - promptTokens);
