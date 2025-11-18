@@ -12,6 +12,8 @@ import { apiClient } from '@/lib/api'
 import type { ModelItem } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useModelsStore } from '@/store/models-store'
+import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 
 type MessageId = number | string
 
@@ -194,6 +196,48 @@ const buildVariantSelections = (metas: MessageMeta[]): Record<string, MessageId>
       selections[parentKey] = meta.id
     })
   return selections
+}
+
+const findSessionById = (
+  sessions: ChatSession[],
+  current: ChatSession | null,
+  targetId: number,
+): ChatSession | null => {
+  const match = sessions.find((session) => session.id === targetId)
+  if (match) return match
+  if (current && current.id === targetId) return current
+  return null
+}
+
+const findModelForSession = (session: ChatSession | null): ModelItem | null => {
+  if (!session) return null
+  const models = useModelsStore.getState().models
+  if (!Array.isArray(models) || models.length === 0) return null
+  const connectionId = session.connectionId ?? null
+  const modelIdentifier = session.modelRawId ?? session.modelLabel ?? null
+  if (!modelIdentifier) return null
+  return (
+    models.find((item) => {
+      const matchesConnection = connectionId != null ? item.connectionId === connectionId : true
+      if (!matchesConnection) return false
+      return item.rawId === modelIdentifier || item.id === modelIdentifier
+    }) ?? null
+  )
+}
+
+const shouldEnableWebSearchForSession = (session: ChatSession | null): boolean => {
+  if (!session) return false
+  const systemSettings = useSettingsStore.getState().systemSettings
+  if (!systemSettings?.webSearchAgentEnable) return false
+  const model = findModelForSession(session)
+  const modelSupportsWebSearch =
+    typeof model?.capabilities?.web_search === 'boolean'
+      ? model.capabilities.web_search
+      : true
+  if (!modelSupportsWebSearch) return false
+  const preference = useWebSearchPreferenceStore.getState().lastSelection
+  const userEnabled = typeof preference === 'boolean' ? preference : true
+  return userEnabled
 }
 
 const getAssistantVariantLimit = () => {
@@ -1880,11 +1924,14 @@ export const useChatStore = create<ChatStore>((set, get) => {
             item.role === 'user' &&
             messageKey(item.id) === parentKey,
         ) ?? null
+      const targetSession = findSessionById(snapshot.sessions, snapshot.currentSession, meta.sessionId)
+      const shouldRequestWebSearch = shouldEnableWebSearchForSession(targetSession)
       await snapshot.streamMessage(meta.sessionId, '', undefined, {
         replyToMessageId: typeof meta.parentMessageId === 'number' ? meta.parentMessageId : undefined,
         replyToClientMessageId:
           parentMeta?.clientMessageId ??
           (typeof meta.parentMessageId === 'string' ? meta.parentMessageId : undefined),
+        features: shouldRequestWebSearch ? { web_search: true } : undefined,
       })
     },
 
