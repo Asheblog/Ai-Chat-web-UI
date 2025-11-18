@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { TaskTraceConsole } from "@/components/task-trace/TaskTraceConsole"
 import { CardTitle, CardDescription } from "@/components/ui/card"
 import { FileText } from "lucide-react"
