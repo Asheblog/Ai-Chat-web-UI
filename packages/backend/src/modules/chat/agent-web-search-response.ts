@@ -238,7 +238,13 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         safeEnqueue(payload);
       };
 
-      safeEnqueue({ type: 'start', messageId: userMessageRecord?.id ?? null });
+      // 对齐标准流式接口：携带 assistantMessageId / assistantClientMessageId，便于前端替换占位ID
+      safeEnqueue({
+        type: 'start',
+        messageId: userMessageRecord?.id ?? null,
+        assistantMessageId: activeAssistantMessageId,
+        assistantClientMessageId: assistantClientMessageId ?? assistantPlaceholderClientMessageId ?? null,
+      });
       if (quotaSnapshot) {
         safeEnqueue({ type: 'quota', quota: serializeQuotaSnapshot(quotaSnapshot) });
       }

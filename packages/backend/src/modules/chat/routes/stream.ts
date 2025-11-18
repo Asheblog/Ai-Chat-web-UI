@@ -123,31 +123,62 @@ export const registerChatStreamRoutes = (router: Hono) => {
       let messageWasReused = false
       let quotaSnapshot: UsageQuotaSnapshot | null = null
 
+      const reuseExistingUserMessage = async (message: Message) => {
+        content = message.content;
+        userMessageRecord = message;
+        messageWasReused = true;
+        const quotaResult = await consumeActorQuota(actor, { now });
+        if (!quotaResult.success) {
+          return {
+            quotaError: c.json({
+              success: false,
+              error: 'Daily quota exhausted',
+              quota: serializeQuotaSnapshot(quotaResult.snapshot),
+              requiredLogin: actor.type !== 'user',
+            }, 429),
+          };
+        }
+        quotaSnapshot = quotaResult.snapshot;
+        return { quotaError: null };
+      };
+
       if (replyToMessageId) {
         const existingUserMessage = await prisma.message.findFirst({
           where: { id: replyToMessageId, sessionId, role: 'user' },
-        })
+        });
         if (!existingUserMessage) {
-          log.warn('[chat stream] reference user message (numeric id) missing', {
-            sessionId,
-            replyToMessageId,
-            actor: actor.identifier,
-          });
-          return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404)
+          let fallbackMessage: Message | null = null;
+          if (replyToClientMessageId) {
+            fallbackMessage = (await prisma.message.findFirst({
+              where: { sessionId, clientMessageId: replyToClientMessageId, role: 'user' },
+            })) as Message | null;
+            if (fallbackMessage) {
+              log.warn('[chat stream] numeric reply message missing, fallback to client id', {
+                sessionId,
+                replyToMessageId,
+                replyToClientMessageId,
+                actor: actor.identifier,
+              });
+            }
+          }
+          if (!fallbackMessage) {
+            log.warn('[chat stream] reference user message (numeric id) missing', {
+              sessionId,
+              replyToMessageId,
+              actor: actor.identifier,
+            });
+            return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404);
+          }
+          const { quotaError } = await reuseExistingUserMessage(fallbackMessage);
+          if (quotaError) {
+            return quotaError;
+          }
+        } else {
+          const { quotaError } = await reuseExistingUserMessage(existingUserMessage as Message);
+          if (quotaError) {
+            return quotaError;
+          }
         }
-        content = existingUserMessage.content
-        userMessageRecord = existingUserMessage as Message
-        messageWasReused = true
-        const quotaResult = await consumeActorQuota(actor, { now })
-        if (!quotaResult.success) {
-          return c.json({
-            success: false,
-            error: 'Daily quota exhausted',
-            quota: serializeQuotaSnapshot(quotaResult.snapshot),
-            requiredLogin: actor.type !== 'user',
-          }, 429)
-        }
-        quotaSnapshot = quotaResult.snapshot
       } else if (replyToClientMessageId) {
         const existingUserMessage = await prisma.message.findFirst({
           where: {
@@ -155,28 +186,19 @@ export const registerChatStreamRoutes = (router: Hono) => {
             clientMessageId: replyToClientMessageId,
             role: 'user',
           },
-        })
+        });
         if (!existingUserMessage) {
           log.warn('[chat stream] reference user message (client id) missing', {
             sessionId,
             replyToClientMessageId,
             actor: actor.identifier,
           });
-          return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404)
+          return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404);
         }
-        content = existingUserMessage.content
-        userMessageRecord = existingUserMessage as Message
-        messageWasReused = true
-        const quotaResult = await consumeActorQuota(actor, { now })
-        if (!quotaResult.success) {
-          return c.json({
-            success: false,
-            error: 'Daily quota exhausted',
-            quota: serializeQuotaSnapshot(quotaResult.snapshot),
-            requiredLogin: actor.type !== 'user',
-          }, 429)
+        const { quotaError } = await reuseExistingUserMessage(existingUserMessage as Message);
+        if (quotaError) {
+          return quotaError;
         }
-        quotaSnapshot = quotaResult.snapshot
       } else {
         try {
           const result = await createUserMessageWithQuota({

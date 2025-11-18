@@ -1324,6 +1324,76 @@ export const useChatStore = create<ChatStore>((set, get) => {
           if (!active) break
 
           if (evt?.type === 'start') {
+            // 如果后端回传了用户消息的真实 ID，用 clientMessageId 对应的占位消息做 ID 替换，避免后续 regen 404
+            if (
+              typeof evt.messageId === 'number' &&
+              Number.isFinite(evt.messageId) &&
+              active.clientMessageId
+            ) {
+              const realUserId = Number(evt.messageId)
+              const clientId = active.clientMessageId
+              const placeholderUserId =
+                typeof userMessageId === 'number' && Number.isFinite(userMessageId)
+                  ? userMessageId
+                  : null
+
+              set((state) => {
+                const userMetaIdx = state.messageMetas.findIndex(
+                  (meta) =>
+                    meta.role === 'user' &&
+                    meta.clientMessageId === clientId &&
+                    meta.id !== realUserId,
+                )
+                if (userMetaIdx === -1) return state
+
+                const prevMeta = state.messageMetas[userMetaIdx]
+                const prevKey = messageKey(prevMeta.id)
+                const nextKey = messageKey(realUserId)
+
+                const nextMetas = state.messageMetas.slice()
+                nextMetas[userMetaIdx] = {
+                  ...prevMeta,
+                  id: realUserId,
+                }
+
+                // 同步父子引用，确保重新生成时使用真实的用户消息 ID
+                for (let i = 0; i < nextMetas.length; i += 1) {
+                  const meta = nextMetas[i]
+                  if (
+                    meta.role === 'assistant' &&
+                    meta.parentMessageId != null &&
+                    messageKey(meta.parentMessageId) === prevKey
+                  ) {
+                    nextMetas[i] = { ...meta, parentMessageId: realUserId }
+                  }
+                }
+
+                const nextBodies = { ...state.messageBodies }
+                const prevBody = nextBodies[prevKey]
+                if (prevBody) {
+                  nextBodies[nextKey] = { ...prevBody, id: realUserId }
+                  delete nextBodies[prevKey]
+                }
+
+                const nextRenderCache = { ...state.messageRenderCache }
+                if (nextRenderCache[prevKey]) {
+                  nextRenderCache[nextKey] = nextRenderCache[prevKey]
+                  delete nextRenderCache[prevKey]
+                }
+
+                return {
+                  messageMetas: nextMetas,
+                  assistantVariantSelections: buildVariantSelections(nextMetas),
+                  messageBodies: nextBodies,
+                  messageRenderCache: nextRenderCache,
+                }
+              })
+
+              if (assistantPlaceholder.parentMessageId === placeholderUserId) {
+                assistantPlaceholder.parentMessageId = realUserId
+              }
+            }
+
             if (typeof evt.assistantMessageId === 'number') {
               const nextId = evt.assistantMessageId
               if (messageKey(active.assistantId) !== messageKey(nextId)) {
