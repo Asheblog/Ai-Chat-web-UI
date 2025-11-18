@@ -11,8 +11,14 @@ APP_ROOT="/app/packages/backend"
 DATA_DIR="/app/data"
 LOG_DIR="/app/logs"
 DEFAULT_DB_NAME="app.db"
+IMAGE_DIR_DEFAULT="/app/storage/chat-images"
 
 cd "$APP_ROOT"
+
+if [ -z "${CHAT_IMAGE_DIR:-}" ]; then
+  export CHAT_IMAGE_DIR="$IMAGE_DIR_DEFAULT"
+  echo "[entrypoint] CHAT_IMAGE_DIR 未设置，已默认指向 $CHAT_IMAGE_DIR"
+fi
 
 normalize_database_url() {
   local raw="${DATABASE_URL:-file:./data/$DEFAULT_DB_NAME}"
@@ -38,10 +44,10 @@ normalize_database_url() {
 normalize_database_url
 
 DB_DIR="$(dirname "$DB_FILE")"
-mkdir -p "$DATA_DIR" "$LOG_DIR" "$DB_DIR" || true
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$DB_DIR" "$CHAT_IMAGE_DIR" || true
 
 # 修复卷权限（容器首次创建命名卷时可能为 root:root）
-chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" || true
+chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" "$CHAT_IMAGE_DIR" || true
 if [ "$DB_DIR" != "$DATA_DIR" ]; then
   chown -R 1001:1001 "$DB_DIR" || true
 fi
@@ -101,7 +107,7 @@ if [ "$SHOULD_INIT_DB" -eq 1 ]; then
     npm run db:seed || true
   fi
   # 再次修复权限，确保播种后新生成的文件归属 backend 用户
-  chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" || true
+  chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" "$CHAT_IMAGE_DIR" || true
 fi
 
 echo "[entrypoint] Starting backend service..."

@@ -26,6 +26,7 @@ services:
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs
+      - backend_images:/app/storage/chat-images
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/settings/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
@@ -96,6 +97,10 @@ volumes:
   backend_logs:
     driver: local
     name: ai_chat_web_ui_logs
+  # 聊天图片/头像持久化
+  backend_images:
+    driver: local
+    name: ai_chat_web_ui_images
 
 networks:
   ai-chat-web-ui-network:

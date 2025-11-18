@@ -103,6 +103,7 @@ networks:
 关键配置要点
 - `JWT_SECRET`：务必改为 32 位以上强密码。
 - `CORS_ORIGIN`：填写前端实际访问地址（含协议+端口）。
+- 图片存储：`CHAT_IMAGE_DIR` 默认指向 `/app/storage/chat-images`。Compose 中的 `backend_images:/app/storage/chat-images` 会将聊天图片与头像持久化到宿主卷；若需使用其他目录，请同时调整 `CHAT_IMAGE_DIR` 与卷挂载路径。
 - 端口：`"宿主机端口:容器端口"`，容器内固定后端 8001、前端 3000。
 - 升级/回滚：把镜像标签从 `latest` 改为某次构建的 commit SHA 标签，更新/重建即可；回滚就是切回旧标签。
 
