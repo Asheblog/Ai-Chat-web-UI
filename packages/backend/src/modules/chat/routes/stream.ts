@@ -97,6 +97,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
       });
 
       if (!session) {
+        log.warn('[chat stream] session not found', {
+          sessionId,
+          actor: actor.identifier,
+        });
         return c.json<ApiResponse>({
           success: false,
           error: 'Chat session not found',
@@ -124,6 +128,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
           where: { id: replyToMessageId, sessionId, role: 'user' },
         })
         if (!existingUserMessage) {
+          log.warn('[chat stream] reference user message (numeric id) missing', {
+            sessionId,
+            replyToMessageId,
+            actor: actor.identifier,
+          });
           return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404)
         }
         content = existingUserMessage.content
@@ -148,6 +157,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
           },
         })
         if (!existingUserMessage) {
+          log.warn('[chat stream] reference user message (client id) missing', {
+            sessionId,
+            replyToClientMessageId,
+            actor: actor.identifier,
+          });
           return c.json<ApiResponse>({ success: false, error: 'Reference message not found' }, 404)
         }
         content = existingUserMessage.content
