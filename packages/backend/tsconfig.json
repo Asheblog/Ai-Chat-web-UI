@@ -17,7 +17,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
     "incremental": true,
-    "types": ["node"]
+    "types": ["node", "jest"]
   },
   "include": [
     "src/**/*"

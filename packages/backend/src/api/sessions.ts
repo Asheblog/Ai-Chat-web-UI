@@ -1,618 +1,162 @@
-import { Hono } from 'hono';
-import { zValidator } from '@hono/zod-validator';
-import { z } from 'zod';
-import { prisma } from '../db';
-import { actorMiddleware } from '../middleware/auth';
-import type { ApiResponse, ChatSession, Actor } from '../types';
-import { ensureAnonymousSession } from '../utils/actor';
-// 保留原有创建会话解析逻辑；前端可传 connectionId/rawId 以避免歧义
+import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
+import { actorMiddleware } from '../middleware/auth'
+import type { Actor, ApiResponse } from '../types'
+import { sessionService, SessionServiceError } from '../services/sessions'
 
-const sessions = new Hono();
+const sessions = new Hono()
 
-const sessionOwnershipClause = (actor: Actor) =>
-  actor.type === 'user'
-    ? { userId: actor.id }
-    : { anonymousKey: actor.key };
-
-// 容错解析连接配置的模型ID列表
-const parseModelIds = (json?: string | null): string[] => {
-  if (!json) return []
-  try {
-    const parsed = JSON.parse(json)
-    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : []
-  } catch {
-    return []
-  }
-}
-
-const composeModelLabel = (rawId?: string | null, prefix?: string | null, fallback?: string | null): string | null => {
-  const cleanRaw = (rawId || '').trim()
-  const cleanPrefix = (prefix || '').trim()
-  if (cleanRaw && cleanPrefix) return `${cleanPrefix}.${cleanRaw}`
-  if (cleanRaw) return cleanRaw
-  return fallback || null
-}
-
-// 创建会话schema
-// 支持同时传入 connectionId + rawId 以绕开字符串解析歧义
 const createSessionSchema = z.object({
-  modelId: z.string().min(1), // 聚合模型ID（含前缀）
+  modelId: z.string().min(1),
   title: z.string().min(1).max(200).optional(),
-  // 直接指定连接与原始模型ID（推荐，避免歧义）
   connectionId: z.number().int().positive().optional(),
   rawId: z.string().min(1).optional(),
-  // 会话级推理默认（可选）
   reasoningEnabled: z.boolean().optional(),
-  reasoningEffort: z.enum(['low','medium','high']).optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),
-});
+})
 
-// 获取用户的聊天会话列表
-sessions.get('/', actorMiddleware, async (c) => {
-  try {
-    const actor = c.get('actor') as Actor;
-    const page = parseInt(c.req.query('page') || '1');
-    const limit = parseInt(c.req.query('limit') || '20');
-    const where = sessionOwnershipClause(actor);
-
-    const [sessionsList, total] = await Promise.all([
-      prisma.chatSession.findMany({
-        where,
-        select: {
-          id: true,
-          userId: true,
-          anonymousKey: true,
-          expiresAt: true,
-          connectionId: true,
-          modelRawId: true,
-          title: true,
-          createdAt: true,
-          reasoningEnabled: true,
-          reasoningEffort: true,
-          ollamaThink: true,
-          connection: {
-            select: { id: true, provider: true, baseUrl: true, prefixId: true }
-          },
-          _count: {
-            select: {
-              messages: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.chatSession.count({
-        where,
-      }),
-    ]);
-
-    const normalisedSessions = sessionsList.map((s) => ({
-      ...s,
-      reasoningEffort: s.reasoningEffort === 'low' || s.reasoningEffort === 'medium' || s.reasoningEffort === 'high' ? s.reasoningEffort : null,
-      // 附加一个模型标签，供前端展示
-      modelLabel: composeModelLabel(s.modelRawId, s.connection?.prefixId || null) || undefined,
-    }));
-    const responsePayload = {
-      sessions: normalisedSessions,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-
-    return c.json<ApiResponse<typeof responsePayload>>({
-      success: true,
-      data: responsePayload,
-    });
-
-  } catch (error) {
-    console.error('Get sessions error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to fetch chat sessions',
-    }, 500);
-  }
-});
-
-// 创建新的聊天会话
-sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), async (c) => {
-  return (async () => {
-    const actor = c.get('actor') as Actor;
-    const { modelId, title, connectionId: reqConnectionId, rawId: reqRawId, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
-    // 解析 modelId -> (connectionId, rawId)
-    // 优先使用客户端直传（更可靠）
-    let connectionId: number | null = null
-    let rawId: string | null = null
-    if (reqConnectionId && reqRawId) {
-      // 校验连接对当前用户可见且启用
-      const conn = await prisma.connection.findFirst({
-        where: {
-          id: reqConnectionId,
-          enable: true,
-          ownerUserId: null,
-        },
-      })
-      if (!conn) {
-        return c.json<ApiResponse>({ success: false, error: 'Invalid connectionId for current user' }, 400)
-      }
-      connectionId = reqConnectionId
-      rawId = reqRawId
-    } else {
-      // 先查缓存表
-      const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
-      if (cached) {
-        connectionId = cached.connectionId
-        rawId = cached.rawId
-      } else {
-        // 回退：尝试匹配 prefix 到连接（旧逻辑留作兼容；优先使用前端直传 connectionId/rawId）
-        const conns = await prisma.connection.findMany({
-          where: {
-            ownerUserId: null,
-            enable: true,
-          },
-        })
-        let fallbackExact: { connectionId: number; rawId: string } | null = null
-        let fallbackFirst: { connectionId: number; rawId: string } | null = null
-        for (const conn of conns) {
-          const px = (conn.prefixId || '').trim()
-          if (px && modelId.startsWith(px + '.')) {
-            connectionId = conn.id
-            rawId = modelId.substring(px.length + 1)
-            break
-          }
-          if (!px) {
-            if (!fallbackFirst) {
-              fallbackFirst = { connectionId: conn.id, rawId: modelId }
-            }
-            if (!fallbackExact) {
-              const ids = parseModelIds(conn.modelIdsJson)
-              if (ids.includes(modelId)) {
-                fallbackExact = { connectionId: conn.id, rawId: modelId }
-              }
-            }
-          }
-        }
-        if (!connectionId || !rawId) {
-          const selected = fallbackExact || fallbackFirst
-          if (selected) {
-            connectionId = selected.connectionId
-            rawId = selected.rawId
-          }
-        }
-      }
-    }
-
-    if (!connectionId || !rawId) {
-      return c.json<ApiResponse>({ success: false, error: 'Model not found in connections' }, 400)
-    }
-
-    // 创建会话
-    const anonymousContext = actor.type === 'anonymous' ? await ensureAnonymousSession(actor) : null
-
-    const session = await prisma.chatSession.create({
-      data: {
-        ...(actor.type === 'user' ? { userId: actor.id } : {}),
-        ...(actor.type === 'anonymous'
-          ? {
-              anonymousKey: anonymousContext?.anonymousKey ?? actor.key,
-              expiresAt: anonymousContext?.expiresAt ?? null,
-            }
-          : {}),
-        connectionId,
-        modelRawId: rawId,
-        title: title || 'New Chat',
-        reasoningEnabled,
-        reasoningEffort,
-        ollamaThink,
-      },
-      select: {
-        id: true,
-        userId: true,
-        anonymousKey: true,
-        expiresAt: true,
-        connectionId: true,
-        modelRawId: true,
-        title: true,
-        createdAt: true,
-        reasoningEnabled: true,
-        reasoningEffort: true,
-        ollamaThink: true,
-        connection: { select: { id: true, provider: true, baseUrl: true, prefixId: true } },
-      },
-    });
-
-    if (actor.type === 'user') {
-      try {
-        await prisma.user.update({
-          where: { id: actor.id },
-          data: {
-            preferredModelId: modelId,
-            preferredConnectionId: connectionId,
-            preferredModelRawId: rawId,
-          },
-        });
-      } catch (error) {
-        console.error('Failed to persist preferred model on session create:', error);
-      }
-    }
-
-    const responseData = {
-      ...session,
-      modelLabel: modelId || composeModelLabel(session.modelRawId, session.connection?.prefixId || null),
-    };
-    return c.json<ApiResponse<typeof responseData>>({
-      success: true,
-      data: responseData,
-      message: 'Chat session created successfully',
-    });
-  } )().catch((error) => {
-    console.error('Create session error:', error)
-    return c.json<ApiResponse>({ success: false, error: 'Failed to create chat session' }, 500)
-  })
-});
-
-// 获取单个聊天会话详情
-sessions.get('/:id', actorMiddleware, async (c) => {
-  try {
-    const actor = c.get('actor') as Actor;
-    const sessionId = parseInt(c.req.param('id'));
-
-    if (isNaN(sessionId)) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Invalid session ID',
-      }, 400);
-    }
-
-    const session = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        ...sessionOwnershipClause(actor),
-      },
-      select: {
-        id: true,
-        userId: true,
-        anonymousKey: true,
-        expiresAt: true,
-        connectionId: true,
-        modelRawId: true,
-        title: true,
-        createdAt: true,
-        reasoningEnabled: true,
-        reasoningEffort: true,
-        ollamaThink: true,
-        connection: { select: { id: true, provider: true, baseUrl: true, prefixId: true } },
-        messages: {
-          select: {
-            id: true,
-            sessionId: true,
-            role: true,
-            content: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-    });
-
-    if (!session) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Chat session not found',
-      }, 404);
-    }
-
-    return c.json<ApiResponse<any>>({
-      success: true,
-      data: { ...session, modelLabel: composeModelLabel(session?.modelRawId, session?.connection?.prefixId || null) },
-    });
-
-  } catch (error) {
-    console.error('Get session error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to fetch chat session',
-    }, 500);
-  }
-});
-
-// 更新会话标题
-sessions.put('/:id', actorMiddleware, zValidator('json', z.object({
+const updateSessionSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   reasoningEnabled: z.boolean().optional(),
-  reasoningEffort: z.enum(['low','medium','high']).optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),
-})), async (c) => {
-  try {
-    const actor = c.get('actor') as Actor;
-    const sessionId = parseInt(c.req.param('id'));
-    const { title, reasoningEnabled, reasoningEffort, ollamaThink } = c.req.valid('json');
+})
 
-    if (isNaN(sessionId)) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Invalid session ID',
-      }, 400);
-    }
-
-    // 验证会话是否存在且属于当前用户
-    const existingSession = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        ...sessionOwnershipClause(actor),
-      },
-    });
-
-    if (!existingSession) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Chat session not found',
-      }, 404);
-    }
-
-    // 更新会话字段
-    const updatedSession = await prisma.chatSession.update({
-      where: { id: sessionId },
-      data: {
-        ...(typeof title === 'string' ? { title } : {}),
-        ...(typeof reasoningEnabled === 'boolean' ? { reasoningEnabled } : {}),
-        ...(typeof reasoningEffort === 'string' ? { reasoningEffort } : {}),
-        ...(typeof ollamaThink === 'boolean' ? { ollamaThink } : {}),
-      },
-      select: {
-        id: true,
-        userId: true,
-        anonymousKey: true,
-        expiresAt: true,
-        title: true,
-        createdAt: true,
-        reasoningEnabled: true,
-        reasoningEffort: true,
-        ollamaThink: true,
-      },
-    });
-
-    return c.json<ApiResponse<typeof updatedSession>>({
-      success: true,
-      data: updatedSession,
-      message: 'Session updated successfully',
-    });
-
-  } catch (error) {
-    console.error('Update session error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to update session title',
-    }, 500);
-  }
-});
-
-// 切换会话的模型（聚合模型ID -> 连接ID + 原始模型ID）
-sessions.put('/:id/model', actorMiddleware, zValidator('json', z.object({
+const switchModelSchema = z.object({
   modelId: z.string().min(1),
   connectionId: z.number().int().positive().optional(),
   rawId: z.string().min(1).optional(),
-})), async (c) => {
+})
+
+const parsePagination = (value: string | null, fallback: number) => {
+  const parsed = parseInt(value || '', 10)
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed
+  }
+  return fallback
+}
+
+const handleServiceError = (
+  c: any,
+  error: unknown,
+  fallbackMessage: string,
+  logLabel: string,
+) => {
+  if (error instanceof SessionServiceError) {
+    return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+  }
+  console.error(logLabel, error)
+  return c.json<ApiResponse>({ success: false, error: fallbackMessage }, 500)
+}
+
+sessions.get('/', actorMiddleware, async (c) => {
   try {
     const actor = c.get('actor') as Actor
-    const sessionId = parseInt(c.req.param('id'))
-    const { modelId, connectionId: reqConnectionId, rawId: reqRawId } = c.req.valid('json') as { modelId: string; connectionId?: number; rawId?: string }
-
-    if (isNaN(sessionId)) {
-      return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
-    }
-
-    // 验证会话归属
-    const existing = await prisma.chatSession.findFirst({ where: { id: sessionId, ...sessionOwnershipClause(actor) } })
-    if (!existing) {
-      return c.json<ApiResponse>({ success: false, error: 'Chat session not found' }, 404)
-    }
-
-    // 解析 modelId -> (connectionId, rawId)
-    let connectionId: number | null = null
-    let rawId: string | null = null
-
-    if (reqConnectionId && reqRawId) {
-      const conn = await prisma.connection.findFirst({
-        where: {
-          id: reqConnectionId,
-          enable: true,
-          ownerUserId: null,
-        },
-      })
-      if (!conn) {
-        return c.json<ApiResponse>({ success: false, error: 'Connection not found for current user' }, 404)
-      }
-      connectionId = conn.id
-      rawId = reqRawId
-    }
-
-    if (!connectionId || !rawId) {
-      // 优先命中缓存目录
-      const cached = await prisma.modelCatalog.findFirst({ where: { modelId } })
-      if (cached) {
-        connectionId = cached.connectionId
-        rawId = cached.rawId
-      } else {
-        // 回退：从可见连接中匹配（系统级 + 用户级）
-      const conns = await prisma.connection.findMany({
-        where: {
-          enable: true,
-          ownerUserId: null,
-        },
-      })
-        let fallbackExact: { connectionId: number; rawId: string } | null = null
-        let fallbackFirst: { connectionId: number; rawId: string } | null = null
-        for (const conn of conns) {
-          const px = (conn.prefixId || '').trim()
-          if (px && modelId.startsWith(px + '.')) {
-            connectionId = conn.id
-            rawId = modelId.substring(px.length + 1)
-            break
-          }
-          if (!px) {
-            if (!fallbackFirst) {
-              fallbackFirst = { connectionId: conn.id, rawId: modelId }
-            }
-            if (!fallbackExact) {
-              const ids = parseModelIds(conn.modelIdsJson)
-              if (ids.includes(modelId)) {
-                fallbackExact = { connectionId: conn.id, rawId: modelId }
-              }
-            }
-          }
-        }
-        if (!connectionId || !rawId) {
-          const selected = fallbackExact || fallbackFirst
-          if (selected) {
-            connectionId = selected.connectionId
-            rawId = selected.rawId
-          }
-        }
-      }
-    }
-
-    if (!connectionId || !rawId) {
-      return c.json<ApiResponse>({ success: false, error: 'Model not found in connections' }, 400)
-    }
-
-    // 更新会话的连接与模型
-    const updated = await prisma.chatSession.update({
-      where: { id: sessionId },
-      data: { connectionId, modelRawId: rawId },
-      select: {
-        id: true,
-        userId: true,
-        anonymousKey: true,
-        expiresAt: true,
-        connectionId: true,
-        modelRawId: true,
-        title: true,
-        createdAt: true,
-        reasoningEnabled: true,
-        reasoningEffort: true,
-        ollamaThink: true,
-      },
-    })
-
-    if (actor.type === 'user') {
-      try {
-        await prisma.user.update({
-          where: { id: actor.id },
-          data: {
-            preferredModelId: modelId,
-            preferredConnectionId: connectionId,
-            preferredModelRawId: rawId,
-          },
-        })
-      } catch (error) {
-        console.error('Failed to persist preferred model on switch:', error)
-      }
-    }
-
-    return c.json<ApiResponse<any>>({ success: true, data: { ...updated, modelLabel: modelId } })
+    const page = parsePagination(c.req.query('page'), 1)
+    const limit = parsePagination(c.req.query('limit'), 20)
+    const result = await sessionService.listSessions(actor, { page, limit })
+    return c.json<ApiResponse<typeof result>>({ success: true, data: result })
   } catch (error) {
-    console.error('Switch session model error:', error)
-    return c.json<ApiResponse>({ success: false, error: 'Failed to switch session model' }, 500)
+    return handleServiceError(c, error, 'Failed to fetch chat sessions', 'Get sessions error:')
   }
 })
 
-// 删除聊天会话
+sessions.post('/', actorMiddleware, zValidator('json', createSessionSchema), async (c) => {
+  try {
+    const actor = c.get('actor') as Actor
+    const payload = c.req.valid('json')
+    const session = await sessionService.createSession(actor, payload)
+    return c.json<ApiResponse<typeof session>>({
+      success: true,
+      data: session,
+      message: 'Chat session created successfully',
+    })
+  } catch (error) {
+    return handleServiceError(c, error, 'Failed to create chat session', 'Create session error:')
+  }
+})
+
+sessions.get('/:id', actorMiddleware, async (c) => {
+  try {
+    const sessionId = parseInt(c.req.param('id'), 10)
+    if (Number.isNaN(sessionId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
+    }
+    const actor = c.get('actor') as Actor
+    const session = await sessionService.getSession(actor, sessionId)
+    return c.json<ApiResponse<typeof session>>({ success: true, data: session })
+  } catch (error) {
+    return handleServiceError(c, error, 'Failed to fetch chat session', 'Get session error:')
+  }
+})
+
+sessions.put('/:id', actorMiddleware, zValidator('json', updateSessionSchema), async (c) => {
+  try {
+    const sessionId = parseInt(c.req.param('id'), 10)
+    if (Number.isNaN(sessionId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
+    }
+    const actor = c.get('actor') as Actor
+    const updates = c.req.valid('json')
+    const session = await sessionService.updateSession(actor, sessionId, updates)
+    return c.json<ApiResponse<typeof session>>({
+      success: true,
+      data: session,
+      message: 'Session updated successfully',
+    })
+  } catch (error) {
+    return handleServiceError(c, error, 'Failed to update session title', 'Update session error:')
+  }
+})
+
+sessions.put('/:id/model', actorMiddleware, zValidator('json', switchModelSchema), async (c) => {
+  try {
+    const sessionId = parseInt(c.req.param('id'), 10)
+    if (Number.isNaN(sessionId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
+    }
+    const actor = c.get('actor') as Actor
+    const payload = c.req.valid('json')
+    const session = await sessionService.switchSessionModel(actor, sessionId, payload)
+    return c.json<ApiResponse<typeof session>>({ success: true, data: session })
+  } catch (error) {
+    return handleServiceError(c, error, 'Failed to switch session model', 'Switch session model error:')
+  }
+})
+
 sessions.delete('/:id', actorMiddleware, async (c) => {
   try {
-    const actor = c.get('actor') as Actor;
-    const sessionId = parseInt(c.req.param('id'));
-
-    if (isNaN(sessionId)) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Invalid session ID',
-      }, 400);
+    const sessionId = parseInt(c.req.param('id'), 10)
+    if (Number.isNaN(sessionId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
     }
-
-    // 验证会话是否存在且属于当前用户
-    const existingSession = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        ...sessionOwnershipClause(actor),
-      },
-    });
-
-    if (!existingSession) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Chat session not found',
-      }, 404);
-    }
-
-    // 删除会话（相关消息会通过Prisma的cascade删除）
-    await prisma.chatSession.delete({
-      where: { id: sessionId },
-    });
-
-    return c.json<ApiResponse>({
-      success: true,
-      message: 'Chat session deleted successfully',
-    });
-
+    const actor = c.get('actor') as Actor
+    await sessionService.deleteSession(actor, sessionId)
+    return c.json<ApiResponse>({ success: true, message: 'Chat session deleted successfully' })
   } catch (error) {
-    console.error('Delete session error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to delete chat session',
-    }, 500);
+    return handleServiceError(c, error, 'Failed to delete chat session', 'Delete session error:')
   }
-});
+})
 
-// 清空会话消息
 sessions.delete('/:id/messages', actorMiddleware, async (c) => {
   try {
-    const actor = c.get('actor') as Actor;
-    const sessionId = parseInt(c.req.param('id'));
-
-    if (isNaN(sessionId)) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Invalid session ID',
-      }, 400);
+    const sessionId = parseInt(c.req.param('id'), 10)
+    if (Number.isNaN(sessionId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
     }
-
-    // 验证会话是否存在且属于当前用户
-    const existingSession = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        ...sessionOwnershipClause(actor),
-      },
-    });
-
-    if (!existingSession) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Chat session not found',
-      }, 404);
-    }
-
-    // 删除会话中的所有消息
-    await prisma.message.deleteMany({
-      where: { sessionId },
-    });
-
-    return c.json<ApiResponse>({
-      success: true,
-      message: 'Session messages cleared successfully',
-    });
-
+    const actor = c.get('actor') as Actor
+    await sessionService.clearSessionMessages(actor, sessionId)
+    return c.json<ApiResponse>({ success: true, message: 'Session messages cleared successfully' })
   } catch (error) {
-    console.error('Clear session messages error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to clear session messages',
-    }, 500);
+    return handleServiceError(
+      c,
+      error,
+      'Failed to clear session messages',
+      'Clear session messages error:',
+    )
   }
-});
+})
 
-export default sessions;
+export default sessions
