@@ -50,6 +50,7 @@ import {
   sessionOwnershipClause,
 } from '../chat-common';
 import { createUserMessageWithQuota } from '../services/message-service';
+import { chatService, ChatServiceError } from '../../../services/chat';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -86,30 +87,20 @@ export const registerChatStreamRoutes = (router: Hono) => {
       })
 
       // 验证会话是否存在且属于当前用户
-      const session = await prisma.chatSession.findFirst({
-        where: {
-          id: sessionId,
-          ...sessionOwnershipClause(actor),
-        },
-        include: {
-          connection: true,
-        },
-      });
-
-      if (!session) {
-        log.warn('[chat stream] session not found', {
-          sessionId,
-          actor: actor.identifier,
-        });
-        return c.json<ApiResponse>({
-          success: false,
-          error: 'Chat session not found',
-        }, 404);
-      }
-
-      // 新模型选择：要求存在 connection + modelRawId
-      if (!session.connectionId || !session.connection || !session.modelRawId) {
-        return c.json<ApiResponse>({ success: false, error: 'Session model not selected' }, 400)
+      let session
+      try {
+        session = await chatService.getSessionWithConnection(actor, sessionId)
+      } catch (error) {
+        if (error instanceof ChatServiceError) {
+          if (error.statusCode === 404) {
+            log.warn('[chat stream] session not found', {
+              sessionId,
+              actor: actor.identifier,
+            })
+          }
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+        }
+        throw error
       }
 
       await extendAnonymousSession(actor, sessionId)

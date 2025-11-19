@@ -4,7 +4,7 @@ import { actorMiddleware } from '../../../middleware/auth';
 import { Tokenizer } from '../../../utils/tokenizer';
 import { resolveContextLimit } from '../../../utils/context-window';
 import type { Actor, ApiResponse } from '../../../types';
-import { sessionOwnershipClause } from '../chat-common';
+import { chatService } from '../../../services/chat';
 
 export const registerChatUsageRoutes = (router: Hono) => {
   router.get('/usage', actorMiddleware, async (c) => {
@@ -19,13 +19,7 @@ export const registerChatUsageRoutes = (router: Hono) => {
         return c.json<ApiResponse>({ success: false, error: 'Actor context missing' }, 401);
       }
 
-      const session = await prisma.chatSession.findFirst({
-        where: {
-          id: sessionId,
-          ...sessionOwnershipClause(actor),
-        },
-        include: { connection: true },
-      });
+      const session = await chatService.findSessionWithConnection(actor, sessionId);
       if (!session) {
         return c.json<ApiResponse>({
           success: true,

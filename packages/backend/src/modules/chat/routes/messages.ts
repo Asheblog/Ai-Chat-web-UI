@@ -8,6 +8,7 @@ import {
 } from '../../../utils/chat-images';
 import { parseToolLogsJson, type ToolLogEntry } from '../../chat/tool-logs';
 import { extendAnonymousSession, sessionOwnershipClause } from '../chat-common';
+import { chatService, ChatServiceError } from '../../../services/chat';
 
 export const registerChatMessageRoutes = (router: Hono) => {
   router.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
@@ -22,18 +23,13 @@ export const registerChatMessageRoutes = (router: Hono) => {
         }, 400);
       }
 
-      const session = await prisma.chatSession.findFirst({
-        where: {
-          id: sessionId,
-          ...sessionOwnershipClause(actor),
-        },
-      });
-
-      if (!session) {
-        return c.json<ApiResponse>({
-          success: false,
-          error: 'Chat session not found',
-        }, 404);
+      try {
+        await chatService.ensureSessionAccess(actor, sessionId)
+      } catch (error) {
+        if (error instanceof ChatServiceError) {
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+        }
+        throw error
       }
 
       const page = parseInt(c.req.query('page') || '1');
@@ -136,6 +132,15 @@ export const registerChatMessageRoutes = (router: Hono) => {
 
       if (Number.isNaN(sessionId) || Number.isNaN(messageId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400);
+      }
+
+      try {
+        await chatService.ensureSessionAccess(actor, sessionId)
+      } catch (error) {
+        if (error instanceof ChatServiceError) {
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+        }
+        throw error
       }
 
       const message = await prisma.message.findFirst({
