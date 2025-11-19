@@ -510,6 +510,38 @@ taskTrace.delete('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddl
   }
 })
 
+taskTrace.delete('/all', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+  try {
+    const targets = await prisma.taskTrace.findMany({
+      select: { id: true, logFilePath: true, latexTrace: { select: { logFilePath: true } } },
+    })
+    if (targets.length === 0) {
+      return c.json<ApiResponse>({ success: true, data: { deleted: 0 } })
+    }
+    await prisma.taskTrace.deleteMany({ where: { id: { in: targets.map((t) => t.id) } } })
+    const filesToRemove = targets.flatMap((item) => {
+      const list: Array<string | null | undefined> = [item.logFilePath]
+      if (item.latexTrace?.logFilePath) {
+        list.push(item.latexTrace.logFilePath)
+      }
+      return list
+    })
+    await Promise.all(
+      filesToRemove
+        .filter((p): p is string => typeof p === 'string' && p.length > 0)
+        .map(async (file) => {
+          try {
+            await unlink(file)
+          } catch {}
+        }),
+    )
+    return c.json<ApiResponse>({ success: true, data: { deleted: targets.length } })
+  } catch (error) {
+    console.error('Delete all traces failed', error)
+    return c.json<ApiResponse>({ success: false, error: 'Failed to delete all traces' }, 500)
+  }
+})
+
 taskTrace.delete('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const id = Number.parseInt(c.req.param('id'), 10)

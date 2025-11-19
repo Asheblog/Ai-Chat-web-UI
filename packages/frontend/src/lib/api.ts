@@ -935,6 +935,11 @@ class ApiClient {
     return response.data
   }
 
+  async deleteAllTaskTraces() {
+    const response = await this.client.delete<ApiResponse<{ deleted: number }>>('/task-trace/all')
+    return response.data
+  }
+
   async deleteTaskTrace(id: number) {
     const response = await this.client.delete<ApiResponse<any>>(`/task-trace/${id}`)
     return response.data

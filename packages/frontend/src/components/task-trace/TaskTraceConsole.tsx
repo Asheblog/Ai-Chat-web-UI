@@ -61,6 +61,7 @@ export function TaskTraceConsole() {
   const [latexEvents, setLatexEvents] = useState<LatexTraceEventRecord[]>([])
   const [latexTruncated, setLatexTruncated] = useState(false)
   const [latexLoading, setLatexLoading] = useState(false)
+  const [clearingAll, setClearingAll] = useState(false)
 
   const fetchList = useCallback(async () => {
     setLoading(true)
@@ -185,6 +186,24 @@ export function TaskTraceConsole() {
     }
   }
 
+  const handleDeleteAll = async () => {
+    if (!window.confirm('确定要清空所有任务追踪日志吗？该操作会删除全部记录且无法恢复。')) {
+      return
+    }
+    setClearingAll(true)
+    try {
+      const res = await apiClient.deleteAllTaskTraces()
+      const deleted = res.data?.deleted ?? 0
+      toast({ title: '已清空任务追踪日志', description: `共删除 ${deleted} 条记录` })
+      setPage(1)
+      fetchList()
+    } catch (error: any) {
+      toast({ title: '清空失败', description: error?.response?.data?.error || error?.message || '未知错误', variant: 'destructive' })
+    } finally {
+      setClearingAll(false)
+    }
+  }
+
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [pageSize, total])
 
   if (!isAdmin) {
@@ -240,9 +259,15 @@ export function TaskTraceConsole() {
             <div className="text-sm font-semibold">追踪记录</div>
             <div className="text-xs text-muted-foreground">共 {total} 条</div>
           </div>
-          <Button variant="ghost" size="icon" onClick={fetchList} disabled={loading}>
-            <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={fetchList} disabled={loading}>
+              <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button variant="destructive" size="sm" disabled={loading || clearingAll} onClick={handleDeleteAll}>
+              <Trash2 className="mr-1 h-4 w-4" />
+              {clearingAll ? '清空中' : '清空全部'}
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}>
