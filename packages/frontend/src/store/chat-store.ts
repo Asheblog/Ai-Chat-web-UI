@@ -524,7 +524,10 @@ interface ChatStore extends ChatState {
 }
 
 export const useChatStore = create<ChatStore>((set, get) => {
-  const streamState: { active: StreamAccumulator | null } = { active: null }
+const streamState: { active: StreamAccumulator | null; stopRequested: boolean } = {
+  active: null,
+  stopRequested: false,
+}
   const streamingPollers = new Map<number, ReturnType<typeof setInterval>>()
 
   const stopMessagePoller = (messageId: number) => {
@@ -852,6 +855,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
       clearTimeout(active.flushTimer)
     }
     streamState.active = null
+    streamState.stopRequested = false
   }
 
   return {
@@ -1329,6 +1333,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         }
       })
 
+      streamState.stopRequested = false
       streamState.active = {
         sessionId,
         assistantId: assistantPlaceholder.id,
@@ -1648,6 +1653,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         get().fetchSessionsUsage().catch(() => {})
       } catch (error: any) {
         const interruptedContext = streamState.active
+        const manualStopRequested = streamState.stopRequested
         flushActiveStream(true)
         resetStreamState()
 
@@ -1664,55 +1670,10 @@ export const useChatStore = create<ChatStore>((set, get) => {
           error?.code === 20 ||
           (typeof error?.message === 'string' && error.message.toLowerCase().includes('aborted'))
 
-        if (isAbortError) {
-          // 用户手动停止或浏览器主动中断，状态已在 stopStreaming 中处理
-          return
-        }
-
-        if (isStreamIncomplete) {
-          const messageId =
-            typeof interruptedContext?.assistantId === 'number'
-              ? interruptedContext.assistantId
-              : typeof assistantPlaceholder.id === 'number'
-                ? assistantPlaceholder.id
-                : null
-          if (messageId !== null) {
-            startMessageProgressWatcher(sessionId, messageId)
-          }
-          set({ isStreaming: false })
-          return
-        }
-
-        if (error?.handled === 'agent_error') {
-          const message =
-            resolveProviderSafetyMessage(error) || error?.message || '联网搜索失败，请稍后重试'
-          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
-          set({ error: message, isStreaming: false })
-          removeAssistantPlaceholder()
-          return
-        }
-
-        if (error?.status === 429) {
-          const message = error?.payload?.error || '额度不足，请登录或等待次日重置'
-          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
-          set({ error: message, isStreaming: false })
-          removeAssistantPlaceholder()
-          return
-        }
-
-        const providerSafetyMessage = resolveProviderSafetyMessage(error)
-        if (providerSafetyMessage) {
-          updateMetaStreamStatus(assistantPlaceholder.id, 'error', providerSafetyMessage)
-          set({ error: providerSafetyMessage, isStreaming: false })
-          removeAssistantPlaceholder()
-          return
-        }
-
         const trySyncFinalResult = async (): Promise<boolean> => {
-          if (!interruptedContext) return false
           const candidates = [
-            interruptedContext.assistantClientMessageId,
-            interruptedContext.clientMessageId,
+            interruptedContext?.assistantClientMessageId ?? null,
+            interruptedContext?.clientMessageId ?? null,
             userClientMessageId ?? null,
           ]
           const seen = new Set<string>()
@@ -1741,11 +1702,67 @@ export const useChatStore = create<ChatStore>((set, get) => {
               }
               if (process.env.NODE_ENV !== 'production') {
                 // eslint-disable-next-line no-console
-                console.debug('[streamMessage] sync upstream result failed', syncError?.message || syncError)
+                console.debug('[streamMessage] sync failure', syncError?.message || syncError)
               }
             }
           }
           return false
+        }
+
+        const recoverInterruptedStream = async () => {
+          const synced = await trySyncFinalResult()
+          if (synced) {
+            return true
+          }
+          const messageId =
+            typeof interruptedContext?.assistantId === 'number'
+              ? interruptedContext.assistantId
+              : typeof assistantPlaceholder.id === 'number'
+                ? assistantPlaceholder.id
+                : null
+          if (messageId !== null) {
+            startMessageProgressWatcher(sessionId, messageId)
+          }
+          set({ isStreaming: false })
+          return true
+        }
+
+        if (isAbortError) {
+          if (manualStopRequested) {
+            return
+          }
+          await recoverInterruptedStream()
+          return
+        }
+
+        if (isStreamIncomplete) {
+          await recoverInterruptedStream()
+          return
+        }
+
+        if (error?.handled === 'agent_error') {
+          const message =
+            resolveProviderSafetyMessage(error) || error?.message || '联网搜索失败，请稍后重试'
+          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
+          set({ error: message, isStreaming: false })
+          removeAssistantPlaceholder()
+          return
+        }
+
+        if (error?.status === 429) {
+          const message = error?.payload?.error || '额度不足，请登录或等待次日重置'
+          updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
+          set({ error: message, isStreaming: false })
+          removeAssistantPlaceholder()
+          return
+        }
+
+        const providerSafetyMessage = resolveProviderSafetyMessage(error)
+        if (providerSafetyMessage) {
+          updateMetaStreamStatus(assistantPlaceholder.id, 'error', providerSafetyMessage)
+          set({ error: providerSafetyMessage, isStreaming: false })
+          removeAssistantPlaceholder()
+          return
         }
 
         const synced = await trySyncFinalResult()
@@ -1788,6 +1805,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           })
           .catch(() => {})
       }
+      streamState.stopRequested = true
       try {
         apiClient.cancelStream()
       } catch {
