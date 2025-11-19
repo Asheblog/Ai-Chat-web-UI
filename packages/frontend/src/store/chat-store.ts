@@ -1708,73 +1708,49 @@ export const useChatStore = create<ChatStore>((set, get) => {
           return
         }
 
-        try {
-          const resp = await apiClient.chatCompletion(sessionId, content, images, {
-            ...(options || {}),
-            contextEnabled,
-            clientMessageId: userClientMessageId,
-          })
-          const finalText = resp?.data?.content || ''
-          if (resp?.data?.quota) {
-            useAuthStore.getState().updateQuota(resp.data.quota)
-          }
-
-          if (finalText) {
-            set((state) => {
-              const key = messageKey(assistantPlaceholder.id)
-              const prevBody = ensureBody(state.messageBodies[key], assistantPlaceholder.id)
-              const body: MessageBody = {
-                id: prevBody.id,
-                content: finalText,
-                reasoning: prevBody.reasoning,
-                version: prevBody.version + 1,
-                reasoningVersion: prevBody.reasoningVersion,
-              }
-              const bodies = { ...state.messageBodies, [key]: body }
-              const renderCache = { ...state.messageRenderCache }
-              delete renderCache[key]
-              const metaIndex = state.messageMetas.findIndex((meta) => meta.id === assistantPlaceholder.id)
-              const metas = state.messageMetas.slice()
-              if (metaIndex >= 0) {
-                metas[metaIndex] = {
-                  ...metas[metaIndex],
-                  isPlaceholder: false,
-                  reasoningStatus: metas[metaIndex].reasoningStatus ?? (body.reasoning ? 'done' : undefined),
+        const trySyncFinalResult = async (): Promise<boolean> => {
+          if (!interruptedContext) return false
+          const candidates = [
+            interruptedContext.assistantClientMessageId,
+            interruptedContext.clientMessageId,
+            userClientMessageId ?? null,
+          ]
+          const seen = new Set<string>()
+          for (const candidate of candidates) {
+            if (typeof candidate !== 'string') continue
+            const trimmed = candidate.trim()
+            if (!trimmed || seen.has(trimmed)) continue
+            seen.add(trimmed)
+            try {
+              const res = await apiClient.getMessageByClientId(sessionId, trimmed)
+              const serverMessage = res?.data?.message
+              if (serverMessage) {
+                const merged = mergeImages(serverMessage, get().messageImageCache)
+                applyServerMessageSnapshot(merged)
+                if (typeof merged.id === 'number') {
+                  updateMetaStreamStatus(merged.id, merged.streamStatus ?? 'done')
                 }
+                set({ isStreaming: false })
+                get().fetchUsage(sessionId).catch(() => {})
+                get().fetchSessionsUsage().catch(() => {})
+                return true
               }
-              return {
-                messageBodies: bodies,
-                messageRenderCache: renderCache,
-                messageMetas: metas,
-                isStreaming: false,
+            } catch (syncError: any) {
+              if (syncError?.response?.status === 404) {
+                continue
               }
-            })
-            await get().fetchUsage(sessionId)
-            get().fetchSessionsUsage().catch(() => {})
-            updateMetaStreamStatus(assistantPlaceholder.id, 'done')
-            return
+              if (process.env.NODE_ENV !== 'production') {
+                // eslint-disable-next-line no-console
+                console.debug('[streamMessage] sync upstream result failed', syncError?.message || syncError)
+              }
+            }
           }
-        } catch (fallbackError: any) {
-          const fallbackQuota =
-            fallbackError?.response?.data?.quota ?? fallbackError?.payload?.quota ?? null
-          if (fallbackQuota) {
-            useAuthStore.getState().updateQuota(fallbackQuota)
-          }
-          if (fallbackError?.response?.status === 429) {
-            const message = fallbackError?.response?.data?.error || '额度不足，请登录或等待次日重置'
-            updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
-            set({ error: message, isStreaming: false })
-            removeAssistantPlaceholder()
-            return
-          }
+          return false
+        }
 
-          const fallbackSafetyMessage = resolveProviderSafetyMessage(fallbackError)
-          if (fallbackSafetyMessage) {
-            updateMetaStreamStatus(assistantPlaceholder.id, 'error', fallbackSafetyMessage)
-            set({ error: fallbackSafetyMessage, isStreaming: false })
-            removeAssistantPlaceholder()
-            return
-          }
+        const synced = await trySyncFinalResult()
+        if (synced) {
+          return
         }
 
         const genericError = resolveProviderSafetyMessage(error) || error?.message || '发送消息失败'

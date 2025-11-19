@@ -10,6 +10,30 @@ import { parseToolLogsJson, type ToolLogEntry } from '../../chat/tool-logs';
 import { extendAnonymousSession, sessionOwnershipClause } from '../chat-common';
 import { chatService, ChatServiceError } from '../../../services/chat';
 
+const messageSelectFields = {
+  id: true,
+  sessionId: true,
+  role: true,
+  content: true,
+  parentMessageId: true,
+  variantIndex: true,
+  attachments: {
+    select: {
+      relativePath: true,
+    },
+  },
+  clientMessageId: true,
+  reasoning: true,
+  reasoningDurationSeconds: true,
+  toolLogsJson: true,
+  createdAt: true,
+  updatedAt: true,
+  streamStatus: true,
+  streamCursor: true,
+  streamReasoning: true,
+  streamError: true,
+} as const;
+
 export const registerChatMessageRoutes = (router: Hono) => {
   router.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
     try {
@@ -38,29 +62,7 @@ export const registerChatMessageRoutes = (router: Hono) => {
       const [messages, total, siteBaseSetting] = await Promise.all([
         prisma.message.findMany({
           where: { sessionId },
-          select: {
-            id: true,
-            sessionId: true,
-            role: true,
-            content: true,
-            parentMessageId: true,
-            variantIndex: true,
-            attachments: {
-              select: {
-                relativePath: true,
-              },
-            },
-            clientMessageId: true,
-            reasoning: true,
-            reasoningDurationSeconds: true,
-            toolLogsJson: true,
-            createdAt: true,
-            updatedAt: true,
-            streamStatus: true,
-            streamCursor: true,
-            streamReasoning: true,
-            streamError: true,
-          },
+          select: messageSelectFields,
           orderBy: { createdAt: 'asc' },
           skip: (page - 1) * limit,
           take: limit,
@@ -149,25 +151,7 @@ export const registerChatMessageRoutes = (router: Hono) => {
           sessionId,
           session: sessionOwnershipClause(actor),
         },
-        select: {
-          id: true,
-          sessionId: true,
-          role: true,
-          content: true,
-          clientMessageId: true,
-          reasoning: true,
-          reasoningDurationSeconds: true,
-          streamStatus: true,
-          streamCursor: true,
-          streamReasoning: true,
-          streamError: true,
-          toolLogsJson: true,
-          createdAt: true,
-          updatedAt: true,
-          attachments: {
-            select: { relativePath: true },
-          },
-        },
+        select: messageSelectFields,
       });
 
       if (!message) {
@@ -201,6 +185,69 @@ export const registerChatMessageRoutes = (router: Hono) => {
     } catch (error) {
       console.error('Get message progress error:', error);
       return c.json<ApiResponse>({ success: false, error: 'Failed to fetch progress' }, 500);
+    }
+  });
+
+  router.get('/sessions/:sessionId/messages/by-client/:clientMessageId', actorMiddleware, async (c) => {
+    try {
+      const actor = c.get('actor') as Actor;
+      const sessionId = parseInt(c.req.param('sessionId'));
+      const clientParam = c.req.param('clientMessageId') || '';
+      const clientMessageId = decodeURIComponent(clientParam).trim();
+
+      if (Number.isNaN(sessionId) || !clientMessageId) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400);
+      }
+
+      try {
+        await chatService.ensureSessionAccess(actor, sessionId);
+      } catch (error) {
+        if (error instanceof ChatServiceError) {
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode);
+        }
+        throw error;
+      }
+
+      const message = await prisma.message.findFirst({
+        where: {
+          sessionId,
+          clientMessageId,
+          session: sessionOwnershipClause(actor),
+        },
+        select: messageSelectFields,
+      });
+
+      if (!message) {
+        return c.json<ApiResponse>({ success: false, error: 'Message not found' }, 404);
+      }
+
+      const siteBaseSetting = await prisma.systemSetting.findUnique({
+        where: { key: 'site_base_url' },
+        select: { value: true },
+      });
+      const baseUrl = determineChatImageBaseUrl({
+        request: c.req.raw,
+        siteBaseUrl: siteBaseSetting?.value ?? null,
+      });
+      const rel = Array.isArray(message.attachments)
+        ? message.attachments.map((att) => att.relativePath)
+        : [];
+      const normalized = {
+        ...message,
+        attachments: undefined,
+        images: resolveChatImageUrls(rel, baseUrl),
+        toolEvents: parseToolLogsJson(message.toolLogsJson as string | null | undefined),
+      };
+
+      await extendAnonymousSession(actor, sessionId);
+
+      return c.json<ApiResponse<{ message: typeof normalized }>>({
+        success: true,
+        data: { message: normalized },
+      });
+    } catch (error) {
+      console.error('Get message by client id error:', error);
+      return c.json<ApiResponse>({ success: false, error: 'Failed to fetch message' }, 500);
     }
   });
 };

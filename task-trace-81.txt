@@ -1,0 +1,168 @@
+Trace #81
+Status: completed
+Actor: user:1
+Session: 79
+Message: 190
+Client ID: 060bad71-d5d7-4cd4-9e45-395cf0f6d896:assistant
+Level: standard
+Started: 2025-11-19T06:48:56.902Z
+Ended: 2025-11-19T06:50:06.749Z
+Duration(ms): 69848
+--- Metadata ---
+{
+  "provider": "openai",
+  "model": "google/gemini-3-pro-preview-free",
+  "connectionId": 4,
+  "features": {},
+  "agentWebSearchActive": false,
+  "reasoningEnabled": true,
+  "reasoningEffort": "high",
+  "ollamaThink": false,
+  "contextLimit": 120000,
+  "finalUsage": {
+    "completion_tokens": 2405,
+    "prompt_tokens": 263,
+    "total_tokens": 2668,
+    "completion_tokens_details": {
+      "accepted_prediction_tokens": null,
+      "audio_tokens": null,
+      "reasoning_tokens": 1914,
+      "rejected_prediction_tokens": null
+    },
+    "prompt_tokens_details": null
+  },
+  "providerUsageSource": "fallback_non_stream",
+  "messageId": 190
+}
+--- Events ---
+[0001] 2025-11-19T06:48:56.913Z request:init
+{
+  "sessionId": 79,
+  "clientMessageId": "060bad71-d5d7-4cd4-9e45-395cf0f6d896",
+  "promptTokens": 18,
+  "contextLimit": 120000,
+  "contextEnabled": true,
+  "hasImages": true,
+  "messageReused": false,
+  "quota": {
+    "scope": "USER",
+    "identifier": "user:1",
+    "dailyLimit": 200,
+    "usedCount": 7,
+    "remaining": 193,
+    "lastResetAt": "2025-11-19T02:40:31.934Z",
+    "unlimited": false,
+    "customDailyLimit": null,
+    "usingDefaultLimit": true
+  }
+}
+[0002] 2025-11-19T06:48:56.913Z stream:started
+{
+  "mode": "standard",
+  "provider": "openai",
+  "baseUrl": "https://zenmux.ai/api/v1"
+}
+[0003] 2025-11-19T06:48:56.913Z sse:dispatch
+{
+  "type": "start",
+  "messageId": 189,
+  "delivered": true,
+  "downstreamClosed": false
+}
+[0004] 2025-11-19T06:48:56.913Z sse:dispatch
+{
+  "type": "quota",
+  "quota": {
+    "scope": "USER",
+    "identifier": "user:1",
+    "dailyLimit": 200,
+    "usedCount": 7,
+    "remaining": 193,
+    "lastResetAt": "2025-11-19T02:40:31.934Z",
+    "unlimited": false,
+    "customDailyLimit": null,
+    "usingDefaultLimit": true
+  },
+  "delivered": true,
+  "downstreamClosed": false
+}
+[0005] 2025-11-19T06:48:56.913Z sse:dispatch
+{
+  "type": "usage",
+  "usage": {
+    "prompt_tokens": 18,
+    "total_tokens": 18,
+    "context_limit": 120000,
+    "context_remaining": 119982
+  },
+  "delivered": true,
+  "downstreamClosed": false
+}
+[0006] 2025-11-19T06:49:17.525Z sse:dispatch
+{
+  "type": "keepalive",
+  "delivered": true,
+  "downstreamClosed": false
+}
+[0007] 2025-11-19T06:49:31.756Z stream:downstream_closed
+{
+  "sessionId": 79,
+  "actor": "user:1",
+  "clientMessageId": "060bad71-d5d7-4cd4-9e45-395cf0f6d896",
+  "assistantMessageId": 190,
+  "assistantClientMessageId": "060bad71-d5d7-4cd4-9e45-395cf0f6d896:assistant",
+  "reason": "request-signal-abort"
+}
+[0008] 2025-11-19T06:50:06.724Z sse:dispatch
+{
+  "type": "usage",
+  "usage": {
+    "completion_tokens": 2405,
+    "prompt_tokens": 263,
+    "total_tokens": 2668,
+    "completion_tokens_details": {
+      "accepted_prediction_tokens": null,
+      "audio_tokens": null,
+      "reasoning_tokens": 1914,
+      "rejected_prediction_tokens": null
+    },
+    "prompt_tokens_details": null
+  },
+  "delivered": false,
+  "downstreamClosed": true
+}
+[0009] 2025-11-19T06:50:06.724Z sse:dispatch
+{
+  "type": "content",
+  "length": 706,
+  "preview": "好的，这张图上的字是：\n\n从右到左读，这四个大字是 **豫園自在** (yù yuán zì zài)。\n\n### 详细解释：\n\n1.  **豫園 (Yù Yuán)**：这就是著名的上海**豫园**。这是一个有四百多年历史的古典园林，也是…",
+  "delivered": false,
+  "downstreamClosed": true
+}
+[0010] 2025-11-19T06:50:06.724Z sse:dispatch
+{
+  "type": "complete",
+  "delivered": false,
+  "downstreamClosed": true
+}
+[0011] 2025-11-19T06:50:06.724Z stream:fallback_non_stream
+{
+  "origin": "reasoning_only"
+}
+[0012] 2025-11-19T06:50:06.731Z db:persist_progress
+{
+  "messageId": 190,
+  "length": 706,
+  "reasoningLength": 0,
+  "status": "done",
+  "force": true
+}
+[0013] 2025-11-19T06:50:06.748Z db:persist_final
+{
+  "messageId": 190,
+  "length": 706,
+  "promptTokens": 263,
+  "completionTokens": 2405,
+  "totalTokens": 2668,
+  "source": "non_stream_fallback"
+}

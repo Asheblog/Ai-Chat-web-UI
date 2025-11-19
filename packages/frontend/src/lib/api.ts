@@ -276,6 +276,14 @@ class ApiClient {
     return response.data
   }
 
+  async getMessageByClientId(sessionId: number, clientMessageId: string) {
+    const encoded = encodeURIComponent(clientMessageId.trim())
+    const response = await this.client.get<ApiResponse<{ message: Message }>>(
+      `/chat/sessions/${sessionId}/messages/by-client/${encoded}`
+    )
+    return response.data
+  }
+
   async sendMessage(sessionId: number, content: string) {
     // 非流式发送后端未提供，推荐使用 streamChat。此函数保留占位，抛出错误以避免误用。
     throw new Error('sendMessage is not supported. Use streamChat instead.')
