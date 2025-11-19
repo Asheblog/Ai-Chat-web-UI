@@ -1,58 +1,39 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { prisma } from '../db';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Actor } from '../types';
-import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage';
-import { getQuotaPolicy, invalidateQuotaPolicyCache, invalidateReasoningMaxOutputTokensDefaultCache } from '../utils/system-settings';
-import { invalidateTaskTraceConfig } from '../utils/task-trace';
+import { prisma } from '../db';
 import { syncSharedAnonymousQuota } from '../utils/quota';
+import { invalidateQuotaPolicyCache } from '../utils/system-settings'
 import {
   replaceProfileImage,
   resolveProfileImageUrl,
   determineProfileImageBaseUrl,
 } from '../utils/profile-images';
+import { settingsService, SettingsServiceError } from '../services/settings'
 
 const settings = new Hono();
 
-const BRAND_TEXT_CACHE_TTL_MS = 30_000;
-let cachedBrandText: { value: string; expiresAt: number } | null = null;
-
-const resolveBrandText = async () => {
-  const now = Date.now();
-  if (cachedBrandText && cachedBrandText.expiresAt > now) {
-    return cachedBrandText.value;
+const handleServiceError = (
+  c: any,
+  error: unknown,
+  fallbackMessage: string,
+  logLabel: string,
+) => {
+  if (error instanceof SettingsServiceError) {
+    return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode);
   }
-  const record = await prisma.systemSetting.findUnique({
-    where: { key: 'brand_text' },
-    select: { value: true },
-  });
-  const normalized = (record?.value || '').trim() || 'AIChat';
-  cachedBrandText = {
-    value: normalized,
-    expiresAt: now + BRAND_TEXT_CACHE_TTL_MS,
-  };
-  return normalized;
-};
-
-const invalidateBrandTextCache = () => {
-  cachedBrandText = null;
+  console.error(logLabel, error);
+  return c.json<ApiResponse>({ success: false, error: fallbackMessage }, 500);
 };
 
 settings.get('/branding', async (c) => {
   try {
-    const brandText = await resolveBrandText();
-    return c.json<ApiResponse>({
-      success: true,
-      data: { brand_text: brandText },
-    });
+    const brandText = await settingsService.getBrandingText();
+    return c.json<ApiResponse>({ success: true, data: { brand_text: brandText } });
   } catch (error) {
-    console.error('Get branding error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to fetch branding info',
-    }, 500);
+    return handleServiceError(c, error, 'Failed to fetch branding info', 'Get branding error:');
   }
 });
 
@@ -125,634 +106,34 @@ const modelPreferenceSchema = z.object({
 // 获取系统设置（仅管理员）
 settings.get('/system', actorMiddleware, async (c) => {
   try {
-    const actor = c.get('actor') as Actor | undefined;
+    const actor = c.get('actor') as Actor | undefined
     if (!actor) {
-      return c.json<ApiResponse>({
-        success: false,
-        error: 'Actor unavailable',
-      }, 401);
+      return c.json<ApiResponse>({ success: false, error: 'Actor unavailable' }, 401)
     }
-    const isAdmin = actor.type === 'user' && actor.role === 'ADMIN';
-    const systemSettings = await prisma.systemSetting.findMany({
-      select: {
-        key: true,
-        value: true,
-      },
-    });
-
-    // 转换为键值对对象
-    const settingsObj = systemSettings.reduce((acc: Record<string, string>, setting: { key: string; value: string }) => {
-      acc[setting.key] = setting.value;
-      return acc;
-    }, {} as Record<string, string>);
-
-    const quotaPolicy = await getQuotaPolicy();
-
-    // 转换布尔值
-  const formattedSettings = {
-      registration_enabled: settingsObj.registration_enabled === 'true',
-      max_context_tokens: parseInt(settingsObj.max_context_tokens || '4000'),
-      brand_text: settingsObj.brand_text || 'AIChat',
-      // 流式/稳定性（若DB无配置，则回退到环境变量或默认值）
-      sse_heartbeat_interval_ms: parseInt(settingsObj.sse_heartbeat_interval_ms || process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000'),
-      provider_max_idle_ms: parseInt(settingsObj.provider_max_idle_ms || process.env.PROVIDER_MAX_IDLE_MS || '60000'),
-      provider_timeout_ms: parseInt(settingsObj.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000'),
-      usage_emit: (settingsObj.usage_emit ?? (process.env.USAGE_EMIT ?? 'true')).toString().toLowerCase() !== 'false',
-      usage_provider_only: (settingsObj.usage_provider_only ?? (process.env.USAGE_PROVIDER_ONLY ?? 'false')).toString().toLowerCase() === 'true',
-      provider_initial_grace_ms: parseInt(settingsObj.provider_initial_grace_ms || process.env.PROVIDER_INITIAL_GRACE_MS || '120000'),
-      provider_reasoning_idle_ms: parseInt(settingsObj.provider_reasoning_idle_ms || process.env.PROVIDER_REASONING_IDLE_MS || '300000'),
-      reasoning_keepalive_interval_ms: parseInt(settingsObj.reasoning_keepalive_interval_ms || process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0'),
-      // 推理链
-      reasoning_enabled: (settingsObj.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false',
-      reasoning_default_expand: (settingsObj.reasoning_default_expand ?? (process.env.REASONING_DEFAULT_EXPAND ?? 'false')).toString().toLowerCase() === 'true',
-      // 默认 true（按你的要求）
-      reasoning_save_to_db: (settingsObj.reasoning_save_to_db ?? (process.env.REASONING_SAVE_TO_DB ?? 'true')).toString().toLowerCase() === 'true',
-      reasoning_tags_mode: (settingsObj.reasoning_tags_mode ?? (process.env.REASONING_TAGS_MODE ?? 'default')).toString(),
-      reasoning_custom_tags: settingsObj.reasoning_custom_tags || process.env.REASONING_CUSTOM_TAGS || '',
-      stream_delta_chunk_size: parseInt(settingsObj.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'),
-      stream_delta_flush_interval_ms: parseInt(settingsObj.stream_delta_flush_interval_ms || process.env.STREAM_DELTA_FLUSH_INTERVAL_MS || '0'),
-      stream_reasoning_flush_interval_ms: parseInt(settingsObj.stream_reasoning_flush_interval_ms || process.env.STREAM_REASONING_FLUSH_INTERVAL_MS || '0'),
-      stream_keepalive_interval_ms: parseInt(settingsObj.stream_keepalive_interval_ms || process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'),
-      openai_reasoning_effort: (settingsObj.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || ''),
-      reasoning_max_output_tokens_default: (() => {
-        const raw = settingsObj.reasoning_max_output_tokens_default ?? process.env.REASONING_MAX_OUTPUT_TOKENS_DEFAULT ?? '32000';
-        const parsed = Number.parseInt(String(raw), 10);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          return Math.min(256000, parsed);
-        }
-        return 32000;
-      })(),
-      ollama_think: (settingsObj.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true',
-      chat_image_retention_days: (() => {
-        const raw = settingsObj.chat_image_retention_days ?? process.env.CHAT_IMAGE_RETENTION_DAYS ?? `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
-        const parsed = Number.parseInt(String(raw), 10)
-        return Number.isFinite(parsed) && parsed >= 0 ? parsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
-      })(),
-      assistant_reply_history_limit: (() => {
-        const raw = settingsObj.assistant_reply_history_limit ?? process.env.ASSISTANT_REPLY_HISTORY_LIMIT ?? '5'
-        const parsed = Number.parseInt(String(raw), 10)
-        if (Number.isFinite(parsed) && parsed > 0) {
-          return Math.min(20, parsed)
-        }
-        return 5
-      })(),
-      site_base_url: settingsObj.site_base_url || process.env.CHAT_IMAGE_BASE_URL || '',
-      anonymous_retention_days: quotaPolicy.anonymousRetentionDays,
-      anonymous_daily_quota: quotaPolicy.anonymousDailyQuota,
-      default_user_daily_quota: quotaPolicy.defaultUserDailyQuota,
-      web_search_agent_enable: (settingsObj.web_search_agent_enable ?? (process.env.WEB_SEARCH_AGENT_ENABLE ?? 'false')).toString().toLowerCase() === 'true',
-      web_search_default_engine: (settingsObj.web_search_default_engine || process.env.WEB_SEARCH_DEFAULT_ENGINE || 'tavily'),
-      web_search_result_limit: (() => {
-        const raw = settingsObj.web_search_result_limit ?? process.env.WEB_SEARCH_RESULT_LIMIT ?? '4'
-        const parsed = Number.parseInt(String(raw), 10)
-        return Number.isFinite(parsed) ? Math.max(1, Math.min(10, parsed)) : 4
-      })(),
-      web_search_domain_filter: (() => {
-        try {
-          const raw = settingsObj.web_search_domain_filter
-          if (typeof raw === 'string' && raw.trim() !== '') {
-            const parsed = JSON.parse(raw)
-            if (Array.isArray(parsed)) {
-              return parsed.map((d: string) => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
-            }
-          }
-        } catch {}
-        return []
-      })(),
-      web_search_has_api_key: Boolean(settingsObj.web_search_api_key || process.env.WEB_SEARCH_API_KEY),
-      task_trace_enabled: (settingsObj.task_trace_enabled ?? 'false').toString().toLowerCase() === 'true',
-      task_trace_default_on: (settingsObj.task_trace_default_on ?? 'false').toString().toLowerCase() === 'true',
-      task_trace_admin_only: (settingsObj.task_trace_admin_only ?? 'true').toString().toLowerCase() !== 'false',
-      task_trace_env: (() => {
-        const value = (settingsObj.task_trace_env || '').toString().toLowerCase()
-        return value === 'both' || value === 'prod' ? value : 'dev'
-      })(),
-      task_trace_retention_days: (() => {
-        const raw = settingsObj.task_trace_retention_days || process.env.TASK_TRACE_RETENTION_DAYS || '7'
-        const parsed = Number.parseInt(String(raw), 10)
-        if (Number.isFinite(parsed)) {
-          return Math.max(1, Math.min(365, parsed))
-        }
-        return 7
-      })(),
-      task_trace_max_events: (() => {
-        const raw = settingsObj.task_trace_max_events || process.env.TASK_TRACE_MAX_EVENTS || '2000'
-        const parsed = Number.parseInt(String(raw), 10)
-        if (Number.isFinite(parsed)) {
-          return Math.max(100, Math.min(200000, parsed))
-        }
-        return 2000
-      })(),
-      task_trace_idle_timeout_ms: (() => {
-        const raw = settingsObj.task_trace_idle_timeout_ms || process.env.TASK_TRACE_IDLE_TIMEOUT_MS || '30000'
-        const parsed = Number.parseInt(String(raw), 10)
-        if (Number.isFinite(parsed)) {
-          return Math.max(1000, Math.min(600000, parsed))
-        }
-        return 30000
-      })(),
-    };
-
-    const assistantAvatarBase = determineProfileImageBaseUrl({
-      request: c.req.raw,
-      siteBaseUrl: formattedSettings.site_base_url,
-    })
-    const assistantAvatarPath = settingsObj.assistant_avatar_path || null
-    formattedSettings.assistant_avatar_url = resolveProfileImageUrl(assistantAvatarPath, assistantAvatarBase)
-
-    if (!isAdmin) {
-      const publicSettings = {
-        brand_text: formattedSettings.brand_text,
-        registration_enabled: formattedSettings.registration_enabled,
-        anonymous_retention_days: formattedSettings.anonymous_retention_days,
-        anonymous_daily_quota: formattedSettings.anonymous_daily_quota,
-        default_user_daily_quota: formattedSettings.default_user_daily_quota,
-        web_search_agent_enable: formattedSettings.web_search_agent_enable,
-        web_search_default_engine: formattedSettings.web_search_default_engine,
-        web_search_result_limit: formattedSettings.web_search_result_limit,
-        web_search_domain_filter: formattedSettings.web_search_domain_filter,
-        web_search_has_api_key: formattedSettings.web_search_has_api_key,
-        assistant_avatar_url: formattedSettings.assistant_avatar_url,
-      };
-      return c.json<ApiResponse>({
-        success: true,
-        data: publicSettings,
-      });
-    }
-
-    return c.json<ApiResponse>({
-      success: true,
-      data: formattedSettings,
-    });
-
+    const result = await settingsService.getSystemSettings(actor)
+    return c.json<ApiResponse>({ success: true, data: result })
   } catch (error) {
-    console.error('Get system settings error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to fetch system settings',
-    }, 500);
+    return handleServiceError(c, error, 'Failed to fetch system settings', 'Get system settings error:')
   }
 });
 
 // 更新系统设置（仅管理员）
-settings.put('/system', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', systemSettingSchema), async (c) => {
-  try {
-    const payload = c.req.valid('json');
-    const {
-      registration_enabled,
-      brand_text,
-      sse_heartbeat_interval_ms,
-      provider_max_idle_ms,
-      provider_timeout_ms,
-      provider_initial_grace_ms,
-      provider_reasoning_idle_ms,
-      reasoning_keepalive_interval_ms,
-      stream_delta_flush_interval_ms,
-      stream_reasoning_flush_interval_ms,
-      stream_keepalive_interval_ms,
-      usage_emit,
-      usage_provider_only,
-      reasoning_enabled,
-      reasoning_default_expand,
-      reasoning_save_to_db,
-      reasoning_tags_mode,
-      reasoning_custom_tags,
-      stream_delta_chunk_size,
-      openai_reasoning_effort,
-      reasoning_max_output_tokens_default,
-      ollama_think,
-      chat_image_retention_days,
-      assistant_reply_history_limit,
-      site_base_url,
-      anonymous_retention_days,
-      anonymous_daily_quota,
-      default_user_daily_quota,
-      web_search_agent_enable,
-      web_search_default_engine,
-      web_search_api_key,
-      web_search_result_limit,
-      web_search_domain_filter,
-      task_trace_enabled,
-      task_trace_default_on,
-      task_trace_admin_only,
-      task_trace_env,
-      task_trace_retention_days,
-      task_trace_max_events,
-      task_trace_idle_timeout_ms,
-      assistant_avatar,
-    } = payload;
-    let anonymousQuotaUpdated = false;
-    let taskTraceSettingsUpdated = false;
-
-    // 条件更新：仅对传入的字段做 upsert
-    if (typeof registration_enabled === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'registration_enabled' },
-        update: { value: registration_enabled.toString() },
-        create: { key: 'registration_enabled', value: registration_enabled.toString() },
-      });
+settings.put(
+  '/system',
+  actorMiddleware,
+  requireUserActor,
+  adminOnlyMiddleware,
+  zValidator('json', systemSettingSchema),
+  async (c) => {
+    try {
+      const payload = c.req.valid('json')
+      await settingsService.updateSystemSettings(payload)
+      return c.json<ApiResponse>({ success: true, message: 'System settings updated successfully' })
+    } catch (error) {
+      return handleServiceError(c, error, 'Failed to update system settings', 'Update system settings error:')
     }
-
-    if (typeof brand_text === 'string') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'brand_text' },
-        update: { value: brand_text },
-        create: { key: 'brand_text', value: brand_text },
-      });
-      invalidateBrandTextCache();
-    }
-
-    // 以下为流式/稳定性配置（仅对传入字段进行 upsert）
-    if (typeof sse_heartbeat_interval_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'sse_heartbeat_interval_ms' },
-        update: { value: String(sse_heartbeat_interval_ms) },
-        create: { key: 'sse_heartbeat_interval_ms', value: String(sse_heartbeat_interval_ms) },
-      });
-    }
-
-    if (typeof provider_max_idle_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'provider_max_idle_ms' },
-        update: { value: String(provider_max_idle_ms) },
-        create: { key: 'provider_max_idle_ms', value: String(provider_max_idle_ms) },
-      });
-    }
-
-    if (typeof provider_timeout_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'provider_timeout_ms' },
-        update: { value: String(provider_timeout_ms) },
-        create: { key: 'provider_timeout_ms', value: String(provider_timeout_ms) },
-      });
-    }
-
-    if (typeof provider_initial_grace_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'provider_initial_grace_ms' },
-        update: { value: String(provider_initial_grace_ms) },
-        create: { key: 'provider_initial_grace_ms', value: String(provider_initial_grace_ms) },
-      });
-    }
-
-    if (typeof provider_reasoning_idle_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'provider_reasoning_idle_ms' },
-        update: { value: String(provider_reasoning_idle_ms) },
-        create: { key: 'provider_reasoning_idle_ms', value: String(provider_reasoning_idle_ms) },
-      });
-    }
-
-    if (typeof reasoning_keepalive_interval_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'reasoning_keepalive_interval_ms' },
-        update: { value: String(reasoning_keepalive_interval_ms) },
-        create: { key: 'reasoning_keepalive_interval_ms', value: String(reasoning_keepalive_interval_ms) },
-      });
-    }
-
-    if (typeof stream_delta_flush_interval_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'stream_delta_flush_interval_ms' },
-        update: { value: String(stream_delta_flush_interval_ms) },
-        create: { key: 'stream_delta_flush_interval_ms', value: String(stream_delta_flush_interval_ms) },
-      });
-    }
-
-    if (typeof stream_reasoning_flush_interval_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'stream_reasoning_flush_interval_ms' },
-        update: { value: String(stream_reasoning_flush_interval_ms) },
-        create: { key: 'stream_reasoning_flush_interval_ms', value: String(stream_reasoning_flush_interval_ms) },
-      });
-    }
-
-    if (typeof stream_keepalive_interval_ms === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'stream_keepalive_interval_ms' },
-        update: { value: String(stream_keepalive_interval_ms) },
-        create: { key: 'stream_keepalive_interval_ms', value: String(stream_keepalive_interval_ms) },
-      });
-    }
-
-    if (typeof usage_emit === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'usage_emit' },
-        update: { value: usage_emit.toString() },
-        create: { key: 'usage_emit', value: usage_emit.toString() },
-      });
-    }
-
-    if (typeof usage_provider_only === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'usage_provider_only' },
-        update: { value: usage_provider_only.toString() },
-        create: { key: 'usage_provider_only', value: usage_provider_only.toString() },
-      });
-    }
-
-    // 推理链相关
-    if (typeof reasoning_enabled === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'reasoning_enabled' },
-        update: { value: reasoning_enabled.toString() },
-        create: { key: 'reasoning_enabled', value: reasoning_enabled.toString() },
-      });
-    }
-
-    if (typeof reasoning_default_expand === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'reasoning_default_expand' },
-        update: { value: reasoning_default_expand.toString() },
-        create: { key: 'reasoning_default_expand', value: reasoning_default_expand.toString() },
-      });
-    }
-
-    if (typeof reasoning_save_to_db === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'reasoning_save_to_db' },
-        update: { value: reasoning_save_to_db.toString() },
-        create: { key: 'reasoning_save_to_db', value: reasoning_save_to_db.toString() },
-      });
-    }
-
-    if (typeof reasoning_tags_mode === 'string') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'reasoning_tags_mode' },
-        update: { value: reasoning_tags_mode },
-        create: { key: 'reasoning_tags_mode', value: reasoning_tags_mode },
-      });
-    }
-
-    if (typeof reasoning_custom_tags === 'string') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'reasoning_custom_tags' },
-        update: { value: reasoning_custom_tags },
-        create: { key: 'reasoning_custom_tags', value: reasoning_custom_tags },
-      });
-    }
-
-    if (typeof stream_delta_chunk_size === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'stream_delta_chunk_size' },
-        update: { value: String(stream_delta_chunk_size) },
-        create: { key: 'stream_delta_chunk_size', value: String(stream_delta_chunk_size) },
-      });
-    }
-
-    if (typeof openai_reasoning_effort === 'string') {
-      if (openai_reasoning_effort === 'unset') {
-        await prisma.systemSetting.deleteMany({ where: { key: 'openai_reasoning_effort' } });
-      } else {
-        await prisma.systemSetting.upsert({
-          where: { key: 'openai_reasoning_effort' },
-          update: { value: openai_reasoning_effort },
-          create: { key: 'openai_reasoning_effort', value: openai_reasoning_effort },
-        });
-      }
-    }
-
-    if (typeof reasoning_max_output_tokens_default === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'reasoning_max_output_tokens_default' },
-        update: { value: String(reasoning_max_output_tokens_default) },
-        create: { key: 'reasoning_max_output_tokens_default', value: String(reasoning_max_output_tokens_default) },
-      });
-      invalidateReasoningMaxOutputTokensDefaultCache();
-    } else if (reasoning_max_output_tokens_default === null) {
-      await prisma.systemSetting.deleteMany({ where: { key: 'reasoning_max_output_tokens_default' } });
-      invalidateReasoningMaxOutputTokensDefaultCache();
-    }
-
-    if (typeof ollama_think === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'ollama_think' },
-        update: { value: ollama_think.toString() },
-        create: { key: 'ollama_think', value: ollama_think.toString() },
-      });
-    }
-
-    if (typeof chat_image_retention_days === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'chat_image_retention_days' },
-        update: { value: String(chat_image_retention_days) },
-        create: { key: 'chat_image_retention_days', value: String(chat_image_retention_days) },
-      });
-    }
-
-    if (typeof assistant_reply_history_limit === 'number') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'assistant_reply_history_limit' },
-        update: { value: String(Math.max(1, Math.min(20, assistant_reply_history_limit))) },
-        create: { key: 'assistant_reply_history_limit', value: String(Math.max(1, Math.min(20, assistant_reply_history_limit))) },
-      })
-    }
-
-    if (typeof site_base_url === 'string') {
-      const trimmed = site_base_url.trim()
-      if (trimmed) {
-        await prisma.systemSetting.upsert({
-          where: { key: 'site_base_url' },
-          update: { value: trimmed },
-          create: { key: 'site_base_url', value: trimmed },
-        });
-      } else {
-        await prisma.systemSetting.deleteMany({ where: { key: 'site_base_url' } })
-      }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(payload, 'assistant_avatar')) {
-      const existing = await prisma.systemSetting.findUnique({
-        where: { key: 'assistant_avatar_path' },
-        select: { value: true },
-      })
-      const currentPath = existing?.value ?? null
-      if (assistant_avatar === null) {
-        await replaceProfileImage(null, { currentPath })
-        await prisma.systemSetting.deleteMany({ where: { key: 'assistant_avatar_path' } })
-      } else if (assistant_avatar) {
-        const nextPath = await replaceProfileImage(assistant_avatar, { currentPath })
-        if (nextPath) {
-          await prisma.systemSetting.upsert({
-            where: { key: 'assistant_avatar_path' },
-            update: { value: nextPath },
-            create: { key: 'assistant_avatar_path', value: nextPath },
-          })
-        }
-      }
-    }
-
-    if (typeof anonymous_retention_days === 'number') {
-      const clamped = Math.max(0, Math.min(15, anonymous_retention_days))
-      await prisma.systemSetting.upsert({
-        where: { key: 'anonymous_retention_days' },
-        update: { value: String(clamped) },
-        create: { key: 'anonymous_retention_days', value: String(clamped) },
-      })
-    }
-
-    if (typeof anonymous_daily_quota === 'number') {
-      const sanitized = Math.max(0, anonymous_daily_quota)
-      await prisma.systemSetting.upsert({
-        where: { key: 'anonymous_daily_quota' },
-        update: { value: String(sanitized) },
-        create: { key: 'anonymous_daily_quota', value: String(sanitized) },
-      })
-      anonymousQuotaUpdated = true;
-    }
-
-    if (typeof default_user_daily_quota === 'number') {
-      const sanitized = Math.max(0, default_user_daily_quota)
-      await prisma.systemSetting.upsert({
-        where: { key: 'default_user_daily_quota' },
-        update: { value: String(sanitized) },
-        create: { key: 'default_user_daily_quota', value: String(sanitized) },
-      })
-    }
-
-    if (typeof web_search_agent_enable === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'web_search_agent_enable' },
-        update: { value: web_search_agent_enable.toString() },
-        create: { key: 'web_search_agent_enable', value: web_search_agent_enable.toString() },
-      })
-    }
-
-    if (typeof web_search_default_engine === 'string') {
-      const normalized = web_search_default_engine.trim().toLowerCase()
-      if (normalized) {
-        await prisma.systemSetting.upsert({
-          where: { key: 'web_search_default_engine' },
-          update: { value: normalized },
-          create: { key: 'web_search_default_engine', value: normalized },
-        })
-      }
-    }
-
-    if (typeof web_search_api_key === 'string') {
-      const trimmed = web_search_api_key.trim()
-      if (trimmed) {
-        await prisma.systemSetting.upsert({
-          where: { key: 'web_search_api_key' },
-          update: { value: trimmed },
-          create: { key: 'web_search_api_key', value: trimmed },
-        })
-      } else {
-        await prisma.systemSetting.deleteMany({ where: { key: 'web_search_api_key' } })
-      }
-    }
-
-    if (typeof web_search_result_limit === 'number') {
-      const sanitized = Math.max(1, Math.min(10, web_search_result_limit))
-      await prisma.systemSetting.upsert({
-        where: { key: 'web_search_result_limit' },
-        update: { value: String(sanitized) },
-        create: { key: 'web_search_result_limit', value: String(sanitized) },
-      })
-    }
-
-    if (Array.isArray(web_search_domain_filter)) {
-      const normalized = web_search_domain_filter.map((d) => d.trim()).filter(Boolean)
-      if (normalized.length > 0) {
-        await prisma.systemSetting.upsert({
-          where: { key: 'web_search_domain_filter' },
-          update: { value: JSON.stringify(normalized) },
-          create: { key: 'web_search_domain_filter', value: JSON.stringify(normalized) },
-        })
-      } else {
-        await prisma.systemSetting.deleteMany({ where: { key: 'web_search_domain_filter' } })
-      }
-    }
-
-    if (typeof task_trace_enabled === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'task_trace_enabled' },
-        update: { value: task_trace_enabled.toString() },
-        create: { key: 'task_trace_enabled', value: task_trace_enabled.toString() },
-      })
-      taskTraceSettingsUpdated = true;
-    }
-
-    if (typeof task_trace_default_on === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'task_trace_default_on' },
-        update: { value: task_trace_default_on.toString() },
-        create: { key: 'task_trace_default_on', value: task_trace_default_on.toString() },
-      })
-      taskTraceSettingsUpdated = true;
-    }
-
-    if (typeof task_trace_admin_only === 'boolean') {
-      await prisma.systemSetting.upsert({
-        where: { key: 'task_trace_admin_only' },
-        update: { value: task_trace_admin_only.toString() },
-        create: { key: 'task_trace_admin_only', value: task_trace_admin_only.toString() },
-      })
-      taskTraceSettingsUpdated = true;
-    }
-
-    if (typeof task_trace_env === 'string') {
-      const normalized = ['dev', 'prod', 'both'].includes(task_trace_env) ? task_trace_env : 'dev'
-      await prisma.systemSetting.upsert({
-        where: { key: 'task_trace_env' },
-        update: { value: normalized },
-        create: { key: 'task_trace_env', value: normalized },
-      })
-      taskTraceSettingsUpdated = true;
-    }
-
-    if (typeof task_trace_retention_days === 'number') {
-      const sanitized = Math.max(1, Math.min(365, task_trace_retention_days))
-      await prisma.systemSetting.upsert({
-        where: { key: 'task_trace_retention_days' },
-        update: { value: String(sanitized) },
-        create: { key: 'task_trace_retention_days', value: String(sanitized) },
-      })
-      taskTraceSettingsUpdated = true;
-    }
-
-    if (typeof task_trace_max_events === 'number') {
-      const sanitized = Math.max(100, Math.min(200000, task_trace_max_events))
-      await prisma.systemSetting.upsert({
-        where: { key: 'task_trace_max_events' },
-        update: { value: String(sanitized) },
-        create: { key: 'task_trace_max_events', value: String(sanitized) },
-      })
-      taskTraceSettingsUpdated = true;
-    }
-
-    if (typeof task_trace_idle_timeout_ms === 'number') {
-      const sanitized = Math.max(1000, Math.min(600000, task_trace_idle_timeout_ms))
-      await prisma.systemSetting.upsert({
-        where: { key: 'task_trace_idle_timeout_ms' },
-        update: { value: String(sanitized) },
-        create: { key: 'task_trace_idle_timeout_ms', value: String(sanitized) },
-      })
-      taskTraceSettingsUpdated = true;
-    }
-
-    if (anonymousQuotaUpdated) {
-      await syncSharedAnonymousQuota({ resetUsed: false })
-    }
-
-    invalidateQuotaPolicyCache();
-    if (taskTraceSettingsUpdated) {
-      invalidateTaskTraceConfig();
-    }
-
-    return c.json<ApiResponse>({
-      success: true,
-      message: 'System settings updated successfully',
-    });
-
-  } catch (error) {
-    console.error('Update system settings error:', error);
-    return c.json<ApiResponse>({
-      success: false,
-      error: 'Failed to update system settings',
-    }, 500);
-  }
-});
+  },
+);
 
 settings.post('/system/anonymous-quota/reset', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', resetAnonymousQuotaSchema), async (c) => {
   try {
