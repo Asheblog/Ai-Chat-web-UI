@@ -270,7 +270,7 @@ export function TaskTraceConsole() {
           </div>
         </div>
 
-        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}>
+        <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
