@@ -46,9 +46,10 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   const reasoningRaw = body.reasoning || ''
   const reasoningText = reasoningRaw.trim()
   const currentUser = useAuthStore((state) => state.user)
-  const { reasoningDefaultExpand, assistantAvatarUrl } = useSettingsStore((state) => ({
+  const { reasoningDefaultExpand, assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
     reasoningDefaultExpand: Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
     assistantAvatarUrl: state.systemSettings?.assistantAvatarUrl ?? null,
+    assistantAvatarReady: state.assistantAvatarReady,
   }))
   const defaultShouldShow = useMemo(() => {
     if (meta.role !== 'assistant') return false
@@ -246,6 +247,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   const avatarFallbackText = isUser
     ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
     : 'A'
+  const assistantFallbackHidden = !isUser && assistantAvatarReady && Boolean(assistantAvatarUrl)
   const showVariantControls = Boolean(variantInfo)
   const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
 
@@ -253,7 +255,12 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
         <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
-        <AvatarFallback className={isUser ? 'text-muted-foreground' : 'text-muted-foreground'}>
+        <AvatarFallback
+          className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
+            assistantFallbackHidden ? 'opacity-0' : ''
+          }`}
+          aria-hidden={assistantFallbackHidden ? 'true' : undefined}
+        >
           {avatarFallbackText}
         </AvatarFallback>
       </Avatar>

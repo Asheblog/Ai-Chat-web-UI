@@ -3,6 +3,19 @@ import { persist } from 'zustand/middleware'
 import { SettingsState, SystemSettings } from '@/types'
 import { apiClient } from '@/lib/api'
 
+const avatarReadyCache = new Map<string, boolean>()
+const preloadImage = (url: string): Promise<boolean> => {
+  if (typeof window === 'undefined') return Promise.resolve(false)
+  if (!url || typeof url !== 'string') return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const img = new window.Image()
+    img.decoding = 'async'
+    img.onload = () => resolve(true)
+    img.onerror = () => resolve(false)
+    img.src = url
+  })
+}
+
 type AvatarUploadPayload = { data: string; mime: string }
 type SystemSettingsUpdatePayload = Partial<SystemSettings> & {
   assistantAvatarUpload?: AvatarUploadPayload | null
@@ -44,56 +57,102 @@ const normalizeBrandText = (value?: string | null) => {
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set, get) => ({
-      theme: 'system',
-      maxTokens: 4000,
-      contextEnabled: true,
-      sidebarCollapsed: false,
-      systemSettings: null,
-      isLoading: false,
-      error: null,
-      publicBrandText: null,
-
-      fetchSystemSettings: async () => {
-        set({ isLoading: true, error: null })
-        try {
-          const response = await apiClient.getSystemSettings()
-          const prevSettings = get().systemSettings
-          const merged = mergeSystemSettings(prevSettings, response.data)
-          const normalizedBrand = normalizeBrandText(merged.brandText)
-          set((state) => ({
-            systemSettings: merged,
-            publicBrandText: normalizedBrand ?? state.publicBrandText,
-            isLoading: false,
-          }))
-        } catch (error: any) {
-          set({
-            error: error.response?.data?.error || error.message || '获取系统设置失败',
-            isLoading: false,
+    (set, get) => {
+      const ensureAssistantAvatarReady = (url?: string | null) => {
+        if (typeof window === 'undefined') return
+        const normalized = typeof url === 'string' ? url.trim() : ''
+        if (!normalized) {
+          set((state) => {
+            if (!state.assistantAvatarReady && state.assistantAvatarReadyFor === null) {
+              return state
+            }
+            return { ...state, assistantAvatarReady: false, assistantAvatarReadyFor: null }
           })
+          return
         }
-      },
+        set((state) => {
+          if (state.assistantAvatarReadyFor === normalized && state.assistantAvatarReady) {
+            return state
+          }
+          if (state.assistantAvatarReadyFor === normalized && !state.assistantAvatarReady) {
+            return state
+          }
+          return { ...state, assistantAvatarReady: false, assistantAvatarReadyFor: normalized }
+        })
+        if (avatarReadyCache.has(normalized)) {
+          set((state) => {
+            if (state.assistantAvatarReadyFor !== normalized) return state
+            if (state.assistantAvatarReady) return state
+            return { ...state, assistantAvatarReady: true }
+          })
+          return
+        }
+        preloadImage(normalized).then((success) => {
+          if (success) {
+            avatarReadyCache.set(normalized, true)
+          }
+          set((state) => {
+            if (state.assistantAvatarReadyFor !== normalized) return state
+            if (state.assistantAvatarReady === success) return state
+            return { ...state, assistantAvatarReady: success }
+          })
+        })
+      }
 
-      updateSystemSettings: async (settings: SystemSettingsUpdatePayload) => {
-        set({ isLoading: true, error: null })
-        try {
-          const response = await apiClient.updateSystemSettings(settings)
-          const prevSettings = get().systemSettings
-          const updatedSettings = mergeSystemSettings(prevSettings, response.data)
-          const normalizedBrand = normalizeBrandText(updatedSettings.brandText)
+      return {
+        theme: 'system',
+        maxTokens: 4000,
+        contextEnabled: true,
+        sidebarCollapsed: false,
+        systemSettings: null,
+        isLoading: false,
+        error: null,
+        publicBrandText: null,
+        assistantAvatarReady: false,
+        assistantAvatarReadyFor: null,
+
+        fetchSystemSettings: async () => {
+          set({ isLoading: true, error: null })
+          try {
+            const response = await apiClient.getSystemSettings()
+            const prevSettings = get().systemSettings
+            const merged = mergeSystemSettings(prevSettings, response.data)
+            const normalizedBrand = normalizeBrandText(merged.brandText)
+            set((state) => ({
+              systemSettings: merged,
+              publicBrandText: normalizedBrand ?? state.publicBrandText,
+              isLoading: false,
+            }))
+            ensureAssistantAvatarReady(merged.assistantAvatarUrl)
+          } catch (error: any) {
+            set({
+              error: error.response?.data?.error || error.message || '获取系统设置失败',
+              isLoading: false,
+            })
+          }
+        },
+
+        updateSystemSettings: async (settings: SystemSettingsUpdatePayload) => {
+          set({ isLoading: true, error: null })
+          try {
+            const response = await apiClient.updateSystemSettings(settings)
+            const prevSettings = get().systemSettings
+            const updatedSettings = mergeSystemSettings(prevSettings, response.data)
+            const normalizedBrand = normalizeBrandText(updatedSettings.brandText)
 
           set((state) => ({
             systemSettings: updatedSettings,
             publicBrandText: normalizedBrand ?? state.publicBrandText,
             isLoading: false,
           }))
-        } catch (error: any) {
-          set({
-            error: error.response?.data?.error || error.message || '更新系统设置失败',
-            isLoading: false,
-          })
-        }
-      },
+            ensureAssistantAvatarReady(updatedSettings.assistantAvatarUrl)
+          } catch (error: any) {
+            set({
+              error: error.response?.data?.error || error.message || '更新系统设置失败',
+              isLoading: false,
+            })
+          }
+        },
 
       fetchPublicBranding: async () => {
         try {
@@ -155,10 +214,11 @@ export const useSettingsStore = create<SettingsStore>()(
 
       setSidebarCollapsed: (v: boolean) => { set({ sidebarCollapsed: !!v }) },
 
-      clearError: () => {
-        set({ error: null })
-      },
-    }),
+        clearError: () => {
+          set({ error: null })
+        },
+      }
+    },
     {
       name: 'settings-storage',
       partialize: (state) => ({

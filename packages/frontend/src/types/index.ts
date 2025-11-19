@@ -277,6 +277,8 @@ export interface SettingsState {
   isLoading: boolean;
   error: string | null;
   publicBrandText: string | null;
+  assistantAvatarReady: boolean;
+  assistantAvatarReadyFor: string | null;
 }
 
 // API 响应类型
