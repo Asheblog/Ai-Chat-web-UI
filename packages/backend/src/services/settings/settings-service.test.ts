@@ -1,6 +1,6 @@
-import { SettingsService } from './settings-service'
+import { SettingsService, type SettingsServiceDeps } from './settings-service'
 
-const buildService = () => {
+const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
   const prisma = {
     systemSetting: {
       findUnique: jest.fn(),
@@ -23,7 +23,9 @@ const buildService = () => {
   const invalidateReasoningMaxOutputTokensDefaultCache = jest.fn()
   const invalidateTaskTraceConfig = jest.fn()
   const syncSharedAnonymousQuota = jest.fn(async () => {})
-  const replaceProfileImage = jest.fn(async () => 'path/avatar.png')
+  const replaceProfileImage = overrides.replaceProfileImage
+    ? overrides.replaceProfileImage
+    : jest.fn(async () => 'path/avatar.png')
 
   const service = new SettingsService({
     prisma: prisma as any,
@@ -33,6 +35,7 @@ const buildService = () => {
     invalidateTaskTraceConfig,
     syncSharedAnonymousQuota,
     replaceProfileImage,
+    ...overrides,
   })
 
   return {
@@ -93,5 +96,15 @@ describe('SettingsService', () => {
     expect(invalidateQuotaPolicyCache).toHaveBeenCalled()
     expect(syncSharedAnonymousQuota).toHaveBeenCalled()
     expect(invalidateReasoningMaxOutputTokensDefaultCache).toHaveBeenCalled()
+  })
+  it('throws SettingsServiceError when assistant avatar payload invalid', async () => {
+    const { service } = buildService({
+      replaceProfileImage: jest.fn(async () => {
+        throw new Error('invalid data')
+      }) as any,
+    })
+    await expect(
+      service.updateSystemSettings({ assistant_avatar: { data: 'xxx', mime: 'image/png' } }),
+    ).rejects.toThrow('Invalid assistant avatar payload')
   })
 })
