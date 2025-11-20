@@ -20,15 +20,6 @@ const parseIntParam = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-const parseJsonColumn = <T = any>(value: string | null | undefined): T | null => {
-  if (typeof value !== 'string' || value.trim() === '') return null
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return null
-  }
-}
-
 taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
     const page = Math.max(1, parseIntParam(c.req.query('page'), 1))
@@ -140,10 +131,7 @@ taskTrace.get('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddlewa
     return c.json<ApiResponse>({
       success: true,
       data: {
-        latexTrace: {
-          ...latex,
-          metadata: parseJsonColumn(latex.metadata),
-        },
+        latexTrace: latex,
       },
     })
   } catch (error) {
