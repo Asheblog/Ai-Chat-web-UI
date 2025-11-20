@@ -3,13 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Actor } from '../types';
-import { prisma } from '../db';
-import { syncSharedAnonymousQuota } from '../utils/quota';
-import { invalidateQuotaPolicyCache } from '../utils/system-settings'
-import { settingsService, SettingsServiceError } from '../services/settings'
-import { personalSettingsService } from '../services/settings/personal-settings-service'
-import { healthService, HealthServiceError } from '../services/settings/health-service'
-import { appInfoService } from '../services/settings/app-info-service'
+import { settingsFacade, SettingsServiceError, HealthServiceError } from '../services/settings/settings-facade'
 
 const settings = new Hono();
 
@@ -28,7 +22,7 @@ const handleServiceError = (
 
 settings.get('/branding', async (c) => {
   try {
-    const brandText = await settingsService.getBrandingText();
+    const brandText = await settingsFacade.getBrandingText();
     return c.json<ApiResponse>({ success: true, data: { brand_text: brandText } });
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch branding info', 'Get branding error:');
@@ -108,7 +102,7 @@ settings.get('/system', actorMiddleware, async (c) => {
     if (!actor) {
       return c.json<ApiResponse>({ success: false, error: 'Actor unavailable' }, 401)
     }
-    const result = await settingsService.getSystemSettings(actor)
+    const result = await settingsFacade.getSystemSettings(actor)
     return c.json<ApiResponse>({ success: true, data: result })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch system settings', 'Get system settings error:')
@@ -125,7 +119,7 @@ settings.put(
   async (c) => {
     try {
       const payload = c.req.valid('json')
-      await settingsService.updateSystemSettings(payload)
+      await settingsFacade.updateSystemSettings(payload)
       return c.json<ApiResponse>({ success: true, message: 'System settings updated successfully' })
     } catch (error) {
       return handleServiceError(c, error, 'Failed to update system settings', 'Update system settings error:')
@@ -136,8 +130,7 @@ settings.put(
 settings.post('/system/anonymous-quota/reset', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', resetAnonymousQuotaSchema), async (c) => {
   try {
     const { resetUsed } = c.req.valid('json');
-    await syncSharedAnonymousQuota({ resetUsed: Boolean(resetUsed) });
-    invalidateQuotaPolicyCache();
+    await settingsFacade.resetAnonymousQuota({ resetUsed: Boolean(resetUsed) });
     return c.json<ApiResponse>({
       success: true,
       message: 'Anonymous quota synchronized',
@@ -159,10 +152,7 @@ settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
       return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
     }
 
-    const personalSettings = await personalSettingsService.getPersonalSettings({
-      userId: user.id,
-      request: c.req.raw,
-    })
+    const personalSettings = await settingsFacade.getPersonalSettings({ userId: user.id, request: c.req.raw })
 
     return c.json<ApiResponse>({
       success: true,
@@ -192,7 +182,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
       return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
     }
 
-    const updated = await personalSettingsService.updatePersonalSettings({
+    const updated = await settingsFacade.updatePersonalSettings({
       userId: user.id,
       payload: updateData,
       request: c.req.raw,
@@ -225,7 +215,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
 // 获取应用信息
 settings.get('/app-info', async (c) => {
   try {
-    const appInfo = await appInfoService.getAppInfo()
+    const appInfo = await settingsFacade.getAppInfo()
 
     return c.json<ApiResponse>({
       success: true,
@@ -244,7 +234,7 @@ settings.get('/app-info', async (c) => {
 // 健康检查接口
 settings.get('/health', async (c) => {
   try {
-    const healthInfo = await healthService.check()
+    const healthInfo = await settingsFacade.checkHealth()
     return c.json<ApiResponse>({
       success: true,
       data: healthInfo,
