@@ -13,6 +13,7 @@ export interface AuthContextResult {
   error?: string
   clearAuth?: boolean
   clearAnon?: boolean
+  anonCookie?: { key: string; retentionDays: number } | null
 }
 
 export interface AuthContextServiceDeps {
@@ -97,7 +98,10 @@ export class AuthContextService {
 
     const anonKey = this.normalizeAnonKey(params.anonCookie) ?? this.generateAnonKey()
 
-    return { actor: this.buildAnonymousActor(anonKey, quotaPolicy.anonymousRetentionDays) }
+    return {
+      actor: this.buildAnonymousActor(anonKey, quotaPolicy.anonymousRetentionDays),
+      anonCookie: { key: anonKey, retentionDays: quotaPolicy.anonymousRetentionDays },
+    }
   }
 
   buildUserActor(payload: {

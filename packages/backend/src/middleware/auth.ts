@@ -89,6 +89,8 @@ export const actorMiddleware = async (c: Context, next: Next) => {
       status: result.actor.status,
       avatarUrl: avatarUrl ?? null,
     })
+  } else if (result.anonCookie) {
+    ensureAnonCookie(c, result.anonCookie.key, result.anonCookie.retentionDays)
   }
 
   await next()

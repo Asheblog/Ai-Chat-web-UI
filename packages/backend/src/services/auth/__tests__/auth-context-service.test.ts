@@ -97,6 +97,8 @@ describe('AuthContextService', () => {
 
     expect(result.actor?.type).toBe('anonymous')
     expect(result.actor && result.actor.identifier.startsWith('anon:')).toBe(true)
+    expect(result.anonCookie?.key).toBeDefined()
+    expect(result.anonCookie?.retentionDays).toBe(7)
   })
 
   test('uses existing anon cookie when valid', async () => {
@@ -107,5 +109,6 @@ describe('AuthContextService', () => {
 
     expect(result.actor?.type).toBe('anonymous')
     expect(result.actor?.identifier).toBe('anon:anon_valid_key')
+    expect(result.anonCookie?.key).toBe('anon_valid_key')
   })
 })
