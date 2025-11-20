@@ -55,6 +55,7 @@ import { chatService, ChatServiceError } from '../../../services/chat';
 import { providerRequester } from '../services/provider-requester';
 import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
 import { assistantProgressService } from '../services/assistant-progress-service';
+import { streamUsageService } from '../services/stream-usage-service';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -1150,93 +1151,72 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
             // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
             try {
-              const providerNums = providerUsageSeen
-                ? extractUsageNumbers(providerUsageSnapshot)
-                : { prompt: 0, completion: 0, total: 0 };
-              const providerValid =
-                providerNums.prompt > 0 || providerNums.completion > 0 || providerNums.total > 0;
-              const finalUsage = providerValid
-                ? providerNums
-                : {
-                    prompt: promptTokens,
-                    completion: completionTokensFallback,
-                    total: promptTokens + completionTokensFallback,
-                  };
+              const usageResult = await streamUsageService.finalize({
+                sessionId,
+                modelRawId: session.modelRawId!,
+                providerHost,
+                assistantMessageId,
+                assistantClientMessageId,
+                clientMessageId,
+                userMessageId: userMessageRecord?.id ?? null,
+                content: aiResponseContent,
+                reasoningBuffer,
+                reasoningDurationSeconds,
+                promptTokens,
+                completionTokensFallback,
+                contextLimit,
+                providerUsageSeen,
+                providerUsageSnapshot,
+                reasoningEnabled: REASONING_ENABLED,
+                reasoningSaveToDb:
+                  typeof payload?.saveReasoning === 'boolean'
+                    ? payload.saveReasoning
+                    : REASONING_SAVE_TO_DB,
+                assistantReplyHistoryLimit,
+                traceRecorder,
+              });
+              assistantMessageId = usageResult.assistantMessageId;
+              traceMetadataExtras.finalUsage = {
+                prompt_tokens: usageResult.finalUsage.prompt,
+                completion_tokens: usageResult.finalUsage.completion,
+                total_tokens: usageResult.finalUsage.total,
+                context_limit: usageResult.finalUsage.contextLimit,
+                context_remaining: Math.max(
+                  0,
+                  usageResult.finalUsage.contextLimit - usageResult.finalUsage.prompt,
+                ),
+              };
+              traceMetadataExtras.providerUsageSource = usageResult.providerUsageSource;
 
-              let persistedAssistantMessageId: number | null = assistantMessageId;
-              const trimmedContent = aiResponseContent.trim();
-              if (trimmedContent) {
-                const shouldPersistReasoning =
-                  REASONING_ENABLED &&
-                  (typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : REASONING_SAVE_TO_DB) &&
-                  reasoningBuffer.trim().length > 0;
-                const persistedId = await persistAssistantFinalResponse({
-                  sessionId,
-                  existingMessageId: assistantMessageId,
-                  assistantClientMessageId,
-                  fallbackClientMessageId: clientMessageId,
-                  parentMessageId: userMessageRecord?.id ?? null,
-                  replyHistoryLimit: assistantReplyHistoryLimit,
-                  content: trimmedContent,
-                  streamReasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
-                  reasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
-                  reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
-                  streamError: null,
-                  usage: {
-                    promptTokens: finalUsage.prompt,
-                    completionTokens: finalUsage.completion,
-                    totalTokens: finalUsage.total,
-                    contextLimit,
-                  },
-                  model: session.modelRawId,
-                  provider: providerHost ?? undefined,
-                });
-                if (persistedId) {
-                  persistedAssistantMessageId = persistedId;
-                  assistantMessageId = persistedId;
-                  traceRecorder.log('db:persist_final', {
-                    messageId: persistedId,
-                    length: trimmedContent.length,
-                    promptTokens: finalUsage.prompt,
-                    completionTokens: finalUsage.completion,
-                    totalTokens: finalUsage.total,
-                    source: 'stream_final',
-                  });
-                }
-
-                if (!latexTraceRecorder && traceRecorder.isEnabled()) {
-                  const traceId = traceRecorder.getTraceId();
-                  if (traceId) {
-                    try {
-                      const audit = analyzeLatexBlocks(trimmedContent);
-                      if (audit.segments.length > 0) {
-                        latexAuditSummary = { matched: audit.matchedCount, unmatched: audit.unmatchedCount };
-                        latexTraceRecorder = await LatexTraceRecorder.create({
-                          taskTraceId: traceId,
-                          matchedBlocks: audit.matchedCount,
-                          unmatchedBlocks: audit.unmatchedCount,
-                          metadata: {
-                            segmentsSample: audit.segments.slice(0, 3).map((segment) => ({
-                              matched: segment.matched,
-                              reason: segment.reason,
-                              preview: segment.trimmed.slice(0, 80),
-                            })),
-                          },
-                        });
-                        latexTraceRecorder?.logSegments(audit.segments);
-                      }
-                    } catch (error) {
-                      log.warn('Latex trace creation failed', error);
+              if (!latexTraceRecorder && traceRecorder.isEnabled()) {
+                const traceId = traceRecorder.getTraceId();
+                if (traceId && aiResponseContent.trim()) {
+                  try {
+                    const audit = analyzeLatexBlocks(aiResponseContent.trim());
+                    if (audit.segments.length > 0) {
+                      latexAuditSummary = { matched: audit.matchedCount, unmatched: audit.unmatchedCount };
+                      latexTraceRecorder = await LatexTraceRecorder.create({
+                        taskTraceId: traceId,
+                        matchedBlocks: audit.matchedCount,
+                        unmatchedBlocks: audit.unmatchedCount,
+                        metadata: {
+                          segmentsSample: audit.segments.slice(0, 3).map((segment) => ({
+                            matched: segment.matched,
+                            reason: segment.reason,
+                            preview: segment.trimmed.slice(0, 80),
+                          })),
+                        },
+                      });
+                      latexTraceRecorder?.logSegments(audit.segments);
                     }
+                  } catch (error) {
+                    log.warn('Latex trace creation failed', error);
                   }
                 }
+              }
 
-                if (persistedAssistantMessageId) {
-                  traceRecorder.setMessageContext(
-                    persistedAssistantMessageId,
-                    assistantClientMessageId ?? clientMessageId,
-                  );
-                }
+              if (assistantMessageId) {
+                traceRecorder.setMessageContext(assistantMessageId, assistantClientMessageId ?? clientMessageId);
               }
             } catch (persistErr) {
               console.warn('Persist final assistant response failed:', persistErr);
