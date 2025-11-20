@@ -54,6 +54,7 @@ import { createUserMessageWithQuota } from '../services/message-service';
 import { chatService, ChatServiceError } from '../../../services/chat';
 import { providerRequester } from '../services/provider-requester';
 import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
+import { assistantProgressService } from '../services/assistant-progress-service';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -558,60 +559,18 @@ export const registerChatStreamRoutes = (router: Hono) => {
           assistantReasoningPersistLength = reasoningBuffer.length;
         }
         const nextStatus = options?.status ?? (cancelled ? 'cancelled' : 'streaming');
-        try {
-          await prisma.message.update({
-            where: { id: assistantMessageId },
-            data: {
-              content: aiResponseContent,
-              streamCursor: aiResponseContent.length,
-              streamStatus: nextStatus,
-              streamReasoning: currentReasoning && currentReasoning.trim().length > 0 ? currentReasoning : null,
-              streamError: options?.errorMessage ?? null,
-            },
-          });
-          traceRecorder.log('db:persist_progress', {
-            messageId: assistantMessageId,
-            length: aiResponseContent.length,
-            reasoningLength: currentReasoning?.length ?? 0,
-            status: nextStatus,
-            force,
-          });
-        } catch (error) {
-          const isRecordMissing =
-            error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
-          if (isRecordMissing) {
-            const recoveredId = await upsertAssistantMessageByClientId({
-              sessionId,
-              clientMessageId: assistantClientMessageId,
-              data: {
-                content: aiResponseContent,
-                streamCursor: aiResponseContent.length,
-                streamStatus: nextStatus,
-                streamReasoning: currentReasoning && currentReasoning.trim().length > 0 ? currentReasoning : null,
-                streamError: options?.errorMessage ?? null,
-              },
-            });
-            if (recoveredId) {
-              assistantMessageId = recoveredId;
-              log.warn('Assistant progress target missing, upserted placeholder record', {
-                sessionId,
-                recoveredId,
-              });
-              traceRecorder.log('db:persist_progress', {
-                messageId: recoveredId,
-                length: aiResponseContent.length,
-                reasoningLength: currentReasoning?.length ?? 0,
-                status: nextStatus,
-                force,
-                recovered: true,
-              });
-              return;
-            }
-          }
-          log.warn('Persist assistant progress failed', {
-            sessionId,
-            error: error instanceof Error ? error.message : error,
-          });
+        const result = await assistantProgressService.persistProgress({
+          assistantMessageId,
+          sessionId,
+          clientMessageId: assistantClientMessageId,
+          content: aiResponseContent,
+          reasoning: currentReasoning,
+          status: nextStatus,
+          errorMessage: options?.errorMessage ?? null,
+          traceRecorder,
+        });
+        if (result.recovered && result.messageId) {
+          assistantMessageId = result.messageId;
         }
       };
 
