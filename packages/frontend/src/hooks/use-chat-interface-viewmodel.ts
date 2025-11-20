@@ -48,6 +48,8 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     setWebSearchEnabled,
     canUseWebSearch,
     assistantVariantSelections,
+    sendLocked,
+    sendLockedReason,
   } = useChatComposer()
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
@@ -64,7 +66,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     return null
   }
 
-  const desktopSendDisabled = (!input.trim() && selectedImages.length === 0) && !isStreaming
+  const desktopSendDisabled = sendLocked || ((!input.trim() && selectedImages.length === 0) && !isStreaming)
   const textareaDisabled = isStreaming || sessionControls.quotaExhausted
   const imageLimits = {
     maxCount: MAX_IMAGE_COUNT,
@@ -103,6 +105,8 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     mobilePlaceholder: sessionControls.mobilePlaceholder,
     textareaDisabled,
     desktopSendDisabled,
+    sendLocked,
+    sendLockedReason,
     pickImages,
     onRemoveImage: removeImage,
     onInputChange: handleTextareaChange,

@@ -18,6 +18,8 @@ interface MobileComposerProps {
   onCompositionStart: () => void
   onCompositionEnd: () => void
   isStreaming: boolean
+  sendLocked: boolean
+  sendLockedReason: string | null
   onSend: () => void
   onStop: () => void
   selectedImages: ChatComposerImage[]
@@ -43,6 +45,8 @@ export function MobileComposer({
   onCompositionStart,
   onCompositionEnd,
   isStreaming,
+  sendLocked,
+  sendLockedReason,
   onSend,
   onStop,
   selectedImages,
@@ -59,7 +63,7 @@ export function MobileComposer({
   canUseTrace,
   onToggleTrace,
 }: MobileComposerProps) {
-  const disabled = !input.trim() && selectedImages.length === 0
+  const disabled = sendLocked || (!input.trim() && selectedImages.length === 0)
 
   return (
     <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
@@ -101,6 +105,7 @@ export function MobileComposer({
                   }
                 }}
                 disabled={isStreaming ? false : disabled}
+                title={!isStreaming && sendLocked && sendLockedReason ? sendLockedReason : undefined}
                 aria-label={isStreaming ? '停止' : '发送'}
               >
                 {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}

@@ -33,6 +33,7 @@ export function useChatComposer() {
     messageRenderCache,
     isMessagesLoading,
     isStreaming,
+    activeStreamSessionId,
     streamMessage,
     stopStreaming,
     clearError,
@@ -143,6 +144,14 @@ export function useChatComposer() {
   const canUseWebSearch = Boolean(systemSettings?.webSearchAgentEnable) && isWebSearchCapable
   const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
 
+  const foreignStreamLocked = Boolean(
+    activeStreamSessionId != null &&
+      (!currentSession || activeStreamSessionId !== currentSession.id),
+  )
+  const sendLockedReason = foreignStreamLocked
+    ? '其他会话正在生成中，请等待结束或返回该会话停止。'
+    : null
+
   useEffect(() => {
     if (!canUseWebSearch) {
       if (webSearchEnabled) {
@@ -218,7 +227,16 @@ export function useChatComposer() {
   )
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isStreaming || !currentSession) return
+    if (!input.trim() || !currentSession) return
+    if (isStreaming) return
+    if (foreignStreamLocked) {
+      toast({
+        title: '有其他会话正在生成',
+        description: '请先等待该会话完成或手动停止后再发送新的消息。',
+        variant: 'destructive',
+      })
+      return
+    }
     const message = input.trim()
     const prevSelectedImages = selectedImages
     setInput('')
@@ -261,6 +279,7 @@ export function useChatComposer() {
     input,
     isStreaming,
     currentSession,
+    foreignStreamLocked,
     clearError,
     isVisionEnabled,
     selectedImages,
@@ -365,6 +384,8 @@ export function useChatComposer() {
     MAX_IMAGE_COUNT,
     MAX_IMAGE_MB,
     MAX_IMAGE_EDGE,
+    sendLocked: foreignStreamLocked,
+    sendLockedReason,
     // 控制方法
     setInput,
     setIsComposing,

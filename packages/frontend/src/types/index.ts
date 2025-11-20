@@ -228,6 +228,7 @@ export interface ChatState {
   isSessionsLoading: boolean;
   isMessagesLoading: boolean;
   isStreaming: boolean;
+  activeStreamSessionId: number | null;
   error: string | null;
   messageImageCache: Record<string, string[]>;
   messagesHydrated: Record<number, boolean>;

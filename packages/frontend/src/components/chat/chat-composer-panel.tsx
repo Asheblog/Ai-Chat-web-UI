@@ -17,6 +17,8 @@ export interface ChatComposerPanelProps {
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   showExpand: boolean
   isStreaming: boolean
+  sendLocked: boolean
+  sendLockedReason: string | null
   selectedImages: ChatComposerImage[]
   thinkingEnabled: boolean
   webSearchEnabled: boolean
@@ -51,6 +53,8 @@ export function ChatComposerPanel({
   textareaRef,
   showExpand,
   isStreaming,
+  sendLocked,
+  sendLockedReason,
   selectedImages,
   thinkingEnabled,
   webSearchEnabled,
@@ -104,6 +108,8 @@ export function ChatComposerPanel({
         onCompositionStart={onCompositionStart}
         onCompositionEnd={onCompositionEnd}
         isStreaming={isStreaming}
+        sendLocked={sendLocked}
+        sendLockedReason={sendLockedReason}
         onSend={onSend}
         onStop={onStop}
         selectedImages={selectedImages}
@@ -151,6 +157,7 @@ export function ChatComposerPanel({
         onSend={onSend}
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}
+        sendLockedReason={sendLockedReason}
       />
 
       <input
@@ -170,6 +177,9 @@ export function ChatComposerPanel({
         onClose={closeExpand}
         onApply={applyExpand}
       />
+      {sendLocked && sendLockedReason ? (
+        <p className="text-center text-xs text-muted-foreground pb-3">{sendLockedReason}</p>
+      ) : null}
     </div>
   )
 }

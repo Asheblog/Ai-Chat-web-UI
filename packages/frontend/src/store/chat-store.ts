@@ -546,8 +546,43 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
   const recomputeStreamingState = () => {
     const snapshot = get()
     const hasStreaming = snapshot.messageMetas.some((meta) => meta.streamStatus === 'streaming')
-    if (snapshot.isStreaming !== hasStreaming) {
-      set({ isStreaming: hasStreaming })
+    const currentSessionId = snapshot.currentSession?.id ?? null
+    const shouldFlagCurrent =
+      Boolean(currentSessionId) &&
+      snapshot.activeStreamSessionId === currentSessionId &&
+      hasStreaming
+    const updates: Partial<ChatState> = {}
+    if (snapshot.isStreaming !== shouldFlagCurrent) {
+      updates.isStreaming = shouldFlagCurrent
+    }
+    if (!hasStreaming && currentSessionId && snapshot.activeStreamSessionId === currentSessionId) {
+      updates.activeStreamSessionId = null
+    }
+    if (Object.keys(updates).length > 0) {
+      set(updates)
+    }
+  }
+
+  const streamingFlagUpdate = (state: ChatState, sessionId: number | null, streaming: boolean): Partial<ChatState> => {
+    if (streaming) {
+      if (sessionId == null) return {}
+      return {
+        activeStreamSessionId: sessionId,
+        isStreaming: state.currentSession?.id === sessionId,
+      }
+    }
+    if (sessionId == null) {
+      if (state.activeStreamSessionId == null && !state.isStreaming) {
+        return {}
+      }
+      return { activeStreamSessionId: null, isStreaming: false }
+    }
+    if (state.activeStreamSessionId !== sessionId) {
+      return {}
+    }
+    return {
+      activeStreamSessionId: null,
+      isStreaming: state.currentSession?.id === sessionId ? false : state.isStreaming,
     }
   }
 
@@ -869,6 +904,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
     isSessionsLoading: false,
     isMessagesLoading: false,
     isStreaming: false,
+    activeStreamSessionId: null,
     error: null,
     usageCurrent: null,
     usageLastRound: null,
@@ -952,8 +988,16 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           }
         })
         if (normalized.some((msg) => msg.streamStatus === 'streaming')) {
-          set({ isStreaming: true })
+          set((state) => ({
+            isStreaming: state.currentSession?.id === sessionId,
+            activeStreamSessionId: sessionId,
+          }))
         } else {
+          set((state) =>
+            state.activeStreamSessionId === sessionId
+              ? { activeStreamSessionId: null, isStreaming: state.currentSession?.id === sessionId ? false : state.isStreaming }
+              : state,
+          )
           recomputeStreamingState()
         }
         applyBufferedSnapshots(sessionId)
@@ -998,6 +1042,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           messagesHydrated: { ...state.messagesHydrated, [newSession.id]: true },
           isMessagesLoading: false,
           isSessionsLoading: false,
+          isStreaming: false,
         }))
         return newSession
       } catch (error: any) {
@@ -1018,7 +1063,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         if (nextHydrated[sessionId]) {
           delete nextHydrated[sessionId]
         }
-        set({
+        set((state) => ({
           currentSession: session,
           messageMetas: [],
           assistantVariantSelections: {},
@@ -1028,7 +1073,8 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           usageLastRound: null,
           usageTotals: null,
           messagesHydrated: nextHydrated,
-        })
+          isStreaming: state.activeStreamSessionId === session.id,
+        }))
         get().fetchMessages(sessionId)
         get().fetchUsage(sessionId)
       }
@@ -1328,7 +1374,8 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           messageBodies: bodies,
           messageRenderCache: renderCache,
           messageImageCache: nextCache,
-          isStreaming: true,
+          isStreaming: state.currentSession?.id === sessionId,
+          activeStreamSessionId: sessionId,
           error: null,
         }
       })
@@ -1648,7 +1695,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         }
         resetStreamState()
         recomputeStreamingState()
-        set({ isStreaming: false })
+        set((state) => streamingFlagUpdate(state, sessionId, false))
         get().fetchUsage(sessionId).catch(() => {})
         get().fetchSessionsUsage().catch(() => {})
       } catch (error: any) {
@@ -1691,7 +1738,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
                 if (typeof merged.id === 'number') {
                   updateMetaStreamStatus(merged.id, merged.streamStatus ?? 'done')
                 }
-                set({ isStreaming: false })
+                set((state) => streamingFlagUpdate(state, sessionId, false))
                 get().fetchUsage(sessionId).catch(() => {})
                 get().fetchSessionsUsage().catch(() => {})
                 return true
@@ -1723,7 +1770,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           if (messageId !== null) {
             startMessageProgressWatcher(sessionId, messageId)
           }
-          set({ isStreaming: false })
+          set((state) => streamingFlagUpdate(state, sessionId, false))
           return true
         }
 
@@ -1744,7 +1791,10 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           const message =
             resolveProviderSafetyMessage(error) || error?.message || '联网搜索失败，请稍后重试'
           updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
-          set({ error: message, isStreaming: false })
+          set((state) => ({
+            error: message,
+            ...streamingFlagUpdate(state, sessionId, false),
+          }))
           removeAssistantPlaceholder()
           return
         }
@@ -1752,7 +1802,10 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         if (error?.status === 429) {
           const message = error?.payload?.error || '额度不足，请登录或等待次日重置'
           updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
-          set({ error: message, isStreaming: false })
+          set((state) => ({
+            error: message,
+            ...streamingFlagUpdate(state, sessionId, false),
+          }))
           removeAssistantPlaceholder()
           return
         }
@@ -1760,7 +1813,10 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         const providerSafetyMessage = resolveProviderSafetyMessage(error)
         if (providerSafetyMessage) {
           updateMetaStreamStatus(assistantPlaceholder.id, 'error', providerSafetyMessage)
-          set({ error: providerSafetyMessage, isStreaming: false })
+          set((state) => ({
+            error: providerSafetyMessage,
+            ...streamingFlagUpdate(state, sessionId, false),
+          }))
           removeAssistantPlaceholder()
           return
         }
@@ -1772,10 +1828,10 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
 
         const genericError = resolveProviderSafetyMessage(error) || error?.message || '发送消息失败'
         updateMetaStreamStatus(assistantPlaceholder.id, 'error', genericError)
-        set({
+        set((state) => ({
           error: genericError,
-          isStreaming: false,
-        })
+          ...streamingFlagUpdate(state, sessionId, false),
+        }))
         removeAssistantPlaceholder()
       }
     },
@@ -1814,7 +1870,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
       flushActiveStream(true)
       resetStreamState()
       set((state) => ({
-        isStreaming: false,
+        ...streamingFlagUpdate(state, targetSessionId, false),
         toolEvents: activeSessionId
           ? state.toolEvents.filter((event) => event.sessionId !== activeSessionId)
           : state.toolEvents,

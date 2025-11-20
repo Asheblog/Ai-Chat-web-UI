@@ -43,6 +43,7 @@ interface DesktopComposerProps {
   onSend: () => void
   onStop: () => void
   desktopSendDisabled: boolean
+  sendLockedReason: string | null
 }
 
 export function DesktopComposer({
@@ -75,7 +76,10 @@ export function DesktopComposer({
   onSend,
   onStop,
   desktopSendDisabled,
+  sendLockedReason,
 }: DesktopComposerProps) {
+  const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
+
   return (
     <div className="hidden md:block">
       <div className="mx-auto max-w-3xl px-4 md:px-6 pb-6">
@@ -204,7 +208,7 @@ export function DesktopComposer({
                   {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
                 </motion.button>
               </TooltipTrigger>
-              <TooltipContent>{isStreaming ? '停止生成' : '发送'}</TooltipContent>
+              <TooltipContent>{sendTooltip}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
