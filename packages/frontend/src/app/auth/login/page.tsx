@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAuthStore } from '@/store/auth-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { extractErrorMessage } from '@/lib/utils'
 
 export default function LoginPage() {
@@ -21,7 +22,9 @@ export default function LoginPage() {
 
   const router = useRouter()
   const { login, user, error, clearError } = useAuthStore()
+  const { systemSettings, publicBrandText } = useSettingsStore()
   const errorMessage = error ? extractErrorMessage(error) : null
+  const brandText = (systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'
 
   useEffect(() => {
     if (user) {
@@ -80,7 +83,7 @@ export default function LoginPage() {
 
   return (
     <AuthFormLayout
-      title="AI聊天平台"
+      title={brandText}
       description="登录您的账户开始对话"
       error={errorMessage}
       footer={

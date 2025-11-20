@@ -3,6 +3,8 @@
 
 轻量级 AI 聊天平台（后端 Hono + SQLite，前端 Next.js）。本文档仅保留两种最简部署方式：
 
+示例网站：https://aichat.asheblog.org
+
 - CI 镜像 + 1Panel（推荐）
 - 本地运行（开发 / 非 Docker 生产）
 
