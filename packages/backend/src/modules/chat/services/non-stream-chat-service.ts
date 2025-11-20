@@ -5,12 +5,13 @@ import type { UsageQuotaSnapshot } from '../../../types'
 import { BackendLogger as log } from '../../../utils/logger'
 import { logTraffic as defaultLogTraffic } from '../../../utils/traffic-logger'
 import type { ProviderChatCompletionResponse } from '../chat-common'
-import { BACKOFF_429_MS, BACKOFF_5XX_MS, sendMessageSchema } from '../chat-common'
+import { sendMessageSchema } from '../chat-common'
 import {
   chatRequestBuilder,
   type ChatRequestBuilder,
   type PreparedChatRequest,
 } from './chat-request-builder'
+import { providerRequester, type ProviderRequester } from './provider-requester'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 
@@ -49,24 +50,24 @@ export class ChatCompletionServiceError extends Error {
 export interface NonStreamChatServiceDeps {
   prisma?: PrismaClient
   logTraffic?: typeof defaultLogTraffic
-  fetchImpl?: typeof fetch
   now?: () => Date
   requestBuilder?: ChatRequestBuilder
+  requester?: ProviderRequester
 }
 
 export class NonStreamChatService {
   private prisma: PrismaClient
   private logTraffic: typeof defaultLogTraffic
-  private fetchImpl: typeof fetch
   private now: () => Date
   private requestBuilder: ChatRequestBuilder
+  private requester: ProviderRequester
 
   constructor(deps: NonStreamChatServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.logTraffic = deps.logTraffic ?? defaultLogTraffic
-    this.fetchImpl = deps.fetchImpl ?? fetch
     this.now = deps.now ?? (() => new Date())
     this.requestBuilder = deps.requestBuilder ?? chatRequestBuilder
+    this.requester = deps.requester ?? providerRequester
   }
 
   async execute(request: NonStreamChatRequest): Promise<NonStreamChatResult> {
@@ -158,81 +159,19 @@ export class NonStreamChatService {
     sessionId: number
     providerRequest: PreparedChatRequest['providerRequest']
   }) {
-    const serializeBody = () => JSON.stringify(params.providerRequest.body)
-    const doOnce = async (signal: AbortSignal) => {
-      await this.logTraffic({
-        category: 'upstream-request',
+    return this.requester.requestWithBackoff({
+      request: {
+        url: params.providerRequest.url,
+        headers: params.providerRequest.headers,
+        body: params.providerRequest.body,
+      },
+      context: {
+        sessionId: params.sessionId,
+        provider: params.providerRequest.providerLabel,
         route: '/api/chat/completion',
-        direction: 'outbound',
-        context: {
-          sessionId: params.sessionId,
-          provider: params.providerRequest.providerLabel,
-          url: params.providerRequest.url,
-        },
-        payload: {
-          headers: params.providerRequest.headers,
-          body: params.providerRequest.body,
-        },
-      })
-      try {
-        const response = await this.fetchImpl(params.providerRequest.url, {
-          method: 'POST',
-          headers: params.providerRequest.headers,
-          body: serializeBody(),
-          signal,
-        })
-        await this.logTraffic({
-          category: 'upstream-response',
-          route: '/api/chat/completion',
-          direction: 'outbound',
-          context: {
-            sessionId: params.sessionId,
-            provider: params.providerRequest.providerLabel,
-            url: params.providerRequest.url,
-          },
-          payload: {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries()),
-          },
-        })
-        return response
-      } catch (error: any) {
-        await this.logTraffic({
-          category: 'upstream-error',
-          route: '/api/chat/completion',
-          direction: 'outbound',
-          context: {
-            sessionId: params.sessionId,
-            provider: params.providerRequest.providerLabel,
-            url: params.providerRequest.url,
-          },
-          payload: {
-            message: error?.message || String(error),
-          },
-        })
-        throw error
-      }
-    }
-
-    const abortController = new AbortController()
-    const timer = setTimeout(
-      () => abortController.abort(new Error('provider timeout')),
-      params.providerRequest.timeoutMs,
-    )
-    try {
-      let response = await doOnce(abortController.signal)
-      if (response.status === 429) {
-        await new Promise((resolve) => setTimeout(resolve, BACKOFF_429_MS))
-        response = await doOnce(abortController.signal)
-      } else if (response.status >= 500) {
-        await new Promise((resolve) => setTimeout(resolve, BACKOFF_5XX_MS))
-        response = await doOnce(abortController.signal)
-      }
-      return response
-    } finally {
-      clearTimeout(timer)
-    }
+        timeoutMs: params.providerRequest.timeoutMs,
+      },
+    })
   }
 
   private buildUsage(

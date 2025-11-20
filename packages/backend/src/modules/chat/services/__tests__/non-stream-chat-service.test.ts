@@ -75,46 +75,42 @@ const buildService = (overrides?: { prepared?: PreparedChatRequest; fetchOk?: bo
   prisma.message.create.mockResolvedValue({ id: 99 })
 
   const logTraffic = jest.fn(() => Promise.resolve())
-  const fetchImpl = jest.fn()
+  const requester = {
+    requestWithBackoff: jest.fn(),
+  }
   const prepared = overrides?.prepared ?? buildPrepared()
   const requestBuilder = {
     prepare: jest.fn().mockResolvedValue(prepared),
   }
 
   if (overrides?.fetchOk === false) {
-    fetchImpl.mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: 'error',
-      headers: new Headers(),
-      json: jest.fn(),
-    })
+    requester.requestWithBackoff.mockResolvedValue(
+      new Response('err', { status: 500, statusText: 'error' }),
+    )
   } else {
-    const headers = new Headers()
-    fetchImpl.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers,
-      json: jest.fn().mockResolvedValue({
-        choices: [{ message: { content: 'world' } }],
-        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-      }),
-    })
+    requester.requestWithBackoff.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'world' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        }),
+        { status: 200, statusText: 'OK', headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
   }
 
   const service = new NonStreamChatService({
     prisma: prisma as any,
     logTraffic,
-    fetchImpl,
     now,
     requestBuilder: requestBuilder as any,
+    requester: requester as any,
   })
 
   return {
     prisma,
     service,
-    fetchImpl,
+    requester,
     requestBuilder,
   }
 }
