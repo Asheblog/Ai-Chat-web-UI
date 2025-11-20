@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { createReadStream } from 'node:fs'
-import { readFile, unlink, access } from 'node:fs/promises'
+import { readFile, access } from 'node:fs/promises'
 import readline from 'node:readline'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
@@ -262,20 +262,7 @@ taskTrace.get('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddlewa
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const latex = await prisma.latexTrace.findUnique({
-      where: { taskTraceId: id },
-      select: {
-        id: true,
-        taskTraceId: true,
-        matchedBlocks: true,
-        unmatchedBlocks: true,
-        status: true,
-        metadata: true,
-        logFilePath: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const latex = await taskTraceService.getLatexTrace(id)
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
@@ -300,10 +287,7 @@ taskTrace.get('/:id/latex/events', actorMiddleware, requireUserActor, adminOnlyM
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const latex = await prisma.latexTrace.findUnique({
-      where: { taskTraceId: id },
-      select: { logFilePath: true },
-    })
+    const latex = await taskTraceService.getLatexTrace(id)
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
@@ -324,27 +308,14 @@ taskTrace.get('/:id/latex/export', actorMiddleware, requireUserActor, adminOnlyM
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const latex = await prisma.latexTrace.findUnique({
-      where: { taskTraceId: id },
-      select: {
-        id: true,
-        taskTraceId: true,
-        matchedBlocks: true,
-        unmatchedBlocks: true,
-        status: true,
-        metadata: true,
-        logFilePath: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const latex = await taskTraceService.getLatexTrace(id)
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
     const { events } = await readLatexEventsFromFile(latex.logFilePath, Number.MAX_SAFE_INTEGER)
     const lines: string[] = []
-    lines.push(`Latex Trace #${latex.id} (Task Trace #${latex.taskTraceId})`)
-    lines.push(`Status: ${latex.status}`)
+      lines.push(`Latex Trace #${latex.id} (Task Trace #${latex.taskTraceId})`)
+      lines.push(`Status: ${latex.status}`)
     lines.push(`Matched Blocks: ${latex.matchedBlocks}`)
     lines.push(`Unmatched Blocks: ${latex.unmatchedBlocks}`)
     lines.push(`Created At: ${latex.createdAt?.toISOString?.() ?? latex.createdAt}`)
@@ -375,18 +346,9 @@ taskTrace.delete('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddl
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const latex = await prisma.latexTrace.findUnique({
-      where: { taskTraceId: id },
-      select: { id: true, logFilePath: true },
-    })
-    if (!latex) {
+    const result = await taskTraceService.deleteLatexTrace(id)
+    if (!result.deleted) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
-    }
-    await prisma.latexTrace.delete({ where: { taskTraceId: id } })
-    if (latex.logFilePath) {
-      try {
-        await unlink(latex.logFilePath)
-      } catch {}
     }
     return c.json<ApiResponse>({ success: true })
   } catch (error) {
@@ -397,30 +359,8 @@ taskTrace.delete('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddl
 
 taskTrace.delete('/all', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const targets = await prisma.taskTrace.findMany({
-      select: { id: true, logFilePath: true, latexTrace: { select: { logFilePath: true } } },
-    })
-    if (targets.length === 0) {
-      return c.json<ApiResponse>({ success: true, data: { deleted: 0 } })
-    }
-    await prisma.taskTrace.deleteMany({ where: { id: { in: targets.map((t) => t.id) } } })
-    const filesToRemove = targets.flatMap((item) => {
-      const list: Array<string | null | undefined> = [item.logFilePath]
-      if (item.latexTrace?.logFilePath) {
-        list.push(item.latexTrace.logFilePath)
-      }
-      return list
-    })
-    await Promise.all(
-      filesToRemove
-        .filter((p): p is string => typeof p === 'string' && p.length > 0)
-        .map(async (file) => {
-          try {
-            await unlink(file)
-          } catch {}
-        }),
-    )
-    return c.json<ApiResponse>({ success: true, data: { deleted: targets.length } })
+    const result = await taskTraceService.deleteAllTraces()
+    return c.json<ApiResponse>({ success: true, data: { deleted: result.deleted } })
   } catch (error) {
     console.error('Delete all traces failed', error)
     return c.json<ApiResponse>({ success: false, error: 'Failed to delete all traces' }, 500)
@@ -433,23 +373,9 @@ taskTrace.delete('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware,
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const trace = await prisma.taskTrace.findUnique({
-      where: { id },
-      select: { logFilePath: true, latexTrace: { select: { logFilePath: true } } },
-    })
-    if (!trace) {
+    const result = await taskTraceService.deleteTrace(id)
+    if (!result.deleted) {
       return c.json<ApiResponse>({ success: true, message: 'Trace removed' })
-    }
-    await prisma.taskTrace.delete({ where: { id } })
-    if (trace.logFilePath) {
-      try {
-        await unlink(trace.logFilePath)
-      } catch {}
-    }
-    if (trace.latexTrace?.logFilePath) {
-      try {
-        await unlink(trace.latexTrace.logFilePath)
-      } catch {}
     }
     return c.json<ApiResponse>({ success: true, message: 'Trace removed' })
   } catch (error) {
@@ -464,40 +390,12 @@ taskTrace.post('/cleanup', actorMiddleware, requireUserActor, adminOnlyMiddlewar
     const inputDays = body?.retentionDays
     const config = await getTaskTraceConfig()
     const retentionDays = typeof inputDays === 'number' ? Math.max(1, Math.min(365, inputDays)) : config.retentionDays
-    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000)
-    const targets = await prisma.taskTrace.findMany({
-      where: { startedAt: { lt: cutoff } },
-      select: { id: true, logFilePath: true, latexTrace: { select: { logFilePath: true } } },
-    })
-    if (targets.length === 0) {
-      return c.json<ApiResponse>({
-        success: true,
-        data: {
-          deleted: 0,
-          retentionDays,
-        },
-      })
-    }
-    await prisma.taskTrace.deleteMany({ where: { id: { in: targets.map((t) => t.id) } } })
-    const filesToRemove = targets.flatMap((item) => {
-      const list: Array<string | null | undefined> = [item.logFilePath]
-      if (item.latexTrace?.logFilePath) list.push(item.latexTrace.logFilePath)
-      return list
-    })
-    await Promise.all(
-      filesToRemove
-        .filter((p): p is string => typeof p === 'string' && p.length > 0)
-        .map(async (file) => {
-          try {
-            await unlink(file)
-          } catch {}
-        }),
-    )
+    const result = await taskTraceService.cleanupTraces(retentionDays)
     return c.json<ApiResponse>({
       success: true,
       data: {
-        deleted: targets.length,
-        retentionDays,
+        deleted: result.deleted,
+        retentionDays: result.retentionDays,
       },
     })
   } catch (error) {

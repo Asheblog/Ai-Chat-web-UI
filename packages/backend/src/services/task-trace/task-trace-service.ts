@@ -1,5 +1,6 @@
 import type { LatexTrace, PrismaClient, TaskTrace } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
+import { unlink as defaultUnlink } from 'node:fs/promises'
 
 export interface TaskTraceServiceDeps {
   prisma?: PrismaClient
@@ -51,9 +52,11 @@ const parseJsonColumn = <T = any>(value: string | null | undefined): T | null =>
 
 export class TaskTraceService {
   private prisma: PrismaClient
+  private unlink: typeof defaultUnlink
 
   constructor(deps: TaskTraceServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
+    this.unlink = defaultUnlink
   }
 
   async listTraces(params: TaskTraceListParams): Promise<{ items: TaskTraceSummary[]; total: number }> {
@@ -194,6 +197,115 @@ export class TaskTraceService {
             metadata: parseJsonColumn(trace.latexTrace.metadata),
           } as TaskTraceDetail['latexTrace'])
         : null,
+    }
+  }
+
+  async getLatexTrace(taskTraceId: number): Promise<LatexTrace & { metadata: Record<string, any> | null } | null> {
+    const latex = await this.prisma.latexTrace.findUnique({
+      where: { taskTraceId },
+      select: {
+        id: true,
+        taskTraceId: true,
+        matchedBlocks: true,
+        unmatchedBlocks: true,
+        status: true,
+        metadata: true,
+        logFilePath: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+    if (!latex) return null
+    return {
+      ...latex,
+      metadata: parseJsonColumn(latex.metadata),
+    }
+  }
+
+  async deleteLatexTrace(taskTraceId: number): Promise<{ deleted: boolean }> {
+    const latex = await this.prisma.latexTrace.findUnique({
+      where: { taskTraceId },
+      select: { id: true, logFilePath: true },
+    })
+    if (!latex) {
+      return { deleted: false }
+    }
+    await this.prisma.latexTrace.delete({ where: { taskTraceId } })
+    if (latex.logFilePath) {
+      await this.safeUnlink(latex.logFilePath)
+    }
+    return { deleted: true }
+  }
+
+  async deleteTrace(id: number): Promise<{ deleted: boolean }> {
+    const trace = await this.prisma.taskTrace.findUnique({
+      where: { id },
+      select: { logFilePath: true, latexTrace: { select: { logFilePath: true } } },
+    })
+    if (!trace) {
+      return { deleted: false }
+    }
+    await this.prisma.taskTrace.delete({ where: { id } })
+    if (trace.logFilePath) {
+      await this.safeUnlink(trace.logFilePath)
+    }
+    if (trace.latexTrace?.logFilePath) {
+      await this.safeUnlink(trace.latexTrace.logFilePath)
+    }
+    return { deleted: true }
+  }
+
+  async deleteAllTraces(): Promise<{ deleted: number }> {
+    const targets = await this.prisma.taskTrace.findMany({
+      select: {
+        id: true,
+        logFilePath: true,
+        latexTrace: { select: { logFilePath: true } },
+      },
+    })
+    if (targets.length === 0) {
+      return { deleted: 0 }
+    }
+    await this.prisma.taskTrace.deleteMany({ where: { id: { in: targets.map((t) => t.id) } } })
+    await this.removeFiles(
+      targets.flatMap((item) => [item.logFilePath, item.latexTrace?.logFilePath]),
+    )
+    return { deleted: targets.length }
+  }
+
+  async cleanupTraces(retentionDays: number, now: () => number = () => Date.now()): Promise<{
+    deleted: number
+    retentionDays: number
+  }> {
+    const cutoff = new Date(now() - retentionDays * 24 * 60 * 60 * 1000)
+    const targets = await this.prisma.taskTrace.findMany({
+      where: { startedAt: { lt: cutoff } },
+      select: {
+        id: true,
+        logFilePath: true,
+        latexTrace: { select: { logFilePath: true } },
+      },
+    })
+    if (targets.length === 0) {
+      return { deleted: 0, retentionDays }
+    }
+    await this.prisma.taskTrace.deleteMany({ where: { id: { in: targets.map((t) => t.id) } } })
+    await this.removeFiles(
+      targets.flatMap((item) => [item.logFilePath, item.latexTrace?.logFilePath]),
+    )
+    return { deleted: targets.length, retentionDays }
+  }
+
+  private async removeFiles(paths: Array<string | null | undefined>) {
+    const valid = paths.filter((p): p is string => typeof p === 'string' && p.length > 0)
+    await Promise.all(valid.map((file) => this.safeUnlink(file)))
+  }
+
+  private async safeUnlink(file: string) {
+    try {
+      await this.unlink(file)
+    } catch {
+      // ignore file removal errors
     }
   }
 }
