@@ -1,15 +1,12 @@
-import { randomBytes } from 'node:crypto'
 import { Context, Next } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
-import { AuthUtils } from '../utils/auth'
-import { prisma } from '../db'
-import { getQuotaPolicy } from '../utils/system-settings'
-import type { Actor, AnonymousActor, UserActor } from '../types'
+import type { Actor } from '../types'
 import {
   determineProfileImageBaseUrl,
   resolveProfileImageUrl,
 } from '../utils/profile-images'
+import { authContextService } from '../services/auth/auth-context-service'
 
 const ANON_COOKIE_KEY = 'anon_key'
 const COOKIE_PATH_ROOT: Parameters<typeof deleteCookie>[2] = { path: '/' }
@@ -22,42 +19,6 @@ const toContentfulStatus = (status: number): ContentfulStatusCode => {
     return 500 as ContentfulStatusCode
   }
   return status as ContentfulStatusCode
-}
-
-const resolveTokenFromRequest = (c: Context) => {
-  const authHeader = c.req.header('Authorization')
-  let token = AuthUtils.extractTokenFromHeader(authHeader)
-  if (!token) {
-    try {
-      token = getCookie(c, 'token') || null
-    } catch {
-      token = null
-    }
-  }
-  return token
-}
-
-const buildUserActor = (payload: { id: number; username: string; role: 'ADMIN' | 'USER'; status: 'PENDING' | 'ACTIVE' | 'DISABLED'; preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null; avatarPath?: string | null }): UserActor => ({
-  type: 'user',
-  id: payload.id,
-  username: payload.username,
-  role: payload.role,
-  status: payload.status,
-  identifier: `user:${payload.id}`,
-  preferredModel: payload.preferredModel ?? null,
-  avatarPath: payload.avatarPath ?? null,
-})
-
-const buildAnonymousActor = (key: string, retentionDays: number): AnonymousActor => {
-  const expiresAt = retentionDays > 0
-    ? new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000)
-    : null
-  return {
-    type: 'anonymous',
-    key,
-    identifier: `anon:${key}`,
-    expiresAt,
-  }
 }
 
 const ensureAnonCookie = (c: Context, key: string, retentionDays: number) => {
@@ -74,73 +35,6 @@ const ensureAnonCookie = (c: Context, key: string, retentionDays: number) => {
   setCookie(c, ANON_COOKIE_KEY, key, cookieOptions)
 }
 
-const normaliseAnonKey = (key?: string | null) => {
-  if (!key) return null
-  const trimmed = key.trim()
-  if (!trimmed) return null
-  if (!/^[a-zA-Z0-9_-]{10,128}$/.test(trimmed)) {
-    return null
-  }
-  return trimmed
-}
-
-const generateAnonKey = () => randomBytes(24).toString('base64url')
-
-const resolveActor = async (c: Context): Promise<{ actor: Actor | null; status?: number; error?: string; clearAuth?: boolean; clearAnon?: boolean }> => {
-  const token = resolveTokenFromRequest(c)
-
-  if (token) {
-    const payload = AuthUtils.verifyToken(token)
-    if (!payload) {
-      return { actor: null, status: 401, error: 'Invalid or expired token', clearAuth: true }
-    }
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, username: true, role: true, status: true, preferredModelId: true, preferredConnectionId: true, preferredModelRawId: true, avatarPath: true },
-    })
-    if (!user) {
-      return { actor: null, status: 401, error: 'User not found', clearAuth: true }
-    }
-    if (user.status !== 'ACTIVE') {
-      const error = user.status === 'PENDING' ? 'Account pending approval' : 'Account disabled'
-      return { actor: null, status: user.status === 'PENDING' ? 423 : 403, error, clearAuth: true }
-    }
-    return {
-      actor: buildUserActor({
-        ...user,
-        role: user.role as 'ADMIN' | 'USER',
-        status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
-        preferredModel: {
-          modelId: user.preferredModelId ?? null,
-          connectionId: user.preferredConnectionId ?? null,
-          rawId: user.preferredModelRawId ?? null,
-        },
-        avatarPath: user.avatarPath ?? null,
-      }),
-    }
-  }
-
-  const quotaPolicy = await getQuotaPolicy()
-  if (quotaPolicy.anonymousDailyQuota <= 0) {
-    return { actor: null, status: 401, error: 'Anonymous access is disabled', clearAnon: true }
-  }
-
-  let anonKey = null
-  try {
-    anonKey = normaliseAnonKey(getCookie(c, ANON_COOKIE_KEY))
-  } catch {
-    anonKey = null
-  }
-
-  if (!anonKey) {
-    anonKey = generateAnonKey()
-  }
-
-  ensureAnonCookie(c, anonKey, quotaPolicy.anonymousRetentionDays)
-
-  return { actor: buildAnonymousActor(anonKey, quotaPolicy.anonymousRetentionDays) }
-}
-
 // 扩展Hono Context类型
 declare module 'hono' {
   interface ContextVariableMap {
@@ -155,7 +49,21 @@ declare module 'hono' {
 }
 
 export const actorMiddleware = async (c: Context, next: Next) => {
-  const result = await resolveActor(c)
+  const authHeader = c.req.header('Authorization')
+  let authCookie: string | null = null
+  let anonCookie: string | null = null
+  try {
+    authCookie = getCookie(c, 'token') || null
+  } catch {}
+  try {
+    anonCookie = getCookie(c, ANON_COOKIE_KEY) || null
+  } catch {}
+
+  const result = await authContextService.resolveActor({
+    authHeader,
+    authCookie,
+    anonCookie,
+  })
   if (!result.actor) {
     if (result.clearAuth) {
       try { deleteCookie(c, 'token', COOKIE_PATH_ROOT) } catch {}
