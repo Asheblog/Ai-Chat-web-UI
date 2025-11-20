@@ -8,11 +8,13 @@ import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import { resolveModelIdForUser } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
 import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
-import { prisma } from '../db';
-import { persistChatImages } from '../utils/chat-images';
 import { logTraffic } from '../utils/traffic-logger';
 
 import type { Connection, Message as MessageEntity } from '@prisma/client';
+import {
+  openaiCompatMessageService,
+  OpenAICompatMessageServiceError,
+} from '../services/openai-compat/message-service';
 
 const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
@@ -803,21 +805,21 @@ openaiCompat.get('/messages', actorMiddleware, requireUserActor, async (c) => {
     return c.json({ error: 'invalid_request', message: 'session_id is required' }, 400);
   }
 
-  const session = await prisma.chatSession.findFirst({
-    where: { id: sessionId, userId: user.id },
-    select: { id: true },
-  });
-  if (!session) {
-    return c.json({ error: 'not_found', message: 'Session not found' }, 404);
+  try {
+    await openaiCompatMessageService.ensureSessionOwnedByUser(user.id, sessionId);
+  } catch (error) {
+    if (error instanceof OpenAICompatMessageServiceError) {
+      return c.json({ error: 'not_found', message: error.message }, error.statusCode);
+    }
+    throw error;
   }
 
   const limitRaw = c.req.query('limit');
   const limit = limitRaw ? Number(limitRaw) : undefined;
 
-  const messages = await prisma.message.findMany({
-    where: { sessionId },
-    orderBy: { createdAt: 'asc' },
-    ...(limit && !Number.isNaN(limit) && limit > 0 ? { take: limit } : {}),
+  const messages = await openaiCompatMessageService.listMessages({
+    sessionId,
+    limit,
   });
 
   return c.json({
@@ -836,67 +838,27 @@ openaiCompat.post(
     const user = c.get('user')!; // requireUserActor 已确保 user 存在
     const body = c.req.valid('json');
 
-    const session = await prisma.chatSession.findFirst({
-      where: { id: body.session_id, userId: user.id },
-      select: { id: true },
-    });
-    if (!session) {
-      return c.json({ error: 'not_found', message: 'Session not found' }, 404);
+    try {
+      await openaiCompatMessageService.ensureSessionOwnedByUser(user.id, body.session_id);
+    } catch (error) {
+      if (error instanceof OpenAICompatMessageServiceError) {
+        return c.json({ error: 'not_found', message: error.message }, error.statusCode);
+      }
+      throw error;
     }
 
     const contentText = flattenMessageContent(body.content);
 
-    const createData: any = {
+    const message = await openaiCompatMessageService.saveMessage({
       sessionId: body.session_id,
       role: body.role,
       content: contentText,
-    };
-    if (body.reasoning !== undefined) createData.reasoning = body.reasoning;
-    if (body.reasoning_duration_seconds !== undefined) {
-      createData.reasoningDurationSeconds = body.reasoning_duration_seconds;
-    }
-
-    let message: MessageEntity;
-
-    if (body.client_message_id) {
-      message = await prisma.message.upsert({
-        where: {
-          sessionId_clientMessageId: {
-            sessionId: body.session_id,
-            clientMessageId: body.client_message_id,
-          },
-        },
-        update: {
-          content: contentText,
-          role: body.role,
-          ...(body.reasoning !== undefined ? { reasoning: body.reasoning } : {}),
-          ...(body.reasoning_duration_seconds !== undefined
-            ? { reasoningDurationSeconds: body.reasoning_duration_seconds }
-            : {}),
-        },
-        create: {
-          ...createData,
-          clientMessageId: body.client_message_id,
-        },
-      });
-    } else {
-      message = await prisma.message.create({
-        data: createData,
-      });
-    }
-
-    if (body.images && body.images.length > 0) {
-      try {
-        await persistChatImages(body.images, {
-          sessionId: body.session_id,
-          messageId: message.id,
-          userId: user.id,
-          clientMessageId: body.client_message_id,
-        });
-      } catch (error) {
-        console.warn('[openai-compatible] persist images failed', error);
-      }
-    }
+      clientMessageId: body.client_message_id,
+      reasoning: body.reasoning,
+      reasoningDurationSeconds: body.reasoning_duration_seconds,
+      images: body.images,
+      userId: user.id,
+    });
 
     return c.json(formatMessage(message));
   },
