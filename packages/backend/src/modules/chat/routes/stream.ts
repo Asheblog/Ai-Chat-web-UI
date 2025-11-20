@@ -53,6 +53,7 @@ import {
 import { createUserMessageWithQuota } from '../services/message-service';
 import { chatService, ChatServiceError } from '../../../services/chat';
 import { providerRequester } from '../services/provider-requester';
+import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -644,68 +645,19 @@ export const registerChatStreamRoutes = (router: Hono) => {
         usage?: ProviderChatCompletionResponse['usage'] | null;
       };
 
-      const performNonStreamingFallback = async (): Promise<NonStreamFallbackResult | null> => {
-        const nonStreamData = { ...requestData, stream: false } as any;
-        const ac = new AbortController();
-        const fallbackTimeout = setTimeout(() => ac.abort(new Error('provider non-stream timeout')), providerTimeoutMs);
-        try {
-          let url = '';
-          let body: any = { ...nonStreamData };
-          let headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-            ...authHeader,
-            ...extraHeaders,
-          };
-          if (provider === 'openai') {
-            body = convertOpenAIReasoningPayload(body);
-            url = `${baseUrl}/chat/completions`;
-          } else if (provider === 'azure_openai') {
-            const v = session.connection?.azureApiVersion || '2024-02-15-preview';
-            body = convertOpenAIReasoningPayload(body);
-            url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`;
-          } else if (provider === 'ollama') {
-            url = `${baseUrl}/api/chat`;
-            body = {
-              model: session.modelRawId,
-              messages: messagesPayload.map((m: any) => ({
-                role: m.role,
-                content: typeof m.content === 'string' ? m.content : m.content?.map((p: any) => p.text).filter(Boolean).join('\n'),
-              })),
-              stream: false,
-            };
-          } else {
-            url = `${baseUrl}`;
-          }
-
-          const resp = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            signal: ac.signal,
-          });
-          if (!resp.ok) return null;
-          const json = await resp.json() as ProviderChatCompletionResponse;
-          const text = (json?.choices?.[0]?.message?.content || '').trim();
-          if (!text) return null;
-          const reasoningText =
-            json?.choices?.[0]?.message?.reasoning_content ||
-            (json as any)?.message?.thinking ||
-            null;
-          return {
-            text,
-            reasoning: reasoningText,
-            usage: json?.usage ?? null,
-          };
-        } catch (error) {
-          log.warn('Non-stream fallback request failed', {
-            sessionId,
-            error: error instanceof Error ? error.message : error,
-          });
-          return null;
-        } finally {
-          clearTimeout(fallbackTimeout);
-        }
-      };
+      const performNonStreamingFallback = async (): Promise<NonStreamFallbackResult | null> =>
+        nonStreamFallbackService.execute({
+          provider,
+          baseUrl,
+          modelRawId: session.modelRawId!,
+          messagesPayload,
+          requestData,
+          authHeader,
+          extraHeaders,
+          azureApiVersion: session.connection?.azureApiVersion,
+          timeoutMs: providerTimeoutMs,
+          logger: log,
+        });
 
         const stream = new ReadableStream({
           async start(controller) {
