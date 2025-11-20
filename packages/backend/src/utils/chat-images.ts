@@ -25,6 +25,10 @@ const MIME_EXT: Record<string, string> = {
   'image/heif': 'heif',
 }
 
+const EXT_MIME: Record<string, string> = Object.fromEntries(
+  Object.entries(MIME_EXT).map(([mime, ext]) => [ext, mime]),
+) as Record<string, string>
+
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 let lastCleanupAt = 0
 let messageAttachmentUnavailable = false
@@ -174,6 +178,48 @@ export async function persistChatImages(
   }
 
   return relativePaths
+}
+
+const resolveMimeFromExt = (ext: string): string => {
+  const normalized = ext.replace(/^\./, '').toLowerCase()
+  if (EXT_MIME[normalized]) return EXT_MIME[normalized]
+  if (normalized) return `image/${normalized}`
+  return 'application/octet-stream'
+}
+
+export async function loadPersistedChatImages(messageId: number): Promise<IncomingImage[]> {
+  if (messageAttachmentUnavailable) return []
+
+  try {
+    const attachments = await prisma.messageAttachment.findMany({
+      where: { messageId },
+      select: { relativePath: true },
+    })
+    if (!attachments.length) return []
+
+    const images: IncomingImage[] = []
+    for (const attachment of attachments) {
+      const relative = attachment.relativePath
+      const absolute = path.join(CHAT_IMAGE_STORAGE_ROOT, relative)
+      try {
+        const buffer = await fs.readFile(absolute)
+        const mime = resolveMimeFromExt(path.extname(relative))
+        images.push({ data: buffer.toString('base64'), mime })
+      } catch (error) {
+        console.warn('[loadPersistedChatImages] failed to read attachment', {
+          messageId,
+          relativePath: relative,
+          error,
+        })
+      }
+    }
+    return images
+  } catch (error) {
+    if (!handleMessageAttachmentTableMissing('loadPersistedChatImages', error)) {
+      console.error('[loadPersistedChatImages] failed to load attachments', { messageId, error })
+    }
+  }
+  return []
 }
 
 export function determineChatImageBaseUrl(options: { request: Request; siteBaseUrl?: string | null }): string {

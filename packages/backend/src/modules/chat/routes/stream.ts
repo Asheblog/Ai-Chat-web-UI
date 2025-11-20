@@ -7,7 +7,7 @@ import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../t
 import { AuthUtils } from '../../../utils/auth';
 import { convertOpenAIReasoningPayload } from '../../../utils/providers';
 import { Tokenizer } from '../../../utils/tokenizer';
-import { cleanupExpiredChatImages } from '../../../utils/chat-images';
+import { cleanupExpiredChatImages, loadPersistedChatImages } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
 import { consumeActorQuota, serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
@@ -70,7 +70,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           : ''
       const replyToClientMessageId = replyToClientMessageIdRaw || null
       let content = typeof payload?.content === 'string' ? payload.content : ''
-      const images = replyToMessageId || replyToClientMessageId ? undefined : payload.images;
+      let images = replyToMessageId || replyToClientMessageId ? undefined : payload.images;
       const requestedFeatures = payload?.features || {};
       const traceToggle = typeof payload?.traceEnabled === 'boolean' ? payload.traceEnabled : undefined;
 
@@ -217,6 +217,13 @@ export const registerChatStreamRoutes = (router: Hono) => {
             }, 429)
           }
           throw error
+        }
+      }
+
+      if ((replyToMessageId || replyToClientMessageId) && userMessageRecord && (!images || images.length === 0)) {
+        const restoredImages = await loadPersistedChatImages(userMessageRecord.id)
+        if (restoredImages.length > 0) {
+          images = restoredImages
         }
       }
 
