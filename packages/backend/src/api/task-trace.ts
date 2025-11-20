@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { readFile } from 'node:fs/promises'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import { getTaskTraceConfig } from '../utils/task-trace'
@@ -119,7 +118,7 @@ taskTrace.get('/:id/export', actorMiddleware, requireUserActor, adminOnlyMiddlew
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': `attachment; filename="task-trace-${trace.id}.txt"`,
+        'Content-Disposition': `attachment; filename="task-trace-${detail.trace.id}.txt"`,
       },
     })
   } catch (error) {
