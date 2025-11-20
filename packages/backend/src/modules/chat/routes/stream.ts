@@ -13,8 +13,6 @@ import { consumeActorQuota, serializeQuotaSnapshot } from '../../../utils/quota'
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
 import { resolveContextLimit, resolveCompletionLimit } from '../../../utils/context-window';
 import { TaskTraceRecorder, shouldEnableTaskTrace, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
-import { LatexTraceRecorder } from '../../../utils/latex-trace';
-import { analyzeLatexBlocks } from '@aichat/shared/latex-normalizer';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../../../utils/reasoning-tags';
 import { createAgentWebSearchResponse, buildAgentWebSearchConfig } from '../../chat/agent-web-search-response';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
@@ -56,6 +54,7 @@ import { providerRequester } from '../services/provider-requester';
 import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
 import { assistantProgressService } from '../services/assistant-progress-service';
 import { streamUsageService } from '../services/stream-usage-service';
+import { streamTraceService } from '../services/stream-trace-service';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -1188,36 +1187,16 @@ export const registerChatStreamRoutes = (router: Hono) => {
               };
               traceMetadataExtras.providerUsageSource = usageResult.providerUsageSource;
 
-              if (!latexTraceRecorder && traceRecorder.isEnabled()) {
-                const traceId = traceRecorder.getTraceId();
-                if (traceId && aiResponseContent.trim()) {
-                  try {
-                    const audit = analyzeLatexBlocks(aiResponseContent.trim());
-                    if (audit.segments.length > 0) {
-                      latexAuditSummary = { matched: audit.matchedCount, unmatched: audit.unmatchedCount };
-                      latexTraceRecorder = await LatexTraceRecorder.create({
-                        taskTraceId: traceId,
-                        matchedBlocks: audit.matchedCount,
-                        unmatchedBlocks: audit.unmatchedCount,
-                        metadata: {
-                          segmentsSample: audit.segments.slice(0, 3).map((segment) => ({
-                            matched: segment.matched,
-                            reason: segment.reason,
-                            preview: segment.trimmed.slice(0, 80),
-                          })),
-                        },
-                      });
-                      latexTraceRecorder?.logSegments(audit.segments);
-                    }
-                  } catch (error) {
-                    log.warn('Latex trace creation failed', error);
-                  }
-                }
-              }
-
-              if (assistantMessageId) {
-                traceRecorder.setMessageContext(assistantMessageId, assistantClientMessageId ?? clientMessageId);
-              }
+              const traceResult = await streamTraceService.handleLatexTrace({
+                traceRecorder,
+                latexTraceRecorder,
+                content: aiResponseContent,
+                assistantMessageId,
+                assistantClientMessageId,
+                clientMessageId,
+              })
+              latexTraceRecorder = traceResult.latexTraceRecorder
+              latexAuditSummary = traceResult.latexAuditSummary
             } catch (persistErr) {
               console.warn('Persist final assistant response failed:', persistErr);
             }
