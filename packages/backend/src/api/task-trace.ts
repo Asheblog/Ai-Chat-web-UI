@@ -4,10 +4,10 @@ import { z } from 'zod'
 import { createReadStream } from 'node:fs'
 import { readFile, unlink, access } from 'node:fs/promises'
 import readline from 'node:readline'
-import { prisma } from '../db'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import { getTaskTraceConfig } from '../utils/task-trace'
+import { taskTraceService } from '../services/task-trace/task-trace-service'
 
 const taskTrace = new Hono()
 
@@ -126,85 +126,21 @@ taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async
     const statusRaw = c.req.query('status')
     const keyword = (c.req.query('keyword') || '').trim()
 
-    const where: any = {}
-    if (sessionIdRaw) {
-      const parsed = Number.parseInt(sessionIdRaw, 10)
-      if (Number.isFinite(parsed)) {
-        where.sessionId = parsed
-      }
-    }
-    if (statusRaw) {
-      where.status = statusRaw
-    }
-    if (keyword) {
-      where.OR = [
-        { actor: { contains: keyword } },
-        { clientMessageId: { contains: keyword } },
-      ]
-    }
-
-    const [items, total] = await Promise.all([
-      prisma.taskTrace.findMany({
-        where,
-        orderBy: { startedAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: {
-          id: true,
-          sessionId: true,
-          messageId: true,
-          clientMessageId: true,
-          actor: true,
-          status: true,
-          traceLevel: true,
-          startedAt: true,
-          endedAt: true,
-          durationMs: true,
-          metadata: true,
-          eventCount: true,
-          latexTrace: {
-            select: {
-              id: true,
-              status: true,
-              matchedBlocks: true,
-              unmatchedBlocks: true,
-              updatedAt: true,
-            },
-          },
-        },
-      }),
-      prisma.taskTrace.count({ where }),
-    ])
-
-    const data = items.map((item) => ({
-      id: item.id,
-      sessionId: item.sessionId,
-      messageId: item.messageId,
-      clientMessageId: item.clientMessageId,
-      actor: item.actor,
-      status: item.status,
-      traceLevel: item.traceLevel,
-      startedAt: item.startedAt,
-      endedAt: item.endedAt,
-      durationMs: item.durationMs,
-      metadata: parseJsonColumn(item.metadata),
-      eventCount: item.eventCount,
-      latexTrace: item.latexTrace
-        ? {
-            id: item.latexTrace.id,
-            status: item.latexTrace.status,
-            matchedBlocks: item.latexTrace.matchedBlocks,
-            unmatchedBlocks: item.latexTrace.unmatchedBlocks,
-            updatedAt: item.latexTrace.updatedAt,
-          }
-        : null,
-    }))
+    const result = await taskTraceService.listTraces({
+      page,
+      pageSize,
+      sessionId: sessionIdRaw && Number.isFinite(Number.parseInt(sessionIdRaw, 10))
+        ? Number.parseInt(sessionIdRaw, 10)
+        : undefined,
+      status: statusRaw || undefined,
+      keyword: keyword || undefined,
+    })
 
     return c.json<ApiResponse>({
       success: true,
       data: {
-        items: data,
-        total,
+        items: result.items,
+        total: result.total,
         page,
         pageSize,
       },
@@ -221,36 +157,8 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const trace = await prisma.taskTrace.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        sessionId: true,
-        messageId: true,
-        clientMessageId: true,
-        actor: true,
-        status: true,
-        traceLevel: true,
-        startedAt: true,
-        endedAt: true,
-        durationMs: true,
-        metadata: true,
-        eventCount: true,
-        logFilePath: true,
-        latexTrace: {
-          select: {
-            id: true,
-            status: true,
-            matchedBlocks: true,
-            unmatchedBlocks: true,
-            metadata: true,
-            logFilePath: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
-      },
-    })
+    const traceDetail = await taskTraceService.getTraceWithLatex(id)
+    const trace = traceDetail?.trace
     if (!trace) {
       return c.json<ApiResponse>({ success: false, error: 'Trace not found' }, 404)
     }
@@ -258,31 +166,8 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
     return c.json<ApiResponse>({
       success: true,
       data: {
-        trace: {
-          id: trace.id,
-          sessionId: trace.sessionId,
-          messageId: trace.messageId,
-          clientMessageId: trace.clientMessageId,
-          actor: trace.actor,
-          status: trace.status,
-          traceLevel: trace.traceLevel,
-          startedAt: trace.startedAt,
-          endedAt: trace.endedAt,
-          durationMs: trace.durationMs,
-          metadata: parseJsonColumn(trace.metadata),
-          eventCount: trace.eventCount,
-        },
-        latexTrace: trace.latexTrace
-          ? {
-              id: trace.latexTrace.id,
-              status: trace.latexTrace.status,
-              matchedBlocks: trace.latexTrace.matchedBlocks,
-              unmatchedBlocks: trace.latexTrace.unmatchedBlocks,
-              metadata: parseJsonColumn(trace.latexTrace.metadata),
-              createdAt: trace.latexTrace.createdAt,
-              updatedAt: trace.latexTrace.updatedAt,
-            }
-          : null,
+        trace,
+        latexTrace: traceDetail?.latexTrace ?? null,
         events,
         truncated: truncated || (trace.eventCount ?? 0) > events.length,
       },
