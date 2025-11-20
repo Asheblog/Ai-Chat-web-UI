@@ -1,5 +1,5 @@
 import type { Actor } from '../../types'
-import { settingsService, SettingsServiceError } from './settings-service'
+import { settingsService, SettingsServiceError } from './index'
 import { personalSettingsService } from './personal-settings-service'
 import { healthService, HealthServiceError } from './health-service'
 import { appInfoService } from './app-info-service'
