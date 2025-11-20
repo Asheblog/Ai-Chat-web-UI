@@ -627,14 +627,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
         const stream = new ReadableStream({
           async start(controller) {
-          let heartbeat: ReturnType<typeof setInterval> | null = null;
-          const stopHeartbeat = () => {
-            if (heartbeat) {
-              clearInterval(heartbeat);
-              heartbeat = null;
-            }
-          };
-
+          let stopHeartbeat: (() => void) | null = null;
+ 
           let downstreamAborted = false;
           let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
           const requestSignal = c.req.raw.signal;
@@ -643,45 +637,13 @@ export const registerChatStreamRoutes = (router: Hono) => {
           let lastChunkTimestamp = Date.now();
           let idleWarned = false;
 
-          const markDownstreamClosed = (reason?: string, meta?: Record<string, unknown>) => {
-            if (downstreamAborted) return;
-            downstreamAborted = true;
-            stopHeartbeat();
-            const payload = {
-              ...streamLogBase(),
-              reason: reason ?? 'unknown',
-              ...(meta ?? {}),
-            };
-            log.warn('SSE downstream closed', payload);
-            traceRecorder.log('stream:downstream_closed', payload);
-          };
-
-          const safeEnqueue = (payload: string) => {
-            if (!downstreamAborted && requestSignal?.aborted) {
-              markDownstreamClosed('request-signal-aborted');
-            }
-
-            let delivered = false;
-            if (!downstreamAborted) {
-              try {
-                controller.enqueue(encoder.encode(payload));
-                delivered = true;
-              } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : String(err);
-                markDownstreamClosed('enqueue-error', { error: errorMessage });
-              }
-            }
-
-            const summary = summarizeSseLine(payload.trim());
-            if (summary) {
-              traceRecorder.log('sse:dispatch', {
-                ...summary,
-                delivered,
-                downstreamClosed: downstreamAborted,
-              });
-            }
-            return delivered;
-          };
+          const emitter = streamSseService.createEmitter({
+            controller,
+            encoder,
+            requestSignal,
+            traceRecorder,
+            streamLogBase,
+          })
           const completeWithNonStreamingFallback = async (
             origin: 'stream_error' | 'reasoning_only',
           ): Promise<boolean> => {
@@ -706,15 +668,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
               providerUsageSnapshot = fallbackResult.usage;
               traceMetadataExtras.finalUsage = fallbackResult.usage;
               traceMetadataExtras.providerUsageSource = 'fallback_non_stream';
-              const usageEvent = `data: ${JSON.stringify({ type: 'usage', usage: fallbackResult.usage })}\n\n`;
-              safeEnqueue(usageEvent);
+                const usageEvent = `data: ${JSON.stringify({ type: 'usage', usage: fallbackResult.usage })}\n\n`;
+              emitter.enqueue(usageEvent);
             }
 
             aiResponseContent = trimmedText;
             const contentEvent = `data: ${JSON.stringify({ type: 'content', content: trimmedText })}\n\n`;
-            safeEnqueue(contentEvent);
+            emitter.enqueue(contentEvent);
             const completeEvent = `data: ${JSON.stringify({ type: 'complete', origin: 'fallback' })}\n\n`;
-            safeEnqueue(completeEvent);
+            emitter.enqueue(completeEvent);
             traceStatus = 'completed';
             traceRecorder.log('stream:fallback_non_stream', { origin });
 
@@ -840,7 +802,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   context_remaining: contextRemaining,
                 },
               })}\n\n`;
-              safeEnqueue(usageEvent);
+              emitter.enqueue(usageEvent);
             }
 
             // 调用第三方AI API（带退避）
@@ -915,50 +877,44 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
             const emitReasoningKeepalive = (idleMs: number) => {
               const keepaliveEvent = `data: ${JSON.stringify({ type: 'reasoning', keepalive: true, idle_ms: idleMs })}\n\n`;
-              safeEnqueue(keepaliveEvent);
-              lastKeepaliveSentAt = Date.now();
+              emitter.enqueue(keepaliveEvent);
             };
             const emitStreamKeepalive = (idleMs: number) => {
               const keepaliveEvent = `data: ${JSON.stringify({ type: 'keepalive', idle_ms: idleMs })}\n\n`;
-              safeEnqueue(keepaliveEvent);
-              lastKeepaliveSentAt = Date.now();
+              emitter.enqueue(keepaliveEvent);
             };
 
-            // 心跳&空闲监控
-            heartbeat = setInterval(() => {
-              try {
-                // SSE 注释心跳（客户端忽略），同时也可用 data: keepalive
-                safeEnqueue(': ping\n\n');
-              } catch {}
-              const now = Date.now();
-              if (!firstChunkAt) {
-                if (providerInitialGraceMs > 0 && now - requestStartedAt > providerInitialGraceMs) {
-                  try { (response as any)?.body?.cancel?.(); } catch {}
-                }
-                return;
-              }
-              const last = lastChunkAt ?? firstChunkAt;
-              const idleMs = now - last;
-              if (traceIdleTimeoutMs && idleMs > traceIdleTimeoutMs && !traceIdleWarned) {
-                traceRecorder.log('stream.keepalive_timeout', { idleMs });
-                traceIdleWarned = true;
-              }
-              if (providerReasoningIdleMs > 0 && idleMs > providerReasoningIdleMs) {
+            stopHeartbeat = streamSseService.startHeartbeat({
+              emitter,
+              heartbeatIntervalMs,
+              providerInitialGraceMs,
+              providerReasoningIdleMs,
+              reasoningKeepaliveIntervalMs,
+              streamKeepaliveIntervalMs,
+              traceIdleTimeoutMs,
+              getTimestamps: () => ({
+                firstChunkAt,
+                lastChunkAt,
+                lastKeepaliveSentAt,
+                requestStartedAt,
+              }),
+              setLastKeepaliveSentAt: (ts) => {
+                lastKeepaliveSentAt = ts
+              },
+              onTraceIdleTimeout: traceIdleWarned
+                ? undefined
+                : (idleMs) => {
+                    traceRecorder.log('stream.keepalive_timeout', { idleMs })
+                    traceIdleWarned = true
+                  },
+              cancelProvider: () => {
                 try { (response as any)?.body?.cancel?.(); } catch {}
-                return;
-              }
-              if (reasoningKeepaliveIntervalMs > 0 && idleMs > reasoningKeepaliveIntervalMs && now - lastKeepaliveSentAt > reasoningKeepaliveIntervalMs) {
-                try {
-                  void flushReasoningDelta(true).catch(() => {});
-                  void flushVisibleDelta(true).catch(() => {});
-                  emitReasoningKeepalive(idleMs);
-                } catch {}
-              } else if (streamKeepaliveIntervalMs > 0 && idleMs > streamKeepaliveIntervalMs && now - lastKeepaliveSentAt > streamKeepaliveIntervalMs) {
-                try {
-                  emitStreamKeepalive(idleMs);
-                } catch {}
-              }
-            }, Math.max(1000, heartbeatIntervalMs));
+              },
+              flushReasoningDelta: (force) => flushReasoningDelta(force),
+              flushVisibleDelta: (force) => flushVisibleDelta(force),
+              emitReasoningKeepalive,
+              emitStreamKeepalive,
+            });
 
             while (true) {
               const { done, value } = await reader.read();
