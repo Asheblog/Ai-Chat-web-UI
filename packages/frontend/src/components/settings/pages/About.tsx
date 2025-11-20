@@ -3,7 +3,7 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 
-// 关于页面：展示版本信息与更新日志（v1.4.5）
+// 关于页面：展示版本信息与更新日志（v1.4.6）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +23,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.4.5</Badge>
+          <Badge variant="secondary" className="font-mono">v1.4.6</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
@@ -52,44 +52,44 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">420fb46</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">11c629a</span>
               <span className="text-muted-foreground leading-relaxed">
-                推理面板全新上线，独立组件化并强化样式，让推理细节与消息气泡的状态展示更直观。
+                消息引用恢复持久化图片附件，回复上下文中的视觉内容得以同步展示，避免二次查看素材。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">01cdf74</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">84e00c0</span>
               <span className="text-muted-foreground leading-relaxed">
-                推理模型配置支持最大输出 Tokens 与上下文窗口，后端接口与设置页联动，便于按模型精细化管控。
+                串流阶段新增跨会话加锁与停止请求跟踪，彻底避免并发写冲突并保障中断响应即时生效。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d1500b5</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">9b965c4</span>
               <span className="text-muted-foreground leading-relaxed">
-                用户与助手头像全链路打通，新增头像上传字段、个人偏好同步以及消息气泡的头像渲染。
+                助手消息支持多版本变体与重新生成，允许针对同一提问快速迭代多轮回答并选择最佳输出。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">fbbbef5</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">fa53398</span>
               <span className="text-muted-foreground leading-relaxed">
-                头像上传接入 Sharp 压缩裁剪，并完善格式校验，生成的存储文件更轻量、兼容性更好。
+                新增基于 clientId 的消息查找接口，前端可可靠对齐去重发送记录，修复偶发的重复插入。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b42c222</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">682b916</span>
               <span className="text-muted-foreground leading-relaxed">
-                模型目录增加 Context Window 能力并强化补全额度校验，调用限制与窗口配置保持一致。
+                任务追踪页引入管理员批量删除操作并联动响应式表格，清理失效任务更快捷。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a13a969</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5ca2c69</span>
               <span className="text-muted-foreground leading-relaxed">
-                数学渲染管线重构并补充规范化处理，KaTeX 加载更稳健，LaTeX 展示兼容性提升。
+                Web Search 逻辑与模型能力解耦：按会话模型开启外部检索、统一串流输出并持久化用户偏好。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-16 推送变更摘要
+            以上为 2025-11-20 推送变更摘要
           </p>
         </Card>
       </div>
