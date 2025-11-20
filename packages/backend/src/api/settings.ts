@@ -9,6 +9,7 @@ import { invalidateQuotaPolicyCache } from '../utils/system-settings'
 import { settingsService, SettingsServiceError } from '../services/settings'
 import { personalSettingsService } from '../services/settings/personal-settings-service'
 import { healthService, HealthServiceError } from '../services/settings/health-service'
+import { appInfoService } from '../services/settings/app-info-service'
 
 const settings = new Hono();
 
@@ -224,22 +225,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
 // 获取应用信息
 settings.get('/app-info', async (c) => {
   try {
-    const registrationSetting = await prisma.systemSetting.findUnique({
-      where: { key: 'registration_enabled' },
-    });
-    const registrationEnabled = registrationSetting?.value !== 'false';
-
-    const appInfo = {
-      name: 'AI Chat Platform',
-      version: 'v1.1.0',
-      mode: registrationEnabled ? 'multi' : 'restricted',
-      features: {
-        registration: registrationEnabled,
-        streaming: true,
-        file_upload: false, // 未来功能
-        long_term_memory: false, // 未来功能
-      },
-    };
+    const appInfo = await appInfoService.getAppInfo()
 
     return c.json<ApiResponse>({
       success: true,
