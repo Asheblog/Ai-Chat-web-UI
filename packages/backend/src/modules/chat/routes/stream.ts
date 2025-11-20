@@ -55,6 +55,7 @@ import { nonStreamFallbackService } from '../services/non-stream-fallback-servic
 import { assistantProgressService } from '../services/assistant-progress-service';
 import { streamUsageService } from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
+import { streamSseService } from '../services/stream-sse-service';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
