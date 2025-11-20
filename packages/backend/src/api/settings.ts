@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Actor } from '../types';
+import { prisma } from '../db';
 import { syncSharedAnonymousQuota } from '../utils/quota';
 import { invalidateQuotaPolicyCache } from '../utils/system-settings'
 import { settingsService, SettingsServiceError } from '../services/settings'
