@@ -1,8 +1,8 @@
-import { StreamMetaStore } from '../stream-meta-store'
+import { MemoryStreamMetaStore } from '../stream-meta-store'
 
 describe('StreamMetaStore', () => {
   test('registers and retrieves stream meta by message id and client id', () => {
-    const store = new StreamMetaStore()
+    const store = new MemoryStreamMetaStore()
     const meta = store.registerStreamMeta({
       sessionId: 1,
       actorIdentifier: 'user:1',
@@ -15,7 +15,7 @@ describe('StreamMetaStore', () => {
   })
 
   test('assigns assistant client id and resolves derived ids', () => {
-    const store = new StreamMetaStore()
+    const store = new MemoryStreamMetaStore()
     const derived = store.deriveAssistantClientMessageId('client-x')
     expect(derived.endsWith(':assistant')).toBe(true)
     const ensured = store.ensureAssistantClientMessageId(null)
@@ -25,7 +25,7 @@ describe('StreamMetaStore', () => {
   })
 
   test('handles pending cancel markers', () => {
-    const store = new StreamMetaStore()
+    const store = new MemoryStreamMetaStore()
     store.registerPendingCancelMarker({
       sessionId: 2,
       clientMessageId: 'x',

@@ -20,7 +20,38 @@ export type StreamMetaRegistrationParams = {
   assistantMessageId?: number | string | null
 }
 
-export class StreamMetaStore {
+export interface StreamMetaStore {
+  buildAgentStreamKey(sessionId: number, clientMessageId?: string | null, messageId?: number | string | null): string
+  deriveAssistantClientMessageId(clientMessageId?: string | null): string
+  ensureAssistantClientMessageId(value?: string | null): string
+  resolveAssistantClientIdFromRequest(value?: string | null): string | null
+  registerStreamMeta(params: StreamMetaRegistrationParams): AgentStreamMeta | null
+  updateStreamMetaController(meta: AgentStreamMeta | null, controller: AbortController | null): void
+  persistStreamMeta(meta: AgentStreamMeta | null): void
+  releaseStreamMeta(meta: AgentStreamMeta | null): void
+  findStreamMetaByMessageId(sessionId: number, messageId?: number | string | null): AgentStreamMeta | null
+  findStreamMetaByClientMessageId(sessionId: number, clientMessageId?: string | null): AgentStreamMeta | null
+  findStreamMetaByAssistantClientMessageId(sessionId: number, assistantClientMessageId?: string | null): AgentStreamMeta | null
+  getStreamMetaByKey(key: string | null | undefined): AgentStreamMeta | null
+  buildPendingCancelKeyByClientId(sessionId: number, clientMessageId?: string | null): string | null
+  buildPendingCancelKeyByMessageId(sessionId: number, messageId?: number | string | null): string | null
+  registerPendingCancelMarker(params: {
+    sessionId: number
+    messageId?: number | string | null
+    clientMessageId?: string | null
+    assistantClientMessageId?: string | null
+  }): boolean
+  clearPendingCancelMarkers(params: {
+    sessionId: number
+    messageId?: number | string | null
+    clientMessageId?: string | null
+    assistantClientMessageId?: string | null
+  }): void
+  hasPendingStreamCancelKey(key: string | null | undefined): boolean
+  deletePendingStreamCancelKey(key: string | null | undefined): void
+}
+
+export class MemoryStreamMetaStore implements StreamMetaStore {
   private agentStreamControllers = new Map<string, AgentStreamMeta>()
   private pendingStreamCancels = new Set<string>()
 
@@ -215,5 +246,5 @@ export class StreamMetaStore {
   }
 }
 
-export const streamMetaStore = new StreamMetaStore()
+export const streamMetaStore = new MemoryStreamMetaStore()
 export const STREAMING_PLACEHOLDER_STATUSES: Array<NonNullable<Message['streamStatus']>> = ['pending', 'streaming']
