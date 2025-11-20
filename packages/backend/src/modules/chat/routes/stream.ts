@@ -36,6 +36,7 @@ import {
   updateStreamMetaController,
   deletePendingStreamCancelKey,
 } from '../../chat/stream-state';
+import { chatRequestBuilder } from '../services/chat-request-builder';
 import type { AgentStreamMeta } from '../../chat/stream-state';
 import { BackendLogger as log } from '../../../utils/logger';
 import { logTraffic } from '../../../utils/traffic-logger';
@@ -250,150 +251,31 @@ export const registerChatStreamRoutes = (router: Hono) => {
         });
       }
 
-      const contextEnabled = payload?.contextEnabled !== false;
-      const contextLimit = await resolveContextLimit({
-        connectionId: session.connectionId,
-        rawModelId: session.modelRawId,
-        provider: session.connection.provider,
+      const preparedRequest = await chatRequestBuilder.prepare({
+        session,
+        payload,
+        content,
+        images,
+        mode: 'stream',
+        historyUpperBound: userMessageRecord?.createdAt ?? null,
       });
 
-      let truncatedContext: Array<{ role: string; content: string }>;
-
-      if (contextEnabled) {
-        const recentMessages = await prisma.message.findMany({
-          where: {
-            sessionId,
-            ...(replyToMessageId && userMessageRecord?.createdAt
-              ? { createdAt: { lte: userMessageRecord.createdAt } }
-              : {}),
-          },
-          select: {
-            role: true,
-            content: true,
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 50,
-        });
-
-        const conversationHistory = recentMessages
-          .filter((msg: { role: string; content: string }) => msg.role !== 'user' || msg.content !== content)
-          .reverse();
-
-        const fullConversation = [
-          ...conversationHistory,
-          { role: 'user', content },
-        ];
-
-        truncatedContext = await Tokenizer.truncateMessages(
-          fullConversation,
-          contextLimit,
-        );
-      } else {
-        truncatedContext = [{ role: 'user', content }];
-      }
-
-      if (requestedFeatures?.web_search === true) {
-        truncatedContext = [
-          {
-            role: 'system',
-            content:
-              '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。',
-          },
-          ...truncatedContext,
-        ];
-      }
-
-      // 统计上下文使用量（估算）
-      const promptTokens = await Tokenizer.countConversationTokens(truncatedContext);
-      const contextRemaining = Math.max(0, contextLimit - promptTokens);
-      const completionLimit = await resolveCompletionLimit({
-        connectionId: session.connectionId,
-        rawModelId: session.modelRawId,
-        provider: session.connection.provider,
-      });
-      const appliedMaxTokens = Math.max(1, Math.min(completionLimit, Math.max(1, contextRemaining)));
-
-      // 解密API Key（仅 bearer 时需要）
-      const decryptedApiKey = session.connection.authType === 'bearer' && session.connection.apiKey
-        ? AuthUtils.decryptApiKey(session.connection.apiKey)
-        : ''
-
-      const provider = session.connection.provider as 'openai' | 'azure_openai' | 'ollama'
-      const baseUrl = session.connection.baseUrl.replace(/\/$/, '')
-      const providerHost = (() => {
-        try {
-          const parsed = new URL(baseUrl);
-          return parsed.hostname;
-        } catch {
-          return null;
-        }
-      })();
-      const extraHeaders = session.connection.headersJson ? JSON.parse(session.connection.headersJson) : {}
-      const authHeader: Record<string,string> = {}
-      if (session.connection.authType === 'bearer' && decryptedApiKey) {
-        authHeader['Authorization'] = `Bearer ${decryptedApiKey}`
-      } else if (session.connection.authType === 'system_oauth') {
-        const token = process.env.SYSTEM_OAUTH_TOKEN
-        if (token) authHeader['Authorization'] = `Bearer ${token}`
-      } else if (session.connection.authType === 'microsoft_entra_id' && provider === 'azure_openai') {
-        try {
-          const envToken = process.env.AZURE_ACCESS_TOKEN
-          if (envToken) authHeader['Authorization'] = `Bearer ${envToken}`
-          else {
-            // 动态获取 Azure 访问令牌
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const { DefaultAzureCredential } = require('@azure/identity')
-            const cred = new DefaultAzureCredential()
-            const token = await cred.getToken('https://cognitiveservices.azure.com/.default')
-            if (token?.token) authHeader['Authorization'] = `Bearer ${token.token}`
-          }
-        } catch (e) {
-          // 忽略失败：缺少依赖或凭据时不设置 Authorization
-        }
-      }
+      const promptTokens = preparedRequest.promptTokens;
+      const contextLimit = preparedRequest.contextLimit;
+      const contextRemaining = preparedRequest.contextRemaining;
+      const contextEnabled = preparedRequest.contextEnabled;
+      const sysMap = preparedRequest.systemSettings;
+      const messagesPayload = preparedRequest.messagesPayload;
+      const requestData: any = JSON.parse(JSON.stringify(preparedRequest.baseRequestBody));
+      const providerRequest = preparedRequest.providerRequest;
+      const provider = providerRequest.providerLabel as 'openai' | 'azure_openai' | 'ollama';
+      const baseUrl = session.connection.baseUrl.replace(/\/$/, '');
+      const authHeader = providerRequest.authHeader;
+      const extraHeaders = providerRequest.extraHeaders;
+      const providerHost = providerRequest.providerHost;
 
       log.debug('Chat stream request', { sessionId, actor: actor.identifier, provider, baseUrl, model: session.modelRawId })
 
-      // 构建AI API请求
-      // 先将历史消息（纯文本）放入
-      const messagesPayload: any[] = truncatedContext.map((msg: { role: string; content: string }) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
-
-      // 为当前用户消息构造多模态内容
-      const parts: any[] = []
-      if (content?.trim()) {
-        parts.push({ type: 'text', text: content })
-      }
-      if (images && images.length) {
-        for (const img of images) {
-          parts.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } })
-        }
-      }
-
-      // 如果最后一条就是当前用户消息，则替换为 parts；否则追加一条
-      const last = messagesPayload[messagesPayload.length - 1]
-      if (last && last.role === 'user' && last.content === content) {
-        messagesPayload[messagesPayload.length - 1] = { role: 'user', content: parts }
-      } else {
-        messagesPayload.push({ role: 'user', content: parts })
-      }
-
-      const requestData: any = {
-        model: session.modelRawId,
-        messages: messagesPayload,
-        stream: true,
-        temperature: 0.7,
-      };
-      requestData.max_tokens = appliedMaxTokens;
-
-      // 供应商参数透传（系统设置控制）
-      // 即时与会话/系统优先级：request > session > system/env
-      const sessionDefaults = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { reasoningEnabled: true, reasoningEffort: true, ollamaThink: true } })
-      // 读取系统设置以支持推理/思考等开关的默认值（需在使用 sysMap 前初始化）
-      const sysRows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
-      const sysMap = sysRows.reduce((m, r) => { (m as any)[r.key] = r.value; return m; }, {} as Record<string, string>);
       const traceDecision = await shouldEnableTaskTrace({
         actor,
         requestFlag: traceToggle,
@@ -401,11 +283,6 @@ export const registerChatStreamRoutes = (router: Hono) => {
         env: process.env.NODE_ENV,
       });
       const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
-      const retentionDaysRaw = sysMap.chat_image_retention_days || process.env.CHAT_IMAGE_RETENTION_DAYS || `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
-      const retentionDaysParsed = Number.parseInt(retentionDaysRaw, 10)
-      cleanupExpiredChatImages(Number.isFinite(retentionDaysParsed) ? retentionDaysParsed : CHAT_IMAGE_DEFAULT_RETENTION_DAYS).catch((error) => {
-        console.warn('[chat] cleanupExpiredChatImages', error)
-      })
       const assistantReplyHistoryLimit = (() => {
         const raw =
           sysMap.assistant_reply_history_limit ||
@@ -417,34 +294,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
         }
         return 5
       })()
-      const reqReasoningEnabled = payload.reasoningEnabled
-      const reqReasoningEffort = payload.reasoningEffort
-      const reqOllamaThink = payload.ollamaThink
-
-      const effectiveReasoningEnabled = typeof reqReasoningEnabled === 'boolean'
-        ? reqReasoningEnabled
-        : (sessionDefaults?.reasoningEnabled ?? ((sysMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false'))
-
-      const effectiveReasoningEffort = (reqReasoningEffort || sessionDefaults?.reasoningEffort || (sysMap.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || '')).toString()
-
-      const effectiveOllamaThink = typeof reqOllamaThink === 'boolean'
-        ? reqOllamaThink
-        : ((sessionDefaults?.ollamaThink ?? ((sysMap.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false')).toString().toLowerCase() === 'true')) as boolean)
+      const effectiveReasoningEnabled = preparedRequest.reasoning.enabled
+      const effectiveReasoningEffort = preparedRequest.reasoning.effort
+      const effectiveOllamaThink = preparedRequest.reasoning.ollamaThink
 
       const defaultReasoningSaveToDb = (sysMap.reasoning_save_to_db ?? (process.env.REASONING_SAVE_TO_DB ?? 'true'))
         .toString()
         .toLowerCase() === 'true';
       const effectiveReasoningSaveToDb =
         typeof payload?.saveReasoning === 'boolean' ? payload.saveReasoning : defaultReasoningSaveToDb;
-
-      delete requestData.reasoning_effort
-      delete requestData.think
-      if (effectiveReasoningEnabled && effectiveReasoningEffort) {
-        requestData.reasoning_effort = effectiveReasoningEffort
-      }
-      if (effectiveReasoningEnabled && effectiveOllamaThink) {
-        requestData.think = true
-      }
 
       console.log('Starting AI stream request to:', baseUrl);
 
@@ -617,7 +475,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
       // 心跳与超时参数
       const heartbeatIntervalMs = parseInt(sysMap.sse_heartbeat_interval_ms || process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000');
       const providerMaxIdleMs = parseInt(sysMap.provider_max_idle_ms || process.env.PROVIDER_MAX_IDLE_MS || '60000');
-      const providerTimeoutMs = parseInt(sysMap.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000');
+      const providerTimeoutMs = providerRequest.timeoutMs;
 
       // 推理链（CoT）配置
       const REASONING_ENABLED = (sysMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false';
@@ -759,32 +617,9 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       // 单次厂商请求（支持 429/5xx 退避一次）
       const providerRequestOnce = async (signal: AbortSignal): Promise<Response> => {
-        let url = ''
-        let body: any = { ...requestData }
-        let headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...authHeader,
-          ...extraHeaders,
-        }
-        if (provider === 'openai') {
-          body = convertOpenAIReasoningPayload(body)
-          url = `${baseUrl}/chat/completions`
-        } else if (provider === 'azure_openai') {
-          const v = session.connection?.azureApiVersion || '2024-02-15-preview'
-          // Azure 使用 deployments/{model}/chat/completions
-          body = convertOpenAIReasoningPayload(body)
-          url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`
-        } else if (provider === 'ollama') {
-          // 适配 Ollama chat 接口
-          url = `${baseUrl}/api/chat`
-          body = {
-            model: session.modelRawId,
-            messages: messagesPayload.map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : m.content?.map((p: any) => p.text).filter(Boolean).join('\n') })),
-            stream: true,
-          }
-        } else {
-          url = `${baseUrl}`
-        }
+        const url = providerRequest.url
+        const headers = providerRequest.headers
+        const serializedBody = JSON.stringify(providerRequest.body)
 
         await logTraffic({
           category: 'upstream-request',
@@ -797,12 +632,12 @@ export const registerChatStreamRoutes = (router: Hono) => {
           },
           payload: {
             headers,
-            body,
+            body: providerRequest.body,
           },
         })
 
         try {
-          const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+          const response = await fetch(url, { method: 'POST', headers, body: serializedBody, signal })
           await logTraffic({
             category: 'upstream-response',
             route: '/api/chat/stream',

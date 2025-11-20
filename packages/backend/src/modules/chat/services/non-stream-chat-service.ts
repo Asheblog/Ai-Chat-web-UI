@@ -1,20 +1,21 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { z } from 'zod'
-import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage'
 import { prisma as defaultPrisma } from '../../../db'
 import type { UsageQuotaSnapshot } from '../../../types'
-import { cleanupExpiredChatImages as defaultCleanupExpiredChatImages } from '../../../utils/chat-images'
-import { resolveCompletionLimit as defaultResolveCompletionLimit, resolveContextLimit as defaultResolveContextLimit } from '../../../utils/context-window'
 import { BackendLogger as log } from '../../../utils/logger'
-import { AuthUtils as defaultAuthUtils } from '../../../utils/auth'
-import { Tokenizer } from '../../../utils/tokenizer'
 import { logTraffic as defaultLogTraffic } from '../../../utils/traffic-logger'
 import type { ProviderChatCompletionResponse } from '../chat-common'
 import { BACKOFF_429_MS, BACKOFF_5XX_MS, sendMessageSchema } from '../chat-common'
+import {
+  chatRequestBuilder,
+  type ChatRequestBuilder,
+  type PreparedChatRequest,
+} from './chat-request-builder'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 
 type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
+
 interface NonStreamChatRequest {
   session: ChatSessionWithConnection
   payload: SendMessagePayload
@@ -45,93 +46,42 @@ export class ChatCompletionServiceError extends Error {
   }
 }
 
-const parseHeadersJson = (raw?: string | null): Record<string, string> => {
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    return Object.fromEntries(
-      Object.entries(parsed).map(([key, value]) => [key, String(value)]),
-    )
-  } catch {
-    return {}
-  }
-}
-
 export interface NonStreamChatServiceDeps {
   prisma?: PrismaClient
-  tokenizer?: Pick<typeof Tokenizer, 'truncateMessages' | 'countConversationTokens'>
-  resolveContextLimit?: typeof defaultResolveContextLimit
-  resolveCompletionLimit?: typeof defaultResolveCompletionLimit
-  cleanupExpiredChatImages?: typeof defaultCleanupExpiredChatImages
-  authUtils?: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
   logTraffic?: typeof defaultLogTraffic
   fetchImpl?: typeof fetch
   now?: () => Date
+  requestBuilder?: ChatRequestBuilder
 }
 
 export class NonStreamChatService {
   private prisma: PrismaClient
-  private tokenizer: Pick<typeof Tokenizer, 'truncateMessages' | 'countConversationTokens'>
-  private resolveContextLimit: typeof defaultResolveContextLimit
-  private resolveCompletionLimit: typeof defaultResolveCompletionLimit
-  private cleanupExpiredChatImages: typeof defaultCleanupExpiredChatImages
-  private authUtils: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
   private logTraffic: typeof defaultLogTraffic
   private fetchImpl: typeof fetch
   private now: () => Date
+  private requestBuilder: ChatRequestBuilder
 
   constructor(deps: NonStreamChatServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
-    this.tokenizer = deps.tokenizer ?? Tokenizer
-    this.resolveContextLimit = deps.resolveContextLimit ?? defaultResolveContextLimit
-    this.resolveCompletionLimit = deps.resolveCompletionLimit ?? defaultResolveCompletionLimit
-    this.cleanupExpiredChatImages = deps.cleanupExpiredChatImages ?? defaultCleanupExpiredChatImages
-    this.authUtils = deps.authUtils ?? defaultAuthUtils
     this.logTraffic = deps.logTraffic ?? defaultLogTraffic
     this.fetchImpl = deps.fetchImpl ?? fetch
     this.now = deps.now ?? (() => new Date())
+    this.requestBuilder = deps.requestBuilder ?? chatRequestBuilder
   }
 
   async execute(request: NonStreamChatRequest): Promise<NonStreamChatResult> {
     const { session, payload, content, images = [], quotaSnapshot } = request
-    const contextInfo = await this.buildContextMessages({
-      sessionId: session.id,
-      connectionId: session.connectionId!,
-      modelRawId: session.modelRawId!,
-      provider: session.connection.provider,
-      actorContent: content,
-      contextEnabled: payload?.contextEnabled !== false,
-    })
-
-    const requestedFeatures = payload?.features || {}
-    let preparedMessages = contextInfo.truncatedContext
-    if (requestedFeatures.web_search === true) {
-      preparedMessages = [
-        {
-          role: 'system',
-          content:
-            '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。',
-        },
-        ...preparedMessages,
-      ]
-    }
-
-    const providerRequest = await this.buildProviderRequest({
+    const prepared = await this.requestBuilder.prepare({
       session,
       payload,
       content,
       images,
-      messages: preparedMessages,
-      appliedMaxTokens: contextInfo.appliedMaxTokens,
+      mode: 'completion',
     })
 
     const response = await this.performProviderRequest({
       sessionId: session.id,
-      provider: providerRequest.providerLabel,
-      url: providerRequest.url,
-      headers: providerRequest.headers,
-      body: providerRequest.body,
-      timeoutMs: providerRequest.timeoutMs,
+      providerRequest: prepared.providerRequest,
     })
 
     if (!response.ok) {
@@ -149,8 +99,8 @@ export class NonStreamChatService {
       direction: 'outbound',
       context: {
         sessionId: session.id,
-        provider: providerRequest.providerLabel,
-        url: providerRequest.url,
+        provider: prepared.providerRequest.providerLabel,
+        url: prepared.providerRequest.url,
         stage: 'parsed',
       },
       payload: {
@@ -164,9 +114,9 @@ export class NonStreamChatService {
       json?.choices?.[0]?.message?.reasoning_content || json?.message?.thinking || undefined
 
     const usage = this.buildUsage(json, {
-      promptTokens: contextInfo.promptTokens,
-      contextLimit: contextInfo.contextLimit,
-      contextRemaining: contextInfo.contextRemaining,
+      promptTokens: prepared.promptTokens,
+      contextLimit: prepared.contextLimit,
+      contextRemaining: prepared.contextRemaining,
     })
 
     const sessionStillExists = await this.sessionExists(session.id)
@@ -189,7 +139,7 @@ export class NonStreamChatService {
         session,
         assistantMessageId: assistantId,
         usage,
-        providerHost: providerRequest.providerHost,
+        providerHost: prepared.providerRequest.providerHost,
       })
     } else {
       log.warn('Skip persisting usage metric because session no longer exists', {
@@ -204,311 +154,31 @@ export class NonStreamChatService {
     }
   }
 
-  private async buildContextMessages(params: {
-    sessionId: number
-    connectionId: number
-    modelRawId: string
-    provider: string
-    actorContent: string
-    contextEnabled: boolean
-  }): Promise<{
-    truncatedContext: Array<{ role: string; content: string }>
-    promptTokens: number
-    contextLimit: number
-    contextRemaining: number
-    appliedMaxTokens: number
-  }> {
-    const contextLimit = await this.resolveContextLimit({
-      connectionId: params.connectionId,
-      rawModelId: params.modelRawId,
-      provider: params.provider,
-    })
-
-    let truncated: Array<{ role: string; content: string }>
-    if (params.contextEnabled) {
-      const recent = await this.prisma.message.findMany({
-        where: { sessionId: params.sessionId },
-        select: { role: true, content: true },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      })
-      const conversation = recent
-        .filter((msg) => msg.role !== 'user' || msg.content !== params.actorContent)
-        .reverse()
-
-      truncated = await this.tokenizer.truncateMessages(
-        conversation.concat([{ role: 'user', content: params.actorContent }]),
-        contextLimit,
-      )
-    } else {
-      truncated = [{ role: 'user', content: params.actorContent }]
-    }
-
-    const promptTokens = await this.tokenizer.countConversationTokens(truncated)
-    const contextRemaining = Math.max(0, contextLimit - promptTokens)
-    const completionLimit = await this.resolveCompletionLimit({
-      connectionId: params.connectionId,
-      rawModelId: params.modelRawId,
-      provider: params.provider,
-    })
-    const appliedMaxTokens = Math.max(
-      1,
-      Math.min(completionLimit, Math.max(1, contextRemaining)),
-    )
-
-    return {
-      truncatedContext: truncated,
-      promptTokens,
-      contextLimit,
-      contextRemaining,
-      appliedMaxTokens,
-    }
-  }
-
-  private async buildProviderRequest(params: {
-    session: ChatSessionWithConnection
-    payload: SendMessagePayload
-    messages: Array<{ role: string; content: string }>
-    content: string
-    images: Array<{ data: string; mime: string }>
-    appliedMaxTokens: number
-  }) {
-    const { session, payload, messages, content, images, appliedMaxTokens } = params
-    const provider = session.connection.provider as 'openai' | 'azure_openai' | 'ollama'
-
-    const messagesPayload = this.buildMessagesPayload(messages, content, images, provider)
-
-    const settingsMap = await this.loadSystemSettings()
-    this.scheduleImageCleanup(settingsMap)
-    const timeoutMs = this.resolveProviderTimeout(settingsMap)
-
-    const reasoningEnabled = this.resolveReasoningEnabled(payload, session, settingsMap)
-    const reasoningEffort = this.resolveReasoningEffort(payload, session, settingsMap)
-    const ollamaThinkEnabled = this.resolveOllamaThink(payload, session, settingsMap)
-
-    const baseUrl = session.connection.baseUrl.replace(/\/$/, '')
-    const providerHost = this.safeResolveHost(baseUrl)
-    const extraHeaders = parseHeadersJson(session.connection.headersJson)
-    const decryptedApiKey =
-      session.connection.authType === 'bearer' && session.connection.apiKey
-        ? this.authUtils.decryptApiKey(session.connection.apiKey)
-        : ''
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(session.connection.authType === 'bearer' && decryptedApiKey
-        ? { Authorization: `Bearer ${decryptedApiKey}` }
-        : {}),
-      ...extraHeaders,
-    }
-
-    let body: any = {
-      model: session.modelRawId,
-      messages: messagesPayload,
-      stream: false,
-      temperature: 0.7,
-      max_tokens: appliedMaxTokens,
-    }
-
-    if (reasoningEnabled) {
-      if (reasoningEffort) {
-        body.reasoning_effort = reasoningEffort
-      }
-      if (ollamaThinkEnabled) {
-        body.think = true
-      }
-    } else {
-      delete body.reasoning_effort
-      delete body.think
-    }
-
-    let url = ''
-    if (provider === 'openai') {
-      url = `${baseUrl}/chat/completions`
-    } else if (provider === 'azure_openai') {
-      const apiVersion = session.connection.azureApiVersion || '2024-02-15-preview'
-      url = `${baseUrl}/openai/deployments/${encodeURIComponent(session.modelRawId!)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
-    } else if (provider === 'ollama') {
-      url = `${baseUrl}/api/chat`
-      body = {
-        model: session.modelRawId,
-        messages: messagesPayload.map((item: any) => ({
-          role: item.role,
-          content: typeof item.content === 'string'
-            ? item.content
-            : item.content?.map((part: any) => part.text).filter(Boolean).join('\n'),
-        })),
-        stream: false,
-      }
-    }
-
-    return {
-      providerLabel: provider,
-      providerHost,
-      url,
-      headers,
-      body,
-      timeoutMs,
-    }
-  }
-
-  private buildMessagesPayload(
-    context: Array<{ role: string; content: string }>,
-    content: string,
-    images: Array<{ data: string; mime: string }>,
-    provider: string,
-  ) {
-    const messagesPayload = context.map((message) => ({
-      role: message.role,
-      content: message.content,
-    }))
-
-    if (provider === 'ollama') {
-      return messagesPayload
-    }
-
-    const parts: any[] = []
-    if (content?.trim()) {
-      parts.push({ type: 'text', text: content })
-    }
-    for (const image of images) {
-      parts.push({
-        type: 'image_url',
-        image_url: { url: `data:${image.mime};base64,${image.data}` },
-      })
-    }
-
-    if (parts.length === 0) {
-      return messagesPayload
-    }
-
-    const last = messagesPayload[messagesPayload.length - 1]
-    if (last && last.role === 'user' && last.content === content) {
-      messagesPayload[messagesPayload.length - 1] = { role: 'user', content: parts }
-    } else {
-      messagesPayload.push({ role: 'user', content: parts })
-    }
-
-    return messagesPayload
-  }
-
-  private async loadSystemSettings(): Promise<Record<string, string>> {
-    const rows = await this.prisma.systemSetting.findMany({ select: { key: true, value: true } })
-    return rows.reduce<Record<string, string>>((acc, row) => {
-      acc[row.key] = row.value ?? ''
-      return acc
-    }, {})
-  }
-
-  private scheduleImageCleanup(settings: Record<string, string>) {
-    const retentionRaw =
-      settings.chat_image_retention_days ||
-      process.env.CHAT_IMAGE_RETENTION_DAYS ||
-      `${CHAT_IMAGE_DEFAULT_RETENTION_DAYS}`
-    const retention = Number.parseInt(retentionRaw, 10)
-    const value = Number.isFinite(retention) ? retention : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
-    this.cleanupExpiredChatImages(value).catch((error) => {
-      log.warn('[chat] cleanupExpiredChatImages failed', {
-        error: error instanceof Error ? error.message : error,
-      })
-    })
-  }
-
-  private resolveProviderTimeout(settings: Record<string, string>): number {
-    const raw = settings.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000'
-    const parsed = Number.parseInt(raw, 10)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 300000
-  }
-
-  private resolveReasoningEnabled(
-    payload: SendMessagePayload,
-    session: ChatSessionWithConnection,
-    settings: Record<string, string>,
-  ): boolean {
-    if (typeof payload?.reasoningEnabled === 'boolean') {
-      return payload.reasoningEnabled
-    }
-    if (typeof session.reasoningEnabled === 'boolean') {
-      return session.reasoningEnabled
-    }
-    const fallback = settings.reasoning_enabled ?? process.env.REASONING_ENABLED ?? 'true'
-    return fallback.toString().toLowerCase() !== 'false'
-  }
-
-  private resolveReasoningEffort(
-    payload: SendMessagePayload,
-    session: ChatSessionWithConnection,
-    settings: Record<string, string>,
-  ): string {
-    return (
-      payload?.reasoningEffort ||
-      session.reasoningEffort ||
-      settings.openai_reasoning_effort ||
-      process.env.OPENAI_REASONING_EFFORT ||
-      ''
-    ).toString()
-  }
-
-  private resolveOllamaThink(
-    payload: SendMessagePayload,
-    session: ChatSessionWithConnection,
-    settings: Record<string, string>,
-  ): boolean {
-    if (typeof payload?.ollamaThink === 'boolean') {
-      return payload.ollamaThink
-    }
-    if (typeof session.ollamaThink === 'boolean') {
-      return session.ollamaThink
-    }
-    const fallback = settings.ollama_think ?? process.env.OLLAMA_THINK ?? 'false'
-    return fallback.toString().toLowerCase() === 'true'
-  }
-
-  private shouldSaveReasoning(payload: SendMessagePayload): boolean {
-    if (typeof payload?.saveReasoning === 'boolean') {
-      return payload.saveReasoning
-    }
-    return true
-  }
-
-  private safeResolveHost(baseUrl: string): string | null {
-    try {
-      const parsed = new URL(baseUrl)
-      return parsed.hostname
-    } catch {
-      return null
-    }
-  }
-
   private async performProviderRequest(params: {
     sessionId: number
-    provider: string
-    url: string
-    headers: Record<string, string>
-    body: any
-    timeoutMs: number
+    providerRequest: PreparedChatRequest['providerRequest']
   }) {
-    const { sessionId, provider, url, headers, body, timeoutMs } = params
-
+    const serializeBody = () => JSON.stringify(params.providerRequest.body)
     const doOnce = async (signal: AbortSignal) => {
       await this.logTraffic({
         category: 'upstream-request',
         route: '/api/chat/completion',
         direction: 'outbound',
         context: {
-          sessionId,
-          provider,
-          url,
+          sessionId: params.sessionId,
+          provider: params.providerRequest.providerLabel,
+          url: params.providerRequest.url,
         },
         payload: {
-          headers,
-          body,
+          headers: params.providerRequest.headers,
+          body: params.providerRequest.body,
         },
       })
       try {
-        const response = await this.fetchImpl(url, {
+        const response = await this.fetchImpl(params.providerRequest.url, {
           method: 'POST',
-          headers,
-          body: JSON.stringify(body),
+          headers: params.providerRequest.headers,
+          body: serializeBody(),
           signal,
         })
         await this.logTraffic({
@@ -516,9 +186,9 @@ export class NonStreamChatService {
           route: '/api/chat/completion',
           direction: 'outbound',
           context: {
-            sessionId,
-            provider,
-            url,
+            sessionId: params.sessionId,
+            provider: params.providerRequest.providerLabel,
+            url: params.providerRequest.url,
           },
           payload: {
             status: response.status,
@@ -533,9 +203,9 @@ export class NonStreamChatService {
           route: '/api/chat/completion',
           direction: 'outbound',
           context: {
-            sessionId,
-            provider,
-            url,
+            sessionId: params.sessionId,
+            provider: params.providerRequest.providerLabel,
+            url: params.providerRequest.url,
           },
           payload: {
             message: error?.message || String(error),
@@ -546,7 +216,10 @@ export class NonStreamChatService {
     }
 
     const abortController = new AbortController()
-    const timer = setTimeout(() => abortController.abort(new Error('provider timeout')), timeoutMs)
+    const timer = setTimeout(
+      () => abortController.abort(new Error('provider timeout')),
+      params.providerRequest.timeoutMs,
+    )
     try {
       let response = await doOnce(abortController.signal)
       if (response.status === 429) {
@@ -639,6 +312,13 @@ export class NonStreamChatService {
   private async sessionExists(sessionId: number): Promise<boolean> {
     const count = await this.prisma.chatSession.count({ where: { id: sessionId } })
     return count > 0
+  }
+
+  private shouldSaveReasoning(payload: SendMessagePayload): boolean {
+    if (typeof payload?.saveReasoning === 'boolean') {
+      return payload.saveReasoning
+    }
+    return true
   }
 }
 
