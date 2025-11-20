@@ -52,6 +52,7 @@ import {
 } from '../chat-common';
 import { createUserMessageWithQuota } from '../services/message-service';
 import { chatService, ChatServiceError } from '../../../services/chat';
+import { providerRequester } from '../services/provider-requester';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -613,92 +614,31 @@ export const registerChatStreamRoutes = (router: Hono) => {
         }
       };
 
-      let currentProviderController: AbortController | null = null;
+  let currentProviderController: AbortController | null = null;
 
-      // 单次厂商请求（支持 429/5xx 退避一次）
-      const providerRequestOnce = async (signal: AbortSignal): Promise<Response> => {
-        const url = providerRequest.url
-        const headers = providerRequest.headers
-        const serializedBody = JSON.stringify(providerRequest.body)
-
-        await logTraffic({
-          category: 'upstream-request',
-          route: '/api/chat/stream',
-          direction: 'outbound',
+      const providerRequestWithBackoff = async (): Promise<Response> =>
+        providerRequester.requestWithBackoff({
+          request: {
+            url: providerRequest.url,
+            headers: providerRequest.headers,
+            body: providerRequest.body,
+          },
           context: {
             sessionId,
             provider,
-            url,
-          },
-          payload: {
-            headers,
-            body: providerRequest.body,
-          },
-        })
-
-        try {
-          const response = await fetch(url, { method: 'POST', headers, body: serializedBody, signal })
-          await logTraffic({
-            category: 'upstream-response',
             route: '/api/chat/stream',
-            direction: 'outbound',
-            context: {
-              sessionId,
-              provider,
-              url,
-            },
-            payload: {
-              status: response.status,
-              statusText: response.statusText,
-              headers: Object.fromEntries(response.headers.entries()),
-            },
-          })
-          return response
-        } catch (error: any) {
-          await logTraffic({
-            category: 'upstream-error',
-            route: '/api/chat/stream',
-            direction: 'outbound',
-            context: {
-              sessionId,
-              provider,
-              url,
-            },
-            payload: {
-              message: error?.message || String(error),
-            },
-          })
-          throw error
-        }
-      };
-
-      const providerRequestWithBackoff = async (): Promise<Response> => {
-        // 控制超时与空闲的 AbortController
-        const ac = new AbortController();
-        currentProviderController = ac;
-        bindProviderController(ac);
-        const timeout = setTimeout(() => ac.abort(new Error('provider request timeout')), providerTimeoutMs);
-        try {
-          let response = await providerRequestOnce(ac.signal);
-          if (response.status === 429) {
-            log.warn('Provider rate limited (429), backing off...', { backoffMs: BACKOFF_429_MS });
-            await new Promise(r => setTimeout(r, BACKOFF_429_MS));
-            response = await providerRequestOnce(ac.signal);
-          } else if (response.status >= 500) {
-            log.warn('Provider 5xx, backing off...', { status: response.status, backoffMs: BACKOFF_5XX_MS });
-            await new Promise(r => setTimeout(r, BACKOFF_5XX_MS));
-            response = await providerRequestOnce(ac.signal);
-          }
-          return response;
-        } catch (error) {
-          bindProviderController(null);
-          currentProviderController = null;
-          throw error;
-        } finally {
-          clearTimeout(timeout);
-        }
-      };
-      type NonStreamFallbackResult = {
+            timeoutMs: providerTimeoutMs,
+          },
+          onControllerReady: (controller) => {
+            currentProviderController = controller
+            bindProviderController(controller)
+          },
+          onControllerClear: () => {
+            bindProviderController(null)
+            currentProviderController = null
+          },
+        });
+     type NonStreamFallbackResult = {
         text: string;
         reasoning?: string | null;
         usage?: ProviderChatCompletionResponse['usage'] | null;
