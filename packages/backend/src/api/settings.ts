@@ -8,6 +8,7 @@ import { syncSharedAnonymousQuota } from '../utils/quota';
 import { invalidateQuotaPolicyCache } from '../utils/system-settings'
 import { settingsService, SettingsServiceError } from '../services/settings'
 import { personalSettingsService } from '../services/settings/personal-settings-service'
+import { healthService, HealthServiceError } from '../services/settings/health-service'
 
 const settings = new Hono();
 
@@ -257,17 +258,7 @@ settings.get('/app-info', async (c) => {
 // 健康检查接口
 settings.get('/health', async (c) => {
   try {
-    // 检查数据库连接
-    await prisma.$queryRaw`SELECT 1`;
-
-    const healthInfo = {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      version: 'v1.1.0',
-      database: 'connected',
-      memory: process.memoryUsage(),
-    };
-
+    const healthInfo = await healthService.check()
     return c.json<ApiResponse>({
       success: true,
       data: healthInfo,
@@ -276,6 +267,7 @@ settings.get('/health', async (c) => {
   } catch (error) {
     console.error('Health check error:', error);
 
+    const status = error instanceof HealthServiceError ? error.statusCode : 503
     const healthInfo = {
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
@@ -286,7 +278,7 @@ settings.get('/health', async (c) => {
       success: false,
       data: healthInfo,
       error: 'Service is unhealthy',
-    }, 503);
+    }, status);
   }
 });
 
