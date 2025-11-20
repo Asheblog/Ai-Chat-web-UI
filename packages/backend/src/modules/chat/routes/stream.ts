@@ -645,6 +645,17 @@ export const registerChatStreamRoutes = (router: Hono) => {
             traceRecorder,
             streamLogBase,
           })
+          const safeEnqueue = (payload: string) => {
+            if (downstreamAborted || emitter.isClosed()) return false
+            const delivered = emitter.enqueue(payload)
+            if (!delivered) {
+              downstreamAborted = true
+              try {
+                controller.close()
+              } catch {}
+            }
+            return delivered
+          }
           const completeWithNonStreamingFallback = async (
             origin: 'stream_error' | 'reasoning_only',
           ): Promise<boolean> => {
