@@ -3,15 +3,10 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Actor } from '../types';
-import { prisma } from '../db';
 import { syncSharedAnonymousQuota } from '../utils/quota';
 import { invalidateQuotaPolicyCache } from '../utils/system-settings'
-import {
-  replaceProfileImage,
-  resolveProfileImageUrl,
-  determineProfileImageBaseUrl,
-} from '../utils/profile-images';
 import { settingsService, SettingsServiceError } from '../services/settings'
+import { personalSettingsService } from '../services/settings/personal-settings-service'
 
 const settings = new Hono();
 
@@ -161,27 +156,10 @@ settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
       return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
     }
 
-    const record = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        preferredModelId: true,
-        preferredConnectionId: true,
-        preferredModelRawId: true,
-        avatarPath: true,
-      },
-    });
-    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
-
-    const personalSettings = {
-      context_token_limit: parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000'),
-      theme: 'light',
-      preferred_model: {
-        modelId: record?.preferredModelId ?? null,
-        connectionId: record?.preferredConnectionId ?? null,
-        rawId: record?.preferredModelRawId ?? null,
-      },
-      avatar_url: resolveProfileImageUrl(record?.avatarPath ?? null, baseUrl),
-    };
+    const personalSettings = await personalSettingsService.getPersonalSettings({
+      userId: user.id,
+      request: c.req.raw,
+    })
 
     return c.json<ApiResponse>({
       success: true,
@@ -211,37 +189,11 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
       return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
     }
 
-    const currentProfile = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        preferredModelId: true,
-        preferredConnectionId: true,
-        preferredModelRawId: true,
-        avatarPath: true,
-      },
-    });
-    const updates: any = {};
-    let avatarPathResult = currentProfile?.avatarPath ?? null;
-    if (Object.prototype.hasOwnProperty.call(updateData, 'preferred_model')) {
-      const pref = updateData.preferred_model || null;
-      updates.preferredModelId = pref?.modelId ?? null;
-      updates.preferredConnectionId = pref?.connectionId ?? null;
-      updates.preferredModelRawId = pref?.rawId ?? null;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(updateData, 'avatar')) {
-      const nextPath = await replaceProfileImage(updateData.avatar ?? null, {
-        currentPath: currentProfile?.avatarPath ?? null,
-      })
-      updates.avatarPath = nextPath
-      avatarPathResult = nextPath
-    }
-
-    if (Object.keys(updates).length > 0) {
-      await prisma.user.update({ where: { id: user.id }, data: updates });
-    }
-
-    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
+    const updated = await personalSettingsService.updatePersonalSettings({
+      userId: user.id,
+      payload: updateData,
+      request: c.req.raw,
+    })
 
     const responseData: Record<string, any> = { ...updateData }
     if (Object.prototype.hasOwnProperty.call(responseData, 'avatar')) {
@@ -252,12 +204,8 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
       success: true,
       data: {
         ...responseData,
-        preferred_model: {
-          modelId: updates.preferredModelId ?? currentProfile?.preferredModelId ?? null,
-          connectionId: updates.preferredConnectionId ?? currentProfile?.preferredConnectionId ?? null,
-          rawId: updates.preferredModelRawId ?? currentProfile?.preferredModelRawId ?? null,
-        },
-        avatar_url: resolveProfileImageUrl(avatarPathResult, baseUrl),
+        preferred_model: updated.preferred_model,
+        avatar_url: updated.avatar_url,
       },
       message: 'Personal settings updated successfully',
     });
