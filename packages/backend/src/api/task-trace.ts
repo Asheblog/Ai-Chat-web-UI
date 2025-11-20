@@ -1,13 +1,12 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { createReadStream } from 'node:fs'
-import { readFile, access } from 'node:fs/promises'
-import readline from 'node:readline'
+import { readFile } from 'node:fs/promises'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import { getTaskTraceConfig } from '../utils/task-trace'
 import { taskTraceService } from '../services/task-trace/task-trace-service'
+import { taskTraceFileService } from '../services/task-trace/task-trace-file-service'
 
 const taskTrace = new Hono()
 
@@ -28,94 +27,6 @@ const parseJsonColumn = <T = any>(value: string | null | undefined): T | null =>
   } catch {
     return null
   }
-}
-
-const readTraceEventsFromFile = async (filePath: string | null | undefined, limit = 2000) => {
-  const events: Array<{ id: string; seq: number; eventType: string; payload: any; timestamp: string | null }> = []
-  if (!filePath) {
-    return { events, truncated: false }
-  }
-  try {
-    await access(filePath)
-  } catch {
-    return { events, truncated: false }
-  }
-  const stream = createReadStream(filePath, { encoding: 'utf8' })
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
-  let truncated = false
-  const take = Math.max(1, limit)
-  const maxLines = take + 1
-  try {
-    for await (const line of rl) {
-      if (!line.trim()) continue
-      let parsed: any = null
-      try {
-        parsed = JSON.parse(line)
-      } catch {
-        continue
-      }
-      const seq = typeof parsed.seq === 'number' ? parsed.seq : events.length + 1
-      const eventType = typeof parsed.eventType === 'string' ? parsed.eventType : (parsed.type || 'event')
-      events.push({
-        id: `${seq}`,
-        seq,
-        eventType,
-        payload: parsed.payload ?? {},
-        timestamp: typeof parsed.timestamp === 'string' ? parsed.timestamp : null,
-      })
-      if (events.length >= maxLines) {
-        truncated = true
-        events.pop()
-        break
-      }
-    }
-  } finally {
-    rl.close()
-    stream.destroy()
-  }
-  return { events, truncated }
-}
-
-const readLatexEventsFromFile = async (filePath: string | null | undefined, limit = 2000) => {
-  const items: Array<{ seq: number; matched: boolean; reason: string; raw: string; normalized: string; trimmed: string }> = []
-  if (!filePath) {
-    return { events: items, truncated: false }
-  }
-  try {
-    await access(filePath)
-  } catch {
-    return { events: items, truncated: false }
-  }
-  const stream = createReadStream(filePath, { encoding: 'utf8' })
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
-  let truncated = false
-  const maxLines = Math.max(1, limit)
-  try {
-    for await (const line of rl) {
-      if (!line.trim()) continue
-      try {
-        const parsed = JSON.parse(line)
-        items.push({
-          seq: typeof parsed.seq === 'number' ? parsed.seq : items.length + 1,
-          matched: Boolean(parsed.matched),
-          reason: typeof parsed.reason === 'string' ? parsed.reason : '',
-          raw: typeof parsed.raw === 'string' ? parsed.raw : '',
-          normalized: typeof parsed.normalized === 'string' ? parsed.normalized : '',
-          trimmed: typeof parsed.trimmed === 'string' ? parsed.trimmed : '',
-        })
-      } catch {
-        continue
-      }
-      if (items.length >= maxLines) {
-        truncated = true
-        break
-      }
-    }
-  } finally {
-    rl.close()
-    stream.destroy()
-  }
-  return { events: items, truncated }
 }
 
 taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
@@ -162,7 +73,7 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
     if (!trace) {
       return c.json<ApiResponse>({ success: false, error: 'Trace not found' }, 404)
     }
-    const { events, truncated } = await readTraceEventsFromFile(trace.logFilePath, 2000)
+    const { events, truncated } = await taskTraceFileService.readTraceEventsFromFile(trace.logFilePath, 2000)
     return c.json<ApiResponse>({
       success: true,
       data: {
@@ -291,7 +202,7 @@ taskTrace.get('/:id/latex/events', actorMiddleware, requireUserActor, adminOnlyM
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
-    const { events, truncated } = await readLatexEventsFromFile(latex.logFilePath, 2000)
+    const { events, truncated } = await taskTraceFileService.readLatexEventsFromFile(latex.logFilePath, 2000)
     return c.json<ApiResponse>({
       success: true,
       data: { events, truncated },
@@ -312,7 +223,7 @@ taskTrace.get('/:id/latex/export', actorMiddleware, requireUserActor, adminOnlyM
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
-    const { events } = await readLatexEventsFromFile(latex.logFilePath, Number.MAX_SAFE_INTEGER)
+    const { events } = await taskTraceFileService.readLatexEventsFromFile(latex.logFilePath, Number.MAX_SAFE_INTEGER)
     const lines: string[] = []
       lines.push(`Latex Trace #${latex.id} (Task Trace #${latex.taskTraceId})`)
       lines.push(`Status: ${latex.status}`)
