@@ -7,6 +7,7 @@ import type { ApiResponse } from '../types'
 import { getTaskTraceConfig } from '../utils/task-trace'
 import { taskTraceService } from '../services/task-trace/task-trace-service'
 import { taskTraceFileService } from '../services/task-trace/task-trace-file-service'
+import { buildLatexExport, buildTraceExport } from '../services/task-trace/task-trace-export-service'
 
 const taskTrace = new Hono()
 
@@ -95,65 +96,25 @@ taskTrace.get('/:id/export', actorMiddleware, requireUserActor, adminOnlyMiddlew
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const trace = await prisma.taskTrace.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        sessionId: true,
-        messageId: true,
-        clientMessageId: true,
-        actor: true,
-        status: true,
-        traceLevel: true,
-        startedAt: true,
-        endedAt: true,
-        durationMs: true,
-        metadata: true,
-        logFilePath: true,
-      },
-    })
-    if (!trace) {
+    const detail = await taskTraceService.getTraceWithLatex(id)
+    if (!detail?.trace) {
       return c.json<ApiResponse>({ success: false, error: 'Trace not found' }, 404)
     }
-    const lines: string[] = []
-    lines.push(`Trace #${trace.id}`)
-    lines.push(`Status: ${trace.status}`)
-    lines.push(`Actor: ${trace.actor}`)
-    lines.push(`Session: ${trace.sessionId ?? '-'}`)
-    lines.push(`Message: ${trace.messageId ?? '-'}`)
-    lines.push(`Client ID: ${trace.clientMessageId ?? '-'}`)
-    lines.push(`Level: ${trace.traceLevel}`)
-    lines.push(`Started: ${trace.startedAt?.toISOString?.() ?? trace.startedAt}`)
-    lines.push(`Ended: ${trace.endedAt ? trace.endedAt.toISOString() : '-'}`)
-    if (typeof trace.durationMs === 'number') {
-      lines.push(`Duration(ms): ${trace.durationMs}`)
-    }
-    lines.push('--- Metadata ---')
-    lines.push(JSON.stringify(parseJsonColumn(trace.metadata) ?? {}, null, 2))
-    lines.push('--- Events ---')
-    if (trace.logFilePath) {
-      try {
-        const content = await readFile(trace.logFilePath, 'utf8')
-        const rawLines = content.split('\n').filter((l) => l.trim() !== '')
-        for (const raw of rawLines) {
-          let parsed: any = null
-          try {
-            parsed = JSON.parse(raw)
-          } catch {
-            continue
-          }
-          const seq = typeof parsed.seq === 'number' ? parsed.seq : null
-          const ts = parsed.timestamp ? new Date(parsed.timestamp).toISOString() : ''
-          lines.push(`[${seq != null ? seq.toString().padStart(4, '0') : '----'}] ${ts} ${parsed.eventType || parsed.type || 'event'}`)
-          lines.push(JSON.stringify(parsed.payload ?? {}, null, 2))
-        }
-      } catch (error) {
-        lines.push(`(无法读取日志文件：${(error as Error).message})`)
-      }
-    } else {
-      lines.push('(未找到日志文件)')
-    }
-    const body = lines.join('\n')
+    const { events } = await taskTraceFileService.readTraceEventsFromFile(detail.trace.logFilePath, Number.MAX_SAFE_INTEGER)
+    const body = buildTraceExport({
+      id: detail.trace.id,
+      status: detail.trace.status,
+      actor: detail.trace.actor,
+      sessionId: detail.trace.sessionId,
+      messageId: detail.trace.messageId,
+      clientMessageId: detail.trace.clientMessageId,
+      traceLevel: detail.trace.traceLevel,
+      startedAt: detail.trace.startedAt,
+      endedAt: detail.trace.endedAt,
+      durationMs: detail.trace.durationMs,
+      metadata: detail.trace.metadata,
+      events,
+    })
     return c.newResponse(body, {
       status: 200,
       headers: {
@@ -224,20 +185,17 @@ taskTrace.get('/:id/latex/export', actorMiddleware, requireUserActor, adminOnlyM
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
     const { events } = await taskTraceFileService.readLatexEventsFromFile(latex.logFilePath, Number.MAX_SAFE_INTEGER)
-    const lines: string[] = []
-      lines.push(`Latex Trace #${latex.id} (Task Trace #${latex.taskTraceId})`)
-      lines.push(`Status: ${latex.status}`)
-    lines.push(`Matched Blocks: ${latex.matchedBlocks}`)
-    lines.push(`Unmatched Blocks: ${latex.unmatchedBlocks}`)
-    lines.push(`Created At: ${latex.createdAt?.toISOString?.() ?? latex.createdAt}`)
-    lines.push(`Updated At: ${latex.updatedAt?.toISOString?.() ?? latex.updatedAt}`)
-    lines.push('--- Metadata ---')
-    lines.push(JSON.stringify(parseJsonColumn(latex.metadata) ?? {}, null, 2))
-    lines.push('--- Segments ---')
-    for (const event of events) {
-      lines.push(JSON.stringify(event))
-    }
-    const body = lines.join('\n')
+    const body = buildLatexExport({
+      id: latex.id,
+      taskTraceId: latex.taskTraceId,
+      status: latex.status,
+      matchedBlocks: latex.matchedBlocks,
+      unmatchedBlocks: latex.unmatchedBlocks,
+      createdAt: latex.createdAt,
+      updatedAt: latex.updatedAt,
+      metadata: latex.metadata,
+      events,
+    })
     return new Response(body, {
       status: 200,
       headers: {
