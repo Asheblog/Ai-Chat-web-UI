@@ -6,6 +6,7 @@ jest.mock('../../utils/providers', () => ({
 }))
 
 import { createAppContainer } from '../app-container'
+import type { ModelResolverRepository } from '../../repositories/model-resolver-repository'
 
 const createMockRepository = () => ({
   listSystemConnections: jest.fn().mockResolvedValue([]),
@@ -34,5 +35,19 @@ describe('AppContainer', () => {
     await container.connectionService.listSystemConnections()
 
     expect(repo.listSystemConnections).toHaveBeenCalled()
+  })
+
+  it('wires modelResolverService with injected repository', async () => {
+    const repo: jest.Mocked<ModelResolverRepository> = {
+      findCachedModel: jest.fn().mockResolvedValue(null),
+      listEnabledSystemConnections: jest.fn().mockResolvedValue([] as any),
+    }
+    const container = createAppContainer({
+      modelResolverRepository: repo,
+    })
+
+    await container.modelResolverService.resolveModelIdForUser(1, 'gpt-4o')
+
+    expect(repo.findCachedModel).toHaveBeenCalledWith('gpt-4o')
   })
 })

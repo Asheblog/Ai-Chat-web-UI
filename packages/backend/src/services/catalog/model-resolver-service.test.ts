@@ -1,4 +1,8 @@
 import { ModelResolverService } from './model-resolver-service'
+import type {
+  ModelResolverRepository,
+  CachedModelWithConnection,
+} from '../../repositories/model-resolver-repository'
 
 const buildConn = (overrides: Partial<any> = {}) => ({
   id: overrides.id ?? 1,
@@ -11,33 +15,31 @@ const buildConn = (overrides: Partial<any> = {}) => ({
   ...overrides,
 })
 
-const createMockPrisma = (options: { catalog?: any[]; connections?: any[] } = {}) => {
+const createRepository = (options: { catalog?: CachedModelWithConnection[]; connections?: any[] } = {}) => {
   const catalog = options.catalog ?? []
   const connections = options.connections ?? []
-  return {
-    modelCatalog: {
-      findFirst: jest.fn(async ({ where }: any) =>
-        catalog.find((row) => row.modelId === where.modelId) || null
-      ),
-    },
-    connection: {
-      findMany: jest.fn(async () => connections),
-    },
+  const repository: jest.Mocked<ModelResolverRepository> = {
+    findCachedModel: jest.fn(async (modelId: string) =>
+      catalog.find((row) => row.modelId === modelId) || null
+    ),
+    listEnabledSystemConnections: jest.fn(async () => connections as any),
   }
+  return repository
 }
 
 describe('ModelResolverService', () => {
   test('returns cached mapping when present', async () => {
-    const prisma = createMockPrisma({
+    const repository = createRepository({
       catalog: [
         {
           modelId: 'gpt-4o',
           rawId: 'gpt-4o',
-          connection: buildConn({ id: 2 }),
+          connectionId: 2,
+          connection: buildConn({ id: 2 }) as any,
         },
       ],
     })
-    const service = new ModelResolverService({ prisma: prisma as any })
+    const service = new ModelResolverService({ repository })
 
     const result = await service.resolveModelIdForUser(1, 'gpt-4o')
 
@@ -46,10 +48,10 @@ describe('ModelResolverService', () => {
   })
 
   test('resolves by prefix when cache missing', async () => {
-    const prisma = createMockPrisma({
+    const repository = createRepository({
       connections: [buildConn({ id: 3, prefixId: 'azure-gpt' })],
     })
-    const service = new ModelResolverService({ prisma: prisma as any })
+    const service = new ModelResolverService({ repository })
 
     const result = await service.resolveModelIdForUser(1, 'azure-gpt.gpt-4o')
 
@@ -58,13 +60,13 @@ describe('ModelResolverService', () => {
   })
 
   test('falls back to explicit modelIds or first connection', async () => {
-    const prisma = createMockPrisma({
+    const repository = createRepository({
       connections: [
         buildConn({ id: 4, modelIdsJson: JSON.stringify(['gpt-4o']) }),
         buildConn({ id: 5 }),
       ],
     })
-    const service = new ModelResolverService({ prisma: prisma as any })
+    const service = new ModelResolverService({ repository })
 
     const mapped = await service.resolveModelIdForUser(1, 'gpt-4o')
     const first = await service.resolveModelIdForUser(1, 'gpt-3.5')
@@ -76,8 +78,8 @@ describe('ModelResolverService', () => {
   })
 
   test('returns null when no connections match', async () => {
-    const prisma = createMockPrisma({ connections: [] })
-    const service = new ModelResolverService({ prisma: prisma as any })
+    const repository = createRepository({ connections: [] })
+    const service = new ModelResolverService({ repository })
 
     const result = await service.resolveModelIdForUser(1, 'none')
 

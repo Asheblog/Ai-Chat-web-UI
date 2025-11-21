@@ -1,6 +1,10 @@
 import type { PrismaClient } from '@prisma/client'
 import type { Connection } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
+import {
+  PrismaModelResolverRepository,
+  type ModelResolverRepository,
+} from '../../repositories/model-resolver-repository'
 
 const parseModelIds = (json?: string | null): string[] => {
   if (!json) return []
@@ -14,13 +18,15 @@ const parseModelIds = (json?: string | null): string[] => {
 
 export interface ModelResolverDeps {
   prisma?: PrismaClient
+  repository?: ModelResolverRepository
 }
 
 export class ModelResolverService {
-  private prisma: PrismaClient
+  private repository: ModelResolverRepository
 
   constructor(deps: ModelResolverDeps = {}) {
-    this.prisma = deps.prisma ?? defaultPrisma
+    const prisma = deps.prisma ?? defaultPrisma
+    this.repository = deps.repository ?? new PrismaModelResolverRepository(prisma)
   }
 
   /**
@@ -36,14 +42,7 @@ export class ModelResolverService {
     // 用户ID目前未用于筛选，但保留以便后续权限/私有连接扩展
     void userId
 
-    const cached = await this.prisma.modelCatalog.findFirst({
-      where: { modelId: cleanModelId },
-      select: {
-        connectionId: true,
-        rawId: true,
-        connection: true,
-      },
-    })
+    const cached = await this.repository.findCachedModel(cleanModelId)
 
     if (cached?.connection && cached.rawId) {
       return {
@@ -52,12 +51,7 @@ export class ModelResolverService {
       }
     }
 
-    const connections = await this.prisma.connection.findMany({
-      where: {
-        enable: true,
-        ownerUserId: null,
-      },
-    })
+    const connections = await this.repository.listEnabledSystemConnections()
 
     let fallbackExact: { connection: Connection; rawId: string } | null = null
     let fallbackFirst: { connection: Connection; rawId: string } | null = null
