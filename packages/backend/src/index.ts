@@ -4,7 +4,7 @@ import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { CHAT_IMAGE_PUBLIC_PATH, CHAT_IMAGE_STORAGE_ROOT } from './config/storage';
-import { getAppContext } from './context/app-context';
+import { createAppContainer } from './container/app-container';
 
 // 导入路由
 import auth from './api/auth';
@@ -12,7 +12,7 @@ import users from './api/users';
 import sessions from './api/sessions';
 import chat from './api/chat';
 import settings from './api/settings';
-import connections from './api/connections';
+import { createConnectionsApi } from './api/connections';
 import catalog from './api/catalog';
 import openaiCompat from './api/openai-compatible';
 import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './utils/model-catalog';
@@ -21,7 +21,8 @@ import taskTrace from './api/task-trace';
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
 
-const appContext = getAppContext();
+const container = createAppContainer();
+const appContext = container.context;
 const app = new Hono();
 
 // 基础中间件
@@ -60,7 +61,10 @@ app.use(
 // API路由
 app.route('/api/auth', auth);
 app.route('/api/users', users);
-app.route('/api/connections', connections);
+app.route(
+  '/api/connections',
+  createConnectionsApi({ connectionService: container.connectionService }),
+);
 app.route('/api/catalog', catalog);
 app.route('/api/sessions', sessions);
 app.route('/api/chat', chat);

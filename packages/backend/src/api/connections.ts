@@ -6,6 +6,7 @@ import type { ApiResponse } from '../types'
 import {
   connectionService,
   ConnectionServiceError,
+  type ConnectionService,
 } from '../services/connections'
 
 const capabilitySchema = z.object({
@@ -31,8 +32,6 @@ const connectionSchema = z.object({
   defaultCapabilities: capabilitySchema.partial().optional(),
 })
 
-const connections = new Hono()
-
 const handleServiceError = (
   c: any,
   error: unknown,
@@ -46,74 +45,81 @@ const handleServiceError = (
   return c.json<ApiResponse>({ success: false, error: fallbackMessage }, 500)
 }
 
-connections.use('*', actorMiddleware)
+export const createConnectionsApi = (deps: { connectionService?: ConnectionService } = {}) => {
+  const service = deps.connectionService ?? connectionService
+  const router = new Hono()
 
-connections.get('/', requireUserActor, adminOnlyMiddleware, async (c) => {
-  try {
-    const rows = await connectionService.listSystemConnections()
-    return c.json<ApiResponse>({ success: true, data: rows })
-  } catch (error) {
-    return handleServiceError(c, error, 'Failed to list connections', 'List connections error:')
-  }
-})
+  router.use('*', actorMiddleware)
 
-connections.post(
-  '/',
-  requireUserActor,
-  adminOnlyMiddleware,
-  zValidator('json', connectionSchema),
-  async (c) => {
+  router.get('/', requireUserActor, adminOnlyMiddleware, async (c) => {
     try {
-      const payload = c.req.valid('json')
-      const row = await connectionService.createSystemConnection(payload)
-      return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
+      const rows = await service.listSystemConnections()
+      return c.json<ApiResponse>({ success: true, data: rows })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to create connection', 'Create connection error:')
+      return handleServiceError(c, error, 'Failed to list connections', 'List connections error:')
     }
-  },
-)
+  })
 
-connections.put(
-  '/:id',
-  requireUserActor,
-  adminOnlyMiddleware,
-  zValidator('json', connectionSchema.partial()),
-  async (c) => {
+  router.post(
+    '/',
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', connectionSchema),
+    async (c) => {
+      try {
+        const payload = c.req.valid('json')
+        const row = await service.createSystemConnection(payload)
+        return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
+      } catch (error) {
+        return handleServiceError(c, error, 'Failed to create connection', 'Create connection error:')
+      }
+    },
+  )
+
+  router.put(
+    '/:id',
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', connectionSchema.partial()),
+    async (c) => {
+      try {
+        const id = parseInt(c.req.param('id'), 10)
+        if (Number.isNaN(id)) {
+          return c.json<ApiResponse>({ success: false, error: 'Invalid connection id' }, 400)
+        }
+        const payload = c.req.valid('json')
+        const row = await service.updateSystemConnection(id, payload)
+        return c.json<ApiResponse>({ success: true, data: row, message: 'Connection updated' })
+      } catch (error) {
+        return handleServiceError(c, error, 'Failed to update connection', 'Update connection error:')
+      }
+    },
+  )
+
+  router.delete('/:id', requireUserActor, adminOnlyMiddleware, async (c) => {
     try {
       const id = parseInt(c.req.param('id'), 10)
       if (Number.isNaN(id)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid connection id' }, 400)
       }
-      const payload = c.req.valid('json')
-      const row = await connectionService.updateSystemConnection(id, payload)
-      return c.json<ApiResponse>({ success: true, data: row, message: 'Connection updated' })
+      await service.deleteSystemConnection(id)
+      return c.json<ApiResponse>({ success: true, message: 'Connection deleted' })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to update connection', 'Update connection error:')
+      return handleServiceError(c, error, 'Failed to delete connection', 'Delete connection error:')
     }
-  },
-)
+  })
 
-connections.delete('/:id', requireUserActor, adminOnlyMiddleware, async (c) => {
-  try {
-    const id = parseInt(c.req.param('id'), 10)
-    if (Number.isNaN(id)) {
-      return c.json<ApiResponse>({ success: false, error: 'Invalid connection id' }, 400)
+  router.post('/verify', requireUserActor, zValidator('json', connectionSchema), async (c) => {
+    try {
+      const payload = c.req.valid('json')
+      await service.verifyConnectionConfig(payload)
+      return c.json<ApiResponse>({ success: true, message: 'Connection verified' })
+    } catch (error) {
+      return handleServiceError(c, error, 'Verify failed', 'Verify connection error:')
     }
-    await connectionService.deleteSystemConnection(id)
-    return c.json<ApiResponse>({ success: true, message: 'Connection deleted' })
-  } catch (error) {
-    return handleServiceError(c, error, 'Failed to delete connection', 'Delete connection error:')
-  }
-})
+  })
 
-connections.post('/verify', requireUserActor, zValidator('json', connectionSchema), async (c) => {
-  try {
-    const payload = c.req.valid('json')
-    await connectionService.verifyConnectionConfig(payload)
-    return c.json<ApiResponse>({ success: true, message: 'Connection verified' })
-  } catch (error) {
-    return handleServiceError(c, error, 'Verify failed', 'Verify connection error:')
-  }
-})
+  return router
+}
 
-export default connections
+export default createConnectionsApi()

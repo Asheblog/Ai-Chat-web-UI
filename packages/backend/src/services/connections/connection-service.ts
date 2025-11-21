@@ -1,5 +1,10 @@
 import type { Connection, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
+import {
+  PrismaConnectionRepository,
+  type ConnectionRepository,
+  type ConnectionWriteData,
+} from '../../repositories/connection-repository'
 import { normalizeCapabilityFlags } from '../../utils/capabilities'
 
 export class ConnectionServiceError extends Error {
@@ -17,6 +22,7 @@ type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entr
 
 export interface ConnectionServiceDeps {
   prisma?: PrismaClient
+  repository?: ConnectionRepository
   encryptApiKey?: (value: string) => string
   refreshModelCatalog?: (connection: Connection) => Promise<unknown>
   verifyConnection?: (config: {
@@ -59,14 +65,15 @@ const serializeRecord = (value?: Record<string, unknown>) =>
 const serializeArray = <T>(value?: T[]) => JSON.stringify(value ?? [])
 
 export class ConnectionService {
-  private prisma: PrismaClient
+  private repository: ConnectionRepository
   private encryptApiKey: (value: string) => string
   private refreshModelCatalog: (connection: Connection) => Promise<unknown>
   private verifyConnection?: ConnectionServiceDeps['verifyConnection']
   private logger: Pick<typeof console, 'warn' | 'error'>
 
   constructor(deps: ConnectionServiceDeps = {}) {
-    this.prisma = deps.prisma ?? defaultPrisma
+    const prisma = deps.prisma ?? defaultPrisma
+    this.repository = deps.repository ?? new PrismaConnectionRepository(prisma)
     this.encryptApiKey = deps.encryptApiKey ?? ((value) => value)
     this.refreshModelCatalog = deps.refreshModelCatalog ?? (async () => {})
     this.verifyConnection = deps.verifyConnection
@@ -74,40 +81,35 @@ export class ConnectionService {
   }
 
   async listSystemConnections() {
-    return this.prisma.connection.findMany({
-      where: { ownerUserId: null },
-    })
+    return this.repository.listSystemConnections()
   }
 
   async createSystemConnection(payload: ConnectionPayload) {
-    const connection = await this.prisma.connection.create({
-      data: this.buildConnectionData(payload),
-    })
+    const connection = await this.repository.createSystemConnection(
+      this.buildConnectionData(payload),
+    )
     await this.refreshCatalogSafe(connection, 'create')
     return connection
   }
 
   async updateSystemConnection(id: number, payload: Partial<ConnectionPayload>) {
-    const existing = await this.prisma.connection.findUnique({ where: { id } })
+    const existing = await this.repository.findSystemConnectionById(id)
     if (!existing) {
       throw new ConnectionServiceError('Connection not found', 404)
     }
     const updates = this.buildConnectionData(payload, true)
-    const connection = await this.prisma.connection.update({
-      where: { id },
-      data: updates,
-    })
+    const connection = await this.repository.updateSystemConnection(id, updates)
     await this.refreshCatalogSafe(connection, 'update')
     return connection
   }
 
   async deleteSystemConnection(id: number) {
-    const existing = await this.prisma.connection.findUnique({ where: { id } })
+    const existing = await this.repository.findSystemConnectionById(id)
     if (!existing) {
       throw new ConnectionServiceError('Connection not found', 404)
     }
-    await this.prisma.connection.delete({ where: { id } })
-    await this.prisma.modelCatalog.deleteMany({ where: { connectionId: id } })
+    await this.repository.deleteSystemConnection(id)
+    await this.repository.deleteModelCatalogByConnectionId(id)
   }
 
   async verifyConnectionConfig(payload: ConnectionPayload) {
@@ -133,10 +135,8 @@ export class ConnectionService {
   private buildConnectionData(
     payload: Partial<ConnectionPayload>,
     isPartial = false,
-  ): Partial<Connection> & {
-    ownerUserId: null
-  } {
-    const data: Partial<Connection> & { ownerUserId: null } = {
+  ): ConnectionWriteData {
+    const data: ConnectionWriteData = {
       ownerUserId: null,
     }
     if (!isPartial || payload.provider) {
