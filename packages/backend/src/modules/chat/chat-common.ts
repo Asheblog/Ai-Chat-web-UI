@@ -2,13 +2,20 @@ import { z } from 'zod';
 import { prisma } from '../../db';
 import { ensureAnonymousSession } from '../../utils/actor';
 import type { Actor, UsageQuotaSnapshot } from '../../types';
-import { getAppConfig } from '../../config/app-config';
+import { getAppConfig, type AppConfig } from '../../config/app-config';
 
-const appConfig = getAppConfig();
+let chatConfig: AppConfig = getAppConfig();
 
-export const BACKOFF_429_MS = appConfig.retry.upstream429Ms;
-export const BACKOFF_5XX_MS = appConfig.retry.upstream5xxMs;
-export const MESSAGE_DEDUPE_WINDOW_MS = appConfig.chat.messageDedupeWindowMs;
+export let BACKOFF_429_MS = chatConfig.retry.upstream429Ms;
+export let BACKOFF_5XX_MS = chatConfig.retry.upstream5xxMs;
+export let MESSAGE_DEDUPE_WINDOW_MS = chatConfig.chat.messageDedupeWindowMs;
+
+export const setChatConfig = (config: AppConfig) => {
+  chatConfig = config;
+  BACKOFF_429_MS = chatConfig.retry.upstream429Ms;
+  BACKOFF_5XX_MS = chatConfig.retry.upstream5xxMs;
+  MESSAGE_DEDUPE_WINDOW_MS = chatConfig.chat.messageDedupeWindowMs;
+};
 
 export const sendMessageSchema = z.object({
   sessionId: z.number().int().positive(),

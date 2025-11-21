@@ -17,12 +17,14 @@ import catalog from './api/catalog';
 import { createOpenAICompatApi } from './api/openai-compatible';
 import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './utils/model-catalog';
 import taskTrace from './api/task-trace';
+import { setChatConfig } from './modules/chat/chat-common';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
 
 const container = createAppContainer();
 const appContext = container.context;
+setChatConfig(appContext.config);
 const app = new Hono();
 
 // 基础中间件
