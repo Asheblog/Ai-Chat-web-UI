@@ -7,7 +7,7 @@ import { CHAT_IMAGE_PUBLIC_PATH, CHAT_IMAGE_STORAGE_ROOT } from './config/storag
 import { createAppContainer } from './container/app-container';
 
 // 导入路由
-import auth from './api/auth';
+import { createAuthApi } from './api/auth';
 import users from './api/users';
 import sessions from './api/sessions';
 import chat from './api/chat';
@@ -59,7 +59,7 @@ app.use(
 );
 
 // API路由
-app.route('/api/auth', auth);
+app.route('/api/auth', createAuthApi({ config: appContext.config }));
 app.route('/api/users', users);
 app.route(
   '/api/connections',
