@@ -14,6 +14,7 @@ import { AuthUtils } from '../utils/auth'
 import { refreshModelCatalogForConnection } from '../utils/model-catalog'
 import { verifyConnection } from '../utils/providers'
 import { BackendLogger as log } from '../utils/logger'
+import { setModelResolverService } from '../utils/model-resolver'
 
 export interface AppContainerDeps {
   context?: AppContext
@@ -41,6 +42,7 @@ export class AppContainer {
       new ModelResolverService({
         repository: this.modelResolverRepository,
       })
+    setModelResolverService(this.modelResolverService)
     this.connectionService =
       deps.connectionService ??
       new ConnectionService({
