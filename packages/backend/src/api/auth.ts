@@ -6,8 +6,10 @@ import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import type { AuthResponse, RegisterResponse, ApiResponse, ActorContext, Actor } from '../types';
 import { serializeQuotaSnapshot } from '../utils/quota';
 import { authService, AuthServiceError } from '../services/auth/auth-service';
+import { getAppConfig } from '../config/app-config';
 
 const auth = new Hono();
+const appConfig = getAppConfig();
 
 // 注册schema
 const registerSchema = z.object({
@@ -29,7 +31,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
 
     if (result.token) {
       try {
-        const secure = (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || (process.env.NODE_ENV === 'production');
+        const secure = appConfig.server.cookieSecure;
         setCookie(c, 'token', result.token, {
           httpOnly: true,
           secure,
@@ -72,7 +74,7 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     const result = await authService.login({ username, password, request: c.req.raw });
 
     try {
-      const secure = (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || (process.env.NODE_ENV === 'production');
+      const secure = appConfig.server.cookieSecure;
       setCookie(c, 'token', result.token, {
         httpOnly: true,
         secure,

@@ -7,9 +7,11 @@ import {
   resolveProfileImageUrl,
 } from '../utils/profile-images'
 import { authContextService } from '../services/auth/auth-context-service'
+import { getAppConfig } from '../config/app-config'
 
 const ANON_COOKIE_KEY = 'anon_key'
 const COOKIE_PATH_ROOT: Parameters<typeof deleteCookie>[2] = { path: '/' }
+const appConfig = getAppConfig()
 
 const toContentfulStatus = (status: number): ContentfulStatusCode => {
   if (status === 101 || status === 204 || status === 205 || status === 304) {
@@ -22,7 +24,7 @@ const toContentfulStatus = (status: number): ContentfulStatusCode => {
 }
 
 const ensureAnonCookie = (c: Context, key: string, retentionDays: number) => {
-  const secure = (process.env.COOKIE_SECURE ?? '').toLowerCase() === 'true' || process.env.NODE_ENV === 'production'
+  const secure = appConfig.server.cookieSecure
   const cookieOptions: Parameters<typeof setCookie>[3] = {
     httpOnly: true,
     sameSite: 'Lax',

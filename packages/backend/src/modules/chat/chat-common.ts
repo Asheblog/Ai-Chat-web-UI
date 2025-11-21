@@ -2,10 +2,13 @@ import { z } from 'zod';
 import { prisma } from '../../db';
 import { ensureAnonymousSession } from '../../utils/actor';
 import type { Actor, UsageQuotaSnapshot } from '../../types';
+import { getAppConfig } from '../../config/app-config';
 
-export const BACKOFF_429_MS = 15000;
-export const BACKOFF_5XX_MS = 2000;
-export const MESSAGE_DEDUPE_WINDOW_MS = parseInt(process.env.MESSAGE_DEDUPE_WINDOW_MS || '30000');
+const appConfig = getAppConfig();
+
+export const BACKOFF_429_MS = appConfig.retry.upstream429Ms;
+export const BACKOFF_5XX_MS = appConfig.retry.upstream5xxMs;
+export const MESSAGE_DEDUPE_WINDOW_MS = appConfig.chat.messageDedupeWindowMs;
 
 export const sendMessageSchema = z.object({
   sessionId: z.number().int().positive(),

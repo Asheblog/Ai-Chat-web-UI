@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { CHAT_IMAGE_PUBLIC_PATH, CHAT_IMAGE_STORAGE_ROOT } from './config/storage';
+import { getAppContext } from './context/app-context';
 
 // 导入路由
 import auth from './api/auth';
@@ -14,12 +15,13 @@ import settings from './api/settings';
 import connections from './api/connections';
 import catalog from './api/catalog';
 import openaiCompat from './api/openai-compatible';
-import { scheduleModelCatalogAutoRefresh } from './utils/model-catalog';
+import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './utils/model-catalog';
 import taskTrace from './api/task-trace';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
 
+const appContext = getAppContext();
 const app = new Hono();
 
 // 基础中间件
@@ -28,8 +30,8 @@ app.use('*', logger());
 // CORS 开关与来源配置
 // ENABLE_CORS: 默认为 true；为 false 时不注册 CORS 中间件
 // CORS_ORIGIN: 允许的来源；未设置时默认为 "*"；当为 "*" 时将自动禁用 credentials
-const enableCors = (process.env.ENABLE_CORS ?? 'true').toLowerCase() === 'true'
-const corsOrigin = process.env.CORS_ORIGIN || '*'
+const enableCors = appContext.config.server.corsEnabled
+const corsOrigin = appContext.config.server.corsOrigin
 
 if (enableCors) {
   app.use('*', cors({
@@ -143,15 +145,18 @@ app.get('/api', (c) => {
 app.notFound(notFoundHandler);
 app.onError(errorHandler);
 
-const stopCatalogRefresh = scheduleModelCatalogAutoRefresh();
+setModelCatalogTtlSeconds(appContext.config.modelCatalog.ttlSeconds);
+const stopCatalogRefresh = scheduleModelCatalogAutoRefresh({
+  refreshIntervalMs: appContext.config.modelCatalog.refreshIntervalMs,
+});
 
 // 启动服务器
 // 端口解析：优先 PORT，其次兼容 BACKEND_PORT，最后回退 8001（统一本地/容器内行为）
-const port = parseInt(process.env.PORT || process.env.BACKEND_PORT || '8001');
+const port = appContext.config.server.port;
 // 容器内 HOSTNAME 会被设置为容器ID，若直接绑定会导致仅监听在容器IP，健康检查访问 localhost 失败。
 // 因此仅当显式配置 HOST 时才使用，否则回退到 0.0.0.0 （监听全部接口）。
-const bindHost = process.env.HOST || '0.0.0.0';
-const displayHost = process.env.HOST || process.env.HOSTNAME || bindHost;
+const bindHost = appContext.config.server.host;
+const displayHost = appContext.config.server.displayHost;
 
 console.log(`🚀 AI Chat Platform Backend starting on ${displayHost}:${port}`);
 console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);

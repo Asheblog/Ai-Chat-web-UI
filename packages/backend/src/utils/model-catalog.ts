@@ -72,14 +72,26 @@ const buildConfigFromConnection = (conn: Connection): ConnectionConfig => ({
 })
 
 const DEFAULT_TTL_S = 600
+let ttlOverrideSeconds: number | null = null
 
 const OLLAMA_CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000
 const ollamaShowCache = new Map<string, { value: number | null; expiresAt: number }>()
 
 const resolveTtlSeconds = () => {
+  if (Number.isFinite(ttlOverrideSeconds) && (ttlOverrideSeconds as number) > 0) {
+    return Math.floor(ttlOverrideSeconds as number)
+  }
   const raw = parseInt(process.env.MODELS_TTL_S || '', 10)
   if (Number.isFinite(raw) && raw > 0) return raw
   return DEFAULT_TTL_S
+}
+
+export const setModelCatalogTtlSeconds = (value: number | null | undefined) => {
+  if (Number.isFinite(value) && (value as number) > 0) {
+    ttlOverrideSeconds = Math.floor(value as number)
+  } else {
+    ttlOverrideSeconds = null
+  }
 }
 
 const normalizeConnectionsToSystem = async () => {
@@ -325,10 +337,9 @@ export async function refreshAllModelCatalog() {
 
 let catalogTimer: NodeJS.Timeout | null = null
 
-export function scheduleModelCatalogAutoRefresh() {
-  const intervalSecRaw = parseInt(process.env.MODELS_REFRESH_INTERVAL_S || '', 10)
-  const intervalMs = Number.isFinite(intervalSecRaw) && intervalSecRaw > 0
-    ? intervalSecRaw * 1000
+export function scheduleModelCatalogAutoRefresh(options: { refreshIntervalMs?: number } = {}) {
+  const intervalMs = Number.isFinite(options.refreshIntervalMs) && (options.refreshIntervalMs as number) > 0
+    ? Math.floor(options.refreshIntervalMs as number)
     : resolveTtlSeconds() * 1000
 
   if (catalogTimer) {
