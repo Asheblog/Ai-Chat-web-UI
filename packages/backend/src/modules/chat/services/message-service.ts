@@ -1,11 +1,41 @@
-import type { Message as PrismaMessage } from '@prisma/client'
-import { prisma } from '../../../db'
+import type { Message as PrismaMessage, PrismaClient } from '@prisma/client'
+import { prisma as defaultPrisma } from '../../../db'
 import type { Actor, UsageQuotaSnapshot } from '../../../types'
-import { persistChatImages } from '../../../utils/chat-images'
-import { consumeActorQuota, inspectActorQuota } from '../../../utils/quota'
+import { persistChatImages as defaultPersistChatImages } from '../../../utils/chat-images'
+import {
+  consumeActorQuota as defaultConsumeActorQuota,
+  inspectActorQuota as defaultInspectActorQuota,
+} from '../../../utils/quota'
 import { MESSAGE_DEDUPE_WINDOW_MS, QuotaExceededError } from '../chat-common'
 
 type IncomingImage = { data: string; mime: string }
+
+export interface MessageServiceDeps {
+  prisma: Pick<PrismaClient, '$transaction'>
+  persistChatImages: typeof defaultPersistChatImages
+  consumeActorQuota: typeof defaultConsumeActorQuota
+  inspectActorQuota: typeof defaultInspectActorQuota
+}
+
+const baseDeps: MessageServiceDeps = {
+  prisma: defaultPrisma,
+  persistChatImages: defaultPersistChatImages,
+  consumeActorQuota: defaultConsumeActorQuota,
+  inspectActorQuota: defaultInspectActorQuota,
+}
+
+let deps: MessageServiceDeps = { ...baseDeps }
+
+export const setMessageServiceDeps = (overrides: Partial<MessageServiceDeps>) => {
+  const cleaned = Object.fromEntries(
+    Object.entries(overrides).filter(([, value]) => value !== undefined),
+  ) as Partial<MessageServiceDeps>
+  deps = { ...deps, ...cleaned }
+}
+
+export const resetMessageServiceDeps = () => {
+  deps = { ...baseDeps }
+}
 
 export interface CreateUserMessageOptions {
   actor: Actor
@@ -48,7 +78,7 @@ export const createUserMessageWithQuota = async (
   let quotaSnapshot: UsageQuotaSnapshot | null = null
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await deps.prisma.$transaction(async (tx) => {
       if (clientMessageId) {
         const existing = await tx.message.findUnique({
           where: {
@@ -61,7 +91,7 @@ export const createUserMessageWithQuota = async (
         if (existing) {
           userMessageRecord = existing
           messageWasReused = true
-          quotaSnapshot = await inspectActorQuota(actor, { tx, now })
+          quotaSnapshot = await deps.inspectActorQuota(actor, { tx, now })
           return
         }
       } else {
@@ -72,12 +102,12 @@ export const createUserMessageWithQuota = async (
         if (hasRecentDuplicate(existing, now)) {
           userMessageRecord = existing
           messageWasReused = true
-          quotaSnapshot = await inspectActorQuota(actor, { tx, now })
+          quotaSnapshot = await deps.inspectActorQuota(actor, { tx, now })
           return
         }
       }
 
-      const consumeResult = await consumeActorQuota(actor, { tx, now })
+      const consumeResult = await deps.consumeActorQuota(actor, { tx, now })
       if (!consumeResult.success) {
         throw new QuotaExceededError(consumeResult.snapshot)
       }
@@ -105,7 +135,7 @@ export const createUserMessageWithQuota = async (
 
   if (images && images.length > 0 && !messageWasReused) {
     const userId = actor.type === 'user' ? actor.id : 0
-    await persistChatImages(images, {
+    await deps.persistChatImages(images, {
       sessionId,
       messageId: userMessageRecord.id,
       userId,
