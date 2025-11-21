@@ -37,7 +37,7 @@ import {
 import { chatRequestBuilder } from '../services/chat-request-builder';
 import type { AgentStreamMeta } from '../../chat/stream-state';
 import { BackendLogger as log } from '../../../utils/logger';
-import { logTraffic } from '../../../utils/traffic-logger';
+import { logTraffic as defaultLogTraffic } from '../../../utils/traffic-logger';
 import {
   BACKOFF_429_MS,
   BACKOFF_5XX_MS,
@@ -57,7 +57,8 @@ import { streamUsageService } from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
 
-export const registerChatStreamRoutes = (router: Hono) => {
+export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: typeof defaultLogTraffic } = {}) => {
+  const logTraffic = deps.logTraffic ?? defaultLogTraffic
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor;

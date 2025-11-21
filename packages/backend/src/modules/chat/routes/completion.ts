@@ -6,7 +6,7 @@ import type { Actor, ApiResponse, UsageQuotaSnapshot } from '../../../types';
 import { serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
 import { BackendLogger as log } from '../../../utils/logger';
-import { logTraffic } from '../../../utils/traffic-logger';
+import { logTraffic as defaultLogTraffic } from '../../../utils/traffic-logger';
 import {
   QuotaExceededError,
   extendAnonymousSession,
@@ -19,7 +19,8 @@ import {
   nonStreamChatService,
 } from '../services/non-stream-chat-service';
 
-export const registerChatCompletionRoutes = (router: Hono) => {
+export const registerChatCompletionRoutes = (router: Hono, deps: { logTraffic?: typeof defaultLogTraffic } = {}) => {
+  const logTraffic = deps.logTraffic ?? defaultLogTraffic
   router.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor;

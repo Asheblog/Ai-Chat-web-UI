@@ -1,4 +1,12 @@
-import type { TrafficLogEntry } from '../services/traffic/traffic-logger'
-import { trafficLogger } from '../services/traffic/traffic-logger'
+import type { TrafficLogEntry, TrafficLogger } from '../services/traffic/traffic-logger'
+import { trafficLogger as defaultTrafficLogger } from '../services/traffic/traffic-logger'
 
-export const logTraffic = async (entry: TrafficLogEntry) => trafficLogger.log(entry)
+let currentTrafficLogger: TrafficLogger = defaultTrafficLogger
+
+export const setTrafficLogger = (logger: TrafficLogger) => {
+  currentTrafficLogger = logger
+}
+
+export const getTrafficLogger = () => currentTrafficLogger
+
+export const logTraffic = async (entry: TrafficLogEntry) => currentTrafficLogger.log(entry)
