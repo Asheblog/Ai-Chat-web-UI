@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { prisma } from '../../../db';
+import type { PrismaClient } from '@prisma/client';
+import { prisma as defaultPrisma } from '../../../db';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { Actor, ApiResponse, UsageQuotaSnapshot } from '../../../types';
 import { serializeQuotaSnapshot } from '../../../utils/quota';
@@ -17,10 +18,20 @@ import { createUserMessageWithQuota } from '../services/message-service';
 import {
   ChatCompletionServiceError,
   nonStreamChatService,
+  type NonStreamChatService,
 } from '../services/non-stream-chat-service';
 
-export const registerChatCompletionRoutes = (router: Hono, deps: { logTraffic?: typeof defaultLogTraffic } = {}) => {
+export const registerChatCompletionRoutes = (
+  router: Hono,
+  deps: {
+    logTraffic?: typeof defaultLogTraffic
+    prisma?: PrismaClient
+    nonStreamService?: NonStreamChatService
+  } = {},
+) => {
   const logTraffic = deps.logTraffic ?? defaultLogTraffic
+  const prisma = deps.prisma ?? defaultPrisma
+  const nonStreamService = deps.nonStreamService ?? nonStreamChatService
   router.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor;
@@ -95,7 +106,7 @@ export const registerChatCompletionRoutes = (router: Hono, deps: { logTraffic?: 
 
       let completionResult;
       try {
-        completionResult = await nonStreamChatService.execute({
+        completionResult = await nonStreamService.execute({
           session,
           payload,
           content,
