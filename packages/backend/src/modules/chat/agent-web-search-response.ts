@@ -314,6 +314,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           ...extraHeaders,
         };
 
+        traceRecorder.log('agent:provider_request', {
+          provider,
+          model: session.modelRawId,
+          url,
+          headerKeys: Object.keys(headers || {}),
+          authHeaderProvided: Object.keys(authHeader || {}).length > 0,
+          extraHeaderKeys: Object.keys(extraHeaders || {}),
+          toolsRequested: Array.isArray(body.tools) ? body.tools.map((t: any) => t?.function?.name || t?.type || 'unknown') : [],
+        });
+
         currentProviderController = new AbortController();
         setStreamController(currentProviderController);
 
