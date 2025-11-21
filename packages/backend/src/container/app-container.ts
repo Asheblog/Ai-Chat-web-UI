@@ -15,6 +15,7 @@ import { refreshModelCatalogForConnection } from '../utils/model-catalog'
 import { verifyConnection } from '../utils/providers'
 import { BackendLogger as log } from '../utils/logger'
 import { setModelResolverService } from '../utils/model-resolver'
+import { SessionService } from '../services/sessions/session-service'
 
 export interface AppContainerDeps {
   context?: AppContext
@@ -22,6 +23,7 @@ export interface AppContainerDeps {
   connectionService?: ConnectionService
   modelResolverRepository?: ModelResolverRepository
   modelResolverService?: ModelResolverService
+  sessionService?: SessionService
 }
 
 export class AppContainer {
@@ -30,6 +32,7 @@ export class AppContainer {
   readonly connectionService: ConnectionService
   readonly modelResolverRepository: ModelResolverRepository
   readonly modelResolverService: ModelResolverService
+  readonly sessionService: SessionService
 
   constructor(deps: AppContainerDeps = {}) {
     this.context = deps.context ?? createAppContext()
@@ -51,6 +54,13 @@ export class AppContainer {
         refreshModelCatalog: refreshModelCatalogForConnection,
         verifyConnection,
         logger: log,
+      })
+    this.sessionService =
+      deps.sessionService ??
+      new SessionService({
+        prisma: this.context.prisma,
+        modelResolverService: this.modelResolverService,
+        logger: this.context.logger,
       })
   }
 }

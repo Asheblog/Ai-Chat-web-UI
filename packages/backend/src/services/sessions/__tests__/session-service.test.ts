@@ -27,24 +27,34 @@ const createMockPrisma = () => ({
 
 const createService = (overrides?: {
   ensureAnonymousSession?: ReturnType<typeof jest.fn>
+  modelResolverService?: { resolveModelForRequest: jest.Mock }
 }) => {
   const prisma = createMockPrisma()
   const ensureAnonymousSession =
     overrides?.ensureAnonymousSession ?? jest.fn().mockResolvedValue(null)
+  const modelResolverService =
+    overrides?.modelResolverService ??
+    ({
+      resolveModelForRequest: jest.fn().mockResolvedValue({
+        connection: { id: 99, provider: 'openai', baseUrl: 'https://api', prefixId: 'openai' },
+        rawModelId: 'gpt-4o',
+      }),
+    } as any)
   const logger = { warn: jest.fn(), error: jest.fn() }
   const service = new SessionService({
     prisma: prisma as any,
     ensureAnonymousSession,
+    modelResolverService: modelResolverService as any,
     logger,
   })
-  return { service, prisma, ensureAnonymousSession }
+  return { service, prisma, ensureAnonymousSession, modelResolverService }
 }
 
 const baseDate = new Date('2024-01-01T00:00:00.000Z')
 
 describe('SessionService', () => {
   it('creates session using explicit connection and updates preferences', async () => {
-    const { service, prisma } = createService()
+    const { service, prisma, modelResolverService } = createService()
     const actor: Actor = {
       type: 'user',
       id: 1,
@@ -54,10 +64,10 @@ describe('SessionService', () => {
       identifier: 'user:1',
     }
 
-    prisma.connection.findFirst.mockResolvedValue({
-      id: 22,
-      enable: true,
-      ownerUserId: null,
+    const connection = { id: 22, provider: 'openai', baseUrl: 'https://api', prefixId: 'openai' }
+    modelResolverService.resolveModelForRequest.mockResolvedValue({
+      connection,
+      rawModelId: 'gpt-4o',
     })
     prisma.chatSession.create.mockResolvedValue({
       id: 10,
@@ -71,7 +81,7 @@ describe('SessionService', () => {
       reasoningEnabled: null,
       reasoningEffort: null,
       ollamaThink: null,
-      connection: { id: 22, provider: 'openai', baseUrl: 'https://api', prefixId: 'openai' },
+      connection,
     })
     prisma.user.update.mockResolvedValue({})
 
@@ -82,8 +92,11 @@ describe('SessionService', () => {
       rawId: 'gpt-4o',
     })
 
-    expect(prisma.connection.findFirst).toHaveBeenCalledWith({
-      where: { id: 22, enable: true, ownerUserId: null },
+    expect(modelResolverService.resolveModelForRequest).toHaveBeenCalledWith({
+      userId: 1,
+      modelId: 'openai.gpt-4o',
+      connectionId: 22,
+      rawId: 'gpt-4o',
     })
     expect(prisma.chatSession.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -111,7 +124,16 @@ describe('SessionService', () => {
       anonymousKey: 'anon-key',
       expiresAt: baseDate,
     })
-    const { service, prisma } = createService({ ensureAnonymousSession })
+    const connection = { id: 30, provider: 'ollama', baseUrl: 'http://ollama', prefixId: 'llama' }
+    const { service, prisma, modelResolverService } = createService({
+      ensureAnonymousSession,
+      modelResolverService: {
+        resolveModelForRequest: jest.fn().mockResolvedValue({
+          connection,
+          rawModelId: 'llama-3',
+        }),
+      } as any,
+    })
     const actor: Actor = {
       type: 'anonymous',
       key: 'anon-key',
@@ -119,10 +141,6 @@ describe('SessionService', () => {
       expiresAt: null,
     }
 
-    prisma.modelCatalog.findFirst.mockResolvedValue({
-      connectionId: 30,
-      rawId: 'llama-3',
-    })
     prisma.chatSession.create.mockResolvedValue({
       id: 11,
       userId: null,
@@ -135,7 +153,7 @@ describe('SessionService', () => {
       reasoningEnabled: true,
       reasoningEffort: 'low',
       ollamaThink: false,
-      connection: { id: 30, provider: 'ollama', baseUrl: 'http://ollama', prefixId: 'llama' },
+      connection,
     })
 
     const result = await service.createSession(actor, {
@@ -145,6 +163,12 @@ describe('SessionService', () => {
     })
 
     expect(ensureAnonymousSession).toHaveBeenCalledWith(actor)
+    expect(modelResolverService.resolveModelForRequest).toHaveBeenCalledWith({
+      userId: null,
+      modelId: 'llama.llama-3',
+      connectionId: undefined,
+      rawId: undefined,
+    })
     expect(prisma.chatSession.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -224,9 +248,11 @@ describe('SessionService', () => {
   })
 
   it('throws user-friendly error when model cannot be resolved', async () => {
-    const { service, prisma } = createService()
-    prisma.modelCatalog.findFirst.mockResolvedValue(null)
-    prisma.connection.findMany.mockResolvedValue([])
+    const { service, modelResolverService } = createService({
+      modelResolverService: {
+        resolveModelForRequest: jest.fn().mockResolvedValue(null),
+      } as any,
+    })
 
     const actor: Actor = {
       type: 'user',
@@ -240,5 +266,6 @@ describe('SessionService', () => {
     await expect(
       service.createSession(actor, { modelId: 'missing-model' }),
     ).rejects.toBeInstanceOf(SessionServiceError)
+    expect(modelResolverService.resolveModelForRequest).toHaveBeenCalled()
   })
 })

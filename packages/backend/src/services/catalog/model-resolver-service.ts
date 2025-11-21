@@ -91,6 +91,32 @@ export class ModelResolverService {
     }
     return null
   }
+
+  async resolveModelForRequest(params: {
+    userId?: number | null
+    modelId: string
+    connectionId?: number
+    rawId?: string
+  }): Promise<{ connection: Connection; rawModelId: string } | null> {
+    const userId = params.userId ?? 0
+    const modelId = (params.modelId || '').trim()
+
+    if (params.connectionId && params.rawId) {
+      const connection = await this.repository.findEnabledSystemConnectionById(params.connectionId)
+      if (!connection) {
+        return null
+      }
+      return {
+        connection,
+        rawModelId: params.rawId,
+      }
+    }
+
+    if (!modelId) return null
+
+    const resolved = await this.resolveModelIdForUser(userId, modelId)
+    return resolved ?? null
+  }
 }
 
 export const modelResolverService = new ModelResolverService()

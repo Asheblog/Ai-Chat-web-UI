@@ -37,6 +37,7 @@ const buildMockResolver = (): jest.Mocked<ModelResolverService> => ({
       headersJson: '',
     } as any,
   })),
+  resolveModelForRequest: jest.fn(),
 })
 
 describe('openai-compatible api', () => {

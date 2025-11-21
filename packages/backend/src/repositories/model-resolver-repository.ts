@@ -10,6 +10,7 @@ export interface CachedModelWithConnection {
 export interface ModelResolverRepository {
   findCachedModel(modelId: string): Promise<CachedModelWithConnection | null>
   listEnabledSystemConnections(): Promise<Connection[]>
+  findEnabledSystemConnectionById(id: number): Promise<Connection | null>
 }
 
 export class PrismaModelResolverRepository implements ModelResolverRepository {
@@ -44,6 +45,16 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
   listEnabledSystemConnections() {
     return this.prisma.connection.findMany({
       where: {
+        enable: true,
+        ownerUserId: null,
+      },
+    })
+  }
+
+  findEnabledSystemConnectionById(id: number) {
+    return this.prisma.connection.findFirst({
+      where: {
+        id,
         enable: true,
         ownerUserId: null,
       },

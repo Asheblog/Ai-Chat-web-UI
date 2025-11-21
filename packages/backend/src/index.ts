@@ -9,7 +9,7 @@ import { createAppContainer } from './container/app-container';
 // 导入路由
 import { createAuthApi } from './api/auth';
 import users from './api/users';
-import sessions from './api/sessions';
+import { createSessionsApi } from './api/sessions';
 import chat from './api/chat';
 import settings from './api/settings';
 import { createConnectionsApi } from './api/connections';
@@ -68,7 +68,7 @@ app.route(
   createConnectionsApi({ connectionService: container.connectionService }),
 );
 app.route('/api/catalog', catalog);
-app.route('/api/sessions', sessions);
+app.route('/api/sessions', createSessionsApi({ sessionService: container.sessionService }));
 app.route('/api/chat', chat);
 app.route('/api/settings', settings);
 app.route('/api/task-trace', taskTrace);

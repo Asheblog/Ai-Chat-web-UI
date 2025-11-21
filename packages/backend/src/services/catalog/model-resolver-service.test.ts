@@ -23,6 +23,9 @@ const createRepository = (options: { catalog?: CachedModelWithConnection[]; conn
       catalog.find((row) => row.modelId === modelId) || null
     ),
     listEnabledSystemConnections: jest.fn(async () => connections as any),
+    findEnabledSystemConnectionById: jest.fn(async (id: number) =>
+      (connections as any).find((conn: any) => conn.id === id) || null
+    ),
   }
   return repository
 }
@@ -84,5 +87,39 @@ describe('ModelResolverService', () => {
     const result = await service.resolveModelIdForUser(1, 'none')
 
     expect(result).toBeNull()
+  })
+
+  test('prefers explicit connection+rawId when provided', async () => {
+    const repository = createRepository({
+      connections: [buildConn({ id: 9, prefixId: 'azure' })],
+    })
+    const service = new ModelResolverService({ repository })
+
+    const result = await service.resolveModelForRequest({
+      userId: 1,
+      modelId: 'whatever',
+      connectionId: 9,
+      rawId: 'gpt-4o',
+    })
+
+    expect(repository.findEnabledSystemConnectionById).toHaveBeenCalledWith(9)
+    expect(result?.connection.id).toBe(9)
+    expect(result?.rawModelId).toBe('gpt-4o')
+  })
+
+  test('uses fallback resolver when explicit connection missing', async () => {
+    const repository = createRepository({
+      connections: [buildConn({ id: 2, prefixId: 'openai' })],
+    })
+    const service = new ModelResolverService({ repository })
+
+    const result = await service.resolveModelForRequest({
+      userId: 5,
+      modelId: 'openai.gpt-4o',
+    })
+
+    expect(repository.findEnabledSystemConnectionById).not.toHaveBeenCalled()
+    expect(result?.connection.id).toBe(2)
+    expect(result?.rawModelId).toBe('gpt-4o')
   })
 })

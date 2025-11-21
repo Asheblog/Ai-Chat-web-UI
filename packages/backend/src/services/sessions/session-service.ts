@@ -2,6 +2,8 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import { ensureAnonymousSession as defaultEnsureAnonymousSession } from '../../utils/actor'
+import type { ModelResolverService } from '../catalog/model-resolver-service'
+import { modelResolverService as defaultModelResolverService } from '../catalog/model-resolver-service'
 
 export class SessionServiceError extends Error {
   statusCode: number
@@ -16,6 +18,7 @@ export class SessionServiceError extends Error {
 export interface SessionServiceDeps {
   prisma?: PrismaClient
   ensureAnonymousSession?: typeof defaultEnsureAnonymousSession
+  modelResolverService?: ModelResolverService
   logger?: Pick<typeof console, 'error' | 'warn'>
 }
 
@@ -55,16 +58,6 @@ const detailSelect = {
   },
 } satisfies Prisma.ChatSessionSelect
 
-const parseModelIds = (json?: string | null): string[] => {
-  if (!json) return []
-  try {
-    const parsed = JSON.parse(json)
-    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : []
-  } catch {
-    return []
-  }
-}
-
 const composeModelLabel = (
   rawId?: string | null,
   prefix?: string | null,
@@ -98,11 +91,13 @@ type SessionDetail = Prisma.ChatSessionGetPayload<{ select: typeof detailSelect 
 export class SessionService {
   private prisma: PrismaClient
   private ensureAnonymousSession: typeof defaultEnsureAnonymousSession
+  private modelResolverService: ModelResolverService
   private logger: Pick<typeof console, 'error' | 'warn'>
 
   constructor(deps: SessionServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.ensureAnonymousSession = deps.ensureAnonymousSession ?? defaultEnsureAnonymousSession
+    this.modelResolverService = deps.modelResolverService ?? defaultModelResolverService
     this.logger = deps.logger ?? console
   }
 
@@ -147,10 +142,7 @@ export class SessionService {
       ollamaThink?: boolean
     },
   ) {
-    const resolution = await this.resolveConnectionAndModel(payload)
-    if (!resolution) {
-      throw new SessionServiceError('Model not found in connections', 400)
-    }
+    const resolution = await this.resolveModelSelection(actor, payload)
 
     const anonymousContext =
       actor.type === 'anonymous' ? await this.ensureAnonymousSession(actor) : null
@@ -164,8 +156,8 @@ export class SessionService {
               expiresAt: anonymousContext?.expiresAt ?? null,
             }
           : {}),
-        connectionId: resolution.connectionId,
-        modelRawId: resolution.rawId,
+        connectionId: resolution.connection.id,
+        modelRawId: resolution.rawModelId,
         title: payload.title || 'New Chat',
         reasoningEnabled: payload.reasoningEnabled,
         reasoningEffort: payload.reasoningEffort,
@@ -255,16 +247,13 @@ export class SessionService {
       throw new SessionServiceError('Chat session not found', 404)
     }
 
-    const resolution = await this.resolveConnectionAndModel(payload)
-    if (!resolution) {
-      throw new SessionServiceError('Model not found in connections', 400)
-    }
+    const resolution = await this.resolveModelSelection(actor, payload)
 
     const updated = await this.prisma.chatSession.update({
       where: { id: sessionId },
       data: {
-        connectionId: resolution.connectionId,
-        modelRawId: resolution.rawId,
+        connectionId: resolution.connection.id,
+        modelRawId: resolution.rawModelId,
       },
       select: sessionSelect,
     })
@@ -314,77 +303,41 @@ export class SessionService {
   private async persistPreferredModel(
     userId: number,
     modelId: string,
-    resolution: { connectionId: number; rawId: string },
+    resolution: { connection: Prisma.ConnectionGetPayload<true>; rawModelId: string },
   ) {
     await this.prisma.user.update({
       where: { id: userId },
       data: {
         preferredModelId: modelId,
-        preferredConnectionId: resolution.connectionId,
-        preferredModelRawId: resolution.rawId,
+        preferredConnectionId: resolution.connection.id,
+        preferredModelRawId: resolution.rawModelId,
       },
     })
   }
 
-  private async resolveConnectionAndModel(payload: {
-    modelId: string
-    connectionId?: number
-    rawId?: string
-  }): Promise<{ connectionId: number; rawId: string } | null> {
-    if (payload.connectionId && payload.rawId) {
-      const conn = await this.prisma.connection.findFirst({
-        where: {
-          id: payload.connectionId,
-          enable: true,
-          ownerUserId: null,
-        },
-      })
-      if (!conn) {
+  private async resolveModelSelection(
+    actor: Actor,
+    payload: {
+      modelId: string
+      connectionId?: number
+      rawId?: string
+    },
+  ): Promise<{ connection: Prisma.ConnectionGetPayload<true>; rawModelId: string }> {
+    const resolution = await this.modelResolverService.resolveModelForRequest({
+      userId: actor.type === 'user' ? actor.id : null,
+      modelId: payload.modelId,
+      connectionId: payload.connectionId,
+      rawId: payload.rawId,
+    })
+
+    if (!resolution) {
+      if (payload.connectionId) {
         throw new SessionServiceError('Invalid connectionId for current user', 400)
       }
-      return { connectionId: conn.id, rawId: payload.rawId }
+      throw new SessionServiceError('Model not found in connections', 400)
     }
 
-    const cached = await this.prisma.modelCatalog.findFirst({
-      where: { modelId: payload.modelId },
-    })
-    if (cached) {
-      return { connectionId: cached.connectionId, rawId: cached.rawId }
-    }
-
-    const connections = await this.prisma.connection.findMany({
-      where: {
-        enable: true,
-        ownerUserId: null,
-      },
-    })
-
-    let fallbackExact: { connectionId: number; rawId: string } | null = null
-    let fallbackFirst: { connectionId: number; rawId: string } | null = null
-
-    for (const conn of connections) {
-      const prefix = (conn.prefixId || '').trim()
-      if (prefix && payload.modelId.startsWith(`${prefix}.`)) {
-        return {
-          connectionId: conn.id,
-          rawId: payload.modelId.substring(prefix.length + 1),
-        }
-      }
-
-      if (!prefix) {
-        if (!fallbackFirst) {
-          fallbackFirst = { connectionId: conn.id, rawId: payload.modelId }
-        }
-        if (!fallbackExact) {
-          const ids = parseModelIds(conn.modelIdsJson)
-          if (ids.includes(payload.modelId)) {
-            fallbackExact = { connectionId: conn.id, rawId: payload.modelId }
-          }
-        }
-      }
-    }
-
-    return fallbackExact || fallbackFirst
+    return resolution
   }
 }
 

@@ -41,6 +41,7 @@ describe('AppContainer', () => {
     const repo: jest.Mocked<ModelResolverRepository> = {
       findCachedModel: jest.fn().mockResolvedValue(null),
       listEnabledSystemConnections: jest.fn().mockResolvedValue([] as any),
+      findEnabledSystemConnectionById: jest.fn().mockResolvedValue(null),
     }
     const container = createAppContainer({
       modelResolverRepository: repo,
