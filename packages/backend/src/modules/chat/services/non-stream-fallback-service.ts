@@ -1,4 +1,7 @@
 import { convertOpenAIReasoningPayload } from '../../../utils/providers'
+import type { TaskTraceRecorder } from '../../../utils/task-trace'
+import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers'
+import { truncateString } from '../../../utils/task-trace'
 
 type Provider = 'openai' | 'azure_openai' | 'ollama'
 
@@ -14,6 +17,8 @@ export interface NonStreamFallbackParams {
   timeoutMs: number
   logger?: Pick<typeof console, 'warn'>
   fetchImpl?: typeof fetch
+  traceRecorder?: TaskTraceRecorder | null
+  traceContext?: Record<string, unknown>
 }
 
 export interface NonStreamFallbackResult {
@@ -32,6 +37,10 @@ export class NonStreamFallbackService {
   }
 
   async execute(params: NonStreamFallbackParams): Promise<NonStreamFallbackResult | null> {
+    const traceRecorder = params.traceRecorder
+    const traceContext = params.traceContext || {}
+    const logTrace = (eventType: string, payload: Record<string, unknown>) =>
+      traceRecorder?.log(eventType, { ...traceContext, ...payload })
     const nonStreamData = { ...params.requestData, stream: false } as any
     const ac = new AbortController()
     const fallbackTimeout = setTimeout(
@@ -72,13 +81,44 @@ export class NonStreamFallbackService {
         url = `${params.baseUrl}`
       }
 
+      logTrace('http:provider_request', {
+        route: '/api/chat/stream',
+        mode: 'fallback_non_stream',
+        provider: params.provider,
+        url,
+        headers: redactHeadersForTrace(headers),
+        body: summarizeBodyForTrace(body),
+        timeoutMs: params.timeoutMs,
+      })
+
       const resp = await this.fetchImpl(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
         signal: ac.signal,
       })
-      if (!resp.ok) return null
+      logTrace('http:provider_response', {
+        route: '/api/chat/stream',
+        mode: 'fallback_non_stream',
+        provider: params.provider,
+        url,
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: redactHeadersForTrace(resp.headers),
+      })
+      if (!resp.ok) {
+        const errorText = await resp.text().catch(() => '')
+        logTrace('http:provider_error_body', {
+          route: '/api/chat/stream',
+          mode: 'fallback_non_stream',
+          provider: params.provider,
+          url,
+          status: resp.status,
+          statusText: resp.statusText,
+          bodyPreview: truncateString(errorText, 500),
+        })
+        return null
+      }
       const json = (await resp.json()) as any
       const text = (json?.choices?.[0]?.message?.content || '').trim()
       if (!text) return null
@@ -92,6 +132,12 @@ export class NonStreamFallbackService {
     } catch (error) {
       this.logger.warn?.('Non-stream fallback request failed', {
         error: error instanceof Error ? error.message : error,
+      })
+      logTrace('http:provider_error', {
+        route: '/api/chat/stream',
+        mode: 'fallback_non_stream',
+        provider: params.provider,
+        error: summarizeErrorForTrace(error),
       })
       return null
     } finally {

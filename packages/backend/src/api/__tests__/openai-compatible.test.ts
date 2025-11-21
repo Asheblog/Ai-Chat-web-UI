@@ -41,9 +41,8 @@ const buildMockResolver = (): jest.Mocked<ModelResolverService> => ({
 })
 
 describe('openai-compatible api', () => {
-  it('uses injected resolver, fetch, and logTraffic for chat completions', async () => {
+  it('uses injected resolver and fetch for chat completions', async () => {
     const resolver = buildMockResolver()
-    const logTraffic = jest.fn()
     const fetchImpl = jest.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe('https://api.example.com/v1/chat/completions')
       expect(init?.method).toBe('POST')
@@ -56,7 +55,6 @@ describe('openai-compatible api', () => {
     const app = createOpenAICompatApi({
       modelResolverService: resolver,
       fetchImpl,
-      logTraffic,
     })
 
     const res = await app.request('http://localhost/chat/completions', {
@@ -71,8 +69,5 @@ describe('openai-compatible api', () => {
     expect(res.status).toBe(200)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(resolver.resolveModelIdForUser).toHaveBeenCalledWith(1, 'demo-model')
-    expect(logTraffic).toHaveBeenCalledWith(
-      expect.objectContaining({ category: 'client-request', route: '/v1/chat/completions' }),
-    )
   })
 })

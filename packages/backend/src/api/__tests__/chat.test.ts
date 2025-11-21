@@ -22,12 +22,10 @@ import { registerChatStreamRoutes } from '../../modules/chat/routes/stream'
 import { registerChatCompletionRoutes } from '../../modules/chat/routes/completion'
 
 describe('chat api factory', () => {
-  it('passes injected logTraffic into stream/completion routes', () => {
-    const logTraffic = jest.fn()
+  it('registers chat routes', () => {
+    createChatApi()
 
-    createChatApi({ logTraffic })
-
-    expect(registerChatStreamRoutes).toHaveBeenCalledWith(expect.anything(), { logTraffic })
-    expect(registerChatCompletionRoutes).toHaveBeenCalledWith(expect.anything(), { logTraffic })
+    expect(registerChatStreamRoutes).toHaveBeenCalledWith(expect.anything())
+    expect(registerChatCompletionRoutes).toHaveBeenCalledWith(expect.anything())
   })
 })

@@ -74,7 +74,6 @@ const buildService = (overrides?: { prepared?: PreparedChatRequest; fetchOk?: bo
   }
   prisma.message.create.mockResolvedValue({ id: 99 })
 
-  const logTraffic = jest.fn(() => Promise.resolve())
   const requester = {
     requestWithBackoff: jest.fn(),
   }
@@ -101,7 +100,6 @@ const buildService = (overrides?: { prepared?: PreparedChatRequest; fetchOk?: bo
 
   const service = new NonStreamChatService({
     prisma: prisma as any,
-    logTraffic,
     now,
     requestBuilder: requestBuilder as any,
     requester: requester as any,

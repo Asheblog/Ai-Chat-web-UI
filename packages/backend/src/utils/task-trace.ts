@@ -161,10 +161,10 @@ const MAX_STRING_LENGTH = 500
 const MAX_ARRAY_ITEMS = 10
 const MAX_OBJECT_ENTRIES = 20
 
-const truncateString = (value: string, limit = MAX_STRING_LENGTH) =>
+export const truncateString = (value: string, limit = MAX_STRING_LENGTH) =>
   value.length <= limit ? value : `${value.slice(0, limit)}…`
 
-const sanitizePayload = (payload: unknown, depth = 0): any => {
+export const sanitizePayload = (payload: unknown, depth = 0): any => {
   if (payload == null) return payload
   if (typeof payload === 'string') {
     return truncateString(payload)

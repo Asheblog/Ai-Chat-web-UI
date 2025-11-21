@@ -5,20 +5,13 @@ import { registerChatStreamRoutes } from '../modules/chat/routes/stream';
 import { registerChatCompletionRoutes } from '../modules/chat/routes/completion';
 import { registerChatControlRoutes } from '../modules/chat/routes/control';
 import { registerChatUsageRoutes } from '../modules/chat/routes/usage';
-import { logTraffic as defaultLogTraffic } from '../utils/traffic-logger';
-
-export interface ChatApiDeps {
-  logTraffic?: typeof defaultLogTraffic
-}
-
-export const createChatApi = (deps: ChatApiDeps = {}) => {
+export const createChatApi = () => {
   const chat = new Hono();
-  const logTraffic = deps.logTraffic ?? defaultLogTraffic
 
   registerChatMessageRoutes(chat);
   registerChatAttachmentRoutes(chat);
-  registerChatStreamRoutes(chat, { logTraffic });
-  registerChatCompletionRoutes(chat, { logTraffic });
+  registerChatStreamRoutes(chat);
+  registerChatCompletionRoutes(chat);
   registerChatControlRoutes(chat);
   registerChatUsageRoutes(chat);
 

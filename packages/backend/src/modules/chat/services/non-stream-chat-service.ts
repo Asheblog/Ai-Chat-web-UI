@@ -3,7 +3,9 @@ import type { z } from 'zod'
 import { prisma as defaultPrisma } from '../../../db'
 import type { UsageQuotaSnapshot } from '../../../types'
 import { BackendLogger as log } from '../../../utils/logger'
-import { logTraffic as defaultLogTraffic } from '../../../utils/traffic-logger'
+import type { TaskTraceRecorder } from '../../../utils/task-trace'
+import { redactHeadersForTrace, summarizeBodyForTrace } from '../../../utils/trace-helpers'
+import { truncateString } from '../../../utils/task-trace'
 import type { ProviderChatCompletionResponse } from '../chat-common'
 import { sendMessageSchema } from '../chat-common'
 import {
@@ -23,6 +25,7 @@ interface NonStreamChatRequest {
   content: string
   images?: Array<{ data: string; mime: string }>
   quotaSnapshot: UsageQuotaSnapshot | null
+  traceRecorder?: TaskTraceRecorder | null
 }
 
 export interface NonStreamChatResult {
@@ -49,7 +52,6 @@ export class ChatCompletionServiceError extends Error {
 
 export interface NonStreamChatServiceDeps {
   prisma?: PrismaClient
-  logTraffic?: typeof defaultLogTraffic
   now?: () => Date
   requestBuilder?: ChatRequestBuilder
   requester?: ProviderRequester
@@ -57,21 +59,19 @@ export interface NonStreamChatServiceDeps {
 
 export class NonStreamChatService {
   private prisma: PrismaClient
-  private logTraffic: typeof defaultLogTraffic
   private now: () => Date
   private requestBuilder: ChatRequestBuilder
   private requester: ProviderRequester
 
   constructor(deps: NonStreamChatServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
-    this.logTraffic = deps.logTraffic ?? defaultLogTraffic
     this.now = deps.now ?? (() => new Date())
     this.requestBuilder = deps.requestBuilder ?? chatRequestBuilder
     this.requester = deps.requester ?? providerRequester
   }
 
   async execute(request: NonStreamChatRequest): Promise<NonStreamChatResult> {
-    const { session, payload, content, images = [], quotaSnapshot } = request
+    const { session, payload, content, images = [], quotaSnapshot, traceRecorder } = request
     const prepared = await this.requestBuilder.prepare({
       session,
       payload,
@@ -83,9 +83,20 @@ export class NonStreamChatService {
     const response = await this.performProviderRequest({
       sessionId: session.id,
       providerRequest: prepared.providerRequest,
+      traceRecorder,
     })
 
     if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      traceRecorder?.log('http:provider_error_body', {
+        route: '/api/chat/completion',
+        provider: prepared.providerRequest.providerLabel,
+        sessionId: session.id,
+        status: response.status,
+        statusText: response.statusText,
+        headers: redactHeadersForTrace(response.headers),
+        bodyPreview: truncateString(errorText, 500),
+      })
       throw new ChatCompletionServiceError(
         `AI API request failed: ${response.status} ${response.statusText}`,
         502,
@@ -94,20 +105,13 @@ export class NonStreamChatService {
 
     const json = (await response.json()) as ProviderChatCompletionResponse
 
-    await this.logTraffic({
-      category: 'upstream-response',
+    traceRecorder?.log('http:provider_response_parsed', {
       route: '/api/chat/completion',
-      direction: 'outbound',
-      context: {
-        sessionId: session.id,
-        provider: prepared.providerRequest.providerLabel,
-        url: prepared.providerRequest.url,
-        stage: 'parsed',
-      },
-      payload: {
-        status: response.status,
-        body: json,
-      },
+      provider: prepared.providerRequest.providerLabel,
+      sessionId: session.id,
+      url: prepared.providerRequest.url,
+      status: response.status,
+      body: summarizeBodyForTrace(json),
     })
 
     const text = json?.choices?.[0]?.message?.content || ''
@@ -158,6 +162,7 @@ export class NonStreamChatService {
   private async performProviderRequest(params: {
     sessionId: number
     providerRequest: PreparedChatRequest['providerRequest']
+    traceRecorder?: TaskTraceRecorder | null
   }) {
     return this.requester.requestWithBackoff({
       request: {
@@ -170,6 +175,12 @@ export class NonStreamChatService {
         provider: params.providerRequest.providerLabel,
         route: '/api/chat/completion',
         timeoutMs: params.providerRequest.timeoutMs,
+      },
+      traceRecorder: params.traceRecorder,
+      traceContext: {
+        route: '/api/chat/completion',
+        provider: params.providerRequest.providerLabel,
+        sessionId: params.sessionId,
       },
     })
   }

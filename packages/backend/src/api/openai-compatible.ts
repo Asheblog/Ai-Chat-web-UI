@@ -8,7 +8,10 @@ import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import { getModelResolverService, resolveModelIdForUser } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
 import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
-import { logTraffic as defaultLogTraffic } from '../utils/traffic-logger';
+import { TaskTraceRecorder, shouldEnableTaskTrace, type TaskTraceStatus } from '../utils/task-trace';
+import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../utils/trace-helpers';
+import { truncateString } from '../utils/task-trace';
+import type { Actor } from '../types';
 
 import type { Connection, Message as MessageEntity } from '@prisma/client';
 import {
@@ -25,7 +28,6 @@ export interface OpenAICompatDeps {
   modelResolverService?: ReturnType<typeof getModelResolverService>
   messageService?: OpenAICompatMessageService
   fetchImpl?: typeof fetch
-  logTraffic?: typeof defaultLogTraffic
 }
 
 
@@ -225,16 +227,24 @@ async function buildProviderRequest(opts: ProviderRequestOptions) {
 async function requestWithBackoff(
   executor: (signal: AbortSignal) => Promise<Response>,
   timeoutMs = PROVIDER_TIMEOUT_MS,
+  trace?: { recorder?: TaskTraceRecorder | null; context?: Record<string, unknown> },
 ) {
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(new Error('provider request timeout')), timeoutMs);
+  const logTrace = (eventType: string, payload: Record<string, unknown>) =>
+    trace?.recorder?.log(eventType, { ...(trace?.context || {}), ...payload });
   try {
+    let attempt = 1;
     let response = await executor(abortController.signal);
     if (response.status === 429) {
+      logTrace('http:provider_retry', { attempt, status: response.status, backoffMs: BACKOFF_429_MS })
       await new Promise((resolve) => setTimeout(resolve, BACKOFF_429_MS));
+      attempt += 1;
       response = await executor(abortController.signal);
     } else if (response.status >= 500) {
+      logTrace('http:provider_retry', { attempt, status: response.status, backoffMs: BACKOFF_5XX_MS })
       await new Promise((resolve) => setTimeout(resolve, BACKOFF_5XX_MS));
+      attempt += 1;
       response = await executor(abortController.signal);
     }
     return response;
@@ -331,7 +341,6 @@ function formatMessage(message: MessageEntity) {
 
 export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const logTraffic = deps.logTraffic ?? defaultLogTraffic;
   const resolveModel = (userId: number, modelId: string) =>
     deps.modelResolverService
       ? deps.modelResolverService.resolveModelIdForUser(userId, modelId)
@@ -347,27 +356,67 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
     zValidator('json', chatCompletionsSchema),
     async (c) => {
       const user = c.get('user')!; // requireUserActor 已确保 user 存在
+      const actor = c.get('actor') as Actor;
       const body = c.req.valid('json');
-
-      await logTraffic({
-        category: 'client-request',
-        route: '/v1/chat/completions',
-        direction: 'inbound',
-        context: {
-          userId: user.id,
-          stream: Boolean(body.stream),
-        },
-        payload: body,
-      })
-
-      const resolved = await resolveModel(user.id, body.model);
-      if (!resolved) {
-        return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
-      }
-
-      const provider = resolved.connection.provider as ProviderType;
+      let traceRecorder: TaskTraceRecorder | null = null;
+      let traceStatus: TaskTraceStatus = 'running';
+      let traceError: string | null = null;
+      const traceMetadataExtras: Record<string, unknown> = {};
 
       try {
+        const traceDecision = await shouldEnableTaskTrace({
+          actor,
+          env: process.env.NODE_ENV,
+        })
+        traceRecorder = await TaskTraceRecorder.create({
+          enabled: traceDecision.enabled,
+          actorIdentifier: actor.identifier,
+          traceLevel: traceDecision.traceLevel,
+          metadata: {
+            route: '/v1/chat/completions',
+            model: body.model,
+            stream: Boolean(body.stream),
+          },
+          maxEvents: traceDecision.config.maxEvents,
+        })
+        if (!traceRecorder) {
+          throw new Error('Trace recorder not initialized')
+        }
+        traceRecorder.log('request:init', {
+          userId: user.id,
+          model: body.model,
+          stream: Boolean(body.stream),
+        })
+        traceRecorder.log('http:client_request', {
+          route: '/v1/chat/completions',
+          direction: 'inbound',
+          actor: actor.identifier,
+          userId: user.id,
+          model: body.model,
+          stream: Boolean(body.stream),
+          temperature: body.temperature,
+          top_p: body.top_p,
+          messages: summarizeBodyForTrace(body.messages),
+          metadataKeys: body.metadata ? Object.keys(body.metadata) : undefined,
+        })
+
+        const resolved = await resolveModel(user.id, body.model);
+        if (!resolved) {
+          traceStatus = 'error'
+          traceError = 'model_not_found'
+          traceRecorder.log('http:client_response', {
+            route: '/v1/chat/completions',
+            direction: 'inbound',
+            userId: user.id,
+            actor: actor.identifier,
+            status: 404,
+            error: 'model_not_found',
+          })
+          return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
+        }
+
+        const provider = resolved.connection.provider as ProviderType;
+
         const request = await buildProviderRequest({
           connection: resolved.connection,
           rawModelId: resolved.rawModelId,
@@ -378,20 +427,22 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
           },
         });
 
-        await logTraffic({
-          category: 'upstream-request',
+        traceRecorder.log('model:resolved', {
+          provider,
+          connectionId: resolved.connection.id,
+          baseUrl: resolved.connection.baseUrl,
+          modelRawId: resolved.rawModelId,
+        })
+
+        traceRecorder.log('http:provider_request', {
           route: '/v1/chat/completions',
-          direction: 'outbound',
-          context: {
-            userId: user.id,
-            provider,
-            url: request.url,
-            stream: Boolean(body.stream),
-          },
-          payload: {
-            headers: request.headers,
-            body: request.payload,
-          },
+          provider,
+          userId: user.id,
+          url: request.url,
+          stream: Boolean(body.stream),
+          headers: redactHeadersForTrace(request.headers),
+          body: summarizeBodyForTrace(request.payload),
+          timeoutMs: PROVIDER_TIMEOUT_MS,
         })
 
         const executor = (signal: AbortSignal) =>
@@ -402,39 +453,48 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
             signal,
           });
 
-        const response = await requestWithBackoff(executor);
-        await logTraffic({
-          category: 'upstream-response',
-          route: '/v1/chat/completions',
-          direction: 'outbound',
+        const response = await requestWithBackoff(executor, PROVIDER_TIMEOUT_MS, {
+          recorder: traceRecorder,
           context: {
-            userId: user.id,
+            route: '/v1/chat/completions',
             provider,
+            userId: user.id,
             url: request.url,
             stream: Boolean(body.stream),
           },
-          payload: {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries()),
-          },
+        });
+        traceRecorder.log('http:provider_response', {
+          route: '/v1/chat/completions',
+          provider,
+          userId: user.id,
+          url: request.url,
+          stream: Boolean(body.stream),
+          status: response.status,
+          statusText: response.statusText,
+          headers: redactHeadersForTrace(response.headers),
         })
 
         if (!response.ok && response.status !== 200) {
           const errorPayload = await response.text();
-          await logTraffic({
-            category: 'client-response',
+          traceStatus = 'error'
+          traceError = `provider_error_${response.status}`
+          traceRecorder.log('http:provider_error_body', {
+            route: '/v1/chat/completions',
+            provider,
+            userId: user.id,
+            url: request.url,
+            status: response.status,
+            statusText: response.statusText,
+            bodyPreview: truncateString(errorPayload, 500),
+          })
+          traceRecorder.log('http:client_response', {
             route: '/v1/chat/completions',
             direction: 'inbound',
-            context: {
-              userId: user.id,
-              stream: Boolean(body.stream),
-            },
-            payload: {
-              status: response.status,
-              statusText: response.statusText,
-              body: errorPayload,
-            },
+            userId: user.id,
+            actor: actor.identifier,
+            stream: Boolean(body.stream),
+            status: response.status,
+            statusText: response.statusText,
           })
           return c.newResponse(errorPayload, toStatusCode(response.status), {
             'Content-Type': response.headers.get('Content-Type') || 'application/json',
@@ -445,19 +505,17 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
           if (provider === 'ollama') {
             const reader = response.body?.getReader();
             if (!reader) {
-              await logTraffic({
-                category: 'client-response',
+              traceStatus = 'error'
+              traceError = 'Stream not supported by provider response'
+              traceRecorder.log('http:client_response', {
                 route: '/v1/chat/completions',
                 direction: 'inbound',
-                context: {
-                  userId: user.id,
-                  stream: true,
-                  provider,
-                },
-                payload: {
-                  status: 500,
-                  error: 'Stream not supported by provider response',
-                },
+                userId: user.id,
+                actor: actor.identifier,
+                stream: true,
+                provider,
+                status: 500,
+                error: 'Stream not supported by provider response',
               })
               return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
             }
@@ -511,20 +569,17 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
               },
             });
 
-            await logTraffic({
-              category: 'client-response',
+            traceRecorder.log('http:client_response', {
               route: '/v1/chat/completions',
               direction: 'inbound',
-              context: {
-                userId: user.id,
-                stream: true,
-                provider,
-              },
-              payload: {
-                status: 200,
-                mode: 'ollama-stream',
-              },
+              userId: user.id,
+              actor: actor.identifier,
+              stream: true,
+              provider,
+              status: 200,
+              mode: 'ollama-stream',
             })
+            traceStatus = 'completed'
             return c.newResponse(stream as any, 200, sseHeaders);
           }
 
@@ -533,20 +588,17 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
           if (providerContentType) {
             headers.set('Content-Type', providerContentType);
           }
-          await logTraffic({
-            category: 'client-response',
+          traceRecorder.log('http:client_response', {
             route: '/v1/chat/completions',
             direction: 'inbound',
-            context: {
-              userId: user.id,
-              stream: true,
-              provider,
-            },
-            payload: {
-              status: 200,
-              mode: 'proxy-stream',
-            },
+            userId: user.id,
+            actor: actor.identifier,
+            stream: true,
+            provider,
+            status: 200,
+            mode: 'proxy-stream',
           })
+          traceStatus = 'completed'
           return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
         }
 
@@ -560,52 +612,44 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
           const requestId = `chatcmpl-${randomUUID()}`;
           const created = Math.floor(Date.now() / 1000);
           const result = convertOllamaFinalToOpenAI(json, body.model, requestId, created)
-          await logTraffic({
-            category: 'client-response',
+          traceRecorder.log('http:client_response', {
             route: '/v1/chat/completions',
             direction: 'inbound',
-            context: {
-              userId: user.id,
-              stream: false,
-              provider,
-            },
-            payload: {
-              status: 200,
-              body: result,
-            },
+            userId: user.id,
+            actor: actor.identifier,
+            stream: false,
+            provider,
+            status: 200,
+            body: summarizeBodyForTrace(result),
           })
+          traceStatus = 'completed'
           return c.json(result);
         }
 
         const json = await response.json();
-        await logTraffic({
-          category: 'client-response',
+        traceRecorder.log('http:client_response', {
           route: '/v1/chat/completions',
           direction: 'inbound',
-          context: {
-            userId: user.id,
-            stream: false,
-            provider,
-          },
-          payload: {
-            status: response.status,
-            body: json,
-          },
+          userId: user.id,
+          actor: actor.identifier,
+          stream: false,
+          provider,
+          status: response.status,
+          body: summarizeBodyForTrace(json),
         })
+        traceStatus = 'completed'
         return c.json(json, toContentfulStatus(response.status));
       } catch (error: any) {
-        await logTraffic({
-          category: 'client-response',
+        traceStatus = 'error'
+        traceError = error?.message || String(error)
+        traceRecorder?.log('http:client_response', {
           route: '/v1/chat/completions',
           direction: 'inbound',
-          context: {
-            userId: user.id,
-            stream: Boolean(body.stream),
-          },
-          payload: {
-            status: 500,
-            error: error?.message || String(error),
-          },
+          actor: actor.identifier,
+          userId: user.id,
+          stream: Boolean(body.stream),
+          status: 500,
+          error: summarizeErrorForTrace(error),
         })
         return c.json(
           {
@@ -614,6 +658,15 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
           },
           500,
         );
+      } finally {
+        if (traceRecorder?.isEnabled()) {
+          const finalStatus =
+            traceStatus === 'running' ? (traceError ? 'error' : 'completed') : traceStatus
+          await traceRecorder.finalize(finalStatus, {
+            metadata: traceMetadataExtras,
+            error: traceError,
+          })
+        }
       }
     },
   );

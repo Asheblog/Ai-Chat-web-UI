@@ -37,7 +37,8 @@ import {
 import { chatRequestBuilder } from '../services/chat-request-builder';
 import type { AgentStreamMeta } from '../../chat/stream-state';
 import { BackendLogger as log } from '../../../utils/logger';
-import { logTraffic as defaultLogTraffic } from '../../../utils/traffic-logger';
+import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers';
+import { truncateString } from '../../../utils/task-trace';
 import {
   BACKOFF_429_MS,
   BACKOFF_5XX_MS,
@@ -57,9 +58,9 @@ import { streamUsageService } from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
 
-export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: typeof defaultLogTraffic } = {}) => {
-  const logTraffic = deps.logTraffic ?? defaultLogTraffic
+export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
+    let traceRecorder: TaskTraceRecorder | null = null
     try {
       const actor = c.get('actor') as Actor;
       const payload = c.req.valid('json') as any;
@@ -75,22 +76,6 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
       let images = replyToMessageId || replyToClientMessageId ? undefined : payload.images;
       const requestedFeatures = payload?.features || {};
       const traceToggle = typeof payload?.traceEnabled === 'boolean' ? payload.traceEnabled : undefined;
-
-      await logTraffic({
-        category: 'client-request',
-        route: '/api/chat/stream',
-        direction: 'inbound',
-        context: {
-          sessionId,
-          actor: actor.identifier,
-          actorType: actor.type,
-        },
-        payload: {
-          sessionId,
-          content,
-          images,
-        },
-      })
 
       // 验证会话是否存在且属于当前用户
       let session
@@ -344,7 +329,7 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
         250,
         parseInt(sysMap.stream_progress_persist_interval_ms || process.env.STREAM_PROGRESS_PERSIST_INTERVAL_MS || '800'),
       );
-      const traceRecorder = await TaskTraceRecorder.create({
+      traceRecorder = await TaskTraceRecorder.create({
         enabled: traceDecision.enabled,
         sessionId,
         messageId: assistantMessageId ?? undefined,
@@ -364,6 +349,9 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
         },
         maxEvents: traceDecision.config.maxEvents,
       });
+      if (!traceRecorder) {
+        throw new Error('Trace recorder not initialized')
+      }
       traceRecorder.log('request:init', {
         sessionId,
         clientMessageId,
@@ -374,6 +362,20 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
         messageReused: messageWasReused,
         quota: quotaSnapshot ? serializeQuotaSnapshot(quotaSnapshot) : null,
       });
+      traceRecorder.log('http:client_request', {
+        route: '/api/chat/stream',
+        direction: 'inbound',
+        actor: actor.identifier,
+        actorType: actor.type,
+        sessionId,
+        replyToMessageId,
+        replyToClientMessageId,
+        clientMessageId,
+        contentPreview: truncateString(content || '', 200),
+        imagesCount: Array.isArray(images) ? images.length : 0,
+        features: requestedFeatures,
+        traceRequested: traceToggle ?? null,
+      })
 
       if (agentWebSearchActive) {
         return await createAgentWebSearchResponse({
@@ -598,6 +600,15 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
             route: '/api/chat/stream',
             timeoutMs: providerTimeoutMs,
           },
+          traceRecorder,
+          traceContext: {
+            route: '/api/chat/stream',
+            sessionId,
+            provider,
+            baseUrl,
+            model: session.modelRawId,
+            connectionId: session.connectionId,
+          },
           onControllerReady: (controller) => {
             currentProviderController = controller
             bindProviderController(controller)
@@ -625,6 +636,14 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
           azureApiVersion: session.connection?.azureApiVersion,
           timeoutMs: providerTimeoutMs,
           logger: log,
+          traceRecorder,
+          traceContext: {
+            route: '/api/chat/stream',
+            sessionId,
+            provider,
+            model: session.modelRawId,
+            baseUrl,
+          },
         });
 
         const stream = new ReadableStream({
@@ -823,6 +842,16 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
 
             log.debug('AI provider response', { status: response.status, ok: response.ok })
             if (!response.ok) {
+              const errorText = await response.text().catch(() => '')
+              traceRecorder.log('http:provider_error_body', {
+                route: '/api/chat/stream',
+                provider,
+                sessionId,
+                status: response.status,
+                statusText: response.statusText,
+                headers: redactHeadersForTrace(response.headers),
+                bodyPreview: truncateString(errorText, 500),
+              })
               throw new Error(`AI API request failed: ${response.status} ${response.statusText}`);
             }
 
@@ -1266,39 +1295,35 @@ export const registerChatStreamRoutes = (router: Hono, deps: { logTraffic?: type
         },
       });
 
-      await logTraffic({
-        category: 'client-response',
+      traceRecorder?.log('http:client_response', {
         route: '/api/chat/stream',
         direction: 'inbound',
-        context: {
-          sessionId,
-          actor: actor.identifier,
-        },
-        payload: {
-          status: 200,
-          stream: true,
-        },
+        sessionId,
+        actor: actor.identifier,
+        status: 200,
+        stream: true,
+        sseHeaders,
       })
       return c.newResponse(stream as any, 200, sseHeaders);
 
     } catch (error) {
       console.error('Chat stream error:', error);
       log.error('Chat stream error detail', (error as Error)?.message, (error as Error)?.stack)
-      await logTraffic({
-        category: 'client-response',
+      traceRecorder?.log('http:client_response', {
         route: '/api/chat/stream',
         direction: 'inbound',
-        context: {
-          actor: (() => {
-            try { return (c.get('actor') as Actor | undefined)?.identifier }
-            catch { return undefined }
-          })(),
-        },
-        payload: {
-          status: 500,
-          error: (error as Error)?.message || String(error),
-        },
+        actor: (() => {
+          try { return (c.get('actor') as Actor | undefined)?.identifier }
+          catch { return undefined }
+        })(),
+        status: 500,
+        error: summarizeErrorForTrace(error),
       })
+      if (traceRecorder?.isEnabled()) {
+        await traceRecorder.finalize('error', {
+          metadata: { error: (error as Error)?.message || String(error) },
+        })
+      }
       return c.json<ApiResponse>({
         success: false,
         error: 'Failed to process chat request',
