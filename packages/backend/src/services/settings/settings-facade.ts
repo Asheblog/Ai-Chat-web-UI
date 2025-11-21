@@ -71,4 +71,10 @@ export class SettingsFacade {
 
 export { SettingsServiceError, HealthServiceError }
 
-export const settingsFacade = new SettingsFacade()
+let settingsFacade = new SettingsFacade()
+
+export const setSettingsFacade = (facade: SettingsFacade) => {
+  settingsFacade = facade
+}
+
+export { settingsFacade }

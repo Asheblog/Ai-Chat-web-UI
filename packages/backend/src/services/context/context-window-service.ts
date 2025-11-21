@@ -224,4 +224,10 @@ export class ContextWindowService {
   }
 }
 
-export const contextWindowService = new ContextWindowService()
+let contextWindowService = new ContextWindowService()
+
+export const setContextWindowService = (service: ContextWindowService) => {
+  contextWindowService = service
+}
+
+export { contextWindowService }

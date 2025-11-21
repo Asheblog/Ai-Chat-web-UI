@@ -119,4 +119,10 @@ export class ModelResolverService {
   }
 }
 
-export const modelResolverService = new ModelResolverService()
+let modelResolverService = new ModelResolverService()
+
+export const setModelResolverServiceInstance = (service: ModelResolverService) => {
+  modelResolverService = service
+}
+
+export { modelResolverService }

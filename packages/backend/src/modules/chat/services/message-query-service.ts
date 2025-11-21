@@ -183,6 +183,12 @@ export class ChatMessageQueryService {
   }
 }
 
-export const chatMessageQueryService = new ChatMessageQueryService()
+let chatMessageQueryService = new ChatMessageQueryService()
+
+export const setChatMessageQueryService = (service: ChatMessageQueryService) => {
+  chatMessageQueryService = service
+}
+
+export { chatMessageQueryService }
 
 export { messageSelectFields }

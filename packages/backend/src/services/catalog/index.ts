@@ -10,7 +10,7 @@ import { parseCapabilityEnvelope, normalizeCapabilityFlags, serializeCapabilityE
 import { invalidateCompletionLimitCache, invalidateContextWindowCache } from '../../utils/context-window'
 import { ModelCatalogService } from './model-catalog-service'
 
-export const modelCatalogService = new ModelCatalogService({
+let modelCatalogService = new ModelCatalogService({
   prisma,
   refreshAllModelCatalog: refreshAllModelCatalog,
   refreshModelCatalogForConnections,
@@ -24,5 +24,11 @@ export const modelCatalogService = new ModelCatalogService({
   invalidateContextWindowCache,
   logger: log,
 })
+
+export const setModelCatalogService = (service: ModelCatalogService) => {
+  modelCatalogService = service
+}
+
+export { modelCatalogService }
 
 export * from './model-catalog-service'

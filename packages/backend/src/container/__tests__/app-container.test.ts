@@ -1,8 +1,13 @@
 jest.mock('../../utils/model-catalog', () => ({
   refreshModelCatalogForConnection: jest.fn(),
+  refreshAllModelCatalog: jest.fn(),
+  refreshModelCatalogForConnections: jest.fn(),
+  refreshModelCatalogForConnectionId: jest.fn(),
 }))
 jest.mock('../../utils/providers', () => ({
   verifyConnection: jest.fn(),
+  computeCapabilities: jest.fn(),
+  deriveChannelName: jest.fn(),
 }))
 
 import { createAppContainer } from '../app-container'

@@ -5,8 +5,15 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import type { ApiResponse } from '../types'
 import { serializeQuotaSnapshot } from '../utils/quota'
 import { userService, UserServiceError, type ListStatus } from '../services/users'
+import type { UserService } from '../services/users/user-service'
 
-const users = new Hono()
+export interface UsersApiDeps {
+  userService?: UserService
+}
+
+export const createUsersApi = (deps: UsersApiDeps = {}) => {
+  const svc = deps.userService ?? userService
+  const users = new Hono()
 
 users.use('*', actorMiddleware, requireUserActor, adminOnlyMiddleware)
 
@@ -63,7 +70,7 @@ users.post('/', zValidator('json', createUserSchema), async (c) => {
   try {
     const payload = c.req.valid('json')
     const currentUser = c.get('user')
-    const newUser = await userService.createUser(payload, currentUser?.id ?? null)
+    const newUser = await svc.createUser(payload, currentUser?.id ?? null)
     return c.json<ApiResponse>({
       success: true,
       data: newUser,
@@ -84,7 +91,7 @@ users.get('/', async (c) => {
     const status = normalizedStatus && listStatusValues.includes(normalizedStatus as ListStatus)
       ? (normalizedStatus as ListStatus)
       : undefined
-    const result = await userService.listUsers({ page, limit, search, status })
+    const result = await svc.listUsers({ page, limit, search, status })
     return c.json<ApiResponse<typeof result>>({ success: true, data: result })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch users', 'Get users error:')
@@ -97,7 +104,7 @@ users.get('/:id', async (c) => {
     if (!userId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
-    const user = await userService.getUserWithCounts(userId)
+    const user = await svc.getUserWithCounts(userId)
     return c.json<ApiResponse>({ success: true, data: user })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch user', 'Get user error:')
@@ -110,7 +117,7 @@ users.get('/:id/quota', async (c) => {
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
-    const result = await userService.getUserQuota(targetId)
+    const result = await svc.getUserQuota(targetId)
     return c.json<ApiResponse<{ quota: ReturnType<typeof serializeQuotaSnapshot> }>>({
       success: true,
       data: {
@@ -130,7 +137,7 @@ users.put('/:id/username', zValidator('json', updateUsernameSchema), async (c) =
     }
     const { username } = c.req.valid('json')
     const currentUser = c.get('user')!
-    const updated = await userService.updateUsername(targetId, username, currentUser.id)
+    const updated = await svc.updateUsername(targetId, username, currentUser.id)
     return c.json<ApiResponse>({ success: true, data: updated, message: 'Username updated successfully' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to update username', 'Update username error:')
@@ -148,7 +155,7 @@ users.put('/:id/role', async (c) => {
       return c.json<ApiResponse>({ success: false, error: 'Invalid role. Must be ADMIN or USER' }, 400)
     }
     const currentUser = c.get('user')!
-    const updated = await userService.updateRole(userId, role, currentUser.id)
+    const updated = await svc.updateRole(userId, role, currentUser.id)
     return c.json<ApiResponse>({ success: true, data: updated, message: 'User role updated successfully' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to update user role', 'Update user role error:')
@@ -162,7 +169,7 @@ users.post('/:id/approve', async (c) => {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
     const currentUser = c.get('user')!
-    const updated = await userService.approveUser(targetId, currentUser.id)
+    const updated = await svc.approveUser(targetId, currentUser.id)
     return c.json<ApiResponse>({ success: true, data: updated, message: 'User approved successfully' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to approve user', 'Approve user error:')
@@ -177,7 +184,7 @@ users.post('/:id/reject', zValidator('json', rejectionSchema), async (c) => {
     }
     const { reason } = c.req.valid('json')
     const currentUser = c.get('user')!
-    const updated = await userService.rejectUser(targetId, reason, currentUser.id)
+    const updated = await svc.rejectUser(targetId, reason, currentUser.id)
     return c.json<ApiResponse>({ success: true, data: updated, message: 'User request rejected' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to reject user', 'Reject user error:')
@@ -192,7 +199,7 @@ users.post('/:id/status', zValidator('json', statusUpdateSchema), async (c) => {
     }
     const { status, reason } = c.req.valid('json')
     const currentUser = c.get('user')!
-    const updated = await userService.updateStatus(targetId, status, reason, currentUser.id)
+    const updated = await svc.updateStatus(targetId, status, reason, currentUser.id)
     return c.json<ApiResponse>({ success: true, data: updated, message: 'User status updated' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to update user status', 'Update user status error:')
@@ -207,7 +214,7 @@ users.put('/:id/password', zValidator('json', resetPasswordSchema), async (c) =>
     }
     const { password } = c.req.valid('json')
     const currentUser = c.get('user')!
-    await userService.resetPassword(targetId, password, currentUser.id)
+    await svc.resetPassword(targetId, password, currentUser.id)
     return c.json<ApiResponse>({ success: true, message: 'Password reset successfully' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to reset password', 'Reset user password error:')
@@ -221,7 +228,7 @@ users.delete('/:id', async (c) => {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
     const currentUser = c.get('user')!
-    await userService.deleteUser(userId, currentUser.id)
+    await svc.deleteUser(userId, currentUser.id)
     return c.json<ApiResponse>({ success: true, message: 'User deleted successfully' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to delete user', 'Delete user error:')
@@ -236,7 +243,7 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
     }
     const payload = c.req.valid('json')
     const currentUser = c.get('user')!
-    const result = await userService.updateQuota(targetId, payload, currentUser.id)
+    const result = await svc.updateQuota(targetId, payload, currentUser.id)
     return c.json<ApiResponse<{ quota: ReturnType<typeof serializeQuotaSnapshot>; user: typeof result.user }>>({
       success: true,
       data: {
@@ -250,4 +257,7 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
   }
 })
 
-export default users
+  return users
+}
+
+export default createUsersApi()

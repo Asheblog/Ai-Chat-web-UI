@@ -331,4 +331,10 @@ export class AuthService {
   }
 }
 
-export const authService = new AuthService()
+let authService = new AuthService()
+
+export const setAuthService = (service: AuthService) => {
+  authService = service
+}
+
+export { authService }

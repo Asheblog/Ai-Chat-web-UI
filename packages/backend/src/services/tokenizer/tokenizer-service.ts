@@ -82,4 +82,10 @@ export class TokenizerService {
   }
 }
 
-export const tokenizerService = new TokenizerService()
+let tokenizerService = new TokenizerService()
+
+export const setTokenizerService = (service: TokenizerService) => {
+  tokenizerService = service
+}
+
+export { tokenizerService }

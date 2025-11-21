@@ -4,11 +4,17 @@ import { inspectActorQuota } from '../../utils/quota'
 import { BackendLogger as log } from '../../utils/logger'
 import { UserService } from './user-service'
 
-export const userService = new UserService({
+let userService: UserService = new UserService({
   prisma,
   authUtils: AuthUtils,
   inspectActorQuota,
   logger: log,
 })
+
+export const setUserService = (service: UserService) => {
+  userService = service
+}
+
+export { userService }
 
 export * from './user-service'

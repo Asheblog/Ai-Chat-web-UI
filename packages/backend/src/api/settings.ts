@@ -4,8 +4,15 @@ import { z } from 'zod';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Actor } from '../types';
 import { settingsFacade, SettingsServiceError, HealthServiceError } from '../services/settings/settings-facade'
+import type { SettingsFacade } from '../services/settings/settings-facade'
 
-const settings = new Hono();
+export interface SettingsApiDeps {
+  settingsFacade?: SettingsFacade
+}
+
+export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
+  const facade = deps.settingsFacade ?? settingsFacade
+  const settings = new Hono();
 
 const handleServiceError = (
   c: any,
@@ -22,7 +29,7 @@ const handleServiceError = (
 
 settings.get('/branding', async (c) => {
   try {
-    const brandText = await settingsFacade.getBrandingText();
+    const brandText = await facade.getBrandingText();
     return c.json<ApiResponse>({ success: true, data: { brand_text: brandText } });
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch branding info', 'Get branding error:');
@@ -102,7 +109,7 @@ settings.get('/system', actorMiddleware, async (c) => {
     if (!actor) {
       return c.json<ApiResponse>({ success: false, error: 'Actor unavailable' }, 401)
     }
-    const result = await settingsFacade.getSystemSettings(actor)
+    const result = await facade.getSystemSettings(actor)
     return c.json<ApiResponse>({ success: true, data: result })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch system settings', 'Get system settings error:')
@@ -119,7 +126,7 @@ settings.put(
   async (c) => {
     try {
       const payload = c.req.valid('json')
-      await settingsFacade.updateSystemSettings(payload)
+      await facade.updateSystemSettings(payload)
       return c.json<ApiResponse>({ success: true, message: 'System settings updated successfully' })
     } catch (error) {
       return handleServiceError(c, error, 'Failed to update system settings', 'Update system settings error:')
@@ -130,7 +137,7 @@ settings.put(
 settings.post('/system/anonymous-quota/reset', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', resetAnonymousQuotaSchema), async (c) => {
   try {
     const { resetUsed } = c.req.valid('json');
-    await settingsFacade.resetAnonymousQuota({ resetUsed: Boolean(resetUsed) });
+    await facade.resetAnonymousQuota({ resetUsed: Boolean(resetUsed) });
     return c.json<ApiResponse>({
       success: true,
       message: 'Anonymous quota synchronized',
@@ -152,7 +159,7 @@ settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
       return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
     }
 
-    const personalSettings = await settingsFacade.getPersonalSettings({ userId: user.id, request: c.req.raw })
+    const personalSettings = await facade.getPersonalSettings({ userId: user.id, request: c.req.raw })
 
     return c.json<ApiResponse>({
       success: true,
@@ -182,7 +189,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
       return c.json<ApiResponse>({ success: false, error: 'User unavailable' }, 401);
     }
 
-    const updated = await settingsFacade.updatePersonalSettings({
+    const updated = await facade.updatePersonalSettings({
       userId: user.id,
       payload: updateData,
       request: c.req.raw,
@@ -215,7 +222,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
 // 获取应用信息
 settings.get('/app-info', async (c) => {
   try {
-    const appInfo = await settingsFacade.getAppInfo()
+    const appInfo = await facade.getAppInfo()
 
     return c.json<ApiResponse>({
       success: true,
@@ -234,7 +241,7 @@ settings.get('/app-info', async (c) => {
 // 健康检查接口
 settings.get('/health', async (c) => {
   try {
-    const healthInfo = await settingsFacade.checkHealth()
+    const healthInfo = await facade.checkHealth()
     return c.json<ApiResponse>({
       success: true,
       data: healthInfo,
@@ -258,4 +265,7 @@ settings.get('/health', async (c) => {
   }
 });
 
-export default settings;
+  return settings;
+};
+
+export default createSettingsApi();

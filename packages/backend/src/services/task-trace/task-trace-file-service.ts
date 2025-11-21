@@ -115,4 +115,10 @@ export class TaskTraceFileService {
   }
 }
 
-export const taskTraceFileService = new TaskTraceFileService()
+let taskTraceFileService = new TaskTraceFileService()
+
+export const setTaskTraceFileService = (service: TaskTraceFileService) => {
+  taskTraceFileService = service
+}
+
+export { taskTraceFileService }

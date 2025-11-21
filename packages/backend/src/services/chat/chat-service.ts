@@ -77,4 +77,10 @@ export class ChatService {
   }
 }
 
-export const chatService = new ChatService()
+let chatService = new ChatService()
+
+export const setChatService = (service: ChatService) => {
+  chatService = service
+}
+
+export { chatService }

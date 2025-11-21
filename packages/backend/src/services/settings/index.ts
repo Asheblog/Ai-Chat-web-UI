@@ -9,7 +9,7 @@ import { syncSharedAnonymousQuota } from '../../utils/quota'
 import { replaceProfileImage } from '../../utils/profile-images'
 import { SettingsService } from './settings-service'
 
-export const settingsService = new SettingsService({
+let settingsService = new SettingsService({
   prisma,
   getQuotaPolicy,
   invalidateQuotaPolicyCache,
@@ -18,5 +18,11 @@ export const settingsService = new SettingsService({
   syncSharedAnonymousQuota,
   replaceProfileImage,
 })
+
+export const setSettingsService = (service: SettingsService) => {
+  settingsService = service
+}
+
+export { settingsService }
 
 export * from './settings-service'

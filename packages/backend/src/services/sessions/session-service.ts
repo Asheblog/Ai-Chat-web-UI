@@ -341,4 +341,10 @@ export class SessionService {
   }
 }
 
-export const sessionService = new SessionService()
+let sessionService = new SessionService()
+
+export const setSessionService = (service: SessionService) => {
+  sessionService = service
+}
+
+export { sessionService }

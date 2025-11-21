@@ -130,4 +130,10 @@ export class StreamUsageService {
   }
 }
 
-export const streamUsageService = new StreamUsageService()
+let streamUsageService = new StreamUsageService()
+
+export const setStreamUsageService = (service: StreamUsageService) => {
+  streamUsageService = service
+}
+
+export { streamUsageService }

@@ -50,4 +50,10 @@ export class HealthService {
   }
 }
 
-export const healthService = new HealthService()
+let healthService = new HealthService()
+
+export const setHealthService = (service: HealthService) => {
+  healthService = service
+}
+
+export { healthService }

@@ -2,8 +2,15 @@ import { Hono } from 'hono'
 import type { ApiResponse } from '../types'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import { modelCatalogService, ModelCatalogServiceError } from '../services/catalog'
+import type { ModelCatalogService } from '../services/catalog/model-catalog-service'
 
-const catalog = new Hono()
+export interface CatalogApiDeps {
+  modelCatalogService?: ModelCatalogService
+}
+
+export const createCatalogApi = (deps: CatalogApiDeps = {}) => {
+  const svc = deps.modelCatalogService ?? modelCatalogService
+  const catalog = new Hono()
 
 catalog.use('*', actorMiddleware)
 
@@ -32,7 +39,7 @@ const handleServiceError = (
 
 catalog.get('/models', async (c) => {
   try {
-    const list = await modelCatalogService.listModels()
+    const list = await svc.listModels()
     return c.json<ApiResponse>({ success: true, data: list })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch models', 'List catalog models error:')
@@ -41,7 +48,7 @@ catalog.get('/models', async (c) => {
 
 catalog.post('/models/refresh', requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    await modelCatalogService.refreshAllModels()
+    await svc.refreshAllModels()
     return c.json<ApiResponse>({ success: true, message: 'Refreshed' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to refresh models', 'Manual refresh models error:')
@@ -61,7 +68,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     }
     const maxOutputTokens = toPositiveIntOrNull(body.max_output_tokens, 'max_output_tokens')
     const contextWindow = toPositiveIntOrNull(body.context_window, 'context_window')
-    await modelCatalogService.saveOverride({
+    await svc.saveOverride({
       connectionId,
       rawId,
       tagsInput: body.tags,
@@ -82,7 +89,7 @@ catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) 
       body = await c.req.json()
     } catch {}
     const all = Boolean(body?.all)
-    const count = await modelCatalogService.deleteOverrides({
+    const count = await svc.deleteOverrides({
       all,
       items: body?.items,
     })
@@ -94,11 +101,14 @@ catalog.delete('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) 
 
 catalog.get('/models/overrides', requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const data = await modelCatalogService.exportOverrides()
+    const data = await svc.exportOverrides()
     return c.json<ApiResponse>({ success: true, data })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to export overrides', 'Export catalog overrides error:')
   }
 })
 
-export default catalog
+  return catalog
+}
+
+export default createCatalogApi()

@@ -148,4 +148,10 @@ export class AuthContextService {
   }
 }
 
-export const authContextService = new AuthContextService()
+let authContextService = new AuthContextService()
+
+export const setAuthContextService = (service: AuthContextService) => {
+  authContextService = service
+}
+
+export { authContextService }

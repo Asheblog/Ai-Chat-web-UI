@@ -7,8 +7,18 @@ import { getTaskTraceConfig } from '../utils/task-trace'
 import { taskTraceService } from '../services/task-trace/task-trace-service'
 import { taskTraceFileService } from '../services/task-trace/task-trace-file-service'
 import { buildLatexExport, buildTraceExport } from '../services/task-trace/task-trace-export-service'
+import type { TaskTraceService } from '../services/task-trace/task-trace-service'
+import type { TaskTraceFileService } from '../services/task-trace/task-trace-file-service'
 
-const taskTrace = new Hono()
+export interface TaskTraceApiDeps {
+  taskTraceService?: TaskTraceService
+  taskTraceFileService?: TaskTraceFileService
+}
+
+export const createTaskTraceApi = (deps: TaskTraceApiDeps = {}) => {
+  const traceService = deps.taskTraceService ?? taskTraceService
+  const traceFileService = deps.taskTraceFileService ?? taskTraceFileService
+  const taskTrace = new Hono()
 
 const cleanupSchema = z.object({
   retentionDays: z.number().int().min(1).max(365).optional(),
@@ -28,7 +38,7 @@ taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async
     const statusRaw = c.req.query('status')
     const keyword = (c.req.query('keyword') || '').trim()
 
-    const result = await taskTraceService.listTraces({
+    const result = await traceService.listTraces({
       page,
       pageSize,
       sessionId: sessionIdRaw && Number.isFinite(Number.parseInt(sessionIdRaw, 10))
@@ -59,12 +69,12 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const traceDetail = await taskTraceService.getTraceWithLatex(id)
+    const traceDetail = await traceService.getTraceWithLatex(id)
     const trace = traceDetail?.trace
     if (!trace) {
       return c.json<ApiResponse>({ success: false, error: 'Trace not found' }, 404)
     }
-    const { events, truncated } = await taskTraceFileService.readTraceEventsFromFile(trace.logFilePath, 2000)
+    const { events, truncated } = await traceFileService.readTraceEventsFromFile(trace.logFilePath, 2000)
     return c.json<ApiResponse>({
       success: true,
       data: {
@@ -86,11 +96,11 @@ taskTrace.get('/:id/export', actorMiddleware, requireUserActor, adminOnlyMiddlew
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const detail = await taskTraceService.getTraceWithLatex(id)
+    const detail = await traceService.getTraceWithLatex(id)
     if (!detail?.trace) {
       return c.json<ApiResponse>({ success: false, error: 'Trace not found' }, 404)
     }
-    const { events } = await taskTraceFileService.readTraceEventsFromFile(detail.trace.logFilePath, Number.MAX_SAFE_INTEGER)
+    const { events } = await traceFileService.readTraceEventsFromFile(detail.trace.logFilePath, Number.MAX_SAFE_INTEGER)
     const body = buildTraceExport({
       id: detail.trace.id,
       status: detail.trace.status,
@@ -124,7 +134,7 @@ taskTrace.get('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddlewa
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const latex = await taskTraceService.getLatexTrace(id)
+    const latex = await traceService.getLatexTrace(id)
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
@@ -150,7 +160,7 @@ taskTrace.get('/:id/latex/events', actorMiddleware, requireUserActor, adminOnlyM
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
-    const { events, truncated } = await taskTraceFileService.readLatexEventsFromFile(latex.logFilePath, 2000)
+    const { events, truncated } = await traceFileService.readLatexEventsFromFile(latex.logFilePath, 2000)
     return c.json<ApiResponse>({
       success: true,
       data: { events, truncated },
@@ -167,11 +177,11 @@ taskTrace.get('/:id/latex/export', actorMiddleware, requireUserActor, adminOnlyM
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const latex = await taskTraceService.getLatexTrace(id)
+    const latex = await traceService.getLatexTrace(id)
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
-    const { events } = await taskTraceFileService.readLatexEventsFromFile(latex.logFilePath, Number.MAX_SAFE_INTEGER)
+    const { events } = await traceFileService.readLatexEventsFromFile(latex.logFilePath, Number.MAX_SAFE_INTEGER)
     const body = buildLatexExport({
       id: latex.id,
       taskTraceId: latex.taskTraceId,
@@ -202,7 +212,7 @@ taskTrace.delete('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddl
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const result = await taskTraceService.deleteLatexTrace(id)
+    const result = await traceService.deleteLatexTrace(id)
     if (!result.deleted) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }
@@ -215,7 +225,7 @@ taskTrace.delete('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddl
 
 taskTrace.delete('/all', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const result = await taskTraceService.deleteAllTraces()
+    const result = await traceService.deleteAllTraces()
     return c.json<ApiResponse>({ success: true, data: { deleted: result.deleted } })
   } catch (error) {
     console.error('Delete all traces failed', error)
@@ -229,7 +239,7 @@ taskTrace.delete('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware,
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const result = await taskTraceService.deleteTrace(id)
+    const result = await traceService.deleteTrace(id)
     if (!result.deleted) {
       return c.json<ApiResponse>({ success: true, message: 'Trace removed' })
     }
@@ -246,7 +256,7 @@ taskTrace.post('/cleanup', actorMiddleware, requireUserActor, adminOnlyMiddlewar
     const inputDays = body?.retentionDays
     const config = await getTaskTraceConfig()
     const retentionDays = typeof inputDays === 'number' ? Math.max(1, Math.min(365, inputDays)) : config.retentionDays
-    const result = await taskTraceService.cleanupTraces(retentionDays)
+    const result = await traceService.cleanupTraces(retentionDays)
     return c.json<ApiResponse>({
       success: true,
       data: {
@@ -260,4 +270,7 @@ taskTrace.post('/cleanup', actorMiddleware, requireUserActor, adminOnlyMiddlewar
   }
 })
 
-export default taskTrace
+  return taskTrace
+}
+
+export default createTaskTraceApi()

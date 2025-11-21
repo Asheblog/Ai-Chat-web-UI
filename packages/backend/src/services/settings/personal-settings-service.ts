@@ -136,4 +136,10 @@ export class PersonalSettingsService {
   }
 }
 
-export const personalSettingsService = new PersonalSettingsService()
+let personalSettingsService = new PersonalSettingsService()
+
+export const setPersonalSettingsService = (service: PersonalSettingsService) => {
+  personalSettingsService = service
+}
+
+export { personalSettingsService }

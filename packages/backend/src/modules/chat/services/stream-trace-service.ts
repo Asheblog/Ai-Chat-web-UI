@@ -87,4 +87,10 @@ export class StreamTraceService {
   }
 }
 
-export const streamTraceService = new StreamTraceService()
+let streamTraceService = new StreamTraceService()
+
+export const setStreamTraceService = (service: StreamTraceService) => {
+  streamTraceService = service
+}
+
+export { streamTraceService }

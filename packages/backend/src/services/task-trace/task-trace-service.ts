@@ -310,4 +310,10 @@ export class TaskTraceService {
   }
 }
 
-export const taskTraceService = new TaskTraceService()
+let taskTraceService = new TaskTraceService()
+
+export const setTaskTraceService = (service: TaskTraceService) => {
+  taskTraceService = service
+}
+
+export { taskTraceService }

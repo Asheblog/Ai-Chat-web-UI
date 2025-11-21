@@ -8,12 +8,18 @@ import { PrismaConnectionRepository } from '../../repositories/connection-reposi
 
 const connectionRepository = new PrismaConnectionRepository(prisma)
 
-export const connectionService = new ConnectionService({
+let connectionService: ConnectionService = new ConnectionService({
   repository: connectionRepository,
   encryptApiKey: AuthUtils.encryptApiKey,
   refreshModelCatalog: refreshModelCatalogForConnection,
   verifyConnection,
   logger: log,
 })
+
+export const setConnectionService = (service: ConnectionService) => {
+  connectionService = service
+}
+
+export { connectionService }
 
 export * from './connection-service'

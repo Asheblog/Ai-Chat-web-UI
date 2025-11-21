@@ -147,4 +147,10 @@ export class StreamSseService {
   }
 }
 
-export const streamSseService = new StreamSseService()
+let streamSseService = new StreamSseService()
+
+export const setStreamSseService = (service: StreamSseService) => {
+  streamSseService = service
+}
+
+export { streamSseService }

@@ -261,4 +261,10 @@ export class NonStreamChatService {
   }
 }
 
-export const nonStreamChatService = new NonStreamChatService()
+let nonStreamChatService = new NonStreamChatService()
+
+export const setNonStreamChatService = (service: NonStreamChatService) => {
+  nonStreamChatService = service
+}
+
+export { nonStreamChatService }

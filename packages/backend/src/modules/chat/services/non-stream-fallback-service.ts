@@ -100,4 +100,10 @@ export class NonStreamFallbackService {
   }
 }
 
-export const nonStreamFallbackService = new NonStreamFallbackService()
+let nonStreamFallbackService = new NonStreamFallbackService()
+
+export const setNonStreamFallbackService = (service: NonStreamFallbackService) => {
+  nonStreamFallbackService = service
+}
+
+export { nonStreamFallbackService }

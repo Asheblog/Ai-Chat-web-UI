@@ -132,4 +132,10 @@ export class OpenAICompatMessageService {
   }
 }
 
-export const openaiCompatMessageService = new OpenAICompatMessageService()
+let openaiCompatMessageService = new OpenAICompatMessageService()
+
+export const setOpenAICompatMessageService = (service: OpenAICompatMessageService) => {
+  openaiCompatMessageService = service
+}
+
+export { openaiCompatMessageService }

@@ -8,15 +8,15 @@ import { createAppContainer } from './container/app-container';
 
 // 导入路由
 import { createAuthApi } from './api/auth';
-import users from './api/users';
+import { createUsersApi } from './api/users';
 import { createSessionsApi } from './api/sessions';
 import chat from './api/chat';
-import settings from './api/settings';
+import { createSettingsApi } from './api/settings';
 import { createConnectionsApi } from './api/connections';
-import catalog from './api/catalog';
+import { createCatalogApi } from './api/catalog';
 import { createOpenAICompatApi } from './api/openai-compatible';
 import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './utils/model-catalog';
-import taskTrace from './api/task-trace';
+import { createTaskTraceApi } from './api/task-trace';
 import { setChatConfig } from './modules/chat/chat-common';
 
 // 导入中间件
@@ -61,17 +61,20 @@ app.use(
 );
 
 // API路由
-app.route('/api/auth', createAuthApi({ config: appContext.config }));
-app.route('/api/users', users);
+app.route('/api/auth', createAuthApi({ config: appContext.config, authService: container.authService }));
+app.route('/api/users', createUsersApi({ userService: container.userService }));
 app.route(
   '/api/connections',
   createConnectionsApi({ connectionService: container.connectionService }),
 );
-app.route('/api/catalog', catalog);
+app.route('/api/catalog', createCatalogApi({ modelCatalogService: container.modelCatalogService }));
 app.route('/api/sessions', createSessionsApi({ sessionService: container.sessionService }));
 app.route('/api/chat', chat);
-app.route('/api/settings', settings);
-app.route('/api/task-trace', taskTrace);
+app.route('/api/settings', createSettingsApi({ settingsFacade: container.settingsFacade }));
+app.route('/api/task-trace', createTaskTraceApi({
+  taskTraceService: container.taskTraceService,
+  taskTraceFileService: container.taskTraceFileService,
+}));
 app.route(
   '/v1',
   createOpenAICompatApi({

@@ -35,4 +35,10 @@ export class AppInfoService {
   }
 }
 
-export const appInfoService = new AppInfoService()
+let appInfoService = new AppInfoService()
+
+export const setAppInfoService = (service: AppInfoService) => {
+  appInfoService = service
+}
+
+export { appInfoService }
