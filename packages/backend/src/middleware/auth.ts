@@ -6,12 +6,15 @@ import {
   determineProfileImageBaseUrl,
   resolveProfileImageUrl,
 } from '../utils/profile-images'
-import { authContextService } from '../services/auth/auth-context-service'
-import { getAppConfig } from '../config/app-config'
+import { authContextService as defaultAuthContextService } from '../services/auth/auth-context-service'
+import { getAppConfig, type AppConfig } from '../config/app-config'
 
 const ANON_COOKIE_KEY = 'anon_key'
 const COOKIE_PATH_ROOT: Parameters<typeof deleteCookie>[2] = { path: '/' }
-const appConfig = getAppConfig()
+export interface AuthMiddlewareDeps {
+  config?: AppConfig
+  authContextService?: typeof defaultAuthContextService
+}
 
 const toContentfulStatus = (status: number): ContentfulStatusCode => {
   if (status === 101 || status === 204 || status === 205 || status === 304) {
@@ -23,8 +26,7 @@ const toContentfulStatus = (status: number): ContentfulStatusCode => {
   return status as ContentfulStatusCode
 }
 
-const ensureAnonCookie = (c: Context, key: string, retentionDays: number) => {
-  const secure = appConfig.server.cookieSecure
+const ensureAnonCookie = (c: Context, key: string, retentionDays: number, secure: boolean) => {
   const cookieOptions: Parameters<typeof setCookie>[3] = {
     httpOnly: true,
     sameSite: 'Lax',
@@ -50,75 +52,87 @@ declare module 'hono' {
   }
 }
 
-export const actorMiddleware = async (c: Context, next: Next) => {
-  const authHeader = c.req.header('Authorization')
-  let authCookie: string | null = null
-  let anonCookie: string | null = null
-  try {
-    authCookie = getCookie(c, 'token') || null
-  } catch {}
-  try {
-    anonCookie = getCookie(c, ANON_COOKIE_KEY) || null
-  } catch {}
+export const createAuthMiddleware = (deps: AuthMiddlewareDeps = {}) => {
+  const appConfig = deps.config ?? getAppConfig()
+  const ctxSvc = deps.authContextService ?? defaultAuthContextService
 
-  const result = await authContextService.resolveActor({
-    authHeader,
-    authCookie,
-    anonCookie,
-  })
-  if (!result.actor) {
-    if (result.clearAuth) {
-      try { deleteCookie(c, 'token', COOKIE_PATH_ROOT) } catch {}
-    }
-    if (result.clearAnon) {
-      try { deleteCookie(c, ANON_COOKIE_KEY, COOKIE_PATH_ROOT) } catch {}
-    }
-    if (result.status === 401) {
-      return c.json({ success: false, error: result.error ?? 'Unauthorized' }, 401)
-    }
-    return c.json({ success: false, error: result.error ?? 'Forbidden' }, toContentfulStatus(result.status ?? 403))
-  }
+  const actorMiddleware = async (c: Context, next: Next) => {
+    const authHeader = c.req.header('Authorization')
+    let authCookie: string | null = null
+    let anonCookie: string | null = null
+    try {
+      authCookie = getCookie(c, 'token') || null
+    } catch {}
+    try {
+      anonCookie = getCookie(c, ANON_COOKIE_KEY) || null
+    } catch {}
 
-  c.set('actor', result.actor)
-
-  if (result.actor.type === 'user') {
-    const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
-    const avatarUrl = resolveProfileImageUrl(result.actor.avatarPath ?? null, baseUrl)
-    c.set('user', {
-      id: result.actor.id,
-      username: result.actor.username,
-      role: result.actor.role,
-      status: result.actor.status,
-      avatarUrl: avatarUrl ?? null,
+    const result = await ctxSvc.resolveActor({
+      authHeader,
+      authCookie,
+      anonCookie,
     })
-  } else if (result.anonCookie) {
-    ensureAnonCookie(c, result.anonCookie.key, result.anonCookie.retentionDays)
+    if (!result.actor) {
+      if (result.clearAuth) {
+        try { deleteCookie(c, 'token', COOKIE_PATH_ROOT) } catch {}
+      }
+      if (result.clearAnon) {
+        try { deleteCookie(c, ANON_COOKIE_KEY, COOKIE_PATH_ROOT) } catch {}
+      }
+      if (result.status === 401) {
+        return c.json({ success: false, error: result.error ?? 'Unauthorized' }, 401)
+      }
+      return c.json({ success: false, error: result.error ?? 'Forbidden' }, toContentfulStatus(result.status ?? 403))
+    }
+
+    c.set('actor', result.actor)
+
+    if (result.actor.type === 'user') {
+      const baseUrl = determineProfileImageBaseUrl({ request: c.req.raw })
+      const avatarUrl = resolveProfileImageUrl(result.actor.avatarPath ?? null, baseUrl)
+      c.set('user', {
+        id: result.actor.id,
+        username: result.actor.username,
+        role: result.actor.role,
+        status: result.actor.status,
+        avatarUrl: avatarUrl ?? null,
+      })
+    } else if (result.anonCookie) {
+      ensureAnonCookie(c, result.anonCookie.key, result.anonCookie.retentionDays, appConfig.server.cookieSecure)
+    }
+
+    await next()
   }
 
-  await next()
-}
-
-export const requireUserActor = async (c: Context, next: Next) => {
-  const actor = c.get('actor') as Actor | undefined
-  if (!actor || actor.type !== 'user') {
-    return c.json({
-      success: false,
-      error: 'Authentication required',
-    }, 401)
-  }
-  await next()
-}
-
-// 管理员权限中间件
-export const adminOnlyMiddleware = async (c: Context, next: Next) => {
-  const actor = c.get('actor') as Actor | undefined
-
-  if (!actor || actor.type !== 'user' || actor.role !== 'ADMIN') {
-    return c.json({
-      success: false,
-      error: 'Admin access required',
-    }, 403)
+  const requireUserActor = async (c: Context, next: Next) => {
+    const actor = c.get('actor') as Actor | undefined
+    if (!actor || actor.type !== 'user') {
+      return c.json({
+        success: false,
+        error: 'Authentication required',
+      }, 401)
+    }
+    await next()
   }
 
-  await next()
+  // 管理员权限中间件
+  const adminOnlyMiddleware = async (c: Context, next: Next) => {
+    const actor = c.get('actor') as Actor | undefined
+
+    if (!actor || actor.type !== 'user' || actor.role !== 'ADMIN') {
+      return c.json({
+        success: false,
+        error: 'Admin access required',
+      }, 403)
+    }
+
+    await next()
+  }
+
+  return { actorMiddleware, requireUserActor, adminOnlyMiddleware }
 }
+
+const defaultMiddleware = createAuthMiddleware()
+export const actorMiddleware = defaultMiddleware.actorMiddleware
+export const requireUserActor = defaultMiddleware.requireUserActor
+export const adminOnlyMiddleware = defaultMiddleware.adminOnlyMiddleware
