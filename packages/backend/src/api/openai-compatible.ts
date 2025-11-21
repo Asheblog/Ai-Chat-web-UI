@@ -5,20 +5,29 @@ import { zValidator } from '@hono/zod-validator';
 import { randomUUID } from 'node:crypto';
 
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
-import { resolveModelIdForUser } from '../utils/model-resolver';
+import { getModelResolverService, resolveModelIdForUser } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
 import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
-import { logTraffic } from '../utils/traffic-logger';
+import { logTraffic as defaultLogTraffic } from '../utils/traffic-logger';
 
 import type { Connection, Message as MessageEntity } from '@prisma/client';
 import {
   openaiCompatMessageService,
   OpenAICompatMessageServiceError,
+  OpenAICompatMessageService,
 } from '../services/openai-compat/message-service';
 
 const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
 const PROVIDER_TIMEOUT_MS = parseInt(process.env.PROVIDER_TIMEOUT_MS || '300000');
+
+export interface OpenAICompatDeps {
+  modelResolverService?: ReturnType<typeof getModelResolverService>
+  messageService?: OpenAICompatMessageService
+  fetchImpl?: typeof fetch
+  logTraffic?: typeof defaultLogTraffic
+}
+
 
 const toStatusCode = (status: number): StatusCode => {
   if (status < 100 || status > 599) {
@@ -320,113 +329,188 @@ function formatMessage(message: MessageEntity) {
   };
 }
 
-const openaiCompat = new Hono();
+export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const logTraffic = deps.logTraffic ?? defaultLogTraffic;
+  const resolveModel = (userId: number, modelId: string) =>
+    deps.modelResolverService
+      ? deps.modelResolverService.resolveModelIdForUser(userId, modelId)
+      : resolveModelIdForUser(userId, modelId);
+  const messageService = deps.messageService ?? openaiCompatMessageService;
 
-openaiCompat.post(
-  '/chat/completions',
-  actorMiddleware,
-  requireUserActor,
-  zValidator('json', chatCompletionsSchema),
-  async (c) => {
-    const user = c.get('user')!; // requireUserActor 已确保 user 存在
-    const body = c.req.valid('json');
+  const openaiCompat = new Hono();
 
-    await logTraffic({
-      category: 'client-request',
-      route: '/v1/chat/completions',
-      direction: 'inbound',
-      context: {
-        userId: user.id,
-        stream: Boolean(body.stream),
-      },
-      payload: body,
-    })
-
-    const resolved = await resolveModelIdForUser(user.id, body.model);
-    if (!resolved) {
-      return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
-    }
-
-    const provider = resolved.connection.provider as ProviderType;
-
-    try {
-      const request = await buildProviderRequest({
-        connection: resolved.connection,
-        rawModelId: resolved.rawModelId,
-        provider,
-        body: {
-          ...body,
-          messages: cloneMessages(body.messages),
-        },
-      });
+  openaiCompat.post(
+    '/chat/completions',
+    actorMiddleware,
+    requireUserActor,
+    zValidator('json', chatCompletionsSchema),
+    async (c) => {
+      const user = c.get('user')!; // requireUserActor 已确保 user 存在
+      const body = c.req.valid('json');
 
       await logTraffic({
-        category: 'upstream-request',
+        category: 'client-request',
         route: '/v1/chat/completions',
-        direction: 'outbound',
+        direction: 'inbound',
         context: {
           userId: user.id,
-          provider,
-          url: request.url,
           stream: Boolean(body.stream),
         },
-        payload: {
-          headers: request.headers,
-          body: request.payload,
-        },
+        payload: body,
       })
 
-      const executor = (signal: AbortSignal) =>
-        fetch(request.url, {
-          method: 'POST',
-          headers: request.headers,
-          body: JSON.stringify(request.payload),
-          signal,
+      const resolved = await resolveModel(user.id, body.model);
+      if (!resolved) {
+        return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
+      }
+
+      const provider = resolved.connection.provider as ProviderType;
+
+      try {
+        const request = await buildProviderRequest({
+          connection: resolved.connection,
+          rawModelId: resolved.rawModelId,
+          provider,
+          body: {
+            ...body,
+            messages: cloneMessages(body.messages),
+          },
         });
 
-      const response = await requestWithBackoff(executor);
-      await logTraffic({
-        category: 'upstream-response',
-        route: '/v1/chat/completions',
-        direction: 'outbound',
-        context: {
-          userId: user.id,
-          provider,
-          url: request.url,
-          stream: Boolean(body.stream),
-        },
-        payload: {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries()),
-        },
-      })
-
-      if (!response.ok && response.status !== 200) {
-        const errorPayload = await response.text();
         await logTraffic({
-          category: 'client-response',
+          category: 'upstream-request',
           route: '/v1/chat/completions',
-          direction: 'inbound',
+          direction: 'outbound',
           context: {
             userId: user.id,
+            provider,
+            url: request.url,
+            stream: Boolean(body.stream),
+          },
+          payload: {
+            headers: request.headers,
+            body: request.payload,
+          },
+        })
+
+        const executor = (signal: AbortSignal) =>
+          fetchImpl(request.url, {
+            method: 'POST',
+            headers: request.headers,
+            body: JSON.stringify(request.payload),
+            signal,
+          });
+
+        const response = await requestWithBackoff(executor);
+        await logTraffic({
+          category: 'upstream-response',
+          route: '/v1/chat/completions',
+          direction: 'outbound',
+          context: {
+            userId: user.id,
+            provider,
+            url: request.url,
             stream: Boolean(body.stream),
           },
           payload: {
             status: response.status,
             statusText: response.statusText,
-            body: errorPayload,
+            headers: Object.fromEntries(response.headers.entries()),
           },
         })
-        return c.newResponse(errorPayload, toStatusCode(response.status), {
-          'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        });
-      }
 
-      if (body.stream) {
-        if (provider === 'ollama') {
-          const reader = response.body?.getReader();
-          if (!reader) {
+        if (!response.ok && response.status !== 200) {
+          const errorPayload = await response.text();
+          await logTraffic({
+            category: 'client-response',
+            route: '/v1/chat/completions',
+            direction: 'inbound',
+            context: {
+              userId: user.id,
+              stream: Boolean(body.stream),
+            },
+            payload: {
+              status: response.status,
+              statusText: response.statusText,
+              body: errorPayload,
+            },
+          })
+          return c.newResponse(errorPayload, toStatusCode(response.status), {
+            'Content-Type': response.headers.get('Content-Type') || 'application/json',
+          });
+        }
+
+        if (body.stream) {
+          if (provider === 'ollama') {
+            const reader = response.body?.getReader();
+            if (!reader) {
+              await logTraffic({
+                category: 'client-response',
+                route: '/v1/chat/completions',
+                direction: 'inbound',
+                context: {
+                  userId: user.id,
+                  stream: true,
+                  provider,
+                },
+                payload: {
+                  status: 500,
+                  error: 'Stream not supported by provider response',
+                },
+              })
+              return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
+            }
+
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder();
+            const requestId = `chatcmpl-${randomUUID()}`;
+            const created = Math.floor(Date.now() / 1000);
+            let buffer = '';
+
+            const stream = new ReadableStream({
+              async pull(controller) {
+                const { value, done } = await reader.read();
+                if (done) {
+                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                  controller.close();
+                  return;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed) continue;
+                  try {
+                    const parsed = JSON.parse(trimmed);
+                    const payload = convertOllamaChunkToOpenAI(
+                      parsed,
+                      body.model,
+                      requestId,
+                      created,
+                    );
+                    controller.enqueue(encoder.encode(payload));
+
+                    if (parsed.done) {
+                      const finalPayload = convertOllamaFinalToOpenAI(parsed, body.model, requestId, created);
+                      controller.enqueue(
+                        encoder.encode(`data: ${JSON.stringify(finalPayload)}\n\n`),
+                      );
+                    }
+                  } catch {
+                    // Ignore malformed lines
+                  }
+                }
+              },
+              cancel() {
+                reader.cancel().catch(() => {});
+              },
+            });
+
             await logTraffic({
               category: 'client-response',
               route: '/v1/chat/completions',
@@ -437,62 +521,18 @@ openaiCompat.post(
                 provider,
               },
               payload: {
-                status: 500,
-                error: 'Stream not supported by provider response',
+                status: 200,
+                mode: 'ollama-stream',
               },
             })
-            return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
+            return c.newResponse(stream as any, 200, sseHeaders);
           }
 
-          const encoder = new TextEncoder();
-          const decoder = new TextDecoder();
-          const requestId = `chatcmpl-${randomUUID()}`;
-          const created = Math.floor(Date.now() / 1000);
-          let buffer = '';
-
-          const stream = new ReadableStream({
-            async pull(controller) {
-              const { value, done } = await reader.read();
-              if (done) {
-                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                controller.close();
-                return;
-              }
-
-              buffer += decoder.decode(value, { stream: true });
-
-              const lines = buffer.split('\n');
-              buffer = lines.pop() || '';
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
-                try {
-                  const parsed = JSON.parse(trimmed);
-                  const payload = convertOllamaChunkToOpenAI(
-                    parsed,
-                    body.model,
-                    requestId,
-                    created,
-                  );
-                  controller.enqueue(encoder.encode(payload));
-
-                  if (parsed.done) {
-                    const finalPayload = convertOllamaFinalToOpenAI(parsed, body.model, requestId, created);
-                    controller.enqueue(
-                      encoder.encode(`data: ${JSON.stringify(finalPayload)}\n\n`),
-                    );
-                  }
-                } catch {
-                  // Ignore malformed lines
-                }
-              }
-            },
-            cancel() {
-              reader.cancel().catch(() => {});
-            },
-          });
-
+          const headers = new Headers(sseHeaders);
+          const providerContentType = response.headers.get('Content-Type');
+          if (providerContentType) {
+            headers.set('Content-Type', providerContentType);
+          }
           await logTraffic({
             category: 'client-response',
             route: '/v1/chat/completions',
@@ -504,44 +544,40 @@ openaiCompat.post(
             },
             payload: {
               status: 200,
-              mode: 'ollama-stream',
+              mode: 'proxy-stream',
             },
           })
-          return c.newResponse(stream as any, 200, sseHeaders);
+          return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
         }
 
-        const headers = new Headers(sseHeaders);
-        const providerContentType = response.headers.get('Content-Type');
-        if (providerContentType) {
-          headers.set('Content-Type', providerContentType);
+        if (provider === 'ollama') {
+          const json = await response.json() as {
+            message?: { content?: string | null };
+            prompt_eval_count?: number | null;
+            eval_count?: number | null;
+            [key: string]: unknown;
+          };
+          const requestId = `chatcmpl-${randomUUID()}`;
+          const created = Math.floor(Date.now() / 1000);
+          const result = convertOllamaFinalToOpenAI(json, body.model, requestId, created)
+          await logTraffic({
+            category: 'client-response',
+            route: '/v1/chat/completions',
+            direction: 'inbound',
+            context: {
+              userId: user.id,
+              stream: false,
+              provider,
+            },
+            payload: {
+              status: 200,
+              body: result,
+            },
+          })
+          return c.json(result);
         }
-        await logTraffic({
-          category: 'client-response',
-          route: '/v1/chat/completions',
-          direction: 'inbound',
-          context: {
-            userId: user.id,
-            stream: true,
-            provider,
-          },
-          payload: {
-            status: 200,
-            mode: 'proxy-stream',
-          },
-        })
-        return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
-      }
 
-      if (provider === 'ollama') {
-        const json = await response.json() as {
-          message?: { content?: string | null };
-          prompt_eval_count?: number | null;
-          eval_count?: number | null;
-          [key: string]: unknown;
-        };
-        const requestId = `chatcmpl-${randomUUID()}`;
-        const created = Math.floor(Date.now() / 1000);
-        const result = convertOllamaFinalToOpenAI(json, body.model, requestId, created)
+        const json = await response.json();
         await logTraffic({
           category: 'client-response',
           route: '/v1/chat/completions',
@@ -552,294 +588,243 @@ openaiCompat.post(
             provider,
           },
           payload: {
-            status: 200,
-            body: result,
+            status: response.status,
+            body: json,
           },
         })
-        return c.json(result);
+        return c.json(json, toContentfulStatus(response.status));
+      } catch (error: any) {
+        await logTraffic({
+          category: 'client-response',
+          route: '/v1/chat/completions',
+          direction: 'inbound',
+          context: {
+            userId: user.id,
+            stream: Boolean(body.stream),
+          },
+          payload: {
+            status: 500,
+            error: error?.message || String(error),
+          },
+        })
+        return c.json(
+          {
+            error: 'provider_error',
+            message: error?.message || 'Failed to call provider',
+          },
+          500,
+        );
+      }
+    },
+  );
+
+  openaiCompat.post(
+    '/responses',
+    actorMiddleware,
+    requireUserActor,
+    zValidator('json', responsesSchema),
+    async (c) => {
+      const user = c.get('user')!; // requireUserActor 已确保 user 存在
+      const body = c.req.valid('json');
+
+      const resolved = await resolveModel(user.id, body.model);
+      if (!resolved) {
+        return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
       }
 
-      const json = await response.json();
-      await logTraffic({
-        category: 'client-response',
-        route: '/v1/chat/completions',
-        direction: 'inbound',
-        context: {
-          userId: user.id,
-          stream: false,
+      const messages = (
+        body.messages && body.messages.length
+          ? cloneMessages(body.messages)
+          : [
+              {
+                role: 'user',
+                content: Array.isArray(body.input)
+                  ? body.input
+                  : typeof body.input === 'string'
+                  ? body.input
+                  : body.input ?? '',
+              },
+            ]
+      ) as z.infer<typeof chatMessageSchema>[];
+
+      const chatBody = {
+        model: body.model,
+        messages,
+        stream: body.stream,
+        temperature: body.temperature,
+        top_p: body.top_p,
+        max_tokens: body.max_output_tokens,
+        metadata: body.metadata,
+      };
+
+      const provider = resolved.connection.provider as ProviderType;
+
+      try {
+        const request = await buildProviderRequest({
+          connection: resolved.connection,
+          rawModelId: resolved.rawModelId,
           provider,
-        },
-        payload: {
-          status: response.status,
-          body: json,
-        },
-      })
-      return c.json(json, toContentfulStatus(response.status));
-    } catch (error: any) {
-      await logTraffic({
-        category: 'client-response',
-        route: '/v1/chat/completions',
-        direction: 'inbound',
-        context: {
-          userId: user.id,
-          stream: Boolean(body.stream),
-        },
-        payload: {
-          status: 500,
-          error: error?.message || String(error),
-        },
-      })
-      return c.json(
-        {
-          error: 'provider_error',
-          message: error?.message || 'Failed to call provider',
-        },
-        500,
-      );
-    }
-  },
-);
-
-openaiCompat.post(
-  '/responses',
-  actorMiddleware,
-  requireUserActor,
-  zValidator('json', responsesSchema),
-  async (c) => {
-    const user = c.get('user')!; // requireUserActor 已确保 user 存在
-    const body = c.req.valid('json');
-
-    const resolved = await resolveModelIdForUser(user.id, body.model);
-    if (!resolved) {
-      return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
-    }
-
-    const messages = (
-      body.messages && body.messages.length
-        ? cloneMessages(body.messages)
-        : [
-            {
-              role: 'user',
-              content: Array.isArray(body.input)
-                ? body.input
-                : typeof body.input === 'string'
-                ? body.input
-                : body.input ?? '',
-            },
-          ]
-    ) as z.infer<typeof chatMessageSchema>[];
-
-    const chatBody = {
-      model: body.model,
-      messages,
-      stream: body.stream,
-      temperature: body.temperature,
-      top_p: body.top_p,
-      max_tokens: body.max_output_tokens,
-      metadata: body.metadata,
-    };
-
-    const provider = resolved.connection.provider as ProviderType;
-
-    try {
-      const request = await buildProviderRequest({
-        connection: resolved.connection,
-        rawModelId: resolved.rawModelId,
-        provider,
-        body: {
-          ...chatBody,
-          messages: cloneMessages(messages),
-        },
-      });
-
-      const executor = (signal: AbortSignal) =>
-        fetch(request.url, {
-          method: 'POST',
-          headers: request.headers,
-          body: JSON.stringify(request.payload),
-          signal,
+          body: {
+            ...chatBody,
+            messages: cloneMessages(messages),
+          },
         });
 
-      const response = await requestWithBackoff(executor);
-
-      if (!response.ok && response.status !== 200) {
-        const errorPayload = await response.text();
-        return c.newResponse(errorPayload, toStatusCode(response.status), {
-          'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        });
-      }
-
-      if (body.stream) {
-        if (provider === 'ollama') {
-          const reader = response.body?.getReader();
-          if (!reader) {
-            return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
-          }
-
-          const encoder = new TextEncoder();
-          const decoder = new TextDecoder();
-          const responseId = `resp-${randomUUID()}`;
-          const created = Math.floor(Date.now() / 1000);
-          let buffer = '';
-
-          const stream = new ReadableStream({
-            async pull(controller) {
-              const { value, done } = await reader.read();
-              if (done) {
-                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                controller.close();
-                return;
-              }
-
-              buffer += decoder.decode(value, { stream: true });
-              const lines = buffer.split('\n');
-              buffer = lines.pop() || '';
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
-                try {
-                  const parsed = JSON.parse(trimmed);
-                  const deltaText = parsed?.message?.content || '';
-                  const eventPayload = {
-                    id: responseId,
-                    object: 'response.delta',
-                    created,
-                    model: body.model,
-                    type: 'response.delta',
-                    data: {
-                      type: 'output_text.delta',
-                      delta: deltaText,
-                    },
-                  };
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(eventPayload)}\n\n`));
-                  if (parsed.done) {
-                    const finalPayload = {
-                      id: responseId,
-                      object: 'response.completed',
-                      created,
-                      model: body.model,
-                      type: 'response.completed',
-                      data: null,
-                    };
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalPayload)}\n\n`));
-                  }
-                } catch {
-                  // ignore errors
-                }
-              }
-            },
-            cancel() {
-              reader.cancel().catch(() => {});
-            },
+        const executor = (signal: AbortSignal) =>
+          fetchImpl(request.url, {
+            method: 'POST',
+            headers: request.headers,
+            body: JSON.stringify(request.payload),
+            signal,
           });
 
-          return c.newResponse(stream as any, 200, sseHeaders);
+        const response = await requestWithBackoff(executor);
+
+        if (!response.ok && response.status !== 200) {
+          const errorPayload = await response.text();
+          return c.newResponse(errorPayload, toStatusCode(response.status), {
+            'Content-Type': response.headers.get('Content-Type') || 'application/json',
+          });
         }
 
-        const headers = new Headers(sseHeaders);
-        const providerContentType = response.headers.get('Content-Type');
-        if (providerContentType) {
-          headers.set('Content-Type', providerContentType);
-        }
-        return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
-      }
+        if (body.stream) {
+          if (provider === 'ollama') {
+            const reader = response.body?.getReader();
+            if (!reader) {
+              return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
+            }
 
-      if (provider === 'ollama') {
-        const json = await response.json() as {
-          message?: { content?: string | null };
-          prompt_eval_count?: number | null;
-          eval_count?: number | null;
-          [key: string]: unknown;
-        };
-        const responseId = `resp-${randomUUID()}`;
-        const created = Math.floor(Date.now() / 1000);
-        const text = json?.message?.content || '';
-        const usage = {
-          prompt_tokens: Number(json?.prompt_eval_count || 0) || 0,
-          completion_tokens: Number(json?.eval_count || 0) || 0,
-        };
-        const total = usage.prompt_tokens + usage.completion_tokens;
-        const payload = {
-          id: responseId,
-          object: 'response',
-          created,
-          model: body.model,
-          output: [
-            {
-              type: 'message',
-              message: {
-                role: 'assistant',
-                content: [{ type: 'text', text }],
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder();
+            const responseId = `resp-${randomUUID()}`;
+            const created = Math.floor(Date.now() / 1000);
+            let buffer = '';
+
+            const stream = new ReadableStream({
+              async pull(controller) {
+                const { value, done } = await reader.read();
+                if (done) {
+                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                  controller.close();
+                  return;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed) continue;
+                  try {
+                    const parsed = JSON.parse(trimmed);
+                    const deltaText = parsed?.message?.content || '';
+                    const eventPayload = {
+                      id: responseId,
+                      object: 'response.delta',
+                      created,
+                      model: body.model,
+                      type: 'response.delta',
+                      data: {
+                        type: 'output_text.delta',
+                        delta: deltaText,
+                      },
+                    };
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(eventPayload)}\n\n`));
+                    if (parsed.done) {
+                      const finalPayload = {
+                        id: responseId,
+                        object: 'response.completed',
+                        created,
+                        model: body.model,
+                        type: 'response.completed',
+                        data: null,
+                      };
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalPayload)}\n\n`));
+                    }
+                  } catch {
+                    // ignore errors
+                  }
+                }
               },
+              cancel() {
+                reader.cancel().catch(() => {});
+              },
+            });
+
+            return c.newResponse(stream as any, 200, sseHeaders);
+          }
+
+          const headers = new Headers(sseHeaders);
+          const providerContentType = response.headers.get('Content-Type');
+          if (providerContentType) {
+            headers.set('Content-Type', providerContentType);
+          }
+          return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
+        }
+
+        if (provider === 'ollama') {
+          const json = await response.json() as {
+            message?: { content?: string | null };
+            prompt_eval_count?: number | null;
+            eval_count?: number | null;
+            [key: string]: unknown;
+          };
+          const responseId = `resp-${randomUUID()}`;
+          const created = Math.floor(Date.now() / 1000);
+          const text = json?.message?.content || '';
+          const usage = {
+            prompt_tokens: Number(json?.prompt_eval_count || 0) || 0,
+            completion_tokens: Number(json?.eval_count || 0) || 0,
+          };
+          const total = usage.prompt_tokens + usage.completion_tokens;
+          const payload = {
+            id: responseId,
+            object: 'response',
+            created,
+            model: body.model,
+            output: [
+              {
+                type: 'message',
+                message: {
+                  role: 'assistant',
+                  content: [{ type: 'text', text }],
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: usage.prompt_tokens,
+              completion_tokens: usage.completion_tokens,
+              total_tokens: total,
             },
-          ],
-          usage: {
-            prompt_tokens: usage.prompt_tokens,
-            completion_tokens: usage.completion_tokens,
-            total_tokens: total,
+          };
+          return c.json(payload);
+        }
+
+        const raw = await response.json();
+        return c.json(raw);
+      } catch (error: any) {
+        return c.json(
+          {
+            error: 'provider_error',
+            message: error?.message || 'Failed to call provider',
           },
-        };
-        return c.json(payload);
+          500,
+        );
       }
+    },
+  );
 
-      const raw = await response.json();
-      return c.json(raw);
-    } catch (error: any) {
-      return c.json(
-        {
-          error: 'provider_error',
-          message: error?.message || 'Failed to call provider',
-        },
-        500,
-      );
-    }
-  },
-);
-
-openaiCompat.get('/messages', actorMiddleware, requireUserActor, async (c) => {
-  const user = c.get('user')!; // requireUserActor 已确保 user 存在
-  const rawSessionId = c.req.query('session_id') ?? c.req.query('sessionId');
-  const sessionId = Number(rawSessionId);
-  if (!sessionId || Number.isNaN(sessionId)) {
-    return c.json({ error: 'invalid_request', message: 'session_id is required' }, 400);
-  }
-
-  try {
-    await openaiCompatMessageService.ensureSessionOwnedByUser(user.id, sessionId);
-  } catch (error) {
-    if (error instanceof OpenAICompatMessageServiceError) {
-      return c.json({ error: 'not_found', message: error.message }, error.statusCode);
-    }
-    throw error;
-  }
-
-  const limitRaw = c.req.query('limit');
-  const limit = limitRaw ? Number(limitRaw) : undefined;
-
-  const messages = await openaiCompatMessageService.listMessages({
-    sessionId,
-    limit,
-  });
-
-  return c.json({
-    object: 'list',
-    data: messages.map(formatMessage),
-    has_more: false,
-  });
-});
-
-openaiCompat.post(
-  '/messages',
-  actorMiddleware,
-  requireUserActor,
-  zValidator('json', messageCreateSchema),
-  async (c) => {
+  openaiCompat.get('/messages', actorMiddleware, requireUserActor, async (c) => {
     const user = c.get('user')!; // requireUserActor 已确保 user 存在
-    const body = c.req.valid('json');
+    const rawSessionId = c.req.query('session_id') ?? c.req.query('sessionId');
+    const sessionId = Number(rawSessionId);
+    if (!sessionId || Number.isNaN(sessionId)) {
+      return c.json({ error: 'invalid_request', message: 'session_id is required' }, 400);
+    }
 
     try {
-      await openaiCompatMessageService.ensureSessionOwnedByUser(user.id, body.session_id);
+      await messageService.ensureSessionOwnedByUser(user.id, sessionId);
     } catch (error) {
       if (error instanceof OpenAICompatMessageServiceError) {
         return c.json({ error: 'not_found', message: error.message }, error.statusCode);
@@ -847,21 +832,57 @@ openaiCompat.post(
       throw error;
     }
 
-    const contentText = flattenMessageContent(body.content);
+    const limitRaw = c.req.query('limit');
+    const limit = limitRaw ? Number(limitRaw) : undefined;
 
-    const message = await openaiCompatMessageService.saveMessage({
-      sessionId: body.session_id,
-      role: body.role,
-      content: contentText,
-      clientMessageId: body.client_message_id,
-      reasoning: body.reasoning,
-      reasoningDurationSeconds: body.reasoning_duration_seconds,
-      images: body.images,
-      userId: user.id,
+    const messages = await messageService.listMessages({
+      sessionId,
+      limit,
     });
 
-    return c.json(formatMessage(message));
-  },
-);
+    return c.json({
+      object: 'list',
+      data: messages.map(formatMessage),
+      has_more: false,
+    });
+  });
 
-export default openaiCompat;
+  openaiCompat.post(
+    '/messages',
+    actorMiddleware,
+    requireUserActor,
+    zValidator('json', messageCreateSchema),
+    async (c) => {
+      const user = c.get('user')!; // requireUserActor 已确保 user 存在
+      const body = c.req.valid('json');
+
+      try {
+        await messageService.ensureSessionOwnedByUser(user.id, body.session_id);
+      } catch (error) {
+        if (error instanceof OpenAICompatMessageServiceError) {
+          return c.json({ error: 'not_found', message: error.message }, error.statusCode);
+        }
+        throw error;
+      }
+
+      const contentText = flattenMessageContent(body.content);
+
+      const message = await messageService.saveMessage({
+        sessionId: body.session_id,
+        role: body.role,
+        content: contentText,
+        clientMessageId: body.client_message_id,
+        reasoning: body.reasoning,
+        reasoningDurationSeconds: body.reasoning_duration_seconds,
+        images: body.images,
+        userId: user.id,
+      });
+
+      return c.json(formatMessage(message));
+    },
+  );
+
+  return openaiCompat;
+};
+
+export default createOpenAICompatApi();

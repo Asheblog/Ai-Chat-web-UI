@@ -14,7 +14,7 @@ import chat from './api/chat';
 import settings from './api/settings';
 import { createConnectionsApi } from './api/connections';
 import catalog from './api/catalog';
-import openaiCompat from './api/openai-compatible';
+import { createOpenAICompatApi } from './api/openai-compatible';
 import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './utils/model-catalog';
 import taskTrace from './api/task-trace';
 
@@ -70,7 +70,12 @@ app.route('/api/sessions', sessions);
 app.route('/api/chat', chat);
 app.route('/api/settings', settings);
 app.route('/api/task-trace', taskTrace);
-app.route('/v1', openaiCompat);
+app.route(
+  '/v1',
+  createOpenAICompatApi({
+    modelResolverService: container.modelResolverService,
+  }),
+);
 
 // 根路径
 app.get('/', (c) => {
