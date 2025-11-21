@@ -247,13 +247,15 @@ export class SettingsService {
     }
 
     if (payload.assistant_avatar) {
-      let storedPath: string
+      let storedPath: string | null
       try {
-        storedPath = await this.replaceProfileImage('assistant-avatar', payload.assistant_avatar)
+        storedPath = await this.replaceProfileImage(payload.assistant_avatar, { currentPath: undefined })
       } catch (error) {
         throw new SettingsServiceError('Invalid assistant avatar payload', 400)
       }
-      updates.push(upsert('assistant_avatar_path', storedPath))
+      if (storedPath) {
+        updates.push(upsert('assistant_avatar_path', storedPath))
+      }
     }
     if (payload.assistant_avatar === null) {
       updates.push(upsert('assistant_avatar_path', ''))

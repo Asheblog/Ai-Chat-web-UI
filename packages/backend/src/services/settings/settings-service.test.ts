@@ -107,4 +107,20 @@ describe('SettingsService', () => {
       service.updateSystemSettings({ assistant_avatar: { data: 'xxx', mime: 'image/png' } }),
     ).rejects.toThrow('Invalid assistant avatar payload')
   })
+
+  it('stores assistant avatar payload with replaceProfileImage', async () => {
+    const { service, prisma, replaceProfileImage } = buildService()
+    await service.updateSystemSettings({ assistant_avatar: { data: 'xxx', mime: 'image/png' } })
+
+    expect(replaceProfileImage).toHaveBeenCalledWith(
+      { data: 'xxx', mime: 'image/png' },
+      { currentPath: undefined },
+    )
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'assistant_avatar_path' },
+        update: { value: 'path/avatar.png' },
+      }),
+    )
+  })
 })
