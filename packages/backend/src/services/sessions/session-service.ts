@@ -324,6 +324,7 @@ export class SessionService {
     },
   ): Promise<{ connection: Prisma.ConnectionGetPayload<true>; rawModelId: string }> {
     const resolution = await this.modelResolverService.resolveModelForRequest({
+      actor,
       userId: actor.type === 'user' ? actor.id : null,
       modelId: payload.modelId,
       connectionId: payload.connectionId,

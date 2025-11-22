@@ -187,6 +187,7 @@ class ApiClient {
       tags?: Array<{ name: string }>
       capabilities?: Record<string, boolean>
       maxOutputTokens?: number | null
+      accessPolicy?: { anonymous?: 'allow' | 'deny' | 'inherit'; user?: 'allow' | 'deny' | 'inherit' } | null
     }
   ) {
     const body: Record<string, any> = { connectionId, rawId }
@@ -198,6 +199,9 @@ class ApiClient {
     }
     if (payload && Object.prototype.hasOwnProperty.call(payload, 'maxOutputTokens')) {
       body.max_output_tokens = payload.maxOutputTokens
+    }
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'accessPolicy')) {
+      body.access_policy = payload.accessPolicy
     }
     const response = await this.client.put<ApiResponse<any>>('/catalog/models/tags', body)
     return response.data
@@ -670,6 +674,10 @@ class ApiClient {
       }
       return 200
     })()
+    const modelAccessDefaultAnonymous =
+      settingsRes.data.data?.model_access_default_anonymous === 'allow' ? 'allow' : 'deny'
+    const modelAccessDefaultUser =
+      settingsRes.data.data?.model_access_default_user === 'deny' ? 'deny' : 'allow'
     const siteBaseUrl = typeof settingsRes.data.data?.site_base_url === 'string' ? settingsRes.data.data?.site_base_url : ''
     const webSearchAgentEnable = Boolean(settingsRes.data.data?.web_search_agent_enable ?? false)
     const webSearchDefaultEngine = settingsRes.data.data?.web_search_default_engine || 'tavily'
@@ -747,6 +755,8 @@ class ApiClient {
         anonymousRetentionDays,
         anonymousDailyQuota,
         defaultUserDailyQuota,
+        modelAccessDefaultAnonymous,
+        modelAccessDefaultUser,
         webSearchAgentEnable,
         webSearchDefaultEngine,
         webSearchResultLimit,
@@ -811,6 +821,9 @@ class ApiClient {
     if (typeof rest.anonymousRetentionDays === 'number') payload.anonymous_retention_days = rest.anonymousRetentionDays
     if (typeof rest.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = rest.anonymousDailyQuota
     if (typeof rest.defaultUserDailyQuota === 'number') payload.default_user_daily_quota = rest.defaultUserDailyQuota
+    if (typeof rest.modelAccessDefaultAnonymous === 'string')
+      payload.model_access_default_anonymous = rest.modelAccessDefaultAnonymous
+    if (typeof rest.modelAccessDefaultUser === 'string') payload.model_access_default_user = rest.modelAccessDefaultUser
     if (typeof rest.webSearchAgentEnable === 'boolean') payload.web_search_agent_enable = rest.webSearchAgentEnable
     if (typeof rest.webSearchDefaultEngine === 'string') payload.web_search_default_engine = rest.webSearchDefaultEngine
     if (typeof rest.webSearchResultLimit === 'number') payload.web_search_result_limit = rest.webSearchResultLimit

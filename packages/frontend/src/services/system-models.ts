@@ -7,6 +7,7 @@ export async function updateModelCapabilities(
     tags?: Array<{ name: string }>
     capabilities?: Record<string, boolean>
     maxOutputTokens?: number | null
+    accessPolicy?: { anonymous?: 'allow' | 'deny' | 'inherit'; user?: 'allow' | 'deny' | 'inherit' } | null
   }
 ) {
   return apiClient.updateModelTags(connectionId, rawId, options)

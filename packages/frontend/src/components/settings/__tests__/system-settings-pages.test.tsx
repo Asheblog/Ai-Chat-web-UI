@@ -67,6 +67,8 @@ const baseSettings: SystemSettings = {
   anonymousRetentionDays: 10,
   anonymousDailyQuota: 5,
   defaultUserDailyQuota: 50,
+  modelAccessDefaultAnonymous: 'deny',
+  modelAccessDefaultUser: 'allow',
   assistantAvatarUrl: null,
   reasoningEnabled: true,
   reasoningDefaultExpand: false,

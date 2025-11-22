@@ -14,6 +14,7 @@ import {
 } from '../../utils/profile-images'
 import type { Actor } from '../../types'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../config/storage'
+import { invalidateModelAccessDefaultsCache as defaultInvalidateModelAccessDefaultsCache } from '../../utils/model-access-policy'
 
 export class SettingsServiceError extends Error {
   statusCode: number
@@ -33,6 +34,7 @@ export interface SettingsServiceDeps {
   invalidateTaskTraceConfig?: typeof defaultInvalidateTaskTraceConfig
   syncSharedAnonymousQuota?: typeof defaultSyncSharedAnonymousQuota
   replaceProfileImage?: typeof defaultReplaceProfileImage
+  invalidateModelAccessDefaultsCache?: typeof defaultInvalidateModelAccessDefaultsCache
   now?: () => Date
 }
 
@@ -46,6 +48,7 @@ export class SettingsService {
   private invalidateTaskTraceConfig: typeof defaultInvalidateTaskTraceConfig
   private syncSharedAnonymousQuota: typeof defaultSyncSharedAnonymousQuota
   private replaceProfileImage: typeof defaultReplaceProfileImage
+  private invalidateModelAccessDefaultsCache: typeof defaultInvalidateModelAccessDefaultsCache
   private now: () => Date
   private cachedBrandText: { value: string; expiresAt: number } | null = null
 
@@ -58,6 +61,7 @@ export class SettingsService {
     this.invalidateTaskTraceConfig = deps.invalidateTaskTraceConfig ?? defaultInvalidateTaskTraceConfig
     this.syncSharedAnonymousQuota = deps.syncSharedAnonymousQuota ?? defaultSyncSharedAnonymousQuota
     this.replaceProfileImage = deps.replaceProfileImage ?? defaultReplaceProfileImage
+    this.invalidateModelAccessDefaultsCache = deps.invalidateModelAccessDefaultsCache ?? defaultInvalidateModelAccessDefaultsCache
     this.now = deps.now ?? (() => new Date())
   }
 
@@ -85,6 +89,11 @@ export class SettingsService {
     const map = new Map(rows.map((row) => [row.key, row.value]))
     const read = (key: string, fallback = '') => map.get(key) ?? fallback
     const quotaPolicy = await this.getQuotaPolicy()
+    const parseAccessDefault = (value: unknown, fallback: 'allow' | 'deny'): 'allow' | 'deny' => {
+      if (value === 'allow') return 'allow'
+      if (value === 'deny') return 'deny'
+      return fallback
+    }
 
     const settingsObj = Object.fromEntries(map.entries())
     const formatted = {
@@ -132,6 +141,8 @@ export class SettingsService {
       task_trace_idle_timeout_ms: this.parseIntInRange(settingsObj.task_trace_idle_timeout_ms, process.env.TASK_TRACE_IDLE_TIMEOUT_MS, 1000, 600000, 30000),
       assistant_avatar_url: null as string | null,
       assistant_avatar_path: settingsObj.assistant_avatar_path || null,
+      model_access_default_anonymous: parseAccessDefault(map.get('model_access_default_anonymous'), 'deny'),
+      model_access_default_user: parseAccessDefault(map.get('model_access_default_user'), 'allow'),
     }
 
     const assistantAvatarBase = determineProfileImageBaseUrl({
@@ -147,6 +158,8 @@ export class SettingsService {
         anonymous_retention_days: formatted.anonymous_retention_days,
         anonymous_daily_quota: formatted.anonymous_daily_quota,
         default_user_daily_quota: formatted.default_user_daily_quota,
+        model_access_default_anonymous: formatted.model_access_default_anonymous,
+        model_access_default_user: formatted.model_access_default_user,
         web_search_agent_enable: formatted.web_search_agent_enable,
         web_search_default_engine: formatted.web_search_default_engine,
         web_search_result_limit: formatted.web_search_result_limit,
@@ -215,6 +228,19 @@ export class SettingsService {
       if (typeof payload[key] === 'boolean') {
         updates.push(upsert(key, String(payload[key])))
       }
+    })
+
+    const accessDefaults: Array<{ key: 'model_access_default_anonymous' | 'model_access_default_user'; value: unknown }> = [
+      { key: 'model_access_default_anonymous', value: payload.model_access_default_anonymous },
+      { key: 'model_access_default_user', value: payload.model_access_default_user },
+    ]
+    accessDefaults.forEach(({ key, value }) => {
+      if (value === undefined) return
+      if (value !== 'allow' && value !== 'deny') {
+        throw new SettingsServiceError('model access default must be allow or deny', 400)
+      }
+      updates.push(upsert(key, value))
+      this.invalidateModelAccessDefaultsCache()
     })
 
     const stringFields: Array<{ key: string; value?: unknown }> = [

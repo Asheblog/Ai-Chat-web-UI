@@ -30,6 +30,19 @@ const createRepository = (options: { catalog?: CachedModelWithConnection[]; conn
   return repository
 }
 
+const buildService = (repository: ModelResolverRepository) =>
+  new ModelResolverService({
+    repository,
+    getModelAccessDefaults: async () => ({ anonymous: 'deny', user: 'allow' }),
+    resolveModelAccessPolicy: ({ defaults }) => ({
+      policy: null,
+      resolved: {
+        anonymous: { decision: defaults.anonymous, source: 'default' },
+        user: { decision: defaults.user, source: 'default' },
+      },
+    }),
+  })
+
 describe('ModelResolverService', () => {
   test('returns cached mapping when present', async () => {
     const repository = createRepository({
@@ -42,7 +55,7 @@ describe('ModelResolverService', () => {
         },
       ],
     })
-    const service = new ModelResolverService({ repository })
+    const service = buildService(repository)
 
     const result = await service.resolveModelIdForUser(1, 'gpt-4o')
 
@@ -54,7 +67,7 @@ describe('ModelResolverService', () => {
     const repository = createRepository({
       connections: [buildConn({ id: 3, prefixId: 'azure-gpt' })],
     })
-    const service = new ModelResolverService({ repository })
+    const service = buildService(repository)
 
     const result = await service.resolveModelIdForUser(1, 'azure-gpt.gpt-4o')
 
@@ -69,7 +82,7 @@ describe('ModelResolverService', () => {
         buildConn({ id: 5 }),
       ],
     })
-    const service = new ModelResolverService({ repository })
+    const service = buildService(repository)
 
     const mapped = await service.resolveModelIdForUser(1, 'gpt-4o')
     const first = await service.resolveModelIdForUser(1, 'gpt-3.5')
@@ -82,7 +95,7 @@ describe('ModelResolverService', () => {
 
   test('returns null when no connections match', async () => {
     const repository = createRepository({ connections: [] })
-    const service = new ModelResolverService({ repository })
+    const service = buildService(repository)
 
     const result = await service.resolveModelIdForUser(1, 'none')
 
@@ -93,7 +106,7 @@ describe('ModelResolverService', () => {
     const repository = createRepository({
       connections: [buildConn({ id: 9, prefixId: 'azure' })],
     })
-    const service = new ModelResolverService({ repository })
+    const service = buildService(repository)
 
     const result = await service.resolveModelForRequest({
       userId: 1,
@@ -111,7 +124,7 @@ describe('ModelResolverService', () => {
     const repository = createRepository({
       connections: [buildConn({ id: 2, prefixId: 'openai' })],
     })
-    const service = new ModelResolverService({ repository })
+    const service = buildService(repository)
 
     const result = await service.resolveModelForRequest({
       userId: 5,
@@ -121,5 +134,43 @@ describe('ModelResolverService', () => {
     expect(repository.findEnabledSystemConnectionById).not.toHaveBeenCalled()
     expect(result?.connection.id).toBe(2)
     expect(result?.rawModelId).toBe('gpt-4o')
+  })
+
+  test('denies model when access policy forbids user', async () => {
+    const repository = createRepository({
+      catalog: [
+        {
+          modelId: 'gpt-4o',
+          rawId: 'gpt-4o',
+          connectionId: 1,
+          metaJson: JSON.stringify({ access_policy: { user: 'deny' } }),
+          connection: buildConn({ id: 1 }) as any,
+        },
+      ],
+    })
+    const service = new ModelResolverService({
+      repository,
+      getModelAccessDefaults: async () => ({ anonymous: 'deny', user: 'allow' }),
+      resolveModelAccessPolicy: ({ metaJson, defaults }) => {
+        const payload = metaJson ? JSON.parse(metaJson) : {}
+        const policy = (payload as any).access_policy || {}
+        const userDecision = policy.user === 'deny' ? 'deny' : defaults.user
+        return {
+          policy,
+          resolved: {
+            anonymous: { decision: defaults.anonymous, source: 'default' },
+            user: { decision: userDecision, source: policy.user ? 'override' : 'default' },
+          },
+        }
+      },
+    })
+
+    const result = await service.resolveModelForRequest({
+      actor: { type: 'user', id: 1, username: 'u', role: 'USER', status: 'ACTIVE', identifier: 'u1' } as any,
+      userId: 1,
+      modelId: 'gpt-4o',
+    })
+
+    expect(result).toBeNull()
   })
 })

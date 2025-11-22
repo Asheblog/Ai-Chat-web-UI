@@ -202,6 +202,8 @@ export interface SystemSettings {
   anonymousRetentionDays?: number;
   anonymousDailyQuota?: number;
   defaultUserDailyQuota?: number;
+  modelAccessDefaultAnonymous?: 'allow' | 'deny';
+  modelAccessDefaultUser?: 'allow' | 'deny';
   webSearchAgentEnable?: boolean;
   webSearchDefaultEngine?: string;
   webSearchResultLimit?: number;

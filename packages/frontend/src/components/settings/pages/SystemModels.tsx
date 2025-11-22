@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -66,10 +67,12 @@ export function SystemModelsPage() {
     handleImportFile,
     handleToggleCapability,
     handleSaveMaxTokens,
+    handleUpdateAccessPolicy,
     resetModel,
     handleBatchReset,
     hasCapability,
     recommendTag,
+    accessOptions,
   } = useSystemModels()
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
   const [tokenDialogModel, setTokenDialogModel] = useState<any | null>(null)
@@ -314,6 +317,8 @@ export function SystemModelsPage() {
                         </TableHead>
                       )
                     })}
+                    <TableHead className="text-center w-[110px]">匿名访问</TableHead>
+                    <TableHead className="text-center w-[110px]">注册用户</TableHead>
                     <TableHead className="text-center w-[56px]">手动</TableHead>
                     <TableHead className="text-center w-[64px]">操作</TableHead>
                   </TableRow>
@@ -364,6 +369,48 @@ export function SystemModelsPage() {
                             </TableCell>
                           )
                         })}
+                        <TableCell className="py-3 px-3 text-center">
+                          <Select
+                            value={(m.accessPolicy?.anonymous as any) || 'inherit'}
+                            onValueChange={(v) => handleUpdateAccessPolicy(m, 'anonymous', v as any)}
+                            disabled={isBusy}
+                          >
+                            <SelectTrigger className="w-[108px] h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {accessOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            当前：{m.resolvedAccess?.anonymous?.decision === 'deny' ? '禁止' : '允许'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-3 px-3 text-center">
+                          <Select
+                            value={(m.accessPolicy?.user as any) || 'inherit'}
+                            onValueChange={(v) => handleUpdateAccessPolicy(m, 'user', v as any)}
+                            disabled={isBusy}
+                          >
+                            <SelectTrigger className="w-[108px] h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {accessOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            当前：{m.resolvedAccess?.user?.decision === 'deny' ? '禁止' : '允许'}
+                          </div>
+                        </TableCell>
                         <TableCell className="py-3 px-3 text-center">
                           {m.overridden ? (
                             <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs">

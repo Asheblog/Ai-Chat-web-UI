@@ -13,6 +13,12 @@ import {
   refreshModelCatalog,
 } from "@/services/system-models"
 
+const ACCESS_OPTIONS: Array<{ value: 'inherit' | 'allow' | 'deny'; label: string }> = [
+  { value: 'inherit', label: '继承默认' },
+  { value: 'allow', label: '允许' },
+  { value: 'deny', label: '禁止' },
+]
+
 export type ModelSortField = 'name' | 'provider'
 export type ModelSortOrder = 'asc' | 'desc'
 
@@ -157,6 +163,31 @@ export function useSystemModels() {
     }
   }
 
+  const handleUpdateAccessPolicy = async (
+    model: any,
+    target: 'anonymous' | 'user',
+    value: 'inherit' | 'allow' | 'deny',
+  ) => {
+    const key = modelKey(model)
+    try {
+      setSavingKey(key)
+      await updateModelCapabilities(model.connectionId, model.rawId, { accessPolicy: { [target]: value } })
+      await fetchAll()
+      toast({
+        title: '访问策略已更新',
+        description: `${model.name || model.id} 的${target === 'anonymous' ? '匿名访问' : '注册用户访问'}策略已保存`,
+      })
+    } catch (err: any) {
+      toast({
+        title: '保存失败',
+        description: err?.message || '更新访问策略失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingKey('')
+    }
+  }
+
   const resetModel = async (model: any) => {
     try {
       await deleteModelOverrides([{ connectionId: model.connectionId, rawId: model.rawId }])
@@ -216,6 +247,7 @@ export function useSystemModels() {
       tags: model.tags || [],
       capabilities: model.capabilities || {},
       capabilitySource: model.capabilitySource || null,
+      accessPolicy: model.accessPolicy || undefined,
     }))
     const blob = new Blob([JSON.stringify({ items }, null, 2)], { type: 'application/json;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -254,9 +286,11 @@ export function useSystemModels() {
             capPayload = undefined
           }
         }
+        const accessPolicy = (item as any)?.accessPolicy || (item as any)?.access_policy
         await updateModelCapabilities(Number(item.connectionId), String(item.rawId), {
           tags,
           capabilities: capPayload,
+          accessPolicy,
         })
       }
       await fetchAll()
@@ -336,10 +370,12 @@ export function useSystemModels() {
     handleImportFile,
     handleToggleCapability,
     handleSaveMaxTokens,
+    handleUpdateAccessPolicy,
     resetModel,
     handleBatchReset,
     hasCapability,
     capabilityStateOf,
     recommendTag,
+    accessOptions: ACCESS_OPTIONS,
   }
 }

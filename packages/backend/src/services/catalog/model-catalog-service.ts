@@ -2,6 +2,17 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import { hasDefinedCapability, parseCapabilityEnvelope as defaultParseCapabilityEnvelope } from '../../utils/capabilities'
 import type { CapabilityFlags } from '../../utils/capabilities'
+import type { Actor } from '../../types'
+import {
+  decideModelAccessForActor,
+  getModelAccessDefaults as defaultGetModelAccessDefaults,
+  parseAccessPolicyFromMeta,
+  resolveModelAccessPolicy as defaultResolveModelAccessPolicy,
+  type ModelAccessDefaults,
+  type ModelAccessPolicy,
+  type ModelAccessResolution,
+  type ModelAccessTriState,
+} from '../../utils/model-access-policy'
 
 type RefreshAllFn = () => Promise<unknown>
 type RefreshForConnectionsFn = (connections: Array<{ id: number } & Record<string, any>>) => Promise<unknown>
@@ -11,6 +22,11 @@ type DeriveChannelNameFn = (provider: string, baseUrl?: string) => string
 type NormalizeCapabilityFlagsFn = (input: unknown) => CapabilityFlags | undefined
 type SerializeCapabilityEnvelopeFn = (input: { flags: CapabilityFlags; source: string }) => string
 type InvalidateCacheFn = (connectionId: number, rawId: string) => void
+type GetModelAccessDefaultsFn = () => Promise<ModelAccessDefaults>
+type ResolveModelAccessPolicyFn = (params: {
+  metaJson?: string | null
+  defaults: ModelAccessDefaults
+}) => { policy: ModelAccessPolicy | null; resolved: ModelAccessResolution }
 
 const parseMetaObject = (metaJson: string | null | undefined): Record<string, any> => {
   if (!metaJson) return {}
@@ -89,6 +105,7 @@ export interface SaveOverridePayload {
   capabilitiesInput?: unknown
   maxOutputTokens?: number | null
   contextWindow?: number | null
+  accessPolicyInput?: unknown
 }
 
 export interface DeleteOverridesPayload {
@@ -110,6 +127,8 @@ export interface ModelCatalogServiceDeps {
   invalidateContextWindowCache?: InvalidateCacheFn
   logger?: Pick<typeof console, 'error' | 'warn'>
   now?: () => Date
+  getModelAccessDefaults?: GetModelAccessDefaultsFn
+  resolveModelAccessPolicy?: ResolveModelAccessPolicyFn
 }
 
 export class ModelCatalogService {
@@ -126,6 +145,8 @@ export class ModelCatalogService {
   private invalidateContextWindowCache: InvalidateCacheFn
   private logger: Pick<typeof console, 'error' | 'warn'>
   private now: () => Date
+  private getModelAccessDefaults: GetModelAccessDefaultsFn
+  private resolveModelAccessPolicy: ResolveModelAccessPolicyFn
 
   constructor(deps: ModelCatalogServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
@@ -159,9 +180,11 @@ export class ModelCatalogService {
     )
     this.logger = deps.logger ?? console
     this.now = deps.now ?? (() => new Date())
+    this.getModelAccessDefaults = deps.getModelAccessDefaults ?? defaultGetModelAccessDefaults
+    this.resolveModelAccessPolicy = deps.resolveModelAccessPolicy ?? defaultResolveModelAccessPolicy
   }
 
-  async listModels() {
+  async listModels(actor?: Actor) {
     const connections = await this.prisma.connection.findMany({ where: { ownerUserId: null, enable: true } })
     if (connections.length === 0) {
       return []
@@ -192,7 +215,14 @@ export class ModelCatalogService {
       rows = await loadRows()
     }
 
-    return rows
+    const defaults = await this.getModelAccessDefaults()
+    const actorType = (() => {
+      if (!actor) return 'anonymous' as const
+      if (actor.type === 'user' && actor.role === 'ADMIN') return 'admin' as const
+      return actor.type
+    })()
+
+    const mapped = rows
       .filter((row) => connMap.has(row.connectionId))
       .map((row) => {
         const conn = connMap.get(row.connectionId)!
@@ -219,6 +249,9 @@ export class ModelCatalogService {
           }
         }
 
+        const accessInfo = this.resolveModelAccessPolicy({ metaJson: row.metaJson, defaults })
+        const decision = decideModelAccessForActor(actor ?? { type: actorType }, accessInfo.resolved)
+
         return {
           id: row.modelId,
           rawId: row.rawId,
@@ -234,8 +267,17 @@ export class ModelCatalogService {
           overridden: row.manualOverride,
           contextWindow,
           maxOutputTokens,
+          accessPolicy: accessInfo.policy ?? undefined,
+          resolvedAccess: accessInfo.resolved,
+          accessDecision: decision,
         }
       })
+
+    if (actorType === 'admin') {
+      return mapped
+    }
+
+    return mapped.filter((item) => item.accessDecision === 'allow')
   }
 
   async refreshAllModels() {
@@ -291,6 +333,15 @@ export class ModelCatalogService {
           throw new ModelCatalogServiceError('context_window must be positive')
         }
         metaPayload.context_window = numeric
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'accessPolicyInput')) {
+      const normalized = this.normalizeAccessPolicyInput(payload.accessPolicyInput)
+      if (normalized) {
+        metaPayload.access_policy = normalized
+      } else {
+        delete metaPayload.access_policy
       }
     }
 
@@ -374,7 +425,14 @@ export class ModelCatalogService {
   async exportOverrides() {
     const rows = await this.prisma.modelCatalog.findMany({
       where: { manualOverride: true },
-      select: { connectionId: true, rawId: true, modelId: true, tagsJson: true, capabilitiesJson: true },
+      select: {
+        connectionId: true,
+        rawId: true,
+        modelId: true,
+        tagsJson: true,
+        capabilitiesJson: true,
+        metaJson: true,
+      },
     })
     return rows.map((row) => {
       const tags = (() => {
@@ -393,8 +451,23 @@ export class ModelCatalogService {
         tags,
         capabilities: parsedCaps?.flags || undefined,
         capabilitySource: parsedCaps?.source || null,
+        accessPolicy: parseAccessPolicyFromMeta(row.metaJson) || undefined,
       }
     })
+  }
+
+  private normalizeAccessPolicyInput(input: unknown): ModelAccessPolicy | null {
+    if (input === null || input === undefined) return null
+    if (typeof input !== 'object') {
+      throw new ModelCatalogServiceError('access_policy must be an object or null')
+    }
+    const payload = input as Record<string, any>
+    const allowed: ModelAccessPolicy = {}
+    const accepts = (value: any): value is ModelAccessTriState =>
+      value === 'allow' || value === 'deny' || value === 'inherit'
+    if (accepts(payload.anonymous)) allowed.anonymous = payload.anonymous
+    if (accepts(payload.user)) allowed.user = payload.user
+    return Object.keys(allowed).length ? allowed : null
   }
 
   private normalizeTags(input: any[]): Array<{ name: string }> {

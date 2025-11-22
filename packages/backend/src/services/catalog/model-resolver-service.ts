@@ -5,6 +5,13 @@ import {
   PrismaModelResolverRepository,
   type ModelResolverRepository,
 } from '../../repositories/model-resolver-repository'
+import type { Actor } from '../../types'
+import {
+  decideModelAccessForActor,
+  getModelAccessDefaults as defaultGetModelAccessDefaults,
+  resolveModelAccessPolicy as defaultResolveModelAccessPolicy,
+  type ModelAccessDefaults,
+} from '../../utils/model-access-policy'
 
 const parseModelIds = (json?: string | null): string[] => {
   if (!json) return []
@@ -19,14 +26,20 @@ const parseModelIds = (json?: string | null): string[] => {
 export interface ModelResolverDeps {
   prisma?: PrismaClient
   repository?: ModelResolverRepository
+  getModelAccessDefaults?: () => Promise<ModelAccessDefaults>
+  resolveModelAccessPolicy?: typeof defaultResolveModelAccessPolicy
 }
 
 export class ModelResolverService {
   private repository: ModelResolverRepository
+  private getModelAccessDefaults: () => Promise<ModelAccessDefaults>
+  private resolveModelAccessPolicy: typeof defaultResolveModelAccessPolicy
 
   constructor(deps: ModelResolverDeps = {}) {
     const prisma = deps.prisma ?? defaultPrisma
     this.repository = deps.repository ?? new PrismaModelResolverRepository(prisma)
+    this.getModelAccessDefaults = deps.getModelAccessDefaults ?? defaultGetModelAccessDefaults
+    this.resolveModelAccessPolicy = deps.resolveModelAccessPolicy ?? defaultResolveModelAccessPolicy
   }
 
   /**
@@ -36,7 +49,7 @@ export class ModelResolverService {
   async resolveModelIdForUser(
     userId: number,
     modelId: string,
-  ): Promise<{ connection: Connection; rawModelId: string } | null> {
+  ): Promise<{ connection: Connection; rawModelId: string; metaJson?: string | null } | null> {
     const cleanModelId = (modelId || '').trim()
     if (!cleanModelId) return null
     // 用户ID目前未用于筛选，但保留以便后续权限/私有连接扩展
@@ -48,6 +61,7 @@ export class ModelResolverService {
       return {
         connection: cached.connection,
         rawModelId: cached.rawId,
+        metaJson: cached.metaJson,
       }
     }
 
@@ -93,6 +107,7 @@ export class ModelResolverService {
   }
 
   async resolveModelForRequest(params: {
+    actor?: Actor
     userId?: number | null
     modelId: string
     connectionId?: number
@@ -101,9 +116,27 @@ export class ModelResolverService {
     const userId = params.userId ?? 0
     const modelId = (params.modelId || '').trim()
 
+    const actorType = (() => {
+      if (params.actor?.type === 'user' && params.actor.role === 'ADMIN') return 'admin' as const
+      if (params.actor) return params.actor.type
+      return userId ? 'user' : 'anonymous'
+    })()
+
+    const defaults: ModelAccessDefaults | null = actorType === 'admin' ? null : await this.getModelAccessDefaults()
+    const isAllowed = (metaJson?: string | null) => {
+      if (actorType === 'admin') return true
+      const access = this.resolveModelAccessPolicy({ metaJson, defaults: defaults! })
+      return decideModelAccessForActor(params.actor ?? { type: actorType }, access.resolved) === 'allow'
+    }
+
     if (params.connectionId && params.rawId) {
       const connection = await this.repository.findEnabledSystemConnectionById(params.connectionId)
       if (!connection) {
+        return null
+      }
+      const modelIdWithPrefix = (connection.prefixId ? `${connection.prefixId}.` : '') + params.rawId
+      const cached = await this.repository.findCachedModel(modelIdWithPrefix)
+      if (!isAllowed(cached?.metaJson)) {
         return null
       }
       return {
@@ -115,7 +148,13 @@ export class ModelResolverService {
     if (!modelId) return null
 
     const resolved = await this.resolveModelIdForUser(userId, modelId)
-    return resolved ?? null
+    if (!resolved) return null
+
+    if (!isAllowed(resolved.metaJson)) {
+      return null
+    }
+
+    return { connection: resolved.connection, rawModelId: resolved.rawModelId }
   }
 }
 

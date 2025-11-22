@@ -24,6 +24,22 @@ const toPositiveIntOrNull = (value: unknown, field: string): number | null | und
   return Math.floor(numeric)
 }
 
+const normalizeAccessPolicyInput = (
+  input: unknown,
+): { anonymous?: 'allow' | 'deny' | 'inherit'; user?: 'allow' | 'deny' | 'inherit' } | null | undefined => {
+  if (input === undefined) return undefined
+  if (input === null) return null
+  if (typeof input !== 'object') {
+    throw new ModelCatalogServiceError('access_policy must be an object or null')
+  }
+  const accepts = (value: any) => value === 'allow' || value === 'deny' || value === 'inherit'
+  const payload: Record<string, any> = input as any
+  const normalized: Record<string, 'allow' | 'deny' | 'inherit'> = {}
+  if (accepts(payload.anonymous)) normalized.anonymous = payload.anonymous
+  if (accepts(payload.user)) normalized.user = payload.user
+  return Object.keys(normalized).length ? (normalized as any) : null
+}
+
 const handleServiceError = (
   c: any,
   error: unknown,
@@ -39,7 +55,7 @@ const handleServiceError = (
 
 catalog.get('/models', async (c) => {
   try {
-    const list = await svc.listModels()
+    const list = await svc.listModels(c.get('actor'))
     return c.json<ApiResponse>({ success: true, data: list })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to fetch models', 'List catalog models error:')
@@ -68,14 +84,19 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     }
     const maxOutputTokens = toPositiveIntOrNull(body.max_output_tokens, 'max_output_tokens')
     const contextWindow = toPositiveIntOrNull(body.context_window, 'context_window')
-    await svc.saveOverride({
+    const accessPolicy = normalizeAccessPolicyInput(body.access_policy)
+    const payload: any = {
       connectionId,
       rawId,
       tagsInput: body.tags,
       capabilitiesInput: body.capabilities,
       maxOutputTokens,
       contextWindow,
-    })
+    }
+    if (accessPolicy !== undefined) {
+      payload.accessPolicyInput = accessPolicy
+    }
+    await svc.saveOverride(payload)
     return c.json<ApiResponse>({ success: true, message: 'Saved' })
   } catch (error) {
     return handleServiceError(c, error, 'Failed to save tags', 'Save catalog override error:')

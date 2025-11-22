@@ -5,6 +5,7 @@ export interface CachedModelWithConnection {
   rawId: string
   modelId: string
   connectionId: number
+  metaJson?: string | null
 }
 
 export interface ModelResolverRepository {
@@ -28,10 +29,11 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
         rawId: true,
         connectionId: true,
         connection: true,
+        metaJson: true,
       },
     })
     if (!row) return null
-    const { connection, rawId, modelId: cachedModelId, connectionId } = row as ModelCatalog & {
+    const { connection, rawId, modelId: cachedModelId, connectionId, metaJson } = row as ModelCatalog & {
       connection: Connection
     }
     return {
@@ -39,6 +41,7 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
       rawId,
       modelId: cachedModelId,
       connectionId,
+      metaJson,
     }
   }
 

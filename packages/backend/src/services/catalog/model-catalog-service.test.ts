@@ -26,6 +26,14 @@ const buildService = () => {
   const invalidateCompletionLimitCache = jest.fn()
   const invalidateContextWindowCache = jest.fn()
   const now = () => new Date('2024-01-01T00:00:00Z')
+  const getModelAccessDefaults = jest.fn(async () => ({ anonymous: 'deny', user: 'allow' }))
+  const resolveModelAccessPolicy = jest.fn(({ defaults }) => ({
+    policy: null,
+    resolved: {
+      anonymous: { decision: defaults.anonymous, source: 'default' },
+      user: { decision: defaults.user, source: 'default' },
+    },
+  }))
 
   const service = new ModelCatalogService({
     prisma: prisma as any,
@@ -40,6 +48,8 @@ const buildService = () => {
     invalidateCompletionLimitCache,
     invalidateContextWindowCache,
     now,
+    getModelAccessDefaults,
+    resolveModelAccessPolicy,
   })
 
   return {

@@ -77,6 +77,8 @@ const systemSettingSchema = z.object({
   anonymous_retention_days: z.number().int().min(0).max(15).optional(),
   anonymous_daily_quota: z.number().int().min(0).optional(),
   default_user_daily_quota: z.number().int().min(0).optional(),
+  model_access_default_anonymous: z.enum(['allow', 'deny']).optional(),
+  model_access_default_user: z.enum(['allow', 'deny']).optional(),
   web_search_agent_enable: z.boolean().optional(),
   web_search_default_engine: z.string().min(1).max(32).optional(),
   web_search_api_key: z.string().min(1).optional(),

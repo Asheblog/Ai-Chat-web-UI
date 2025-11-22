@@ -5,7 +5,7 @@ import { zValidator } from '@hono/zod-validator';
 import { randomUUID } from 'node:crypto';
 
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
-import { getModelResolverService, resolveModelIdForUser } from '../utils/model-resolver';
+import { getModelResolverService, resolveModelForActor } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
 import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
 import { TaskTraceRecorder, shouldEnableTaskTrace, type TaskTraceStatus } from '../utils/task-trace';
@@ -341,10 +341,6 @@ function formatMessage(message: MessageEntity) {
 
 export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const resolveModel = (userId: number, modelId: string) =>
-    deps.modelResolverService
-      ? deps.modelResolverService.resolveModelIdForUser(userId, modelId)
-      : resolveModelIdForUser(userId, modelId);
   const messageService = deps.messageService ?? openaiCompatMessageService;
 
   const openaiCompat = new Hono();
@@ -400,7 +396,9 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
           metadataKeys: body.metadata ? Object.keys(body.metadata) : undefined,
         })
 
-        const resolved = await resolveModel(user.id, body.model);
+        const resolved = deps.modelResolverService
+          ? await deps.modelResolverService.resolveModelForRequest({ actor, userId: user.id, modelId: body.model })
+          : await resolveModelForActor({ actor, modelId: body.model });
         if (!resolved) {
           traceStatus = 'error'
           traceError = 'model_not_found'

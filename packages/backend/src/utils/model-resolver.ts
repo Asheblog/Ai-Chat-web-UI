@@ -3,6 +3,7 @@ import {
   modelResolverService as defaultModelResolverService,
   ModelResolverService,
 } from '../services/catalog/model-resolver-service'
+import type { Actor } from '../types'
 
 let currentModelResolverService: ModelResolverService = defaultModelResolverService
 
@@ -20,4 +21,12 @@ export async function resolveModelIdForUser(
   modelId: string,
 ): Promise<{ connection: Connection; rawModelId: string } | null> {
   return currentModelResolverService.resolveModelIdForUser(userId, modelId)
+}
+
+export async function resolveModelForActor(params: { actor: Actor; modelId: string }) {
+  return currentModelResolverService.resolveModelForRequest({
+    actor: params.actor,
+    userId: params.actor.type === 'user' ? params.actor.id : null,
+    modelId: params.modelId,
+  })
 }

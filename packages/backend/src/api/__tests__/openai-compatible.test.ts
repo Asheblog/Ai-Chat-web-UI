@@ -27,7 +27,8 @@ import { createOpenAICompatApi } from '../openai-compatible'
 import type { ModelResolverService } from '../../services/catalog/model-resolver-service'
 
 const buildMockResolver = (): jest.Mocked<ModelResolverService> => ({
-  resolveModelIdForUser: jest.fn().mockImplementation(async () => ({
+  resolveModelIdForUser: jest.fn(),
+  resolveModelForRequest: jest.fn().mockImplementation(async () => ({
     rawModelId: 'gpt-4o',
     connection: {
       provider: 'openai',
@@ -37,7 +38,6 @@ const buildMockResolver = (): jest.Mocked<ModelResolverService> => ({
       headersJson: '',
     } as any,
   })),
-  resolveModelForRequest: jest.fn(),
 })
 
 describe('openai-compatible api', () => {
@@ -68,6 +68,10 @@ describe('openai-compatible api', () => {
 
     expect(res.status).toBe(200)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-    expect(resolver.resolveModelIdForUser).toHaveBeenCalledWith(1, 'demo-model')
+    expect(resolver.resolveModelForRequest).toHaveBeenCalledWith({
+      actor: expect.objectContaining({ identifier: expect.any(String) }),
+      userId: 1,
+      modelId: 'demo-model',
+    })
   })
 })

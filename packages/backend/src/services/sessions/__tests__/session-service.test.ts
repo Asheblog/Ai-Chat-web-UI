@@ -93,6 +93,7 @@ describe('SessionService', () => {
     })
 
     expect(modelResolverService.resolveModelForRequest).toHaveBeenCalledWith({
+      actor,
       userId: 1,
       modelId: 'openai.gpt-4o',
       connectionId: 22,
@@ -164,6 +165,7 @@ describe('SessionService', () => {
 
     expect(ensureAnonymousSession).toHaveBeenCalledWith(actor)
     expect(modelResolverService.resolveModelForRequest).toHaveBeenCalledWith({
+      actor,
       userId: null,
       modelId: 'llama.llama-3',
       connectionId: undefined,
