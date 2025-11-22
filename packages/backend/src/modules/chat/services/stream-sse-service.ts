@@ -38,6 +38,7 @@ export interface HeartbeatOptions {
   }
   setLastKeepaliveSentAt: (ts: number) => void
   onTraceIdleTimeout?: (idleMs: number) => void
+  onProviderInitialTimeout?: (idleMs: number) => void
   cancelProvider?: () => void
   flushReasoningDelta: (force: boolean) => Promise<void>
   flushVisibleDelta: (force: boolean) => Promise<void>
@@ -103,6 +104,9 @@ export class StreamSseService {
         opts.getTimestamps()
       if (!firstChunkAt) {
         if (opts.providerInitialGraceMs > 0 && now - requestStartedAt > opts.providerInitialGraceMs) {
+          try {
+            opts.onProviderInitialTimeout?.(now - requestStartedAt)
+          } catch {}
           try {
             opts.cancelProvider?.()
           } catch {}

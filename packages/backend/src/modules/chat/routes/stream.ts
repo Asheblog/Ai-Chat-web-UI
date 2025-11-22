@@ -869,6 +869,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
             let firstChunkAt: number | null = null;
             let lastChunkAt: number | null = null;
             let lastKeepaliveSentAt = 0;
+            let providerSseLines = 0;
+            let providerSseSamples = 0;
+            const providerSseSampleLimit = 5;
+            let providerContentChunks = 0;
+            let providerReasoningChunks = 0;
+            let providerUsageEvents = 0;
+            let providerStopEvents = 0;
+            let providerFirstDeltaAt: number | null = null;
+            let providerFirstUsageAt: number | null = null;
             const traceIdleTimeoutMs = traceDecision.config.idleTimeoutMs > 0 ? traceDecision.config.idleTimeoutMs : null;
             let traceIdleWarned = false;
             let pendingVisibleDelta = '';
@@ -949,6 +958,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
                     traceRecorder.log('stream.keepalive_timeout', { idleMs })
                     traceIdleWarned = true
                   },
+              onProviderInitialTimeout: (idleMs) => {
+                traceRecorder.log('stream.first_chunk_timeout', {
+                  ...streamLogBase(),
+                  provider,
+                  baseUrl,
+                  idleMs,
+                  providerInitialGraceMs,
+                })
+              },
               cancelProvider: () => {
                 try { (response as any)?.body?.cancel?.(); } catch {}
               },
@@ -977,6 +995,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 const l = line.replace(/\r$/, '');
                 if (!l.startsWith('data: ')) continue;
 
+                providerSseLines += 1;
+
                 const data = l.slice(6);
                 log.debug('SSE line', data?.slice(0, 120));
 
@@ -993,10 +1013,23 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 }
 
                 let parsed: any;
+                let parsedKind: string = 'raw';
                 try {
                   parsed = JSON.parse(data);
+                  parsedKind = 'json';
                 } catch (parseError) {
                   console.warn('Failed to parse SSE data:', data, parseError);
+                  if (providerSseSamples < providerSseSampleLimit) {
+                    providerSseSamples += 1;
+                    traceRecorder.log('stream.provider_sse_sample', {
+                      ...streamLogBase(),
+                      provider,
+                      baseUrl,
+                      idx: providerSseSamples,
+                      kind: 'parse_error',
+                      rawPreview: truncateString(data, 200),
+                    })
+                  }
                   continue;
                 }
 
@@ -1009,10 +1042,13 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
                   pendingReasoningDelta += deltaReasoning;
                   reasoningDeltaCount += 1;
+                  providerReasoningChunks += 1;
+                  if (!providerFirstDeltaAt) providerFirstDeltaAt = now;
                   await flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
                 }
 
                 if (deltaContent) {
+                  if (!providerFirstDeltaAt) providerFirstDeltaAt = now;
                   let visible = deltaContent;
                   if (REASONING_ENABLED && REASONING_TAGS_MODE !== 'off') {
                     const tags = REASONING_TAGS_MODE === 'custom' && REASONING_CUSTOM_TAGS ? REASONING_CUSTOM_TAGS : DEFAULT_REASONING_TAGS;
@@ -1022,6 +1058,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                       if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
                       pendingReasoningDelta += reasoningDelta;
                       reasoningDeltaCount += 1;
+                      providerReasoningChunks += 1;
                       await flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
                     }
                   }
@@ -1029,6 +1066,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   if (visible) {
                     pendingVisibleDelta += visible;
                     visibleDeltaCount += 1;
+                    providerContentChunks += 1;
                     await flushVisibleDelta(visibleDeltaCount >= STREAM_DELTA_CHUNK_SIZE);
                   }
                 }
@@ -1036,6 +1074,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 // 结束原因（如果可用）
                 const fr = parsed.choices?.[0]?.finish_reason;
                 if (fr) {
+                  providerStopEvents += 1;
                   const stopEvent = `data: ${JSON.stringify({
                     type: 'stop',
                     reason: fr,
@@ -1059,11 +1098,28 @@ export const registerChatStreamRoutes = (router: Hono) => {
                     traceMetadataExtras.finalUsage = parsed.usage;
                     traceMetadataExtras.providerUsageSource = 'provider';
                   }
+                  if (!providerFirstUsageAt) providerFirstUsageAt = now;
+                  providerUsageEvents += 1;
                   const providerUsageEvent = `data: ${JSON.stringify({
                     type: 'usage',
                     usage: parsed.usage,
                   })}\n\n`;
                   safeEnqueue(providerUsageEvent);
+                }
+
+                if (providerSseSamples < providerSseSampleLimit) {
+                  providerSseSamples += 1;
+                  traceRecorder.log('stream.provider_sse_sample', {
+                    ...streamLogBase(),
+                    provider,
+                    baseUrl,
+                    idx: providerSseSamples,
+                    kind: parsedKind,
+                    deltaContentPreview: deltaContent ? truncateString(deltaContent, 120) : undefined,
+                    deltaReasoningPreview: deltaReasoning ? truncateString(deltaReasoning, 120) : undefined,
+                    finishReason: fr,
+                    hasUsage: Boolean(parsed.usage),
+                  })
                 }
               }
 
@@ -1071,6 +1127,24 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 break;
               }
             }
+
+            traceRecorder.log('stream.provider_sse_summary', {
+              ...streamLogBase(),
+              provider,
+              baseUrl,
+              firstChunkAt,
+              firstChunkDelayMs: firstChunkAt ? firstChunkAt - requestStartedAt : null,
+              firstDeltaDelayMs: providerFirstDeltaAt ? providerFirstDeltaAt - requestStartedAt : null,
+              firstUsageDelayMs: providerFirstUsageAt ? providerFirstUsageAt - requestStartedAt : null,
+              lastChunkAt,
+              providerDone,
+              downstreamAborted,
+              sseLines: providerSseLines,
+              contentChunks: providerContentChunks,
+              reasoningChunks: providerReasoningChunks,
+              usageEvents: providerUsageEvents,
+              stopEvents: providerStopEvents,
+            })
 
             await flushReasoningDelta(true);
             await flushVisibleDelta(true);
