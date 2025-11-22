@@ -48,8 +48,6 @@ export function SystemGeneralPage() {
   const [anonymousQuotaDraft, setAnonymousQuotaDraft] = useState('20')
   const [defaultUserQuotaDraft, setDefaultUserQuotaDraft] = useState('200')
   const [anonymousRetentionDraft, setAnonymousRetentionDraft] = useState('15')
-  const [allowAnonymousModels, setAllowAnonymousModels] = useState(false)
-  const [allowUserModels, setAllowUserModels] = useState(true)
   const [syncingAnonymousQuota, setSyncingAnonymousQuota] = useState(false)
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -67,8 +65,6 @@ export function SystemGeneralPage() {
     setAnonymousQuotaDraft(String(systemSettings.anonymousDailyQuota ?? 20))
     setDefaultUserQuotaDraft(String(systemSettings.defaultUserDailyQuota ?? 200))
     setAnonymousRetentionDraft(String(systemSettings.anonymousRetentionDays ?? 15))
-    setAllowAnonymousModels((systemSettings.modelAccessDefaultAnonymous || 'deny') === 'allow')
-    setAllowUserModels((systemSettings.modelAccessDefaultUser || 'allow') === 'allow')
     setAssistantAvatarPreview(systemSettings.assistantAvatarUrl || null)
   }, [systemSettings])
 
@@ -170,14 +166,12 @@ export function SystemGeneralPage() {
         allowRegistration: Boolean(systemSettings.allowRegistration),
         anonymousQuota: String(systemSettings.anonymousDailyQuota ?? 20),
         defaultUserQuota: String(systemSettings.defaultUserDailyQuota ?? 200),
-      brandText: systemSettings.brandText || '',
-      siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
-      chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
-      assistantReplyHistoryLimit: String(systemSettings.assistantReplyHistoryLimit ?? 5),
-      anonymousRetentionDays: String(systemSettings.anonymousRetentionDays ?? 15),
-      allowAnonymousModels: (systemSettings.modelAccessDefaultAnonymous || 'deny') === 'allow',
-      allowUserModels: (systemSettings.modelAccessDefaultUser || 'allow') === 'allow',
-    }
+        brandText: systemSettings.brandText || '',
+        siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
+        chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
+        assistantReplyHistoryLimit: String(systemSettings.assistantReplyHistoryLimit ?? 5),
+        anonymousRetentionDays: String(systemSettings.anonymousRetentionDays ?? 15),
+      }
     : null
 
   const fieldChanged =
@@ -190,9 +184,7 @@ export function SystemGeneralPage() {
       siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
       retentionDraft !== normalizedInitials.chatImageRetentionDays ||
       replyHistoryLimitDraft !== normalizedInitials.assistantReplyHistoryLimit ||
-      anonymousRetentionDraft !== normalizedInitials.anonymousRetentionDays ||
-      allowAnonymousModels !== normalizedInitials.allowAnonymousModels ||
-      allowUserModels !== normalizedInitials.allowUserModels
+      anonymousRetentionDraft !== normalizedInitials.anonymousRetentionDays
     )
 
   const handleSaveGeneral = async () => {
@@ -234,8 +226,6 @@ export function SystemGeneralPage() {
         chatImageRetentionDays: parsedRetention,
         assistantReplyHistoryLimit: parsedReplyHistoryLimit,
         anonymousRetentionDays: parsedAnonymousRetention,
-        modelAccessDefaultAnonymous: allowAnonymousModels ? 'allow' : 'deny',
-        modelAccessDefaultUser: allowUserModels ? 'allow' : 'deny',
       })
       toast({ title: '已保存通用配置' })
     } finally {
@@ -360,36 +350,6 @@ export function SystemGeneralPage() {
           </div>
         </SettingRow>
 
-        <SettingRow
-          title="模型默认访问策略"
-          description="控制未单独配置的模型在匿名与注册用户下的访问权限"
-          align="start"
-        >
-          <div className="flex w-full flex-col gap-3 text-sm text-muted-foreground">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-left">
-                <div className="font-medium text-foreground">允许匿名访问模型</div>
-                <div className="text-xs text-muted-foreground">关闭后匿名用户无法获取模型列表</div>
-              </div>
-              <Switch
-                checked={allowAnonymousModels}
-                disabled={!isAdmin}
-                onCheckedChange={(v) => setAllowAnonymousModels(Boolean(v))}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-left">
-                <div className="font-medium text-foreground">允许注册用户访问模型</div>
-                <div className="text-xs text-muted-foreground">关闭后仅管理员可使用模型</div>
-              </div>
-              <Switch
-                checked={allowUserModels}
-                disabled={!isAdmin}
-                onCheckedChange={(v) => setAllowUserModels(Boolean(v))}
-              />
-            </div>
-          </div>
-        </SettingRow>
       </div>
 
       {/* 品牌定制区块 */}

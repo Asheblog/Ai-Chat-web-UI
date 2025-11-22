@@ -16,6 +16,7 @@ import { SystemReasoningPage } from "./pages/SystemReasoning"
 import { SystemModelsPage } from "./pages/SystemModels"
 // import { SystemModelsPage } from "./pages/SystemModels"
 import { SystemUsersPage } from "./pages/SystemUsers"
+import { SystemModelAccessPage } from "./pages/SystemModelAccess"
 import { SystemConnectionsPage } from "./pages/SystemConnections"
 import { SystemWebSearchPage } from "./pages/SystemWebSearch"
 import { SystemMonitoringPage } from "./pages/SystemMonitoring"
@@ -193,6 +194,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
                 case 'system.web-search': return <SystemWebSearchPage />
                 case 'system.connections': return <SystemConnectionsPage />
                 case 'system.models': return <SystemModelsPage />
+                case 'system.model-access': return <SystemModelAccessPage />
                 case 'system.logging': return <SystemMonitoringPage />
                 case 'system.users': return <SystemUsersPage />
                 default:

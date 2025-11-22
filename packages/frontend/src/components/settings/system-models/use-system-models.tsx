@@ -57,6 +57,7 @@ export function useSystemModels() {
   const [refreshing, setRefreshing] = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [batchUpdating, setBatchUpdating] = useState(false)
 
   const list = useMemo(() => {
     const kw = q.trim().toLowerCase()
@@ -127,7 +128,7 @@ export function useSystemModels() {
   }
 
   const handleSaveMaxTokens = async (model: any, rawValue: string) => {
-    const key = modelKey(model)
+    const key = keyOf(model)
     const trimmed = rawValue.trim()
     let payloadValue: number | null
     if (trimmed === '') {
@@ -168,7 +169,7 @@ export function useSystemModels() {
     target: 'anonymous' | 'user',
     value: 'inherit' | 'allow' | 'deny',
   ) => {
-    const key = modelKey(model)
+    const key = keyOf(model)
     try {
       setSavingKey(key)
       await updateModelCapabilities(model.connectionId, model.rawId, { accessPolicy: { [target]: value } })
@@ -185,6 +186,42 @@ export function useSystemModels() {
       })
     } finally {
       setSavingKey('')
+    }
+  }
+
+  const bulkUpdateAccessPolicy = async (
+    models: any[],
+    target: 'anonymous' | 'user',
+    value: 'allow' | 'deny',
+  ) => {
+    if (!models.length) {
+      toast({
+        title: '无可更新项',
+        description: '当前筛选没有匹配的模型',
+        variant: 'destructive',
+      })
+      return
+    }
+    setBatchUpdating(true)
+    try {
+      await Promise.all(
+        models.map((model) =>
+          updateModelCapabilities(model.connectionId, model.rawId, { accessPolicy: { [target]: value } }),
+        ),
+      )
+      await fetchAll()
+      toast({
+        title: '批量更新成功',
+        description: `已将 ${models.length} 个模型的${target === 'anonymous' ? '匿名访问' : '注册用户'}策略设为${value === 'allow' ? '允许' : '禁止'}`,
+      })
+    } catch (err: any) {
+      toast({
+        title: '批量更新失败',
+        description: err?.message || '保存失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setBatchUpdating(false)
     }
   }
 
@@ -362,6 +399,8 @@ export function useSystemModels() {
     refreshing,
     manualRefresh,
     reload,
+    batchUpdating,
+    bulkUpdateAccessPolicy,
     clearDialogOpen,
     setClearDialogOpen,
     clearing,
