@@ -204,16 +204,25 @@ export function useSystemModels() {
     }
     setBatchUpdating(true)
     try {
-      await Promise.all(
-        models.map((model) =>
-          updateModelCapabilities(model.connectionId, model.rawId, { accessPolicy: { [target]: value } }),
-        ),
-      )
+      let success = 0
+      const failed: string[] = []
+      for (const model of models) {
+        try {
+          await updateModelCapabilities(model.connectionId, model.rawId, { accessPolicy: { [target]: value } })
+          success += 1
+        } catch (err: any) {
+          failed.push(model.name || model.id || `${model.connectionId}:${model.rawId}`)
+        }
+      }
       await fetchAll()
       toast({
-        title: '批量更新成功',
-        description: `已将 ${models.length} 个模型的${target === 'anonymous' ? '匿名访问' : '注册用户'}策略设为${value === 'allow' ? '允许' : '禁止'}`,
+        title: failed.length ? '批量更新部分成功' : '批量更新成功',
+        description: `成功 ${success} 个，失败 ${failed.length} 个；已将${target === 'anonymous' ? '匿名访问' : '注册用户'}策略设为${value === 'allow' ? '允许' : '禁止'}`.slice(0, 140),
+        variant: failed.length ? 'destructive' : 'default',
       })
+      if (failed.length) {
+        console.error('批量更新失败模型', failed)
+      }
     } catch (err: any) {
       toast({
         title: '批量更新失败',

@@ -40,6 +40,8 @@ export function SystemModelAccessPage() {
   const [allowAnonymous, setAllowAnonymous] = useState(false)
   const [allowUser, setAllowUser] = useState(true)
   const [savingDefaults, setSavingDefaults] = useState(false)
+  const [page, setPage] = useState(1)
+  const pageSize = 80
 
   useEffect(() => {
     if (!settings) return
@@ -50,6 +52,20 @@ export function SystemModelAccessPage() {
   useEffect(() => {
     reload()
   }, [reload])
+
+  useEffect(() => {
+    setPage(1)
+  }, [q, onlyOverridden, list.length])
+
+  const totalPages = Math.max(1, Math.ceil((list.length || 0) / pageSize))
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
+
+  const pagedList = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return list.slice(start, start + pageSize)
+  }, [list, page])
 
   const normalizedDefaults = useMemo(() => {
     if (!settings) return null
@@ -243,7 +259,9 @@ export function SystemModelAccessPage() {
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">批量应用（当前筛选）</span>
+            <span className="text-muted-foreground">
+              批量应用（当前筛选共 {list.length} 个，操作会遍历所有页）
+            </span>
             <div className="flex gap-1">
               <Button
                 size="sm"
@@ -280,6 +298,28 @@ export function SystemModelAccessPage() {
             </div>
             {batchUpdating && <span className="text-xs text-muted-foreground">批量更新中…</span>}
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <div>共 {list.length} 个模型，每页 {pageSize} 个</div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                上一页
+              </Button>
+              <span>第 {page} / {totalPages} 页</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                下一页
+              </Button>
+            </div>
+          </div>
 
           {loading && (
             <div className="grid gap-3 md:grid-cols-2">
@@ -304,9 +344,9 @@ export function SystemModelAccessPage() {
             </div>
           )}
 
-          {!loading && list.length > 0 && (
+          {!loading && pagedList.length > 0 && (
             <div className="space-y-3">
-              {list.map((model: any) => renderRow(model))}
+              {pagedList.map((model: any) => renderRow(model))}
             </div>
           )}
         </CardContent>
