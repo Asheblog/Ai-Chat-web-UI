@@ -1,9 +1,10 @@
 "use client"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { useModelsStore } from "@/store/models-store"
 import {
   MODEL_CAP_KEYS,
+  MODEL_CAP_LABELS,
   type ModelCapKey,
 } from "./constants"
 import {
@@ -91,6 +92,18 @@ export function useSystemModels() {
       setSortOrder('asc')
     }
   }
+
+  useEffect(() => {
+    setSelectedKeys((prev) => {
+      if (!prev.size) return prev
+      const allowed = new Set(list.map((model: any) => keyOf(model)))
+      const next = new Set<string>()
+      prev.forEach((key) => {
+        if (allowed.has(key)) next.add(key)
+      })
+      return next
+    })
+  }, [list])
 
   const buildCapabilityPayload = (model: any, key: ModelCapKey, value: boolean) => {
     const tags = Array.isArray(model.tags) ? model.tags.map((tag: any) => ({ name: String(tag?.name || '') })) : []
@@ -234,6 +247,51 @@ export function useSystemModels() {
     }
   }
 
+  const bulkUpdateCapability = async (models: any[], key: ModelCapKey, value: boolean) => {
+    if (!models.length) {
+      toast({
+        title: '无可更新项',
+        description: '当前筛选没有匹配的模型',
+        variant: 'destructive',
+      })
+      return
+    }
+    setBatchUpdating(true)
+    try {
+      let success = 0
+      const failed: string[] = []
+      for (const model of models) {
+        const payload = buildCapabilityPayload(model, key, value)
+        try {
+          await updateModelCapabilities(model.connectionId, model.rawId, {
+            tags: payload.tags,
+            capabilities: payload.capabilities,
+          })
+          success += 1
+        } catch (err: any) {
+          failed.push(model.name || model.id || `${model.connectionId}:${model.rawId}`)
+        }
+      }
+      await fetchAll()
+      toast({
+        title: failed.length ? '批量更新部分成功' : '批量更新成功',
+        description: `成功 ${success} 个，失败 ${failed.length} 个；已将 ${MODEL_CAP_LABELS[key]} 设为${value ? '开启' : '关闭'}`.slice(0, 140),
+        variant: failed.length ? 'destructive' : 'default',
+      })
+      if (failed.length) {
+        console.error('批量更新失败模型', failed)
+      }
+    } catch (err: any) {
+      toast({
+        title: '批量更新失败',
+        description: err?.message || '保存失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setBatchUpdating(false)
+    }
+  }
+
   const resetModel = async (model: any) => {
     try {
       await deleteModelOverrides([{ connectionId: model.connectionId, rawId: model.rawId }])
@@ -350,12 +408,14 @@ export function useSystemModels() {
     }
   }
 
-  const toggleSelectAll = () => {
-    if (selectedKeys.size === list.length && list.length > 0) {
-      setSelectedKeys(new Set())
-    } else {
-      setSelectedKeys(new Set(list.map((model: any) => keyOf(model))))
-    }
+  const toggleSelectAll = (keys?: string[]) => {
+    const targetKeys = keys && keys.length > 0 ? keys : list.map((model: any) => keyOf(model))
+    if (targetKeys.length === 0) return
+    const allChecked = targetKeys.every((key) => selectedKeys.has(key))
+    const next = new Set(selectedKeys)
+    if (allChecked) targetKeys.forEach((key) => next.delete(key))
+    else targetKeys.forEach((key) => next.add(key))
+    setSelectedKeys(next)
   }
 
   const toggleSelectRow = (key: string) => {
@@ -410,6 +470,7 @@ export function useSystemModels() {
     reload,
     batchUpdating,
     bulkUpdateAccessPolicy,
+    bulkUpdateCapability,
     clearDialogOpen,
     setClearDialogOpen,
     clearing,

@@ -1,5 +1,5 @@
 "use client"
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -70,10 +70,14 @@ export function SystemModelsPage() {
     handleBatchReset,
     hasCapability,
     recommendTag,
+    bulkUpdateCapability,
+    batchUpdating,
   } = useSystemModels()
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
   const [tokenDialogModel, setTokenDialogModel] = useState<any | null>(null)
   const [tokenDialogValue, setTokenDialogValue] = useState('')
+  const [page, setPage] = useState(1)
+  const pageSize = 80
 
   const openTokenDialog = (model: any) => {
     setTokenDialogModel(model)
@@ -94,6 +98,24 @@ export function SystemModelsPage() {
     await handleSaveMaxTokens(tokenDialogModel, tokenDialogValue)
     closeTokenDialog()
   }
+
+  useEffect(() => {
+    setPage(1)
+  }, [q, onlyOverridden, list.length])
+
+  const totalPages = Math.max(1, Math.ceil((list.length || 0) / pageSize))
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
+
+  const pagedList = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return list.slice(start, start + pageSize)
+  }, [list, page])
+
+  const currentPageKeys = useMemo(() => pagedList.map((m: any) => modelKey(m)), [pagedList])
+  const currentPageAllSelected = currentPageKeys.length > 0 && currentPageKeys.every((key) => selectedKeys.has(key))
+
   return (
     <>
       <div className="space-y-6 min-w-0">
@@ -209,6 +231,52 @@ export function SystemModelsPage() {
         </Card>
       </div>
 
+      {/* 批量能力开关 */}
+      <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-base">批量开关能力</CardTitle>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span>当前筛选 {list.length} 个模型，操作会遍历所有页</span>
+            <span>每页渲染 {pageSize} 个以避免卡顿</span>
+            {batchUpdating && <span className="text-amber-600 dark:text-amber-300">批量更新中…</span>}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {MODEL_CAP_KEYS.map((cap) => {
+            const Icon = MODEL_CAP_ICONS[cap]
+            return (
+              <div
+                key={cap}
+                className="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <Icon className="w-4 h-4" />
+                  <span>{MODEL_CAP_LABELS[cap]}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={isLoading || batchUpdating}
+                    onClick={() => bulkUpdateCapability(list, cap, true)}
+                  >
+                    开启
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isLoading || batchUpdating}
+                    onClick={() => bulkUpdateCapability(list, cap, false)}
+                  >
+                    关闭
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
       {/* 批量操作栏 */}
       {selectedKeys.size > 0 && (
         <Card className="px-4 py-3 sm:px-5 sm:py-3 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
@@ -285,8 +353,8 @@ export function SystemModelsPage() {
                   <TableRow>
                     <TableHead className="w-12 text-center">
                       <Checkbox
-                        checked={selectedKeys.size === list.length && list.length > 0}
-                        onCheckedChange={() => toggleSelectAll()}
+                        checked={currentPageAllSelected}
+                        onCheckedChange={() => toggleSelectAll(currentPageKeys)}
                       />
                     </TableHead>
                     <TableHead
@@ -319,7 +387,7 @@ export function SystemModelsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {list.map((m:any)=>{
+                  {pagedList.map((m:any)=>{
                     const key = modelKey(m)
                     const isBusy = savingKey === key
                     return (
@@ -406,6 +474,28 @@ export function SystemModelsPage() {
               </Table>
             </div>
           )}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground mt-3">
+            <div>当前筛选 {list.length} 个模型，每页 {pageSize} 个</div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                上一页
+              </Button>
+              <span>第 {page} / {totalPages} 页</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                下一页
+              </Button>
+            </div>
+          </div>
         </Card>
       </div>
       </div>
