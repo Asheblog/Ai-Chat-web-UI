@@ -182,11 +182,11 @@ export const sanitizePayload = (payload: unknown, depth = 0): any => {
     return undefined
   }
   if (Array.isArray(payload)) {
-    if (depth > 2) return `[array(${payload.length})]`
+    if (depth > 3) return `[array(${payload.length})]`
     return payload.slice(0, MAX_ARRAY_ITEMS).map((item) => sanitizePayload(item, depth + 1))
   }
   if (typeof payload === 'object') {
-    if (depth > 2) return '[object]'
+    if (depth > 3) return '[object]'
     const entries = Object.entries(payload as Record<string, unknown>)
     const sliced = entries.slice(0, MAX_OBJECT_ENTRIES)
     return sliced.reduce<Record<string, unknown>>((acc, [key, value]) => {
