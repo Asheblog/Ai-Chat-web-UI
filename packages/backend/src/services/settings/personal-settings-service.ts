@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import type { Request } from 'undici'
 import { prisma as defaultPrisma } from '../../db'
+import { AuthUtils } from '../../utils/auth'
 import {
   replaceProfileImage as defaultReplaceProfileImage,
   resolveProfileImageUrl as defaultResolveProfileImageUrl,
@@ -20,6 +21,7 @@ export interface PersonalSettingsPayload {
   theme?: 'light' | 'dark'
   preferred_model?: Nullable<PreferredModelInput>
   avatar?: Nullable<{ data: string; mime: string }>
+  username?: string
 }
 
 export interface PersonalSettingsResult {
@@ -31,6 +33,16 @@ export interface PersonalSettingsResult {
     rawId: string | null
   }
   avatar_url: string | null
+  username?: string
+}
+
+export class PersonalSettingsError extends Error {
+  statusCode: number
+
+  constructor(message: string, statusCode = 400) {
+    super(message)
+    this.statusCode = statusCode
+  }
 }
 
 export interface PersonalSettingsServiceDeps {
@@ -64,6 +76,7 @@ export class PersonalSettingsService {
     const record = await this.prisma.user.findUnique({
       where: { id: params.userId },
       select: {
+        username: true,
         preferredModelId: true,
         preferredConnectionId: true,
         preferredModelRawId: true,
@@ -80,6 +93,7 @@ export class PersonalSettingsService {
         rawId: record?.preferredModelRawId ?? null,
       },
       avatar_url: this.resolveProfileImageUrl(record?.avatarPath ?? null, baseUrl),
+      username: record?.username,
     }
   }
 
@@ -91,6 +105,8 @@ export class PersonalSettingsService {
     const currentProfile = await this.prisma.user.findUnique({
       where: { id: params.userId },
       select: {
+        id: true,
+        username: true,
         preferredModelId: true,
         preferredConnectionId: true,
         preferredModelRawId: true,
@@ -98,8 +114,13 @@ export class PersonalSettingsService {
       },
     })
 
+    if (!currentProfile) {
+      throw new PersonalSettingsError('User not found', 404)
+    }
+
     const updates: Record<string, any> = {}
     let avatarPathResult = currentProfile?.avatarPath ?? null
+    let updatedUsername: string | undefined
 
     if (Object.prototype.hasOwnProperty.call(params.payload, 'preferred_model')) {
       const pref = params.payload.preferred_model || null
@@ -108,9 +129,24 @@ export class PersonalSettingsService {
       updates.preferredModelRawId = pref?.rawId ?? null
     }
 
+    if (Object.prototype.hasOwnProperty.call(params.payload, 'username')) {
+      const normalized = params.payload.username?.trim() || ''
+      if (!AuthUtils.validateUsername(normalized)) {
+        throw new PersonalSettingsError('Username must be 3-20 characters using letters, numbers, or underscores')
+      }
+      if (normalized !== currentProfile.username) {
+        const existed = await this.prisma.user.findUnique({ where: { username: normalized }, select: { id: true } })
+        if (existed && existed.id !== params.userId) {
+          throw new PersonalSettingsError('Username already exists', 409)
+        }
+        updates.username = normalized
+        updatedUsername = normalized
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(params.payload, 'avatar')) {
       avatarPathResult = await this.replaceProfileImage(params.payload.avatar ?? null, {
-        currentPath: currentProfile?.avatarPath ?? null,
+        currentPath: currentProfile.avatarPath ?? null,
       })
       updates.avatarPath = avatarPathResult
     }
@@ -126,12 +162,12 @@ export class PersonalSettingsService {
         params.payload.context_token_limit ?? this.defaultContextLimit(),
       theme: params.payload.theme ?? 'light',
       preferred_model: {
-        modelId: updates.preferredModelId ?? currentProfile?.preferredModelId ?? null,
-        connectionId:
-          updates.preferredConnectionId ?? currentProfile?.preferredConnectionId ?? null,
-        rawId: updates.preferredModelRawId ?? currentProfile?.preferredModelRawId ?? null,
+        modelId: updates.preferredModelId ?? currentProfile.preferredModelId ?? null,
+        connectionId: updates.preferredConnectionId ?? currentProfile.preferredConnectionId ?? null,
+        rawId: updates.preferredModelRawId ?? currentProfile.preferredModelRawId ?? null,
       },
       avatar_url: this.resolveProfileImageUrl(avatarPathResult, baseUrl),
+      username: updatedUsername ?? currentProfile.username,
     }
   }
 }

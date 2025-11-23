@@ -1,5 +1,5 @@
 import type { Request } from 'undici'
-import { PersonalSettingsService } from './personal-settings-service'
+import { PersonalSettingsError, PersonalSettingsService } from './personal-settings-service'
 
 const buildRequest = (): Request => new Request('http://localhost')
 
@@ -38,6 +38,7 @@ describe('PersonalSettingsService', () => {
     const { prisma, service, determineProfileImageBaseUrl, resolveProfileImageUrl } =
       buildService()
     prisma.user.findUnique.mockResolvedValueOnce({
+      username: 'admin',
       preferredModelId: 'm1',
       preferredConnectionId: 2,
       preferredModelRawId: 'raw1',
@@ -57,11 +58,14 @@ describe('PersonalSettingsService', () => {
   it('updates preferred model and avatar when provided', async () => {
     const { prisma, service, replaceProfileImage } = buildService()
     prisma.user.findUnique.mockResolvedValueOnce({
+      id: 5,
+      username: 'old_admin',
       preferredModelId: null,
       preferredConnectionId: null,
       preferredModelRawId: null,
       avatarPath: '/avatar/old.png',
     })
+    prisma.user.findUnique.mockResolvedValueOnce(null)
     prisma.user.update.mockResolvedValueOnce({})
 
     const result = await service.updatePersonalSettings({
@@ -72,6 +76,7 @@ describe('PersonalSettingsService', () => {
         avatar: { data: 'base64', mime: 'image/png' },
         context_token_limit: 6000,
         theme: 'dark',
+        username: 'new_admin',
       },
     })
 
@@ -82,6 +87,7 @@ describe('PersonalSettingsService', () => {
         preferredConnectionId: 3,
         preferredModelRawId: 'raw2',
         avatarPath: '/avatar/new.png',
+        username: 'new_admin',
       },
     })
     expect(replaceProfileImage).toHaveBeenCalled()
@@ -89,11 +95,14 @@ describe('PersonalSettingsService', () => {
     expect(result.context_token_limit).toBe(6000)
     expect(result.theme).toBe('dark')
     expect(result.avatar_url).toContain('/avatar/new.png')
+    expect(result.username).toBe('new_admin')
   })
 
   it('skips update when no fields change', async () => {
     const { prisma, service } = buildService()
     prisma.user.findUnique.mockResolvedValueOnce({
+      id: 6,
+      username: 'existing',
       preferredModelId: 'm3',
       preferredConnectionId: 4,
       preferredModelRawId: 'raw4',
@@ -106,5 +115,26 @@ describe('PersonalSettingsService', () => {
     })
     expect(prisma.user.update).not.toHaveBeenCalled()
     expect(result.preferred_model.connectionId).toBe(4)
+  })
+
+  it('rejects duplicate usernames', async () => {
+    const { prisma, service } = buildService()
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: 7,
+      username: 'admin',
+      preferredModelId: null,
+      preferredConnectionId: null,
+      preferredModelRawId: null,
+      avatarPath: null,
+    })
+    prisma.user.findUnique.mockResolvedValueOnce({ id: 8 })
+
+    await expect(
+      service.updatePersonalSettings({
+        userId: 7,
+        request: buildRequest(),
+        payload: { username: 'taken_name' },
+      }),
+    ).rejects.toBeInstanceOf(PersonalSettingsError)
   })
 })

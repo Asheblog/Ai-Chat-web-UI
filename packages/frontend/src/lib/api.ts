@@ -851,6 +851,7 @@ class ApiClient {
     settings: {
       preferredModel?: { modelId: string; connectionId: number | null; rawId: string | null } | null
       avatar?: ImageUploadPayload | null
+      username?: string
     },
     signal?: AbortSignal,
   ) {
@@ -867,6 +868,9 @@ class ApiClient {
     }
     if (Object.prototype.hasOwnProperty.call(settings, 'avatar')) {
       payload.avatar = settings.avatar ?? null
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'username')) {
+      payload.username = settings.username
     }
     const response = await this.client.put<ApiResponse<any>>('/settings/personal', payload, { signal })
     return response.data?.data

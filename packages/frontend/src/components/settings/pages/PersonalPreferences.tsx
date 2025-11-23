@@ -5,12 +5,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { CardTitle, CardDescription } from "@/components/ui/card"
 import { useSettingsStore } from "@/store/settings-store"
-import { Settings2 } from "lucide-react"
+import { Settings2, UserPen } from "lucide-react"
 import { SettingRow } from "../components/setting-row"
 import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 import { apiClient } from "@/lib/api"
+import { Button } from "@/components/ui/button"
 
 export function PersonalPreferencesPage(){
   const { theme, setTheme, maxTokens, setMaxTokens, contextEnabled, setContextEnabled } = useSettingsStore()
@@ -18,10 +19,45 @@ export function PersonalPreferencesPage(){
   const { user, fetchActor } = useAuthStore((state) => ({ user: state.user, fetchActor: state.fetchActor }))
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl ?? null)
   const [avatarSaving, setAvatarSaving] = useState(false)
+  const [username, setUsername] = useState(user?.username ?? "")
+  const [usernameSaving, setUsernameSaving] = useState(false)
+  const [usernameError, setUsernameError] = useState<string | null>(null)
 
   useEffect(() => {
     setAvatarPreview(user?.avatarUrl ?? null)
   }, [user?.avatarUrl])
+
+  useEffect(() => {
+    setUsername(user?.username ?? "")
+  }, [user?.username])
+
+  const validateUsername = (value: string) => {
+    if (!value.trim()) return "用户名不能为空"
+    const pattern = /^[a-zA-Z0-9_]{3,20}$/
+    if (!pattern.test(value.trim())) return "用户名需为3-20位字母、数字或下划线"
+    return null
+  }
+
+  const handleUsernameSave = async () => {
+    if (!user || usernameSaving) return
+    const msg = validateUsername(username)
+    if (msg) {
+      setUsernameError(msg)
+      return
+    }
+    setUsernameSaving(true)
+    setUsernameError(null)
+    try {
+      await apiClient.updatePersonalSettings({ username: username.trim() })
+      await fetchActor()
+      toast({ title: '用户名已更新' })
+    } catch (error: any) {
+      const message = error?.response?.data?.error || error?.message || '更新用户名失败'
+      setUsernameError(message)
+    } finally {
+      setUsernameSaving(false)
+    }
+  }
 
   const handleAvatarUpload = async ({ data, mime, previewUrl }: AvatarUploadResult) => {
     if (!user || avatarSaving) return
@@ -90,6 +126,34 @@ export function PersonalPreferencesPage(){
             clearDisabled={!avatarPreview && !user?.avatarUrl}
             onError={(message) => toast({ title: '上传失败', description: message, variant: 'destructive' })}
           />
+        </SettingRow>
+
+        <SettingRow
+          title="用户名"
+          description="用于登录和展示，可修改默认管理员用户名"
+          align="start"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <Input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full sm:w-[240px]"
+              placeholder="请输入新的用户名"
+              disabled={!user}
+            />
+            <Button
+              type="button"
+              onClick={handleUsernameSave}
+              disabled={usernameSaving || !user}
+              className="sm:w-[150px]"
+            >
+              <UserPen className="w-4 h-4 mr-2" />
+              保存用户名
+            </Button>
+          </div>
+          {usernameError && (
+            <p className="mt-2 text-sm text-destructive">{usernameError}</p>
+          )}
         </SettingRow>
       </div>
 

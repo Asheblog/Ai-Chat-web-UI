@@ -183,6 +183,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
   theme: z.enum(['light', 'dark']).optional(),
   preferred_model: modelPreferenceSchema.optional(),
   avatar: z.union([imagePayloadSchema, z.null()]).optional(),
+  username: z.string().regex(/^[a-zA-Z0-9_]{3,20}$/).optional(),
 })), async (c) => {
   try {
     const user = c.get('user');
@@ -208,16 +209,19 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
         ...responseData,
         preferred_model: updated.preferred_model,
         avatar_url: updated.avatar_url,
+        username: updated.username,
       },
       message: 'Personal settings updated successfully',
     });
 
   } catch (error) {
     console.error('Update personal settings error:', error);
+    const status = (error as any)?.statusCode ?? 500
+    const message = (error as Error)?.message || 'Failed to update personal settings'
     return c.json<ApiResponse>({
       success: false,
-      error: 'Failed to update personal settings',
-    }, 500);
+      error: message,
+    }, status);
   }
 });
 
