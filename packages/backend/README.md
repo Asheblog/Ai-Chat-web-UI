@@ -20,7 +20,6 @@
 
 ### 🤖 模型管理
 - 个人模型配置
-- 系统模型配置 (管理员)
 - API Key 加密存储
 - 模型权限控制
 
@@ -100,7 +99,6 @@ npm run dev
 - `GET /api/models/:id` - 获取模型配置详情
 - `PUT /api/models/:id` - 更新模型配置
 - `DELETE /api/models/:id` - 删除模型配置
-- `POST /api/models/system` - 创建系统模型配置 (管理员)
 
 ### 会话管理
 

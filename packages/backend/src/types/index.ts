@@ -49,8 +49,6 @@ export interface JWTPayload {
   exp?: number;
 }
 
-// 旧版模型配置（系统模型）已废弃，聚合模型能力由 /api/catalog/models 提供
-
 export interface ChatSession {
   id: number;
   userId: number | null;

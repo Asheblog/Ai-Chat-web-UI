@@ -210,7 +210,6 @@ docker-compose logs -f
 #### 模型管理
 - `GET /api/models` - 获取模型列表
 - `POST /api/models` - 创建个人模型
-- `POST /api/models/system` - 创建系统模型 (管理员)
 
 #### 聊天功能
 - `GET /api/sessions` - 获取会话列表
