@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { CardTitle, CardDescription } from "@/components/ui/card"
 import { useSettingsStore } from "@/store/settings-store"
-import { Settings2, UserPen } from "lucide-react"
+import { Settings2, Save } from "lucide-react"
 import { SettingRow } from "../components/setting-row"
 import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
 import { useAuthStore } from "@/store/auth-store"
@@ -22,6 +22,7 @@ export function PersonalPreferencesPage(){
   const [username, setUsername] = useState(user?.username ?? "")
   const [usernameSaving, setUsernameSaving] = useState(false)
   const [usernameError, setUsernameError] = useState<string | null>(null)
+  const [preferencesSaving, setPreferencesSaving] = useState(false)
 
   useEffect(() => {
     setAvatarPreview(user?.avatarUrl ?? null)
@@ -38,24 +39,46 @@ export function PersonalPreferencesPage(){
     return null
   }
 
-  const handleUsernameSave = async () => {
-    if (!user || usernameSaving) return
-    const msg = validateUsername(username)
+  const handleUsernameSave = async (options?: { silent?: boolean }): Promise<boolean> => {
+    if (!user || usernameSaving) return false
+    const trimmed = username.trim()
+    if (trimmed === (user?.username || "")) {
+      setUsernameError(null)
+      return true
+    }
+    const msg = validateUsername(trimmed)
     if (msg) {
       setUsernameError(msg)
-      return
+      return false
     }
     setUsernameSaving(true)
     setUsernameError(null)
     try {
-      await apiClient.updatePersonalSettings({ username: username.trim() })
+      await apiClient.updatePersonalSettings({ username: trimmed })
       await fetchActor()
-      toast({ title: '用户名已更新' })
+      if (!options?.silent) {
+        toast({ title: '用户名已更新' })
+      }
+      return true
     } catch (error: any) {
       const message = error?.response?.data?.error || error?.message || '更新用户名失败'
       setUsernameError(message)
+      return false
     } finally {
       setUsernameSaving(false)
+    }
+  }
+
+  const handleSavePreferences = async () => {
+    if (!user || preferencesSaving) return
+    setPreferencesSaving(true)
+    try {
+      const usernameOk = await handleUsernameSave({ silent: true })
+      if (usernameOk) {
+        toast({ title: '偏好设置已保存' })
+      }
+    } finally {
+      setPreferencesSaving(false)
     }
   }
 
@@ -133,24 +156,20 @@ export function PersonalPreferencesPage(){
           description="用于登录和展示，可修改默认管理员用户名"
           align="start"
         >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <Input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full sm:w-[240px]"
-              placeholder="请输入新的用户名"
-              disabled={!user}
-            />
-            <Button
-              type="button"
-              onClick={handleUsernameSave}
-              disabled={usernameSaving || !user}
-              className="sm:w-[150px]"
-            >
-              <UserPen className="w-4 h-4 mr-2" />
-              保存用户名
-            </Button>
-          </div>
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onBlur={handleUsernameSave}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleUsernameSave()
+              }
+            }}
+            className="w-full sm:w-[240px]"
+            placeholder="请输入新的用户名"
+            disabled={!user || usernameSaving}
+          />
           {usernameError && (
             <p className="mt-2 text-sm text-destructive">{usernameError}</p>
           )}
@@ -216,6 +235,22 @@ export function PersonalPreferencesPage(){
         >
           <Switch checked={contextEnabled} onCheckedChange={(v)=>setContextEnabled(!!v)} />
         </SettingRow>
+      </div>
+
+      <div className="flex justify-end pt-4">
+        <Button
+          type="button"
+          onClick={handleSavePreferences}
+          disabled={!user || preferencesSaving || usernameSaving || avatarSaving}
+          className="w-full sm:w-auto"
+        >
+          {preferencesSaving ? '保存中...' : (
+            <>
+              <Save className="w-4 h-4 mr-2" />
+              保存偏好设置
+            </>
+          )}
+        </Button>
       </div>
     </div>
   )
