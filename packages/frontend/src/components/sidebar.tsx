@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Settings, Trash2 } from 'lucide-react'
+import { Github, Plus, Settings, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -29,6 +30,7 @@ import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
 import { sessionItemVariants, sessionListVariants } from '@/lib/animations'
+import { APP_VERSION, PROJECT_URL } from '@/lib/app-meta'
 
 const formatUsageLine = (usage?: UsageTotals) => {
   if (!usage) return ''
@@ -343,6 +345,28 @@ export function Sidebar() {
           </motion.div>
         </div>
       </ScrollArea>
+
+      <div className="px-4 pt-4 pb-5 border-t border-slate-200/80 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/40">
+        <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/60 bg-gradient-to-br from-white/90 to-slate-50/60 dark:from-slate-800/80 dark:to-slate-900/60 shadow-sm px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="font-mono text-[11px] leading-none px-2 py-1">
+                {APP_VERSION}
+              </Badge>
+              <span className="text-xs text-muted-foreground">当前版本</span>
+            </div>
+            <Link
+              href={PROJECT_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <Github className="h-4 w-4" />
+              <span>项目地址</span>
+            </Link>
+          </div>
+        </div>
+      </div>
 
     </div>
   )

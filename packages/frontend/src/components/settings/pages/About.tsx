@@ -2,8 +2,9 @@
 import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
+import { APP_VERSION } from "@/lib/app-meta"
 
-// 关于页面：展示版本信息与更新日志（v1.4.7）
+// 关于页面：展示版本信息与更新日志（版本号由 app-meta 统一维护）
 export function AboutPage(){
   return (
     <div className="space-y-6">
@@ -23,7 +24,7 @@ export function AboutPage(){
             <Package className="w-5 h-5 text-muted-foreground" />
             <CardTitle className="text-lg">版本</CardTitle>
           </div>
-          <Badge variant="secondary" className="font-mono">v1.4.7</Badge>
+          <Badge variant="secondary" className="font-mono">{APP_VERSION}</Badge>
         </Card>
 
         <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 px-4 py-4 sm:px-5 sm:py-5">
