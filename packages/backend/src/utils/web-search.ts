@@ -146,10 +146,12 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     data?.results,
     data?.hits,
     data?.list,
+    data?.webpages,
     data?.data?.data,
     data?.data?.results,
     data?.data?.hits,
     data?.data?.list,
+    data?.data?.webpages,
     data?.data?.items,
   ]
   const results = (candidateArrays.find((item) => Array.isArray(item)) as any[]) || []
