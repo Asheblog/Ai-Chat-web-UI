@@ -209,8 +209,17 @@ export interface SystemSettings {
   webSearchResultLimit?: number;
   webSearchDomainFilter?: string[];
   webSearchHasApiKey?: boolean;
+  webSearchHasApiKeyTavily?: boolean;
+  webSearchHasApiKeyBrave?: boolean;
+  webSearchHasApiKeyMetaso?: boolean;
+  webSearchScope?: string;
+  webSearchIncludeSummary?: boolean;
+  webSearchIncludeRaw?: boolean;
   assistantAvatarUrl?: string | null;
   webSearchApiKey?: string;
+  webSearchApiKeyTavily?: string;
+  webSearchApiKeyBrave?: string;
+  webSearchApiKeyMetaso?: string;
   taskTraceEnabled?: boolean;
   taskTraceDefaultOn?: boolean;
   taskTraceAdminOnly?: boolean;

@@ -131,7 +131,29 @@ export class SettingsService {
       web_search_default_engine: settingsObj.web_search_default_engine || process.env.WEB_SEARCH_DEFAULT_ENGINE || 'tavily',
       web_search_result_limit: this.parseIntInRange(settingsObj.web_search_result_limit, process.env.WEB_SEARCH_RESULT_LIMIT, 1, 10, 4),
       web_search_domain_filter: this.parseDomainFilter(settingsObj.web_search_domain_filter),
-      web_search_has_api_key: Boolean(settingsObj.web_search_api_key || process.env.WEB_SEARCH_API_KEY),
+      web_search_has_api_key_tavily: Boolean(
+        settingsObj.web_search_api_key_tavily ||
+          process.env.WEB_SEARCH_API_KEY_TAVILY ||
+          '',
+      ),
+      web_search_has_api_key_brave: Boolean(
+        settingsObj.web_search_api_key_brave ||
+          process.env.WEB_SEARCH_API_KEY_BRAVE ||
+          '',
+      ),
+      web_search_has_api_key_metaso: Boolean(
+        settingsObj.web_search_api_key_metaso ||
+          process.env.WEB_SEARCH_API_KEY_METASO ||
+          '',
+      ),
+      web_search_has_api_key: Boolean(
+        (settingsObj.web_search_api_key_tavily || process.env.WEB_SEARCH_API_KEY_TAVILY) ||
+        (settingsObj.web_search_api_key_brave || process.env.WEB_SEARCH_API_KEY_BRAVE) ||
+        (settingsObj.web_search_api_key_metaso || process.env.WEB_SEARCH_API_KEY_METASO),
+      ),
+      web_search_scope: settingsObj.web_search_scope || process.env.WEB_SEARCH_SCOPE || 'webpage',
+      web_search_include_summary: this.parseBoolean(settingsObj.web_search_include_summary, process.env.WEB_SEARCH_INCLUDE_SUMMARY || 'false'),
+      web_search_include_raw: this.parseBoolean(settingsObj.web_search_include_raw, process.env.WEB_SEARCH_INCLUDE_RAW || 'false'),
       task_trace_enabled: this.parseBoolean(settingsObj.task_trace_enabled, 'false'),
       task_trace_default_on: this.parseBoolean(settingsObj.task_trace_default_on, 'false'),
       task_trace_admin_only: !this.parseBoolean(settingsObj.task_trace_admin_only, 'false'),
@@ -164,7 +186,13 @@ export class SettingsService {
         web_search_default_engine: formatted.web_search_default_engine,
         web_search_result_limit: formatted.web_search_result_limit,
         web_search_domain_filter: formatted.web_search_domain_filter,
-        web_search_has_api_key: formatted.web_search_has_api_key,
+      web_search_has_api_key: formatted.web_search_has_api_key,
+      web_search_has_api_key_tavily: formatted.web_search_has_api_key_tavily,
+      web_search_has_api_key_brave: formatted.web_search_has_api_key_brave,
+      web_search_has_api_key_metaso: formatted.web_search_has_api_key_metaso,
+        web_search_scope: formatted.web_search_scope,
+        web_search_include_summary: formatted.web_search_include_summary,
+        web_search_include_raw: formatted.web_search_include_raw,
         assistant_avatar_url: formatted.assistant_avatar_url,
       }
     }
@@ -220,6 +248,8 @@ export class SettingsService {
       'reasoning_save_to_db',
       'ollama_think',
       'web_search_agent_enable',
+      'web_search_include_summary',
+      'web_search_include_raw',
       'task_trace_enabled',
       'task_trace_default_on',
       'task_trace_admin_only',
@@ -249,8 +279,11 @@ export class SettingsService {
       { key: 'openai_reasoning_effort', value: payload.openai_reasoning_effort },
       { key: 'site_base_url', value: payload.site_base_url },
       { key: 'web_search_default_engine', value: payload.web_search_default_engine },
-      { key: 'web_search_api_key', value: payload.web_search_api_key },
+      { key: 'web_search_api_key_tavily', value: payload.web_search_api_key_tavily },
+      { key: 'web_search_api_key_brave', value: payload.web_search_api_key_brave },
+      { key: 'web_search_api_key_metaso', value: payload.web_search_api_key_metaso },
       { key: 'web_search_domain_filter', value: Array.isArray(payload.web_search_domain_filter) ? JSON.stringify(payload.web_search_domain_filter) : undefined },
+      { key: 'web_search_scope', value: payload.web_search_scope },
       { key: 'task_trace_env', value: payload.task_trace_env },
     ]
     stringFields.forEach(({ key, value }) => {

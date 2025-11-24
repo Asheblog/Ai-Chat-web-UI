@@ -22,6 +22,8 @@ export interface ChatComposerPanelProps {
   selectedImages: ChatComposerImage[]
   thinkingEnabled: boolean
   webSearchEnabled: boolean
+  webSearchScope: string
+  showWebSearchScope: boolean
   canUseWebSearch: boolean
   isVisionEnabled: boolean
   traceEnabled: boolean
@@ -41,6 +43,7 @@ export interface ChatComposerPanelProps {
   onStop: () => void
   onToggleThinking: (value: boolean) => void
   onToggleWebSearch: (value: boolean) => void
+  onWebSearchScopeChange: (value: string) => void
   onToggleTrace: (value: boolean) => void
   onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
   fileInputRef: MutableRefObject<HTMLInputElement | null>
@@ -58,6 +61,8 @@ export function ChatComposerPanel({
   selectedImages,
   thinkingEnabled,
   webSearchEnabled,
+  webSearchScope,
+  showWebSearchScope,
   canUseWebSearch,
   isVisionEnabled,
   traceEnabled,
@@ -77,6 +82,7 @@ export function ChatComposerPanel({
   onStop,
   onToggleThinking,
   onToggleWebSearch,
+  onWebSearchScopeChange,
   onToggleTrace,
   onEffortChange,
   fileInputRef,
@@ -118,6 +124,9 @@ export function ChatComposerPanel({
         onToggleThinking={onToggleThinking}
         webSearchEnabled={webSearchEnabled}
         onToggleWebSearch={onToggleWebSearch}
+        webSearchScope={webSearchScope}
+        onWebSearchScopeChange={onWebSearchScopeChange}
+        showWebSearchScope={showWebSearchScope}
         pickImages={pickImages}
         canUseWebSearch={canUseWebSearch}
         isVisionEnabled={isVisionEnabled}
@@ -146,6 +155,9 @@ export function ChatComposerPanel({
         onToggleThinking={onToggleThinking}
         webSearchEnabled={webSearchEnabled}
         onToggleWebSearch={onToggleWebSearch}
+        webSearchScope={webSearchScope}
+        onWebSearchScopeChange={onWebSearchScopeChange}
+        showWebSearchScope={showWebSearchScope}
         canUseWebSearch={canUseWebSearch}
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}

@@ -51,10 +51,12 @@ export function useChatComposer() {
   const MAX_IMAGE_MB = 5
   const MAX_IMAGE_EDGE = 4096
   const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
+  const [webSearchScope, setWebSearchScope] = useState('webpage')
   const [traceEnabled, setTraceEnabled] = useState(false)
   const tracePreferenceRef = useRef<Record<number, boolean>>({})
   const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
+  const scopePreferenceKey = 'web_search_scope_preference'
   const setWebSearchEnabled = useCallback(
     (value: boolean) => {
       setWebSearchEnabledState(value)
@@ -142,6 +144,7 @@ export function useChatComposer() {
   }, [activeModel, currentSession])
 
   const canUseWebSearch = Boolean(systemSettings?.webSearchAgentEnable) && isWebSearchCapable
+  const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
   const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
 
   const foreignStreamLocked = Boolean(
@@ -165,6 +168,32 @@ export function useChatComposer() {
       setWebSearchEnabledState(desired)
     }
   }, [canUseWebSearch, storedWebSearchPreference, webSearchEnabled])
+
+  useEffect(() => {
+    if (!canUseWebSearch || !isMetasoEngine) {
+      setWebSearchScope('webpage')
+      return
+    }
+    const stored = (() => {
+      try {
+        return localStorage.getItem(scopePreferenceKey) || ''
+      } catch {
+        return ''
+      }
+    })()
+    const fromSetting = systemSettings?.webSearchScope || 'webpage'
+    const next = stored || fromSetting || 'webpage'
+    if (next && webSearchScope !== next) {
+      setWebSearchScope(next)
+    }
+    if (!stored && next) {
+      try {
+        localStorage.setItem(scopePreferenceKey, next)
+      } catch {
+        // ignore storage error
+      }
+    }
+  }, [canUseWebSearch, isMetasoEngine, systemSettings?.webSearchScope, webSearchScope, scopePreferenceKey])
 
   useEffect(() => {
     if (!canUseTrace) {
@@ -258,6 +287,9 @@ export function useChatComposer() {
           webSearchEnabled && canUseWebSearch
             ? {
                 web_search: true,
+                ...(isMetasoEngine ? { web_search_scope: webSearchScope } : {}),
+                ...(systemSettings?.webSearchIncludeSummary ? { web_search_include_summary: true } : {}),
+                ...(systemSettings?.webSearchIncludeRaw ? { web_search_include_raw: true } : {}),
               }
             : undefined,
         traceEnabled: canUseTrace ? traceEnabled : undefined,
@@ -291,6 +323,10 @@ export function useChatComposer() {
     toast,
     webSearchEnabled,
     canUseWebSearch,
+    webSearchScope,
+    isMetasoEngine,
+    systemSettings?.webSearchIncludeSummary,
+    systemSettings?.webSearchIncludeRaw,
     canUseTrace,
     traceEnabled,
   ])
@@ -304,6 +340,15 @@ export function useChatComposer() {
     tracePreferenceRef.current[currentSession.id] = value
     setTraceEnabled(value)
   }, [currentSession])
+
+  const handleWebSearchScopeChange = useCallback((next: string) => {
+    setWebSearchScope(next)
+    try {
+      localStorage.setItem(scopePreferenceKey, next)
+    } catch {
+      // ignore storage error
+    }
+  }, [scopePreferenceKey])
 
   const pickImages = useCallback(() => {
     if (!isVisionEnabled) {
@@ -406,6 +451,9 @@ export function useChatComposer() {
     webSearchEnabled,
     setWebSearchEnabled,
     canUseWebSearch,
+    webSearchScope,
+    setWebSearchScope: handleWebSearchScopeChange,
+    showWebSearchScope: canUseWebSearch && isMetasoEngine,
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,

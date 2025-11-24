@@ -280,6 +280,28 @@ export const registerChatStreamRoutes = (router: Hono) => {
         env: process.env.NODE_ENV,
       });
       const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
+      const sanitizeScope = (scope?: string) => {
+        if (!scope) return undefined;
+        const normalized = scope.trim().toLowerCase();
+        return ['webpage', 'document', 'paper', 'image', 'video', 'podcast'].includes(normalized)
+          ? normalized
+          : undefined;
+      };
+      if (requestedFeatures) {
+        if (typeof requestedFeatures.web_search_scope === 'string') {
+          agentWebSearchConfig.scope = sanitizeScope(requestedFeatures.web_search_scope);
+        }
+        if (typeof requestedFeatures.web_search_include_summary === 'boolean') {
+          agentWebSearchConfig.includeSummary = requestedFeatures.web_search_include_summary;
+        }
+        if (typeof requestedFeatures.web_search_include_raw === 'boolean') {
+          agentWebSearchConfig.includeRawContent = requestedFeatures.web_search_include_raw;
+        }
+        if (typeof requestedFeatures.web_search_size === 'number' && Number.isFinite(requestedFeatures.web_search_size)) {
+          const next = Math.max(1, Math.min(10, requestedFeatures.web_search_size));
+          agentWebSearchConfig.resultLimit = next;
+        }
+      }
       const assistantReplyHistoryLimit = (() => {
         const raw =
           sysMap.assistant_reply_history_limit ||

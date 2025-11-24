@@ -13,9 +13,13 @@ export interface WebSearchOptions {
   limit: number
   domains?: string[]
   endpoint?: string
+  scope?: string
+  includeSummary?: boolean
+  includeRawContent?: boolean
 }
 
 const DEFAULT_LIMIT = 4
+const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'image', 'video', 'podcast'])
 
 const clampLimit = (value?: number) => {
   if (!value || Number.isNaN(value)) return DEFAULT_LIMIT
@@ -102,6 +106,61 @@ const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<We
   }))
 }
 
+const sanitizeMetasoScope = (scope?: string) => {
+  if (!scope) return 'webpage'
+  const normalized = scope.trim().toLowerCase()
+  return METASO_SCOPE_WHITELIST.has(normalized) ? normalized : 'webpage'
+}
+
+const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
+  if (!opts.apiKey) {
+    throw new Error('Metaso API key is not configured')
+  }
+  const endpoint = opts.endpoint || 'https://metaso.cn/api/v1/search'
+  const payload: Record<string, unknown> = {
+    q: query,
+    scope: sanitizeMetasoScope(opts.scope),
+    includeSummary: Boolean(opts.includeSummary),
+    includeRawContent: Boolean(opts.includeRawContent),
+    size: clampLimit(opts.limit),
+    conciseSnippet: false,
+    stream: false,
+    output: 'json',
+  }
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${opts.apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Metaso search failed: ${response.status} ${text}`)
+  }
+  const data = await response.json()
+  const candidateArrays = [
+    data?.data,
+    data?.results,
+    data?.hits,
+    data?.list,
+    data?.data?.data,
+    data?.data?.results,
+    data?.data?.hits,
+    data?.data?.list,
+    data?.data?.items,
+  ]
+  const results = (candidateArrays.find((item) => Array.isArray(item)) as any[]) || []
+  return results.map((item: any) => ({
+    title: item?.title || item?.name || item?.url || 'Untitled',
+    url: item?.url || item?.link || '',
+    snippet: item?.summary || item?.description || item?.snippet || '',
+    content: item?.content || item?.summary || item?.description,
+  }))
+}
+
 export const runWebSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
   const engine = (opts.engine || '').toLowerCase()
   log.debug('web search request', { engine, query })
@@ -110,6 +169,8 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
       return runTavilySearch(query, opts)
     case 'brave':
       return runBraveSearch(query, opts)
+    case 'metaso':
+      return runMetasoSearch(query, opts)
     default:
       throw new Error(`Unsupported web search engine: ${engine || 'unknown'}`)
   }

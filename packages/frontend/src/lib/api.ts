@@ -686,6 +686,17 @@ class ApiClient {
       ? (settingsRes.data.data?.web_search_domain_filter as string[])
       : []
     const webSearchHasApiKey = Boolean(settingsRes.data.data?.web_search_has_api_key ?? false)
+    const webSearchHasApiKeyTavily = Boolean(settingsRes.data.data?.web_search_has_api_key_tavily ?? webSearchHasApiKey)
+    const webSearchHasApiKeyBrave = Boolean(settingsRes.data.data?.web_search_has_api_key_brave ?? webSearchHasApiKey)
+    const webSearchHasApiKeyMetaso = Boolean(settingsRes.data.data?.web_search_has_api_key_metaso ?? webSearchHasApiKey)
+    const aggregatedHasKey =
+      webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKey
+    const webSearchScope =
+      typeof settingsRes.data.data?.web_search_scope === 'string'
+        ? settingsRes.data.data?.web_search_scope
+        : 'webpage'
+    const webSearchIncludeSummary = Boolean(settingsRes.data.data?.web_search_include_summary ?? false)
+    const webSearchIncludeRaw = Boolean(settingsRes.data.data?.web_search_include_raw ?? false)
     const assistantAvatarUrl = (() => {
       const raw = settingsRes.data.data?.assistant_avatar_url
       if (typeof raw === 'string' && raw.trim().length > 0) return raw
@@ -758,15 +769,21 @@ class ApiClient {
         modelAccessDefaultAnonymous,
         modelAccessDefaultUser,
         webSearchAgentEnable,
-        webSearchDefaultEngine,
-        webSearchResultLimit,
-        webSearchDomainFilter,
-        webSearchHasApiKey,
-        assistantAvatarUrl,
-        taskTraceEnabled,
-        taskTraceDefaultOn,
-        taskTraceAdminOnly,
-        taskTraceEnv,
+      webSearchDefaultEngine,
+      webSearchResultLimit,
+      webSearchDomainFilter,
+      webSearchHasApiKey: aggregatedHasKey,
+      webSearchHasApiKeyTavily,
+      webSearchHasApiKeyBrave,
+      webSearchHasApiKeyMetaso,
+       webSearchScope,
+       webSearchIncludeSummary,
+       webSearchIncludeRaw,
+       assistantAvatarUrl,
+      taskTraceEnabled,
+      taskTraceDefaultOn,
+      taskTraceAdminOnly,
+      taskTraceEnv,
         taskTraceRetentionDays,
         taskTraceMaxEvents,
         taskTraceIdleTimeoutMs,
@@ -828,6 +845,15 @@ class ApiClient {
     if (typeof rest.webSearchDefaultEngine === 'string') payload.web_search_default_engine = rest.webSearchDefaultEngine
     if (typeof rest.webSearchResultLimit === 'number') payload.web_search_result_limit = rest.webSearchResultLimit
     if (Array.isArray(rest.webSearchDomainFilter)) payload.web_search_domain_filter = rest.webSearchDomainFilter
+    if (typeof rest.webSearchScope === 'string') payload.web_search_scope = rest.webSearchScope
+    if (typeof rest.webSearchIncludeSummary === 'boolean') payload.web_search_include_summary = rest.webSearchIncludeSummary
+    if (typeof rest.webSearchIncludeRaw === 'boolean') payload.web_search_include_raw = rest.webSearchIncludeRaw
+    if (typeof rest.webSearchApiKeyTavily === 'string') payload.web_search_api_key_tavily = rest.webSearchApiKeyTavily
+    if (typeof rest.webSearchApiKeyBrave === 'string') payload.web_search_api_key_brave = rest.webSearchApiKeyBrave
+    if (typeof rest.webSearchApiKeyMetaso === 'string') payload.web_search_api_key_metaso = rest.webSearchApiKeyMetaso
+    if (typeof rest.webSearchApiKeyTavily === 'string') payload.web_search_api_key_tavily = rest.webSearchApiKeyTavily
+    if (typeof rest.webSearchApiKeyBrave === 'string') payload.web_search_api_key_brave = rest.webSearchApiKeyBrave
+    if (typeof rest.webSearchApiKeyMetaso === 'string') payload.web_search_api_key_metaso = rest.webSearchApiKeyMetaso
     if (typeof (rest as any).webSearchApiKey === 'string') payload.web_search_api_key = (rest as any).webSearchApiKey
     if (typeof rest.taskTraceEnabled === 'boolean') payload.task_trace_enabled = rest.taskTraceEnabled
     if (typeof rest.taskTraceDefaultOn === 'boolean') payload.task_trace_default_on = rest.taskTraceDefaultOn

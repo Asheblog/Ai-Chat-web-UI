@@ -32,6 +32,12 @@ export const sendMessageSchema = z.object({
   features: z
     .object({
       web_search: z.boolean().optional(),
+      web_search_scope: z
+        .enum(['webpage', 'document', 'paper', 'image', 'video', 'podcast'])
+        .optional(),
+      web_search_include_summary: z.boolean().optional(),
+      web_search_include_raw: z.boolean().optional(),
+      web_search_size: z.number().int().min(1).max(10).optional(),
     })
     .optional(),
   traceEnabled: z.boolean().optional(),

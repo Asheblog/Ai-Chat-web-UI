@@ -520,6 +520,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                   limit: args?.num_results || agentConfig.resultLimit,
                   domains: agentConfig.domains,
                   endpoint: agentConfig.endpoint,
+                  scope: agentConfig.scope,
+                  includeSummary: agentConfig.includeSummary,
+                  includeRawContent: agentConfig.includeRawContent,
                 });
                 emitReasoning(`获得 ${hits.length} 条结果，准备综合。`, {
                   ...reasoningMetaBase,
@@ -744,6 +747,47 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           type: 'error',
           error: error?.message || 'Web search agent failed',
         });
+        const persistErrorStatus = async () => {
+          const payload = {
+            content: aiResponseContent,
+            streamCursor: aiResponseContent.length,
+            streamStatus: 'error' as const,
+            streamError: traceErrorMessage,
+          };
+          try {
+            if (activeAssistantMessageId) {
+              await prisma.message.update({
+                where: { id: activeAssistantMessageId },
+                data: payload,
+              });
+              return;
+            }
+          } catch (persistError) {
+            const isMissing =
+              persistError instanceof Prisma.PrismaClientKnownRequestError &&
+              persistError.code === 'P2025';
+            if (!isMissing) {
+              log.warn('Persist agent error status failed', {
+                sessionId,
+                error: persistError instanceof Error ? persistError.message : persistError,
+              });
+              return;
+            }
+          }
+          try {
+            await upsertAssistantMessageByClientId({
+              sessionId,
+              clientMessageId: assistantPlaceholderClientMessageId,
+              data: payload,
+            });
+          } catch (persistError) {
+            log.warn('Upsert agent error status failed', {
+              sessionId,
+              error: persistError instanceof Error ? persistError.message : persistError,
+            });
+          }
+        };
+        await persistErrorStatus();
         const agentError =
           error instanceof Error ? error : new Error(error?.message || 'Web search agent failed');
         (agentError as any).handled = 'agent_error';
@@ -826,7 +870,11 @@ export const buildAgentWebSearchConfig = (sysMap: Record<string, string>): Agent
     process.env.WEB_SEARCH_DEFAULT_ENGINE ||
     'tavily'
   ).toLowerCase();
-  const apiKey = sysMap.web_search_api_key || process.env.WEB_SEARCH_API_KEY || '';
+  const engineUpper = engine.toUpperCase();
+  const apiKey =
+    sysMap[`web_search_api_key_${engine}`] ||
+    process.env[`WEB_SEARCH_API_KEY_${engineUpper}`] ||
+    '';
   const limitRaw = sysMap.web_search_result_limit ?? process.env.WEB_SEARCH_RESULT_LIMIT ?? '4';
   const parsedLimit = Number.parseInt(String(limitRaw), 10);
   const resultLimit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(10, parsedLimit)) : 4;
@@ -834,6 +882,19 @@ export const buildAgentWebSearchConfig = (sysMap: Record<string, string>): Agent
   const envDomains = parseDomainListSetting(process.env.WEB_SEARCH_DOMAIN_FILTER);
   const domainList = sysDomains.length > 0 ? sysDomains : envDomains;
   const endpoint = sysMap.web_search_endpoint || process.env.WEB_SEARCH_ENDPOINT;
+  const scopeRaw = (sysMap.web_search_scope || process.env.WEB_SEARCH_SCOPE || '').trim().toLowerCase();
+  const scope =
+    scopeRaw && ['webpage', 'document', 'paper', 'image', 'video', 'podcast'].includes(scopeRaw)
+      ? scopeRaw
+      : undefined;
+  const includeSummary = parseBooleanSetting(
+    sysMap.web_search_include_summary ?? process.env.WEB_SEARCH_INCLUDE_SUMMARY,
+    false,
+  );
+  const includeRawContent = parseBooleanSetting(
+    sysMap.web_search_include_raw ?? process.env.WEB_SEARCH_INCLUDE_RAW,
+    false,
+  );
   return {
     enabled,
     engine,
@@ -841,6 +902,9 @@ export const buildAgentWebSearchConfig = (sysMap: Record<string, string>): Agent
     resultLimit,
     domains: domainList,
     endpoint,
+    scope,
+    includeSummary,
+    includeRawContent,
   };
 };
 import { randomUUID } from 'node:crypto';
@@ -872,6 +936,9 @@ export interface AgentWebSearchConfig {
   resultLimit: number;
   domains: string[];
   endpoint?: string;
+  scope?: string;
+  includeSummary?: boolean;
+  includeRawContent?: boolean;
 }
 
 export type AgentResponseParams = {

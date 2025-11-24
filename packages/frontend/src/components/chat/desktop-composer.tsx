@@ -32,6 +32,9 @@ interface DesktopComposerProps {
   onToggleThinking: (value: boolean) => void
   webSearchEnabled: boolean
   onToggleWebSearch: (value: boolean) => void
+  webSearchScope: string
+  onWebSearchScopeChange: (value: string) => void
+  showWebSearchScope: boolean
   canUseWebSearch: boolean
   traceEnabled: boolean
   canUseTrace: boolean
@@ -65,6 +68,9 @@ export function DesktopComposer({
   onToggleThinking,
   webSearchEnabled,
   onToggleWebSearch,
+  webSearchScope,
+  onWebSearchScopeChange,
+  showWebSearchScope,
   canUseWebSearch,
   traceEnabled,
   canUseTrace,
@@ -108,6 +114,24 @@ export function DesktopComposer({
                   disabled={!canUseWebSearch}
                 />
               </div>
+              {showWebSearchScope ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">搜索范围（Metaso）</span>
+                  <Select value={webSearchScope} onValueChange={(value) => onWebSearchScopeChange(value)} disabled={!canUseWebSearch}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="选择范围" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="webpage">网页</SelectItem>
+                      <SelectItem value="document">文档</SelectItem>
+                      <SelectItem value="paper">论文</SelectItem>
+                      <SelectItem value="image">图片</SelectItem>
+                      <SelectItem value="video">视频</SelectItem>
+                      <SelectItem value="podcast">播客</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               {canUseTrace ? (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">

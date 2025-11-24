@@ -7,6 +7,7 @@ import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations'
 
@@ -28,6 +29,9 @@ interface MobileComposerProps {
   onToggleThinking: (value: boolean) => void
   webSearchEnabled: boolean
   onToggleWebSearch: (value: boolean) => void
+  webSearchScope: string
+  onWebSearchScopeChange: (value: string) => void
+  showWebSearchScope: boolean
   pickImages: () => void
   canUseWebSearch: boolean
   isVisionEnabled: boolean
@@ -55,6 +59,9 @@ export function MobileComposer({
   onToggleThinking,
   webSearchEnabled,
   onToggleWebSearch,
+  webSearchScope,
+  onWebSearchScopeChange,
+  showWebSearchScope,
   pickImages,
   canUseWebSearch,
   isVisionEnabled,
@@ -158,6 +165,22 @@ export function MobileComposer({
               </span>
               <span className="text-xs font-medium">联网</span>
             </Button>
+
+            {showWebSearchScope ? (
+              <Select value={webSearchScope} onValueChange={onWebSearchScopeChange} disabled={!canUseWebSearch || isStreaming}>
+                <SelectTrigger className="h-10 w-[120px] rounded-full text-xs">
+                  <SelectValue placeholder="范围" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="webpage">网页</SelectItem>
+                  <SelectItem value="document">文档</SelectItem>
+                  <SelectItem value="paper">论文</SelectItem>
+                  <SelectItem value="image">图片</SelectItem>
+                  <SelectItem value="video">视频</SelectItem>
+                  <SelectItem value="podcast">播客</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
 
             {canUseTrace ? (
               <Button
