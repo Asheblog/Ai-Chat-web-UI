@@ -53,44 +53,56 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">31bf9a4</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4c63266</span>
               <span className="text-muted-foreground leading-relaxed">
-                前端引入 Vitest 测试框架，组件与业务逻辑具备单测支撑，可在本地与 CI 更快回归。
+                接入 Metaso 搜索引擎，支持网页/文档/论文/图片/视频/播客范围选择，可配置摘要与原文返回，并按引擎独立管理 API Key。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cf9f714</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d6a46e0</span>
               <span className="text-muted-foreground leading-relaxed">
-                助手头像存储改用 replaceProfileImage，替换时自动覆盖旧资源，防止残留无效文件。
+                上线模型访问策略框架，匿名与登录用户可设置允许/拒绝/继承三态，默认策略可被逐模型覆盖，目录解析与 API 访问遵循新策略。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cdc06e1</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e3967d8</span>
               <span className="text-muted-foreground leading-relaxed">
-                会话 API 支持依赖注入，目录结构与服务解耦，便于后续扩展持久层与鉴权策略。
+                模型访问控制迁移到独立管理页，新增导航入口与批量策略更新，原总览与模型页面的分散控制下线（破坏性调整）。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5b4bb5c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5244f39</span>
               <span className="text-muted-foreground leading-relaxed">
-                对聊天完成路由进行依赖注入改造，便于替换模型服务或日志实现，提升可测试性。
+                模型访问列表支持分页（80/页）与批量操作进度提示，成功/失败计数分离，并提醒跨页批量覆盖范围。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cd2b8c7</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8f25c39</span>
               <span className="text-muted-foreground leading-relaxed">
-                配置管理集中到 app config，统一加载运行所需配置并简化各模块的依赖输入。
+                模型管理列表分页并保留跨页选择，批量切换模型能力开关时展示加载与进度，避免筛选变更造成残留选择。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5f9d50b</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8578b5d</span>
               <span className="text-muted-foreground leading-relaxed">
-                串流推送新增安全入队函数，确保 SSE 数据传输的排队与派发稳定可靠。
+                个人偏好页支持管理员修改用户名，统一保存按钮提交全部偏好，用户名自动去空格校验并在保存期间禁用控件。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">24d06aa</span>
+              <span className="text-muted-foreground leading-relaxed">
+                聊天流新增供应商 SSE 监控，记录首包/内容/推理/用量事件及样本日志，加入首包超时回调提升异常可观测性。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">90c4049</span>
+              <span className="text-muted-foreground leading-relaxed">
+                聊天链路将旧流量日志替换为 Task Trace 结构化追踪，统一记录请求/响应/错误并提供清洗截断能力。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-21 推送变更摘要
+            以上为 2025-11-24 推送变更摘要
           </p>
         </Card>
       </div>
