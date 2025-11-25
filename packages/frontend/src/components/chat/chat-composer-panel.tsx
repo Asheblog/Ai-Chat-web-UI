@@ -7,6 +7,8 @@ import { DesktopComposer } from './desktop-composer'
 import { ExpandEditorDialog } from './expand-editor-dialog'
 import { CustomRequestEditor } from './custom-request-editor'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Separator } from '@/components/ui/separator'
 
 interface ImageLimitConfig {
   maxCount: number
@@ -124,17 +126,14 @@ export function ChatComposerPanel({
 
   return (
     <div className="sticky bottom-0 w-full">
-      <div className="px-3 pb-3 md:px-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">高级请求定制</p>
-            <p className="text-xs text-muted-foreground">可为本次消息添加自定义请求体和请求头。</p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => setAdvancedOpen((v) => !v)}>
-            {advancedOpen ? '收起' : '展开'}
-          </Button>
-        </div>
-        {advancedOpen ? (
+      <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>高级请求定制</DialogTitle>
+            <DialogDescription>
+              为本次消息添加自定义请求体和请求头。核心字段（model/messages/stream）已锁定，敏感头会被忽略。
+            </DialogDescription>
+          </DialogHeader>
           <CustomRequestEditor
             customHeaders={customHeaders}
             onAddHeader={onAddCustomHeader}
@@ -144,8 +143,14 @@ export function ChatComposerPanel({
             onCustomBodyChange={onCustomBodyChange}
             customBodyError={customBodyError}
           />
-        ) : null}
-      </div>
+          <Separator />
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setAdvancedOpen(false)}>
+              完成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <MobileComposer
         input={input}
@@ -175,6 +180,7 @@ export function ChatComposerPanel({
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}
         onToggleTrace={onToggleTrace}
+        onOpenAdvanced={() => setAdvancedOpen(true)}
       />
 
       <DesktopComposer
@@ -207,6 +213,7 @@ export function ChatComposerPanel({
         onEffortChange={onEffortChange}
         showExpand={showExpand}
         onExpandOpen={openExpand}
+        onOpenAdvanced={() => setAdvancedOpen(true)}
         onSend={onSend}
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}

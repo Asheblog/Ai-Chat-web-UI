@@ -48,12 +48,14 @@ export function CustomRequestEditor({
                   onChange={(e) => onHeaderChange(idx, 'name', e.target.value)}
                   placeholder="标头名称"
                   className="h-10 flex-1"
+                  data-advanced-input="true"
                 />
                 <Input
                   value={item.value}
                   onChange={(e) => onHeaderChange(idx, 'value', e.target.value)}
                   placeholder="标头值"
                   className="h-10 flex-1"
+                  data-advanced-input="true"
                 />
                 <Button
                   variant="ghost"
@@ -81,6 +83,7 @@ export function CustomRequestEditor({
           onChange={(e) => onCustomBodyChange(e.target.value)}
           placeholder='例如：{"temperature":0.3,"top_p":0.8}'
           className="min-h-[120px] resize-y"
+          data-advanced-input="true"
         />
         {customBodyError ? (
           <p className="text-xs text-destructive">{customBodyError}</p>
