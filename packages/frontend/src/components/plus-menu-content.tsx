@@ -22,6 +22,7 @@ interface PlusMenuContentProps {
   webSearchDisabledNote?: string
   contentClassName?: string
   bodyClassName?: string
+  onOpenAdvanced?: () => void
 }
 
 export function PlusMenuContent({
@@ -41,6 +42,7 @@ export function PlusMenuContent({
   webSearchDisabledNote,
   contentClassName,
   bodyClassName,
+  onOpenAdvanced,
 }: PlusMenuContentProps) {
   return (
     <DropdownMenuContent align="start" className={cn('w-64', contentClassName)}>
@@ -113,6 +115,17 @@ export function PlusMenuContent({
 
         {webSearchDisabledNote ? (
           <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
+        ) : null}
+
+        {onOpenAdvanced ? (
+          <button
+            type="button"
+            className="w-full rounded-xl border border-dashed border-border/70 bg-muted/40 px-3 py-2 text-left hover:bg-muted"
+            onClick={onOpenAdvanced}
+          >
+            <div className="text-xs font-medium text-foreground">高级请求定制</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">编辑自定义请求体/请求头</div>
+          </button>
         ) : null}
       </div>
     </DropdownMenuContent>

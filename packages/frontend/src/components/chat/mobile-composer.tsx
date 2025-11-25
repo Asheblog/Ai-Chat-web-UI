@@ -39,6 +39,7 @@ interface MobileComposerProps {
   traceEnabled: boolean
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
+  onOpenAdvanced: () => void
 }
 
 export function MobileComposer({
@@ -69,6 +70,7 @@ export function MobileComposer({
   traceEnabled,
   canUseTrace,
   onToggleTrace,
+  onOpenAdvanced,
 }: MobileComposerProps) {
   const disabled = sendLocked || (!input.trim() && selectedImages.length === 0)
 
@@ -206,6 +208,16 @@ export function MobileComposer({
                 <span className="text-xs font-medium">追踪</span>
               </Button>
             ) : null}
+
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
+              onClick={onOpenAdvanced}
+              aria-label="高级请求定制"
+            >
+              高级
+            </Button>
 
             <TooltipProvider>
               <Tooltip>

@@ -134,6 +134,10 @@ export function useChatComposer() {
 
   useEffect(() => {
     if (!textareaRef.current || isStreaming) return
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    const advancedEditing = active instanceof HTMLElement && active.dataset?.advancedInput === 'true'
+    if (advancedEditing) return
+    if (active && active !== document.body && active !== textareaRef.current) return
     textareaRef.current.focus()
   }, [isStreaming])
 

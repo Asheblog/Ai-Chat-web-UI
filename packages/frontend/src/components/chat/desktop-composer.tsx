@@ -42,6 +42,7 @@ interface DesktopComposerProps {
   onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
   showExpand: boolean
   onExpandOpen: () => void
+  onOpenAdvanced: () => void
   onSend: () => void
   onStop: () => void
   desktopSendDisabled: boolean
@@ -78,6 +79,7 @@ export function DesktopComposer({
   onEffortChange,
   showExpand,
   onExpandOpen,
+  onOpenAdvanced,
   onSend,
   onStop,
   desktopSendDisabled,
@@ -115,6 +117,7 @@ export function DesktopComposer({
               onEffortChange={(value) => onEffortChange(value as typeof effort)}
               contentClassName="rounded-2xl"
               bodyClassName="text-sm"
+              onOpenAdvanced={onOpenAdvanced}
             />
           </DropdownMenu>
 

@@ -7,8 +7,6 @@ import { DesktopComposer } from './desktop-composer'
 import { ExpandEditorDialog } from './expand-editor-dialog'
 import { CustomRequestEditor } from './custom-request-editor'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Separator } from '@/components/ui/separator'
 
 interface ImageLimitConfig {
   maxCount: number
@@ -126,31 +124,48 @@ export function ChatComposerPanel({
 
   return (
     <div className="sticky bottom-0 w-full">
-      <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>高级请求定制</DialogTitle>
-            <DialogDescription>
-              为本次消息添加自定义请求体和请求头。核心字段（model/messages/stream）已锁定，敏感头会被忽略。
-            </DialogDescription>
-          </DialogHeader>
-          <CustomRequestEditor
-            customHeaders={customHeaders}
-            onAddHeader={onAddCustomHeader}
-            onHeaderChange={onCustomHeaderChange}
-            onRemoveHeader={onRemoveCustomHeader}
-            customBody={customBody}
-            onCustomBodyChange={onCustomBodyChange}
-            customBodyError={customBodyError}
-          />
-          <Separator />
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setAdvancedOpen(false)}>
-              完成
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {advancedOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8"
+          role="dialog"
+          aria-modal="true"
+          aria-label="高级请求定制"
+          onClick={() => setAdvancedOpen(false)}
+        >
+          <div
+            className="w-full max-w-5xl rounded-2xl bg-background shadow-2xl border border-border/70 max-h-full overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+              <div>
+                <p className="text-lg font-semibold leading-none">高级请求定制</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  为本次消息添加自定义请求体和请求头。核心字段（model/messages/stream）已锁定，敏感头会被忽略。
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setAdvancedOpen(false)} aria-label="关闭">
+                ✕
+              </Button>
+            </div>
+            <div className="px-5 py-4">
+              <CustomRequestEditor
+                customHeaders={customHeaders}
+                onAddHeader={onAddCustomHeader}
+                onHeaderChange={onCustomHeaderChange}
+                onRemoveHeader={onRemoveCustomHeader}
+                customBody={customBody}
+                onCustomBodyChange={onCustomBodyChange}
+                customBodyError={customBodyError}
+              />
+            </div>
+            <div className="flex justify-end border-t border-border/60 px-5 py-3">
+              <Button variant="secondary" onClick={() => setAdvancedOpen(false)}>
+                完成
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <MobileComposer
         input={input}

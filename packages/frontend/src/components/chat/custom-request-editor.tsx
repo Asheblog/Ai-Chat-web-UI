@@ -40,7 +40,7 @@ export function CustomRequestEditor({
           <div className="space-y-2">
             {customHeaders.map((item, idx) => (
               <div
-                key={`${idx}-${item.name}-${item.value}`}
+                key={`header-${idx}`}
                 className="flex flex-col gap-2 md:flex-row md:items-center"
               >
                 <Input
