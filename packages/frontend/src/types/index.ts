@@ -173,6 +173,8 @@ export interface SystemSettings {
   allowRegistration: boolean;
   brandText?: string;
   systemModels: any[]; // 已废弃：保留字段占位，改用聚合模型
+  assistantAvatarUpload?: { data: string; mime: string } | null;
+  assistantAvatarRemove?: boolean;
   // 流式/稳定性相关（系统级）
   sseHeartbeatIntervalMs?: number;
   providerMaxIdleMs?: number;

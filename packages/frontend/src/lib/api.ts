@@ -309,6 +309,8 @@ class ApiClient {
       traceEnabled?: boolean
       replyToMessageId?: number | string
       replyToClientMessageId?: string
+      customBody?: Record<string, any>
+      customHeaders?: Array<{ name: string; value: string }>
     }
   ): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
@@ -319,6 +321,14 @@ class ApiClient {
         content,
         ...(images ? { images } : {}),
         ...rest,
+      }
+      if (rest?.customBody) {
+        payload.custom_body = rest.customBody
+        delete payload.customBody
+      }
+      if (Array.isArray(rest?.customHeaders)) {
+        payload.custom_headers = rest.customHeaders
+        delete payload.customHeaders
       }
       if (typeof replyToMessageId === 'number') {
         payload.replyToMessageId = replyToMessageId
@@ -521,8 +531,20 @@ class ApiClient {
   }
 
   // 非流式接口：失败退避策略同上
-  async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string }): Promise<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>> {
-    const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>>('/chat/completion', { sessionId, content, images, ...(options||{}) })
+  async chatCompletion(sessionId: number, content: string, images?: Array<{ data: string; mime: string }>, options?: { reasoningEnabled?: boolean; reasoningEffort?: 'low'|'medium'|'high'; ollamaThink?: boolean; saveReasoning?: boolean; contextEnabled?: boolean; clientMessageId?: string; customBody?: Record<string, any>; customHeaders?: Array<{ name: string; value: string }> }): Promise<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>> {
+    const buildPayload = () => {
+      const payload: Record<string, any> = { sessionId, content, images, ...(options || {}) }
+      if (options?.customBody) {
+        payload.custom_body = options.customBody
+        delete payload.customBody
+      }
+      if (Array.isArray(options?.customHeaders)) {
+        payload.custom_headers = options.customHeaders
+        delete payload.customHeaders
+      }
+      return payload
+    }
+    const doOnce = () => this.client.post<ApiResponse<{ content: string; usage: any; quota?: ActorQuota }>>('/chat/completion', buildPayload())
     try {
       let res = await doOnce()
       if (res.status === 429) {
@@ -598,58 +620,59 @@ class ApiClient {
       }
       return undefined
     }
-    const allowRegistration = !!settingsRes.data.data?.registration_enabled
-    const brandText = settingsRes.data.data?.brand_text || 'AIChat'
+    const raw: any = settingsRes.data.data || {}
+    const allowRegistration = !!raw.registration_enabled
+    const brandText = raw.brand_text || 'AIChat'
     const systemModels: any[] = []
-    const sseHeartbeatIntervalMs = Number(settingsRes.data.data?.sse_heartbeat_interval_ms ?? 15000)
-    const providerMaxIdleMs = Number(settingsRes.data.data?.provider_max_idle_ms ?? 60000)
-    const providerTimeoutMs = Number(settingsRes.data.data?.provider_timeout_ms ?? 300000)
-    const providerInitialGraceMs = Number(settingsRes.data.data?.provider_initial_grace_ms ?? 120000)
-    const providerReasoningIdleMs = Number(settingsRes.data.data?.provider_reasoning_idle_ms ?? 300000)
-    const reasoningKeepaliveIntervalMs = Number(settingsRes.data.data?.reasoning_keepalive_interval_ms ?? 0)
-    const usageEmit = (settingsRes.data.data?.usage_emit ?? true) as boolean
-    const usageProviderOnly = (settingsRes.data.data?.usage_provider_only ?? false) as boolean
-    const reasoningEnabled = (settingsRes.data.data?.reasoning_enabled ?? true) as boolean
-    const reasoningDefaultExpand = (settingsRes.data.data?.reasoning_default_expand ?? false) as boolean
-    const reasoningSaveToDb = (settingsRes.data.data?.reasoning_save_to_db ?? true) as boolean
-    const reasoningTagsMode = (settingsRes.data.data?.reasoning_tags_mode ?? 'default') as any
-    const reasoningCustomTags = (settingsRes.data.data?.reasoning_custom_tags ?? '') as string
-    const streamDeltaChunkSize = Number(settingsRes.data.data?.stream_delta_chunk_size ?? 1)
+    const sseHeartbeatIntervalMs = Number(raw.sse_heartbeat_interval_ms ?? 15000)
+    const providerMaxIdleMs = Number(raw.provider_max_idle_ms ?? 60000)
+    const providerTimeoutMs = Number(raw.provider_timeout_ms ?? 300000)
+    const providerInitialGraceMs = Number(raw.provider_initial_grace_ms ?? 120000)
+    const providerReasoningIdleMs = Number(raw.provider_reasoning_idle_ms ?? 300000)
+    const reasoningKeepaliveIntervalMs = Number(raw.reasoning_keepalive_interval_ms ?? 0)
+    const usageEmit = (raw.usage_emit ?? true) as boolean
+    const usageProviderOnly = (raw.usage_provider_only ?? false) as boolean
+    const reasoningEnabled = (raw.reasoning_enabled ?? true) as boolean
+    const reasoningDefaultExpand = (raw.reasoning_default_expand ?? false) as boolean
+    const reasoningSaveToDb = (raw.reasoning_save_to_db ?? true) as boolean
+    const reasoningTagsMode = (raw.reasoning_tags_mode ?? 'default') as any
+    const reasoningCustomTags = (raw.reasoning_custom_tags ?? '') as string
+    const streamDeltaChunkSize = Number(raw.stream_delta_chunk_size ?? 1)
     const streamDeltaFlushIntervalMs = (() => {
-      const parsed = parseOptionalInt(settingsRes.data.data?.stream_delta_flush_interval_ms)
+      const parsed = parseOptionalInt(raw.stream_delta_flush_interval_ms)
       return typeof parsed === 'number' ? Math.max(0, parsed) : undefined
     })()
     const streamReasoningFlushIntervalMs = (() => {
-      const parsed = parseOptionalInt(settingsRes.data.data?.stream_reasoning_flush_interval_ms)
+      const parsed = parseOptionalInt(raw.stream_reasoning_flush_interval_ms)
       return typeof parsed === 'number' ? Math.max(0, parsed) : undefined
     })()
     const streamKeepaliveIntervalMs = (() => {
-      const parsed = parseOptionalInt(settingsRes.data.data?.stream_keepalive_interval_ms)
+      const parsed = parseOptionalInt(raw.stream_keepalive_interval_ms)
       return typeof parsed === 'number' ? Math.max(0, parsed) : undefined
     })()
-    const openaiReasoningEffort = (settingsRes.data.data?.openai_reasoning_effort ?? '') as any
+    const openaiReasoningEffort = (raw.openai_reasoning_effort ?? '') as any
     const reasoningMaxOutputTokensDefault = (() => {
-      const parsed = parseOptionalInt(settingsRes.data.data?.reasoning_max_output_tokens_default as any)
+      const parsed = parseOptionalInt(raw.reasoning_max_output_tokens_default as any)
       if (typeof parsed === 'number' && parsed > 0) {
         return Math.min(256000, parsed)
       }
       return undefined
     })()
-    const ollamaThink = Boolean(settingsRes.data.data?.ollama_think ?? false)
+    const ollamaThink = Boolean(raw.ollama_think ?? false)
     const chatImageRetentionDays = (() => {
-      const raw = settingsRes.data.data?.chat_image_retention_days
-      if (typeof raw === 'number') return raw
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        const parsed = Number.parseInt(raw, 10)
+      const v = raw.chat_image_retention_days
+      if (typeof v === 'number') return v
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
         if (Number.isFinite(parsed) && parsed >= 0) return parsed
       }
       return 30
     })()
     const anonymousRetentionDays = (() => {
-      const raw = settingsRes.data.data?.anonymous_retention_days
-      if (typeof raw === 'number') return Math.max(0, Math.min(15, raw))
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        const parsed = Number.parseInt(raw, 10)
+      const v = raw.anonymous_retention_days
+      if (typeof v === 'number') return Math.max(0, Math.min(15, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
         if (Number.isFinite(parsed)) {
           return Math.max(0, Math.min(15, parsed))
         }
@@ -657,80 +680,80 @@ class ApiClient {
       return 15
     })()
     const anonymousDailyQuota = (() => {
-      const raw = settingsRes.data.data?.anonymous_daily_quota
-      if (typeof raw === 'number') return Math.max(0, raw)
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        const parsed = Number.parseInt(raw, 10)
+      const v = raw.anonymous_daily_quota
+      if (typeof v === 'number') return Math.max(0, v)
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
         if (Number.isFinite(parsed)) return Math.max(0, parsed)
       }
       return 20
     })()
     const defaultUserDailyQuota = (() => {
-      const raw = settingsRes.data.data?.default_user_daily_quota
-      if (typeof raw === 'number') return Math.max(0, raw)
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        const parsed = Number.parseInt(raw, 10)
+      const v = raw.default_user_daily_quota
+      if (typeof v === 'number') return Math.max(0, v)
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
         if (Number.isFinite(parsed)) return Math.max(0, parsed)
       }
       return 200
     })()
-    const modelAccessDefaultAnonymous =
-      settingsRes.data.data?.model_access_default_anonymous === 'allow' ? 'allow' : 'deny'
-    const modelAccessDefaultUser =
-      settingsRes.data.data?.model_access_default_user === 'deny' ? 'deny' : 'allow'
-    const siteBaseUrl = typeof settingsRes.data.data?.site_base_url === 'string' ? settingsRes.data.data?.site_base_url : ''
-    const webSearchAgentEnable = Boolean(settingsRes.data.data?.web_search_agent_enable ?? false)
-    const webSearchDefaultEngine = settingsRes.data.data?.web_search_default_engine || 'tavily'
-    const webSearchResultLimit = Number(settingsRes.data.data?.web_search_result_limit ?? 4)
-    const webSearchDomainFilter = Array.isArray(settingsRes.data.data?.web_search_domain_filter)
-      ? (settingsRes.data.data?.web_search_domain_filter as string[])
+    const modelAccessDefaultAnonymous: 'allow' | 'deny' =
+      raw.model_access_default_anonymous === 'allow' ? 'allow' : 'deny'
+    const modelAccessDefaultUser: 'allow' | 'deny' =
+      raw.model_access_default_user === 'deny' ? 'deny' : 'allow'
+    const siteBaseUrl = typeof raw.site_base_url === 'string' ? raw.site_base_url : ''
+    const webSearchAgentEnable = Boolean(raw.web_search_agent_enable ?? false)
+    const webSearchDefaultEngine = raw.web_search_default_engine || 'tavily'
+    const webSearchResultLimit = Number(raw.web_search_result_limit ?? 4)
+    const webSearchDomainFilter = Array.isArray(raw.web_search_domain_filter)
+      ? (raw.web_search_domain_filter as string[])
       : []
-    const webSearchHasApiKey = Boolean(settingsRes.data.data?.web_search_has_api_key ?? false)
-    const webSearchHasApiKeyTavily = Boolean(settingsRes.data.data?.web_search_has_api_key_tavily ?? webSearchHasApiKey)
-    const webSearchHasApiKeyBrave = Boolean(settingsRes.data.data?.web_search_has_api_key_brave ?? webSearchHasApiKey)
-    const webSearchHasApiKeyMetaso = Boolean(settingsRes.data.data?.web_search_has_api_key_metaso ?? webSearchHasApiKey)
+    const webSearchHasApiKey = Boolean(raw.web_search_has_api_key ?? false)
+    const webSearchHasApiKeyTavily = Boolean(raw.web_search_has_api_key_tavily ?? webSearchHasApiKey)
+    const webSearchHasApiKeyBrave = Boolean(raw.web_search_has_api_key_brave ?? webSearchHasApiKey)
+    const webSearchHasApiKeyMetaso = Boolean(raw.web_search_has_api_key_metaso ?? webSearchHasApiKey)
     const aggregatedHasKey =
       webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKey
     const webSearchScope =
-      typeof settingsRes.data.data?.web_search_scope === 'string'
-        ? settingsRes.data.data?.web_search_scope
+      typeof raw.web_search_scope === 'string'
+        ? raw.web_search_scope
         : 'webpage'
-    const webSearchIncludeSummary = Boolean(settingsRes.data.data?.web_search_include_summary ?? false)
-    const webSearchIncludeRaw = Boolean(settingsRes.data.data?.web_search_include_raw ?? false)
+    const webSearchIncludeSummary = Boolean(raw.web_search_include_summary ?? false)
+    const webSearchIncludeRaw = Boolean(raw.web_search_include_raw ?? false)
     const assistantAvatarUrl = (() => {
-      const raw = settingsRes.data.data?.assistant_avatar_url
-      if (typeof raw === 'string' && raw.trim().length > 0) return raw
-      if (raw === null) return null
+      const value = raw.assistant_avatar_url
+      if (typeof value === 'string' && value.trim().length > 0) return value
+      if (value === null) return null
       return null
     })()
-    const taskTraceEnabled = Boolean(settingsRes.data.data?.task_trace_enabled ?? false)
-    const taskTraceDefaultOn = Boolean(settingsRes.data.data?.task_trace_default_on ?? false)
-    const taskTraceAdminOnly = (settingsRes.data.data?.task_trace_admin_only ?? true) as boolean
-    const rawEnv = (settingsRes.data.data?.task_trace_env || '').toLowerCase()
+    const taskTraceEnabled = Boolean(raw.task_trace_enabled ?? false)
+    const taskTraceDefaultOn = Boolean(raw.task_trace_default_on ?? false)
+    const taskTraceAdminOnly = (raw.task_trace_admin_only ?? true) as boolean
+    const rawEnv = (raw.task_trace_env || '').toLowerCase()
     const taskTraceEnv: 'dev' | 'prod' | 'both' = rawEnv === 'prod' || rawEnv === 'both' ? (rawEnv as 'prod' | 'both') : 'dev'
     const taskTraceRetentionDays = (() => {
-      const raw = settingsRes.data.data?.task_trace_retention_days
-      if (typeof raw === 'number') return Math.max(1, Math.min(365, raw))
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        const parsed = Number.parseInt(raw, 10)
+      const v = raw.task_trace_retention_days
+      if (typeof v === 'number') return Math.max(1, Math.min(365, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
         if (Number.isFinite(parsed)) return Math.max(1, Math.min(365, parsed))
       }
       return 7
     })()
     const taskTraceMaxEvents = (() => {
-      const raw = settingsRes.data.data?.task_trace_max_events
-      if (typeof raw === 'number') return Math.max(100, Math.min(200000, raw))
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        const parsed = Number.parseInt(raw, 10)
+      const v = raw.task_trace_max_events
+      if (typeof v === 'number') return Math.max(100, Math.min(200000, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
         if (Number.isFinite(parsed)) return Math.max(100, Math.min(200000, parsed))
       }
       return 2000
     })()
     const taskTraceIdleTimeoutMs = (() => {
-      const raw = settingsRes.data.data?.task_trace_idle_timeout_ms
-      if (typeof raw === 'number') return Math.max(1000, Math.min(600000, raw))
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        const parsed = Number.parseInt(raw, 10)
+      const v = raw.task_trace_idle_timeout_ms
+      if (typeof v === 'number') return Math.max(1000, Math.min(600000, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
         if (Number.isFinite(parsed)) return Math.max(1000, Math.min(600000, parsed))
       }
       return 30000
@@ -761,7 +784,7 @@ class ApiClient {
         reasoningMaxOutputTokensDefault,
         ollamaThink,
         chatImageRetentionDays,
-        assistantReplyHistoryLimit: Number(settingsRes.data.data?.assistant_reply_history_limit ?? 5),
+        assistantReplyHistoryLimit: Number(raw.assistant_reply_history_limit ?? 5),
         siteBaseUrl,
         anonymousRetentionDays,
         anonymousDailyQuota,
@@ -787,7 +810,7 @@ class ApiClient {
         taskTraceRetentionDays,
         taskTraceMaxEvents,
         taskTraceIdleTimeoutMs,
-      },
+      } as any,
     }
   }
 

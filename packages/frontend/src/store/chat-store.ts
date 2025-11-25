@@ -59,6 +59,27 @@ interface StreamCompletionSnapshot {
 const STREAM_SNAPSHOT_STORAGE_KEY = 'aichat:stream-completions'
 const STREAM_SNAPSHOT_TTL_MS = 2 * 60 * 1000
 
+type StreamSendOptions = {
+  reasoningEnabled?: boolean
+  reasoningEffort?: 'low' | 'medium' | 'high'
+  ollamaThink?: boolean
+  saveReasoning?: boolean
+  features?: {
+    web_search?: boolean
+    web_search_scope?: string
+    web_search_include_summary?: boolean
+    web_search_include_raw?: boolean
+    web_search_size?: number
+  }
+  replyToMessageId?: number | string
+  replyToClientMessageId?: string
+  traceEnabled?: boolean
+  contextEnabled?: boolean
+  clientMessageId?: string
+  customBody?: Record<string, any>
+  customHeaders?: Array<{ name: string; value: string }>
+}
+
 const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
   if (typeof window === 'undefined') return []
   try {
@@ -502,14 +523,7 @@ interface ChatStore extends ChatState {
     sessionId: number,
     content: string,
     images?: Array<{ data: string; mime: string }>,
-    options?: {
-      reasoningEnabled?: boolean;
-      reasoningEffort?: 'low' | 'medium' | 'high';
-      ollamaThink?: boolean;
-      saveReasoning?: boolean;
-      features?: { web_search?: boolean };
-      replyToMessageId?: number;
-    }
+    options?: StreamSendOptions
   ) => Promise<void>
   stopStreaming: () => void
   addMessage: (message: Message) => void
@@ -620,9 +634,12 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         }
         const key = messageKey(meta.id)
         const prevBody = ensureBody(nextBodies[key], meta.id)
-        const contentChanged = snapshot.content && snapshot.content !== prevBody.content
-        const reasoningChanged =
-          snapshot.reasoning && snapshot.reasoning !== (prevBody.reasoning ?? '')
+        const contentChanged = Boolean(
+          snapshot.content && snapshot.content !== prevBody.content,
+        )
+        const reasoningChanged = Boolean(
+          snapshot.reasoning && snapshot.reasoning !== (prevBody.reasoning ?? ''),
+        )
 
         nextBodies[key] = {
           id: prevBody.id,

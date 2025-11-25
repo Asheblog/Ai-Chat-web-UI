@@ -5,6 +5,8 @@ import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { MobileComposer } from './mobile-composer'
 import { DesktopComposer } from './desktop-composer'
 import { ExpandEditorDialog } from './expand-editor-dialog'
+import { CustomRequestEditor } from './custom-request-editor'
+import { Button } from '@/components/ui/button'
 
 interface ImageLimitConfig {
   maxCount: number
@@ -50,6 +52,13 @@ export interface ChatComposerPanelProps {
   fileInputRef: MutableRefObject<HTMLInputElement | null>
   onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
   imageLimits: ImageLimitConfig
+  customHeaders: Array<{ name: string; value: string }>
+  onAddCustomHeader: () => void
+  onCustomHeaderChange: (index: number, field: 'name' | 'value', value: string) => void
+  onRemoveCustomHeader: (index: number) => void
+  customBody: string
+  onCustomBodyChange: (value: string) => void
+  customBodyError?: string | null
 }
 
 export function ChatComposerPanel({
@@ -89,9 +98,17 @@ export function ChatComposerPanel({
   fileInputRef,
   onFilesSelected,
   imageLimits,
+  customHeaders,
+  onAddCustomHeader,
+  onCustomHeaderChange,
+  onRemoveCustomHeader,
+  customBody,
+  onCustomBodyChange,
+  customBodyError,
 }: ChatComposerPanelProps) {
   const [expandOpen, setExpandOpen] = useState(false)
   const [expandDraft, setExpandDraft] = useState('')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const openExpand = () => {
     setExpandDraft(input)
@@ -107,6 +124,29 @@ export function ChatComposerPanel({
 
   return (
     <div className="sticky bottom-0 w-full">
+      <div className="px-3 pb-3 md:px-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">高级请求定制</p>
+            <p className="text-xs text-muted-foreground">可为本次消息添加自定义请求体和请求头。</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setAdvancedOpen((v) => !v)}>
+            {advancedOpen ? '收起' : '展开'}
+          </Button>
+        </div>
+        {advancedOpen ? (
+          <CustomRequestEditor
+            customHeaders={customHeaders}
+            onAddHeader={onAddCustomHeader}
+            onHeaderChange={onCustomHeaderChange}
+            onRemoveHeader={onRemoveCustomHeader}
+            customBody={customBody}
+            onCustomBodyChange={onCustomBodyChange}
+            customBodyError={customBodyError}
+          />
+        ) : null}
+      </div>
+
       <MobileComposer
         input={input}
         textareaRef={textareaRef}

@@ -9,6 +9,18 @@ import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 
+const FORBIDDEN_HEADER_NAMES = new Set([
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+  'host',
+  'connection',
+  'transfer-encoding',
+  'content-length',
+  'accept-encoding',
+])
+
 export interface ChatComposerImage {
   dataUrl: string
   mime: string
@@ -26,6 +38,9 @@ export function useChatComposer() {
   const [effort, setEffort] = useState<'low' | 'medium' | 'high' | 'unset'>('unset')
   const [ollamaThink, setOllamaThink] = useState<boolean>(false)
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
+  const [customBodyInput, setCustomBodyInput] = useState<string>('')
+  const [customBodyError, setCustomBodyError] = useState<string | null>(null)
+  const [customHeaders, setCustomHeaders] = useState<Array<{ name: string; value: string }>>([])
 
   const {
     currentSession,
@@ -150,6 +165,28 @@ export function useChatComposer() {
   const canUseWebSearch = Boolean(systemSettings?.webSearchAgentEnable) && isWebSearchCapable
   const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
   const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
+  const addCustomHeader = useCallback(() => {
+    if (customHeaders.length >= 10) {
+      toast({
+        title: '已达到上限',
+        description: '最多添加 10 个自定义请求头',
+        variant: 'destructive',
+      })
+      return
+    }
+    setCustomHeaders((prev) => [...prev, { name: '', value: '' }])
+  }, [customHeaders.length, toast])
+  const updateCustomHeader = useCallback(
+    (index: number, field: 'name' | 'value', value: string) => {
+      setCustomHeaders((prev) =>
+        prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+      )
+    },
+    [],
+  )
+  const removeCustomHeader = useCallback((index: number) => {
+    setCustomHeaders((prev) => prev.filter((_, i) => i !== index))
+  }, [])
 
   const foreignStreamLocked = Boolean(
     activeStreamSessionId != null &&
@@ -282,6 +319,59 @@ export function useChatComposer() {
       if (prevSelectedImages.length > 0) {
         setSelectedImages([])
       }
+      let parsedCustomBody: Record<string, any> | undefined
+      if (customBodyInput.trim()) {
+        try {
+          const parsed = JSON.parse(customBodyInput)
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('自定义请求体必须是 JSON 对象')
+          }
+          parsedCustomBody = parsed
+          setCustomBodyError(null)
+        } catch (err: any) {
+          const message = err instanceof Error ? err.message : '自定义请求体解析失败'
+          setCustomBodyError(message)
+          toast({ title: '发送失败', description: message, variant: 'destructive' })
+          return
+        }
+      } else {
+        setCustomBodyError(null)
+      }
+      const sanitizedHeaders: Array<{ name: string; value: string }> = []
+      if (customHeaders.length > 0) {
+        for (const item of customHeaders) {
+          const name = (item?.name || '').trim()
+          const value = (item?.value || '').trim()
+          if (!name && !value) continue
+          if (!name) {
+            toast({ title: '请求头无效', description: '请输入请求头名称', variant: 'destructive' })
+            return
+          }
+          if (name.length > 64) {
+            toast({ title: '请求头过长', description: '名称需 ≤ 64 字符', variant: 'destructive' })
+            return
+          }
+          if (value.length > 2048) {
+            toast({ title: '请求头值过长', description: '值需 ≤ 2048 字符', variant: 'destructive' })
+            return
+          }
+          const lower = name.toLowerCase()
+          if (FORBIDDEN_HEADER_NAMES.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-')) {
+            toast({
+              title: '请求头被拒绝',
+              description: '敏感或被保护的请求头无法覆盖，请更换名称',
+              variant: 'destructive',
+            })
+            return
+          }
+          const existingIdx = sanitizedHeaders.findIndex((h) => h.name.toLowerCase() === lower)
+          if (existingIdx >= 0) {
+            sanitizedHeaders.splice(existingIdx, 1)
+          }
+          if (!value) continue
+          sanitizedHeaders.push({ name, value })
+        }
+      }
       const options = {
         reasoningEnabled: thinkingEnabled,
         reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
@@ -297,6 +387,8 @@ export function useChatComposer() {
               }
             : undefined,
         traceEnabled: canUseTrace ? traceEnabled : undefined,
+        customBody: parsedCustomBody,
+        customHeaders: sanitizedHeaders.length ? sanitizedHeaders : undefined,
       }
       await streamMessage(currentSession.id, message, imagesPayload, options)
       setNoSaveThisRound(false)
@@ -333,6 +425,8 @@ export function useChatComposer() {
     systemSettings?.webSearchIncludeRaw,
     canUseTrace,
     traceEnabled,
+    customBodyInput,
+    customHeaders,
   ])
 
   const handleStop = useCallback(() => {
@@ -432,6 +526,9 @@ export function useChatComposer() {
     effort,
     ollamaThink,
     noSaveThisRound,
+    customBodyInput,
+    customBodyError,
+    customHeaders,
     messageMetas,
     messageBodies,
     messageRenderCache,
@@ -454,6 +551,12 @@ export function useChatComposer() {
     setEffort,
     setOllamaThink,
     setNoSaveThisRound,
+    setCustomBodyInput,
+    setCustomBodyError,
+    addCustomHeader,
+    updateCustomHeader,
+    removeCustomHeader,
+    setCustomHeaders,
     setSelectedImages,
     handleSend,
     handleStop,
@@ -473,6 +576,5 @@ export function useChatComposer() {
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,
-    assistantVariantSelections,
   }
 }

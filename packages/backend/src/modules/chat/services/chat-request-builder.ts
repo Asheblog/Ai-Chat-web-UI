@@ -65,6 +65,18 @@ export interface ChatRequestBuilderDeps {
 }
 
 export class ChatRequestBuilder {
+  private protectedBodyKeys = new Set(['model', 'messages', 'stream'])
+  private forbiddenHeaderNames = new Set([
+    'authorization',
+    'proxy-authorization',
+    'cookie',
+    'set-cookie',
+    'host',
+    'connection',
+    'transfer-encoding',
+    'content-length',
+    'accept-encoding',
+  ])
   private prisma: PrismaClient
   private tokenizer: Pick<typeof Tokenizer, 'truncateMessages' | 'countConversationTokens'>
   private resolveContextLimit: typeof defaultResolveContextLimit
@@ -118,7 +130,7 @@ export class ChatRequestBuilder {
       params.images ?? [],
     )
 
-    const baseRequestBody: any = {
+    let baseRequestBody: any = {
       model: params.session.modelRawId,
       messages: messagesPayload,
       stream: params.mode === 'stream',
@@ -133,6 +145,8 @@ export class ChatRequestBuilder {
     })
 
     this.applyReasoningOptions(baseRequestBody, reasoning)
+    const customBodyResult = this.applyCustomBody(baseRequestBody, params.payload?.custom_body)
+    baseRequestBody = customBodyResult.mergedBody
 
     const providerRequest = await this.buildProviderRequest({
       session: params.session,
@@ -140,6 +154,7 @@ export class ChatRequestBuilder {
       messagesPayload,
       systemSettings,
       mode: params.mode,
+      customHeaders: params.payload?.custom_headers,
     })
 
     return {
@@ -308,6 +323,7 @@ export class ChatRequestBuilder {
     messagesPayload: any[]
     systemSettings: Record<string, string>
     mode: 'stream' | 'completion'
+    customHeaders?: Array<{ name: string; value: string }>
   }) {
     const provider = params.session.connection.provider as ProviderType
     const baseUrl = params.session.connection.baseUrl.replace(/\/$/, '')
@@ -323,9 +339,10 @@ export class ChatRequestBuilder {
       decryptedKey,
       extraHeaders,
     )
+    const mergedHeaders = this.mergeCustomHeaders(providerHeaders, extraHeaders, params.customHeaders)
 
     const authHeader: Record<string, string> = {}
-    for (const [key, value] of Object.entries(providerHeaders)) {
+    for (const [key, value] of Object.entries(mergedHeaders)) {
       const lower = key.toLowerCase()
       if (lower === 'content-type') {
         continue
@@ -364,12 +381,85 @@ export class ChatRequestBuilder {
       providerLabel: provider,
       providerHost: this.safeResolveHost(baseUrl),
       url,
-      headers: providerHeaders,
+      headers: mergedHeaders,
       authHeader,
       extraHeaders,
       body,
       timeoutMs,
     }
+  }
+
+  private applyCustomBody(
+    base: Record<string, any>,
+    custom?: Record<string, any>,
+  ): { mergedBody: Record<string, any>; blockedKeys: string[] } {
+    if (!custom || typeof custom !== 'object' || Array.isArray(custom)) {
+      return { mergedBody: base, blockedKeys: [] }
+    }
+    const blocked: string[] = []
+    const mergeObject = (
+      target: Record<string, any>,
+      source: Record<string, any>,
+      path: string,
+    ) => {
+      for (const [key, value] of Object.entries(source)) {
+        const nextPath = path ? `${path}.${key}` : key
+        if (this.protectedBodyKeys.has(key)) {
+          blocked.push(nextPath)
+          continue
+        }
+        if (
+          value &&
+          typeof value === 'object' &&
+          !Array.isArray(value) &&
+          typeof target[key] === 'object' &&
+          target[key] !== null &&
+          !Array.isArray(target[key])
+        ) {
+          target[key] = mergeObject({ ...(target[key] as Record<string, any>) }, value, nextPath)
+        } else {
+          target[key] = value
+        }
+      }
+      return target
+    }
+
+    return {
+      mergedBody: mergeObject({ ...base }, custom, ''),
+      blockedKeys: blocked,
+    }
+  }
+
+  private mergeCustomHeaders(
+    providerHeaders: Record<string, string>,
+    extraHeaders: Record<string, string>,
+    customHeaders?: Array<{ name: string; value: string }>,
+  ): Record<string, string> {
+    if (!customHeaders || customHeaders.length === 0) {
+      return providerHeaders
+    }
+    const merged: Record<string, string> = { ...providerHeaders }
+    for (const header of customHeaders) {
+      const name = (header?.name || '').trim()
+      const value = (header?.value || '').trim()
+      if (!name || !value) {
+        continue
+      }
+      const lower = name.toLowerCase()
+      if (this.forbiddenHeaderNames.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-')) {
+        continue
+      }
+      const headerExists = Object.keys(extraHeaders).some((k) => k.toLowerCase() === lower)
+      if (headerExists) {
+        continue
+      }
+      const mergedHasSame = Object.keys(merged).some((k) => k.toLowerCase() === lower)
+      if (mergedHasSame) {
+        continue
+      }
+      merged[name] = value
+    }
+    return merged
   }
 
   private convertMessagesForOllama(messagesPayload: any[]) {

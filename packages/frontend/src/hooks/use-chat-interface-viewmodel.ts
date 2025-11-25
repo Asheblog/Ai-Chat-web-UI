@@ -54,6 +54,17 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     assistantVariantSelections,
     sendLocked,
     sendLockedReason,
+    customBodyInput,
+    customBodyError,
+    customHeaders,
+    setCustomBodyInput,
+    setCustomBodyError,
+    addCustomHeader,
+    updateCustomHeader,
+    removeCustomHeader,
+    traceEnabled,
+    canUseTrace,
+    onToggleTrace,
   } = useChatComposer()
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
@@ -122,6 +133,9 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     onCompositionEnd: () => setIsComposing(false),
     onSend: handleSend,
     onStop: handleStop,
+    traceEnabled,
+    canUseTrace,
+    onToggleTrace,
     onToggleThinking: sessionControls.toggleReasoning,
     onToggleWebSearch: sessionControls.toggleWebSearch,
     onWebSearchScopeChange: setWebSearchScope,
@@ -129,6 +143,16 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     fileInputRef,
     onFilesSelected,
     imageLimits,
+    customHeaders,
+    onAddCustomHeader: addCustomHeader,
+    onCustomHeaderChange: updateCustomHeader,
+    onRemoveCustomHeader: removeCustomHeader,
+    customBody: customBodyInput,
+    onCustomBodyChange: (value) => {
+      setCustomBodyError(null)
+      setCustomBodyInput(value)
+    },
+    customBodyError,
   }
 
   return {

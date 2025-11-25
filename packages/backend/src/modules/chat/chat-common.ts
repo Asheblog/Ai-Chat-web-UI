@@ -40,6 +40,22 @@ export const sendMessageSchema = z.object({
       web_search_size: z.number().int().min(1).max(10).optional(),
     })
     .optional(),
+  custom_body: z.record(z.any()).optional(),
+  custom_headers: z
+    .array(
+      z.object({
+        name: z
+          .string()
+          .transform((v) => v.trim())
+          .refine((v) => v.length > 0 && v.length <= 64, { message: 'Header name must be 1-64 chars' }),
+        value: z
+          .string()
+          .transform((v) => v.trim())
+          .refine((v) => v.length <= 2048, { message: 'Header value too long' }),
+      }),
+    )
+    .max(10)
+    .optional(),
   traceEnabled: z.boolean().optional(),
 }).refine((value) => {
   const hasContent = typeof value.content === 'string' && value.content.trim().length > 0

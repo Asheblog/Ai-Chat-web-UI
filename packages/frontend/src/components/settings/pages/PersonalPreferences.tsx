@@ -159,7 +159,7 @@ export function PersonalPreferencesPage(){
           <Input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            onBlur={handleUsernameSave}
+            onBlur={() => handleUsernameSave()}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
