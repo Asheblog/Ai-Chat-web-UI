@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  // 需要对工作区包做一次转译，以便在浏览器端服用最新 TS 语法
   transpilePackages: ['@aichat/shared'],
   // 暂时忽略类型错误，以保证生产构建顺利产出（后续可开启修复类型）
   typescript: {

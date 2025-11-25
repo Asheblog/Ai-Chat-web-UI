@@ -5,6 +5,8 @@ const config = {
   testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/**/__tests__/**/*.test.ts'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^@aichat/shared$': '<rootDir>/../shared/src/index.ts',
+    '^@aichat/shared/(.*)$': '<rootDir>/../shared/src/$1.ts',
   },
   extensionsToTreatAsEsm: ['.ts'],
   transform: {

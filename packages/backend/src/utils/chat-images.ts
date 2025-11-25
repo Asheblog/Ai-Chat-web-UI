@@ -3,6 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { Prisma } from '@prisma/client'
+import sharp from 'sharp'
+import { DEFAULT_CHAT_IMAGE_LIMITS, type ChatImageLimitConfig } from '@aichat/shared/image-limits'
 import { prisma } from '../db'
 import {
   CHAT_IMAGE_STORAGE_ROOT,
@@ -12,6 +14,71 @@ import {
 } from '../config/storage'
 
 type IncomingImage = { data: string; mime: string }
+const BYTES_PER_MB = 1024 * 1024
+
+const validationError = (message: string): Error => {
+  const err = new Error(message)
+  err.name = 'ValidationError'
+  return err
+}
+
+export async function validateChatImages(
+  images: IncomingImage[] | undefined,
+  limits: ChatImageLimitConfig = DEFAULT_CHAT_IMAGE_LIMITS,
+): Promise<void> {
+  if (!images || images.length === 0) return
+
+  if (images.length > limits.maxCount) {
+    throw validationError(`图片数量超过限制（>${limits.maxCount}张）`)
+  }
+
+  let totalBytes = 0
+
+  for (let index = 0; index < images.length; index += 1) {
+    const current = images[index]
+    if (!current?.data || !current?.mime) {
+      throw validationError('图片内容缺失或格式不正确')
+    }
+
+    const mime = current.mime.toLowerCase()
+    if (!mime.startsWith('image/')) {
+      throw validationError('仅支持图片文件')
+    }
+
+    let buffer: Buffer
+    try {
+      buffer = Buffer.from(current.data, 'base64')
+    } catch (error) {
+      throw validationError('图片数据无法解析')
+    }
+
+    const sizeMb = buffer.byteLength / BYTES_PER_MB
+    if (sizeMb > limits.maxMb) {
+      throw validationError(`图片大小超过限制（>${limits.maxMb}MB）`)
+    }
+
+    totalBytes += buffer.byteLength
+
+    try {
+      const metadata = await sharp(buffer).metadata()
+      const width = metadata.width ?? 0
+      const height = metadata.height ?? 0
+      if (width > limits.maxEdge || height > limits.maxEdge) {
+        throw validationError(`分辨率过大（>${limits.maxEdge}像素）`)
+      }
+    } catch (error) {
+      if ((error as Error).name === 'ValidationError') {
+        throw error
+      }
+      throw validationError('图片读取失败或格式不受支持')
+    }
+  }
+
+  const totalMb = totalBytes / BYTES_PER_MB
+  if (totalMb > limits.maxTotalMb) {
+    throw validationError(`所有图片合计需 ≤ ${limits.maxTotalMb}MB`)
+  }
+}
 
 const MIME_EXT: Record<string, string> = {
   'image/png': 'png',
@@ -117,9 +184,13 @@ const ensureProtocol = (proto: string | null | undefined, fallback: 'http' | 'ht
 
 export async function persistChatImages(
   images: IncomingImage[] | undefined,
-  opts: { sessionId: number; messageId: number; userId: number; clientMessageId?: string | null },
+  opts: { sessionId: number; messageId: number; userId: number; clientMessageId?: string | null; skipValidation?: boolean },
 ): Promise<string[]> {
   if (!images || images.length === 0) return []
+
+  if (!opts.skipValidation) {
+    await validateChatImages(images)
+  }
 
   await ensureDir(CHAT_IMAGE_STORAGE_ROOT)
 

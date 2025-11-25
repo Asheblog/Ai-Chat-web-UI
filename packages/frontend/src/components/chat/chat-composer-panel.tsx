@@ -10,6 +10,7 @@ interface ImageLimitConfig {
   maxCount: number
   maxMb: number
   maxEdge: number
+  maxTotalMb: number
 }
 
 export interface ChatComposerPanelProps {

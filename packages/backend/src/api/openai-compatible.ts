@@ -19,10 +19,12 @@ import {
   OpenAICompatMessageServiceError,
   OpenAICompatMessageService,
 } from '../services/openai-compat/message-service';
+import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits';
 
 const BACKOFF_429_MS = 15000;
 const BACKOFF_5XX_MS = 2000;
 const PROVIDER_TIMEOUT_MS = parseInt(process.env.PROVIDER_TIMEOUT_MS || '300000');
+const CHAT_IMAGE_MAX_COUNT = DEFAULT_CHAT_IMAGE_LIMITS.maxCount;
 
 export interface OpenAICompatDeps {
   modelResolverService?: ReturnType<typeof getModelResolverService>
@@ -118,7 +120,7 @@ const messageCreateSchema = z.object({
   reasoning_duration_seconds: z.number().int().nonnegative().optional(),
   images: z
     .array(z.object({ data: z.string().min(1), mime: z.string().min(1) }))
-    .max(4)
+    .max(CHAT_IMAGE_MAX_COUNT)
     .optional(),
 });
 

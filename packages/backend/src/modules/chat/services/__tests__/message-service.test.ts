@@ -43,6 +43,8 @@ describe('message-service injection', () => {
     inspectActorQuota: jest.fn(),
     persistChatImages: jest.fn(),
   }
+  const VALID_IMAGE_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBgSppZQAAAABJRU5ErkJggg=='
 
   afterEach(() => {
     resetMessageServiceDeps()
@@ -86,7 +88,7 @@ describe('message-service injection', () => {
       actor,
       sessionId: 2,
       content: 'hi',
-      images: [{ data: 'x', mime: 'image/png' }],
+      images: [{ data: VALID_IMAGE_BASE64, mime: 'image/png' }],
     })
 
     expect(persistChatImages).toHaveBeenCalled()

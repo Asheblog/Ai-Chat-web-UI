@@ -37,6 +37,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     MAX_IMAGE_COUNT,
     MAX_IMAGE_MB,
     MAX_IMAGE_EDGE,
+    MAX_TOTAL_IMAGE_MB,
     handleSend,
     handleStop,
     handleKeyDown,
@@ -75,6 +76,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     maxCount: MAX_IMAGE_COUNT,
     maxMb: MAX_IMAGE_MB,
     maxEdge: MAX_IMAGE_EDGE,
+    maxTotalMb: MAX_TOTAL_IMAGE_MB,
   }
 
   const toolbar: ChatToolbarProps = {

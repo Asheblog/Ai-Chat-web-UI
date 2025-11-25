@@ -687,14 +687,21 @@ export const registerChatStreamRoutes = (router: Hono) => {
             traceRecorder,
             streamLogBase,
           })
+          const markDownstreamClosed = (reason: string) => {
+            if (downstreamAborted) return
+            downstreamAborted = true
+            try {
+              emitter.markClosed(reason)
+            } catch {}
+            try {
+              controller.close()
+            } catch {}
+          }
           const safeEnqueue = (payload: string) => {
             if (downstreamAborted || emitter.isClosed()) return false
             const delivered = emitter.enqueue(payload)
             if (!delivered) {
-              downstreamAborted = true
-              try {
-                controller.close()
-              } catch {}
+              markDownstreamClosed('enqueue-closed')
             }
             return delivered
           }

@@ -1,6 +1,7 @@
 'use client'
 
 import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
 import { useToast } from '@/components/ui/use-toast'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -47,9 +48,12 @@ export function useChatComposer() {
   const { actorState, user } = useAuthStore((state) => ({ actorState: state.actorState, user: state.user }))
   const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
 
-  const MAX_IMAGE_COUNT = 4
-  const MAX_IMAGE_MB = 5
-  const MAX_IMAGE_EDGE = 4096
+  const {
+    maxCount: MAX_IMAGE_COUNT,
+    maxMb: MAX_IMAGE_MB,
+    maxEdge: MAX_IMAGE_EDGE,
+    maxTotalMb: MAX_TOTAL_IMAGE_MB,
+  } = DEFAULT_CHAT_IMAGE_LIMITS
   const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
   const [traceEnabled, setTraceEnabled] = useState(false)
@@ -366,6 +370,17 @@ export function useChatComposer() {
     async (e: ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || [])
       if (files.length === 0) return
+      const existingBytes = selectedImages.reduce((sum, img) => sum + img.size, 0)
+      const incomingBytes = files.reduce((sum, f) => sum + f.size, 0)
+      const totalMb = (existingBytes + incomingBytes) / (1024 * 1024)
+      if (totalMb > MAX_TOTAL_IMAGE_MB) {
+        toast({
+          title: '超过总大小限制',
+          description: `所有图片合计需 ≤ ${MAX_TOTAL_IMAGE_MB}MB，请压缩后再试`,
+          variant: 'destructive',
+        })
+        return
+      }
       if (selectedImages.length + files.length > MAX_IMAGE_COUNT) {
         toast({
           title: '超过数量限制',
@@ -384,7 +399,7 @@ export function useChatComposer() {
       }
       if (fileInputRef.current) fileInputRef.current.value = ''
     },
-    [MAX_IMAGE_COUNT, selectedImages.length, toast, validateImage],
+    [MAX_IMAGE_COUNT, MAX_TOTAL_IMAGE_MB, selectedImages, toast, validateImage],
   )
 
   const removeImage = useCallback((idx: number) => {
@@ -429,6 +444,7 @@ export function useChatComposer() {
     MAX_IMAGE_COUNT,
     MAX_IMAGE_MB,
     MAX_IMAGE_EDGE,
+    MAX_TOTAL_IMAGE_MB,
     sendLocked: foreignStreamLocked,
     sendLockedReason,
     // 控制方法

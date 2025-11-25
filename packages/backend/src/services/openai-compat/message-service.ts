@@ -1,6 +1,6 @@
 import type { Message, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
-import { persistChatImages as defaultPersistChatImages } from '../../utils/chat-images'
+import { persistChatImages as defaultPersistChatImages, validateChatImages } from '../../utils/chat-images'
 
 type IncomingImage = { data: string; mime: string }
 
@@ -73,6 +73,8 @@ export class OpenAICompatMessageService {
       userId,
     } = params
 
+    await validateChatImages(images)
+
     const createData: Partial<Message> = {
       sessionId,
       role,
@@ -112,20 +114,13 @@ export class OpenAICompatMessageService {
     }
 
     if (images && images.length > 0) {
-      try {
-        await this.persistChatImages(images, {
-          sessionId,
-          messageId: message.id,
-          userId,
-          clientMessageId: clientMessageId ?? undefined,
-        })
-      } catch (error) {
-        this.logger.warn?.('[openai-compatible] persist images failed', {
-          sessionId,
-          messageId: message.id,
-          error: error instanceof Error ? error.message : error,
-        })
-      }
+      await this.persistChatImages(images, {
+        sessionId,
+        messageId: message.id,
+        userId,
+        clientMessageId: clientMessageId ?? undefined,
+        skipValidation: true,
+      })
     }
 
     return message

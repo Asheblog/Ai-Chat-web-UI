@@ -45,6 +45,9 @@ const baseMessage = (): Message => ({
   attachmentsJson: null,
 })
 
+const VALID_IMAGE_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBgSppZQAAAABJRU5ErkJggg=='
+
 describe('OpenAICompatMessageService', () => {
   it('ensures session ownership and throws when missing', async () => {
     const { service, prisma } = buildService()
@@ -93,7 +96,7 @@ describe('OpenAICompatMessageService', () => {
       clientMessageId: 'c-1',
       reasoning: 'because',
       reasoningDurationSeconds: 2,
-      images: [{ data: 'base64', mime: 'image/png' }],
+      images: [{ data: VALID_IMAGE_BASE64, mime: 'image/png' }],
       userId: 5,
     })
 
@@ -104,33 +107,34 @@ describe('OpenAICompatMessageService', () => {
       }),
     )
     expect(persistChatImages).toHaveBeenCalledWith(
-      [{ data: 'base64', mime: 'image/png' }],
+      [{ data: VALID_IMAGE_BASE64, mime: 'image/png' }],
       expect.objectContaining({
         sessionId: 11,
         messageId: 2,
         userId: 5,
         clientMessageId: 'c-1',
+        skipValidation: true,
       }),
     )
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
-  it('creates message when no client id and logs image errors without throwing', async () => {
+  it('creates message when no client id and bubbles image errors', async () => {
     const { service, prisma, persistChatImages, logger } = buildService()
     const saved = baseMessage()
     prisma.message.create.mockResolvedValueOnce(saved)
     persistChatImages.mockRejectedValueOnce(new Error('disk full'))
 
-    const result = await service.saveMessage({
-      sessionId: 12,
-      role: 'user',
-      content: 'question',
-      images: [{ data: 'base64', mime: 'image/jpeg' }],
-      userId: 9,
-    })
-
-    expect(result).toEqual(saved)
+    await expect(
+      service.saveMessage({
+        sessionId: 12,
+        role: 'user',
+        content: 'question',
+        images: [{ data: VALID_IMAGE_BASE64, mime: 'image/jpeg' }],
+        userId: 9,
+      }),
+    ).rejects.toThrow('disk full')
     expect(prisma.message.create).toHaveBeenCalled()
-    expect(logger.warn).toHaveBeenCalled()
+    expect(logger.warn).not.toHaveBeenCalled()
   })
 })

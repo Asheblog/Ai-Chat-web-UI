@@ -8,7 +8,8 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./latex-normalizer": "./dist/latex-normalizer.js"
+    "./latex-normalizer": "./dist/latex-normalizer.js",
+    "./image-limits": "./dist/image-limits.js"
   },
   "files": [
     "dist"

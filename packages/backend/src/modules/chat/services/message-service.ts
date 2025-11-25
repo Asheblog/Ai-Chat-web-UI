@@ -1,7 +1,7 @@
 import type { Message as PrismaMessage, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
 import type { Actor, UsageQuotaSnapshot } from '../../../types'
-import { persistChatImages as defaultPersistChatImages } from '../../../utils/chat-images'
+import { persistChatImages as defaultPersistChatImages, validateChatImages } from '../../../utils/chat-images'
 import {
   consumeActorQuota as defaultConsumeActorQuota,
   inspectActorQuota as defaultInspectActorQuota,
@@ -73,6 +73,8 @@ export const createUserMessageWithQuota = async (
   const now = options.now ?? new Date()
   const clientMessageId = normalizeClientMessageId(options.clientMessageId)
 
+  await validateChatImages(images)
+
   let userMessageRecord: PrismaMessage | null = null
   let messageWasReused = false
   let quotaSnapshot: UsageQuotaSnapshot | null = null
@@ -140,6 +142,7 @@ export const createUserMessageWithQuota = async (
       messageId: userMessageRecord.id,
       userId,
       clientMessageId,
+      skipValidation: true,
     })
   }
 

@@ -2,6 +2,7 @@
 
 // 全新欢迎页：模仿 ChatGPT 着陆面板（大标题 + 大输入框），并保持响应式
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
 import { useRouter } from 'next/navigation'
 import { Plus, ImagePlus, X, Globe } from 'lucide-react'
 import NextImage from 'next/image'
@@ -63,9 +64,12 @@ export function WelcomeScreen() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [selectedImages, setSelectedImages] = useState<Array<{ dataUrl: string; mime: string; size: number }>>([])
-  const MAX_IMAGE_COUNT = 4
-  const MAX_IMAGE_MB = 5
-  const MAX_IMAGE_EDGE = 4096
+  const {
+    maxCount: MAX_IMAGE_COUNT,
+    maxMb: MAX_IMAGE_MB,
+    maxEdge: MAX_IMAGE_EDGE,
+    maxTotalMb: MAX_TOTAL_IMAGE_MB,
+  } = DEFAULT_CHAT_IMAGE_LIMITS
   const MAX_AUTO_HEIGHT = 200
   const [showExpand, setShowExpand] = useState(false)
   const [expandOpen, setExpandOpen] = useState(false)
@@ -215,6 +219,13 @@ export function WelcomeScreen() {
   const onFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
+    const existingBytes = selectedImages.reduce((sum, img) => sum + img.size, 0)
+    const incomingBytes = files.reduce((sum, f) => sum + f.size, 0)
+    const totalMb = (existingBytes + incomingBytes) / (1024 * 1024)
+    if (totalMb > MAX_TOTAL_IMAGE_MB) {
+      toast({ title: '超过总大小限制', description: `所有图片合计需 ≤ ${MAX_TOTAL_IMAGE_MB}MB，请压缩后再试`, variant: 'destructive' })
+      return
+    }
     if (selectedImages.length + files.length > MAX_IMAGE_COUNT) {
       toast({ title: '超过数量限制', description: `每次最多上传 ${MAX_IMAGE_COUNT} 张图片`, variant: 'destructive' })
       return

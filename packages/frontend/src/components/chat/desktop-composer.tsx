@@ -27,7 +27,7 @@ interface DesktopComposerProps {
   onRemoveImage: (index: number) => void
   pickImages: () => void
   isVisionEnabled: boolean
-  imageLimits: { maxCount: number; maxMb: number; maxEdge: number }
+  imageLimits: { maxCount: number; maxMb: number; maxEdge: number; maxTotalMb: number }
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
   webSearchEnabled: boolean
@@ -208,7 +208,7 @@ export function DesktopComposer({
               </TooltipTrigger>
               <TooltipContent>
                 {isVisionEnabled
-                  ? `添加图片（限制：最多 ${imageLimits.maxCount} 张，单张 ≤ ${imageLimits.maxMb}MB，最大边长 ≤ ${imageLimits.maxEdge}px）`
+                  ? `添加图片（限制：最多 ${imageLimits.maxCount} 张，单张 ≤ ${imageLimits.maxMb}MB，总体积 ≤ ${imageLimits.maxTotalMb}MB，最大边长 ≤ ${imageLimits.maxEdge}px）`
                   : '当前模型不支持图片'}
               </TooltipContent>
             </Tooltip>
