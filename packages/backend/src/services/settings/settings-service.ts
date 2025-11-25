@@ -156,7 +156,7 @@ export class SettingsService {
       web_search_include_raw: this.parseBoolean(settingsObj.web_search_include_raw, process.env.WEB_SEARCH_INCLUDE_RAW || 'false'),
       task_trace_enabled: this.parseBoolean(settingsObj.task_trace_enabled, 'false'),
       task_trace_default_on: this.parseBoolean(settingsObj.task_trace_default_on, 'false'),
-      task_trace_admin_only: !this.parseBoolean(settingsObj.task_trace_admin_only, 'false'),
+      task_trace_admin_only: this.parseBoolean(settingsObj.task_trace_admin_only, 'true'),
       task_trace_env: this.parseTaskTraceEnv(settingsObj.task_trace_env),
       task_trace_retention_days: this.parseIntInRange(settingsObj.task_trace_retention_days, process.env.TASK_TRACE_RETENTION_DAYS, 1, 365, 7),
       task_trace_max_events: this.parseIntInRange(settingsObj.task_trace_max_events, process.env.TASK_TRACE_MAX_EVENTS, 100, 200000, 2000),
