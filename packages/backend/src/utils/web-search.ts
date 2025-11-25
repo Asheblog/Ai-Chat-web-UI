@@ -19,7 +19,7 @@ export interface WebSearchOptions {
 }
 
 const DEFAULT_LIMIT = 4
-const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'image', 'video', 'podcast'])
+const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'scholar', 'image', 'video', 'podcast'])
 
 const clampLimit = (value?: number) => {
   if (!value || Number.isNaN(value)) return DEFAULT_LIMIT
@@ -117,15 +117,17 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     throw new Error('Metaso API key is not configured')
   }
   const endpoint = opts.endpoint || 'https://metaso.cn/api/v1/search'
+  const scope = sanitizeMetasoScope(opts.scope)
   const payload: Record<string, unknown> = {
     q: query,
-    scope: sanitizeMetasoScope(opts.scope),
+    scope,
     includeSummary: Boolean(opts.includeSummary),
     includeRawContent: Boolean(opts.includeRawContent),
     size: clampLimit(opts.limit),
     conciseSnippet: false,
     stream: false,
     output: 'json',
+    format: 'chat_completions',
   }
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -141,12 +143,23 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     throw new Error(`Metaso search failed: ${response.status} ${text}`)
   }
   const data = await response.json()
+  const scopeCandidates: Record<string, any[] | undefined> = {
+    webpage: data?.results || data?.data?.results,
+    document: data?.documents || data?.data?.documents,
+    paper: data?.papers || data?.data?.papers,
+    scholar: data?.scholars || data?.data?.scholars,
+    image: data?.images || data?.data?.images,
+    video: data?.videos || data?.data?.videos,
+    podcast: data?.podcasts || data?.data?.podcasts,
+  }
   const candidateArrays = [
+    scopeCandidates[scope],
     data?.data,
     data?.results,
     data?.hits,
     data?.list,
     data?.webpages,
+    data?.items,
     data?.data?.data,
     data?.data?.results,
     data?.data?.hits,
@@ -157,7 +170,7 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
   const results = (candidateArrays.find((item) => Array.isArray(item)) as any[]) || []
   return results.map((item: any) => ({
     title: item?.title || item?.name || item?.url || 'Untitled',
-    url: item?.url || item?.link || '',
+    url: item?.url || item?.link || item?.imageUrl || '',
     snippet: item?.summary || item?.description || item?.snippet || '',
     content: item?.content || item?.summary || item?.description,
   }))
