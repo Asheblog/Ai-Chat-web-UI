@@ -6,12 +6,11 @@ import { Plus, Maximize2, ImagePlus, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Switch } from '@/components/ui/switch'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations'
+import { PlusMenuContent } from '@/components/plus-menu-content'
 
 interface DesktopComposerProps {
   input: string
@@ -100,66 +99,23 @@ export function DesktopComposer({
                 <Plus className="h-5 w-5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64 rounded-2xl">
-              <div className="px-3 py-3 space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">思考模式</span>
-                  <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
-                </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">联网搜索</span>
-                <Switch
-                  checked={webSearchEnabled && canUseWebSearch}
-                  onCheckedChange={(checked) => onToggleWebSearch(Boolean(checked))}
-                  disabled={!canUseWebSearch}
-                />
-              </div>
-              {showWebSearchScope ? (
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">搜索范围（Metaso）</span>
-                  <Select value={webSearchScope} onValueChange={(value) => onWebSearchScopeChange(value)} disabled={!canUseWebSearch}>
-                    <SelectTrigger className="h-8">
-                      <SelectValue placeholder="选择范围" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="webpage">网页</SelectItem>
-                      <SelectItem value="document">文档</SelectItem>
-                      <SelectItem value="paper">论文</SelectItem>
-                      <SelectItem value="image">图片</SelectItem>
-                      <SelectItem value="video">视频</SelectItem>
-                      <SelectItem value="podcast">播客</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-              {canUseTrace ? (
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">任务追踪</span>
-                    <Switch
-                      checked={traceEnabled}
-                      onCheckedChange={(checked) => onToggleTrace(Boolean(checked))}
-                    />
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">仅管理员可见，用于临时关闭某次追踪。</p>
-                </div>
-              ) : null}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">思考深度</span>
-                <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
-                    <SelectTrigger className="h-8 w-32">
-                      <SelectValue placeholder="不设置" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unset">不设置</SelectItem>
-                      <SelectItem value="low">low</SelectItem>
-                      <SelectItem value="medium">medium</SelectItem>
-                      <SelectItem value="high">high</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </DropdownMenuContent>
+            <PlusMenuContent
+              thinkingEnabled={thinkingEnabled}
+              onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+              webSearchEnabled={webSearchEnabled}
+              onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+              canUseWebSearch={canUseWebSearch}
+              showWebSearchScope={showWebSearchScope}
+              webSearchScope={webSearchScope}
+              onWebSearchScopeChange={onWebSearchScopeChange}
+              canUseTrace={canUseTrace}
+              traceEnabled={traceEnabled}
+              onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
+              effort={effort}
+              onEffortChange={(value) => onEffortChange(value as typeof effort)}
+              contentClassName="rounded-2xl"
+              bodyClassName="text-sm"
+            />
           </DropdownMenu>
 
           <div className="flex-1">

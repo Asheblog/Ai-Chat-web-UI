@@ -12,9 +12,7 @@ import { ModelSelector } from '@/components/model-selector'
 import { useChatStore } from '@/store/chat-store'
 import { apiClient } from '@/lib/api'
 import { useModelsStore } from '@/store/models-store'
-import { Switch } from '@/components/ui/switch'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -24,6 +22,7 @@ import { UserMenu } from '@/components/user-menu'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelPreferenceStore, persistPreferredModel, findPreferredModel } from '@/store/model-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
+import { PlusMenuContent } from '@/components/plus-menu-content'
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
@@ -57,8 +56,10 @@ export function WelcomeScreen() {
   const [effortTouched, setEffortTouched] = useState(false)
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [webSearchTouched, setWebSearchTouched] = useState(false)
+  const [webSearchScope, setWebSearchScope] = useState('webpage')
   const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
+  const scopePreferenceKey = 'web_search_scope_preference'
 
   // 图片上传（与聊天页保持一致的限制）
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -148,6 +149,8 @@ export function WelcomeScreen() {
   const canUseWebSearch = Boolean(
     systemSettings?.webSearchAgentEnable && systemSettings?.webSearchHasApiKey && isWebSearchCapable,
   )
+  const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
+  const showWebSearchScope = canUseWebSearch && isMetasoEngine
 
   // 切换到不支持图片的模型时清空图片
   useEffect(() => {
@@ -178,6 +181,32 @@ export function WelcomeScreen() {
       setWebSearchEnabled(true)
     }
   }, [canUseWebSearch, storedWebSearchPreference, webSearchEnabled, webSearchTouched])
+
+  useEffect(() => {
+    if (!showWebSearchScope) {
+      if (webSearchScope !== 'webpage') setWebSearchScope('webpage')
+      return
+    }
+    const stored = (() => {
+      try {
+        return localStorage.getItem(scopePreferenceKey) || ''
+      } catch {
+        return ''
+      }
+    })()
+    const fromSetting = systemSettings?.webSearchScope || 'webpage'
+    const next = stored || fromSetting || 'webpage'
+    if (next && webSearchScope !== next) {
+      setWebSearchScope(next)
+    }
+    if (!stored && next) {
+      try {
+        localStorage.setItem(scopePreferenceKey, next)
+      } catch {
+        // ignore storage error
+      }
+    }
+  }, [showWebSearchScope, systemSettings?.webSearchScope, scopePreferenceKey, webSearchScope])
 
   const validateImage = (file: File): Promise<{ ok: boolean; reason?: string; dataUrl?: string; mime?: string; size?: number }> => {
     return new Promise((resolve) => {
@@ -292,7 +321,12 @@ export function WelcomeScreen() {
       if (thinkingTouched) opts.reasoningEnabled = thinkingEnabled
       if (effortTouched && effort !== 'unset') opts.reasoningEffort = effort as any
       if ((webSearchTouched || canUseWebSearch) && webSearchEnabled && canUseWebSearch) {
-        opts.features = { web_search: true }
+        opts.features = {
+          web_search: true,
+          ...(isMetasoEngine ? { web_search_scope: webSearchScope } : {}),
+          ...(systemSettings?.webSearchIncludeSummary ? { web_search_include_summary: true } : {}),
+          ...(systemSettings?.webSearchIncludeRaw ? { web_search_include_raw: true } : {}),
+        }
       }
       await streamMessage(session.id, text, imgs, Object.keys(opts).length ? opts : undefined)
           setSelectedImages([])
@@ -366,51 +400,43 @@ export function WelcomeScreen() {
                   <Plus className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64">
-                <div className="px-3 py-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">思考模式</span>
-                    <Switch
-                      checked={thinkingEnabled}
-                      onCheckedChange={(v)=>{ setThinkingEnabled(!!v); setThinkingTouched(true) }}
-                      aria-label="思考模式开关"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">思考深度</span>
-                    <Select value={effort} onValueChange={(v)=>{ setEffort(v as any); setEffortTouched(true) }}>
-                      <SelectTrigger className="h-8 w-32">
-                        <SelectValue placeholder="不设置" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unset">不设置</SelectItem>
-                        <SelectItem value="low">low</SelectItem>
-                        <SelectItem value="medium">medium</SelectItem>
-                        <SelectItem value="high">high</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">联网搜索</span>
-                    <Switch
-                      checked={webSearchEnabled && canUseWebSearch}
-                      disabled={!canUseWebSearch}
-                      onCheckedChange={(v) => {
-                        const nextValue = canUseWebSearch && !!v
-                        setWebSearchTouched(true)
-                        setWebSearchEnabled(nextValue)
-                        persistWebSearchPreference(nextValue)
-                      }}
-                      aria-label="联网搜索开关"
-                    />
-                  </div>
-                  {!systemSettings?.webSearchHasApiKey && (
-                    <p className="text-[11px] text-muted-foreground">
-                      管理员未配置搜索 API Key，暂不可用
-                    </p>
-                  )}
-                </div>
-              </DropdownMenuContent>
+              <PlusMenuContent
+                thinkingEnabled={thinkingEnabled}
+                onToggleThinking={(v) => {
+                  setThinkingEnabled(!!v)
+                  setThinkingTouched(true)
+                }}
+                effort={effort}
+                onEffortChange={(v) => {
+                  setEffort(v as any)
+                  setEffortTouched(true)
+                }}
+                webSearchEnabled={webSearchEnabled}
+                onToggleWebSearch={(v) => {
+                  const nextValue = canUseWebSearch && !!v
+                  setWebSearchTouched(true)
+                  setWebSearchEnabled(nextValue)
+                  persistWebSearchPreference(nextValue)
+                }}
+                canUseWebSearch={canUseWebSearch}
+                showWebSearchScope={showWebSearchScope}
+                webSearchScope={webSearchScope}
+                onWebSearchScopeChange={(value) => {
+                  setWebSearchScope(value)
+                  try {
+                    localStorage.setItem(scopePreferenceKey, value)
+                  } catch {
+                    // ignore storage error
+                  }
+                }}
+                webSearchDisabledNote={
+                  !systemSettings?.webSearchHasApiKey
+                    ? '管理员未配置搜索 API Key，暂不可用'
+                    : undefined
+                }
+                contentClassName="rounded-2xl"
+                bodyClassName="text-sm"
+              />
             </DropdownMenu>
 
             <div className="flex-1">
