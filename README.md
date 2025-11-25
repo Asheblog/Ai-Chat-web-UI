@@ -1,4 +1,4 @@
-# AI Chat Platform（未完成开发）
+# AI Chat 聊天平台
 ---
 
 轻量级 AI 聊天平台（后端 Hono + SQLite，前端 Next.js）。本文档仅保留两种最简部署方式：
