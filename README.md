@@ -137,20 +137,31 @@ networks:
 
 ```
 aichat/
-├── .github/
-│   └── workflows/
-│       └── docker-images.yml       # GH Actions：构建并推送前后端镜像
+├── docker-compose.yml               # 生产部署 Compose
+├── docker-compose.dev.yml           # 开发/本地 Compose
 ├── packages/
-│   ├── backend/                    # 后端（Hono + Prisma + SQLite）
-│   │   ├── src/                    # API、路由、中间件
-│   │   ├── prisma/                 # Prisma schema 与 seed/迁移脚本
-│   │   └── Dockerfile              # 后端镜像
-│   └── frontend/                   # 前端（Next.js 14）
+│   ├── backend/                     # 后端（Hono + Prisma + SQLite）
+│   │   ├── src/                     # 路由/中间件/模块/服务
+│   │   │   ├── api/                 # auth/users/chat/... 路由
+│   │   │   ├── modules/chat/        # 聊天流/Agent/用量/推理
+│   │   │   ├── services/            # 会话/连接/配额等服务
+│   │   │   └── middleware/          # 认证/错误处理
+│   │   ├── prisma/                  # schema 与 seed/迁移
+│   │   ├── docker/                  # 本地/调试脚本
+│   │   └── Dockerfile
+│   └── frontend/                    # 前端（Next.js 14）
 │       ├── src/
-│       └── Dockerfile              # 前端镜像（standalone 运行）
-├── scripts/                        # 辅助脚本（本地/调试）
+│       │   ├── app/                 # 页面路由
+│       │   ├── components/          # UI 组件
+│       │   ├── lib/                 # API 客户端与工具
+│       │   ├── store/               # 状态管理
+│       │   └── workers/             # Web Worker
+│       └── Dockerfile
+├── scripts/                         # 辅助脚本
+├── docs/                            # 文档/截图
+├── start.sh / start.bat             # 便捷启动
 ├── README.md
- └── docs/                           # 文档（可选）
+└── 构建命令.txt
 ```
 
 数据持久化
@@ -167,16 +178,27 @@ sequenceDiagram
   participant FE as 前端 Next.js (3000)
   participant BE as 后端 Hono (8001)
   participant DB as SQLite (/app/data/app.db)
-  participant Prov as 第三方模型提供方
+  participant Prov as 模型提供方 (OpenAI/Azure/Ollama…)
+  participant Search as Web Search/工具API(可选)
 
-  U->>FE: 输入消息
-  FE->>BE: POST /api/chat/stream (JWT)
-  BE->>DB: 读取会话/系统设置
-  BE->>Prov: 转发请求（带鉴权）
-  Prov-->>BE: 流式SSE/分片
-  BE-->>FE: 转发SSE；统计用量
-  BE->>DB: 持久化消息/用量
-  FE-->>U: 渲染模型回复
+  U->>FE: 输入消息/上传图片
+  FE->>BE: POST /api/chat/stream (sessionId、features、clientMessageId、JWT/匿名Key)
+  BE->>DB: 校验会话归属/续期匿名；检查已选连接&模型
+  BE->>DB: 去重+配额 consumeActorQuota；写入用户消息/图片
+  BE->>DB: 载入系统/个人设置，截断上下文，计算 max_tokens
+  alt 开启 Agent Web Search
+    BE->>Prov: 触发带工具的模型请求
+    Prov-->>BE: 工具调用指令 (web_search)
+    BE->>Search: 调用搜索接口（域名过滤/结果限数）
+    Search-->>BE: 结果摘要/原文片段
+    BE-->>Prov: 回填工具结果，继续生成
+  else 标准流
+    BE->>Prov: 带退避的流式请求（429→15s，5xx/超时→2s，最多1次重试）
+    Prov-->>BE: SSE delta/reasoning/usage
+  end
+  BE->>DB: 持久化助手进度/推理/usage（优先厂商用量；异常时非流式兜底）
+  BE-->>FE: SSE start/quota/content/reasoning/usage/stop/complete/keepalive/error
+  FE-->>U: 渲染回复，可取消/重试
 ```
 ---
 
