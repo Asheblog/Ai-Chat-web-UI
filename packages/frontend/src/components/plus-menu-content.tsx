@@ -24,6 +24,8 @@ interface PlusMenuContentProps {
   bodyClassName?: string
   onOpenAdvanced?: () => void
   onOpenSessionPrompt?: () => void
+  showThinkingToggle?: boolean
+  showWebSearchToggle?: boolean
 }
 
 export function PlusMenuContent({
@@ -45,15 +47,19 @@ export function PlusMenuContent({
   bodyClassName,
   onOpenAdvanced,
   onOpenSessionPrompt,
+  showThinkingToggle = true,
+  showWebSearchToggle = true,
 }: PlusMenuContentProps) {
   return (
     <DropdownMenuContent align="start" className={cn('w-64', contentClassName)}>
       <div className={cn('px-3 py-3 space-y-3', bodyClassName)}>
         {/* 思考模式 */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">思考模式</span>
-          <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
-        </div>
+        {showThinkingToggle ? (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">思考模式</span>
+            <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
+          </div>
+        ) : null}
 
         {/* 思考深度 */}
         {onEffortChange ? (
@@ -74,7 +80,7 @@ export function PlusMenuContent({
         ) : null}
 
         {/* 联网搜索 */}
-        {onToggleWebSearch ? (
+        {showWebSearchToggle && onToggleWebSearch ? (
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">联网搜索</span>
             <Switch

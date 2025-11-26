@@ -1,15 +1,17 @@
 'use client'
 
 import type { KeyboardEventHandler, MutableRefObject } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Square, ImagePlus, Brain, Globe, ScrollText } from 'lucide-react'
+import { Send, Square, ImagePlus, Brain, Globe, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations'
+import { PlusMenuContent } from '@/components/plus-menu-content'
 
 interface MobileComposerProps {
   input: string
@@ -40,6 +42,7 @@ interface MobileComposerProps {
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
   onOpenAdvanced: () => void
+  onOpenSessionPrompt?: () => void
 }
 
 export function MobileComposer({
@@ -71,8 +74,10 @@ export function MobileComposer({
   canUseTrace,
   onToggleTrace,
   onOpenAdvanced,
+  onOpenSessionPrompt,
 }: MobileComposerProps) {
   const disabled = sendLocked || (!input.trim() && selectedImages.length === 0)
+  const [plusOpen, setPlusOpen] = useState(false)
 
   return (
     <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
@@ -168,56 +173,58 @@ export function MobileComposer({
               <span className="text-xs font-medium">联网</span>
             </Button>
 
-            {showWebSearchScope ? (
-              <Select value={webSearchScope} onValueChange={onWebSearchScopeChange} disabled={!canUseWebSearch || isStreaming}>
-                <SelectTrigger className="h-10 w-[120px] rounded-full text-xs">
-                  <SelectValue placeholder="范围" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="webpage">网页</SelectItem>
-                  <SelectItem value="document">文档</SelectItem>
-                  <SelectItem value="paper">论文</SelectItem>
-                  <SelectItem value="image">图片</SelectItem>
-                  <SelectItem value="video">视频</SelectItem>
-                  <SelectItem value="podcast">播客</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : null}
-
-            {canUseTrace ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${
-                  traceEnabled
-                    ? 'bg-amber-100 border-amber-200 text-amber-800 dark:bg-amber-900/40 dark:border-amber-800 dark:text-amber-200'
-                    : 'bg-background border-border text-muted-foreground hover:bg-muted'
-                }`}
-                onClick={() => onToggleTrace(!traceEnabled)}
-                aria-pressed={traceEnabled}
-                disabled={isStreaming}
-                aria-label="任务追踪"
-              >
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                    traceEnabled ? 'bg-amber-500 text-white shadow-sm' : 'bg-muted text-muted-foreground'
+            <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={`h-10 rounded-full px-3 pr-3 flex items-center gap-2 transition-colors ${
+                    plusOpen
+                      ? 'bg-muted border-border text-foreground'
+                      : 'bg-background border-border text-muted-foreground hover:bg-muted'
                   }`}
+                  aria-label="更多操作"
                 >
-                  <ScrollText className="h-3.5 w-3.5" />
-                </span>
-                <span className="text-xs font-medium">追踪</span>
-              </Button>
-            ) : null}
-
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
-              onClick={onOpenAdvanced}
-              aria-label="高级请求定制"
-            >
-              高级
-            </Button>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Plus className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-xs font-medium">更多</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <PlusMenuContent
+                thinkingEnabled={thinkingEnabled}
+                onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+                webSearchEnabled={webSearchEnabled}
+                onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+                canUseWebSearch={canUseWebSearch}
+                showWebSearchScope={showWebSearchScope}
+                webSearchScope={webSearchScope}
+                onWebSearchScopeChange={(value) => {
+                  onWebSearchScopeChange(value)
+                  setPlusOpen(false)
+                }}
+                canUseTrace={canUseTrace}
+                traceEnabled={traceEnabled}
+                onToggleTrace={(checked) => {
+                  onToggleTrace(Boolean(checked))
+                  setPlusOpen(false)
+                }}
+                showThinkingToggle={false}
+                showWebSearchToggle={false}
+                onOpenAdvanced={() => {
+                  setPlusOpen(false)
+                  onOpenAdvanced()
+                }}
+                onOpenSessionPrompt={
+                  onOpenSessionPrompt
+                    ? () => {
+                        setPlusOpen(false)
+                        onOpenSessionPrompt()
+                      }
+                    : undefined
+                }
+              />
+            </DropdownMenu>
 
             <TooltipProvider>
               <Tooltip>
@@ -226,7 +233,7 @@ export function MobileComposer({
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="h-10 w-10 rounded-full"
+                    className="h-10 w-10 rounded-full ml-auto"
                     onClick={pickImages}
                     disabled={isStreaming || !isVisionEnabled}
                     aria-label="上传图片"
