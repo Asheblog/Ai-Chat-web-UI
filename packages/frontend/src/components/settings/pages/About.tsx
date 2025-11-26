@@ -53,56 +53,50 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4c63266</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6193056</span>
               <span className="text-muted-foreground leading-relaxed">
-                接入 Metaso 搜索引擎，支持网页/文档/论文/图片/视频/播客范围选择，可配置摘要与原文返回，并按引擎独立管理 API Key。
+                支持会话级系统提示词并具备全局后备，聊天与欢迎页可编辑，按“会话&gt;全局&gt;无”顺序继承并计入上下文，系统设置新增配置入口。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d6a46e0</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">3cbc21a</span>
               <span className="text-muted-foreground leading-relaxed">
-                上线模型访问策略框架，匿名与登录用户可设置允许/拒绝/继承三态，默认策略可被逐模型覆盖，目录解析与 API 访问遵循新策略。
+                新增请求体修改策略，保护 model/messages/stream 等关键字段，允许合并自定义 body 与 headers 并过滤敏感头，保障高级定制的安全性。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e3967d8</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c95c384</span>
               <span className="text-muted-foreground leading-relaxed">
-                模型访问控制迁移到独立管理页，新增导航入口与批量策略更新，原总览与模型页面的分散控制下线（破坏性调整）。
+                高级请求自定义改为独立弹窗，提供标题/描述/底部操作的分区布局，桌面与移动端通过回调打开，交互更聚焦。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5244f39</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f844a01</span>
               <span className="text-muted-foreground leading-relaxed">
-                模型访问列表支持分页（80/页）与批量操作进度提示，成功/失败计数分离，并提醒跨页批量覆盖范围。
+                自定义请求体与 Header 按会话做本地缓存，切换会话或刷新页面不丢失草稿配置。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8f25c39</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7bc840b</span>
               <span className="text-muted-foreground leading-relaxed">
-                模型管理列表分页并保留跨页选择，批量切换模型能力开关时展示加载与进度，避免筛选变更造成残留选择。
+                将加号菜单抽为共享组件，桌面与欢迎页复用，简化代码并保留 Web 搜索范围偏好。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8578b5d</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8a75c96</span>
               <span className="text-muted-foreground leading-relaxed">
-                个人偏好页支持管理员修改用户名，统一保存按钮提交全部偏好，用户名自动去空格校验并在保存期间禁用控件。
+                统一加号组件的行为与样式，补齐分隔符和状态处理，修复旧版下拉的交互问题。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">24d06aa</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">733e832</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天流新增供应商 SSE 监控，记录首包/内容/推理/用量事件及样本日志，加入首包超时回调提升异常可观测性。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">90c4049</span>
-              <span className="text-muted-foreground leading-relaxed">
-                聊天链路将旧流量日志替换为 Task Trace 结构化追踪，统一记录请求/响应/错误并提供清洗截断能力。
+                移动端输入区控件收敛到加号菜单，新增会话提示词入口，提升遮罩层级与间距并隐藏推理/Web 搜索按钮。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-24 推送变更摘要
+            以上为 2025-11-26 推送变更摘要
           </p>
         </Card>
       </div>
