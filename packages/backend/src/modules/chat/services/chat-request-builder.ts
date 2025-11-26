@@ -98,6 +98,28 @@ export class ChatRequestBuilder {
       throw new Error('Chat session connection is not ready')
     }
     const contextEnabled = params.payload?.contextEnabled !== false
+    const systemSettings = await this.loadSystemSettings()
+    this.scheduleImageCleanup(systemSettings)
+
+    const systemPrompts: Array<{ role: 'system'; content: string }> = []
+    const globalPrompt = (systemSettings.chat_system_prompt || '').toString().trim()
+    if (globalPrompt) {
+      systemPrompts.push({ role: 'system', content: globalPrompt })
+    }
+    const sessionPrompt = (params.session as any).systemPrompt
+    if (typeof sessionPrompt === 'string' && sessionPrompt.trim()) {
+      systemPrompts.push({ role: 'system', content: sessionPrompt.trim() })
+    }
+
+    const requestedFeatures = params.payload?.features || {}
+    if (requestedFeatures.web_search === true) {
+      systemPrompts.push({
+        role: 'system',
+        content:
+          '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。',
+      })
+    }
+
     const contextInfo = await this.buildContextMessages({
       sessionId: params.session.id,
       connectionId: params.session.connectionId,
@@ -106,23 +128,10 @@ export class ChatRequestBuilder {
       actorContent: params.content,
       contextEnabled,
       historyUpperBound: params.historyUpperBound ?? null,
+      pinnedSystemMessages: systemPrompts,
     })
 
-    const systemSettings = await this.loadSystemSettings()
-    this.scheduleImageCleanup(systemSettings)
-
-    const requestedFeatures = params.payload?.features || {}
-    let contextMessages = contextInfo.truncatedContext
-    if (requestedFeatures.web_search === true) {
-      contextMessages = [
-        {
-          role: 'system',
-          content:
-            '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。',
-        },
-        ...contextMessages,
-      ]
-    }
+    const contextMessages = contextInfo.truncatedContext
 
     const messagesPayload = this.buildMessagesPayload(
       contextMessages,
@@ -179,6 +188,7 @@ export class ChatRequestBuilder {
     actorContent: string
     contextEnabled: boolean
     historyUpperBound: Date | null
+    pinnedSystemMessages: Array<{ role: 'system'; content: string }>
   }) {
     const contextLimit = await this.resolveContextLimit({
       connectionId: params.connectionId,
@@ -186,7 +196,13 @@ export class ChatRequestBuilder {
       provider: params.provider,
     })
 
-    let truncated: Array<{ role: string; content: string }>
+    const pinned = params.pinnedSystemMessages
+    const pinnedTokens = pinned.length
+      ? await this.tokenizer.countConversationTokens(pinned)
+      : 0
+    const remainingBudget = Math.max(0, contextLimit - pinnedTokens)
+
+    let truncatedConversation: Array<{ role: string; content: string }>
     if (params.contextEnabled) {
       const recent = await this.prisma.message.findMany({
         where: {
@@ -206,15 +222,17 @@ export class ChatRequestBuilder {
       const conversation = recent
         .filter((msg) => msg.role !== 'user' || msg.content !== params.actorContent)
         .reverse()
-      truncated = await this.tokenizer.truncateMessages(
-        conversation.concat([{ role: 'user', content: params.actorContent }]),
-        contextLimit,
+      const toTruncate = conversation.concat([{ role: 'user', content: params.actorContent }])
+      truncatedConversation = await this.tokenizer.truncateMessages(
+        toTruncate,
+        Math.max(1, remainingBudget),
       )
     } else {
-      truncated = [{ role: 'user', content: params.actorContent }]
+      truncatedConversation = [{ role: 'user', content: params.actorContent }]
     }
 
-    const promptTokens = await this.tokenizer.countConversationTokens(truncated)
+    const combined = [...pinned, ...truncatedConversation]
+    const promptTokens = await this.tokenizer.countConversationTokens(combined)
     const contextRemaining = Math.max(0, contextLimit - promptTokens)
     const completionLimit = await this.resolveCompletionLimit({
       connectionId: params.connectionId,
@@ -227,7 +245,7 @@ export class ChatRequestBuilder {
     )
 
     return {
-      truncatedContext: truncated,
+      truncatedContext: combined,
       promptTokens,
       contextLimit,
       contextRemaining,

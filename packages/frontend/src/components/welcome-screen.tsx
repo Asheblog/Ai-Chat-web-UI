@@ -23,6 +23,19 @@ import { useAuthStore } from '@/store/auth-store'
 import { useModelPreferenceStore, persistPreferredModel, findPreferredModel } from '@/store/model-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { PlusMenuContent } from '@/components/plus-menu-content'
+import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
+
+const FORBIDDEN_HEADER_NAMES = new Set([
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+  'host',
+  'connection',
+  'transfer-encoding',
+  'content-length',
+  'accept-encoding',
+])
 
 export function WelcomeScreen() {
   const { createSession, streamMessage } = useChatStore()
@@ -75,6 +88,13 @@ export function WelcomeScreen() {
   const [showExpand, setShowExpand] = useState(false)
   const [expandOpen, setExpandOpen] = useState(false)
   const [expandDraft, setExpandDraft] = useState('')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [customBodyInput, setCustomBodyInput] = useState<string>('')
+  const [customBodyError, setCustomBodyError] = useState<string | null>(null)
+  const [customHeaders, setCustomHeaders] = useState<Array<{ name: string; value: string }>>([])
+  const [sessionPromptOpen, setSessionPromptOpen] = useState(false)
+  const [sessionPromptDraft, setSessionPromptDraft] = useState('')
+  const [sessionPromptTouched, setSessionPromptTouched] = useState(false)
 
   // 选择一个默认模型（优先使用持久化偏好）
   const { models, fetchAll } = useModelsStore()
@@ -128,7 +148,10 @@ export function WelcomeScreen() {
     const sysEffort: 'unset'|'low'|'medium'|'high' = raw && raw !== '' ? raw : 'unset'
     if (!thinkingTouched) setThinkingEnabled(sysEnabled)
     if (!effortTouched) setEffort(sysEffort)
-  }, [systemSettings?.reasoningEnabled, systemSettings?.openaiReasoningEffort, thinkingTouched, effortTouched])
+    if (!sessionPromptTouched) {
+      setSessionPromptDraft(systemSettings?.chatSystemPrompt || '')
+    }
+  }, [systemSettings?.reasoningEnabled, systemSettings?.openaiReasoningEffort, systemSettings?.chatSystemPrompt, thinkingTouched, effortTouched, sessionPromptTouched])
 
   const selectedModel = useMemo(() => {
     return (models || []).find((mm) => mm.id === selectedModelId) ?? null
@@ -288,11 +311,65 @@ export function WelcomeScreen() {
     setIsCreating(true)
     const text = query.trim()
     try {
+      // 自定义请求体校验
+      let parsedCustomBody: Record<string, any> | undefined
+      if (customBodyInput.trim()) {
+        try {
+          const parsed = JSON.parse(customBodyInput)
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('自定义请求体必须是 JSON 对象')
+          }
+          parsedCustomBody = parsed
+          setCustomBodyError(null)
+        } catch (err: any) {
+          const message = err instanceof Error ? err.message : '自定义请求体解析失败'
+          setCustomBodyError(message)
+          toast({ title: '创建失败', description: message, variant: 'destructive' })
+          return
+        }
+      } else {
+        setCustomBodyError(null)
+      }
+      const sanitizedHeaders: Array<{ name: string; value: string }> = []
+      if (customHeaders.length > 0) {
+        for (const item of customHeaders) {
+          const name = (item?.name || '').trim()
+          const value = (item?.value || '').trim()
+          if (!name && !value) continue
+          if (!name) {
+            toast({ title: '请求头无效', description: '请输入请求头名称', variant: 'destructive' })
+            return
+          }
+          if (name.length > 64) {
+            toast({ title: '请求头过长', description: '名称需 ≤ 64 字符', variant: 'destructive' })
+            return
+          }
+          if (value.length > 2048) {
+            toast({ title: '请求头值过长', description: '值需 ≤ 2048 字符', variant: 'destructive' })
+            return
+          }
+          const lower = name.toLowerCase()
+          if (FORBIDDEN_HEADER_NAMES.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-')) {
+            toast({
+              title: '请求头被拒绝',
+              description: '敏感或被保护的请求头无法覆盖，请更换名称',
+              variant: 'destructive',
+            })
+            return
+          }
+          const existingIdx = sanitizedHeaders.findIndex((h) => h.name.toLowerCase() === lower)
+          if (existingIdx >= 0) sanitizedHeaders.splice(existingIdx, 1)
+          if (!value) continue
+          sanitizedHeaders.push({ name, value })
+        }
+      }
+
       // 以输入作为标题（截断）以便会话列表更清晰
       const title = text ? text.slice(0, 50) : '新的对话'
       // 携带 connectionId/rawId 以避免后端解析歧义
       const m = (models || []).find(mm => mm.id === selectedModelId)
-      const created = await createSession(selectedModelId, title, m?.connectionId, m?.rawId)
+      const normalizedPrompt = sessionPromptDraft.trim()
+      const created = await createSession(selectedModelId, title, m?.connectionId, m?.rawId, normalizedPrompt || undefined)
       if (created?.id) {
         router.push(`/main/${created.id}`)
       }
@@ -300,10 +377,11 @@ export function WelcomeScreen() {
       // 仅当用户改动过时，才写入会话偏好
       try {
         const session = useChatStore.getState().currentSession
-        if (session && (thinkingTouched || effortTouched)) {
+        if (session && (thinkingTouched || effortTouched || sessionPromptTouched)) {
           const prefs: any = {}
           if (thinkingTouched) prefs.reasoningEnabled = !!thinkingEnabled
           if (effortTouched && effort !== 'unset') prefs.reasoningEffort = effort as any
+          if (sessionPromptTouched) prefs.systemPrompt = (sessionPromptDraft.trim() || null) as any
           if (Object.keys(prefs).length > 0) {
             await useChatStore.getState().updateSessionPrefs(session.id, prefs)
           }
@@ -318,17 +396,19 @@ export function WelcomeScreen() {
             ? selectedImages.map(img => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
             : undefined
           const opts: any = {}
-      if (thinkingTouched) opts.reasoningEnabled = thinkingEnabled
-      if (effortTouched && effort !== 'unset') opts.reasoningEffort = effort as any
-      if ((webSearchTouched || canUseWebSearch) && webSearchEnabled && canUseWebSearch) {
-        opts.features = {
-          web_search: true,
-          ...(isMetasoEngine ? { web_search_scope: webSearchScope } : {}),
-          ...(systemSettings?.webSearchIncludeSummary ? { web_search_include_summary: true } : {}),
-          ...(systemSettings?.webSearchIncludeRaw ? { web_search_include_raw: true } : {}),
-        }
-      }
-      await streamMessage(session.id, text, imgs, Object.keys(opts).length ? opts : undefined)
+          if (thinkingTouched) opts.reasoningEnabled = thinkingEnabled
+          if (effortTouched && effort !== 'unset') opts.reasoningEffort = effort as any
+          if ((webSearchTouched || canUseWebSearch) && webSearchEnabled && canUseWebSearch) {
+            opts.features = {
+              web_search: true,
+              ...(isMetasoEngine ? { web_search_scope: webSearchScope } : {}),
+              ...(systemSettings?.webSearchIncludeSummary ? { web_search_include_summary: true } : {}),
+              ...(systemSettings?.webSearchIncludeRaw ? { web_search_include_raw: true } : {}),
+            }
+          }
+          if (parsedCustomBody) opts.customBody = parsedCustomBody
+          if (sanitizedHeaders.length) opts.customHeaders = sanitizedHeaders
+          await streamMessage(session.id, text, imgs, Object.keys(opts).length ? opts : undefined)
           setSelectedImages([])
           if (fileInputRef.current) fileInputRef.current.value = ''
         }
@@ -434,10 +514,56 @@ export function WelcomeScreen() {
                     ? '管理员未配置搜索 API Key，暂不可用'
                     : undefined
                 }
+                onOpenAdvanced={() => setAdvancedOpen(true)}
+                onOpenSessionPrompt={() => setSessionPromptOpen(true)}
                 contentClassName="rounded-2xl"
                 bodyClassName="text-sm"
               />
             </DropdownMenu>
+            {advancedOpen ? (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8"
+                role="dialog"
+                aria-modal="true"
+                aria-label="高级请求定制"
+                onClick={() => setAdvancedOpen(false)}
+              >
+                <div
+                  className="w-full max-w-3xl rounded-2xl bg-background shadow-2xl border border-border/70 max-h-full overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+                    <div>
+                      <p className="text-lg font-semibold leading-none">高级请求定制</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        为本次消息添加自定义请求体和请求头。核心字段（model/messages/stream）已锁定，敏感头会被忽略。
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => setAdvancedOpen(false)} aria-label="关闭">
+                      ✕
+                    </Button>
+                  </div>
+                  <div className="px-5 py-4">
+                    <CustomRequestEditor
+                      customHeaders={customHeaders}
+                      onAddHeader={() => setCustomHeaders((prev) => [...prev, { name: '', value: '' }])}
+                      onHeaderChange={(index, field, value) => {
+                        setCustomHeaders((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)))
+                      }}
+                      onRemoveHeader={(index) => setCustomHeaders((prev) => prev.filter((_, i) => i !== index))}
+                      customBody={customBodyInput}
+                      onCustomBodyChange={(value) => setCustomBodyInput(value)}
+                      customBodyError={customBodyError}
+                    />
+                  </div>
+                  <div className="flex justify-end border-t border-border/60 px-5 py-3">
+                    <Button variant="secondary" onClick={() => setAdvancedOpen(false)}>
+                      完成
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex-1">
               <Textarea
@@ -482,8 +608,69 @@ export function WelcomeScreen() {
               >
                 <ImagePlus className="h-5 w-5" />
               </Button>
+          </div>
+        </div>
+        {sessionPromptOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label="编辑会话系统提示词"
+            onClick={() => setSessionPromptOpen(false)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl bg-background shadow-2xl border border-border/70 max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+                <div>
+                  <p className="text-lg font-semibold leading-none">会话系统提示词</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {sessionPromptDraft.trim() ? '当前会话将使用该提示词' : (systemSettings?.chatSystemPrompt ? '留空将继承全局提示词' : '留空不附加系统提示词')}
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setSessionPromptOpen(false)} aria-label="关闭">
+                  ✕
+                </Button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <textarea
+                  value={sessionPromptDraft}
+                  onChange={(e) => {
+                    setSessionPromptDraft(e.target.value)
+                    setSessionPromptTouched(true)
+                  }}
+                  rows={6}
+                  placeholder={
+                    systemSettings?.chatSystemPrompt
+                      ? `留空以继承全局提示词：${systemSettings.chatSystemPrompt.slice(0, 80)}${systemSettings.chatSystemPrompt.length > 80 ? '...' : ''}`
+                      : '为空则不附加系统提示词'
+                  }
+                  className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                />
+                <p className="text-xs text-muted-foreground">生效顺序：会话 &gt; 全局。</p>
+              </div>
+              <div className="flex items-center justify-between border-t border-border/60 px-5 py-3">
+                <Button variant="ghost" onClick={() => { setSessionPromptDraft(''); setSessionPromptTouched(true) }}>
+                  清空
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setSessionPromptOpen(false)}>
+                    取消
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setSessionPromptTouched(true)
+                      setSessionPromptOpen(false)
+                    }}
+                  >
+                    确认
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
+        ) : null}
           {/* 选中图片预览 */}
           {selectedImages.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">

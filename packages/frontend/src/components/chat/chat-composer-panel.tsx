@@ -59,6 +59,12 @@ export interface ChatComposerPanelProps {
   customBody: string
   onCustomBodyChange: (value: string) => void
   customBodyError?: string | null
+  sessionPromptDraft: string
+  sessionPromptSourceLabel: string
+  sessionPromptPlaceholder: string
+  onSessionPromptChange: (value: string) => void
+  onSessionPromptSave: () => void
+  sessionPromptSaving: boolean
 }
 
 export function ChatComposerPanel({
@@ -105,10 +111,17 @@ export function ChatComposerPanel({
   customBody,
   onCustomBodyChange,
   customBodyError,
+  sessionPromptDraft,
+  sessionPromptSaving,
+  sessionPromptSourceLabel,
+  sessionPromptPlaceholder,
+  onSessionPromptChange,
+  onSessionPromptSave,
 }: ChatComposerPanelProps) {
   const [expandOpen, setExpandOpen] = useState(false)
   const [expandDraft, setExpandDraft] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [sessionPromptOpen, setSessionPromptOpen] = useState(false)
 
   const openExpand = () => {
     setExpandDraft(input)
@@ -162,6 +175,60 @@ export function ChatComposerPanel({
               <Button variant="secondary" onClick={() => setAdvancedOpen(false)}>
                 完成
               </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {sessionPromptOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="编辑会话系统提示词"
+          onClick={() => setSessionPromptOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-background shadow-2xl border border-border/70 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+              <div>
+                <p className="text-lg font-semibold leading-none">会话系统提示词</p>
+                <p className="text-sm text-muted-foreground mt-1">{sessionPromptSourceLabel}</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setSessionPromptOpen(false)} aria-label="关闭">
+                ✕
+              </Button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <textarea
+                value={sessionPromptDraft}
+                onChange={(e) => onSessionPromptChange(e.target.value)}
+                rows={6}
+                placeholder={sessionPromptPlaceholder}
+                className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              />
+              <p className="text-xs text-muted-foreground">生效顺序：会话 &gt; 全局。留空则继承全局提示词。</p>
+            </div>
+            <div className="flex items-center justify-between border-t border-border/60 px-5 py-3">
+              <Button variant="ghost" onClick={() => onSessionPromptChange('')} disabled={sessionPromptSaving}>
+                清空
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setSessionPromptOpen(false)} disabled={sessionPromptSaving}>
+                  取消
+                </Button>
+                <Button
+                  onClick={async () => {
+                    await onSessionPromptSave()
+                    setSessionPromptOpen(false)
+                  }}
+                  disabled={sessionPromptSaving}
+                >
+                  {sessionPromptSaving ? '保存中...' : '保存提示词'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -229,6 +296,7 @@ export function ChatComposerPanel({
         showExpand={showExpand}
         onExpandOpen={openExpand}
         onOpenAdvanced={() => setAdvancedOpen(true)}
+        onOpenSessionPrompt={() => setSessionPromptOpen(true)}
         onSend={onSend}
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}

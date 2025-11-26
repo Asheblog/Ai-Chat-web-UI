@@ -43,6 +43,7 @@ interface DesktopComposerProps {
   showExpand: boolean
   onExpandOpen: () => void
   onOpenAdvanced: () => void
+  onOpenSessionPrompt: () => void
   onSend: () => void
   onStop: () => void
   desktopSendDisabled: boolean
@@ -80,6 +81,7 @@ export function DesktopComposer({
   showExpand,
   onExpandOpen,
   onOpenAdvanced,
+  onOpenSessionPrompt,
   onSend,
   onStop,
   desktopSendDisabled,
@@ -118,6 +120,7 @@ export function DesktopComposer({
               contentClassName="rounded-2xl"
               bodyClassName="text-sm"
               onOpenAdvanced={onOpenAdvanced}
+              onOpenSessionPrompt={onOpenSessionPrompt}
             />
           </DropdownMenu>
 

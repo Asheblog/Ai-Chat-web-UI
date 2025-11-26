@@ -53,6 +53,8 @@ model ChatSession {
   reasoningEnabled Boolean?
   reasoningEffort  String?   // 'low' | 'medium' | 'high'
   ollamaThink      Boolean?
+  // 会话级系统提示词：为空表示继承系统级
+  systemPrompt     String?
 
   user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   connection  Connection?  @relation(fields: [connectionId], references: [id])

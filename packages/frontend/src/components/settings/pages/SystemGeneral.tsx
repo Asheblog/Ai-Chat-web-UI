@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { CardTitle, CardDescription } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +43,7 @@ export function SystemGeneralPage() {
   const [allowRegistrationDraft, setAllowRegistrationDraft] = useState(true)
   const [brandTextDraft, setBrandTextDraft] = useState("")
   const [, setIsIMEComposing] = useState(false)
+  const [chatSystemPromptDraft, setChatSystemPromptDraft] = useState('')
   const [retentionDraft, setRetentionDraft] = useState('30')
   const [replyHistoryLimitDraft, setReplyHistoryLimitDraft] = useState('5')
   const [siteBaseDraft, setSiteBaseDraft] = useState('')
@@ -59,6 +61,7 @@ export function SystemGeneralPage() {
     if (!systemSettings) return
     setAllowRegistrationDraft(Boolean(systemSettings.allowRegistration))
     setBrandTextDraft(systemSettings.brandText || '')
+    setChatSystemPromptDraft(systemSettings.chatSystemPrompt || '')
     setRetentionDraft(String(systemSettings.chatImageRetentionDays ?? 30))
     setReplyHistoryLimitDraft(String(systemSettings.assistantReplyHistoryLimit ?? 5))
     setSiteBaseDraft(systemSettings.siteBaseUrl || '')
@@ -167,6 +170,7 @@ export function SystemGeneralPage() {
         anonymousQuota: String(systemSettings.anonymousDailyQuota ?? 20),
         defaultUserQuota: String(systemSettings.defaultUserDailyQuota ?? 200),
         brandText: systemSettings.brandText || '',
+        chatSystemPrompt: systemSettings.chatSystemPrompt || '',
         siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
         chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
         assistantReplyHistoryLimit: String(systemSettings.assistantReplyHistoryLimit ?? 5),
@@ -181,6 +185,7 @@ export function SystemGeneralPage() {
       anonymousQuotaDraft !== normalizedInitials.anonymousQuota ||
       defaultUserQuotaDraft !== normalizedInitials.defaultUserQuota ||
       brandTextDraft !== normalizedInitials.brandText ||
+      chatSystemPromptDraft !== normalizedInitials.chatSystemPrompt ||
       siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
       retentionDraft !== normalizedInitials.chatImageRetentionDays ||
       replyHistoryLimitDraft !== normalizedInitials.assistantReplyHistoryLimit ||
@@ -222,6 +227,7 @@ export function SystemGeneralPage() {
         anonymousDailyQuota: parsedAnonymousQuota,
         defaultUserDailyQuota: parsedDefaultQuota,
         brandText: brandTextDraft,
+        chatSystemPrompt: chatSystemPromptDraft,
         siteBaseUrl: siteBaseDraft.trim(),
         chatImageRetentionDays: parsedRetention,
         assistantReplyHistoryLimit: parsedReplyHistoryLimit,
@@ -379,6 +385,23 @@ export function SystemGeneralPage() {
               className="w-full sm:w-[320px]"
               disabled={!isAdmin}
             />
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="全局系统提示词"
+          description="留空则不注入；会话未设置时自动继承"
+          align="start"
+        >
+          <div className="w-full space-y-2">
+            <Textarea
+              value={chatSystemPromptDraft}
+              onChange={(e) => setChatSystemPromptDraft(e.target.value)}
+              placeholder="例如：你是一位专业助教，请使用简洁、结构化的回答。"
+              rows={4}
+              disabled={!isAdmin}
+            />
+            <p className="text-xs text-muted-foreground">生效顺序：会话自定义 &gt; 全局默认</p>
           </div>
         </SettingRow>
 

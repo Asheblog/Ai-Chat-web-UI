@@ -23,6 +23,7 @@ interface PlusMenuContentProps {
   contentClassName?: string
   bodyClassName?: string
   onOpenAdvanced?: () => void
+  onOpenSessionPrompt?: () => void
 }
 
 export function PlusMenuContent({
@@ -43,15 +44,36 @@ export function PlusMenuContent({
   contentClassName,
   bodyClassName,
   onOpenAdvanced,
+  onOpenSessionPrompt,
 }: PlusMenuContentProps) {
   return (
     <DropdownMenuContent align="start" className={cn('w-64', contentClassName)}>
       <div className={cn('px-3 py-3 space-y-3', bodyClassName)}>
+        {/* 思考模式 */}
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">思考模式</span>
           <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
         </div>
 
+        {/* 思考深度 */}
+        {onEffortChange ? (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">思考深度</span>
+            <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
+              <SelectTrigger className="h-8 w-32">
+                <SelectValue placeholder="不设置" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unset">不设置</SelectItem>
+                <SelectItem value="low">low</SelectItem>
+                <SelectItem value="medium">medium</SelectItem>
+                <SelectItem value="high">high</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
+        {/* 联网搜索 */}
         {onToggleWebSearch ? (
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">联网搜索</span>
@@ -63,6 +85,7 @@ export function PlusMenuContent({
           </div>
         ) : null}
 
+        {/* 搜索范围 */}
         {showWebSearchScope && onWebSearchScopeChange ? (
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">搜索范围（Metaso）</span>
@@ -86,6 +109,7 @@ export function PlusMenuContent({
           </div>
         ) : null}
 
+        {/* 任务追踪 */}
         {canUseTrace && onToggleTrace ? (
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
@@ -96,35 +120,29 @@ export function PlusMenuContent({
           </div>
         ) : null}
 
-        {onEffortChange ? (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">思考深度</span>
-            <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
-              <SelectTrigger className="h-8 w-32">
-                <SelectValue placeholder="不设置" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unset">不设置</SelectItem>
-                <SelectItem value="low">low</SelectItem>
-                <SelectItem value="medium">medium</SelectItem>
-                <SelectItem value="high">high</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-
         {webSearchDisabledNote ? (
           <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
         ) : null}
 
+        {/* 编辑自定义请求头 */}
         {onOpenAdvanced ? (
           <button
             type="button"
-            className="w-full rounded-xl border border-dashed border-border/70 bg-muted/40 px-3 py-2 text-left hover:bg-muted"
+            className="w-full rounded-xl border border-dashed border-border/70 bg-muted/30 px-3 py-2 text-left hover:bg-muted text-sm font-medium"
             onClick={onOpenAdvanced}
           >
-            <div className="text-xs font-medium text-foreground">高级请求定制</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">编辑自定义请求体/请求头</div>
+            编辑自定义请求头
+          </button>
+        ) : null}
+
+        {/* 当前会话系统提示词 */}
+        {onOpenSessionPrompt ? (
+          <button
+            type="button"
+            className="w-full rounded-xl border border-dashed border-border/70 bg-muted/30 px-3 py-2 text-left hover:bg-muted text-sm font-medium"
+            onClick={onOpenSessionPrompt}
+          >
+            当前会话系统提示词
           </button>
         ) : null}
       </div>

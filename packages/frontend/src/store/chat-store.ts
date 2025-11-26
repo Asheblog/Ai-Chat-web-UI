@@ -512,12 +512,12 @@ interface ChatStore extends ChatState {
   fetchSessionsUsage: () => Promise<void>
   fetchMessages: (sessionId: number) => Promise<void>
   fetchUsage: (sessionId: number) => Promise<void>
-  createSession: (modelId: string, title?: string, connectionId?: number, rawId?: string) => Promise<ChatSession | null>
+  createSession: (modelId: string, title?: string, connectionId?: number, rawId?: string, systemPrompt?: string | null) => Promise<ChatSession | null>
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>
   updateSessionTitle: (sessionId: number, title: string) => Promise<void>
   switchSessionModel: (sessionId: number, model: ModelItem) => Promise<void>
-  updateSessionPrefs: (sessionId: number, prefs: Partial<{ reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean }>) => Promise<void>
+  updateSessionPrefs: (sessionId: number, prefs: Partial<{ reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean; systemPrompt: string | null }>) => Promise<void>
   sendMessage: (sessionId: number, content: string) => Promise<void>
   streamMessage: (
     sessionId: number,
@@ -1043,11 +1043,11 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
       }
     },
 
-    createSession: async (modelId: string, title?: string, connectionId?: number, rawId?: string) => {
+    createSession: async (modelId: string, title?: string, connectionId?: number, rawId?: string, systemPrompt?: string | null) => {
       stopAllMessagePollers()
       set({ isSessionsLoading: true, error: null })
       try {
-        const response = await apiClient.createSessionByModelId(modelId, title, connectionId, rawId)
+        const response = await apiClient.createSessionByModelId(modelId, title, connectionId, rawId, systemPrompt ?? undefined)
         const newSession = response.data as ChatSession
         set((state) => ({
           sessions: [newSession, ...state.sessions],
@@ -1182,8 +1182,10 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
               ? { ...(state.currentSession as ChatSession), ...prefs }
               : state.currentSession,
         }))
+        return true
       } catch (error: any) {
         set({ error: error?.response?.data?.error || error?.message || '更新会话偏好失败' })
+        return false
       }
     },
 

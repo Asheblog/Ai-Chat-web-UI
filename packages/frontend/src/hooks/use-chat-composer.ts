@@ -51,10 +51,13 @@ export function useChatComposer() {
     clearError,
     error,
     assistantVariantSelections,
+    updateSessionPrefs,
   } = useChatStore()
   const [customBodyInput, setCustomBodyInput] = useState<string>('')
   const [customBodyError, setCustomBodyError] = useState<string | null>(null)
   const [customHeaders, setCustomHeaders] = useState<Array<{ name: string; value: string }>>([])
+  const [sessionPromptDraft, setSessionPromptDraft] = useState<string>('')
+  const [sessionPromptSaving, setSessionPromptSaving] = useState<boolean>(false)
   const cacheKey = useMemo(() => {
     if (!currentSession?.id) return null
     return `aichat:custom-request:${currentSession.id}`
@@ -154,12 +157,15 @@ export function useChatComposer() {
         ? Boolean(currentSession.ollamaThink)
         : sysOllamaThink,
     )
+    const nextPrompt = (currentSession.systemPrompt ?? '') || ''
+    setSessionPromptDraft(nextPrompt)
   }, [
     currentSession,
     currentSession?.id,
     currentSession?.reasoningEnabled,
     currentSession?.reasoningEffort,
     currentSession?.ollamaThink,
+    currentSession?.systemPrompt,
     systemSettings?.reasoningEnabled,
     systemSettings?.openaiReasoningEffort,
     systemSettings?.ollamaThink,
@@ -235,6 +241,34 @@ export function useChatComposer() {
     setCustomHeaders((prev) => prev.filter((_, i) => i !== index))
   }, [])
 
+  const handleSessionPromptSave = useCallback(async () => {
+    if (!currentSession) return
+    setSessionPromptSaving(true)
+    try {
+      const normalized = sessionPromptDraft.trim()
+      const ok = await updateSessionPrefs(currentSession.id, {
+        systemPrompt: normalized ? normalized : null,
+      })
+      if (ok) {
+        toast({ title: '会话提示词已更新' })
+      } else {
+        toast({
+          title: '保存失败',
+          description: '服务端未能保存会话提示词，请稍后重试',
+          variant: 'destructive',
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: '保存失败',
+        description: error?.response?.data?.error || error?.message || '更新会话提示词失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setSessionPromptSaving(false)
+    }
+  }, [currentSession, sessionPromptDraft, toast, updateSessionPrefs])
+
   const foreignStreamLocked = Boolean(
     activeStreamSessionId != null &&
       (!currentSession || activeStreamSessionId !== currentSession.id),
@@ -242,6 +276,17 @@ export function useChatComposer() {
   const sendLockedReason = foreignStreamLocked
     ? '其他会话正在生成中，请等待结束或返回该会话停止。'
     : null
+
+  const systemPromptFallback = (systemSettings?.chatSystemPrompt ?? '').trim()
+  const sessionPromptSourceLabel =
+    currentSession?.systemPrompt && currentSession.systemPrompt.trim()
+      ? '当前会话自定义生效'
+      : systemPromptFallback
+        ? '使用全局提示词'
+        : '未设置提示词'
+  const sessionPromptPlaceholder = systemPromptFallback
+    ? `留空以继承全局提示词：${systemPromptFallback.slice(0, 60)}${systemPromptFallback.length > 60 ? '...' : ''}`
+    : '为空则不附加系统提示词'
 
   useEffect(() => {
     if (!canUseWebSearch) {
@@ -579,6 +624,10 @@ export function useChatComposer() {
     messageMetas,
     messageBodies,
     messageRenderCache,
+    sessionPromptDraft,
+    sessionPromptSaving,
+    sessionPromptSourceLabel,
+    sessionPromptPlaceholder,
     assistantVariantSelections,
     isMessagesLoading,
     isStreaming,
@@ -600,6 +649,7 @@ export function useChatComposer() {
     setNoSaveThisRound,
     setCustomBodyInput,
     setCustomBodyError,
+    setSessionPromptDraft,
     addCustomHeader,
     updateCustomHeader,
     removeCustomHeader,
@@ -623,5 +673,6 @@ export function useChatComposer() {
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,
+    onSaveSessionPrompt: handleSessionPromptSave,
   }
 }

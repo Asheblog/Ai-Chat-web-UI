@@ -62,6 +62,12 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     addCustomHeader,
     updateCustomHeader,
     removeCustomHeader,
+    sessionPromptDraft,
+    sessionPromptSaving,
+    sessionPromptSourceLabel,
+    sessionPromptPlaceholder,
+    setSessionPromptDraft,
+    onSaveSessionPrompt,
     traceEnabled,
     canUseTrace,
     onToggleTrace,
@@ -153,6 +159,12 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
       setCustomBodyInput(value)
     },
     customBodyError,
+    sessionPromptDraft,
+    sessionPromptSaving,
+    sessionPromptSourceLabel,
+    sessionPromptPlaceholder,
+    onSessionPromptChange: setSessionPromptDraft,
+    onSessionPromptSave: onSaveSessionPrompt,
   }
 
   return {

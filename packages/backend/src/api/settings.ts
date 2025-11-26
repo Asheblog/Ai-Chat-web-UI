@@ -58,6 +58,7 @@ const systemSettingSchema = z.object({
   stream_keepalive_interval_ms: z.number().int().min(0).max(3600000).optional(),
   usage_emit: z.boolean().optional(),
   usage_provider_only: z.boolean().optional(),
+  chat_system_prompt: z.string().max(4000).optional(),
   // 推理链（思维链）相关
   reasoning_enabled: z.boolean().optional(),
   reasoning_default_expand: z.boolean().optional(),

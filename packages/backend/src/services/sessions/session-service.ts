@@ -34,6 +34,7 @@ const sessionSelect = {
   reasoningEnabled: true,
   reasoningEffort: true,
   ollamaThink: true,
+  systemPrompt: true,
   connection: {
     select: { id: true, provider: true, baseUrl: true, prefixId: true },
   },
@@ -140,6 +141,7 @@ export class SessionService {
       reasoningEnabled?: boolean
       reasoningEffort?: string
       ollamaThink?: boolean
+      systemPrompt?: string | null
     },
   ) {
     const resolution = await this.resolveModelSelection(actor, payload)
@@ -162,6 +164,7 @@ export class SessionService {
         reasoningEnabled: payload.reasoningEnabled,
         reasoningEffort: payload.reasoningEffort,
         ollamaThink: payload.ollamaThink,
+        systemPrompt: payload.systemPrompt,
       },
       select: sessionSelect,
     })
@@ -206,6 +209,7 @@ export class SessionService {
       reasoningEnabled?: boolean
       reasoningEffort?: string
       ollamaThink?: boolean
+      systemPrompt?: string | null
     },
   ) {
     const existing = await this.prisma.chatSession.findFirst({
@@ -227,6 +231,9 @@ export class SessionService {
           ? { reasoningEffort: updates.reasoningEffort }
           : {}),
         ...(typeof updates.ollamaThink === 'boolean' ? { ollamaThink: updates.ollamaThink } : {}),
+        ...(Object.prototype.hasOwnProperty.call(updates, 'systemPrompt')
+          ? { systemPrompt: updates.systemPrompt ?? null }
+          : {}),
       },
       select: sessionSelect,
     })

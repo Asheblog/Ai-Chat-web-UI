@@ -89,6 +89,7 @@ export interface ChatSession {
   reasoningEnabled?: boolean | null;
   reasoningEffort?: 'low' | 'medium' | 'high' | null;
   ollamaThink?: boolean | null;
+  systemPrompt?: string | null;
   messages?: Message[];
   _count?: {
     messages: number;
@@ -218,6 +219,7 @@ export interface SystemSettings {
   webSearchIncludeSummary?: boolean;
   webSearchIncludeRaw?: boolean;
   assistantAvatarUrl?: string | null;
+  chatSystemPrompt?: string;
   webSearchApiKey?: string;
   webSearchApiKeyTavily?: string;
   webSearchApiKeyBrave?: string;

@@ -164,12 +164,15 @@ class ApiClient {
     return response.data
   }
 
-  async createSessionByModelId(modelId: string, title?: string, connectionId?: number, rawId?: string) {
+  async createSessionByModelId(modelId: string, title?: string, connectionId?: number, rawId?: string, systemPrompt?: string | null) {
     const payload: any = { modelId }
     if (title) payload.title = title
     if (connectionId && rawId) {
       payload.connectionId = connectionId
       payload.rawId = rawId
+    }
+    if (typeof systemPrompt === 'string') {
+      payload.systemPrompt = systemPrompt
     }
     const response = await this.client.post<ApiResponse<any>>('/sessions', payload)
     return response.data
@@ -256,7 +259,7 @@ class ApiClient {
     await this.client.delete(`/sessions/${sessionId}`)
   }
 
-  async updateSession(sessionId: number, updates: Partial<{ title: string; reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean }>) {
+  async updateSession(sessionId: number, updates: Partial<{ title: string; reasoningEnabled: boolean; reasoningEffort: 'low'|'medium'|'high'; ollamaThink: boolean; systemPrompt: string | null }>) {
     const response = await this.client.put(`/sessions/${sessionId}`, updates)
     return response.data
   }
@@ -726,6 +729,7 @@ class ApiClient {
       if (value === null) return null
       return null
     })()
+    const chatSystemPrompt = typeof raw.chat_system_prompt === 'string' ? raw.chat_system_prompt : ''
     const taskTraceEnabled = Boolean(raw.task_trace_enabled ?? false)
     const taskTraceDefaultOn = Boolean(raw.task_trace_default_on ?? false)
     const taskTraceAdminOnly = (raw.task_trace_admin_only ?? true) as boolean
@@ -792,21 +796,22 @@ class ApiClient {
         modelAccessDefaultAnonymous,
         modelAccessDefaultUser,
         webSearchAgentEnable,
-      webSearchDefaultEngine,
-      webSearchResultLimit,
-      webSearchDomainFilter,
-      webSearchHasApiKey: aggregatedHasKey,
-      webSearchHasApiKeyTavily,
-      webSearchHasApiKeyBrave,
-      webSearchHasApiKeyMetaso,
-       webSearchScope,
-       webSearchIncludeSummary,
-       webSearchIncludeRaw,
-       assistantAvatarUrl,
-      taskTraceEnabled,
-      taskTraceDefaultOn,
-      taskTraceAdminOnly,
-      taskTraceEnv,
+        webSearchDefaultEngine,
+        webSearchResultLimit,
+        webSearchDomainFilter,
+        webSearchHasApiKey: aggregatedHasKey,
+        webSearchHasApiKeyTavily,
+        webSearchHasApiKeyBrave,
+        webSearchHasApiKeyMetaso,
+        webSearchScope,
+        webSearchIncludeSummary,
+        webSearchIncludeRaw,
+        assistantAvatarUrl,
+        chatSystemPrompt,
+        taskTraceEnabled,
+        taskTraceDefaultOn,
+        taskTraceAdminOnly,
+        taskTraceEnv,
         taskTraceRetentionDays,
         taskTraceMaxEvents,
         taskTraceIdleTimeoutMs,
@@ -837,6 +842,7 @@ class ApiClient {
     if (typeof rest.reasoningKeepaliveIntervalMs === 'number') payload.reasoning_keepalive_interval_ms = rest.reasoningKeepaliveIntervalMs
     if (typeof rest.usageEmit === 'boolean') payload.usage_emit = !!rest.usageEmit
     if (typeof rest.usageProviderOnly === 'boolean') payload.usage_provider_only = !!rest.usageProviderOnly
+    if (typeof rest.chatSystemPrompt === 'string') payload.chat_system_prompt = rest.chatSystemPrompt
     if (typeof rest.reasoningEnabled === 'boolean') payload.reasoning_enabled = !!rest.reasoningEnabled
     if (typeof rest.reasoningDefaultExpand === 'boolean') payload.reasoning_default_expand = !!rest.reasoningDefaultExpand
     if (typeof rest.reasoningSaveToDb === 'boolean') payload.reasoning_save_to_db = !!rest.reasoningSaveToDb

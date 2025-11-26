@@ -110,6 +110,7 @@ export class SettingsService {
       stream_keepalive_interval_ms: Number(read('stream_keepalive_interval_ms', process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0')),
       usage_emit: this.parseBoolean(settingsObj.usage_emit, process.env.USAGE_EMIT),
       usage_provider_only: this.parseBoolean(settingsObj.usage_provider_only, process.env.USAGE_PROVIDER_ONLY),
+      chat_system_prompt: settingsObj.chat_system_prompt || process.env.CHAT_SYSTEM_PROMPT || '',
       reasoning_enabled: this.parseBoolean(settingsObj.reasoning_enabled, process.env.REASONING_ENABLED || 'true'),
       reasoning_default_expand: this.parseBoolean(settingsObj.reasoning_default_expand, process.env.REASONING_DEFAULT_EXPAND || 'false'),
       reasoning_save_to_db: this.parseBoolean(settingsObj.reasoning_save_to_db, process.env.REASONING_SAVE_TO_DB || 'false'),
@@ -194,6 +195,7 @@ export class SettingsService {
         web_search_include_summary: formatted.web_search_include_summary,
         web_search_include_raw: formatted.web_search_include_raw,
         assistant_avatar_url: formatted.assistant_avatar_url,
+        chat_system_prompt: formatted.chat_system_prompt,
       }
     }
     return formatted
@@ -278,6 +280,7 @@ export class SettingsService {
       { key: 'reasoning_custom_tags', value: payload.reasoning_custom_tags },
       { key: 'openai_reasoning_effort', value: payload.openai_reasoning_effort },
       { key: 'site_base_url', value: payload.site_base_url },
+      { key: 'chat_system_prompt', value: payload.chat_system_prompt },
       { key: 'web_search_default_engine', value: payload.web_search_default_engine },
       { key: 'web_search_api_key_tavily', value: payload.web_search_api_key_tavily },
       { key: 'web_search_api_key_brave', value: payload.web_search_api_key_brave },
