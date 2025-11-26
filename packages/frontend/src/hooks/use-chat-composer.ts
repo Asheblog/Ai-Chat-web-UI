@@ -38,10 +38,6 @@ export function useChatComposer() {
   const [effort, setEffort] = useState<'low' | 'medium' | 'high' | 'unset'>('unset')
   const [ollamaThink, setOllamaThink] = useState<boolean>(false)
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
-  const [customBodyInput, setCustomBodyInput] = useState<string>('')
-  const [customBodyError, setCustomBodyError] = useState<string | null>(null)
-  const [customHeaders, setCustomHeaders] = useState<Array<{ name: string; value: string }>>([])
-
   const {
     currentSession,
     messageMetas,
@@ -56,6 +52,13 @@ export function useChatComposer() {
     error,
     assistantVariantSelections,
   } = useChatStore()
+  const [customBodyInput, setCustomBodyInput] = useState<string>('')
+  const [customBodyError, setCustomBodyError] = useState<string | null>(null)
+  const [customHeaders, setCustomHeaders] = useState<Array<{ name: string; value: string }>>([])
+  const cacheKey = useMemo(() => {
+    if (!currentSession?.id) return null
+    return `aichat:custom-request:${currentSession.id}`
+  }, [currentSession?.id])
 
   const { systemSettings } = useSettingsStore()
   const { toast } = useToast()
@@ -83,6 +86,46 @@ export function useChatComposer() {
     },
     [persistWebSearchPreference],
   )
+
+  useEffect(() => {
+    if (!cacheKey) {
+      setCustomBodyInput('')
+      setCustomHeaders([])
+      return
+    }
+    try {
+      const raw = localStorage.getItem(cacheKey)
+      if (!raw) {
+        setCustomBodyInput('')
+        setCustomHeaders([])
+        return
+      }
+      const parsed = JSON.parse(raw) as { body?: string; headers?: Array<{ name: string; value: string }> }
+      setCustomBodyInput(typeof parsed?.body === 'string' ? parsed.body : '')
+      if (Array.isArray(parsed?.headers)) {
+        setCustomHeaders(
+          parsed.headers
+            .filter((item) => item && typeof item.name === 'string' && typeof item.value === 'string')
+            .map((item) => ({ name: item.name, value: item.value })),
+        )
+      } else {
+        setCustomHeaders([])
+      }
+    } catch {
+      setCustomBodyInput('')
+      setCustomHeaders([])
+    }
+  }, [cacheKey])
+
+  useEffect(() => {
+    if (!cacheKey) return
+    try {
+      const payload = JSON.stringify({ body: customBodyInput, headers: customHeaders })
+      localStorage.setItem(cacheKey, payload)
+    } catch {
+      // ignore storage errors
+    }
+  }, [cacheKey, customBodyInput, customHeaders])
 
   const modelsCount = allModels.length
   useEffect(() => {
