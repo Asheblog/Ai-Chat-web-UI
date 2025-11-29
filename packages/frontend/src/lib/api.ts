@@ -456,7 +456,30 @@ class ApiClient {
                   meta: parsed.meta,
                 }
               } else if (parsed.type === 'start') {
-                yield { type: 'start' }
+                const normalizedMessageId =
+                  typeof parsed.messageId === 'number'
+                    ? parsed.messageId
+                    : typeof parsed.message_id === 'number'
+                      ? parsed.message_id
+                      : null
+                const normalizedAssistantId =
+                  typeof parsed.assistantMessageId === 'number'
+                    ? parsed.assistantMessageId
+                    : typeof parsed.assistant_message_id === 'number'
+                      ? parsed.assistant_message_id
+                      : null
+                const normalizedAssistantClientId =
+                  typeof parsed.assistantClientMessageId === 'string'
+                    ? parsed.assistantClientMessageId
+                    : typeof parsed.assistant_client_message_id === 'string'
+                      ? parsed.assistant_client_message_id
+                      : undefined
+                yield {
+                  type: 'start',
+                  messageId: normalizedMessageId,
+                  assistantMessageId: normalizedAssistantId,
+                  assistantClientMessageId: normalizedAssistantClientId ?? null,
+                }
               } else if (parsed.type === 'end') {
                 yield { type: 'end' }
               } else if (parsed.type === 'stop') {
