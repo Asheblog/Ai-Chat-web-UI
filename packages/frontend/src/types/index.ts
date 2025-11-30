@@ -164,6 +164,50 @@ export interface CreateMessageRequest {
   content: string;
 }
 
+export interface ShareMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  reasoning?: string | null;
+  createdAt: string;
+  images?: string[];
+}
+
+export interface ChatShare {
+  id: number;
+  sessionId: number;
+  token: string;
+  title: string;
+  sessionTitle: string;
+  messageCount: number;
+  messages: ShareMessage[];
+  createdAt: string;
+  expiresAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface ChatShareSummary {
+  id: number;
+  sessionId: number;
+  token: string;
+  title: string;
+  sessionTitle: string;
+  messageCount: number;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface ShareListResponse {
+  shares: ChatShareSummary[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 // 系统设置类型
 export interface SystemSetting {
   key: string;

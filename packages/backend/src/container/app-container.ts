@@ -30,6 +30,7 @@ import { HealthService, setHealthService } from '../services/settings/health-ser
 import { TaskTraceService, setTaskTraceService } from '../services/task-trace/task-trace-service'
 import { TaskTraceFileService, setTaskTraceFileService } from '../services/task-trace/task-trace-file-service'
 import { ChatService, setChatService } from '../services/chat/chat-service'
+import { ShareService, setShareService } from '../services/shares'
 import { AuthUtils } from '../utils/auth'
 import {
   refreshAllModelCatalog,
@@ -73,6 +74,7 @@ export interface AppContainerDeps {
   taskTraceService?: TaskTraceService
   taskTraceFileService?: TaskTraceFileService
   chatService?: ChatService
+  shareService?: ShareService
 }
 
 export class AppContainer {
@@ -98,6 +100,7 @@ export class AppContainer {
   readonly taskTraceService: TaskTraceService
   readonly taskTraceFileService: TaskTraceFileService
   readonly chatService: ChatService
+  readonly shareService: ShareService
 
   constructor(deps: AppContainerDeps = {}) {
     this.context = deps.context ?? createAppContext()
@@ -148,6 +151,13 @@ export class AppContainer {
         logger: this.context.logger,
       })
     setChatService(this.chatService)
+    this.shareService =
+      deps.shareService ??
+      new ShareService({
+        prisma: this.context.prisma,
+        logger: this.context.logger,
+      })
+    setShareService(this.shareService)
     this.userService =
       deps.userService ??
       new UserService({

@@ -6,12 +6,14 @@
 import React from "react"
 import { PersonalPreferencesPage } from "@/components/settings/pages/PersonalPreferences"
 import { PersonalSecurityPage } from "@/components/settings/pages/PersonalSecurity"
+import { ShareManagementPanel } from "@/components/settings/pages/ShareManagement"
 
 export function PersonalSettings() {
   return (
     <div className="space-y-6">
       <PersonalPreferencesPage />
       <PersonalSecurityPage />
+      <ShareManagementPanel />
     </div>
   )
 }

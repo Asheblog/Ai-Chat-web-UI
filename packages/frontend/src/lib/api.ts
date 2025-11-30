@@ -17,6 +17,9 @@ import type {
   LatexTraceSummary,
   LatexTraceEventRecord,
   SystemSettings,
+  ChatShare,
+  ChatShareSummary,
+  ShareListResponse,
 } from '@/types'
 import { FrontendLogger as log } from '@/lib/logger'
 
@@ -266,6 +269,28 @@ class ApiClient {
 
   async updateSessionModel(sessionId: number, payload: { modelId: string; connectionId?: number; rawId?: string }) {
     const response = await this.client.put<ApiResponse<any>>(`/sessions/${sessionId}/model`, payload)
+    return response.data
+  }
+
+  async listChatShares(params?: { sessionId?: number; status?: 'active' | 'all'; page?: number; limit?: number }) {
+    const response = await this.client.get<ApiResponse<ShareListResponse>>('/shares', {
+      params,
+    })
+    return response.data
+  }
+
+  async createChatShare(payload: { sessionId: number; messageIds: number[]; title?: string; expiresInHours?: number | null }) {
+    const response = await this.client.post<ApiResponse<ChatShare>>('/shares', payload)
+    return response.data
+  }
+
+  async updateChatShare(shareId: number, payload: { title?: string; expiresInHours?: number | null }) {
+    const response = await this.client.patch<ApiResponse<ChatShareSummary>>(`/shares/${shareId}`, payload)
+    return response.data
+  }
+
+  async revokeChatShare(shareId: number) {
+    const response = await this.client.post<ApiResponse<ChatShareSummary>>(`/shares/${shareId}/revoke`)
     return response.data
   }
 

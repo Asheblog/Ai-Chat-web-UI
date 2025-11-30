@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Copy, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, RefreshCw, Share2 } from 'lucide-react'
 import Image from 'next/image'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useAuthStore } from '@/store/auth-store'
 import { ReasoningPanel } from './reasoning-panel'
+import { ShareDialog } from '@/components/chat/share-dialog'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
 
@@ -65,6 +66,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   const [showReasoning, setShowReasoning] = useState(defaultShouldShow)
   const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const streamingToolEvents = useChatStore(
     useCallback(
@@ -250,6 +252,8 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   const assistantFallbackHidden = !isUser && assistantAvatarReady && Boolean(assistantAvatarUrl)
   const showVariantControls = Boolean(variantInfo)
   const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
+  const shareableMessageId = typeof meta.id === 'number' ? meta.id : null
+  const canOpenShareDialog = shareableMessageId !== null && !isStreaming && !meta.pendingSync
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -343,6 +347,26 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
             >
               {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
             </Button>
+            {shareableMessageId !== null && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  title="分享此段对话"
+                  onClick={() => setIsShareDialogOpen(true)}
+                  disabled={!canOpenShareDialog}
+                >
+                  <Share2 className="h-3 w-3" />
+                </Button>
+                <ShareDialog
+                  sessionId={meta.sessionId}
+                  pivotMessageId={shareableMessageId}
+                  open={isShareDialogOpen}
+                  onOpenChange={setIsShareDialogOpen}
+                />
+              </>
+            )}
             {showVariantControls && (
               <Button
                 variant="ghost"

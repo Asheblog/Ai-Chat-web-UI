@@ -18,6 +18,7 @@ import { createOpenAICompatApi } from './api/openai-compatible';
 import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './utils/model-catalog';
 import { createTaskTraceApi } from './api/task-trace';
 import { setChatConfig } from './modules/chat/chat-common';
+import { createSharesApi } from './api/shares';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -75,6 +76,7 @@ app.route('/api/task-trace', createTaskTraceApi({
   taskTraceService: container.taskTraceService,
   taskTraceFileService: container.taskTraceFileService,
 }));
+app.route('/api/shares', createSharesApi({ shareService: container.shareService }));
 app.route(
   '/v1',
   createOpenAICompatApi({

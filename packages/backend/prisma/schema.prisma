@@ -33,6 +33,7 @@ model User {
   chatSessions  ChatSession[]
   connections   Connection[]
   usageQuotas   UsageQuota[]
+  chatShares    ChatShare[] @relation("UserChatShares")
 
   @@index([status])
   @@map("users")
@@ -61,6 +62,7 @@ model ChatSession {
   messages    Message[]
   usageMetrics UsageMetric[]
   taskTraces  TaskTrace[]
+  shares      ChatShare[]
 
   @@index([expiresAt])
   @@index([anonymousKey])
@@ -113,6 +115,27 @@ model MessageAttachment {
 
   @@index([messageId])
   @@map("message_attachments")
+}
+
+model ChatShare {
+  id                     Int      @id @default(autoincrement())
+  sessionId              Int
+  token                  String   @unique
+  title                  String
+  messageIdsJson         String   @default("[]")
+  payloadJson            String
+  createdByUserId        Int?
+  createdByAnonymousKey  String?
+  createdAt              DateTime @default(now())
+  expiresAt              DateTime?
+  revokedAt              DateTime?
+
+  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdByUser User?       @relation("UserChatShares", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([createdByUserId])
+  @@map("chat_shares")
 }
 
 // 3. 用量统计表（每轮生成一条，关联到 assistant 消息）
