@@ -95,6 +95,9 @@ const baseSettings: SystemSettings = {
   webSearchResultLimit: 4,
   webSearchDomainFilter: ["example.com"],
   webSearchHasApiKey: true,
+  webSearchHasApiKeyTavily: true,
+  webSearchHasApiKeyBrave: false,
+  webSearchHasApiKeyMetaso: false,
   taskTraceEnabled: true,
   taskTraceDefaultOn: true,
   taskTraceAdminOnly: true,
@@ -176,6 +179,7 @@ describe("系统设置页面", () => {
         anonymousDailyQuota: 15,
         defaultUserDailyQuota: 50,
         brandText: "NewBrand",
+        chatSystemPrompt: "",
         siteBaseUrl: "https://chat.example.com",
         chatImageRetentionDays: 30,
         assistantReplyHistoryLimit: 5,
@@ -246,7 +250,9 @@ describe("系统设置页面", () => {
 
   test("联网搜索清除已保存 Key 后会发送清空指令", async () => {
     render(<SystemWebSearchPage />)
-    await userEvent.click(screen.getByRole("button", { name: "清除已保存" }))
+    const clearButtons = screen.getAllByRole("button", { name: "清除" })
+    expect(clearButtons.length).toBeGreaterThan(0)
+    await userEvent.click(clearButtons[0])
 
     const saveButton = screen.getByRole("button", { name: "保存联网搜索设置" })
     expect(saveButton).not.toBeDisabled()
@@ -259,7 +265,10 @@ describe("系统设置页面", () => {
         webSearchDefaultEngine: "tavily",
         webSearchResultLimit: 4,
         webSearchDomainFilter: ["example.com"],
-        webSearchApiKey: "",
+        webSearchScope: "webpage",
+        webSearchIncludeSummary: false,
+        webSearchIncludeRaw: false,
+        webSearchApiKeyTavily: "",
       })
     })
   })

@@ -78,6 +78,7 @@ type StreamSendOptions = {
   clientMessageId?: string
   customBody?: Record<string, any>
   customHeaders?: Array<{ name: string; value: string }>
+  streamKey?: string
 }
 
 const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
@@ -554,11 +555,68 @@ interface ChatStore extends ChatState {
 }
 
 export const useChatStore = create<ChatStore>((set, get) => {
-const streamState: { active: StreamAccumulator | null; stopRequested: boolean } = {
-  active: null,
-  stopRequested: false,
-}
+  type ActiveStreamEntry = StreamAccumulator & { streamKey: string; stopRequested: boolean }
+  const activeStreams = new Map<string, ActiveStreamEntry>()
   const streamingPollers = new Map<number, ReturnType<typeof setInterval>>()
+
+  const sessionStreamingUpdate = (sessionId: number, delta: number) => {
+    if (!Number.isFinite(sessionId)) return
+    set((state) => {
+      const current = { ...(state.streamingSessions || {}) }
+      const prev = current[sessionId] ?? 0
+      const next = Math.max(0, prev + delta)
+      if (next <= 0) {
+        delete current[sessionId]
+      } else {
+        current[sessionId] = next
+      }
+      return {
+        streamingSessions: current,
+        activeStreamCount: activeStreams.size,
+      }
+    })
+    recomputeStreamingState()
+  }
+
+  const registerActiveStream = (entry: ActiveStreamEntry) => {
+    activeStreams.set(entry.streamKey, entry)
+    sessionStreamingUpdate(entry.sessionId, 1)
+  }
+
+  const unregisterActiveStream = (streamKey: string) => {
+    const entry = activeStreams.get(streamKey)
+    if (!entry) return
+    if (entry.flushTimer) {
+      clearTimeout(entry.flushTimer)
+      entry.flushTimer = null
+    }
+    activeStreams.delete(streamKey)
+    sessionStreamingUpdate(entry.sessionId, -1)
+  }
+
+  const findStreamByAssistantId = (messageId: MessageId | null | undefined): ActiveStreamEntry | null => {
+    if (typeof messageId === 'undefined' || messageId === null) return null
+    const target = messageKey(messageId)
+    for (const stream of activeStreams.values()) {
+      if (messageKey(stream.assistantId) === target) {
+        return stream
+      }
+    }
+    return null
+  }
+
+  const findStreamByClientMessageId = (clientMessageId?: string | null): ActiveStreamEntry | null => {
+    if (!clientMessageId) return null
+    for (const stream of activeStreams.values()) {
+      if (stream.clientMessageId && stream.clientMessageId === clientMessageId) {
+        return stream
+      }
+      if (stream.assistantClientMessageId && stream.assistantClientMessageId === clientMessageId) {
+        return stream
+      }
+    }
+    return null
+  }
 
   const stopMessagePoller = (messageId: number) => {
     const timer = streamingPollers.get(messageId)
@@ -575,18 +633,20 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
 
   const recomputeStreamingState = () => {
     const snapshot = get()
-    const hasStreaming = snapshot.messageMetas.some((meta) => meta.streamStatus === 'streaming')
     const currentSessionId = snapshot.currentSession?.id ?? null
-    const shouldFlagCurrent =
-      Boolean(currentSessionId) &&
-      snapshot.activeStreamSessionId === currentSessionId &&
-      hasStreaming
+    const streamingCounts = snapshot.streamingSessions || {}
+    const activeForCurrent = currentSessionId ? streamingCounts[currentSessionId] ?? 0 : 0
+    const hasStreamingMeta = snapshot.messageMetas.some(
+      (meta) => meta.sessionId === currentSessionId && meta.streamStatus === 'streaming',
+    )
+    const shouldFlagCurrent = Boolean(currentSessionId) && (activeForCurrent > 0 || hasStreamingMeta)
+    const nextActiveSessionId = shouldFlagCurrent ? currentSessionId : null
     const updates: Partial<ChatState> = {}
     if (snapshot.isStreaming !== shouldFlagCurrent) {
       updates.isStreaming = shouldFlagCurrent
     }
-    if (!hasStreaming && currentSessionId && snapshot.activeStreamSessionId === currentSessionId) {
-      updates.activeStreamSessionId = null
+    if (snapshot.activeStreamSessionId !== nextActiveSessionId) {
+      updates.activeStreamSessionId = nextActiveSessionId
     }
     if (Object.keys(updates).length > 0) {
       set(updates)
@@ -771,7 +831,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
 
   const startMessageProgressWatcher = (sessionId: number, messageId: number) => {
     if (typeof messageId !== 'number' || Number.isNaN(messageId)) return
-    if (streamState.active?.assistantId === messageId) return
+    if (findStreamByAssistantId(messageId)) return
     if (activeWatchers.has(messageId)) return
     activeWatchers.add(messageId)
 
@@ -812,10 +872,9 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
     poll()
   }
 
-  const flushActiveStream = (force = false) => {
-    const active = streamState.active
+  const flushStreamBuffer = (stream: ActiveStreamEntry | null, force = false) => {
+    const active = stream
     if (!active) return
-
     const hasPending =
       active.pendingContent.length > 0 ||
       active.pendingReasoning.length > 0 ||
@@ -907,23 +966,18 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
     })
   }
 
-  const scheduleFlush = () => {
-    const active = streamState.active
-    if (!active) return
-    if (active.flushTimer) return
-    active.flushTimer = setTimeout(() => {
-      active.flushTimer = null
-      flushActiveStream()
+  const scheduleFlush = (stream: ActiveStreamEntry | null) => {
+    if (!stream) return
+    if (stream.flushTimer) return
+    stream.flushTimer = setTimeout(() => {
+      stream.flushTimer = null
+      flushStreamBuffer(stream)
     }, STREAM_FLUSH_INTERVAL)
   }
 
-  const resetStreamState = () => {
-    const active = streamState.active
-    if (active?.flushTimer) {
-      clearTimeout(active.flushTimer)
-    }
-    streamState.active = null
-    streamState.stopRequested = false
+  const clearActiveStream = (stream: ActiveStreamEntry | null) => {
+    if (!stream) return
+    unregisterActiveStream(stream.streamKey)
   }
 
   return {
@@ -938,6 +992,8 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
     isMessagesLoading: false,
     isStreaming: false,
     activeStreamSessionId: null,
+    streamingSessions: {},
+    activeStreamCount: 0,
     error: null,
     usageCurrent: null,
     usageLastRound: null,
@@ -1325,6 +1381,17 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
               : undefined,
           }
 
+      const settingsSnapshot = useSettingsStore.getState()
+      const { contextEnabled } = settingsSnapshot
+      const maxConcurrentStreams = Math.max(1, settingsSnapshot.systemSettings?.chatMaxConcurrentStreams ?? 1)
+      const activeCountSnapshot = get().activeStreamCount ?? 0
+      if (activeCountSnapshot >= maxConcurrentStreams) {
+        set({
+          error: `当前已有 ${activeCountSnapshot}/${maxConcurrentStreams} 个任务生成中，请稍后再试或先停止部分任务。`,
+        })
+        return
+      }
+
       const reasoningPreference =
         snapshot.currentSession?.id === sessionId
           ? snapshot.currentSession?.reasoningEnabled
@@ -1334,7 +1401,6 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
       const resolvedReasoningEnabled =
         options?.reasoningEnabled ?? normalizedReasoningPreference ?? true
       const reasoningDesired = Boolean(resolvedReasoningEnabled)
-      const { contextEnabled } = useSettingsStore.getState()
 
       const parentMessageId: MessageId | null = isRegenerate ? replyToMessageId : userMessage?.id ?? null
       const existingVariantCount = parentMessageId
@@ -1419,8 +1485,10 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         }
       })
 
-      streamState.stopRequested = false
-      streamState.active = {
+      const streamKey =
+        (userClientMessageId && `client:${userClientMessageId}`) ||
+        `assistant:${messageKey(assistantPlaceholder.id)}:${Date.now().toString(36)}`
+      const streamEntry: ActiveStreamEntry = {
         sessionId,
         assistantId: assistantPlaceholder.id,
         content: '',
@@ -1432,9 +1500,13 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         reasoningDesired,
         reasoningActivated: false,
         clientMessageId: userClientMessageId ?? null,
+        assistantClientMessageId: null,
         webSearchRequested: Boolean(options?.features?.web_search),
         lastUsage: null,
+        streamKey,
+        stopRequested: false,
       }
+      registerActiveStream(streamEntry)
 
       const { replyToMessageId: _ignoredReply, replyToClientMessageId: _ignoredReplyClient, ...forwardOptions } =
         options || {}
@@ -1444,6 +1516,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           ...forwardOptions,
           contextEnabled,
           clientMessageId: userClientMessageId ?? undefined,
+          streamKey,
           replyToMessageId:
             isRegenerate && typeof replyToMessageId === 'number' ? replyToMessageId : undefined,
           replyToClientMessageId: isRegenerate
@@ -1455,7 +1528,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
       try {
         const iterator = startStream()
         for await (const evt of iterator) {
-          const active = streamState.active
+          const active = activeStreams.get(streamEntry.streamKey)
           if (!active) break
 
           if (evt?.type === 'start') {
@@ -1621,7 +1694,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
 
           if (evt?.type === 'content' && evt.content) {
             active.pendingContent += evt.content
-            scheduleFlush()
+            scheduleFlush(active)
             continue
           }
 
@@ -1641,7 +1714,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
             if (evt.keepalive) {
               active.pendingMeta.reasoningStatus = 'idle'
               active.pendingMeta.reasoningIdleMs = evt.idleMs ?? null
-              scheduleFlush()
+              scheduleFlush(active)
               continue
             }
 
@@ -1658,7 +1731,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
               }
             }
 
-            scheduleFlush()
+            scheduleFlush(active)
             continue
           }
 
@@ -1688,27 +1761,29 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           }
 
           if (evt?.type === 'complete') {
-            const activeBuffer = streamState.active
+            const activeBuffer = active
             if (activeBuffer) {
               activeBuffer.pendingMeta.reasoningStatus = 'done'
             }
-            scheduleFlush()
+            scheduleFlush(active)
             continue
           }
         }
 
-        const completedSnapshot = streamState.active
+        const finalStream = activeStreams.get(streamEntry.streamKey) ?? null
+        const completedSnapshot = finalStream
           ? {
-              assistantId: streamState.active.assistantId,
-              assistantClientMessageId: streamState.active.assistantClientMessageId ?? streamState.active.clientMessageId,
-              content: streamState.active.content,
-              reasoning: streamState.active.reasoning,
-              usage: streamState.active.lastUsage,
+              assistantId: finalStream.assistantId,
+              assistantClientMessageId: finalStream.assistantClientMessageId ?? finalStream.clientMessageId,
+              content: finalStream.content,
+              reasoning: finalStream.reasoning,
+              usage: finalStream.lastUsage,
               sessionId,
             }
           : null
-        const completedAssistantId = streamState.active?.assistantId
-        flushActiveStream(true)
+        const completedAssistantId =
+          typeof finalStream?.assistantId !== 'undefined' ? finalStream?.assistantId : null
+        flushStreamBuffer(finalStream, true)
         if (
           completedSnapshot &&
           (completedSnapshot.content.length > 0 || completedSnapshot.reasoning.length > 0)
@@ -1732,16 +1807,17 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
         if (typeof completedAssistantId !== 'undefined' && completedAssistantId !== null) {
           updateMetaStreamStatus(completedAssistantId, 'done')
         }
-        resetStreamState()
+        clearActiveStream(finalStream)
         recomputeStreamingState()
         set((state) => streamingFlagUpdate(state, sessionId, false))
         get().fetchUsage(sessionId).catch(() => {})
         get().fetchSessionsUsage().catch(() => {})
       } catch (error: any) {
-        const interruptedContext = streamState.active
-        const manualStopRequested = streamState.stopRequested
-        flushActiveStream(true)
-        resetStreamState()
+        const interruptedContext = activeStreams.get(streamEntry.streamKey) ?? null
+        const manualStopRequested = interruptedContext?.stopRequested ?? false
+        flushStreamBuffer(interruptedContext, true)
+        clearActiveStream(interruptedContext)
+        recomputeStreamingState()
 
         const quotaPayload = error?.payload?.quota ?? null
         if (quotaPayload) {
@@ -1877,45 +1953,64 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
 
     stopStreaming: () => {
       const snapshot = get()
-      const activeSessionId = streamState.active?.sessionId
-      const requestedWebSearch = streamState.active?.webSearchRequested
-      const activeClientMessageId = streamState.active?.clientMessageId ?? null
-      const activeAssistantId =
-        typeof streamState.active?.assistantId === 'number' ? streamState.active.assistantId : null
+      const currentSessionId = snapshot.currentSession?.id ?? null
+      const targets = Array.from(activeStreams.values()).filter((stream) =>
+        currentSessionId ? stream.sessionId === currentSessionId : true,
+      )
+
+      if (targets.length > 0) {
+        targets.forEach((stream) => {
+          stream.stopRequested = true
+          if (stream.sessionId && (stream.clientMessageId || stream.assistantId)) {
+            apiClient
+              .cancelAgentStream(stream.sessionId, {
+                clientMessageId: stream.clientMessageId ?? stream.assistantClientMessageId ?? undefined,
+                messageId:
+                  typeof stream.assistantId === 'number' ? Number(stream.assistantId) : undefined,
+              })
+              .catch(() => {})
+          }
+          try {
+            apiClient.cancelStream(stream.streamKey)
+          } catch {
+            // ignore
+          }
+          flushStreamBuffer(stream, true)
+          clearActiveStream(stream)
+          if (typeof stream.assistantId === 'number') {
+            updateMetaStreamStatus(stream.assistantId, 'cancelled', '已停止生成')
+          }
+        })
+        set((state) => ({
+          ...streamingFlagUpdate(state, currentSessionId, false),
+          toolEvents: currentSessionId
+            ? state.toolEvents.filter((event) => event.sessionId !== currentSessionId)
+            : state.toolEvents,
+        }))
+        return
+      }
+
       const streamingMeta =
         snapshot.messageMetas.find(
           (meta) => meta.role === 'assistant' && meta.streamStatus === 'streaming',
         ) ?? null
-      const targetSessionId = activeSessionId ?? snapshot.currentSession?.id ?? null
-      const fallbackClientMessageId = streamingMeta?.clientMessageId ?? null
       const fallbackAssistantId =
         typeof streamingMeta?.id === 'number' ? streamingMeta.id : null
-      const targetClientMessageId = activeClientMessageId ?? fallbackClientMessageId ?? null
-      const targetAssistantId = activeAssistantId ?? fallbackAssistantId ?? null
-      if (targetSessionId && (targetClientMessageId || targetAssistantId || requestedWebSearch)) {
+      const fallbackClientId = streamingMeta?.clientMessageId ?? null
+      if (currentSessionId && (fallbackAssistantId || fallbackClientId)) {
         apiClient
-          .cancelAgentStream(targetSessionId, {
-            clientMessageId: targetClientMessageId ?? undefined,
-            messageId: targetAssistantId ?? undefined,
+          .cancelAgentStream(currentSessionId, {
+            clientMessageId: fallbackClientId ?? undefined,
+            messageId: fallbackAssistantId ?? undefined,
           })
           .catch(() => {})
-      }
-      streamState.stopRequested = true
-      try {
-        apiClient.cancelStream()
-      } catch {
-        // ignore
-      }
-      flushActiveStream(true)
-      resetStreamState()
-      set((state) => ({
-        ...streamingFlagUpdate(state, targetSessionId, false),
-        toolEvents: activeSessionId
-          ? state.toolEvents.filter((event) => event.sessionId !== activeSessionId)
-          : state.toolEvents,
-      }))
-      if (typeof targetAssistantId !== 'undefined' && targetAssistantId !== null) {
-        updateMetaStreamStatus(targetAssistantId, 'cancelled', '已停止生成')
+        if (fallbackAssistantId != null) {
+          updateMetaStreamStatus(fallbackAssistantId, 'cancelled', '已停止生成')
+        }
+        set((state) => ({
+          ...streamingFlagUpdate(state, currentSessionId, false),
+          toolEvents: state.toolEvents.filter((event) => event.sessionId !== currentSessionId),
+        }))
       }
     },
 

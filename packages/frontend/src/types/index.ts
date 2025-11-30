@@ -275,6 +275,7 @@ export interface SystemSettings {
   taskTraceRetentionDays?: number;
   taskTraceMaxEvents?: number;
   taskTraceIdleTimeoutMs?: number;
+  chatMaxConcurrentStreams?: number;
 }
 
 // UI 状态类型
@@ -303,6 +304,8 @@ export interface ChatState {
     sessionId: number | null;
     selectedMessageIds: number[];
   };
+  streamingSessions?: Record<number, number>;
+  activeStreamCount?: number;
 }
 
 export interface WebSearchHit {

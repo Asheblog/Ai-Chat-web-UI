@@ -33,7 +33,7 @@ type ImageUploadPayload = {
 
 class ApiClient {
   private client: AxiosInstance
-  private currentStreamController: AbortController | null = null
+  private streamControllers = new Map<string, AbortController>()
   // 标记避免重复重定向
   private isRedirecting = false
 
@@ -339,6 +339,7 @@ class ApiClient {
       replyToClientMessageId?: string
       customBody?: Record<string, any>
       customHeaders?: Array<{ name: string; value: string }>
+      streamKey?: string
     }
   ): AsyncGenerator<import('@/types').ChatStreamChunk, void, unknown> {
     // API_BASE_URL 已包含 /api 前缀
@@ -377,10 +378,15 @@ class ApiClient {
       })
     }
 
+    const streamKey =
+      typeof options?.streamKey === 'string' && options.streamKey.trim().length > 0
+        ? options.streamKey.trim()
+        : `session:${sessionId}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`
+    const controller = new AbortController()
+    this.streamControllers.set(streamKey, controller)
+
     // 建立带退避的请求
-    this.currentStreamController?.abort();
-    this.currentStreamController = new AbortController();
-    let response = await doOnce(this.currentStreamController.signal)
+    let response = await doOnce(controller.signal)
     if (response.status === 401) {
       this.handleUnauthorized()
       throw new Error('Unauthorized')
@@ -395,7 +401,7 @@ class ApiClient {
     }
     if (response.status >= 500) {
       await new Promise(r => setTimeout(r, 2000))
-      response = await doOnce(this.currentStreamController.signal)
+      response = await doOnce(controller.signal)
       if (response.status === 401) {
         this.handleUnauthorized()
         throw new Error('Unauthorized')
@@ -535,7 +541,7 @@ class ApiClient {
       }
     } finally {
       reader.releaseLock()
-      this.currentStreamController = null
+      this.streamControllers.delete(streamKey)
     }
 
     if (!completed) {
@@ -545,9 +551,19 @@ class ApiClient {
     }
   }
 
-  cancelStream() {
-    try { this.currentStreamController?.abort(); } catch {}
-    this.currentStreamController = null
+  cancelStream(streamKey?: string) {
+    if (streamKey) {
+      const controller = this.streamControllers.get(streamKey)
+      if (controller) {
+        try { controller.abort() } catch {}
+        this.streamControllers.delete(streamKey)
+      }
+      return
+    }
+    this.streamControllers.forEach((controller) => {
+      try { controller.abort() } catch {}
+    })
+    this.streamControllers.clear()
   }
 
   async cancelAgentStream(
@@ -810,6 +826,15 @@ class ApiClient {
       }
       return 30000
     })()
+    const chatMaxConcurrentStreams = (() => {
+      const v = raw.chat_max_concurrent_streams
+      if (typeof v === 'number') return Math.max(1, Math.min(8, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
+        if (Number.isFinite(parsed)) return Math.max(1, Math.min(8, parsed))
+      }
+      return 1
+    })()
     return {
       data: {
         allowRegistration,
@@ -863,6 +888,7 @@ class ApiClient {
         taskTraceRetentionDays,
         taskTraceMaxEvents,
         taskTraceIdleTimeoutMs,
+        chatMaxConcurrentStreams,
       } as any,
     }
   }
@@ -939,6 +965,9 @@ class ApiClient {
     if (typeof rest.taskTraceRetentionDays === 'number') payload.task_trace_retention_days = rest.taskTraceRetentionDays
     if (typeof rest.taskTraceMaxEvents === 'number') payload.task_trace_max_events = rest.taskTraceMaxEvents
     if (typeof rest.taskTraceIdleTimeoutMs === 'number') payload.task_trace_idle_timeout_ms = rest.taskTraceIdleTimeoutMs
+    if (typeof rest.chatMaxConcurrentStreams === 'number') {
+      payload.chat_max_concurrent_streams = Math.max(1, Math.min(8, Math.floor(rest.chatMaxConcurrentStreams)))
+    }
     if (assistantAvatarUpload) {
       payload.assistant_avatar = assistantAvatarUpload
     } else if (assistantAvatarRemove) {

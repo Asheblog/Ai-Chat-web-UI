@@ -45,7 +45,7 @@ export function useChatComposer() {
     messageRenderCache,
     isMessagesLoading,
     isStreaming,
-    activeStreamSessionId,
+    activeStreamCount,
     streamMessage,
     stopStreaming,
     clearError,
@@ -182,7 +182,7 @@ export function useChatComposer() {
   }, [messageMetas.length])
 
   useEffect(() => {
-    if (!textareaRef.current || isStreaming) return
+    if (!textareaRef.current) return
     const active = typeof document !== 'undefined' ? document.activeElement : null
     const advancedEditing = active instanceof HTMLElement && active.dataset?.advancedInput === 'true'
     if (advancedEditing) return
@@ -269,12 +269,11 @@ export function useChatComposer() {
     }
   }, [currentSession, sessionPromptDraft, toast, updateSessionPrefs])
 
-  const foreignStreamLocked = Boolean(
-    activeStreamSessionId != null &&
-      (!currentSession || activeStreamSessionId !== currentSession.id),
-  )
-  const sendLockedReason = foreignStreamLocked
-    ? '其他会话正在生成中，请等待结束或返回该会话停止。'
+  const maxConcurrentStreams = Math.max(1, systemSettings?.chatMaxConcurrentStreams ?? 1)
+  const totalActiveStreams = activeStreamCount ?? 0
+  const concurrencyLocked = totalActiveStreams >= maxConcurrentStreams
+  const sendLockedReason = concurrencyLocked
+    ? `当前已有 ${totalActiveStreams}/${maxConcurrentStreams} 个请求生成中，请稍后再试或先停止部分任务。`
     : null
 
   const systemPromptFallback = (systemSettings?.chatSystemPrompt ?? '').trim()
@@ -390,11 +389,10 @@ export function useChatComposer() {
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || !currentSession) return
-    if (isStreaming) return
-    if (foreignStreamLocked) {
+    if (concurrencyLocked) {
       toast({
-        title: '有其他会话正在生成',
-        description: '请先等待该会话完成或手动停止后再发送新的消息。',
+        title: '生成任务已达上限',
+        description: `当前共有 ${totalActiveStreams}/${maxConcurrentStreams} 个请求进行中，请稍候或先停止部分任务。`,
         variant: 'destructive',
       })
       return
@@ -497,9 +495,10 @@ export function useChatComposer() {
     }
   }, [
     input,
-    isStreaming,
     currentSession,
-    foreignStreamLocked,
+    concurrencyLocked,
+    totalActiveStreams,
+    maxConcurrentStreams,
     clearError,
     isVisionEnabled,
     selectedImages,
@@ -638,7 +637,7 @@ export function useChatComposer() {
     MAX_IMAGE_MB,
     MAX_IMAGE_EDGE,
     MAX_TOTAL_IMAGE_MB,
-    sendLocked: foreignStreamLocked,
+    sendLocked: concurrencyLocked,
     sendLockedReason,
     // 控制方法
     setInput,

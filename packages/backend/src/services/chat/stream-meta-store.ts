@@ -18,6 +18,7 @@ export type StreamMetaRegistrationParams = {
   clientMessageId?: string | null
   assistantClientMessageId?: string | null
   assistantMessageId?: number | string | null
+  maxActorStreams?: number | null
 }
 
 export interface StreamMetaStore {
@@ -54,6 +55,7 @@ export interface StreamMetaStore {
 export class MemoryStreamMetaStore implements StreamMetaStore {
   private agentStreamControllers = new Map<string, AgentStreamMeta>()
   private pendingStreamCancels = new Set<string>()
+  private activeStreamsByActor = new Map<string, Set<string>>()
 
   buildAgentStreamKey(sessionId: number, clientMessageId?: string | null, messageId?: number | string | null) {
     if (clientMessageId && clientMessageId.trim()) {
@@ -94,9 +96,15 @@ export class MemoryStreamMetaStore implements StreamMetaStore {
   }
 
   registerStreamMeta(params: StreamMetaRegistrationParams): AgentStreamMeta | null {
-    const { sessionId, actorIdentifier, clientMessageId, assistantClientMessageId, assistantMessageId } = params
+    const { sessionId, actorIdentifier, clientMessageId, assistantClientMessageId, assistantMessageId, maxActorStreams } = params
     const key = this.buildAgentStreamKey(sessionId, clientMessageId ?? null, assistantMessageId ?? null)
     if (!key) return null
+    if (typeof maxActorStreams === 'number' && maxActorStreams > 0) {
+      const activeCount = this.activeStreamsByActor.get(actorIdentifier)?.size ?? 0
+      if (activeCount >= maxActorStreams) {
+        return null
+      }
+    }
     const meta: AgentStreamMeta = {
       sessionId,
       actorId: actorIdentifier,
@@ -108,6 +116,9 @@ export class MemoryStreamMetaStore implements StreamMetaStore {
       streamKey: key,
     }
     this.agentStreamControllers.set(key, meta)
+    const actorSet = this.activeStreamsByActor.get(actorIdentifier) ?? new Set<string>()
+    actorSet.add(key)
+    this.activeStreamsByActor.set(actorIdentifier, actorSet)
     return meta
   }
 
@@ -125,6 +136,13 @@ export class MemoryStreamMetaStore implements StreamMetaStore {
   releaseStreamMeta(meta: AgentStreamMeta | null) {
     if (!meta) return
     this.agentStreamControllers.delete(meta.streamKey)
+    const actorSet = this.activeStreamsByActor.get(meta.actorId)
+    if (actorSet) {
+      actorSet.delete(meta.streamKey)
+      if (actorSet.size === 0) {
+        this.activeStreamsByActor.delete(meta.actorId)
+      }
+    }
     meta.controller = null
   }
 

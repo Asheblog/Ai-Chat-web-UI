@@ -346,6 +346,28 @@ export const registerChatStreamRoutes = (router: Hono) => {
         agentWebSearchConfig.enabled &&
         providerSupportsTools &&
         Boolean(agentWebSearchConfig.apiKey);
+      const resolvedMaxConcurrentStreams = (() => {
+        const raw =
+          sysMap.chat_max_concurrent_streams ||
+          process.env.CHAT_MAX_CONCURRENT_STREAMS ||
+          '1';
+        const parsed = Number.parseInt(raw, 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return Math.min(8, Math.max(1, parsed));
+        }
+        return 1;
+      })();
+      const concurrencyErrorMessage = '并发生成数已达系统上限，请稍候重试';
+      const denyByConcurrencyLimit = () => {
+        traceRecorder?.log?.('stream:concurrency_denied', {
+          limit: resolvedMaxConcurrentStreams,
+          actor: actor.identifier,
+        });
+        return c.json<ApiResponse>(
+          { success: false, error: concurrencyErrorMessage },
+          429,
+        );
+      };
 
       const STREAM_PROGRESS_PERSIST_INTERVAL_MS = Math.max(
         250,
@@ -427,6 +449,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
           traceRecorder,
           idleTimeoutMs: traceDecision.config.idleTimeoutMs,
           assistantReplyHistoryLimit,
+          maxConcurrentStreams: resolvedMaxConcurrentStreams,
+          concurrencyErrorMessage,
         });
       }
 
@@ -436,7 +460,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
         clientMessageId,
         assistantMessageId,
         assistantClientMessageId,
+        maxActorStreams: resolvedMaxConcurrentStreams,
       });
+      if (!activeStreamMeta) {
+        return denyByConcurrencyLimit();
+      }
 
       const streamLogBase = () => ({
         sessionId,

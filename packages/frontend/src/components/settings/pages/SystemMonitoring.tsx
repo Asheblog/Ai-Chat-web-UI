@@ -23,6 +23,7 @@ export function SystemMonitoringPage() {
   const [retentionDraft, setRetentionDraft] = useState('7')
   const [maxEventsDraft, setMaxEventsDraft] = useState('2000')
   const [idleTimeoutDraft, setIdleTimeoutDraft] = useState('30000')
+  const [concurrencyDraft, setConcurrencyDraft] = useState('1')
   const [traceTotal, setTraceTotal] = useState<number | null>(null)
   const [cleanupLoading, setCleanupLoading] = useState(false)
 
@@ -38,7 +39,15 @@ export function SystemMonitoringPage() {
     if (typeof settings?.taskTraceIdleTimeoutMs === 'number') {
       setIdleTimeoutDraft(String(settings.taskTraceIdleTimeoutMs))
     }
-  }, [settings?.taskTraceRetentionDays, settings?.taskTraceMaxEvents, settings?.taskTraceIdleTimeoutMs])
+    if (typeof settings?.chatMaxConcurrentStreams === 'number') {
+      setConcurrencyDraft(String(settings.chatMaxConcurrentStreams))
+    }
+  }, [
+    settings?.taskTraceRetentionDays,
+    settings?.taskTraceMaxEvents,
+    settings?.taskTraceIdleTimeoutMs,
+    settings?.chatMaxConcurrentStreams,
+  ])
 
   const fetchTraceStats = useCallback(async () => {
     if (!isAdmin) return
@@ -95,6 +104,54 @@ export function SystemMonitoringPage() {
 
   return (
     <div className="space-y-6">
+      <div className="space-y-5">
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <Thermometer className="w-5 h-5 text-primary" />
+          <div>
+            <CardTitle className="text-lg font-semibold tracking-tight">并发生成控制</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              限制同时进行的流式请求数量，超出即拒绝新的消息
+            </CardDescription>
+          </div>
+        </div>
+        <SettingRow
+          title="最大并发数"
+          description="允许同时进行的流式请求数量（1-8）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="maxConcurrentStreams"
+              type="number"
+              min={1}
+              max={8}
+              className="w-full sm:w-32 text-right"
+              value={concurrencyDraft}
+              disabled={isLoading}
+              onChange={(e) => setConcurrencyDraft(e.target.value)}
+            />
+            <Button
+              variant="outline"
+              disabled={isLoading}
+              onClick={async () => {
+                const parsed = Number.parseInt(concurrencyDraft, 10)
+                if (Number.isNaN(parsed) || parsed < 1 || parsed > 8) {
+                  toast({
+                    title: '输入无效',
+                    description: '请输入 1-8 之间的整数',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+                await handleUpdate({ chatMaxConcurrentStreams: parsed }, '并发上限已更新')
+              }}
+            >
+              保存
+            </Button>
+          </div>
+        </SettingRow>
+      </div>
+
       <div className="space-y-5">
         <div className="flex items-center gap-3 pb-3 border-b">
           <ShieldCheck className="w-5 h-5 text-primary" />

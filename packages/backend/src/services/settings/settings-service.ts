@@ -162,6 +162,13 @@ export class SettingsService {
       task_trace_retention_days: this.parseIntInRange(settingsObj.task_trace_retention_days, process.env.TASK_TRACE_RETENTION_DAYS, 1, 365, 7),
       task_trace_max_events: this.parseIntInRange(settingsObj.task_trace_max_events, process.env.TASK_TRACE_MAX_EVENTS, 100, 200000, 2000),
       task_trace_idle_timeout_ms: this.parseIntInRange(settingsObj.task_trace_idle_timeout_ms, process.env.TASK_TRACE_IDLE_TIMEOUT_MS, 1000, 600000, 30000),
+      chat_max_concurrent_streams: this.parseIntInRange(
+        settingsObj.chat_max_concurrent_streams,
+        process.env.CHAT_MAX_CONCURRENT_STREAMS,
+        1,
+        8,
+        1,
+      ),
       assistant_avatar_url: null as string | null,
       assistant_avatar_path: settingsObj.assistant_avatar_path || null,
       model_access_default_anonymous: parseAccessDefault(map.get('model_access_default_anonymous'), 'deny'),
@@ -196,6 +203,7 @@ export class SettingsService {
         web_search_include_raw: formatted.web_search_include_raw,
         assistant_avatar_url: formatted.assistant_avatar_url,
         chat_system_prompt: formatted.chat_system_prompt,
+        chat_max_concurrent_streams: formatted.chat_max_concurrent_streams,
       }
     }
     return formatted
@@ -241,6 +249,7 @@ export class SettingsService {
     assignIfNumber('task_trace_retention_days', payload.task_trace_retention_days)
     assignIfNumber('task_trace_max_events', payload.task_trace_max_events)
     assignIfNumber('task_trace_idle_timeout_ms', payload.task_trace_idle_timeout_ms)
+    assignIfNumber('chat_max_concurrent_streams', payload.chat_max_concurrent_streams)
 
     const boolFields = [
       'usage_emit',

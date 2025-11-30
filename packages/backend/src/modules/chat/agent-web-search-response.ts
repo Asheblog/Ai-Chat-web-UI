@@ -26,6 +26,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
   traceRecorder,
   idleTimeoutMs,
   assistantReplyHistoryLimit,
+  maxConcurrentStreams,
+  concurrencyErrorMessage,
 } = params;
 
   const traceMetadataExtras: Record<string, unknown> = {};
@@ -52,7 +54,18 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     clientMessageId: resolvedClientMessageId,
     assistantMessageId: activeAssistantMessageId,
     assistantClientMessageId: assistantClientMessageId ?? null,
+    maxActorStreams: maxConcurrentStreams,
   });
+  if (!streamMeta) {
+    traceRecorder.log('agent:concurrency_denied', {
+      limit: maxConcurrentStreams,
+      actor: actorIdentifier,
+    });
+    return new Response(
+      JSON.stringify({ success: false, error: concurrencyErrorMessage }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
   const streamKey =
     streamMeta?.streamKey ??
     buildAgentStreamKey(sessionId, resolvedClientMessageId, userMessageRecord?.id ?? null);
@@ -968,4 +981,6 @@ export type AgentResponseParams = {
   traceRecorder: TaskTraceRecorder;
   idleTimeoutMs: number;
   assistantReplyHistoryLimit: number;
+  maxConcurrentStreams: number;
+  concurrencyErrorMessage: string;
 };

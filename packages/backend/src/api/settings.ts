@@ -98,6 +98,7 @@ const systemSettingSchema = z.object({
   task_trace_retention_days: z.number().int().min(1).max(365).optional(),
   task_trace_max_events: z.number().int().min(100).max(200000).optional(),
   task_trace_idle_timeout_ms: z.number().int().min(1000).max(600000).optional(),
+  chat_max_concurrent_streams: z.number().int().min(1).max(8).optional(),
 });
 
 const resetAnonymousQuotaSchema = z.object({

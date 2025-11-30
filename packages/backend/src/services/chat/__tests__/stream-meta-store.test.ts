@@ -35,4 +35,33 @@ describe('StreamMetaStore', () => {
     store.clearPendingCancelMarkers({ sessionId: 2, messageId: 5, clientMessageId: 'x' })
     expect(store.hasPendingStreamCancelKey(store.buildPendingCancelKeyByMessageId(2, 5))).toBe(false)
   })
+
+  test('enforces actor concurrency limit', () => {
+    const store = new MemoryStreamMetaStore()
+    const first = store.registerStreamMeta({
+      sessionId: 1,
+      actorIdentifier: 'actor-1',
+      clientMessageId: 'alpha',
+      assistantMessageId: 10,
+      maxActorStreams: 1,
+    })
+    expect(first).toBeTruthy()
+    const blocked = store.registerStreamMeta({
+      sessionId: 1,
+      actorIdentifier: 'actor-1',
+      clientMessageId: 'beta',
+      assistantMessageId: 11,
+      maxActorStreams: 1,
+    })
+    expect(blocked).toBeNull()
+    store.releaseStreamMeta(first)
+    const allowed = store.registerStreamMeta({
+      sessionId: 1,
+      actorIdentifier: 'actor-1',
+      clientMessageId: 'gamma',
+      assistantMessageId: 12,
+      maxActorStreams: 1,
+    })
+    expect(allowed).toBeTruthy()
+  })
 })
