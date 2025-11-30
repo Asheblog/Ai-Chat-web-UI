@@ -8,6 +8,26 @@
 - CI 镜像 + 1Panel（推荐）
 - 本地运行（开发 / 非 Docker 生产）
 
+## ✨ 核心能力速览
+
+| 模块 | 主要能力 | 亮点 |
+| --- | --- | --- |
+| 聊天体验 | SSE 实时对话、会话管理、Markdown 渲染、图片/头像上传 | Web Worker Markdown 管线 + `@tanstack/react-virtual` 虚拟滚动，气泡推理展开、复制/重试、移动端抽屉式布局，发送失败自动回滚所选图片（后端持久化到 `storage/chat-images`），并可在关闭页面后保留后台任务直至生成完成。 |
+| 模型与推理 | 系统模型、个人偏好、模型目录缓存 | System Connections 把 OpenAI/Azure/Ollama/Google Generative AI 等统一纳入，支持能力标签、Base URL 校验与连接校验；动态上下文窗口/补全限制、`ollamaThink` 与 OpenAI Reasoning Effort；内置 OpenAI 兼容 API 与模型选择器记忆。 |
+| 权限与配额 | 注册审批、角色治理、匿名访客、每日额度 | 首位注册者自动成为管理员，其余待审批；匿名 Cookie + retention days，系统设置可区分匿名/注册每日额度并一键重置；模型访问策略允许对匿名/注册用户设置 allow/deny。 |
+| 系统设置 | 设置中心、连接/模型管理、品牌化 | 系统/个人设置分区包含通用、网络、模型、推理、日志、图片、品牌等卡片；连接管理支持能力开关、Tags/Prefix、验证按钮；欢迎页品牌文案、LOGO、主题/图片域名均可后台修改。 |
+| 运维与可观测 | Task Trace、用量统计、部署脚本 | Task Trace Console 记录 `/api/chat/stream` 生命周期并支持导出；SSE `usage` 事件 + `usage_quota` 表提供 token 聚合；健康检查、SSE 心跳、全链路 `traffic-logger`；CI 构建前/后端镜像、1Panel Compose、自动 Prisma init、`start.sh/start.bat` 跨平台脚本。 |
+
+## 🌟 亮点特性
+
+- **细腻的流式聊天体验**  Web Worker Markdown 渲染结合 `@tanstack/react-virtual` 虚拟列表，长会话仍保持 60fps；消息气泡支持推理片段折叠、逐字动画、复制/重试；输入区支持多图片上传，失败会回滚队列，文件由后端保存到 `storage/chat-images` 并可配置公开域名；桌面三段式/平板收缩/手机抽屉保证多端一致。
+- **多源模型连接与动态目录**  System Connections 将 OpenAI、Azure OpenAI、Ollama、Google Generative AI 等通道统一抽象，支持 Tags、能力开关、Prefix、Base URL 校验及“验证连接”按钮；模型目录缓存会自动刷新上下文窗口/补全限制，管理员可手动刷新或覆写，前端的模型选择器会记住匿名/登录偏好，还提供 OpenAI 兼容接口以便外部客户端直接调用。
+- **推理 & 工具链编排**  Chat Request Builder 会根据模型元数据动态扩展上下文、调整 max_tokens，结合 `ollamaThink` / OpenAI Reasoning Effort 控制推理；Agent Web Search 能在流式过程中记录工具事件与检索命中，必要时调用外部搜索 API；后端为 429/5xx/超时提供退避+重试，并在流式失败且无增量时自动降级为非流式 completion，最大程度保证可用性。
+- **匿名访客 + 审批制治理**  注册审批流程替代旧的 `APP_MODE`，管理员可在后台审批/禁用用户；匿名访客通过 Cookie 拿到独立 session 和保留天数，系统设置可单独设定匿名/注册的每日额度并支持“同步重置”；模型访问策略（inherit/allow/deny）让敏感模型只对指定人群开放，避免匿名滥用资源。
+- **全链路可观测**  Task Trace Console（`/main/logs/task-trace`）记录 stream key、工具事件、错误堆栈并支持筛选与 TXT 导出；SSE `usage`、`reasoning`、`keepalive` 事件实时反馈 token、推理时长与静默提示；`traffic-logger` 与 `/api/settings/health`、日志卷让排障透明，还能在输入框通过“任务追踪”按钮临时打开全链路追踪。
+- **后台任务不中断**  SSE 流同 Task Trace、消息持久化配合，让服务器在你关闭浏览器或网络掉线后仍会完成推理；重新打开页面即可从同一会话恢复，避免 OpenWebUI 等本地方案常见的“页面关闭即中断”问题。
+- **即插即用的部署体验**  官方 CI 每次推送都会产出前后端镜像（ghcr.io），1Panel Compose 已内置健康检查/卷/互信网络；容器首次启动自动执行 `prisma db push` + 可选 `db:init`；`.env.example` 统一管理变量，`start.sh`/`start.bat` 方便 Linux/Windows 一键启动；图片/日志/数据库卷路径可按需覆盖，系统设置里还能配置品牌文案/图片域名/推理默认策略以满足企业定制。
+
 ---
 
 ## 一、CI 镜像 + 1Panel 部署（推荐）
