@@ -53,50 +53,32 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6193056</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6807061</span>
               <span className="text-muted-foreground leading-relaxed">
-                支持会话级系统提示词并具备全局后备，聊天与欢迎页可编辑，按“会话&gt;全局&gt;无”顺序继承并计入上下文，系统设置新增配置入口。
+                聊天窗口新增「分享选择模式」，可在桌面与移动端批量勾选消息，并通过底部浮层与对话框串联生成分享链接，分享体验支持状态提示、快速清空与下一步指引。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">3cbc21a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c5f0a06</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增请求体修改策略，保护 model/messages/stream 等关键字段，允许合并自定义 body 与 headers 并过滤敏感头，保障高级定制的安全性。
+                完成分享服务端到前端的全链路建设：数据库与 API 支持生成/续期/撤销链接，个人设置新增分享管理面板，支持复制链接、调整有效期与一键撤销。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c95c384</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f3e0a73</span>
               <span className="text-muted-foreground leading-relaxed">
-                高级请求自定义改为独立弹窗，提供标题/描述/底部操作的分区布局，桌面与移动端通过回调打开，交互更聚焦。
+                流式响应处理兼容 message_id/assistant_message_id 等大小写差异，确保 SSE start 事件始终回传真实消息 ID，避免客户端出现重复或缺失消息。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f844a01</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7c8842b</span>
               <span className="text-muted-foreground leading-relaxed">
-                自定义请求体与 Header 按会话做本地缓存，切换会话或刷新页面不丢失草稿配置。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7bc840b</span>
-              <span className="text-muted-foreground leading-relaxed">
-                将加号菜单抽为共享组件，桌面与欢迎页复用，简化代码并保留 Web 搜索范围偏好。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8a75c96</span>
-              <span className="text-muted-foreground leading-relaxed">
-                统一加号组件的行为与样式，补齐分隔符和状态处理，修复旧版下拉的交互问题。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">733e832</span>
-              <span className="text-muted-foreground leading-relaxed">
-                移动端输入区控件收敛到加号菜单，新增会话提示词入口，提升遮罩层级与间距并隐藏推理/Web 搜索按钮。
+                移除 deepseek-chat / deepseek-reasoner 的硬编码 completion 限制，交由模型默认配置决定，方便在不同环境下调高最大输出长度。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-26 推送变更摘要
+            以上为 2025-11-30 推送变更摘要
           </p>
         </Card>
       </div>
