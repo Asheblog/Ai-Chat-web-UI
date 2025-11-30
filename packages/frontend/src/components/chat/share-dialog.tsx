@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Copy } from 'lucide-react'
 import { useChatStore } from '@/store/chat-store'
@@ -35,29 +34,18 @@ const EXPIRATION_OPTIONS = [
   { value: 'custom', label: '自定义（小时）' },
 ]
 
-const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
-
 interface ShareDialogProps {
   sessionId: number
-  pivotMessageId: number | string
+  sessionTitle?: string | null
+  selectedMessageIds: number[]
   open: boolean
   onOpenChange: (open: boolean) => void
+  onShareCompleted?: () => void
 }
 
-type ShareCandidate = {
-  key: string
-  id: number
-  role: 'user' | 'assistant'
-  createdAt: string
-  text: string
-}
-
-export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: ShareDialogProps) {
+export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open, onOpenChange, onShareCompleted }: ShareDialogProps) {
   const { toast } = useToast()
   const messageMetas = useChatStore((state) => state.messageMetas)
-  const messageBodies = useChatStore((state) => state.messageBodies)
-  const currentSession = useChatStore((state) => state.currentSession)
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [shareResult, setShareResult] = useState<{ detail: ChatShare; url: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -65,38 +53,33 @@ export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: S
   const [expiryPreset, setExpiryPreset] = useState('72')
   const [customExpiryHours, setCustomExpiryHours] = useState('')
 
-  const candidates = useMemo<ShareCandidate[]>(() => {
-    return messageMetas
-      .filter((meta) => typeof meta.id === 'number')
-      .map((meta) => {
-        const key = messageKey(meta.id)
-        const body = messageBodies[key]
-        const text = (body?.content || '').trim()
-        return {
-          key,
-          id: Number(meta.id),
-          role: meta.role,
-          createdAt: meta.createdAt,
-          text: text || (meta.role === 'user' ? '（暂无文本内容）' : '（AI 尚未返回文本）'),
-        }
+  const sortedMessageIds = useMemo(() => {
+    if (!selectedMessageIds?.length) return []
+    const orderMap = new Map<number, number>()
+    messageMetas.forEach((meta, index) => {
+      if (typeof meta.id === 'number' && meta.sessionId === sessionId) {
+        orderMap.set(Number(meta.id), index)
+      }
+    })
+    return [...new Set(selectedMessageIds)]
+      .filter((id) => Number.isFinite(id))
+      .sort((a, b) => {
+        const orderA = orderMap.get(a) ?? a
+        const orderB = orderMap.get(b) ?? b
+        return orderA - orderB
       })
-  }, [messageBodies, messageMetas])
-
-  const pivotKey = useMemo(() => messageKey(pivotMessageId), [pivotMessageId])
+  }, [messageMetas, selectedMessageIds, sessionId])
 
   useEffect(() => {
     if (!open) {
       return
     }
-    const pivotIndex = candidates.findIndex((item) => item.key === pivotKey)
-    const count = pivotIndex >= 0 ? pivotIndex + 1 : candidates.length
-    setSelectedKeys(candidates.slice(0, count).map((item) => item.key))
     setShareResult(null)
     setError(null)
-    setTitleInput((currentSession?.title || '分享链接').slice(0, 60))
+    setTitleInput((sessionTitle || '分享链接').slice(0, 60))
     setExpiryPreset('72')
     setCustomExpiryHours('')
-  }, [candidates, open, pivotKey, currentSession?.title])
+  }, [open, sessionTitle])
 
   useEffect(() => {
     if (!open) {
@@ -106,30 +89,14 @@ export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: S
     }
   }, [open])
 
-  const selectedCandidates = useMemo(
-    () => candidates.filter((item) => selectedKeys.includes(item.key)),
-    [candidates, selectedKeys],
-  )
-
-  const toggleSelection = (key: string) => {
-    setSelectedKeys((prev) => {
-      if (prev.includes(key)) {
-        return prev.filter((item) => item !== key)
-      }
-      return [...prev, key]
-    })
-  }
-
-  const handleSelectAll = () => {
-    setSelectedKeys(candidates.map((item) => item.key))
-  }
-
-  const handleClearSelection = () => {
-    setSelectedKeys([])
-  }
+  useEffect(() => {
+    if (!open) return
+    setShareResult(null)
+    setError(null)
+  }, [selectedMessageIds, open])
 
   const handleCreateShare = async () => {
-    if (selectedCandidates.length === 0) {
+    if (sortedMessageIds.length === 0) {
       setError('请至少选择一条消息')
       return
     }
@@ -152,7 +119,7 @@ export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: S
       }
       const payload = {
         sessionId,
-        messageIds: selectedCandidates.map((item) => item.id),
+        messageIds: sortedMessageIds,
         title: titleInput.trim() || undefined,
         expiresInHours,
       }
@@ -196,7 +163,7 @@ export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: S
     }
   }
 
-  const canSubmit = selectedCandidates.length > 0 && !isSubmitting && candidates.length > 0
+  const canSubmit = sortedMessageIds.length > 0 && !isSubmitting
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -204,7 +171,7 @@ export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: S
         <DialogHeader>
           <DialogTitle>分享对话内容</DialogTitle>
           <DialogDescription>
-            选择要分享的消息并生成公开链接，任何人可通过链接查看内容（无需登录）。
+            已在聊天界面选定要分享的内容，这里配置标题和有效期，即可生成公开链接。
           </DialogDescription>
         </DialogHeader>
 
@@ -222,14 +189,38 @@ export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: S
               </Button>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShareResult(null)}>
-                返回选择
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                返回聊天
               </Button>
-              <Button onClick={() => onOpenChange(false)}>完成</Button>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setShareResult(null)}>
+                  重新配置
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (onShareCompleted) {
+                      onShareCompleted()
+                    } else {
+                      onOpenChange(false)
+                    }
+                  }}
+                >
+                  完成
+                </Button>
+              </div>
             </DialogFooter>
           </div>
         ) : (
           <>
+            <div className="space-y-2">
+              <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary/80">
+                当前已选 {sortedMessageIds.length} 条消息。如需调整，请先关闭本对话框返回聊天界面。
+              </div>
+              {sortedMessageIds.length === 0 && (
+                <p className="text-xs text-destructive">暂无选中内容，请在聊天界面勾选要分享的消息。</p>
+              )}
+            </div>
+
             <div className="space-y-4">
               <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">分享标题</p>
@@ -270,68 +261,11 @@ export function ShareDialog({ sessionId, pivotMessageId, open, onOpenChange }: S
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>
-                已选择 {selectedCandidates.length} / {candidates.length} 条消息
-              </span>
-              <div className="space-x-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSelectAll}
-                  disabled={candidates.length === 0}
-                >
-                  全选
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearSelection}
-                  disabled={selectedKeys.length === 0}
-                >
-                  清空
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-3 max-h-72 overflow-y-auto space-y-2 pr-2">
-              {candidates.length === 0 ? (
-                <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-                  当前会话暂无可分享的消息
-                </div>
-              ) : (
-                candidates.map((item) => (
-                  <label
-                    key={item.key}
-                    className="flex items-start gap-3 rounded-md border bg-muted/30 p-3 hover:bg-muted/60 cursor-pointer"
-                  >
-                    <Checkbox
-                      checked={selectedKeys.includes(item.key)}
-                      onCheckedChange={() => toggleSelection(item.key)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          {item.role === 'user' ? '用户' : 'AI'}
-                        </span>
-                        <span>{formatDate(item.createdAt)}</span>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground break-words">
-                        {item.text}
-                      </p>
-                    </div>
-                  </label>
-                ))
-              )}
-            </div>
-
             {error && <p className="text-sm text-destructive">{error}</p>}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                取消
+                返回聊天
               </Button>
               <Button onClick={handleCreateShare} disabled={!canSubmit}>
                 {isSubmitting ? '生成中…' : '生成分享链接'}

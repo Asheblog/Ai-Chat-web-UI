@@ -185,6 +185,18 @@ const getSessionCompletionSnapshots = (sessionId: number): StreamCompletionSnaps
 
 const messageKey = (id: MessageId) => (typeof id === 'string' ? id : String(id))
 
+interface ShareSelectionState {
+  enabled: boolean
+  sessionId: number | null
+  selectedMessageIds: number[]
+}
+
+const createInitialShareSelection = (): ShareSelectionState => ({
+  enabled: false,
+  sessionId: null,
+  selectedMessageIds: [],
+})
+
 const parseDateValue = (value: string | number | Date | null | undefined) => {
   if (value instanceof Date) return value.getTime()
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -535,6 +547,10 @@ interface ChatStore extends ChatState {
   invalidateRenderedContent: (messageId?: MessageId) => void
   regenerateAssistantMessage: (messageId: MessageId) => Promise<void>
   cycleAssistantVariant: (parentKey: string, direction: 'prev' | 'next') => void
+  enterShareSelectionMode: (sessionId: number, messageId?: number) => void
+  toggleShareSelection: (sessionId: number, messageId: number) => void
+  clearShareSelection: () => void
+  exitShareSelectionMode: () => void
 }
 
 export const useChatStore = create<ChatStore>((set, get) => {
@@ -929,6 +945,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
     sessionUsageTotalsMap: {} as Record<number, import('@/types').UsageTotals>,
     toolEvents: [],
     assistantVariantSelections: {},
+    shareSelection: createInitialShareSelection(),
 
     fetchSessions: async () => {
       set({ isSessionsLoading: true, error: null })
@@ -1060,6 +1077,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           isMessagesLoading: false,
           isSessionsLoading: false,
           isStreaming: false,
+          shareSelection: createInitialShareSelection(),
         }))
         return newSession
       } catch (error: any) {
@@ -1091,6 +1109,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           usageTotals: null,
           messagesHydrated: nextHydrated,
           isStreaming: state.activeStreamSessionId === session.id,
+          shareSelection: createInitialShareSelection(),
         }))
         get().fetchMessages(sessionId)
         get().fetchUsage(sessionId)
@@ -1110,6 +1129,7 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
             assistantVariantSelections: shouldClear ? {} : state.assistantVariantSelections,
             messageBodies: shouldClear ? {} : state.messageBodies,
             messageRenderCache: shouldClear ? {} : state.messageRenderCache,
+            shareSelection: shouldClear ? createInitialShareSelection() : state.shareSelection,
           }
         })
       } catch (error: any) {
@@ -2035,6 +2055,61 @@ const streamState: { active: StreamAccumulator | null; stopRequested: boolean } 
           },
         }
       })
+    },
+
+    enterShareSelectionMode: (sessionId: number, messageId?: number) => {
+      if (!Number.isFinite(sessionId)) return
+      set((state) => {
+        const keepExisting = state.shareSelection.enabled && state.shareSelection.sessionId === sessionId
+        const nextIds = keepExisting ? [...state.shareSelection.selectedMessageIds] : []
+        if (typeof messageId === 'number' && Number.isFinite(messageId) && !nextIds.includes(messageId)) {
+          nextIds.push(messageId)
+        }
+        return {
+          shareSelection: {
+            enabled: true,
+            sessionId,
+            selectedMessageIds: nextIds,
+          },
+        }
+      })
+    },
+
+    toggleShareSelection: (sessionId: number, messageId: number) => {
+      if (!Number.isFinite(sessionId) || !Number.isFinite(messageId)) return
+      set((state) => {
+        if (!state.shareSelection.enabled || state.shareSelection.sessionId !== sessionId) {
+          return {}
+        }
+        const exists = state.shareSelection.selectedMessageIds.includes(messageId)
+        const nextIds = exists
+          ? state.shareSelection.selectedMessageIds.filter((id) => id !== messageId)
+          : [...state.shareSelection.selectedMessageIds, messageId]
+        return {
+          shareSelection: {
+            ...state.shareSelection,
+            selectedMessageIds: nextIds,
+          },
+        }
+      })
+    },
+
+    clearShareSelection: () => {
+      set((state) => {
+        if (!state.shareSelection.enabled || state.shareSelection.selectedMessageIds.length === 0) {
+          return {}
+        }
+        return {
+          shareSelection: {
+            ...state.shareSelection,
+            selectedMessageIds: [],
+          },
+        }
+      })
+    },
+
+    exitShareSelectionMode: () => {
+      set({ shareSelection: createInitialShareSelection() })
     },
   }
 })

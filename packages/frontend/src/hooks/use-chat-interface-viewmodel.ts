@@ -110,6 +110,8 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     isStreaming,
     isLoading: isMessagesLoading,
     variantSelections: assistantVariantSelections,
+    sessionId: currentSession.id,
+    sessionTitle: currentSession.title || '分享链接',
   }
 
   const composer: ChatComposerPanelProps = {

@@ -36,12 +36,6 @@ describe("ShareDialog", () => {
   beforeEach(() => {
     useChatStore.setState((state) => ({
       ...state,
-      currentSession: {
-        id: 42,
-        userId: 1,
-        title: "测试会话",
-        createdAt: "2024-01-01T00:00:00.000Z",
-      } as any,
       messageMetas: [
         {
           id: 1,
@@ -49,15 +43,13 @@ describe("ShareDialog", () => {
           role: "assistant",
           createdAt: "2024-01-01T00:00:00.000Z",
         } as any,
+        {
+          id: 2,
+          sessionId: 42,
+          role: "user",
+          createdAt: "2024-01-01T00:01:00.000Z",
+        } as any,
       ],
-      messageBodies: {
-        "1": {
-          id: 1,
-          content: "AI 回复内容",
-          version: 1,
-          reasoningVersion: 0,
-        },
-      },
     }))
   })
 
@@ -67,7 +59,8 @@ describe("ShareDialog", () => {
     render(
       <ShareDialog
         sessionId={42}
-        pivotMessageId={1}
+        sessionTitle="测试会话"
+        selectedMessageIds={[2, 1]}
         open
         onOpenChange={() => {}}
       />,
@@ -82,9 +75,24 @@ describe("ShareDialog", () => {
       expect.objectContaining({
         title: "发布链接",
         sessionId: 42,
-        messageIds: [1],
+        messageIds: [1, 2],
         expiresInHours: 72,
       }),
     )
+  })
+
+  it("disables submit button when no selection", () => {
+    render(
+      <ShareDialog
+        sessionId={42}
+        sessionTitle="测试会话"
+        selectedMessageIds={[]}
+        open
+        onOpenChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByText("生成分享链接")).toBeDisabled()
+    expect(screen.getByText("暂无选中内容，请在聊天界面勾选要分享的消息。")).toBeInTheDocument()
   })
 })

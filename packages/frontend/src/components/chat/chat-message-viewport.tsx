@@ -1,10 +1,15 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MessageList } from '@/components/message-list'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { ChatErrorBanner } from '@/components/chat/chat-error-banner'
+import { Button } from '@/components/ui/button'
+import { Share2 } from 'lucide-react'
+import { useChatStore } from '@/store/chat-store'
+import { ShareDialog } from '@/components/chat/share-dialog'
 
 export interface ChatMessageViewportProps {
   scrollAreaRef: MutableRefObject<HTMLDivElement | null>
@@ -15,6 +20,8 @@ export interface ChatMessageViewportProps {
   isStreaming: boolean
   isLoading: boolean
   variantSelections: Record<string, number | string>
+  sessionId: number
+  sessionTitle: string
 }
 
 export function ChatMessageViewport({
@@ -26,10 +33,85 @@ export function ChatMessageViewport({
   isStreaming,
   isLoading,
   variantSelections,
+  sessionId,
+  sessionTitle,
 }: ChatMessageViewportProps) {
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
+  const { shareSelection, enterShareSelectionMode, toggleShareSelection, clearShareSelection, exitShareSelectionMode } = useChatStore((state) => ({
+    shareSelection: state.shareSelection,
+    enterShareSelectionMode: state.enterShareSelectionMode,
+    toggleShareSelection: state.toggleShareSelection,
+    clearShareSelection: state.clearShareSelection,
+    exitShareSelectionMode: state.exitShareSelectionMode,
+  }))
+  const shareModeActive = shareSelection.enabled && shareSelection.sessionId === sessionId
+  const selectedCount = shareModeActive ? shareSelection.selectedMessageIds.length : 0
+  const showShareEntry = metas.length > 0 && !shareModeActive
+
+  useEffect(() => {
+    if (!shareModeActive && isShareDialogOpen) {
+      setIsShareDialogOpen(false)
+    }
+  }, [shareModeActive, isShareDialogOpen])
+
+  const selectedMessageIds = shareModeActive ? shareSelection.selectedMessageIds : []
+
+  const handleShareNext = () => {
+    if (!shareModeActive || selectedCount === 0) return
+    setIsShareDialogOpen(true)
+  }
+
+  const handleExitShareMode = () => {
+    setIsShareDialogOpen(false)
+    exitShareSelectionMode()
+  }
+
   return (
     <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 md:px-6">
       <div className="pt-4 md:pt-6 pb-4 md:pb-6">
+        {shareModeActive ? (
+          <div className="mb-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-medium text-primary">分享选择模式已开启</p>
+                <p className="text-xs text-primary/80 mt-1">
+                  已选 {selectedCount} 条消息 · 仅当前会话可分享，切换会话将自动清空选择
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => clearShareSelection()}
+                  disabled={selectedCount === 0}
+                >
+                  清空选中
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={handleExitShareMode}>
+                  返回聊天
+                </Button>
+                <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
+                  下一步
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          showShareEntry && (
+            <div className="mb-3 flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => enterShareSelectionMode(sessionId)}
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                分享多条消息
+              </Button>
+            </div>
+          )
+        )}
         <ChatErrorBanner error={error} />
         <MessageList
           metas={metas}
@@ -39,8 +121,31 @@ export function ChatMessageViewport({
           isLoading={isLoading}
           scrollRootRef={scrollAreaRef}
           variantSelections={variantSelections}
+          shareSelection={shareSelection}
+          onShareToggle={(messageId) => toggleShareSelection(sessionId, messageId)}
+          onShareStart={(messageId) => enterShareSelectionMode(sessionId, messageId)}
         />
       </div>
+      {shareModeActive && (
+        <div className="lg:hidden fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
+          <div className="pointer-events-auto rounded-full border border-primary/30 bg-background/95 shadow-lg px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-foreground">
+              已选 <span className="font-semibold text-primary">{selectedCount}</span> 条消息
+            </span>
+            <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
+              下一步
+            </Button>
+          </div>
+        </div>
+      )}
+      <ShareDialog
+        sessionId={sessionId}
+        sessionTitle={sessionTitle}
+        selectedMessageIds={selectedMessageIds}
+        open={isShareDialogOpen}
+        onOpenChange={setIsShareDialogOpen}
+        onShareCompleted={handleExitShareMode}
+      />
     </ScrollArea>
   )
 }

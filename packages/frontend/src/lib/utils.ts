@@ -35,16 +35,10 @@ export function generateSessionTitle(firstMessage: string): string {
   return title.length === 50 ? title + '...' : title
 }
 
-export function copyToClipboard(text: string): Promise<void> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard) {
-    return navigator.clipboard.writeText(text)
-  }
-
+const fallbackCopy = (text: string): Promise<void> => {
   if (typeof document === 'undefined') {
     return Promise.reject(new Error('无法在当前环境访问剪贴板'))
   }
-
-  // 降级方案（仅限浏览器环境）
   const textArea = document.createElement('textarea')
   textArea.value = text
   document.body.appendChild(textArea)
@@ -60,6 +54,13 @@ export function copyToClipboard(text: string): Promise<void> {
       reject(err)
     }
   })
+}
+
+export function copyToClipboard(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text))
+  }
+  return fallbackCopy(text)
 }
 
 export function truncateText(text: string, maxLength: number): string {

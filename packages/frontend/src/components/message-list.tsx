@@ -38,6 +38,13 @@ interface MessageListProps {
   isLoading?: boolean
   scrollRootRef?: RefObject<HTMLElement | null>
   variantSelections?: Record<string, number | string>
+  shareSelection?: {
+    enabled: boolean
+    sessionId: number | null
+    selectedMessageIds: number[]
+  }
+  onShareToggle?: (messageId: number) => void
+  onShareStart?: (messageId: number) => void
 }
 
 function MessageListComponent({
@@ -48,6 +55,9 @@ function MessageListComponent({
   isLoading,
   scrollRootRef,
   variantSelections,
+  shareSelection,
+  onShareToggle,
+  onShareStart,
 }: MessageListProps) {
   const regenerateAssistantMessage = useChatStore((state) => state.regenerateAssistantMessage)
   const cycleAssistantVariant = useChatStore((state) => state.cycleAssistantVariant)
@@ -97,6 +107,14 @@ function MessageListComponent({
     if (selected == null) return false
     return messageKey(selected) === messageKey(meta.id)
   })
+
+  const shareSelectionState = shareSelection ?? { enabled: false, sessionId: null, selectedMessageIds: [] }
+  const shareSelectedKeys = useMemo(() => {
+    if (!shareSelectionState.selectedMessageIds?.length) {
+      return new Set<string>()
+    }
+    return new Set(shareSelectionState.selectedMessageIds.map((id) => messageKey(id)))
+  }, [shareSelectionState.selectedMessageIds])
 
   const virtualizer = useVirtualizer({
     count: displayMetas.length,
@@ -167,6 +185,11 @@ function MessageListComponent({
           meta.role === 'assistant' &&
           lastMeta &&
           messageKey(lastMeta.id) === key
+        const shareModeActive =
+          shareSelectionState.enabled && shareSelectionState.sessionId === meta.sessionId
+        const shareSelectable = typeof meta.id === 'number' && !meta.pendingSync
+        const shareSelected =
+          shareModeActive && shareSelectable && shareSelectedKeys.has(messageKey(meta.id))
         return (
           <div
             key={key}
@@ -187,6 +210,27 @@ function MessageListComponent({
               renderCache={cache}
               isStreaming={streamingForMessage}
               variantInfo={variantInfo}
+              shareSelection={
+                shareSelectable || shareModeActive
+                  ? {
+                      active: shareModeActive,
+                      selectable: shareSelectable,
+                      selected: shareSelected,
+                      onToggle:
+                        shareModeActive && shareSelectable && onShareToggle
+                          ? () => onShareToggle(Number(meta.id))
+                          : undefined,
+                      onStart: shareSelectable && onShareStart ? () => onShareStart(Number(meta.id)) : undefined,
+                    }
+                  : shareSelectable && onShareStart
+                  ? {
+                      active: false,
+                      selectable: shareSelectable,
+                      selected: false,
+                      onStart: () => onShareStart(Number(meta.id)),
+                    }
+                  : undefined
+              }
             />
           </div>
         )
@@ -218,5 +262,8 @@ export const MessageList = memo(
     prev.bodies === next.bodies &&
     prev.renderCache === next.renderCache &&
     prev.scrollRootRef === next.scrollRootRef &&
-    prev.variantSelections === next.variantSelections
+    prev.variantSelections === next.variantSelections &&
+    prev.shareSelection === next.shareSelection &&
+    prev.onShareToggle === next.onShareToggle &&
+    prev.onShareStart === next.onShareStart
 )

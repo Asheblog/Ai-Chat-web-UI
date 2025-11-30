@@ -298,6 +298,11 @@ export interface ChatState {
   sessionUsageTotalsMap: Record<number, UsageTotals>;
   toolEvents: ToolEvent[];
   assistantVariantSelections: Record<string, number | string>;
+  shareSelection: {
+    enabled: boolean;
+    sessionId: number | null;
+    selectedMessageIds: number[];
+  };
 }
 
 export interface WebSearchHit {

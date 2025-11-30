@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Copy, RefreshCw, Share2 } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Copy, RefreshCw, Share2 } from 'lucide-react'
 import Image from 'next/image'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,6 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useAuthStore } from '@/store/auth-store'
 import { ReasoningPanel } from './reasoning-panel'
-import { ShareDialog } from '@/components/chat/share-dialog'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
 
@@ -40,9 +39,16 @@ interface MessageBubbleProps {
     onNext: () => void
     onRegenerate: () => void
   }
+  shareSelection?: {
+    active: boolean
+    selectable: boolean
+    selected: boolean
+    onToggle?: () => void
+    onStart?: () => void
+  }
 }
 
-function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantInfo }: MessageBubbleProps) {
+function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantInfo, shareSelection }: MessageBubbleProps) {
   const [isCopied, setIsCopied] = useState(false)
   const reasoningRaw = body.reasoning || ''
   const reasoningText = reasoningRaw.trim()
@@ -66,7 +72,6 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   const [showReasoning, setShowReasoning] = useState(defaultShouldShow)
   const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
-  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const streamingToolEvents = useChatStore(
     useCallback(
@@ -253,23 +258,44 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   const showVariantControls = Boolean(variantInfo)
   const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
   const shareableMessageId = typeof meta.id === 'number' ? meta.id : null
-  const canOpenShareDialog = shareableMessageId !== null && !isStreaming && !meta.pendingSync
+  const shareSelectionState = shareSelection ?? null
+  const shareModeActive = Boolean(shareSelectionState?.active)
+  const shareSelectable = Boolean(shareSelectionState?.selectable)
+  const shareSelected = Boolean(shareSelectionState?.selected)
+  const shareToggle = shareSelectionState?.onToggle
+  const shareEntryHandler = shareSelectionState?.onStart
+  const shareEntryAvailable =
+    !shareModeActive &&
+    Boolean(shareEntryHandler) &&
+    shareableMessageId !== null &&
+    !meta.pendingSync &&
+    !isStreaming
+  const selectionWrapperClass = shareModeActive
+    ? `rounded-2xl border ${
+        shareSelected
+          ? 'border-primary/50 bg-primary/5'
+          : shareSelectable
+          ? 'border-dashed border-primary/40 bg-muted/40'
+          : 'border-dashed border-border/60 bg-muted/30'
+      } p-2 transition-colors`
+    : ''
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-      <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
-        <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
-        <AvatarFallback
-          className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
-            assistantFallbackHidden ? 'opacity-0' : ''
-          }`}
-          aria-hidden={assistantFallbackHidden ? 'true' : undefined}
-        >
-          {avatarFallbackText}
-        </AvatarFallback>
-      </Avatar>
+    <div className={`relative ${selectionWrapperClass}`}>
+      <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+        <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
+          <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
+          <AvatarFallback
+            className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
+              assistantFallbackHidden ? 'opacity-0' : ''
+            }`}
+            aria-hidden={assistantFallbackHidden ? 'true' : undefined}
+          >
+            {avatarFallbackText}
+          </AvatarFallback>
+        </Avatar>
 
-      <div className={`flex-1 min-w-0 max-w-full lg:max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
+        <div className={`flex-1 min-w-0 max-w-full lg:max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
         {isUser ? (
           <div className={bubbleClass}>
             <div className="text-left">
@@ -347,25 +373,16 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
             >
               {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
             </Button>
-            {shareableMessageId !== null && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  title="分享此段对话"
-                  onClick={() => setIsShareDialogOpen(true)}
-                  disabled={!canOpenShareDialog}
-                >
-                  <Share2 className="h-3 w-3" />
-                </Button>
-                <ShareDialog
-                  sessionId={meta.sessionId}
-                  pivotMessageId={shareableMessageId}
-                  open={isShareDialogOpen}
-                  onOpenChange={setIsShareDialogOpen}
-                />
-              </>
+            {shareEntryAvailable && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                title="进入分享选择模式"
+                onClick={() => shareEntryHandler?.()}
+              >
+                <Share2 className="h-3 w-3" />
+              </Button>
             )}
             {showVariantControls && (
               <Button
@@ -425,10 +442,43 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
             >
               {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
             </Button>
+            {shareEntryAvailable && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                title="进入分享选择模式"
+                onClick={() => shareEntryHandler?.()}
+              >
+                <Share2 className="h-3 w-3" />
+              </Button>
+            )}
             <span>{formatDate(meta.createdAt)}</span>
           </div>
         )}
+        </div>
       </div>
+
+      {shareModeActive && shareSelectable && shareToggle && (
+        <button
+          type="button"
+          className={`absolute ${isUser ? 'right-3' : 'left-3'} top-3 h-6 w-6 rounded-full border ${
+            shareSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/40 bg-background'
+          } flex items-center justify-center shadow-sm transition-colors`}
+          onClick={() => shareToggle()}
+          aria-pressed={shareSelected}
+          aria-label={shareSelected ? '取消选择此消息' : '选择此消息'}
+        >
+          {shareSelected ? <Check className="h-3 w-3" /> : null}
+        </button>
+      )}
+      {shareModeActive && !shareSelectable && (
+        <span
+          className={`absolute ${isUser ? 'right-3' : 'left-3'} top-3 text-[11px] text-muted-foreground`}
+        >
+          待同步
+        </span>
+      )}
     </div>
   )
 }
