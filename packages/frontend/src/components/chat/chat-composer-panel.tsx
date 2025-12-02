@@ -29,6 +29,11 @@ export interface ChatComposerPanelProps {
   webSearchScope: string
   showWebSearchScope: boolean
   canUseWebSearch: boolean
+  webSearchDisabledNote?: string
+  pythonToolEnabled: boolean
+  onTogglePythonTool: (value: boolean) => void
+  canUsePythonTool: boolean
+  pythonToolDisabledNote?: string
   isVisionEnabled: boolean
   traceEnabled: boolean
   canUseTrace: boolean
@@ -81,6 +86,11 @@ export function ChatComposerPanel({
   webSearchScope,
   showWebSearchScope,
   canUseWebSearch,
+  webSearchDisabledNote,
+  pythonToolEnabled,
+  onTogglePythonTool,
+  canUsePythonTool,
+  pythonToolDisabledNote,
   isVisionEnabled,
   traceEnabled,
   canUseTrace,
@@ -265,6 +275,11 @@ export function ChatComposerPanel({
         showWebSearchScope={showWebSearchScope}
         pickImages={pickImages}
         canUseWebSearch={canUseWebSearch}
+        webSearchDisabledNote={webSearchDisabledNote}
+        pythonToolEnabled={pythonToolEnabled}
+        onTogglePythonTool={onTogglePythonTool}
+        canUsePythonTool={canUsePythonTool}
+        pythonToolDisabledNote={pythonToolDisabledNote}
         isVisionEnabled={isVisionEnabled}
         placeholder={mobilePlaceholder}
         traceEnabled={traceEnabled}
@@ -297,6 +312,11 @@ export function ChatComposerPanel({
         onWebSearchScopeChange={onWebSearchScopeChange}
         showWebSearchScope={showWebSearchScope}
         canUseWebSearch={canUseWebSearch}
+        webSearchDisabledNote={webSearchDisabledNote}
+        pythonToolEnabled={pythonToolEnabled}
+        onTogglePythonTool={onTogglePythonTool}
+        canUsePythonTool={canUsePythonTool}
+        pythonToolDisabledNote={pythonToolDisabledNote}
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}
         onToggleTrace={onToggleTrace}

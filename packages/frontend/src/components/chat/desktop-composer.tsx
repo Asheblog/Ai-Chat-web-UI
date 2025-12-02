@@ -35,6 +35,11 @@ interface DesktopComposerProps {
   onWebSearchScopeChange: (value: string) => void
   showWebSearchScope: boolean
   canUseWebSearch: boolean
+  webSearchDisabledNote?: string
+  pythonToolEnabled: boolean
+  onTogglePythonTool: (value: boolean) => void
+  canUsePythonTool: boolean
+  pythonToolDisabledNote?: string
   traceEnabled: boolean
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
@@ -73,6 +78,11 @@ export function DesktopComposer({
   onWebSearchScopeChange,
   showWebSearchScope,
   canUseWebSearch,
+  webSearchDisabledNote,
+  pythonToolEnabled,
+  onTogglePythonTool,
+  canUsePythonTool,
+  pythonToolDisabledNote,
   traceEnabled,
   canUseTrace,
   onToggleTrace,
@@ -112,6 +122,11 @@ export function DesktopComposer({
               showWebSearchScope={showWebSearchScope}
               webSearchScope={webSearchScope}
               onWebSearchScopeChange={onWebSearchScopeChange}
+              webSearchDisabledNote={webSearchDisabledNote}
+              pythonToolEnabled={pythonToolEnabled}
+              onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+              canUsePythonTool={canUsePythonTool}
+              pythonToolDisabledNote={pythonToolDisabledNote}
               canUseTrace={canUseTrace}
               traceEnabled={traceEnabled}
               onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}

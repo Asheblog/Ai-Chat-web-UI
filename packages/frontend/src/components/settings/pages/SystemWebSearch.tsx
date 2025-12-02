@@ -40,6 +40,12 @@ export function SystemWebSearchPage() {
   const [scope, setScope] = useState("webpage")
   const [includeSummary, setIncludeSummary] = useState(false)
   const [includeRaw, setIncludeRaw] = useState(false)
+  const [pythonEnabled, setPythonEnabled] = useState(false)
+  const [pythonCommand, setPythonCommand] = useState("python3")
+  const [pythonArgsText, setPythonArgsText] = useState("")
+  const [pythonTimeout, setPythonTimeout] = useState(8000)
+  const [pythonMaxOutput, setPythonMaxOutput] = useState(4000)
+  const [pythonMaxSource, setPythonMaxSource] = useState(4000)
 
   useEffect(() => {
     fetchSystemSettings().catch(() => {})
@@ -60,6 +66,12 @@ export function SystemWebSearchPage() {
     setScope(systemSettings.webSearchScope || "webpage")
     setIncludeSummary(Boolean(systemSettings.webSearchIncludeSummary ?? false))
     setIncludeRaw(Boolean(systemSettings.webSearchIncludeRaw ?? false))
+    setPythonEnabled(Boolean(systemSettings.pythonToolEnable ?? false))
+    setPythonCommand(systemSettings.pythonToolCommand || "python3")
+    setPythonArgsText((systemSettings.pythonToolArgs ?? []).join("\n"))
+    setPythonTimeout(Number(systemSettings.pythonToolTimeoutMs ?? 8000))
+    setPythonMaxOutput(Number(systemSettings.pythonToolMaxOutputChars ?? 4000))
+    setPythonMaxSource(Number(systemSettings.pythonToolMaxSourceChars ?? 4000))
   }, [systemSettings])
 
   if (isLoading && !systemSettings) {
@@ -87,9 +99,22 @@ export function SystemWebSearchPage() {
       .split(/\r?\n|,/)
       .map((item) => item.trim())
       .filter(Boolean)
+  const normalizeArgs = (text: string) =>
+    text
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean)
 
   const limitRange = { min: 1, max: 10 }
   const limitValid = resultLimit >= limitRange.min && resultLimit <= limitRange.max
+  const pythonTimeoutRange = { min: 1000, max: 60000 }
+  const pythonOutputRange = { min: 256, max: 20000 }
+  const pythonTimeoutValid =
+    pythonTimeout >= pythonTimeoutRange.min && pythonTimeout <= pythonTimeoutRange.max
+  const pythonMaxOutputValid =
+    pythonMaxOutput >= pythonOutputRange.min && pythonMaxOutput <= pythonOutputRange.max
+  const pythonMaxSourceValid =
+    pythonMaxSource >= pythonOutputRange.min && pythonMaxSource <= pythonOutputRange.max
 
   const changed =
     enabled !== Boolean(systemSettings.webSearchAgentEnable ?? false) ||
@@ -99,6 +124,12 @@ export function SystemWebSearchPage() {
     scope !== (systemSettings.webSearchScope || "webpage") ||
     includeSummary !== Boolean(systemSettings.webSearchIncludeSummary ?? false) ||
     includeRaw !== Boolean(systemSettings.webSearchIncludeRaw ?? false) ||
+    pythonEnabled !== Boolean(systemSettings.pythonToolEnable ?? false) ||
+    pythonCommand !== (systemSettings.pythonToolCommand || "python3") ||
+    pythonArgsText !== (systemSettings.pythonToolArgs ?? []).join("\n") ||
+    pythonTimeout !== Number(systemSettings.pythonToolTimeoutMs ?? 8000) ||
+    pythonMaxOutput !== Number(systemSettings.pythonToolMaxOutputChars ?? 4000) ||
+    pythonMaxSource !== Number(systemSettings.pythonToolMaxSourceChars ?? 4000) ||
     apiKeyTavilyDraft.trim() !== "" ||
     apiKeyBraveDraft.trim() !== "" ||
     apiKeyMetasoDraft.trim() !== "" ||
@@ -107,7 +138,7 @@ export function SystemWebSearchPage() {
     clearMetaso
 
   const save = async () => {
-    if (!limitValid) return
+    if (!limitValid || !pythonTimeoutValid || !pythonMaxOutputValid || !pythonMaxSourceValid) return
     const payload: Record<string, any> = {
       webSearchAgentEnable: enabled,
       webSearchDefaultEngine: engine.trim() || "tavily",
@@ -119,6 +150,21 @@ export function SystemWebSearchPage() {
       webSearchScope: scope,
       webSearchIncludeSummary: includeSummary,
       webSearchIncludeRaw: includeRaw,
+      pythonToolEnable: pythonEnabled,
+      pythonToolCommand: pythonCommand.trim() || "python3",
+      pythonToolArgs: normalizeArgs(pythonArgsText),
+      pythonToolTimeoutMs: Math.max(
+        pythonTimeoutRange.min,
+        Math.min(pythonTimeoutRange.max, Math.round(pythonTimeout)),
+      ),
+      pythonToolMaxOutputChars: Math.max(
+        pythonOutputRange.min,
+        Math.min(pythonOutputRange.max, Math.round(pythonMaxOutput)),
+      ),
+      pythonToolMaxSourceChars: Math.max(
+        pythonOutputRange.min,
+        Math.min(pythonOutputRange.max, Math.round(pythonMaxSource)),
+      ),
     }
     if (apiKeyTavilyDraft.trim()) {
       payload.webSearchApiKeyTavily = apiKeyTavilyDraft.trim()
@@ -355,15 +401,106 @@ export function SystemWebSearchPage() {
               清除
             </Button>
           </div>
-          {clearMetaso && <p className="text-xs text-destructive">保存后将删除 Metaso Key。</p>}
-        </div>
-      </div>
+      {clearMetaso && <p className="text-xs text-destructive">保存后将删除 Metaso Key。</p>}
+    </div>
+  </div>
 
-      <div className="flex justify-end pt-2">
-        <Button onClick={save} disabled={!changed || !limitValid || engine.trim() === ""}>
-          保存联网搜索设置
-        </Button>
+  <div className="pt-5 border-t border-border/60 space-y-4">
+    <div className="space-y-1">
+      <CardTitle className="text-lg font-semibold tracking-tight leading-tight">
+        Python 工具（本地计算）
+      </CardTitle>
+      <CardDescription className="text-sm text-muted-foreground">
+        允许模型调用 python_runner 进行数值或结构化计算。运行在后端容器内，请确认镜像已安装 Python。
+      </CardDescription>
+    </div>
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium">启用 Python 工具</p>
+        <p className="text-xs text-muted-foreground">
+          仅 OpenAI / Azure OpenAI 等支持工具调用的连接可用。
+        </p>
       </div>
+      <Switch checked={pythonEnabled} onCheckedChange={(v)=>setPythonEnabled(!!v)} />
+    </div>
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Python 命令</label>
+        <Input
+          value={pythonCommand}
+          onChange={(e)=>setPythonCommand(e.target.value)}
+          placeholder="python3"
+        />
+        <p className="text-xs text-muted-foreground">
+          Linux/WSL 默认 python3，Windows 可改为 python 或绝对路径。
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">额外参数（每行一个，可选）</label>
+        <Textarea
+          value={pythonArgsText}
+          onChange={(e)=>setPythonArgsText(e.target.value)}
+          placeholder="-O"
+          rows={4}
+        />
+        <p className="text-xs text-muted-foreground">无需填写 -c，系统会自动拼接。</p>
+      </div>
+    </div>
+    <div className="grid gap-4 md:grid-cols-3">
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">超时时间（毫秒）</label>
+        <Input
+          type="number"
+          value={pythonTimeout}
+          onChange={(e)=>setPythonTimeout(Number(e.target.value || 0))}
+          className={!pythonTimeoutValid ? "border-destructive" : undefined}
+        />
+        <p className="text-xs text-muted-foreground">
+          {pythonTimeoutRange.min} - {pythonTimeoutRange.max}，默认 8000。
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">stdout 截断字符数</label>
+        <Input
+          type="number"
+          value={pythonMaxOutput}
+          onChange={(e)=>setPythonMaxOutput(Number(e.target.value || 0))}
+          className={!pythonMaxOutputValid ? "border-destructive" : undefined}
+        />
+        <p className="text-xs text-muted-foreground">
+          {pythonOutputRange.min} - {pythonOutputRange.max}，默认 4000。
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">代码长度限制</label>
+        <Input
+          type="number"
+          value={pythonMaxSource}
+          onChange={(e)=>setPythonMaxSource(Number(e.target.value || 0))}
+          className={!pythonMaxSourceValid ? "border-destructive" : undefined}
+        />
+        <p className="text-xs text-muted-foreground">
+          {pythonOutputRange.min} - {pythonOutputRange.max}，默认 4000。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div className="flex justify-end pt-2">
+    <Button
+      onClick={save}
+      disabled={
+        !changed ||
+        !limitValid ||
+        engine.trim() === "" ||
+        !pythonTimeoutValid ||
+        !pythonMaxOutputValid ||
+        !pythonMaxSourceValid
+      }
+    >
+      保存联网搜索设置
+    </Button>
+  </div>
     </div>
   )
 }

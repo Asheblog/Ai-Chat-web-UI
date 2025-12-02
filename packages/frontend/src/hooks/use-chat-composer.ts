@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
+import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 
 const FORBIDDEN_HEADER_NAMES = new Set([
   'authorization',
@@ -77,10 +78,14 @@ export function useChatComposer() {
   } = DEFAULT_CHAT_IMAGE_LIMITS
   const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
+  const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
+  const [pythonToolTouched, setPythonToolTouched] = useState(false)
   const [traceEnabled, setTraceEnabled] = useState(false)
   const tracePreferenceRef = useRef<Record<number, boolean>>({})
   const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
+  const storedPythonPreference = usePythonToolPreferenceStore((state) => state.lastSelection)
+  const persistPythonPreference = usePythonToolPreferenceStore((state) => state.setLastSelection)
   const scopePreferenceKey = 'web_search_scope_preference'
   const setWebSearchEnabled = useCallback(
     (value: boolean) => {
@@ -88,6 +93,13 @@ export function useChatComposer() {
       persistWebSearchPreference(value)
     },
     [persistWebSearchPreference],
+  )
+  const setPythonToolEnabledState = useCallback(
+    (value: boolean) => {
+      setPythonToolEnabled(value)
+      persistPythonPreference(value)
+    },
+    [persistPythonPreference],
   )
 
   useEffect(() => {
@@ -203,19 +215,46 @@ export function useChatComposer() {
     )
   }, [allModels, currentSession])
 
+  const providerSupportsTools = useMemo(() => {
+    const provider = activeModel?.provider?.toLowerCase()
+    if (!provider) return true
+    return provider === 'openai' || provider === 'azure_openai'
+  }, [activeModel])
+
   const isVisionEnabled = useMemo(() => {
-    if (!currentSession) return true
     const cap = activeModel?.capabilities?.vision
     return typeof cap === 'boolean' ? cap : true
-  }, [activeModel, currentSession])
+  }, [activeModel])
 
   const isWebSearchCapable = useMemo(() => {
-    if (!currentSession) return false
     const cap = activeModel?.capabilities?.web_search
     return typeof cap === 'boolean' ? cap : true
-  }, [activeModel, currentSession])
+  }, [activeModel])
 
-  const canUseWebSearch = Boolean(systemSettings?.webSearchAgentEnable) && isWebSearchCapable
+  const pythonToolCapable = useMemo(() => {
+    const cap = activeModel?.capabilities?.code_interpreter
+    return typeof cap === 'boolean' ? cap : true
+  }, [activeModel])
+
+  const canUseWebSearch =
+    Boolean(systemSettings?.webSearchAgentEnable && systemSettings?.webSearchHasApiKey) &&
+    isWebSearchCapable &&
+    providerSupportsTools
+  const canUsePythonTool =
+    Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable && providerSupportsTools
+  const webSearchDisabledNote = useMemo(() => {
+    if (!systemSettings?.webSearchAgentEnable) return '管理员未启用联网搜索'
+    if (!systemSettings?.webSearchHasApiKey) return '尚未配置搜索 API Key'
+    if (!providerSupportsTools) return '当前连接不支持工具调用'
+    if (!isWebSearchCapable) return '当前模型未开放联网搜索'
+    return undefined
+  }, [providerSupportsTools, systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey, isWebSearchCapable])
+  const pythonToolDisabledNote = useMemo(() => {
+    if (!systemSettings?.pythonToolEnable) return '管理员未开启 Python 工具'
+    if (!providerSupportsTools) return '当前连接不支持工具调用'
+    if (!pythonToolCapable) return '当前模型未启用 Python 工具'
+    return undefined
+  }, [providerSupportsTools, pythonToolCapable, systemSettings?.pythonToolEnable])
   const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
   const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
   const addCustomHeader = useCallback(() => {
@@ -300,6 +339,20 @@ export function useChatComposer() {
       setWebSearchEnabledState(desired)
     }
   }, [canUseWebSearch, storedWebSearchPreference, webSearchEnabled])
+
+  useEffect(() => {
+    if (!canUsePythonTool) {
+      if (pythonToolEnabled) {
+        setPythonToolEnabledState(false)
+      }
+      return
+    }
+    const desired =
+      typeof storedPythonPreference === 'boolean' ? storedPythonPreference : false
+    if (pythonToolEnabled !== desired) {
+      setPythonToolEnabledState(desired)
+    }
+  }, [canUsePythonTool, pythonToolEnabled, setPythonToolEnabledState, storedPythonPreference])
 
   useEffect(() => {
     if (!canUseWebSearch || !isMetasoEngine) {
@@ -462,20 +515,22 @@ export function useChatComposer() {
           sanitizedHeaders.push({ name, value })
         }
       }
+      const featureFlags: Record<string, any> = {}
+      if (webSearchEnabled && canUseWebSearch) {
+        featureFlags.web_search = true
+        if (isMetasoEngine) featureFlags.web_search_scope = webSearchScope
+        if (systemSettings?.webSearchIncludeSummary) featureFlags.web_search_include_summary = true
+        if (systemSettings?.webSearchIncludeRaw) featureFlags.web_search_include_raw = true
+      }
+      if (pythonToolEnabled && canUsePythonTool) {
+        featureFlags.python_tool = true
+      }
       const options = {
         reasoningEnabled: thinkingEnabled,
         reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
         ollamaThink: thinkingEnabled ? ollamaThink : undefined,
         saveReasoning: !noSaveThisRound,
-        features:
-          webSearchEnabled && canUseWebSearch
-            ? {
-                web_search: true,
-                ...(isMetasoEngine ? { web_search_scope: webSearchScope } : {}),
-                ...(systemSettings?.webSearchIncludeSummary ? { web_search_include_summary: true } : {}),
-                ...(systemSettings?.webSearchIncludeRaw ? { web_search_include_raw: true } : {}),
-              }
-            : undefined,
+        features: Object.keys(featureFlags).length ? featureFlags : undefined,
         traceEnabled: canUseTrace ? traceEnabled : undefined,
         customBody: parsedCustomBody,
         customHeaders: sanitizedHeaders.length ? sanitizedHeaders : undefined,
@@ -666,9 +721,14 @@ export function useChatComposer() {
     webSearchEnabled,
     setWebSearchEnabled,
     canUseWebSearch,
+    webSearchDisabledNote,
     webSearchScope,
     setWebSearchScope: handleWebSearchScopeChange,
     showWebSearchScope: canUseWebSearch && isMetasoEngine,
+    pythonToolEnabled,
+    setPythonToolEnabled: setPythonToolEnabledState,
+    canUsePythonTool,
+    pythonToolDisabledNote,
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,

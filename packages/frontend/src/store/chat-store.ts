@@ -436,6 +436,7 @@ const normalizeToolEvents = (message: Message): ToolEvent[] => {
       stage,
       status: inferToolStatus(stage),
       query: evt.query,
+      summary: typeof evt.summary === 'string' ? evt.summary : undefined,
       hits: Array.isArray(evt.hits) ? evt.hits : undefined,
       error: evt.error,
       createdAt,
@@ -1668,6 +1669,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
                 query: evt.query as string | undefined,
                 hits: (Array.isArray(evt.hits) ? evt.hits : undefined) as ToolEvent['hits'],
                 error: evt.error as string | undefined,
+                summary: evt.summary as string | undefined,
                 createdAt: idx === -1 ? Date.now() : list[idx].createdAt,
               }
               if (idx === -1) {
@@ -1684,7 +1686,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
             const fallback =
               typeof evt.error === 'string' && evt.error.trim()
                 ? evt.error
-                : '联网搜索失败，请稍后重试'
+                : '工具调用失败，请稍后重试'
             const friendlyMessage = resolveProviderSafetyMessage(evt.error) ?? fallback
             const agentError = new Error(friendlyMessage)
             ;(agentError as any).handled = 'agent_error'
@@ -1904,7 +1906,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
         if (error?.handled === 'agent_error') {
           const message =
-            resolveProviderSafetyMessage(error) || error?.message || '联网搜索失败，请稍后重试'
+            resolveProviderSafetyMessage(error) || error?.message || '工具调用失败，请稍后重试'
           updateMetaStreamStatus(assistantPlaceholder.id, 'error', message)
           set((state) => ({
             error: message,

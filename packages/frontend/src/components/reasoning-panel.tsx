@@ -5,6 +5,13 @@ import { Brain, ChevronDown, Loader2 } from 'lucide-react'
 import { ToolEvent } from '@/types'
 import { TypewriterReasoning } from './typewriter-reasoning'
 
+const formatToolName = (tool: string | undefined) => {
+  if (!tool) return '工具'
+  if (tool === 'web_search') return '联网搜索'
+  if (tool === 'python_runner') return 'Python 工具'
+  return tool
+}
+
 interface ReasoningPanelProps {
   status?: 'idle' | 'streaming' | 'done'
   durationSeconds?: number | null
@@ -14,7 +21,7 @@ interface ReasoningPanelProps {
   reasoningRaw: string
   reasoningHtml?: string
   isStreaming: boolean
-  toolSummary: { total: number; summaryText: string } | null
+  toolSummary: { total: number; summaryText: string; label: string } | null
   toolTimeline: ToolEvent[]
 }
 
@@ -114,7 +121,9 @@ function ReasoningPanelComponent({
             <div className="reasoning-tools">
               <div className="reasoning-tools__header">
                 <div>
-                  <div className="reasoning-tools__title">联网搜索 · {toolSummary.total} 次</div>
+                  <div className="reasoning-tools__title">
+                    {toolSummary.label} · {toolSummary.total} 次
+                  </div>
                   <p className="reasoning-tools__desc">{toolSummary.summaryText}</p>
                 </div>
                 {toolTimeline.length > 0 && (
@@ -130,25 +139,51 @@ function ReasoningPanelComponent({
               {toolTimelineOpen && (
                 <div className="reasoning-tools__timeline">
                   {toolTimeline.map((event) => {
-                    const statusLabel =
-                      event.stage === 'start'
-                        ? '检索中'
-                        : event.stage === 'result'
-                          ? `${event.hits?.length ?? 0} 条结果`
-                          : event.error || '搜索失败'
-                    const statusClass =
-                      event.stage === 'start'
-                        ? 'text-amber-600'
-                        : event.stage === 'result'
-                          ? 'text-emerald-600'
-                          : 'text-destructive'
+                    const toolLabel = formatToolName(event.tool)
+                    const primaryText = event.query || event.summary || toolLabel
+                    let statusLabel: string
+                    let statusClass: string
+                    if (event.tool === 'web_search') {
+                      if (event.stage === 'result') {
+                        statusLabel = `${event.hits?.length ?? 0} 条结果`
+                        statusClass = 'text-emerald-600'
+                      } else if (event.stage === 'error') {
+                        statusLabel = event.error || '搜索失败'
+                        statusClass = 'text-destructive'
+                      } else {
+                        statusLabel = '检索中'
+                        statusClass = 'text-amber-600'
+                      }
+                    } else if (event.tool === 'python_runner') {
+                      if (event.stage === 'result') {
+                        statusLabel = event.summary || '执行完成'
+                        statusClass = 'text-emerald-600'
+                      } else if (event.stage === 'error') {
+                        statusLabel = event.error || '执行失败'
+                        statusClass = 'text-destructive'
+                      } else {
+                        statusLabel = '执行中'
+                        statusClass = 'text-amber-600'
+                      }
+                    } else {
+                      if (event.stage === 'result') {
+                        statusLabel = '完成'
+                        statusClass = 'text-emerald-600'
+                      } else if (event.stage === 'error') {
+                        statusLabel = event.error || '失败'
+                        statusClass = 'text-destructive'
+                      } else {
+                        statusLabel = '进行中'
+                        statusClass = 'text-amber-600'
+                      }
+                    }
                     return (
                       <div key={event.id} className="reasoning-tools__item">
                         <div className="reasoning-tools__item-head">
-                          <span>{event.query || '未提供查询'}</span>
+                          <span>{primaryText}</span>
                           <span className={statusClass}>{statusLabel}</span>
                         </div>
-                        {event.hits && event.hits.length > 0 && (
+                        {event.tool === 'web_search' && event.hits && event.hits.length > 0 && (
                           <ul className="reasoning-tools__hits">
                             {event.hits.slice(0, 3).map((hit, idx) => (
                               <li key={`${event.id}-${idx}`}>
@@ -160,6 +195,9 @@ function ReasoningPanelComponent({
                             ))}
                             {event.hits.length > 3 && <li className="text-muted-foreground">……</li>}
                           </ul>
+                        )}
+                        {event.tool === 'python_runner' && event.summary && (
+                          <p className="text-xs text-muted-foreground">{event.summary}</p>
                         )}
                         {event.error && <p className="reasoning-tools__error">{event.error}</p>}
                       </div>

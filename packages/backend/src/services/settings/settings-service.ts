@@ -155,6 +155,30 @@ export class SettingsService {
       web_search_scope: settingsObj.web_search_scope || process.env.WEB_SEARCH_SCOPE || 'webpage',
       web_search_include_summary: this.parseBoolean(settingsObj.web_search_include_summary, process.env.WEB_SEARCH_INCLUDE_SUMMARY || 'false'),
       web_search_include_raw: this.parseBoolean(settingsObj.web_search_include_raw, process.env.WEB_SEARCH_INCLUDE_RAW || 'false'),
+      python_tool_enable: this.parseBoolean(settingsObj.python_tool_enable, process.env.PYTHON_TOOL_ENABLE || 'false'),
+      python_tool_command: settingsObj.python_tool_command || process.env.PYTHON_TOOL_COMMAND || 'python3',
+      python_tool_args: this.parseDomainFilter(settingsObj.python_tool_args || process.env.PYTHON_TOOL_ARGS || '[]'),
+      python_tool_timeout_ms: this.parseIntInRange(
+        settingsObj.python_tool_timeout_ms,
+        process.env.PYTHON_TOOL_TIMEOUT_MS,
+        1000,
+        60000,
+        8000,
+      ),
+      python_tool_max_output_chars: this.parseIntInRange(
+        settingsObj.python_tool_max_output_chars,
+        process.env.PYTHON_TOOL_MAX_OUTPUT_CHARS,
+        256,
+        20000,
+        4000,
+      ),
+      python_tool_max_source_chars: this.parseIntInRange(
+        settingsObj.python_tool_max_source_chars,
+        process.env.PYTHON_TOOL_MAX_SOURCE_CHARS,
+        256,
+        20000,
+        4000,
+      ),
       task_trace_enabled: this.parseBoolean(settingsObj.task_trace_enabled, 'false'),
       task_trace_default_on: this.parseBoolean(settingsObj.task_trace_default_on, 'false'),
       task_trace_admin_only: this.parseBoolean(settingsObj.task_trace_admin_only, 'true'),
@@ -201,6 +225,7 @@ export class SettingsService {
         web_search_scope: formatted.web_search_scope,
         web_search_include_summary: formatted.web_search_include_summary,
         web_search_include_raw: formatted.web_search_include_raw,
+        python_tool_enable: formatted.python_tool_enable,
         assistant_avatar_url: formatted.assistant_avatar_url,
         chat_system_prompt: formatted.chat_system_prompt,
         chat_max_concurrent_streams: formatted.chat_max_concurrent_streams,
@@ -246,6 +271,9 @@ export class SettingsService {
     assignIfNumber('chat_image_retention_days', payload.chat_image_retention_days)
     assignIfNumber('assistant_reply_history_limit', payload.assistant_reply_history_limit)
     assignIfNumber('web_search_result_limit', payload.web_search_result_limit)
+    assignIfNumber('python_tool_timeout_ms', payload.python_tool_timeout_ms)
+    assignIfNumber('python_tool_max_output_chars', payload.python_tool_max_output_chars)
+    assignIfNumber('python_tool_max_source_chars', payload.python_tool_max_source_chars)
     assignIfNumber('task_trace_retention_days', payload.task_trace_retention_days)
     assignIfNumber('task_trace_max_events', payload.task_trace_max_events)
     assignIfNumber('task_trace_idle_timeout_ms', payload.task_trace_idle_timeout_ms)
@@ -261,6 +289,7 @@ export class SettingsService {
       'web_search_agent_enable',
       'web_search_include_summary',
       'web_search_include_raw',
+      'python_tool_enable',
       'task_trace_enabled',
       'task_trace_default_on',
       'task_trace_admin_only',
@@ -296,6 +325,8 @@ export class SettingsService {
       { key: 'web_search_api_key_metaso', value: payload.web_search_api_key_metaso },
       { key: 'web_search_domain_filter', value: Array.isArray(payload.web_search_domain_filter) ? JSON.stringify(payload.web_search_domain_filter) : undefined },
       { key: 'web_search_scope', value: payload.web_search_scope },
+      { key: 'python_tool_command', value: payload.python_tool_command },
+      { key: 'python_tool_args', value: Array.isArray(payload.python_tool_args) ? JSON.stringify(payload.python_tool_args) : undefined },
       { key: 'task_trace_env', value: payload.task_trace_env },
     ]
     stringFields.forEach(({ key, value }) => {

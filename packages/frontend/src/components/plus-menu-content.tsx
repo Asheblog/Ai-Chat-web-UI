@@ -20,6 +20,10 @@ interface PlusMenuContentProps {
   canUseTrace?: boolean
   onToggleTrace?: (value: boolean) => void
   webSearchDisabledNote?: string
+  pythonToolEnabled?: boolean
+  onTogglePythonTool?: (value: boolean) => void
+  canUsePythonTool?: boolean
+  pythonToolDisabledNote?: string
   contentClassName?: string
   bodyClassName?: string
   onOpenAdvanced?: () => void
@@ -43,6 +47,10 @@ export function PlusMenuContent({
   canUseTrace = false,
   onToggleTrace,
   webSearchDisabledNote,
+  pythonToolEnabled,
+  onTogglePythonTool,
+  canUsePythonTool = true,
+  pythonToolDisabledNote,
   contentClassName,
   bodyClassName,
   onOpenAdvanced,
@@ -91,6 +99,17 @@ export function PlusMenuContent({
           </div>
         ) : null}
 
+        {onTogglePythonTool ? (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Python 工具</span>
+            <Switch
+              checked={Boolean(pythonToolEnabled && canUsePythonTool)}
+              onCheckedChange={(checked) => onTogglePythonTool(Boolean(checked))}
+              disabled={!canUsePythonTool}
+            />
+          </div>
+        ) : null}
+
         {/* 搜索范围 */}
         {showWebSearchScope && onWebSearchScopeChange ? (
           <div className="flex flex-col gap-1">
@@ -128,6 +147,9 @@ export function PlusMenuContent({
 
         {webSearchDisabledNote ? (
           <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
+        ) : null}
+        {pythonToolDisabledNote ? (
+          <p className="text-[11px] text-muted-foreground">{pythonToolDisabledNote}</p>
         ) : null}
 
         {/* 编辑自定义请求头 */}

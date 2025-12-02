@@ -524,7 +524,7 @@ class ApiClient {
                 const message =
                   typeof parsed.error === 'string' && parsed.error.trim()
                     ? parsed.error
-                    : '联网搜索失败，请稍后重试'
+                    : '工具调用失败，请稍后重试'
                 yield { type: 'error', error: message }
               } else if (parsed.error) {
                 throw new Error(parsed.error)
@@ -787,6 +787,39 @@ class ApiClient {
         : 'webpage'
     const webSearchIncludeSummary = Boolean(raw.web_search_include_summary ?? false)
     const webSearchIncludeRaw = Boolean(raw.web_search_include_raw ?? false)
+    const pythonToolEnable = Boolean(raw.python_tool_enable ?? false)
+    const pythonToolCommand =
+      typeof raw.python_tool_command === 'string' && raw.python_tool_command.trim().length > 0
+        ? raw.python_tool_command
+        : 'python3'
+    const pythonToolArgs = Array.isArray(raw.python_tool_args) ? (raw.python_tool_args as string[]) : []
+    const pythonToolTimeoutMs = (() => {
+      const v = raw.python_tool_timeout_ms
+      if (typeof v === 'number') return Math.max(1000, Math.min(60000, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
+        if (Number.isFinite(parsed)) return Math.max(1000, Math.min(60000, parsed))
+      }
+      return 8000
+    })()
+    const pythonToolMaxOutputChars = (() => {
+      const v = raw.python_tool_max_output_chars
+      if (typeof v === 'number') return Math.max(256, Math.min(20000, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
+        if (Number.isFinite(parsed)) return Math.max(256, Math.min(20000, parsed))
+      }
+      return 4000
+    })()
+    const pythonToolMaxSourceChars = (() => {
+      const v = raw.python_tool_max_source_chars
+      if (typeof v === 'number') return Math.max(256, Math.min(20000, v))
+      if (typeof v === 'string' && v.trim() !== '') {
+        const parsed = Number.parseInt(v, 10)
+        if (Number.isFinite(parsed)) return Math.max(256, Math.min(20000, parsed))
+      }
+      return 4000
+    })()
     const assistantAvatarUrl = (() => {
       const value = raw.assistant_avatar_url
       if (typeof value === 'string' && value.trim().length > 0) return value
@@ -879,6 +912,12 @@ class ApiClient {
         webSearchScope,
         webSearchIncludeSummary,
         webSearchIncludeRaw,
+        pythonToolEnable,
+        pythonToolCommand,
+        pythonToolArgs,
+        pythonToolTimeoutMs,
+        pythonToolMaxOutputChars,
+        pythonToolMaxSourceChars,
         assistantAvatarUrl,
         chatSystemPrompt,
         taskTraceEnabled,
@@ -951,6 +990,12 @@ class ApiClient {
     if (typeof rest.webSearchScope === 'string') payload.web_search_scope = rest.webSearchScope
     if (typeof rest.webSearchIncludeSummary === 'boolean') payload.web_search_include_summary = rest.webSearchIncludeSummary
     if (typeof rest.webSearchIncludeRaw === 'boolean') payload.web_search_include_raw = rest.webSearchIncludeRaw
+    if (typeof rest.pythonToolEnable === 'boolean') payload.python_tool_enable = rest.pythonToolEnable
+    if (typeof rest.pythonToolCommand === 'string') payload.python_tool_command = rest.pythonToolCommand
+    if (Array.isArray(rest.pythonToolArgs)) payload.python_tool_args = rest.pythonToolArgs
+    if (typeof rest.pythonToolTimeoutMs === 'number') payload.python_tool_timeout_ms = rest.pythonToolTimeoutMs
+    if (typeof rest.pythonToolMaxOutputChars === 'number') payload.python_tool_max_output_chars = rest.pythonToolMaxOutputChars
+    if (typeof rest.pythonToolMaxSourceChars === 'number') payload.python_tool_max_source_chars = rest.pythonToolMaxSourceChars
     if (typeof rest.webSearchApiKeyTavily === 'string') payload.web_search_api_key_tavily = rest.webSearchApiKeyTavily
     if (typeof rest.webSearchApiKeyBrave === 'string') payload.web_search_api_key_brave = rest.webSearchApiKeyBrave
     if (typeof rest.webSearchApiKeyMetaso === 'string') payload.web_search_api_key_metaso = rest.webSearchApiKeyMetaso

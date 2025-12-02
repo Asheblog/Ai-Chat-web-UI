@@ -119,6 +119,13 @@ export class ChatRequestBuilder {
           '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。',
       })
     }
+    if (requestedFeatures.python_tool === true) {
+      systemPrompts.push({
+        role: 'system',
+        content:
+          '只有在需要精确计算或表格/数组等结构化处理时，才调用 python_runner。请提供简短、确定性的 Python3 代码，并通过 print() 输出最终答案。避免执行危险操作或访问文件系统。',
+      })
+    }
 
     const contextInfo = await this.buildContextMessages({
       sessionId: params.session.id,

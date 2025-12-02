@@ -11,6 +11,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     userMessageRecord,
     sseHeaders,
     agentConfig,
+    pythonToolConfig,
+    toolFlags,
     provider,
     baseUrl,
     authHeader,
@@ -38,6 +40,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     baseUrl,
     engine: agentConfig.engine,
     model: session.modelRawId,
+    tools: {
+      web_search: toolFlags.webSearch,
+      python_runner: toolFlags.python,
+    },
   });
 
   let activeAssistantMessageId = assistantMessageId ?? null;
@@ -202,6 +208,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (Array.isArray(payload.hits)) {
           entry.hits = (payload.hits as WebSearchHit[]).slice(0, 10);
         }
+        if (typeof payload.summary === 'string' && payload.summary.trim()) {
+          entry.summary = payload.summary.trim();
+        }
         if (typeof payload.error === 'string' && payload.error.trim()) {
           entry.error = payload.error;
         }
@@ -217,6 +226,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           query: entry.query ?? existing.query,
           hits: entry.hits ?? existing.hits,
           error: entry.error ?? existing.error,
+          summary: entry.summary ?? existing.summary,
           createdAt: existing.createdAt,
         };
       };
@@ -251,6 +261,185 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         safeEnqueue(payload);
       };
 
+      const truncateText = (text: string, limit = 160) => {
+        const normalized = (text || '').trim();
+        if (!normalized) return '';
+        return normalized.length > limit ? `${normalized.slice(0, limit)}…` : normalized;
+      };
+
+      const handleWebSearchToolCall = async (
+        toolCall: { id?: string; function?: { arguments?: string } },
+        args: { query?: string; num_results?: number },
+      ) => {
+        const query = (args?.query || '').trim();
+        const callId = toolCall.id || randomUUID();
+        const reasoningMetaBase = { kind: 'tool', tool: 'web_search', query, callId };
+        if (!query) {
+          emitReasoning('模型请求了空的联网搜索参数，已忽略。', {
+            ...reasoningMetaBase,
+            stage: 'error',
+          });
+          sendToolEvent({
+            id: callId,
+            tool: 'web_search',
+            stage: 'error',
+            query: '',
+            error: 'Model requested web_search without a query',
+          });
+          workingMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: 'web_search',
+            content: JSON.stringify({ error: 'Missing query parameter' }),
+          });
+          return;
+        }
+
+        emitReasoning(`联网搜索：${query}`, { ...reasoningMetaBase, stage: 'start' });
+        sendToolEvent({ id: callId, tool: 'web_search', stage: 'start', query });
+        try {
+          const hits = await runWebSearch(query, {
+            engine: agentConfig.engine,
+            apiKey: agentConfig.apiKey,
+            limit: args?.num_results || agentConfig.resultLimit,
+            domains: agentConfig.domains,
+            endpoint: agentConfig.endpoint,
+            scope: agentConfig.scope,
+            includeSummary: agentConfig.includeSummary,
+            includeRawContent: agentConfig.includeRawContent,
+          });
+          emitReasoning(`获得 ${hits.length} 条结果，准备综合。`, {
+            ...reasoningMetaBase,
+            stage: 'result',
+            hits: hits.length,
+          });
+          sendToolEvent({
+            id: callId,
+            tool: 'web_search',
+            stage: 'result',
+            query,
+            hits,
+          });
+          const summary = formatHitsForModel(query, hits);
+          workingMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: 'web_search',
+            content: JSON.stringify({ query, hits, summary }),
+          });
+        } catch (searchError: any) {
+          const message = searchError?.message || 'Web search failed';
+          emitReasoning(`联网搜索失败：${message}`, {
+            ...reasoningMetaBase,
+            stage: 'error',
+          });
+          sendToolEvent({
+            id: callId,
+            tool: 'web_search',
+            stage: 'error',
+            query,
+            error: message,
+          });
+          workingMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: 'web_search',
+            content: JSON.stringify({ query, error: message }),
+          });
+        }
+      };
+
+      const handlePythonToolCall = async (
+        toolCall: { id?: string; function?: { arguments?: string } },
+        args: { code?: string; input?: string },
+      ) => {
+        const source = typeof args?.code === 'string' ? args.code : '';
+        const stdin = typeof args?.input === 'string' ? args.input : undefined;
+        const callId = toolCall.id || randomUUID();
+        const reasoningMetaBase = { kind: 'tool', tool: 'python_runner', callId };
+        if (!source.trim()) {
+          const error = '模型未提供 Python code';
+          emitReasoning(error, { ...reasoningMetaBase, stage: 'error' });
+          sendToolEvent({
+            id: callId,
+            tool: 'python_runner',
+            stage: 'error',
+            error,
+          });
+          workingMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: 'python_runner',
+            content: JSON.stringify({ error }),
+          });
+          return;
+        }
+        const preview = truncateText(source.replace(/\s+/g, ' '), 160);
+        emitReasoning('执行 Python 代码', { ...reasoningMetaBase, stage: 'start', summary: preview });
+        sendToolEvent({
+          id: callId,
+          tool: 'python_runner',
+          stage: 'start',
+          summary: preview,
+        });
+        try {
+          const result = await runPythonSnippet({
+            code: source,
+            input: stdin,
+            command: pythonToolConfig.command,
+            args: pythonToolConfig.args,
+            timeoutMs: pythonToolConfig.timeoutMs,
+            maxOutputChars: pythonToolConfig.maxOutputChars,
+            maxSourceChars: pythonToolConfig.maxSourceChars,
+          });
+          const resultPreview = truncateText(
+            result.stdout.trim() || (result.stderr ? `stderr: ${result.stderr.trim()}` : 'Python 运行完成'),
+            200,
+          );
+          emitReasoning('Python 执行完成，准备综合结果。', {
+            ...reasoningMetaBase,
+            stage: 'result',
+            summary: resultPreview,
+          });
+          sendToolEvent({
+            id: callId,
+            tool: 'python_runner',
+            stage: 'result',
+            summary: resultPreview,
+          });
+          workingMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: 'python_runner',
+            content: JSON.stringify({
+              stdout: result.stdout,
+              stderr: result.stderr,
+              exit_code: result.exitCode,
+              duration_ms: result.durationMs,
+              truncated: result.truncated || undefined,
+            }),
+          });
+        } catch (pythonError: any) {
+          const message = pythonError?.message || 'Python 执行失败';
+          emitReasoning(`Python 执行失败：${message}`, {
+            ...reasoningMetaBase,
+            stage: 'error',
+          });
+          sendToolEvent({
+            id: callId,
+            tool: 'python_runner',
+            stage: 'error',
+            error: message,
+          });
+          workingMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: 'python_runner',
+            content: JSON.stringify({ error: message }),
+          });
+        }
+      };
+
       // 对齐标准流式接口：携带 assistantMessageId / assistantClientMessageId，便于前端替换占位ID
       safeEnqueue({
         type: 'start',
@@ -272,6 +461,63 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       });
 
       const workingMessages = JSON.parse(JSON.stringify(messagesPayload));
+      const toolDefinitions: any[] = [];
+      const allowedToolNames = new Set<string>();
+      if (toolFlags.webSearch) {
+        allowedToolNames.add('web_search');
+        toolDefinitions.push({
+          type: 'function',
+          function: {
+            name: 'web_search',
+            description:
+              'Use this tool to search the live web for up-to-date information before responding. Return queries in the same language as the conversation.',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query describing the missing information',
+                },
+                num_results: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: agentConfig.resultLimit,
+                  description: 'Desired number of results',
+                },
+              },
+              required: ['query'],
+            },
+          },
+        });
+      }
+      if (toolFlags.python && pythonToolConfig.enabled) {
+        allowedToolNames.add('python_runner');
+        toolDefinitions.push({
+          type: 'function',
+          function: {
+            name: 'python_runner',
+            description:
+              'Execute short Python 3 code snippets for calculations or data processing. Use print() to output the final answer.',
+            parameters: {
+              type: 'object',
+              properties: {
+                code: {
+                  type: 'string',
+                  description: 'Python code to execute. Keep it concise and deterministic.',
+                },
+                input: {
+                  type: 'string',
+                  description: 'Optional standard input passed to the Python process.',
+                },
+              },
+              required: ['code'],
+            },
+          },
+        });
+      }
+      if (toolDefinitions.length === 0) {
+        throw new Error('Agent 工具未启用');
+      }
       const maxIterations = 4;
       let currentProviderController: AbortController | null = null;
 
@@ -280,32 +526,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           ...requestData,
           stream: true,
           messages,
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'web_search',
-                description:
-                  'Use this tool to search the live web for up-to-date information before responding. Return queries in the same language as the conversation.',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    query: {
-                      type: 'string',
-                      description: 'Search query describing the missing information',
-                    },
-                    num_results: {
-                      type: 'integer',
-                      minimum: 1,
-                      maximum: agentConfig.resultLimit,
-                      description: 'Desired number of results',
-                    },
-                  },
-                  required: ['query'],
-                },
-              },
-            },
-          ],
+          tools: toolDefinitions,
           tool_choice: 'auto',
         });
 
@@ -487,95 +708,32 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             });
 
             for (const toolCall of aggregatedToolCalls) {
-              if (toolCall?.function?.name !== 'web_search') {
+              const toolName = toolCall?.function?.name || 'web_search';
+              if (!allowedToolNames.has(toolName)) {
                 sendToolEvent({
                   id: toolCall.id || randomUUID(),
-                  tool: toolCall?.function?.name ?? 'unknown',
+                  tool: toolName,
                   stage: 'error',
                   error: 'Unsupported tool requested by the model',
                 });
                 continue;
               }
-              let args: { query?: string; num_results?: number } = {};
+              let args: Record<string, unknown> = {};
               try {
                 args = JSON.parse(toolCall.function?.arguments ?? '{}');
               } catch {
                 args = {};
               }
-              const query = (args?.query || '').trim();
-              const callId = toolCall.id || randomUUID();
-              const reasoningMetaBase = { kind: 'tool', tool: 'web_search', query, callId };
-              if (!query) {
-                emitReasoning('模型请求了空的联网搜索参数，已忽略。', {
-                  ...reasoningMetaBase,
-                  stage: 'error',
-                });
+              if (toolName === 'web_search') {
+                await handleWebSearchToolCall(toolCall, args as { query?: string; num_results?: number });
+              } else if (toolName === 'python_runner') {
+                await handlePythonToolCall(toolCall, args as { code?: string; input?: string });
+              } else {
                 sendToolEvent({
-                  id: callId,
-                  tool: 'web_search',
+                  id: toolCall.id || randomUUID(),
+                  tool: toolName,
                   stage: 'error',
-                  query: '',
-                  error: 'Model requested web_search without a query',
-                });
-                workingMessages.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  name: 'web_search',
-                  content: JSON.stringify({ error: 'Missing query parameter' }),
-                });
-                continue;
-              }
-
-              emitReasoning(`联网搜索：${query}`, { ...reasoningMetaBase, stage: 'start' });
-              sendToolEvent({ id: callId, tool: 'web_search', stage: 'start', query });
-              try {
-                const hits = await runWebSearch(query, {
-                  engine: agentConfig.engine,
-                  apiKey: agentConfig.apiKey,
-                  limit: args?.num_results || agentConfig.resultLimit,
-                  domains: agentConfig.domains,
-                  endpoint: agentConfig.endpoint,
-                  scope: agentConfig.scope,
-                  includeSummary: agentConfig.includeSummary,
-                  includeRawContent: agentConfig.includeRawContent,
-                });
-                emitReasoning(`获得 ${hits.length} 条结果，准备综合。`, {
-                  ...reasoningMetaBase,
-                  stage: 'result',
-                  hits: hits.length,
-                });
-                sendToolEvent({
-                  id: callId,
-                  tool: 'web_search',
-                  stage: 'result',
-                  query,
-                  hits,
-                });
-                const summary = formatHitsForModel(query, hits);
-                workingMessages.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  name: 'web_search',
-                  content: JSON.stringify({ query, hits, summary }),
-                });
-              } catch (searchError: any) {
-                const message = searchError?.message || 'Web search failed';
-                emitReasoning(`联网搜索失败：${message}`, {
-                  ...reasoningMetaBase,
-                  stage: 'error',
-                });
-                sendToolEvent({
-                  id: callId,
-                  tool: 'web_search',
-                  stage: 'error',
-                  query,
-                  error: message,
-                });
-                workingMessages.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  name: 'web_search',
-                  content: JSON.stringify({ query, error: message }),
+                  error: 'Unsupported tool requested by the model',
                 });
               }
             }
@@ -824,6 +982,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           stage: item.stage,
           query: item.query,
           hits: Array.isArray(item.hits) ? item.hits.length : undefined,
+          summary: item.summary,
           error: item.error,
           createdAt: new Date(item.createdAt).toISOString(),
         }));
@@ -922,6 +1081,60 @@ export const buildAgentWebSearchConfig = (sysMap: Record<string, string>): Agent
     includeRawContent,
   };
 };
+
+export const buildAgentPythonToolConfig = (sysMap: Record<string, string>): AgentPythonToolConfig => {
+  const enabled = parseBooleanSetting(
+    sysMap.python_tool_enable ?? process.env.PYTHON_TOOL_ENABLE,
+    false,
+  );
+  const command =
+    (sysMap.python_tool_command || process.env.PYTHON_TOOL_COMMAND || 'python3').trim() ||
+    'python3';
+  const argsRaw = sysMap.python_tool_args || process.env.PYTHON_TOOL_ARGS;
+  const args = parseDomainListSetting(argsRaw)?.map((arg) => arg.replace(/\s+$/g, '')) || [];
+  const parseNumber = (
+    value: string | undefined,
+    envValue: string | undefined,
+    min: number,
+    max: number,
+    fallback: number,
+  ) => {
+    const raw = value ?? envValue;
+    if (!raw) return fallback;
+    const parsed = Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+  };
+  const timeoutMs = parseNumber(
+    sysMap.python_tool_timeout_ms,
+    process.env.PYTHON_TOOL_TIMEOUT_MS,
+    1000,
+    60000,
+    8000,
+  );
+  const maxOutputChars = parseNumber(
+    sysMap.python_tool_max_output_chars,
+    process.env.PYTHON_TOOL_MAX_OUTPUT_CHARS,
+    256,
+    20000,
+    4000,
+  );
+  const maxSourceChars = parseNumber(
+    sysMap.python_tool_max_source_chars,
+    process.env.PYTHON_TOOL_MAX_SOURCE_CHARS,
+    256,
+    20000,
+    4000,
+  );
+  return {
+    enabled,
+    command,
+    args,
+    timeoutMs,
+    maxOutputChars,
+    maxSourceChars,
+  };
+};
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../db';
@@ -929,6 +1142,7 @@ import { BackendLogger as log } from '../../utils/logger';
 import { convertOpenAIReasoningPayload } from '../../utils/providers';
 import { Tokenizer } from '../../utils/tokenizer';
 import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../../utils/web-search';
+import { runPythonSnippet } from '../../utils/python-runner';
 import { serializeQuotaSnapshot } from '../../utils/quota';
 import type { UsageQuotaSnapshot } from '../../types';
 import { summarizeSsePayload } from '../../utils/task-trace';
@@ -956,6 +1170,15 @@ export interface AgentWebSearchConfig {
   includeRawContent?: boolean;
 }
 
+export interface AgentPythonToolConfig {
+  enabled: boolean;
+  command: string;
+  args: string[];
+  timeoutMs: number;
+  maxOutputChars: number;
+  maxSourceChars: number;
+}
+
 export type AgentResponseParams = {
   session: typeof prisma.chatSession.$inferSelect;
   sessionId: number;
@@ -968,6 +1191,8 @@ export type AgentResponseParams = {
   userMessageRecord: any;
   sseHeaders: Record<string, string>;
   agentConfig: AgentWebSearchConfig;
+  pythonToolConfig: AgentPythonToolConfig;
+  toolFlags: { webSearch: boolean; python: boolean };
   provider: string;
   baseUrl: string;
   authHeader: Record<string, string>;

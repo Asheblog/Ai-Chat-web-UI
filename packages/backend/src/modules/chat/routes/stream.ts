@@ -14,7 +14,11 @@ import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
 import { resolveContextLimit, resolveCompletionLimit } from '../../../utils/context-window';
 import { TaskTraceRecorder, shouldEnableTaskTrace, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../../../utils/reasoning-tags';
-import { createAgentWebSearchResponse, buildAgentWebSearchConfig } from '../../chat/agent-web-search-response';
+import {
+  createAgentWebSearchResponse,
+  buildAgentWebSearchConfig,
+  buildAgentPythonToolConfig,
+} from '../../chat/agent-web-search-response';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
 import {
   buildAgentStreamKey,
@@ -280,6 +284,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         env: process.env.NODE_ENV,
       });
       const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
+      const pythonToolConfig = buildAgentPythonToolConfig(sysMap);
       const sanitizeScope = (scope?: string) => {
         if (!scope) return undefined;
         const normalized = scope.trim().toLowerCase();
@@ -340,12 +345,16 @@ export const registerChatStreamRoutes = (router: Hono) => {
       };
 
       const webSearchFeatureRequested = requestedFeatures?.web_search === true;
+      const pythonToolFeatureRequested = requestedFeatures?.python_tool === true;
       const providerSupportsTools = provider === 'openai' || provider === 'azure_openai';
       const agentWebSearchActive =
         webSearchFeatureRequested &&
         agentWebSearchConfig.enabled &&
         providerSupportsTools &&
         Boolean(agentWebSearchConfig.apiKey);
+      const pythonToolActive =
+        pythonToolFeatureRequested && pythonToolConfig.enabled && providerSupportsTools;
+      const agentToolsActive = agentWebSearchActive || pythonToolActive;
       const resolvedMaxConcurrentStreams = (() => {
         const raw =
           sysMap.chat_max_concurrent_streams ||
@@ -421,7 +430,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         traceRequested: traceToggle ?? null,
       })
 
-      if (agentWebSearchActive) {
+      if (agentToolsActive) {
         return await createAgentWebSearchResponse({
           session,
           sessionId,
@@ -434,6 +443,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
           userMessageRecord,
           sseHeaders,
           agentConfig: agentWebSearchConfig,
+          pythonToolConfig,
+          toolFlags: { webSearch: agentWebSearchActive, python: pythonToolActive },
           provider,
           baseUrl,
           authHeader,

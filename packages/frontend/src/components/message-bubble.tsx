@@ -99,6 +99,13 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
     return Object.values(merged).sort((a, b) => a.createdAt - b.createdAt)
   }, [historicalToolEvents, streamingToolEvents])
 
+  const describeTool = useCallback((tool?: string | null) => {
+    if (!tool) return '工具调用'
+    if (tool === 'web_search') return '联网搜索'
+    if (tool === 'python_runner') return 'Python 工具'
+    return tool
+  }, [])
+
   const toolSummary = useMemo(() => {
     if (sortedToolTimeline.length === 0) {
       return null
@@ -106,6 +113,7 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
     let running = 0
     let success = 0
     let error = 0
+    const toolCounts = new Map<string, number>()
     sortedToolTimeline.forEach((event) => {
       if (event.stage === 'result') {
         success += 1
@@ -114,16 +122,21 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
       } else {
         running += 1
       }
+      toolCounts.set(event.tool, (toolCounts.get(event.tool) || 0) + 1)
     })
     const parts: string[] = []
     if (success > 0) parts.push(`完成 ${success} 次`)
     if (running > 0) parts.push(`进行中 ${running} 次`)
     if (error > 0) parts.push(`失败 ${error} 次`)
+    const labelParts = Array.from(toolCounts.entries()).map(
+      ([tool, count]) => `${describeTool(tool)} ${count} 次`,
+    )
     return {
       total: sortedToolTimeline.length,
-      summaryText: parts.join(' · ') || '等待搜索结果',
+      summaryText: parts.join(' · ') || '等待工具结果',
+      label: labelParts.length > 0 ? labelParts.join(' / ') : '工具调用',
     }
-  }, [sortedToolTimeline])
+  }, [describeTool, sortedToolTimeline])
 
   const { toast } = useToast()
 

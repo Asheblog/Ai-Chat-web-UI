@@ -9,6 +9,7 @@ export type ToolLogEntry = {
   query?: string;
   hits?: WebSearchHit[];
   error?: string;
+  summary?: string;
   createdAt: number;
 };
 
@@ -95,6 +96,9 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
         }
         if (typeof entry.error === 'string' && entry.error.trim()) {
           log.error = entry.error;
+        }
+        if (typeof entry.summary === 'string' && entry.summary.trim()) {
+          log.summary = entry.summary.trim();
         }
         return log;
       })

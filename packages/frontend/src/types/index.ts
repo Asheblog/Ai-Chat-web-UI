@@ -262,6 +262,12 @@ export interface SystemSettings {
   webSearchScope?: string;
   webSearchIncludeSummary?: boolean;
   webSearchIncludeRaw?: boolean;
+  pythonToolEnable?: boolean;
+  pythonToolCommand?: string;
+  pythonToolArgs?: string[];
+  pythonToolTimeoutMs?: number;
+  pythonToolMaxOutputChars?: number;
+  pythonToolMaxSourceChars?: number;
   assistantAvatarUrl?: string | null;
   chatSystemPrompt?: string;
   webSearchApiKey?: string;

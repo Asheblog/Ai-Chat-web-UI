@@ -22,6 +22,7 @@ import { UserMenu } from '@/components/user-menu'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelPreferenceStore, persistPreferredModel, findPreferredModel } from '@/store/model-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
+import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 
@@ -69,9 +70,13 @@ export function WelcomeScreen() {
   const [effortTouched, setEffortTouched] = useState(false)
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [webSearchTouched, setWebSearchTouched] = useState(false)
+  const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
+  const [pythonToolTouched, setPythonToolTouched] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
   const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
+  const storedPythonPreference = usePythonToolPreferenceStore((state) => state.lastSelection)
+  const persistPythonPreference = usePythonToolPreferenceStore((state) => state.setLastSelection)
   const scopePreferenceKey = 'web_search_scope_preference'
 
   // 图片上传（与聊天页保持一致的限制）
@@ -169,9 +174,37 @@ export function WelcomeScreen() {
     return typeof cap === 'boolean' ? cap : true
   }, [selectedModel])
 
+  const providerSupportsTools = useMemo(() => {
+    const provider = selectedModel?.provider?.toLowerCase()
+    if (!provider) return true
+    return provider === "openai" || provider === "azure_openai"
+  }, [selectedModel])
+
+  const pythonToolCapable = useMemo(() => {
+    const cap = selectedModel?.capabilities?.code_interpreter
+    return typeof cap === "boolean" ? cap : true
+  }, [selectedModel])
+
   const canUseWebSearch = Boolean(
-    systemSettings?.webSearchAgentEnable && systemSettings?.webSearchHasApiKey && isWebSearchCapable,
+    systemSettings?.webSearchAgentEnable &&
+      systemSettings?.webSearchHasApiKey &&
+      isWebSearchCapable &&
+      providerSupportsTools,
   )
+  const canUsePythonTool = Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable && providerSupportsTools
+  const webSearchDisabledNote = useMemo(() => {
+    if (!systemSettings?.webSearchAgentEnable) return "管理员未启用联网搜索"
+    if (!systemSettings?.webSearchHasApiKey) return "尚未配置搜索 API Key"
+    if (!providerSupportsTools) return "当前连接不支持工具调用"
+    if (!isWebSearchCapable) return "该模型未启用联网搜索"
+    return undefined
+  }, [isWebSearchCapable, providerSupportsTools, systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey])
+  const pythonToolDisabledNote = useMemo(() => {
+    if (!systemSettings?.pythonToolEnable) return "管理员未开启 Python 工具"
+    if (!providerSupportsTools) return "当前连接不支持工具调用"
+    if (!pythonToolCapable) return "该模型未启用 Python 工具"
+    return undefined
+  }, [providerSupportsTools, pythonToolCapable, systemSettings?.pythonToolEnable])
   const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
   const showWebSearchScope = canUseWebSearch && isMetasoEngine
 
@@ -204,6 +237,27 @@ export function WelcomeScreen() {
       setWebSearchEnabled(true)
     }
   }, [canUseWebSearch, storedWebSearchPreference, webSearchEnabled, webSearchTouched])
+
+  useEffect(() => {
+    if (!canUsePythonTool) {
+      if (pythonToolEnabled) {
+        setPythonToolEnabled(false)
+      }
+      return
+    }
+    if (typeof storedPythonPreference === 'boolean') {
+      if (pythonToolEnabled !== storedPythonPreference) {
+        setPythonToolEnabled(storedPythonPreference)
+      }
+      if (!pythonToolTouched) {
+        setPythonToolTouched(true)
+      }
+      return
+    }
+    if (!pythonToolTouched) {
+      setPythonToolEnabled(false)
+    }
+  }, [canUsePythonTool, pythonToolEnabled, pythonToolTouched, storedPythonPreference])
 
   useEffect(() => {
     if (!showWebSearchScope) {
@@ -398,13 +452,18 @@ export function WelcomeScreen() {
           const opts: any = {}
           if (thinkingTouched) opts.reasoningEnabled = thinkingEnabled
           if (effortTouched && effort !== 'unset') opts.reasoningEffort = effort as any
+          const featureFlags: Record<string, any> = {}
           if ((webSearchTouched || canUseWebSearch) && webSearchEnabled && canUseWebSearch) {
-            opts.features = {
-              web_search: true,
-              ...(isMetasoEngine ? { web_search_scope: webSearchScope } : {}),
-              ...(systemSettings?.webSearchIncludeSummary ? { web_search_include_summary: true } : {}),
-              ...(systemSettings?.webSearchIncludeRaw ? { web_search_include_raw: true } : {}),
-            }
+            featureFlags.web_search = true
+            if (isMetasoEngine) featureFlags.web_search_scope = webSearchScope
+            if (systemSettings?.webSearchIncludeSummary) featureFlags.web_search_include_summary = true
+            if (systemSettings?.webSearchIncludeRaw) featureFlags.web_search_include_raw = true
+          }
+          if ((pythonToolTouched || canUsePythonTool) && pythonToolEnabled && canUsePythonTool) {
+            featureFlags.python_tool = true
+          }
+          if (Object.keys(featureFlags).length > 0) {
+            opts.features = featureFlags
           }
           if (parsedCustomBody) opts.customBody = parsedCustomBody
           if (sanitizedHeaders.length) opts.customHeaders = sanitizedHeaders
@@ -509,11 +568,16 @@ export function WelcomeScreen() {
                     // ignore storage error
                   }
                 }}
-                webSearchDisabledNote={
-                  !systemSettings?.webSearchHasApiKey
-                    ? '管理员未配置搜索 API Key，暂不可用'
-                    : undefined
-                }
+                webSearchDisabledNote={webSearchDisabledNote}
+                pythonToolEnabled={pythonToolEnabled}
+                onTogglePythonTool={(v) => {
+                  const nextValue = canUsePythonTool && !!v
+                  setPythonToolTouched(true)
+                  setPythonToolEnabled(nextValue)
+                  persistPythonPreference(nextValue)
+                }}
+                canUsePythonTool={canUsePythonTool}
+                pythonToolDisabledNote={pythonToolDisabledNote}
                 onOpenAdvanced={() => setAdvancedOpen(true)}
                 onOpenSessionPrompt={() => setSessionPromptOpen(true)}
                 contentClassName="rounded-2xl"
