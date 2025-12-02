@@ -155,6 +155,13 @@ export class SettingsService {
       web_search_scope: settingsObj.web_search_scope || process.env.WEB_SEARCH_SCOPE || 'webpage',
       web_search_include_summary: this.parseBoolean(settingsObj.web_search_include_summary, process.env.WEB_SEARCH_INCLUDE_SUMMARY || 'false'),
       web_search_include_raw: this.parseBoolean(settingsObj.web_search_include_raw, process.env.WEB_SEARCH_INCLUDE_RAW || 'false'),
+      agent_max_tool_iterations: this.parseIntInRange(
+        settingsObj.agent_max_tool_iterations,
+        process.env.AGENT_MAX_TOOL_ITERATIONS,
+        0,
+        20,
+        4,
+      ),
       python_tool_enable: this.parseBoolean(settingsObj.python_tool_enable, process.env.PYTHON_TOOL_ENABLE || 'false'),
       python_tool_command: settingsObj.python_tool_command || process.env.PYTHON_TOOL_COMMAND || 'python3',
       python_tool_args: this.parseDomainFilter(settingsObj.python_tool_args || process.env.PYTHON_TOOL_ARGS || '[]'),
@@ -271,6 +278,7 @@ export class SettingsService {
     assignIfNumber('chat_image_retention_days', payload.chat_image_retention_days)
     assignIfNumber('assistant_reply_history_limit', payload.assistant_reply_history_limit)
     assignIfNumber('web_search_result_limit', payload.web_search_result_limit)
+    assignIfNumber('agent_max_tool_iterations', payload.agent_max_tool_iterations)
     assignIfNumber('python_tool_timeout_ms', payload.python_tool_timeout_ms)
     assignIfNumber('python_tool_max_output_chars', payload.python_tool_max_output_chars)
     assignIfNumber('python_tool_max_source_chars', payload.python_tool_max_source_chars)

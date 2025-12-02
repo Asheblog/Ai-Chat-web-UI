@@ -46,6 +46,7 @@ export function SystemWebSearchPage() {
   const [pythonTimeout, setPythonTimeout] = useState(8000)
   const [pythonMaxOutput, setPythonMaxOutput] = useState(4000)
   const [pythonMaxSource, setPythonMaxSource] = useState(4000)
+  const [maxToolIterations, setMaxToolIterations] = useState(4)
 
   useEffect(() => {
     fetchSystemSettings().catch(() => {})
@@ -72,6 +73,7 @@ export function SystemWebSearchPage() {
     setPythonTimeout(Number(systemSettings.pythonToolTimeoutMs ?? 8000))
     setPythonMaxOutput(Number(systemSettings.pythonToolMaxOutputChars ?? 4000))
     setPythonMaxSource(Number(systemSettings.pythonToolMaxSourceChars ?? 4000))
+    setMaxToolIterations(Number(systemSettings.agentMaxToolIterations ?? 4))
   }, [systemSettings])
 
   if (isLoading && !systemSettings) {
@@ -115,6 +117,9 @@ export function SystemWebSearchPage() {
     pythonMaxOutput >= pythonOutputRange.min && pythonMaxOutput <= pythonOutputRange.max
   const pythonMaxSourceValid =
     pythonMaxSource >= pythonOutputRange.min && pythonMaxSource <= pythonOutputRange.max
+  const agentIterationRange = { min: 0, max: 20 }
+  const agentIterationValid =
+    maxToolIterations >= agentIterationRange.min && maxToolIterations <= agentIterationRange.max
 
   const changed =
     enabled !== Boolean(systemSettings.webSearchAgentEnable ?? false) ||
@@ -130,6 +135,7 @@ export function SystemWebSearchPage() {
     pythonTimeout !== Number(systemSettings.pythonToolTimeoutMs ?? 8000) ||
     pythonMaxOutput !== Number(systemSettings.pythonToolMaxOutputChars ?? 4000) ||
     pythonMaxSource !== Number(systemSettings.pythonToolMaxSourceChars ?? 4000) ||
+    maxToolIterations !== Number(systemSettings.agentMaxToolIterations ?? 4) ||
     apiKeyTavilyDraft.trim() !== "" ||
     apiKeyBraveDraft.trim() !== "" ||
     apiKeyMetasoDraft.trim() !== "" ||
@@ -138,7 +144,7 @@ export function SystemWebSearchPage() {
     clearMetaso
 
   const save = async () => {
-    if (!limitValid || !pythonTimeoutValid || !pythonMaxOutputValid || !pythonMaxSourceValid) return
+    if (!limitValid || !pythonTimeoutValid || !pythonMaxOutputValid || !pythonMaxSourceValid || !agentIterationValid) return
     const payload: Record<string, any> = {
       webSearchAgentEnable: enabled,
       webSearchDefaultEngine: engine.trim() || "tavily",
@@ -164,6 +170,10 @@ export function SystemWebSearchPage() {
       pythonToolMaxSourceChars: Math.max(
         pythonOutputRange.min,
         Math.min(pythonOutputRange.max, Math.round(pythonMaxSource)),
+      ),
+      agentMaxToolIterations: Math.max(
+        agentIterationRange.min,
+        Math.min(agentIterationRange.max, Math.round(maxToolIterations)),
       ),
     }
     if (apiKeyTavilyDraft.trim()) {
@@ -484,6 +494,18 @@ export function SystemWebSearchPage() {
         </p>
       </div>
     </div>
+    <div className="flex flex-col gap-2">
+      <label className="text-sm font-medium">工具调用上限（0 表示无限制）</label>
+      <Input
+        type="number"
+        value={maxToolIterations}
+        onChange={(e)=>setMaxToolIterations(Number(e.target.value || 0))}
+        className={!agentIterationValid ? "border-destructive" : undefined}
+      />
+      <p className="text-xs text-muted-foreground">
+        建议根据资源情况设置合适次数，0 表示允许模型无限次调用工具。
+      </p>
+    </div>
   </div>
 
   <div className="flex justify-end pt-2">
@@ -495,7 +517,8 @@ export function SystemWebSearchPage() {
         engine.trim() === "" ||
         !pythonTimeoutValid ||
         !pythonMaxOutputValid ||
-        !pythonMaxSourceValid
+        !pythonMaxSourceValid ||
+        !agentIterationValid
       }
     >
       保存联网搜索设置

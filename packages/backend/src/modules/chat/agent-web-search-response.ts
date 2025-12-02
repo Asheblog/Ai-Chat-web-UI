@@ -12,6 +12,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     sseHeaders,
     agentConfig,
     pythonToolConfig,
+    agentMaxToolIterations,
     toolFlags,
     provider,
     baseUrl,
@@ -94,33 +95,57 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let downstreamClosed = false;
       let assistantProgressLastPersistAt = 0;
       let assistantProgressLastPersistedLength = 0;
+      let assistantReasoningPersistLength = 0;
       const idleTimeout = idleTimeoutMs > 0 ? idleTimeoutMs : null;
       let idleWatchTimer: ReturnType<typeof setInterval> | null = null;
       let lastChunkAt = Date.now();
       let idleWarned = false;
 
-      const persistAssistantProgress = async (force = false) => {
+      const persistAssistantProgress = async (
+        options: { force?: boolean; includeReasoning?: boolean; status?: 'streaming' | 'done' | 'error' | 'cancelled'; errorMessage?: string | null } = {},
+      ) => {
         if (!activeAssistantMessageId) return;
-        if (!aiResponseContent && !force) return;
+        const force = options.force === true;
+        const includeReasoning = options.includeReasoning !== false;
+        const currentReasoning =
+          includeReasoning && reasoningBuffer.trim().length ? reasoningBuffer : null;
+        if (!aiResponseContent && !currentReasoning && !force) return;
         const now = Date.now();
         const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
+        const reasoningDelta = includeReasoning
+          ? reasoningBuffer.length - assistantReasoningPersistLength
+          : 0;
         if (!force) {
-          if (deltaLength < 24 && now - assistantProgressLastPersistAt < streamProgressPersistIntervalMs) {
+          const keepaliveExceeded =
+            now - assistantProgressLastPersistAt >= streamProgressPersistIntervalMs;
+          const hasContentDelta = deltaLength >= 24;
+          const hasReasoningDelta = includeReasoning && reasoningDelta >= 24;
+          if (!hasContentDelta && !hasReasoningDelta && !keepaliveExceeded) {
             return;
           }
         }
         assistantProgressLastPersistAt = now;
         assistantProgressLastPersistedLength = aiResponseContent.length;
+        if (includeReasoning) {
+          assistantReasoningPersistLength = reasoningBuffer.length;
+        }
+        const streamStatus = options.status ?? (streamMeta?.cancelled ? 'cancelled' : 'streaming');
+        const reasoningPayload =
+          currentReasoning && currentReasoning.trim().length ? currentReasoning : null;
         try {
           await prisma.message.update({
             where: { id: activeAssistantMessageId },
             data: {
               content: aiResponseContent,
+              streamCursor: aiResponseContent.length,
+              streamStatus,
+              streamReasoning: reasoningPayload,
             },
           });
           traceRecorder.log('db:persist_progress', {
             messageId: activeAssistantMessageId,
             length: aiResponseContent.length,
+            reasoningLength: reasoningPayload?.length ?? 0,
             force,
           });
         } catch (error) {
@@ -133,8 +158,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               data: {
                 content: aiResponseContent,
                 streamCursor: aiResponseContent.length,
-                streamStatus: 'streaming',
-                streamReasoning: null,
+                streamStatus,
+                streamReasoning: reasoningPayload,
                 streamError: null,
               },
             });
@@ -151,6 +176,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               traceRecorder.log('db:persist_progress', {
                 messageId: recoveredId,
                 length: aiResponseContent.length,
+                reasoningLength: reasoningPayload?.length ?? 0,
                 force,
                 recovered: true,
               });
@@ -251,9 +277,20 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       };
       startIdleWatch();
 
+      const appendReasoningChunk = (text: string, meta?: Record<string, unknown>) => {
+        if (!text) return;
+        const metaKind =
+          meta && typeof (meta as any).kind === 'string' ? ((meta as any).kind as string) : null;
+        if (metaKind && metaKind !== 'model' && reasoningBuffer && !reasoningBuffer.endsWith('\n')) {
+          reasoningBuffer += '\n';
+        }
+        reasoningBuffer += text;
+      };
+
       const emitReasoning = (content: string, meta?: Record<string, unknown>) => {
         const text = (content || '').trim();
         if (!text) return;
+        appendReasoningChunk(text, meta);
         const payload: Record<string, unknown> = { type: 'reasoning', content: text };
         if (meta && Object.keys(meta).length > 0) {
           payload.meta = meta;
@@ -518,7 +555,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       if (toolDefinitions.length === 0) {
         throw new Error('Agent 工具未启用');
       }
-      const maxIterations = 4;
+      const maxIterations =
+        agentMaxToolIterations > 0 ? agentMaxToolIterations : Number.POSITIVE_INFINITY;
       let currentProviderController: AbortController | null = null;
 
       const callProvider = async (messages: any[]) => {
@@ -587,6 +625,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let finalUsageSnapshot: any = null;
       let finalContent = '';
       let aiResponseContent = '';
+      let reasoningBuffer = '';
       let providerUsageSeen = false;
 
       try {
@@ -654,6 +693,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
                 iterationReasoning += delta.reasoning_content;
                 emitReasoning(delta.reasoning_content, { kind: 'model', stage: 'stream' });
+                await persistAssistantProgress();
               }
               if (delta.content) {
                 iterationContent += delta.content;
@@ -755,6 +795,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
 
         if (streamMeta?.cancelled) {
+          await persistAssistantProgress({ force: true, status: 'cancelled' });
           log.debug('Agent stream cancelled by client', {
             sessionId,
             streamKey,
@@ -767,6 +808,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
 
         reasoningText = reasoningChunks.join('\n\n').trim();
+        reasoningBuffer = reasoningText;
         if (reasoningText) {
           safeEnqueue({
             type: 'reasoning',
@@ -904,6 +946,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
       } catch (error: any) {
         if (streamMeta?.cancelled) {
+          await persistAssistantProgress({ force: true, status: 'cancelled' });
           log.debug('Agent stream aborted after client cancellation', {
             sessionId,
             streamKey,
@@ -921,11 +964,13 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           error: error?.message || 'Web search agent failed',
         });
         const persistErrorStatus = async () => {
+          const reasoningSnapshot = reasoningBuffer.trim().length ? reasoningBuffer.trim() : null;
           const payload = {
             content: aiResponseContent,
             streamCursor: aiResponseContent.length,
             streamStatus: 'error' as const,
             streamError: traceErrorMessage,
+            streamReasoning: reasoningSnapshot,
           };
           try {
             if (activeAssistantMessageId) {
@@ -1192,6 +1237,7 @@ export type AgentResponseParams = {
   sseHeaders: Record<string, string>;
   agentConfig: AgentWebSearchConfig;
   pythonToolConfig: AgentPythonToolConfig;
+  agentMaxToolIterations: number;
   toolFlags: { webSearch: boolean; python: boolean };
   provider: string;
   baseUrl: string;

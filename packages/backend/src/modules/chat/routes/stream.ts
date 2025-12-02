@@ -285,6 +285,17 @@ export const registerChatStreamRoutes = (router: Hono) => {
       });
       const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
       const pythonToolConfig = buildAgentPythonToolConfig(sysMap);
+      const agentMaxToolIterations = (() => {
+        const raw =
+          sysMap.agent_max_tool_iterations ??
+          process.env.AGENT_MAX_TOOL_ITERATIONS ??
+          '4';
+        const parsed = Number.parseInt(String(raw), 10);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          return Math.min(20, parsed);
+        }
+        return 4;
+      })();
       const sanitizeScope = (scope?: string) => {
         if (!scope) return undefined;
         const normalized = scope.trim().toLowerCase();
@@ -444,6 +455,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           sseHeaders,
           agentConfig: agentWebSearchConfig,
           pythonToolConfig,
+          agentMaxToolIterations,
           toolFlags: { webSearch: agentWebSearchActive, python: pythonToolActive },
           provider,
           baseUrl,

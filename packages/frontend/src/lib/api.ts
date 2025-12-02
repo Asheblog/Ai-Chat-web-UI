@@ -820,6 +820,13 @@ class ApiClient {
       }
       return 4000
     })()
+    const agentMaxToolIterations = (() => {
+      const v = parseOptionalInt(raw.agent_max_tool_iterations)
+      if (typeof v === 'number') {
+        return Math.max(0, Math.min(20, v))
+      }
+      return 4
+    })()
     const assistantAvatarUrl = (() => {
       const value = raw.assistant_avatar_url
       if (typeof value === 'string' && value.trim().length > 0) return value
@@ -918,6 +925,7 @@ class ApiClient {
         pythonToolTimeoutMs,
         pythonToolMaxOutputChars,
         pythonToolMaxSourceChars,
+        agentMaxToolIterations,
         assistantAvatarUrl,
         chatSystemPrompt,
         taskTraceEnabled,
@@ -996,6 +1004,10 @@ class ApiClient {
     if (typeof rest.pythonToolTimeoutMs === 'number') payload.python_tool_timeout_ms = rest.pythonToolTimeoutMs
     if (typeof rest.pythonToolMaxOutputChars === 'number') payload.python_tool_max_output_chars = rest.pythonToolMaxOutputChars
     if (typeof rest.pythonToolMaxSourceChars === 'number') payload.python_tool_max_source_chars = rest.pythonToolMaxSourceChars
+    if (typeof rest.agentMaxToolIterations === 'number') {
+      const clamped = Math.max(0, Math.min(20, Math.round(rest.agentMaxToolIterations)))
+      payload.agent_max_tool_iterations = clamped
+    }
     if (typeof rest.webSearchApiKeyTavily === 'string') payload.web_search_api_key_tavily = rest.webSearchApiKeyTavily
     if (typeof rest.webSearchApiKeyBrave === 'string') payload.web_search_api_key_brave = rest.webSearchApiKeyBrave
     if (typeof rest.webSearchApiKeyMetaso === 'string') payload.web_search_api_key_metaso = rest.webSearchApiKeyMetaso

@@ -268,6 +268,7 @@ export interface SystemSettings {
   pythonToolTimeoutMs?: number;
   pythonToolMaxOutputChars?: number;
   pythonToolMaxSourceChars?: number;
+  agentMaxToolIterations?: number;
   assistantAvatarUrl?: string | null;
   chatSystemPrompt?: string;
   webSearchApiKey?: string;

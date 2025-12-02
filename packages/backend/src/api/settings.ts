@@ -90,6 +90,7 @@ const systemSettingSchema = z.object({
   web_search_scope: z.enum(['webpage', 'document', 'paper', 'image', 'video', 'podcast']).optional(),
   web_search_include_summary: z.boolean().optional(),
   web_search_include_raw: z.boolean().optional(),
+  agent_max_tool_iterations: z.number().int().min(0).max(20).optional(),
   python_tool_enable: z.boolean().optional(),
   python_tool_command: z.string().min(1).max(128).optional(),
   python_tool_args: z.array(z.string().min(1)).optional(),
