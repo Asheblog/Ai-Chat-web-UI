@@ -19,6 +19,7 @@ export class ConnectionServiceError extends Error {
 
 type ProviderType = 'openai' | 'azure_openai' | 'ollama' | 'google_genai'
 type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
+type VendorType = 'deepseek'
 
 export interface ConnectionServiceDeps {
   prisma?: PrismaClient
@@ -27,6 +28,7 @@ export interface ConnectionServiceDeps {
   refreshModelCatalog?: (connection: Connection) => Promise<unknown>
   verifyConnection?: (config: {
     provider: ProviderType
+    vendor?: VendorType
     baseUrl: string
     enable: boolean
     authType: AuthType
@@ -44,6 +46,7 @@ export interface ConnectionServiceDeps {
 
 export interface ConnectionPayload {
   provider: ProviderType
+  vendor?: VendorType
   baseUrl: string
   enable?: boolean
   authType?: AuthType
@@ -118,6 +121,7 @@ export class ConnectionService {
     }
     await this.verifyConnection({
       provider: payload.provider,
+      vendor: payload.vendor,
       baseUrl: payload.baseUrl,
       enable: payload.enable ?? true,
       authType: payload.authType ?? 'bearer',
@@ -146,6 +150,9 @@ export class ConnectionService {
     if (!isPartial || payload.baseUrl) {
       if (!payload.baseUrl) throw new ConnectionServiceError('baseUrl is required', 400)
       data.baseUrl = sanitizeBaseUrl(payload.baseUrl)
+    }
+    if (!isPartial || payload.vendor !== undefined) {
+      data.vendor = payload.vendor ?? null
     }
     if (!isPartial || typeof payload.enable === 'boolean') {
       data.enable = payload.enable ?? true

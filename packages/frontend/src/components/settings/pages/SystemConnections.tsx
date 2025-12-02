@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardTitle, CardDescription } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { useSystemConnections } from '@/components/settings/system-connections/use-system-connections'
+import { useSystemConnections, SPECIAL_PROVIDER_DEEPSEEK, SPECIAL_VENDOR_DEEPSEEK } from '@/components/settings/system-connections/use-system-connections'
 import { CONNECTION_CAP_KEYS, CONNECTION_CAP_LABELS } from '@/components/settings/system-connections/constants'
 
 export function SystemConnectionsPage() {
@@ -29,12 +29,32 @@ export function SystemConnectionsPage() {
   } = useSystemConnections()
 
   const handleProviderChange = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      provider: value,
-      authType: value === 'google_genai' ? 'bearer' : prev.authType,
-    }))
+    setForm((prev) => {
+      const isGoogle = value === 'google_genai'
+      const isDeepseek = value === SPECIAL_PROVIDER_DEEPSEEK
+      const next = {
+        ...prev,
+        provider: value,
+        authType: isGoogle || isDeepseek ? 'bearer' : prev.authType,
+      }
+      if (isDeepseek && (!prev.baseUrl || prev.provider !== SPECIAL_PROVIDER_DEEPSEEK)) {
+        next.baseUrl = 'https://api.deepseek.com/v1'
+      }
+      return next
+    })
   }
+
+  const renderVendorLabel = (vendor?: string | null) => {
+    if (vendor === SPECIAL_VENDOR_DEEPSEEK) return 'DeepSeek（交错思考）'
+    return null
+  }
+
+  const baseUrlPlaceholder = (() => {
+    if (form.provider === SPECIAL_PROVIDER_DEEPSEEK) return 'https://api.deepseek.com/v1'
+    if (form.provider === 'ollama') return 'http://localhost:11434'
+    if (form.provider === 'google_genai') return 'https://generativelanguage.googleapis.com/v1beta'
+    return 'https://api.openai.com/v1'
+  })()
 
   return (
     <div className="space-y-6 min-w-0">
@@ -65,6 +85,7 @@ export function SystemConnectionsPage() {
                   <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
                   <SelectItem value="ollama">Ollama</SelectItem>
                   <SelectItem value="google_genai">Google Generative AI</SelectItem>
+                  <SelectItem value={SPECIAL_PROVIDER_DEEPSEEK}>DeepSeek（交错思考）</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -90,18 +111,17 @@ export function SystemConnectionsPage() {
               <Input
                 value={form.baseUrl}
                 onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                placeholder={
-                  form.provider === 'ollama'
-                    ? 'http://localhost:11434'
-                    : form.provider === 'google_genai'
-                      ? 'https://generativelanguage.googleapis.com/v1beta'
-                      : 'https://api.openai.com/v1'
-                }
+                placeholder={baseUrlPlaceholder}
               />
               {form.provider === 'google_genai' && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   需要在 Google AI Studio 控制台启用 API 并配置 API Key，默认基地址为
                   https://generativelanguage.googleapis.com/v1beta
+                </p>
+              )}
+              {form.provider === SPECIAL_PROVIDER_DEEPSEEK && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  使用 DeepSeek 推理模式时，请将 Base URL 指向官方 OpenAI 兼容接口，例如 https://api.deepseek.com/v1
                 </p>
               )}
             </div>
@@ -213,6 +233,7 @@ export function SystemConnectionsPage() {
 
           {connections.map((connection) => {
             const channelLabel = deriveChannelName(connection.provider, connection.baseUrl)
+            const vendorLabel = renderVendorLabel(connection.vendor)
             return (
               <Card key={connection.id} className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
                 <div className="flex items-start justify-between gap-4">
@@ -221,6 +242,11 @@ export function SystemConnectionsPage() {
                     <div className="text-sm text-muted-foreground break-all">{connection.baseUrl}</div>
                     <div className="flex flex-wrap gap-2 text-xs">
                       <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Provider: {connection.provider}</span>
+                      {vendorLabel && (
+                        <span className="px-2 py-1 rounded bg-muted text-muted-foreground">
+                          Vendor: {vendorLabel}
+                        </span>
+                      )}
                       <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Auth: {connection.authType}</span>
                       {connection.prefixId && <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Prefix: {connection.prefixId}</span>}
                       <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Type: {connection.connectionType}</span>

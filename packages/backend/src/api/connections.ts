@@ -17,8 +17,11 @@ const capabilitySchema = z.object({
   code_interpreter: z.boolean().optional(),
 })
 
+const vendorEnum = z.enum(['deepseek'])
+
 const connectionSchema = z.object({
   provider: z.enum(['openai', 'azure_openai', 'ollama', 'google_genai']),
+  vendor: vendorEnum.optional(),
   baseUrl: z.string().url(),
   enable: z.boolean().optional().default(true),
   authType: z.enum(['bearer', 'none', 'session', 'system_oauth', 'microsoft_entra_id']).optional().default('bearer'),

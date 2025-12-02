@@ -3,6 +3,7 @@ import { apiClient } from "@/lib/api"
 export interface SystemConnection {
   id: number
   provider: string
+  vendor?: string | null
   baseUrl: string
   authType: string
   azureApiVersion?: string | null
@@ -17,6 +18,7 @@ export interface SystemConnection {
 
 export interface SystemConnectionPayload {
   provider: string
+  vendor?: string
   baseUrl: string
   authType: string
   apiKey?: string

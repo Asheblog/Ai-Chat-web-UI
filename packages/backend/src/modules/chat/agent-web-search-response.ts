@@ -478,9 +478,11 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           }
 
           if (finishReason === 'tool_calls' && aggregatedToolCalls.length > 0) {
+            const reasoningPayload = iterationReasoning.trim();
             workingMessages.push({
               role: 'assistant',
               content: iterationContent,
+              ...(reasoningPayload ? { reasoning_content: reasoningPayload } : {}),
               tool_calls: aggregatedToolCalls,
             });
 

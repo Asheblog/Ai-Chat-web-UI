@@ -16,6 +16,9 @@ import {
   parseConnectionCaps,
 } from "./constants"
 
+export const SPECIAL_PROVIDER_DEEPSEEK = 'deepseek_interleave'
+export const SPECIAL_VENDOR_DEEPSEEK = 'deepseek'
+
 export interface ConnectionFormState {
   provider: string
   baseUrl: string
@@ -50,21 +53,32 @@ const buildTags = (raw: string) => {
     .filter((item) => item.name)
 }
 
-const buildPayload = (form: ConnectionFormState, capabilities: Record<ConnectionCapKey, boolean>): SystemConnectionPayload => ({
-  provider: form.provider,
-  baseUrl: form.baseUrl,
-  authType: form.authType,
-  apiKey: form.apiKey || undefined,
-  azureApiVersion: form.azureApiVersion || undefined,
-  enable: !!form.enable,
-  prefixId: form.prefixId || undefined,
-  tags: buildTags(form.tags),
-  modelIds: form.modelIds
-    ? form.modelIds.split(',').map((id) => id.trim()).filter(Boolean)
-    : [],
-  connectionType: form.connectionType,
-  defaultCapabilities: capabilities,
-})
+const mapProviderSelection = (value: string): Pick<SystemConnectionPayload, 'provider' | 'vendor'> => {
+  if (value === SPECIAL_PROVIDER_DEEPSEEK) {
+    return { provider: 'openai', vendor: SPECIAL_VENDOR_DEEPSEEK }
+  }
+  return { provider: value, vendor: undefined }
+}
+
+const buildPayload = (form: ConnectionFormState, capabilities: Record<ConnectionCapKey, boolean>): SystemConnectionPayload => {
+  const { provider, vendor } = mapProviderSelection(form.provider)
+  return {
+    provider,
+    ...(vendor ? { vendor } : {}),
+    baseUrl: form.baseUrl,
+    authType: form.authType,
+    apiKey: form.apiKey || undefined,
+    azureApiVersion: form.azureApiVersion || undefined,
+    enable: !!form.enable,
+    prefixId: form.prefixId || undefined,
+    tags: buildTags(form.tags),
+    modelIds: form.modelIds
+      ? form.modelIds.split(',').map((id) => id.trim()).filter(Boolean)
+      : [],
+    connectionType: form.connectionType,
+    defaultCapabilities: capabilities,
+  }
+}
 
 const extractTags = (row: SystemConnection) => {
   try {
@@ -122,8 +136,11 @@ export function useSystemConnections() {
 
   const startEdit = (row: SystemConnection) => {
     setEditing(row)
+    const providerSelection = row.vendor === SPECIAL_VENDOR_DEEPSEEK
+      ? SPECIAL_PROVIDER_DEEPSEEK
+      : row.provider || 'openai'
     setForm({
-      provider: row.provider || 'openai',
+      provider: providerSelection,
       baseUrl: row.baseUrl || '',
       authType: row.authType || 'bearer',
       apiKey: '',
