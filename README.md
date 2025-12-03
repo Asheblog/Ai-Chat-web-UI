@@ -128,6 +128,7 @@ networks:
 - 图片存储：`CHAT_IMAGE_DIR` 默认指向 `/app/storage/chat-images`。Compose 中的 `backend_images:/app/storage/chat-images` 会将聊天图片与头像持久化到宿主卷；若需使用其他目录，请同时调整 `CHAT_IMAGE_DIR` 与卷挂载路径。
 - 端口：`"宿主机端口:容器端口"`，容器内固定后端 8001、前端 3000。
 - 升级/回滚：把镜像标签从 `latest` 改为某次构建的 commit SHA 标签，更新/重建即可；回滚就是切回旧标签。
+- `SYSTEM_PROMPT_MAX_LENGTH`：控制会话/全局系统提示词的最大字符数（默认 12000）。提示词会被持久化并在每次请求中附加，过长不仅会显著拖慢序列化/数据库写入，还可能触发上游模型的上下文上限，因此仍需上限约束；如确有长提示词需求，可在后端容器中通过该变量（或兼容的 `SESSION_PROMPT_MAX_CHARS`、`CHAT_SYSTEM_PROMPT_MAX_CHARS`）自行调大，硬封顶 100000 字符，修改后重启即可生效。
 
 健康检查
 - 前端：`http://你的IP或域名:3555/api/health`

@@ -5,6 +5,7 @@ import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import { sessionService, SessionServiceError } from '../services/sessions'
 import type { SessionService } from '../services/sessions/session-service'
+import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
 
 const createSessionSchema = z.object({
   modelId: z.string().min(1),
@@ -14,7 +15,7 @@ const createSessionSchema = z.object({
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),
-  systemPrompt: z.string().max(4000).optional(),
+  systemPrompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).optional(),
 })
 
 const updateSessionSchema = z.object({
@@ -22,7 +23,7 @@ const updateSessionSchema = z.object({
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),
-  systemPrompt: z.string().max(4000).nullable().optional(),
+  systemPrompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).nullable().optional(),
 })
 
 const switchModelSchema = z.object({

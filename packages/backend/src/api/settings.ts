@@ -5,6 +5,7 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import type { ApiResponse, Actor } from '../types';
 import { settingsFacade, SettingsServiceError, HealthServiceError } from '../services/settings/settings-facade'
 import type { SettingsFacade } from '../services/settings/settings-facade'
+import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
 
 export interface SettingsApiDeps {
   settingsFacade?: SettingsFacade
@@ -58,7 +59,7 @@ const systemSettingSchema = z.object({
   stream_keepalive_interval_ms: z.number().int().min(0).max(3600000).optional(),
   usage_emit: z.boolean().optional(),
   usage_provider_only: z.boolean().optional(),
-  chat_system_prompt: z.string().max(4000).optional(),
+  chat_system_prompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).optional(),
   // 推理链（思维链）相关
   reasoning_enabled: z.boolean().optional(),
   reasoning_default_expand: z.boolean().optional(),
