@@ -395,16 +395,6 @@ const PythonCallDetailBody = ({ call }: PythonCallDetailBodyProps) => {
           </span>
         </div>
       </div>
-      <section className="python-call-detail__section">
-        <h4>调用描述</h4>
-        <p className="python-call-detail__text">
-          {call.startSummary ?? '模型未提供调用说明。'}
-        </p>
-        {call.resultSummary && (
-          <p className="python-call-detail__text-muted">执行结果：{call.resultSummary}</p>
-        )}
-        {call.error && <p className="python-call-detail__error">{call.error}</p>}
-      </section>
       {call.resultSummary && !stdout && (
         <section className="python-call-detail__section">
           <h4>执行结果</h4>
