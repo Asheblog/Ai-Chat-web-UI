@@ -2,7 +2,7 @@
 
 import { Check, ChevronLeft, ChevronRight, Copy, RefreshCw, Share2 } from 'lucide-react'
 import Image from 'next/image'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { MarkdownRenderer } from './markdown-renderer'
@@ -141,10 +141,17 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   useEffect(() => {
     if (meta.role !== 'assistant') return
     if (reasoningManuallyToggled) return
-    if (sortedToolTimeline.length > 0 && !showReasoning) {
-      setShowReasoning(true)
+    if (sortedToolTimeline.length === 0 || showReasoning) return
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[MessageBubble] auto-expand due to tool events', {
+        stableKey: meta.stableKey,
+        messageId: meta.id,
+        toolEvents: sortedToolTimeline.length,
+      })
     }
-  }, [meta.role, reasoningManuallyToggled, showReasoning, sortedToolTimeline.length])
+    setShowReasoning(true)
+    setReasoningManuallyToggled(true)
+  }, [meta.role, reasoningManuallyToggled, showReasoning, sortedToolTimeline.length, meta.id, meta.stableKey])
 
   const { toast } = useToast()
 
@@ -174,20 +181,90 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
   }, [defaultShouldShow, reasoningManuallyToggled])
 
   useEffect(() => {
+    if (reasoningManuallyToggled) return
     if (
       !hasReasoningState &&
-      reasoningText.length === 0
+      reasoningText.length === 0 &&
+      sortedToolTimeline.length === 0
     ) {
       setReasoningManuallyToggled(false)
       setShowReasoning(false)
     }
-  }, [hasReasoningState, reasoningText.length])
+  }, [hasReasoningState, reasoningText.length, sortedToolTimeline.length, reasoningManuallyToggled])
 
   useEffect(() => {
     if (meta.role === 'assistant' && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming') && !showReasoning && !reasoningManuallyToggled) {
       setShowReasoning(true)
     }
   }, [meta.reasoningStatus, meta.role, showReasoning, reasoningManuallyToggled])
+
+  const mountStableKeyRef = useRef(meta.stableKey)
+  const prevMessageIdRef = useRef(meta.id)
+  const prevStableKeyRef = useRef(meta.stableKey)
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    console.debug('[MessageBubble] mount', {
+      stableKey: mountStableKeyRef.current,
+      messageId: prevMessageIdRef.current,
+      streamStatus: meta.streamStatus,
+    })
+    return () => {
+      console.debug('[MessageBubble] unmount', {
+        stableKey: mountStableKeyRef.current,
+        lastMessageId: prevMessageIdRef.current,
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    if (prevStableKeyRef.current !== meta.stableKey) {
+      console.debug('[MessageBubble] stableKey changed', {
+        prevStableKey: prevStableKeyRef.current,
+        nextStableKey: meta.stableKey,
+        messageId: meta.id,
+      })
+      prevStableKeyRef.current = meta.stableKey
+    }
+  }, [meta.stableKey, meta.id])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    if (prevMessageIdRef.current !== meta.id) {
+      console.debug('[MessageBubble] messageId changed', {
+        stableKey: meta.stableKey,
+        prevId: prevMessageIdRef.current,
+        nextId: meta.id,
+        streamStatus: meta.streamStatus,
+      })
+      prevMessageIdRef.current = meta.id
+    }
+  }, [meta.id, meta.streamStatus, meta.stableKey])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    console.debug('[MessageBubble] reasoning panel state', {
+      stableKey: meta.stableKey,
+      messageId: meta.id,
+      showReasoning,
+      reasoningManuallyToggled,
+      defaultShouldShow,
+      toolEvents: sortedToolTimeline.length,
+      reasoningStatus: meta.reasoningStatus,
+      streamStatus: meta.streamStatus,
+    })
+  }, [
+    defaultShouldShow,
+    meta.id,
+    meta.reasoningStatus,
+    meta.stableKey,
+    meta.streamStatus,
+    reasoningManuallyToggled,
+    showReasoning,
+    sortedToolTimeline.length,
+  ])
 
   useEffect(() => {
     if (isUser) return

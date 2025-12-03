@@ -861,32 +861,61 @@ export const useChatStore = create<ChatStore>((set, get) => {
     if (!snapshots.length) return
     snapshotDebug('apply:start', { sessionId, total: snapshots.length })
     set((state) => {
-      const nextMetas = state.messageMetas.slice()
-      const nextBodies = { ...state.messageBodies }
-      const nextRenderCache = { ...state.messageRenderCache }
-      let metaChanged = false
-      let bodyChanged = false
-      let toolEventsChanged = false
+      const metaIndexByMessageKey = new Map<string, number>()
+      const metaIndexByClientId = new Map<string, number>()
+      state.messageMetas.forEach((meta, index) => {
+        if (meta.sessionId !== sessionId) return
+        metaIndexByMessageKey.set(messageKey(meta.id), index)
+        if (meta.clientMessageId) {
+          metaIndexByClientId.set(meta.clientMessageId, index)
+        }
+      })
+      if (metaIndexByMessageKey.size === 0 && metaIndexByClientId.size === 0) {
+        return state
+      }
+
+      let nextMetas = state.messageMetas
+      let nextBodies = state.messageBodies
+      let nextRenderCache = state.messageRenderCache
       let nextToolEvents = state.toolEvents
+      let metasMutated = false
+      let bodiesMutated = false
+      let renderCacheMutated = false
+      let toolEventsMutated = false
+
+      const ensureMetas = () => {
+        if (!metasMutated) {
+          nextMetas = state.messageMetas.slice()
+          metasMutated = true
+        }
+        return nextMetas
+      }
+      const ensureBodies = () => {
+        if (!bodiesMutated) {
+          nextBodies = { ...state.messageBodies }
+          bodiesMutated = true
+        }
+        return nextBodies
+      }
+      const ensureRenderCache = () => {
+        if (!renderCacheMutated) {
+          nextRenderCache = { ...state.messageRenderCache }
+          renderCacheMutated = true
+        }
+        return nextRenderCache
+      }
 
       snapshots.forEach((snapshot) => {
-        const idx = nextMetas.findIndex((meta) => {
-          if (meta.sessionId !== sessionId) return false
-          if (snapshot.messageId != null && Number(meta.id) === snapshot.messageId) {
-            return true
-          }
-          if (
-            snapshot.messageId == null &&
-            meta.clientMessageId &&
-            snapshot.clientMessageId &&
-            meta.clientMessageId === snapshot.clientMessageId
-          ) {
-            return true
-          }
-          return false
-        })
-        if (idx === -1) return
-        const meta = nextMetas[idx]
+        let metaIndex = -1
+        if (snapshot.messageId != null) {
+          metaIndex = metaIndexByMessageKey.get(messageKey(snapshot.messageId)) ?? -1
+        }
+        if (metaIndex === -1 && snapshot.messageId == null && snapshot.clientMessageId) {
+          metaIndex = metaIndexByClientId.get(snapshot.clientMessageId) ?? -1
+        }
+        if (metaIndex === -1) return
+        const meta = nextMetas[metaIndex]
+        if (!meta) return
         snapshotDebug('apply:match', {
           sessionId,
           metaId: meta.id,
@@ -897,6 +926,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         if (meta.streamStatus === 'done' && !meta.pendingSync) {
           return
         }
+
         const key = messageKey(meta.id)
         const prevBody = ensureBody(nextBodies[key], meta.id, meta.stableKey)
         const snapshotContent = snapshot.content || ''
@@ -915,20 +945,24 @@ export const useChatStore = create<ChatStore>((set, get) => {
               }))
             : null
 
-        nextBodies[key] = {
-          ...prevBody,
-          id: prevBody.id,
-          stableKey: prevBody.stableKey || meta.stableKey,
-          content: contentChanged ? snapshotContent : prevBody.content,
-          reasoning: reasoningChanged ? snapshotReasoning : prevBody.reasoning,
-          version: prevBody.version + (contentChanged ? 1 : 0),
-          reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
-          toolEvents:
-            normalizedToolEvents && normalizedToolEvents.length > 0
-              ? normalizedToolEvents
-              : prevBody.toolEvents,
+        if (contentChanged || reasoningChanged || (normalizedToolEvents && normalizedToolEvents.length > 0)) {
+          const bodies = ensureBodies()
+          bodies[key] = {
+            ...prevBody,
+            id: prevBody.id,
+            stableKey: prevBody.stableKey || meta.stableKey,
+            content: contentChanged ? snapshotContent : prevBody.content,
+            reasoning: reasoningChanged ? snapshotReasoning : prevBody.reasoning,
+            version: prevBody.version + (contentChanged ? 1 : 0),
+            reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
+            toolEvents:
+              normalizedToolEvents && normalizedToolEvents.length > 0
+                ? normalizedToolEvents
+                : prevBody.toolEvents,
+          }
+          const cache = ensureRenderCache()
+          delete cache[key]
         }
-        delete nextRenderCache[key]
 
         if (normalizedToolEvents && normalizedToolEvents.length > 0) {
           const merged = mergeToolEventsForMessage(
@@ -939,48 +973,49 @@ export const useChatStore = create<ChatStore>((set, get) => {
           )
           if (merged !== nextToolEvents) {
             nextToolEvents = merged
-            toolEventsChanged = true
+            toolEventsMutated = true
           }
         }
 
         const nextStreamStatus =
           snapshot.streamStatus ?? meta.streamStatus ?? (meta.pendingSync ? 'done' : 'streaming')
         const nextReasoningStatus = snapshot.reasoningStatus ?? meta.reasoningStatus
-        const updatedMeta: MessageMeta = {
-          ...meta,
-          streamStatus: nextStreamStatus,
-          streamError: nextStreamStatus === 'error' ? meta.streamError : null,
-          reasoningStatus: nextReasoningStatus,
-          isPlaceholder: false,
-          pendingSync: nextStreamStatus === 'done' ? true : meta.pendingSync,
-        }
+        const nextStreamError = nextStreamStatus === 'error' ? meta.streamError : null
         const metaNeedsUpdate =
-          updatedMeta.streamStatus !== meta.streamStatus ||
-          updatedMeta.reasoningStatus !== meta.reasoningStatus ||
-          updatedMeta.streamError !== meta.streamError ||
-          updatedMeta.isPlaceholder !== meta.isPlaceholder ||
-          updatedMeta.pendingSync !== meta.pendingSync
+          nextStreamStatus !== meta.streamStatus ||
+          nextReasoningStatus !== meta.reasoningStatus ||
+          nextStreamError !== meta.streamError ||
+          meta.isPlaceholder ||
+          (nextStreamStatus === 'done' && !meta.pendingSync)
         if (metaNeedsUpdate) {
-          nextMetas[idx] = updatedMeta
-          metaChanged = true
+          const metas = ensureMetas()
+          metas[metaIndex] = {
+            ...meta,
+            streamStatus: nextStreamStatus,
+            streamError: nextStreamError,
+            reasoningStatus: nextReasoningStatus,
+            isPlaceholder: false,
+            pendingSync: nextStreamStatus === 'done' ? true : meta.pendingSync,
+          }
         }
-        bodyChanged =
-          bodyChanged || contentChanged || reasoningChanged || Boolean(normalizedToolEvents)
       })
 
-      if (!metaChanged && !bodyChanged && !toolEventsChanged) {
+      if (!metasMutated && !bodiesMutated && !renderCacheMutated && !toolEventsMutated) {
         return state
       }
 
-      const partial: Partial<ChatState> = {
-        messageBodies: nextBodies,
-        messageRenderCache: nextRenderCache,
-      }
-      if (metaChanged) {
+      const partial: Partial<ChatState> = {}
+      if (metasMutated) {
         partial.messageMetas = nextMetas
         partial.assistantVariantSelections = buildVariantSelections(nextMetas)
       }
-      if (toolEventsChanged) {
+      if (bodiesMutated) {
+        partial.messageBodies = nextBodies
+      }
+      if (renderCacheMutated) {
+        partial.messageRenderCache = nextRenderCache
+      }
+      if (toolEventsMutated) {
         partial.toolEvents = nextToolEvents
       }
       return partial
@@ -997,49 +1032,123 @@ export const useChatStore = create<ChatStore>((set, get) => {
       const prevBody = ensureBody(state.messageBodies[key], message.id, serverMeta.stableKey)
       const contentChanged = prevBody.content !== contentPayload
       const reasoningChanged = (prevBody.reasoning ?? '') !== reasoningPayload
-      const nextBody: MessageBody = {
-        ...prevBody,
-        id: message.id,
-        stableKey: serverMeta.stableKey,
-        content: contentPayload,
-        reasoning: reasoningPayload,
-        version: prevBody.version + (contentChanged ? 1 : 0),
-        reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
-        toolEvents:
-          normalizedToolEvents.length > 0 ? normalizedToolEvents : prevBody.toolEvents,
+      const hasToolUpdates = normalizedToolEvents.length > 0
+
+      let nextBodies = state.messageBodies
+      let nextRenderCache = state.messageRenderCache
+      let nextToolEvents = state.toolEvents
+      let nextMetas = state.messageMetas
+      let metasMutated = false
+      let bodiesMutated = false
+      let renderCacheMutated = false
+      let toolEventsMutated = false
+
+      const ensureBodies = () => {
+        if (!bodiesMutated) {
+          nextBodies = { ...state.messageBodies }
+          bodiesMutated = true
+        }
+        return nextBodies
       }
-      const nextBodies = { ...state.messageBodies, [key]: nextBody }
-      const metaIndex = state.messageMetas.findIndex((meta) => messageKey(meta.id) === key)
-      const nextMetas =
-        metaIndex === -1
-          ? [...state.messageMetas, serverMeta]
-          : state.messageMetas.map((meta, idx) =>
-              idx === metaIndex
-                ? {
-                    ...meta,
-                    ...serverMeta,
-                    stableKey: meta.stableKey || serverMeta.stableKey,
-                    isPlaceholder: false,
-                    streamStatus: message.streamStatus ?? meta.streamStatus,
-                    streamError: message.streamError ?? meta.streamError,
-                    pendingSync: false,
-                  }
-                : meta,
-            )
-      const nextRenderCache = { ...state.messageRenderCache }
-      delete nextRenderCache[key]
-      const partial: Partial<ChatState> = {
-        messageBodies: nextBodies,
-        messageMetas: nextMetas,
-        messageRenderCache: nextRenderCache,
+      const ensureRenderCache = () => {
+        if (!renderCacheMutated) {
+          nextRenderCache = { ...state.messageRenderCache }
+          renderCacheMutated = true
+        }
+        return nextRenderCache
       }
-      if (normalizedToolEvents.length > 0) {
-        partial.toolEvents = mergeToolEventsForMessage(
-          state.toolEvents,
+      const ensureMetas = () => {
+        if (!metasMutated) {
+          nextMetas = state.messageMetas.slice()
+          metasMutated = true
+        }
+        return nextMetas
+      }
+
+      if (contentChanged || reasoningChanged || hasToolUpdates) {
+        const bodies = ensureBodies()
+        bodies[key] = {
+          ...prevBody,
+          id: message.id,
+          stableKey: serverMeta.stableKey,
+          content: contentPayload,
+          reasoning: reasoningPayload,
+          version: prevBody.version + (contentChanged ? 1 : 0),
+          reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
+          toolEvents: hasToolUpdates ? normalizedToolEvents : prevBody.toolEvents,
+        }
+        const cache = ensureRenderCache()
+        delete cache[key]
+      }
+
+      if (hasToolUpdates) {
+        const merged = mergeToolEventsForMessage(
+          nextToolEvents,
           message.sessionId,
           message.id,
           normalizedToolEvents,
         )
+        if (merged !== nextToolEvents) {
+          nextToolEvents = merged
+          toolEventsMutated = true
+        }
+      }
+
+      const metaIndex = nextMetas.findIndex((meta) => messageKey(meta.id) === key)
+      if (metaIndex === -1) {
+        const metas = ensureMetas()
+        metas.push(serverMeta)
+      } else {
+        const prevMeta = nextMetas[metaIndex]
+        const nextStreamStatus = message.streamStatus ?? prevMeta.streamStatus
+        const nextStreamError = message.streamError ?? prevMeta.streamError
+        const nextReasoningStatus = serverMeta.reasoningStatus ?? prevMeta.reasoningStatus
+        const nextReasoningDuration =
+          serverMeta.reasoningDurationSeconds ?? prevMeta.reasoningDurationSeconds
+        const nextReasoningIdle = serverMeta.reasoningIdleMs ?? prevMeta.reasoningIdleMs
+        const nextStableKey = prevMeta.stableKey || serverMeta.stableKey
+        const metaNeedsUpdate =
+          nextStreamStatus !== prevMeta.streamStatus ||
+          nextStreamError !== prevMeta.streamError ||
+          nextReasoningStatus !== prevMeta.reasoningStatus ||
+          nextReasoningDuration !== prevMeta.reasoningDurationSeconds ||
+          nextReasoningIdle !== prevMeta.reasoningIdleMs ||
+          nextStableKey !== prevMeta.stableKey ||
+          prevMeta.isPlaceholder ||
+          prevMeta.pendingSync
+        if (metaNeedsUpdate) {
+          const metas = ensureMetas()
+          metas[metaIndex] = {
+            ...prevMeta,
+            streamStatus: nextStreamStatus,
+            streamError: nextStreamError,
+            reasoningStatus: nextReasoningStatus,
+            reasoningDurationSeconds: nextReasoningDuration,
+            reasoningIdleMs: nextReasoningIdle,
+            stableKey: nextStableKey,
+            isPlaceholder: false,
+            pendingSync: false,
+          }
+        }
+      }
+
+      if (!metasMutated && !bodiesMutated && !renderCacheMutated && !toolEventsMutated) {
+        return state
+      }
+
+      const partial: Partial<ChatState> = {}
+      if (metasMutated) {
+        partial.messageMetas = nextMetas
+        partial.assistantVariantSelections = buildVariantSelections(nextMetas)
+      }
+      if (bodiesMutated) {
+        partial.messageBodies = nextBodies
+      }
+      if (renderCacheMutated) {
+        partial.messageRenderCache = nextRenderCache
+      }
+      if (toolEventsMutated) {
+        partial.toolEvents = nextToolEvents
       }
       return partial
     })
@@ -1319,12 +1428,6 @@ export const useChatStore = create<ChatStore>((set, get) => {
         const rawMessages = Array.isArray(response.data) ? response.data : []
         const normalized = rawMessages.map((msg) => mergeImages(msg, cache))
 
-        const metas: MessageMeta[] = normalized.map((msg) => createMeta(msg))
-        const bodies: Record<string, MessageBody> = {}
-        normalized.forEach((msg) => {
-          bodies[messageKey(msg.id)] = createBody(msg)
-        })
-
         const nextCache = { ...cache }
         normalized.forEach((msg) => {
           if (msg.clientMessageId && msg.images && msg.images.length > 0) {
@@ -1332,16 +1435,87 @@ export const useChatStore = create<ChatStore>((set, get) => {
           }
         })
 
-        set((state) => ({
-          messageMetas: metas,
-          assistantVariantSelections: buildVariantSelections(metas),
-          messageBodies: bodies,
-          messageRenderCache: {},
-          messageImageCache: nextCache,
-          messagesHydrated: { ...state.messagesHydrated, [sessionId]: true },
-          isMessagesLoading: false,
-          toolEvents: state.toolEvents.filter((event) => event.sessionId !== sessionId),
-        }))
+        set((state) => {
+          const existingSessionMetas = state.messageMetas.filter((meta) => meta.sessionId === sessionId)
+          const metaByStableKey = new Map(existingSessionMetas.map((meta) => [meta.stableKey, meta]))
+          const bodyEntryByStableKey = new Map<string, { key: string; body: MessageBody }>()
+          const sessionBodyKeys = new Set<string>()
+          existingSessionMetas.forEach((meta) => {
+            const key = messageKey(meta.id)
+            sessionBodyKeys.add(key)
+            const body = state.messageBodies[key]
+            if (body) {
+              bodyEntryByStableKey.set(meta.stableKey, { key, body })
+            }
+          })
+
+          const nextSessionMetas: MessageMeta[] = []
+          const nextSessionBodyEntries: Array<[string, MessageBody]> = []
+
+          normalized.forEach((msg) => {
+            const serverMeta = createMeta(msg)
+            const stableKey = serverMeta.stableKey
+            const existing = metaByStableKey.get(stableKey)
+            const mergedMeta = existing
+              ? {
+                  ...existing,
+                  ...serverMeta,
+                  isPlaceholder: false,
+                  pendingSync: false,
+                }
+              : serverMeta
+            nextSessionMetas.push(mergedMeta)
+            metaByStableKey.delete(stableKey)
+
+            const body = createBody(msg, stableKey)
+            nextSessionBodyEntries.push([messageKey(body.id), body])
+          })
+
+          metaByStableKey.forEach((meta) => {
+            nextSessionMetas.push(meta)
+            const existingBodyKey = Array.from(sessionBodyKeys).find(
+              (key) => state.messageBodies[key]?.stableKey === meta.stableKey,
+            )
+            if (existingBodyKey) {
+              nextSessionBodyEntries.push([existingBodyKey, state.messageBodies[existingBodyKey]])
+              sessionBodyKeys.delete(existingBodyKey)
+            }
+          })
+
+          nextSessionMetas.sort((a, b) => {
+            const aTime = new Date(a.createdAt).getTime()
+            const bTime = new Date(b.createdAt).getTime()
+            if (aTime !== bTime) return aTime - bTime
+            return messageKey(a.id).localeCompare(messageKey(b.id))
+          })
+
+          const otherMetas = state.messageMetas.filter((meta) => meta.sessionId !== sessionId)
+          const nextMetas = [...otherMetas, ...nextSessionMetas]
+
+          const nextBodies = { ...state.messageBodies }
+          sessionBodyKeys.forEach((key) => {
+            delete nextBodies[key]
+          })
+          nextSessionBodyEntries.forEach(([key, body]) => {
+            nextBodies[key] = body
+          })
+
+          const nextRenderCache = { ...state.messageRenderCache }
+          Array.from(sessionBodyKeys).forEach((key) => {
+            delete nextRenderCache[key]
+          })
+
+          return {
+            messageMetas: nextMetas,
+            assistantVariantSelections: buildVariantSelections(nextMetas),
+            messageBodies: nextBodies,
+            messageRenderCache: nextRenderCache,
+            messageImageCache: nextCache,
+            messagesHydrated: { ...state.messagesHydrated, [sessionId]: true },
+            isMessagesLoading: false,
+            toolEvents: state.toolEvents.filter((event) => event.sessionId !== sessionId),
+          }
+        })
         normalized.forEach((msg) => {
           if (
             msg.role === 'assistant' &&
@@ -1421,9 +1595,18 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
     selectSession: (sessionId: number) => {
       stopAllMessagePollers()
-      const { sessions, messagesHydrated } = get()
+      const snapshot = get()
+      const { sessions, messagesHydrated } = snapshot
       const session = sessions.find((s) => s.id === sessionId)
       if (session) {
+        const alreadyCurrent = snapshot.currentSession?.id === sessionId
+        const alreadyHydrated = messagesHydrated[sessionId] === true
+        if (alreadyCurrent && alreadyHydrated) {
+          set((state) => ({
+            currentSession: session,
+          }))
+          return
+        }
         const nextHydrated = { ...messagesHydrated }
         if (nextHydrated[sessionId]) {
           delete nextHydrated[sessionId]
