@@ -1,8 +1,9 @@
 'use client'
 
-import { memo, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Brain, ChevronDown, Loader2 } from 'lucide-react'
-import { ToolEvent } from '@/types'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ToolEvent, ToolEventDetails } from '@/types'
 import { TypewriterReasoning } from './typewriter-reasoning'
 
 const formatToolName = (tool: string | undefined) => {
@@ -10,6 +11,101 @@ const formatToolName = (tool: string | undefined) => {
   if (tool === 'web_search') return '联网搜索'
   if (tool === 'python_runner') return 'Python 工具'
   return tool
+}
+
+interface PythonToolCallItem {
+  id: string
+  createdAt: number
+  finishedAt?: number
+  status: ToolEvent['status']
+  startSummary?: string
+  resultSummary?: string
+  error?: string
+  details?: ToolEventDetails
+}
+
+const pythonStatusLabel: Record<ToolEvent['status'], string> = {
+  success: '完成',
+  running: '执行中',
+  error: '失败',
+}
+
+const mergeToolDetails = (prev?: ToolEventDetails, next?: ToolEventDetails): ToolEventDetails | undefined => {
+  if (!prev && !next) return undefined
+  return {
+    ...(prev ?? {}),
+    ...(next ?? {}),
+  }
+}
+
+const aggregatePythonCalls = (events: ToolEvent[]): PythonToolCallItem[] => {
+  const map = new Map<string, PythonToolCallItem>()
+  events.forEach((event) => {
+    if (event.tool !== 'python_runner') return
+    let call = map.get(event.id)
+    if (!call) {
+      call = {
+        id: event.id,
+        createdAt: event.createdAt,
+        status: event.status ?? 'running',
+      }
+      map.set(event.id, call)
+    }
+    call.createdAt = Math.min(call.createdAt, event.createdAt)
+    if (event.stage === 'start') {
+      call.status = 'running'
+      if (event.summary) call.startSummary = event.summary
+    } else if (event.stage === 'result') {
+      call.status = 'success'
+      call.resultSummary = event.summary ?? call.resultSummary
+      call.finishedAt = event.createdAt
+    } else if (event.stage === 'error') {
+      call.status = 'error'
+      call.error = event.error || event.summary || call.error
+      call.finishedAt = event.createdAt
+    }
+    call.details = mergeToolDetails(call.details, event.details)
+  })
+  return Array.from(map.values()).sort((a, b) => a.createdAt - b.createdAt)
+}
+
+const extractFirstMeaningfulLine = (input?: string) => {
+  if (!input) return null
+  const lines = input.split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.length > 0) return trimmed
+  }
+  return null
+}
+
+const clampText = (text: string, limit = 80) => {
+  if (text.length <= limit) return text
+  return `${text.slice(0, limit)}…`
+}
+
+const resolvePythonCallTitle = (call: PythonToolCallItem) => {
+  if (call.startSummary) return clampText(call.startSummary, 100)
+  const firstLine = extractFirstMeaningfulLine(call.details?.code)
+  if (firstLine) return clampText(firstLine, 100)
+  return 'Python 调用'
+}
+
+const resolvePythonCallSubtitle = (call: PythonToolCallItem) => {
+  if (call.status === 'error') {
+    return clampText(call.error ?? '执行失败', 100)
+  }
+  if (call.status === 'success') {
+    const primary = call.resultSummary ?? extractFirstMeaningfulLine(call.details?.stdout)
+    return primary ? clampText(primary, 100) : '执行完成，点击查看输出'
+  }
+  return '执行中，点击查看代码与输出'
+}
+
+const formatDurationText = (durationMs?: number) => {
+  if (typeof durationMs !== 'number' || Number.isNaN(durationMs)) return '—'
+  if (durationMs < 1000) return `${durationMs}ms`
+  return `${(durationMs / 1000).toFixed(2)}s`
 }
 
 interface ReasoningPanelProps {
@@ -44,6 +140,25 @@ function ReasoningPanelComponent({
   toolTimeline,
 }: ReasoningPanelProps) {
   const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
+  const [activePythonCallId, setActivePythonCallId] = useState<string | null>(null)
+
+  const pythonCalls = useMemo(() => aggregatePythonCalls(toolTimeline), [toolTimeline])
+  const otherToolEvents = useMemo(
+    () => toolTimeline.filter((event) => event.tool !== 'python_runner'),
+    [toolTimeline],
+  )
+
+  const activePythonCall = useMemo(() => {
+    if (!activePythonCallId) return null
+    return pythonCalls.find((call) => call.id === activePythonCallId) ?? null
+  }, [activePythonCallId, pythonCalls])
+
+  useEffect(() => {
+    if (!activePythonCallId) return
+    if (!pythonCalls.some((call) => call.id === activePythonCallId)) {
+      setActivePythonCallId(null)
+    }
+  }, [activePythonCallId, pythonCalls])
 
   const hasReasoning = reasoningRaw.trim().length > 0 || Boolean(reasoningHtml)
   const placeholderText =
@@ -138,7 +253,38 @@ function ReasoningPanelComponent({
               </div>
               {toolTimelineOpen && (
                 <div className="reasoning-tools__timeline">
-                  {toolTimeline.map((event) => {
+                  {pythonCalls.length > 0 && (
+                    <div className="python-tools">
+                      <p className="python-tools__intro">Python 工具调用（{pythonCalls.length}）</p>
+                      <div className="python-tools__list">
+                        {pythonCalls.map((call) => {
+                          const title = resolvePythonCallTitle(call)
+                          const subtitle = resolvePythonCallSubtitle(call)
+                          return (
+                            <button
+                              key={call.id}
+                              type="button"
+                              className="python-tools__item"
+                              disabled={call.status === 'running'}
+                              onClick={() => {
+                                if (call.status === 'running') return
+                                setActivePythonCallId(call.id)
+                              }}
+                            >
+                              <span className="python-tools__item-text">
+                                <span className="python-tools__item-title">{title}</span>
+                                <span className="python-tools__item-desc">{subtitle}</span>
+                              </span>
+                              <span className={`python-tools__status python-tools__status--${call.status}`}>
+                                {pythonStatusLabel[call.status]}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {otherToolEvents.map((event) => {
                     const toolLabel = formatToolName(event.tool)
                     const primaryText = event.query || event.summary || toolLabel
                     let statusLabel: string
@@ -152,17 +298,6 @@ function ReasoningPanelComponent({
                         statusClass = 'text-destructive'
                       } else {
                         statusLabel = '检索中'
-                        statusClass = 'text-amber-600'
-                      }
-                    } else if (event.tool === 'python_runner') {
-                      if (event.stage === 'result') {
-                        statusLabel = event.summary || '执行完成'
-                        statusClass = 'text-emerald-600'
-                      } else if (event.stage === 'error') {
-                        statusLabel = event.error || '执行失败'
-                        statusClass = 'text-destructive'
-                      } else {
-                        statusLabel = '执行中'
                         statusClass = 'text-amber-600'
                       }
                     } else {
@@ -196,9 +331,6 @@ function ReasoningPanelComponent({
                             {event.hits.length > 3 && <li className="text-muted-foreground">……</li>}
                           </ul>
                         )}
-                        {event.tool === 'python_runner' && event.summary && (
-                          <p className="text-xs text-muted-foreground">{event.summary}</p>
-                        )}
                         {event.error && <p className="reasoning-tools__error">{event.error}</p>}
                       </div>
                     )
@@ -208,6 +340,95 @@ function ReasoningPanelComponent({
             </div>
           )}
         </div>
+      )}
+      {activePythonCall && (
+        <Dialog open onOpenChange={(open) => { if (!open) setActivePythonCallId(null) }}>
+          <DialogContent className="python-call-dialog" aria-describedby="python-call-detail">
+            <DialogHeader>
+              <DialogTitle>Python 调用详情</DialogTitle>
+              <DialogDescription id="python-call-detail">
+                {resolvePythonCallTitle(activePythonCall)}
+              </DialogDescription>
+            </DialogHeader>
+            <PythonCallDetailBody call={activePythonCall} />
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
+interface PythonCallDetailBodyProps {
+  call: PythonToolCallItem
+}
+
+const PythonCallDetailBody = ({ call }: PythonCallDetailBodyProps) => {
+  const duration =
+    typeof call.details?.durationMs === 'number' ? call.details.durationMs : undefined
+  const exitCode =
+    typeof call.details?.exitCode === 'number' && Number.isFinite(call.details.exitCode)
+      ? call.details.exitCode
+      : '—'
+  const code = call.details?.code ?? ''
+  const stdout = call.details?.stdout ?? ''
+  const stderr = call.details?.stderr ?? ''
+
+  return (
+    <div className="python-call-detail">
+      <div className="python-call-detail__meta">
+        <div>
+          <span className="python-call-detail__meta-label">状态</span>
+          <span className="python-call-detail__meta-value">{pythonStatusLabel[call.status]}</span>
+        </div>
+        <div>
+          <span className="python-call-detail__meta-label">耗时</span>
+          <span className="python-call-detail__meta-value">{formatDurationText(duration)}</span>
+        </div>
+        <div>
+          <span className="python-call-detail__meta-label">退出码</span>
+          <span className="python-call-detail__meta-value">{exitCode}</span>
+        </div>
+        <div>
+          <span className="python-call-detail__meta-label">输出</span>
+          <span className="python-call-detail__meta-value">
+            {call.details?.truncated ? '已截断' : '完整'}
+          </span>
+        </div>
+      </div>
+      <section className="python-call-detail__section">
+        <h4>调用描述</h4>
+        <p className="python-call-detail__text">
+          {call.startSummary ?? '模型未提供调用说明。'}
+        </p>
+        {call.resultSummary && (
+          <p className="python-call-detail__text-muted">执行结果：{call.resultSummary}</p>
+        )}
+        {call.error && <p className="python-call-detail__error">{call.error}</p>}
+      </section>
+      {call.resultSummary && !stdout && (
+        <section className="python-call-detail__section">
+          <h4>执行结果</h4>
+          <pre>{call.resultSummary}</pre>
+        </section>
+      )}
+      <section className="python-call-detail__section">
+        <h4>Python 代码</h4>
+        <pre>{code || '未返回 Python 代码'}</pre>
+      </section>
+      {stdout && (
+        <section className="python-call-detail__section">
+          <h4>运行输出</h4>
+          <pre>{stdout}</pre>
+          {call.details?.truncated && (
+            <p className="python-call-detail__hint">输出经过截断，仅展示部分结果。</p>
+          )}
+        </section>
+      )}
+      {(stderr || call.error) && (
+        <section className="python-call-detail__section">
+          <h4>错误输出</h4>
+          <pre>{stderr || call.error}</pre>
+        </section>
       )}
     </div>
   )

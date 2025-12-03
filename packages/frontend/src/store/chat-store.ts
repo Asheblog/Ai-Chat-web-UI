@@ -541,6 +541,10 @@ const normalizeToolEvents = (message: Message): ToolEvent[] => {
       hits: Array.isArray(evt.hits) ? evt.hits : undefined,
       error: evt.error,
       createdAt,
+      details:
+        evt && typeof (evt as any).details === 'object'
+          ? { ...(evt as any).details }
+          : undefined,
     }
   })
 }
@@ -558,6 +562,7 @@ const mergeToolEventsForMessage = (
     sessionId,
     messageId,
     status: event.status ?? inferToolStatus(event.stage),
+    details: event.details ? { ...event.details } : undefined,
   }))
   const filtered = existing.filter(
     (event) =>
@@ -1935,6 +1940,10 @@ export const useChatStore = create<ChatStore>((set, get) => {
               const list = state.toolEvents.slice()
               const eventId = (evt.id as string) || `${sessionId}-${Date.now()}`
               const idx = list.findIndex((item) => item.id === eventId && item.sessionId === sessionId)
+              const detailPayload =
+                evt.details && typeof evt.details === 'object'
+                  ? (evt.details as ToolEvent['details'])
+                  : undefined
               const next: ToolEvent = {
                 id: eventId,
                 sessionId,
@@ -1952,11 +1961,18 @@ export const useChatStore = create<ChatStore>((set, get) => {
                 error: evt.error as string | undefined,
                 summary: evt.summary as string | undefined,
                 createdAt: idx === -1 ? Date.now() : list[idx].createdAt,
+                details: detailPayload ? { ...detailPayload } : list[idx]?.details,
               }
               if (idx === -1) {
                 list.push(next)
               } else {
-                list[idx] = { ...list[idx], ...next }
+                list[idx] = {
+                  ...list[idx],
+                  ...next,
+                  details: detailPayload
+                    ? { ...(list[idx].details ?? {}), ...detailPayload }
+                    : list[idx].details,
+                }
               }
               snapshotDebug('tool:add', {
                 sessionId,

@@ -2,6 +2,17 @@ import type { WebSearchHit } from '../../utils/web-search';
 
 export type ToolLogStage = 'start' | 'result' | 'error';
 
+export interface ToolLogDetails {
+  code?: string;
+  input?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  durationMs?: number;
+  truncated?: boolean;
+  [key: string]: unknown;
+}
+
 export type ToolLogEntry = {
   id: string;
   tool: string;
@@ -11,6 +22,7 @@ export type ToolLogEntry = {
   error?: string;
   summary?: string;
   createdAt: number;
+  details?: ToolLogDetails;
 };
 
 export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
@@ -99,6 +111,40 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
         }
         if (typeof entry.summary === 'string' && entry.summary.trim()) {
           log.summary = entry.summary.trim();
+        }
+        if (entry.details && typeof entry.details === 'object') {
+          const candidate = entry.details as Record<string, unknown>;
+          const normalized: ToolLogDetails = {};
+          if (typeof candidate.code === 'string') normalized.code = candidate.code;
+          if (typeof candidate.input === 'string') normalized.input = candidate.input;
+          if (typeof candidate.stdout === 'string') normalized.stdout = candidate.stdout;
+          if (typeof candidate.stderr === 'string') normalized.stderr = candidate.stderr;
+          if (typeof candidate.exitCode === 'number' && Number.isFinite(candidate.exitCode)) {
+            normalized.exitCode = candidate.exitCode;
+          }
+          if (typeof candidate.durationMs === 'number' && Number.isFinite(candidate.durationMs)) {
+            normalized.durationMs = candidate.durationMs;
+          }
+          if (typeof candidate.truncated === 'boolean') normalized.truncated = candidate.truncated;
+          for (const [key, value] of Object.entries(candidate)) {
+            if (
+              key === 'code' ||
+              key === 'input' ||
+              key === 'stdout' ||
+              key === 'stderr' ||
+              key === 'exitCode' ||
+              key === 'durationMs' ||
+              key === 'truncated'
+            ) {
+              continue;
+            }
+            if (value !== undefined) {
+              normalized[key] = value;
+            }
+          }
+          if (Object.keys(normalized).length > 0) {
+            log.details = normalized;
+          }
         }
         return log;
       })

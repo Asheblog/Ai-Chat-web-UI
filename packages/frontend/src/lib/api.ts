@@ -484,6 +484,8 @@ class ApiClient {
                   query: parsed.query,
                   hits: parsed.hits,
                   error: parsed.error,
+                  summary: parsed.summary,
+                  details: parsed.details,
                   meta: parsed.meta,
                 }
               } else if (parsed.type === 'start') {

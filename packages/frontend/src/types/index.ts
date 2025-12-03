@@ -324,6 +324,17 @@ export interface WebSearchHit {
   snippet?: string;
 }
 
+export interface ToolEventDetails {
+  code?: string;
+  input?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  durationMs?: number;
+  truncated?: boolean;
+  [key: string]: unknown;
+}
+
 export interface ToolEvent {
   id: string;
   sessionId: number;
@@ -336,6 +347,7 @@ export interface ToolEvent {
   error?: string;
   summary?: string;
   createdAt: number;
+  details?: ToolEventDetails;
 }
 
 export interface AuthState {
@@ -387,6 +399,7 @@ export interface ChatStreamChunk {
   query?: string;
   hits?: WebSearchHit[];
   meta?: Record<string, unknown>;
+  details?: ToolEventDetails;
 }
 
 // Usage 统计类型（OpenAI 兼容字段为主）

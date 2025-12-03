@@ -262,6 +262,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (typeof payload.error === 'string' && payload.error.trim()) {
           entry.error = payload.error;
         }
+        if (payload.details && typeof payload.details === 'object') {
+          entry.details = payload.details as ToolLogEntry['details'];
+        }
         const existingIndex = toolLogs.findIndex((log) => log.id === entry.id);
         if (existingIndex === -1) {
           toolLogs.push(entry);
@@ -443,12 +446,19 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           return;
         }
         const preview = truncateText(source.replace(/\s+/g, ' '), 160);
+        const baseDetails: Record<string, unknown> = {
+          code: source,
+        };
+        if (stdin !== undefined) {
+          baseDetails.input = stdin;
+        }
         emitReasoning('执行 Python 代码', { ...reasoningMetaBase, stage: 'start', summary: preview });
         sendToolEvent({
           id: callId,
           tool: 'python_runner',
           stage: 'start',
           summary: preview,
+          details: baseDetails,
         });
         try {
           const result = await runPythonSnippet({
@@ -469,11 +479,22 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             stage: 'result',
             summary: resultPreview,
           });
+          const resultDetails: Record<string, unknown> = {
+            ...baseDetails,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
+            durationMs: result.durationMs,
+          };
+          if (result.truncated) {
+            resultDetails.truncated = true;
+          }
           sendToolEvent({
             id: callId,
             tool: 'python_runner',
             stage: 'result',
             summary: resultPreview,
+            details: resultDetails,
           });
           workingMessages.push({
             role: 'tool',
@@ -498,6 +519,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             tool: 'python_runner',
             stage: 'error',
             error: message,
+            details: baseDetails,
           });
           workingMessages.push({
             role: 'tool',
