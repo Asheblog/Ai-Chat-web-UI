@@ -2472,8 +2472,20 @@ export const useChatStore = create<ChatStore>((set, get) => {
       )
 
       if (targets.length > 0) {
+        const metasSnapshot = snapshot.messageMetas
         targets.forEach((stream) => {
           stream.stopRequested = true
+          const hasReasoningState =
+            stream.reasoningActivated ||
+            metasSnapshot.some(
+              (meta) =>
+                messageKey(meta.id) === messageKey(stream.assistantId) &&
+                typeof meta.reasoningStatus === 'string',
+            )
+          if (hasReasoningState) {
+            stream.pendingMeta.reasoningStatus = 'done'
+            stream.pendingMeta.reasoningIdleMs = null
+          }
           if (stream.sessionId && (stream.clientMessageId || stream.assistantId)) {
             apiClient
               .cancelAgentStream(stream.sessionId, {
@@ -2518,6 +2530,22 @@ export const useChatStore = create<ChatStore>((set, get) => {
           })
           .catch(() => {})
         if (fallbackAssistantId != null) {
+          set((state) => {
+            const key = messageKey(fallbackAssistantId)
+            const idx = state.messageMetas.findIndex((meta) => messageKey(meta.id) === key)
+            if (idx === -1) return state
+            const prevMeta = state.messageMetas[idx]
+            if (prevMeta.reasoningStatus === 'done' && prevMeta.reasoningIdleMs == null) {
+              return state
+            }
+            const nextMetas = state.messageMetas.slice()
+            nextMetas[idx] = {
+              ...prevMeta,
+              reasoningStatus: 'done',
+              reasoningIdleMs: null,
+            }
+            return { messageMetas: nextMetas }
+          })
           updateMetaStreamStatus(fallbackAssistantId, 'cancelled', '已停止生成')
         }
         set((state) => ({
