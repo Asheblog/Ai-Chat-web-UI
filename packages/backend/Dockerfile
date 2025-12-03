@@ -12,6 +12,14 @@ RUN apt-get update && \
         sqlite3 \
         curl \
         dumb-init \
+        python3 \
+        python3-venv \
+        python3-pip \
+        python3-numpy \
+        python3-sympy \
+        python3-scipy \
+        python3-matplotlib \
+        python3-pandas \
         openssl \
         ca-certificates \
         gosu \
@@ -90,6 +98,14 @@ RUN apt-get update && \
         sqlite3 \
         curl \
         dumb-init \
+        python3 \
+        python3-venv \
+        python3-pip \
+        python3-numpy \
+        python3-sympy \
+        python3-scipy \
+        python3-matplotlib \
+        python3-pandas \
         gosu \
         openssl \
         ca-certificates \
