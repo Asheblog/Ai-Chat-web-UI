@@ -231,6 +231,58 @@ const decodePlaceholder = (match: RegExpMatchArray) => {
   }
 }
 
+const isWhitespaceText = (node: any) => node?.type === 'text' && (!node.value || !node.value.trim())
+
+const hasMeaningfulChildren = (children: any[]) =>
+  Array.isArray(children) && children.some((child) => !isWhitespaceText(child))
+
+const normalizeBlockNodes = (node: any) => {
+  if (!node?.children || !Array.isArray(node.children)) return
+  for (let i = 0; i < node.children.length; i += 1) {
+    const child = node.children[i]
+    if (child?.type === 'paragraph' && Array.isArray(child.children)) {
+      const segments: any[] = []
+      let buffer: any[] = []
+      let mutated = false
+      const flushBuffer = () => {
+        if (buffer.length === 0) return
+        segments.push({
+          type: 'paragraph',
+          children: buffer,
+        })
+        buffer = []
+      }
+      for (const grandchild of child.children) {
+        if (grandchild?.type === 'math') {
+          mutated = true
+          flushBuffer()
+          segments.push(grandchild)
+          continue
+        }
+        buffer.push(grandchild)
+      }
+      flushBuffer()
+      if (mutated) {
+        const normalizedSegments = segments.filter((segment) => {
+          if (segment.type !== 'paragraph') return true
+          return hasMeaningfulChildren(segment.children)
+        })
+        if (normalizedSegments.length === 0) {
+          node.children.splice(i, 1)
+          i -= 1
+        } else {
+          node.children.splice(i, 1, ...normalizedSegments)
+          i += normalizedSegments.length - 1
+        }
+        continue
+      }
+    }
+    if (child?.children) {
+      normalizeBlockNodes(child)
+    }
+  }
+}
+
 export const remarkKatexTokenizer = () => (tree: any) => {
   const transformNode = (node: any) => {
     if (!node || !node.children || !Array.isArray(node.children)) {
@@ -285,6 +337,7 @@ export const remarkKatexTokenizer = () => (tree: any) => {
     }
   }
   transformNode(tree)
+  normalizeBlockNodes(tree)
 }
 
 export type LatexDecisionReason = 'inline_token' | 'display_token'
