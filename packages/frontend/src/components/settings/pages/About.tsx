@@ -53,32 +53,62 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6807061</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">ac96597</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天窗口新增「分享选择模式」，可在桌面与移动端批量勾选消息，并通过底部浮层与对话框串联生成分享链接，分享体验支持状态提示、快速清空与下一步指引。
+                移除移动端输入区的 Python 工具按钮，避免窄屏多余入口造成遮挡。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c5f0a06</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7480f74</span>
               <span className="text-muted-foreground leading-relaxed">
-                完成分享服务端到前端的全链路建设：数据库与 API 支持生成/续期/撤销链接，个人设置新增分享管理面板，支持复制链接、调整有效期与一键撤销。
+                修复流式对话取消时推理状态未及时清理的问题，保证界面显示与真实状态一致。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f3e0a73</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">9a51a15</span>
               <span className="text-muted-foreground leading-relaxed">
-                流式响应处理兼容 message_id/assistant_message_id 等大小写差异，确保 SSE start 事件始终回传真实消息 ID，避免客户端出现重复或缺失消息。
+                在消息更新过程中保留推理及工具事件，避免后续补丁覆盖导致信息缺失。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7c8842b</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cb5e107</span>
               <span className="text-muted-foreground leading-relaxed">
-                移除 deepseek-chat / deepseek-reasoner 的硬编码 completion 限制，交由模型默认配置决定，方便在不同环境下调高最大输出长度。
+                优化聊天状态存储的更新策略并补充调试日志，降低多次渲染带来的性能消耗。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">303a0fb</span>
+              <span className="text-muted-foreground leading-relaxed">
+                强化 Python 工具执行的服务端日志与前端提示，使执行反馈与 UI 提示更清晰。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">9ed551a</span>
+              <span className="text-muted-foreground leading-relaxed">
+                改进流式持久化流程，统一稳定 key 并跟踪工具事件，保证历史记录可靠。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cbc8ca9</span>
+              <span className="text-muted-foreground leading-relaxed">
+                在流式执行期间即时写入工具日志，方便线上问题定位与复盘。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">487f02a</span>
+              <span className="text-muted-foreground leading-relaxed">
+                新增可配置的工具迭代上限并持久化推理记录，防止无限循环并保留推理链路。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b0b85a0</span>
+              <span className="text-muted-foreground leading-relaxed">
+                聊天新增 Python 工具执行能力，与现有 Web 搜索协同，扩展回答手段。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-11-30 推送变更摘要
+            以上为 2025-12-03 推送变更摘要
           </p>
         </Card>
       </div>
