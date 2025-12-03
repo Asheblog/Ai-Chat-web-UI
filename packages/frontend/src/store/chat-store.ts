@@ -1026,12 +1026,13 @@ export const useChatStore = create<ChatStore>((set, get) => {
     const normalizedToolEvents = normalizeToolEvents(message)
     const contentPayload = message.content || ''
     const reasoningPayload = message.reasoning ?? message.streamReasoning ?? ''
+    const hasReasoningPayload = typeof reasoningPayload === 'string' && reasoningPayload.length > 0
     set((state) => {
       const serverMeta = createMeta(message)
       const key = messageKey(message.id)
       const prevBody = ensureBody(state.messageBodies[key], message.id, serverMeta.stableKey)
       const contentChanged = prevBody.content !== contentPayload
-      const reasoningChanged = (prevBody.reasoning ?? '') !== reasoningPayload
+      const reasoningChanged = hasReasoningPayload && (prevBody.reasoning ?? '') !== reasoningPayload
       const hasToolUpdates = normalizedToolEvents.length > 0
 
       let nextBodies = state.messageBodies
@@ -1072,7 +1073,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           id: message.id,
           stableKey: serverMeta.stableKey,
           content: contentPayload,
-          reasoning: reasoningPayload,
+          reasoning: hasReasoningPayload ? reasoningPayload : prevBody.reasoning,
           version: prevBody.version + (contentChanged ? 1 : 0),
           reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
           toolEvents: hasToolUpdates ? normalizedToolEvents : prevBody.toolEvents,
@@ -1468,6 +1469,17 @@ export const useChatStore = create<ChatStore>((set, get) => {
             metaByStableKey.delete(stableKey)
 
             const body = createBody(msg, stableKey)
+            const existingBodyEntry = bodyEntryByStableKey.get(stableKey)
+            if (existingBodyEntry) {
+              const prevBody = existingBodyEntry.body
+              if ((body.reasoning == null || body.reasoning.length === 0) && prevBody.reasoning) {
+                body.reasoning = prevBody.reasoning
+                body.reasoningVersion = prevBody.reasoningVersion
+              }
+              if ((!body.toolEvents || body.toolEvents.length === 0) && prevBody.toolEvents?.length) {
+                body.toolEvents = prevBody.toolEvents
+              }
+            }
             nextSessionBodyEntries.push([messageKey(body.id), body])
           })
 
