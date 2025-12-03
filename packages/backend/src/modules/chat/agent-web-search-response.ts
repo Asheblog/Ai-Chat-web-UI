@@ -101,6 +101,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let lastChunkAt = Date.now();
       let idleWarned = false;
 
+      const toolLogs: ToolLogEntry[] = [];
+      let toolLogSequence = 0;
+      let toolLogsDirty = false;
+
       const persistAssistantProgress = async (
         options: { force?: boolean; includeReasoning?: boolean; status?: 'streaming' | 'done' | 'error' | 'cancelled'; errorMessage?: string | null } = {},
       ) => {
@@ -109,7 +113,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const includeReasoning = options.includeReasoning !== false;
         const currentReasoning =
           includeReasoning && reasoningBuffer.trim().length ? reasoningBuffer : null;
-        if (!aiResponseContent && !currentReasoning && !force) return;
+        const hasToolLogDelta = toolLogsDirty;
+        if (!aiResponseContent && !currentReasoning && !force && !hasToolLogDelta) return;
         const now = Date.now();
         const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
         const reasoningDelta = includeReasoning
@@ -120,7 +125,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             now - assistantProgressLastPersistAt >= streamProgressPersistIntervalMs;
           const hasContentDelta = deltaLength >= 24;
           const hasReasoningDelta = includeReasoning && reasoningDelta >= 24;
-          if (!hasContentDelta && !hasReasoningDelta && !keepaliveExceeded) {
+          if (!hasContentDelta && !hasReasoningDelta && !keepaliveExceeded && !hasToolLogDelta) {
             return;
           }
         }
@@ -132,15 +137,25 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const streamStatus = options.status ?? (streamMeta?.cancelled ? 'cancelled' : 'streaming');
         const reasoningPayload =
           currentReasoning && currentReasoning.trim().length ? currentReasoning : null;
+        const shouldPersistToolLogs = toolLogsDirty || force;
+        const toolLogsJson = shouldPersistToolLogs
+          ? toolLogs.length > 0
+            ? JSON.stringify(toolLogs)
+            : null
+          : undefined;
         try {
+          const updateData: Prisma.MessageUpdateInput = {
+            content: aiResponseContent,
+            streamCursor: aiResponseContent.length,
+            streamStatus,
+            streamReasoning: reasoningPayload,
+          };
+          if (toolLogsJson !== undefined) {
+            updateData.toolLogsJson = toolLogsJson;
+          }
           await prisma.message.update({
             where: { id: activeAssistantMessageId },
-            data: {
-              content: aiResponseContent,
-              streamCursor: aiResponseContent.length,
-              streamStatus,
-              streamReasoning: reasoningPayload,
-            },
+            data: updateData,
           });
           traceRecorder.log('db:persist_progress', {
             messageId: activeAssistantMessageId,
@@ -148,6 +163,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             reasoningLength: reasoningPayload?.length ?? 0,
             force,
           });
+          if (toolLogsJson !== undefined) {
+            toolLogsDirty = false;
+          }
         } catch (error) {
           const isRecordMissing =
             error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
@@ -161,6 +179,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 streamStatus,
                 streamReasoning: reasoningPayload,
                 streamError: null,
+                ...(toolLogsJson !== undefined ? { toolLogsJson } : {}),
               },
             });
             if (recoveredId) {
@@ -168,6 +187,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               if (streamMeta) {
                 streamMeta.assistantMessageId = recoveredId;
                 persistStreamMeta(streamMeta);
+              }
+              if (toolLogsJson !== undefined) {
+                toolLogsDirty = false;
               }
               log.warn('Assistant progress target missing, upserted placeholder record', {
                 sessionId,
@@ -205,9 +227,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
       };
 
-      const toolLogs: ToolLogEntry[] = [];
-      let toolLogSequence = 0;
-
       const ensureToolLogId = (payload: Record<string, unknown>) => {
         if (typeof payload.id === 'string' && payload.id.trim()) {
           return (payload.id as string).trim();
@@ -243,18 +262,21 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const existingIndex = toolLogs.findIndex((log) => log.id === entry.id);
         if (existingIndex === -1) {
           toolLogs.push(entry);
-          return;
+        } else {
+          const existing = toolLogs[existingIndex];
+          toolLogs[existingIndex] = {
+            ...existing,
+            stage: entry.stage,
+            query: entry.query ?? existing.query,
+            hits: entry.hits ?? existing.hits,
+            error: entry.error ?? existing.error,
+            summary: entry.summary ?? existing.summary,
+            createdAt: existing.createdAt,
+          };
         }
-        const existing = toolLogs[existingIndex];
-        toolLogs[existingIndex] = {
-          ...existing,
-          stage: entry.stage,
-          query: entry.query ?? existing.query,
-          hits: entry.hits ?? existing.hits,
-          error: entry.error ?? existing.error,
-          summary: entry.summary ?? existing.summary,
-          createdAt: existing.createdAt,
-        };
+        toolLogsDirty = true;
+        // 立即异步持久化工具事件，刷新页面也能看到最新工具日志
+        persistAssistantProgress({ includeReasoning: false }).catch(() => {});
       };
 
       const sendToolEvent = (payload: Record<string, unknown>) => {
@@ -888,6 +910,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 return null;
               }
             })();
+            const finalToolLogsJson = toolLogs.length > 0 ? JSON.stringify(toolLogs) : null;
             const persistedId = await persistAssistantFinalResponse({
               sessionId,
               existingMessageId: activeAssistantMessageId,
@@ -900,7 +923,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               reasoning: shouldPersistReasoning ? reasoningText.trim() : null,
               reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
               streamError: null,
-              toolLogsJson: toolLogs.length > 0 ? JSON.stringify(toolLogs) : null,
+              toolLogsJson: finalToolLogsJson,
               usage: {
                 promptTokens: finalUsageNumbers.prompt,
                 completionTokens: finalUsageNumbers.completion,
@@ -913,6 +936,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             if (persistedId) {
               persistedAssistantMessageId = persistedId;
               activeAssistantMessageId = persistedId;
+              toolLogsDirty = false;
               if (streamMeta) {
                 streamMeta.assistantMessageId = persistedId;
                 persistStreamMeta(streamMeta);
