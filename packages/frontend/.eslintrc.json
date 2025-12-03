@@ -1,3 +1,62 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "max-lines": [
+      "warn",
+      {
+        "max": 350,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/features/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "max-lines": [
+          "warn",
+          {
+            "max": 300,
+            "skipBlankLines": true,
+            "skipComments": true
+          }
+        ],
+        "max-lines-per-function": [
+          "warn",
+          {
+            "max": 90,
+            "skipBlankLines": true,
+            "skipComments": true
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/features/**/components/**/*.{ts,tsx}",
+        "src/features/**/stores/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 250,
+            "skipBlankLines": true,
+            "skipComments": true
+          }
+        ],
+        "max-lines-per-function": [
+          "error",
+          {
+            "max": 80,
+            "skipBlankLines": true,
+            "skipComments": true
+          }
+        ]
+      }
+    }
+  ]
 }

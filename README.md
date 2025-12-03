@@ -3,6 +3,8 @@
 
 轻量级 AI 聊天平台（后端 Hono + SQLite，前端 Next.js）。本文档仅保留两种最简部署方式：
 
+- [解耦计划](./解耦计划.md)：记录前端模块化拆分与行数控制的执行清单，正在按阶段推进。
+
 示例网站：https://aichat.asheblog.org
 
 - CI 镜像 + 1Panel（推荐）

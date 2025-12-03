@@ -21,6 +21,7 @@
     "clean": "pnpm --filter backend clean && rm -rf node_modules",
     "test": "pnpm --filter backend test",
     "lint": "pnpm --filter backend lint",
+    "lint:lines": "tsx scripts/check-lines.mts --root packages/frontend/src --max 300 --avg 150",
     "type-check": "pnpm --filter backend type-check",
     "e2e:provider": "node -r tsx/register scripts/e2e-provider.ts",
     "e2e:provider:img": "node -r tsx/register scripts/e2e-provider-image.ts"

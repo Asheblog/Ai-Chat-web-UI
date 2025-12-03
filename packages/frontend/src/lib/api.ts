@@ -1,9 +1,4 @@
-import axios, {
-  AxiosInstance,
-  AxiosRequestConfig,
-  AxiosResponse,
-  InternalAxiosRequestConfig
-} from 'axios'
+import type { AxiosInstance } from 'axios'
 import type {
   AuthResponse,
   RegisterResponse,
@@ -21,10 +16,15 @@ import type {
   ChatShareSummary,
   ShareListResponse,
 } from '@/types'
-import { FrontendLogger as log } from '@/lib/logger'
+import { createHttpClient, DEFAULT_API_BASE_URL } from '@/lib/http/client'
+import { registerChatApiPlaceholders } from '@/features/chat/api'
+import { registerAuthApiPlaceholders } from '@/features/auth/api'
+import { registerSettingsApiPlaceholders } from '@/features/settings/api'
+import { registerShareApiPlaceholders } from '@/features/share/api'
+import { registerSystemApiPlaceholders } from '@/features/system/api'
 
 // API基础配置（统一使用 NEXT_PUBLIC_API_URL，默认使用相对路径 /api，避免浏览器直连 localhost）
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
+const API_BASE_URL = DEFAULT_API_BASE_URL
 
 type ImageUploadPayload = {
   data: string
@@ -38,55 +38,17 @@ class ApiClient {
   private isRedirecting = false
 
   constructor() {
-    this.client = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
+    this.client = createHttpClient(
+      {},
+      {
+        onUnauthorized: () => this.handleUnauthorized(),
       },
-      // 允许跨域时携带 Cookie（当 NEXT_PUBLIC_API_URL 为绝对地址且后端已开启 credentials）
-      withCredentials: true,
-    })
-
-    // 请求拦截器 - 添加认证token & 记录日志
-    this.client.interceptors.request.use(
-      (config: InternalAxiosRequestConfig) => {
-        ;(config as any).metadata = { start: Date.now() }
-        // 基于 Cookie 的会话：不再附加 Authorization 头
-        log.debug('HTTP Request', config.method?.toUpperCase(), config.baseURL + (config.url || ''), {
-          headers: config.headers,
-          params: config.params,
-        })
-        return config
-      },
-      (error) => {
-        return Promise.reject(error)
-      }
     )
-
-    // 响应拦截器 - 处理错误 & 记录日志
-    this.client.interceptors.response.use(
-      (response: AxiosResponse) => {
-        const start = (response.config as any).metadata?.start || Date.now()
-        log.debug('HTTP Response', response.status, response.statusText, 'in', `${Date.now() - start}ms`, {
-          url: response.config.baseURL + (response.config.url || ''),
-        })
-        return response
-      },
-      (error) => {
-        try {
-          const cfg = error.config || {}
-          const start = (cfg as any).metadata?.start || Date.now()
-          log.error('HTTP Error', error.message, 'in', `${Date.now() - start}ms`, {
-            url: (cfg.baseURL || '') + (cfg.url || ''),
-            status: error.response?.status,
-            data: error.response?.data,
-          })
-        } catch {}
-        if (error.response?.status === 401) this.handleUnauthorized()
-        return Promise.reject(error)
-      }
-    )
+    registerChatApiPlaceholders(this.client)
+    registerAuthApiPlaceholders(this.client)
+    registerSettingsApiPlaceholders(this.client)
+    registerShareApiPlaceholders(this.client)
+    registerSystemApiPlaceholders(this.client)
   }
 
   // 统一处理 401：清理凭证与持久化，并跳转登录
