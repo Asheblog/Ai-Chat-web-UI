@@ -37,7 +37,7 @@ export function PlusMenuContent({
   onToggleThinking,
   effort = 'unset',
   onEffortChange,
-  webSearchEnabled,
+  webSearchEnabled = false,
   onToggleWebSearch,
   canUseWebSearch = true,
   showWebSearchScope = false,
@@ -58,6 +58,8 @@ export function PlusMenuContent({
   showThinkingToggle = true,
   showWebSearchToggle = true,
 }: PlusMenuContentProps) {
+  const shouldShowWebSearchScope = Boolean(showWebSearchScope && webSearchEnabled && canUseWebSearch)
+
   return (
     <DropdownMenuContent align="start" className={cn('w-64', contentClassName)}>
       <div className={cn('px-3 py-3 space-y-3', bodyClassName)}>
@@ -111,7 +113,7 @@ export function PlusMenuContent({
         ) : null}
 
         {/* 搜索范围 */}
-        {showWebSearchScope && onWebSearchScopeChange ? (
+        {shouldShowWebSearchScope && onWebSearchScopeChange ? (
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">搜索范围（Metaso）</span>
             <Select

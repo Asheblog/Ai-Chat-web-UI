@@ -3,7 +3,7 @@
 import type { KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Square, ImagePlus, Brain, Globe, Plus, Pi } from 'lucide-react'
+import { Send, Square, ImagePlus, Brain, Globe, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -181,29 +181,6 @@ export function MobileComposer({
                 <Globe className="h-3.5 w-3.5" />
               </span>
               <span className="text-xs font-medium">联网</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${
-                pythonToolEnabled
-                  ? 'bg-emerald-100 border-emerald-200 text-emerald-700 dark:bg-emerald-900/40 dark:border-emerald-800 dark:text-emerald-200'
-                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
-              }`}
-              onClick={() => onTogglePythonTool(!pythonToolEnabled)}
-              aria-pressed={pythonToolEnabled}
-              disabled={!canUsePythonTool || isStreaming}
-              aria-label="Python 工具"
-            >
-              <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                  pythonToolEnabled ? 'bg-emerald-600 text-white shadow-sm' : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                <Pi className="h-3.5 w-3.5" />
-              </span>
-              <span className="text-xs font-medium">Python</span>
             </Button>
 
             <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
