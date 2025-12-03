@@ -13,6 +13,7 @@ import type { ModelItem } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useModelsStore } from '@/store/models-store'
+import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 
 type MessageId = number | string
@@ -53,11 +54,14 @@ interface StreamCompletionSnapshot {
   content: string
   reasoning: string
   usage?: StreamUsageSnapshot | null
+  toolEvents?: ToolEvent[]
+  reasoningStatus?: MessageMeta['reasoningStatus']
+  streamStatus?: MessageMeta['streamStatus']
   completedAt: number
 }
 
 const STREAM_SNAPSHOT_STORAGE_KEY = 'aichat:stream-completions'
-const STREAM_SNAPSHOT_TTL_MS = 2 * 60 * 1000
+const STREAM_SNAPSHOT_TTL_MS = 30 * 60 * 1000
 
 type StreamSendOptions = {
   reasoningEnabled?: boolean
@@ -110,6 +114,17 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
           usage: (item as any).usage && typeof (item as any).usage === 'object'
             ? (item as any).usage as StreamUsageSnapshot
             : undefined,
+          toolEvents: Array.isArray((item as any).toolEvents)
+            ? ((item as any).toolEvents as ToolEvent[])
+            : undefined,
+          reasoningStatus:
+            typeof (item as any).reasoningStatus === 'string'
+              ? ((item as any).reasoningStatus as MessageMeta['reasoningStatus'])
+              : undefined,
+          streamStatus:
+            typeof (item as any).streamStatus === 'string'
+              ? ((item as any).streamStatus as MessageMeta['streamStatus'])
+              : undefined,
           completedAt,
         } as StreamCompletionSnapshot
       })
@@ -132,6 +147,12 @@ const writeCompletionSnapshots = (records: StreamCompletionSnapshot[]) => {
   }
 }
 
+const snapshotDebug = (...args: any[]) => {
+  if (process.env.NODE_ENV === 'production') return
+  // eslint-disable-next-line no-console
+  console.debug('[snapshot]', ...args)
+}
+
 const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
   if (typeof window === 'undefined') return
   const entries = readCompletionSnapshots()
@@ -147,8 +168,33 @@ const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
   })
   if (index === -1) {
     entries.push(snapshot)
+    snapshotDebug('persist:new', {
+      sessionId: snapshot.sessionId,
+      messageId: snapshot.messageId,
+      clientMessageId: snapshot.clientMessageId,
+      streamStatus: snapshot.streamStatus,
+      reasoningStatus: snapshot.reasoningStatus,
+      toolEvents: snapshot.toolEvents?.length ?? 0,
+    })
   } else {
-    entries[index] = snapshot
+    const existing = entries[index]
+    entries[index] = {
+      ...existing,
+      ...snapshot,
+      content: snapshot.content || existing.content,
+      reasoning: snapshot.reasoning || existing.reasoning,
+      toolEvents: snapshot.toolEvents ?? existing.toolEvents,
+      reasoningStatus: snapshot.reasoningStatus ?? existing.reasoningStatus,
+      streamStatus: snapshot.streamStatus ?? existing.streamStatus,
+    }
+    snapshotDebug('persist:update', {
+      sessionId: snapshot.sessionId,
+      messageId: snapshot.messageId,
+      clientMessageId: snapshot.clientMessageId,
+      streamStatus: entries[index].streamStatus,
+      reasoningStatus: entries[index].reasoningStatus,
+      toolEvents: entries[index].toolEvents?.length ?? 0,
+    })
   }
   writeCompletionSnapshots(entries)
 }
@@ -185,6 +231,27 @@ const getSessionCompletionSnapshots = (sessionId: number): StreamCompletionSnaps
 }
 
 const messageKey = (id: MessageId) => (typeof id === 'string' ? id : String(id))
+
+const generateLocalStableKey = () =>
+  `local:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`
+
+const resolveStableKey = (
+  source: { id: MessageId; clientMessageId?: string | null; stableKey?: string | null },
+  override?: string | null,
+): string => {
+  const preferred = typeof override === 'string' && override.trim().length > 0 ? override.trim() : null
+  if (preferred) return preferred
+  if (typeof source.stableKey === 'string' && source.stableKey.trim().length > 0) {
+    return source.stableKey.trim()
+  }
+  const clientId = typeof source.clientMessageId === 'string' ? source.clientMessageId.trim() : ''
+  if (clientId) {
+    return `client:${clientId}`
+  }
+  const numeric = typeof source.id === 'string' ? source.id : String(source.id)
+  return `msg:${numeric}`
+}
+
 
 interface ShareSelectionState {
   enabled: boolean
@@ -274,6 +341,25 @@ const shouldEnableWebSearchForSession = (session: ChatSession | null): boolean =
   return userEnabled
 }
 
+const shouldEnablePythonToolForSession = (session: ChatSession | null): boolean => {
+  if (!session) return false
+  const systemSettings = useSettingsStore.getState().systemSettings
+  if (!systemSettings?.pythonToolEnable) return false
+  const model = findModelForSession(session)
+  if (!model) return false
+  const provider = (model.provider || '').toLowerCase()
+  if (provider && provider !== 'openai' && provider !== 'azure_openai') {
+    return false
+  }
+  const pythonCapable =
+    typeof model.capabilities?.code_interpreter === 'boolean'
+      ? model.capabilities.code_interpreter
+      : true
+  if (!pythonCapable) return false
+  const preference = usePythonToolPreferenceStore.getState().lastSelection
+  return typeof preference === 'boolean' ? preference : false
+}
+
 const getAssistantVariantLimit = () => {
   const settings = useSettingsStore.getState().systemSettings
   const raw = settings?.assistantReplyHistoryLimit
@@ -313,42 +399,57 @@ const enforceVariantLimitLocally = (
   return { metas: nextMetas, removedIds: toRemove }
 }
 
-const createMeta = (message: Message, overrides: Partial<MessageMeta> = {}): MessageMeta => ({
-  id: message.id,
-  sessionId: message.sessionId,
-  role: message.role,
-  createdAt: message.createdAt,
-  clientMessageId: message.clientMessageId ?? null,
-  parentMessageId:
-    typeof (message as any).parentMessageId === 'number'
-      ? (message as any).parentMessageId
-      : null,
-  variantIndex:
-    typeof (message as any).variantIndex === 'number'
-      ? (message as any).variantIndex
-      : null,
-  reasoningStatus: message.reasoningStatus,
-  reasoningDurationSeconds: message.reasoningDurationSeconds ?? null,
-  reasoningIdleMs: message.reasoningIdleMs ?? null,
-  images: message.images,
-  isPlaceholder: false,
-  streamStatus: message.streamStatus ?? 'done',
-  streamError: message.streamError ?? null,
-  pendingSync: false,
-  ...overrides,
-})
+const createMeta = (message: Message, overrides: Partial<MessageMeta> = {}): MessageMeta => {
+  const stableKey = resolveStableKey(
+    { id: message.id, clientMessageId: message.clientMessageId ?? null, stableKey: message.stableKey ?? null },
+    overrides.stableKey,
+  )
+  return {
+    id: message.id,
+    sessionId: message.sessionId,
+    stableKey,
+    role: message.role,
+    createdAt: message.createdAt,
+    clientMessageId: message.clientMessageId ?? null,
+    parentMessageId:
+      typeof (message as any).parentMessageId === 'number'
+        ? (message as any).parentMessageId
+        : null,
+    variantIndex:
+      typeof (message as any).variantIndex === 'number'
+        ? (message as any).variantIndex
+        : null,
+    reasoningStatus: message.reasoningStatus,
+    reasoningDurationSeconds: message.reasoningDurationSeconds ?? null,
+    reasoningIdleMs: message.reasoningIdleMs ?? null,
+    images: message.images,
+    isPlaceholder: false,
+    streamStatus: message.streamStatus ?? 'done',
+    streamError: message.streamError ?? null,
+    pendingSync: false,
+    ...overrides,
+    stableKey: overrides.stableKey ?? stableKey,
+  }
+}
 
-const createBody = (message: Message): MessageBody => ({
-  id: message.id,
-  content: message.content || '',
-  reasoning: message.reasoning ?? message.streamReasoning ?? '',
-  version: message.content ? 1 : 0,
-  reasoningVersion: message.reasoning || message.streamReasoning ? 1 : 0,
-  toolEvents: normalizeToolEvents(message),
-})
+const createBody = (message: Message, stableKeyOverride?: string | null): MessageBody => {
+  const stableKey = resolveStableKey(
+    { id: message.id, clientMessageId: message.clientMessageId ?? null, stableKey: message.stableKey ?? null },
+    stableKeyOverride,
+  )
+  return {
+    id: message.id,
+    stableKey,
+    content: message.content || '',
+    reasoning: message.reasoning ?? message.streamReasoning ?? '',
+    version: message.content ? 1 : 0,
+    reasoningVersion: message.reasoning || message.streamReasoning ? 1 : 0,
+    toolEvents: normalizeToolEvents(message),
+  }
+}
 
-const ensureBody = (body: MessageBody | undefined, id: MessageId): MessageBody =>
-  body ?? { id, content: '', reasoning: '', version: 0, reasoningVersion: 0 }
+const ensureBody = (body: MessageBody | undefined, id: MessageId, stableKey: string): MessageBody =>
+  body ?? { id, stableKey, content: '', reasoning: '', version: 0, reasoningVersion: 0 }
 
 const mergeImages = (message: Message, cache: Record<string, string[]>): Message => {
   const serverImages = Array.isArray(message.images) ? message.images : []
@@ -442,6 +543,27 @@ const normalizeToolEvents = (message: Message): ToolEvent[] => {
       createdAt,
     }
   })
+}
+
+const mergeToolEventsForMessage = (
+  existing: ToolEvent[],
+  sessionId: number,
+  messageId: MessageId,
+  replacements: ToolEvent[],
+): ToolEvent[] => {
+  if (!Array.isArray(replacements) || replacements.length === 0) return existing
+  const assistantKey = messageKey(messageId)
+  const normalized = replacements.map((event) => ({
+    ...event,
+    sessionId,
+    messageId,
+    status: event.status ?? inferToolStatus(event.stage),
+  }))
+  const filtered = existing.filter(
+    (event) =>
+      event.sessionId !== sessionId || messageKey(event.messageId) !== assistantKey,
+  )
+  return [...filtered, ...normalized]
 }
 
 const PROVIDER_SAFETY_HINT =
@@ -632,6 +754,57 @@ export const useChatStore = create<ChatStore>((set, get) => {
     streamingPollers.clear()
   }
 
+  const persistSnapshotForStream = (stream: ActiveStreamEntry | null) => {
+    if (!stream) return
+    const assistantKey = messageKey(stream.assistantId)
+    const state = get()
+    const body = state.messageBodies[assistantKey]
+    const meta = state.messageMetas.find((item) => messageKey(item.id) === assistantKey)
+    const toolEventsForMessage = state.toolEvents.filter(
+      (event) =>
+        event.sessionId === stream.sessionId && messageKey(event.messageId) === assistantKey,
+    )
+    const contentPayload = body?.content ?? stream.content ?? ''
+    const reasoningPayload = body?.reasoning ?? stream.reasoning ?? ''
+    snapshotDebug('persist:prepare', {
+      sessionId: stream.sessionId,
+      assistantId: stream.assistantId,
+      contentLength: contentPayload?.length ?? 0,
+      reasoningLength: reasoningPayload?.length ?? 0,
+      toolEvents: toolEventsForMessage.length,
+    })
+    if (!contentPayload && !reasoningPayload && toolEventsForMessage.length === 0) {
+      snapshotDebug('persist:skip', {
+        sessionId: stream.sessionId,
+        assistantId: stream.assistantId,
+        reason: 'empty',
+      })
+      return
+    }
+    const resolvedStreamStatus = meta?.streamStatus ?? 'streaming'
+    const resolvedReasoningStatus =
+      meta?.reasoningStatus ?? (stream.reasoningActivated ? 'streaming' : undefined)
+    const resolvedClientId =
+      stream.assistantClientMessageId ??
+      (typeof stream.assistantId === 'string' ? stream.assistantId : null) ??
+      stream.clientMessageId ??
+      null
+    persistCompletionSnapshot({
+      sessionId: stream.sessionId,
+      messageId:
+        typeof stream.assistantId === 'number' && Number.isFinite(stream.assistantId)
+          ? Number(stream.assistantId)
+          : null,
+      clientMessageId: resolvedClientId,
+      content: contentPayload,
+      reasoning: reasoningPayload,
+      toolEvents: toolEventsForMessage,
+      reasoningStatus: resolvedReasoningStatus,
+      streamStatus: resolvedStreamStatus,
+      completedAt: Date.now(),
+    })
+  }
+
   const recomputeStreamingState = () => {
     const snapshot = get()
     const currentSessionId = snapshot.currentSession?.id ?? null
@@ -681,12 +854,15 @@ export const useChatStore = create<ChatStore>((set, get) => {
     if (typeof window === 'undefined') return
     const snapshots = getSessionCompletionSnapshots(sessionId)
     if (!snapshots.length) return
+    snapshotDebug('apply:start', { sessionId, total: snapshots.length })
     set((state) => {
       const nextMetas = state.messageMetas.slice()
       const nextBodies = { ...state.messageBodies }
       const nextRenderCache = { ...state.messageRenderCache }
       let metaChanged = false
       let bodyChanged = false
+      let toolEventsChanged = false
+      let nextToolEvents = state.toolEvents
 
       snapshots.forEach((snapshot) => {
         const idx = nextMetas.findIndex((meta) => {
@@ -706,40 +882,88 @@ export const useChatStore = create<ChatStore>((set, get) => {
         })
         if (idx === -1) return
         const meta = nextMetas[idx]
+        snapshotDebug('apply:match', {
+          sessionId,
+          metaId: meta.id,
+          snapshotMessageId: snapshot.messageId,
+          toolEvents: snapshot.toolEvents?.length ?? 0,
+          streamStatus: snapshot.streamStatus,
+        })
         if (meta.streamStatus === 'done' && !meta.pendingSync) {
           return
         }
         const key = messageKey(meta.id)
-        const prevBody = ensureBody(nextBodies[key], meta.id)
-        const contentChanged = Boolean(
-          snapshot.content && snapshot.content !== prevBody.content,
-        )
-        const reasoningChanged = Boolean(
-          snapshot.reasoning && snapshot.reasoning !== (prevBody.reasoning ?? ''),
-        )
+        const prevBody = ensureBody(nextBodies[key], meta.id, meta.stableKey)
+        const snapshotContent = snapshot.content || ''
+        const snapshotReasoning = snapshot.reasoning || ''
+        const contentChanged = snapshotContent.length > 0 && snapshotContent !== prevBody.content
+        const reasoningChanged =
+          snapshotReasoning.length > 0 && snapshotReasoning !== (prevBody.reasoning ?? '')
+        const snapshotToolEvents = Array.isArray(snapshot.toolEvents) ? snapshot.toolEvents : null
+        const normalizedToolEvents =
+          snapshotToolEvents && snapshotToolEvents.length > 0
+            ? snapshotToolEvents.map((evt) => ({
+                ...evt,
+                sessionId: meta.sessionId,
+                messageId: meta.id,
+                status: evt.status ?? inferToolStatus(evt.stage),
+              }))
+            : null
 
         nextBodies[key] = {
+          ...prevBody,
           id: prevBody.id,
-          content: contentChanged ? snapshot.content : prevBody.content,
-          reasoning: reasoningChanged ? snapshot.reasoning : prevBody.reasoning,
+          stableKey: prevBody.stableKey || meta.stableKey,
+          content: contentChanged ? snapshotContent : prevBody.content,
+          reasoning: reasoningChanged ? snapshotReasoning : prevBody.reasoning,
           version: prevBody.version + (contentChanged ? 1 : 0),
           reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
-          toolEvents: prevBody.toolEvents,
+          toolEvents:
+            normalizedToolEvents && normalizedToolEvents.length > 0
+              ? normalizedToolEvents
+              : prevBody.toolEvents,
         }
         delete nextRenderCache[key]
 
-        nextMetas[idx] = {
-          ...meta,
-          streamStatus: 'done',
-          streamError: null,
-          isPlaceholder: false,
-          pendingSync: true,
+        if (normalizedToolEvents && normalizedToolEvents.length > 0) {
+          const merged = mergeToolEventsForMessage(
+            nextToolEvents,
+            sessionId,
+            meta.id,
+            normalizedToolEvents,
+          )
+          if (merged !== nextToolEvents) {
+            nextToolEvents = merged
+            toolEventsChanged = true
+          }
         }
-        metaChanged = true
-        bodyChanged = bodyChanged || contentChanged || reasoningChanged
+
+        const nextStreamStatus =
+          snapshot.streamStatus ?? meta.streamStatus ?? (meta.pendingSync ? 'done' : 'streaming')
+        const nextReasoningStatus = snapshot.reasoningStatus ?? meta.reasoningStatus
+        const updatedMeta: MessageMeta = {
+          ...meta,
+          streamStatus: nextStreamStatus,
+          streamError: nextStreamStatus === 'error' ? meta.streamError : null,
+          reasoningStatus: nextReasoningStatus,
+          isPlaceholder: false,
+          pendingSync: nextStreamStatus === 'done' ? true : meta.pendingSync,
+        }
+        const metaNeedsUpdate =
+          updatedMeta.streamStatus !== meta.streamStatus ||
+          updatedMeta.reasoningStatus !== meta.reasoningStatus ||
+          updatedMeta.streamError !== meta.streamError ||
+          updatedMeta.isPlaceholder !== meta.isPlaceholder ||
+          updatedMeta.pendingSync !== meta.pendingSync
+        if (metaNeedsUpdate) {
+          nextMetas[idx] = updatedMeta
+          metaChanged = true
+        }
+        bodyChanged =
+          bodyChanged || contentChanged || reasoningChanged || Boolean(normalizedToolEvents)
       })
 
-      if (!metaChanged && !bodyChanged) {
+      if (!metaChanged && !bodyChanged && !toolEventsChanged) {
         return state
       }
 
@@ -751,28 +975,35 @@ export const useChatStore = create<ChatStore>((set, get) => {
         partial.messageMetas = nextMetas
         partial.assistantVariantSelections = buildVariantSelections(nextMetas)
       }
+      if (toolEventsChanged) {
+        partial.toolEvents = nextToolEvents
+      }
       return partial
     })
   }
 
   const applyServerMessageSnapshot = (message: Message) => {
+    const normalizedToolEvents = normalizeToolEvents(message)
+    const contentPayload = message.content || ''
+    const reasoningPayload = message.reasoning ?? message.streamReasoning ?? ''
     set((state) => {
+      const serverMeta = createMeta(message)
       const key = messageKey(message.id)
-      const prevBody = ensureBody(state.messageBodies[key], message.id)
-      const nextContent = message.content || ''
-      const nextReasoning = message.reasoning ?? message.streamReasoning ?? ''
-      const contentChanged = prevBody.content !== nextContent
-      const reasoningChanged = (prevBody.reasoning ?? '') !== nextReasoning
+      const prevBody = ensureBody(state.messageBodies[key], message.id, serverMeta.stableKey)
+      const contentChanged = prevBody.content !== contentPayload
+      const reasoningChanged = (prevBody.reasoning ?? '') !== reasoningPayload
       const nextBody: MessageBody = {
+        ...prevBody,
         id: message.id,
-        content: nextContent,
-        reasoning: nextReasoning,
+        stableKey: serverMeta.stableKey,
+        content: contentPayload,
+        reasoning: reasoningPayload,
         version: prevBody.version + (contentChanged ? 1 : 0),
         reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
-        toolEvents: message.toolEvents?.length ? message.toolEvents : prevBody.toolEvents,
+        toolEvents:
+          normalizedToolEvents.length > 0 ? normalizedToolEvents : prevBody.toolEvents,
       }
       const nextBodies = { ...state.messageBodies, [key]: nextBody }
-      const serverMeta = createMeta(message)
       const metaIndex = state.messageMetas.findIndex((meta) => messageKey(meta.id) === key)
       const nextMetas =
         metaIndex === -1
@@ -782,25 +1013,55 @@ export const useChatStore = create<ChatStore>((set, get) => {
                 ? {
                     ...meta,
                     ...serverMeta,
+                    stableKey: meta.stableKey || serverMeta.stableKey,
                     isPlaceholder: false,
-                  streamStatus: message.streamStatus ?? meta.streamStatus,
-                  streamError: message.streamError ?? meta.streamError,
-                  pendingSync: false,
-                }
-                : meta
+                    streamStatus: message.streamStatus ?? meta.streamStatus,
+                    streamError: message.streamError ?? meta.streamError,
+                    pendingSync: false,
+                  }
+                : meta,
             )
       const nextRenderCache = { ...state.messageRenderCache }
       delete nextRenderCache[key]
-      return {
+      const partial: Partial<ChatState> = {
         messageBodies: nextBodies,
         messageMetas: nextMetas,
         messageRenderCache: nextRenderCache,
       }
+      if (normalizedToolEvents.length > 0) {
+        partial.toolEvents = mergeToolEventsForMessage(
+          state.toolEvents,
+          message.sessionId,
+          message.id,
+          normalizedToolEvents,
+        )
+      }
+      return partial
     })
-    removeCompletionSnapshot(message.sessionId, {
-      messageId: typeof message.id === 'number' ? Number(message.id) : null,
-      clientMessageId: message.clientMessageId ?? null,
-    })
+    if (message.streamStatus === 'streaming') {
+      const shouldPersist =
+        contentPayload.length > 0 ||
+        reasoningPayload.length > 0 ||
+        normalizedToolEvents.length > 0
+      if (shouldPersist) {
+        persistCompletionSnapshot({
+          sessionId: message.sessionId,
+          messageId: typeof message.id === 'number' ? Number(message.id) : null,
+          clientMessageId: message.clientMessageId ?? null,
+          content: contentPayload,
+          reasoning: reasoningPayload,
+          toolEvents: normalizedToolEvents.length > 0 ? normalizedToolEvents : undefined,
+          reasoningStatus: message.reasoningStatus,
+          streamStatus: message.streamStatus,
+          completedAt: Date.now(),
+        })
+      }
+    } else {
+      removeCompletionSnapshot(message.sessionId, {
+        messageId: typeof message.id === 'number' ? Number(message.id) : null,
+        clientMessageId: message.clientMessageId ?? null,
+      })
+    }
     recomputeStreamingState()
   }
 
@@ -906,7 +1167,11 @@ export const useChatStore = create<ChatStore>((set, get) => {
       }
 
       const prevMeta = state.messageMetas[metaIndex]
-      const prevBody = ensureBody(state.messageBodies[assistantKey], active.assistantId)
+      const prevBody = ensureBody(
+        state.messageBodies[assistantKey],
+        active.assistantId,
+        prevMeta.stableKey,
+      )
 
       const nextMeta: MessageMeta = { ...prevMeta }
       let metaChanged = false
@@ -940,7 +1205,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
       }
 
       const nextBody: MessageBody = {
+        ...prevBody,
         id: prevBody.id,
+        stableKey: prevBody.stableKey || prevMeta.stableKey,
         content: contentChanged ? active.content : prevBody.content,
         reasoning: reasoningChanged ? active.reasoning : prevBody.reasoning,
         version: prevBody.version + (contentChanged ? 1 : 0),
@@ -965,6 +1232,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
       return partial
     })
+    persistSnapshotForStream(active)
   }
 
   const scheduleFlush = (stream: ActiveStreamEntry | null) => {
@@ -1413,12 +1681,14 @@ export const useChatStore = create<ChatStore>((set, get) => {
           ).length
         : 0
 
+      const assistantStableKey = generateLocalStableKey()
       const assistantPlaceholder: Message = {
         id: assistantMessageId,
         sessionId,
         role: 'assistant',
         content: '',
         createdAt: now,
+        stableKey: assistantStableKey,
         parentMessageId: parentMessageId ?? undefined,
         variantIndex: parentMessageId ? existingVariantCount + 1 : undefined,
       }
@@ -1630,6 +1900,14 @@ export const useChatStore = create<ChatStore>((set, get) => {
                     nextRenderCache[nextKey] = nextRenderCache[prevKey]
                     delete nextRenderCache[prevKey]
                   }
+                  const nextToolEvents =
+                    state.toolEvents.length > 0
+                      ? state.toolEvents.map((event) =>
+                          messageKey(event.messageId) === prevKey
+                            ? { ...event, messageId: nextId }
+                            : event,
+                        )
+                      : state.toolEvents
                   const partial: Partial<ChatState> = {}
                   if (metaIndex !== -1) partial.messageMetas = nextMetas
                   if (metaIndex !== -1) {
@@ -1637,6 +1915,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
                   }
                   if (prevBody) partial.messageBodies = nextBodies
                   if (nextRenderCache[nextKey]) partial.messageRenderCache = nextRenderCache
+                  if (nextToolEvents !== state.toolEvents) {
+                    partial.toolEvents = nextToolEvents
+                  }
                   return Object.keys(partial).length > 0 ? partial : state
                 })
                 active.assistantId = nextId
@@ -1677,8 +1958,15 @@ export const useChatStore = create<ChatStore>((set, get) => {
               } else {
                 list[idx] = { ...list[idx], ...next }
               }
+              snapshotDebug('tool:add', {
+                sessionId,
+                messageId: next.messageId,
+                stage: next.stage,
+                total: list.length,
+              })
               return { toolEvents: list }
             })
+            persistSnapshotForStream(active)
             continue
           }
 
@@ -1773,6 +2061,14 @@ export const useChatStore = create<ChatStore>((set, get) => {
         }
 
         const finalStream = activeStreams.get(streamEntry.streamKey) ?? null
+        const snapshotToolEvents =
+          finalStream && streamEntry.sessionId === sessionId
+            ? get().toolEvents.filter(
+                (event) =>
+                  event.sessionId === sessionId &&
+                  messageKey(event.messageId) === messageKey(finalStream.assistantId),
+              )
+            : []
         const completedSnapshot = finalStream
           ? {
               assistantId: finalStream.assistantId,
@@ -1780,6 +2076,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
               content: finalStream.content,
               reasoning: finalStream.reasoning,
               usage: finalStream.lastUsage,
+              toolEvents: snapshotToolEvents,
               sessionId,
             }
           : null
@@ -1803,6 +2100,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
             content: completedSnapshot.content,
             reasoning: completedSnapshot.reasoning,
             usage: completedSnapshot.usage,
+            toolEvents: completedSnapshot.toolEvents,
+            streamStatus: 'done',
+            reasoningStatus: 'done',
             completedAt: Date.now(),
           })
         }
@@ -2112,12 +2412,20 @@ export const useChatStore = create<ChatStore>((set, get) => {
         ) ?? null
       const targetSession = findSessionById(snapshot.sessions, snapshot.currentSession, meta.sessionId)
       const shouldRequestWebSearch = shouldEnableWebSearchForSession(targetSession)
+      const shouldRequestPythonTool = shouldEnablePythonToolForSession(targetSession)
+      const featureFlags: Record<string, any> = {}
+      if (shouldRequestWebSearch) {
+        featureFlags.web_search = true
+      }
+      if (shouldRequestPythonTool) {
+        featureFlags.python_tool = true
+      }
       await snapshot.streamMessage(meta.sessionId, '', undefined, {
         replyToMessageId: typeof meta.parentMessageId === 'number' ? meta.parentMessageId : undefined,
         replyToClientMessageId:
           parentMeta?.clientMessageId ??
           (typeof meta.parentMessageId === 'string' ? meta.parentMessageId : undefined),
-        features: shouldRequestWebSearch ? { web_search: true } : undefined,
+        features: Object.keys(featureFlags).length > 0 ? featureFlags : undefined,
       })
     },
 

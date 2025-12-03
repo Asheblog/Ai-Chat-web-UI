@@ -162,6 +162,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             length: aiResponseContent.length,
             reasoningLength: reasoningPayload?.length ?? 0,
             force,
+            toolLogsPersisted: toolLogsJson ? toolLogs.length : 0,
+            toolLogsPending: toolLogsDirty ? toolLogs.length : 0,
           });
           if (toolLogsJson !== undefined) {
             toolLogsDirty = false;
@@ -201,6 +203,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 reasoningLength: reasoningPayload?.length ?? 0,
                 force,
                 recovered: true,
+                toolLogsPersisted: toolLogsJson ? toolLogs.length : 0,
               });
               return;
             }
@@ -275,6 +278,12 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           };
         }
         toolLogsDirty = true;
+        traceRecorder.log('tool:event_buffer', {
+          messageId: activeAssistantMessageId ?? null,
+          tool,
+          stage,
+          totalBuffered: toolLogs.length,
+        });
         // 立即异步持久化工具事件，刷新页面也能看到最新工具日志
         persistAssistantProgress({ includeReasoning: false }).catch(() => {});
       };

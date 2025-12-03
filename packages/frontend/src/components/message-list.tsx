@@ -160,14 +160,15 @@ function MessageListComponent({
     <div ref={containerRef} style={{ height: totalSize, position: 'relative' }}>
       {virtualItems.map((virtualRow) => {
         const meta = displayMetas[virtualRow.index]
-        const key = messageKey(meta.id)
-        const body = bodies[key]
+        const storageKey = messageKey(meta.id)
+        const reactKey = meta.stableKey || storageKey
+        const body = bodies[storageKey]
         if (!body) return null
-        const cache = renderCache[key]
+        const cache = renderCache[storageKey]
         const parentKey = meta.parentMessageId != null ? messageKey(meta.parentMessageId) : null
         const siblings = parentKey ? variantGroups.get(parentKey) || [] : []
         const siblingIndex = parentKey
-          ? siblings.findIndex((entry) => messageKey(entry.id) === key)
+          ? siblings.findIndex((entry) => messageKey(entry.id) === storageKey)
           : -1
         const variantInfo =
           parentKey != null
@@ -184,7 +185,7 @@ function MessageListComponent({
           isStreaming &&
           meta.role === 'assistant' &&
           lastMeta &&
-          messageKey(lastMeta.id) === key
+          messageKey(lastMeta.id) === storageKey
         const shareModeActive =
           shareSelectionState.enabled && shareSelectionState.sessionId === meta.sessionId
         const shareSelectable = typeof meta.id === 'number' && !meta.pendingSync
@@ -192,7 +193,7 @@ function MessageListComponent({
           shareModeActive && shareSelectable && shareSelectedKeys.has(messageKey(meta.id))
         return (
           <div
-            key={key}
+            key={reactKey}
             ref={virtualizer.measureElement}
             data-index={virtualRow.index}
             style={{

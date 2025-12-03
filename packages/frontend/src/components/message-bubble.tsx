@@ -138,6 +138,14 @@ function MessageBubbleComponent({ meta, body, renderCache, isStreaming, variantI
     }
   }, [describeTool, sortedToolTimeline])
 
+  useEffect(() => {
+    if (meta.role !== 'assistant') return
+    if (reasoningManuallyToggled) return
+    if (sortedToolTimeline.length > 0 && !showReasoning) {
+      setShowReasoning(true)
+    }
+  }, [meta.role, reasoningManuallyToggled, showReasoning, sortedToolTimeline.length])
+
   const { toast } = useToast()
 
   const isUser = meta.role === 'user'

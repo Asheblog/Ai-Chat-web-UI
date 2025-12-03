@@ -105,6 +105,7 @@ export interface CreateSessionRequest {
 export interface Message {
   id: number | string;
   sessionId: number;
+  stableKey?: string | null;
   parentMessageId?: number | string | null;
   variantIndex?: number | null;
   role: 'user' | 'assistant';
@@ -127,6 +128,7 @@ export interface Message {
 export interface MessageMeta {
   id: number | string;
   sessionId: number;
+  stableKey: string;
   parentMessageId?: number | string | null;
   variantIndex?: number | null;
   role: 'user' | 'assistant';
@@ -144,6 +146,7 @@ export interface MessageMeta {
 
 export interface MessageBody {
   id: number | string;
+  stableKey: string;
   content: string;
   reasoning?: string | null;
   version: number;
