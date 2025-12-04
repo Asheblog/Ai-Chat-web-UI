@@ -149,6 +149,7 @@ export interface MessageBody {
   stableKey: string;
   content: string;
   reasoning?: string | null;
+  reasoningPlayedLength?: number;
   version: number;
   reasoningVersion: number;
   toolEvents?: ToolEvent[];

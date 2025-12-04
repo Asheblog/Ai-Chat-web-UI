@@ -37,6 +37,10 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
         if (!Number.isFinite(sessionId)) return null
         const completedAt = Number((item as any).completedAt)
         if (!Number.isFinite(completedAt)) return null
+        const reasoningText = typeof (item as any).reasoning === 'string' ? (item as any).reasoning : ''
+        const rawPlayed = Number((item as any).reasoningPlayedLength)
+        const reasoningPlayedLength =
+          Number.isFinite(rawPlayed) && rawPlayed > 0 ? Math.min(rawPlayed, reasoningText.length) : undefined
         return {
           sessionId,
           messageId:
@@ -47,7 +51,8 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
             ? (item as any).clientMessageId
             : null,
           content: typeof (item as any).content === 'string' ? (item as any).content : '',
-          reasoning: typeof (item as any).reasoning === 'string' ? (item as any).reasoning : '',
+          reasoning: reasoningText,
+          reasoningPlayedLength,
           usage: (item as any).usage && typeof (item as any).usage === 'object'
             ? ((item as any).usage as StreamCompletionSnapshot['usage'])
             : undefined,
@@ -112,6 +117,7 @@ const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
       streamStatus: snapshot.streamStatus,
       reasoningStatus: snapshot.reasoningStatus,
       toolEvents: snapshot.toolEvents?.length ?? 0,
+      reasoningPlayedLength: snapshot.reasoningPlayedLength,
     })
   } else {
     const existing = entries[index]
@@ -123,6 +129,10 @@ const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
       toolEvents: snapshot.toolEvents ?? existing.toolEvents,
       reasoningStatus: snapshot.reasoningStatus ?? existing.reasoningStatus,
       streamStatus: snapshot.streamStatus ?? existing.streamStatus,
+      reasoningPlayedLength:
+        typeof snapshot.reasoningPlayedLength === 'number'
+          ? snapshot.reasoningPlayedLength
+          : existing.reasoningPlayedLength,
     }
     snapshotDebug('persist:update', {
       sessionId: snapshot.sessionId,
@@ -131,6 +141,7 @@ const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
       streamStatus: entries[index].streamStatus,
       reasoningStatus: entries[index].reasoningStatus,
       toolEvents: entries[index].toolEvents?.length ?? 0,
+      reasoningPlayedLength: entries[index].reasoningPlayedLength,
     })
   }
   writeCompletionSnapshots(entries)
@@ -259,11 +270,16 @@ export const createChatStoreRuntime = (
     )
     const contentPayload = body?.content ?? stream.content ?? ''
     const reasoningPayload = body?.reasoning ?? stream.reasoning ?? ''
+    const reasoningPlayedLength =
+      body?.reasoningPlayedLength ??
+      stream.reasoningPlayedLength ??
+      (reasoningPayload ? reasoningPayload.length : undefined)
     snapshotDebug('persist:prepare', {
       sessionId: stream.sessionId,
       assistantId: stream.assistantId,
       contentLength: contentPayload?.length ?? 0,
       reasoningLength: reasoningPayload?.length ?? 0,
+      reasoningPlayedLength,
       toolEvents: toolEventsForMessage.length,
     })
     if (!contentPayload && !reasoningPayload && toolEventsForMessage.length === 0) {
@@ -291,6 +307,8 @@ export const createChatStoreRuntime = (
       clientMessageId: resolvedClientId,
       content: contentPayload,
       reasoning: reasoningPayload,
+      reasoningPlayedLength:
+        typeof reasoningPlayedLength === 'number' ? reasoningPlayedLength : undefined,
       toolEvents: toolEventsForMessage,
       reasoningStatus: resolvedReasoningStatus,
       streamStatus: resolvedStreamStatus,
@@ -422,6 +440,26 @@ export const createChatStoreRuntime = (
         const contentChanged = snapshotContent.length > 0 && snapshotContent !== prevBody.content
         const reasoningChanged =
           snapshotReasoning.length > 0 && snapshotReasoning !== (prevBody.reasoning ?? '')
+        const prevReasoningText = prevBody.reasoning ?? ''
+        const prevPlayedLength =
+          typeof prevBody.reasoningPlayedLength === 'number'
+            ? Math.max(0, Math.min(prevBody.reasoningPlayedLength, prevReasoningText.length))
+            : prevReasoningText.length
+        const snapshotPlayedRaw =
+          typeof snapshot.reasoningPlayedLength === 'number' && Number.isFinite(snapshot.reasoningPlayedLength)
+            ? snapshot.reasoningPlayedLength
+            : null
+        const resolvedPlayedLength = (() => {
+          if (snapshotPlayedRaw !== null) {
+            const normalized = Math.max(0, Math.floor(snapshotPlayedRaw))
+            return Math.min(normalized, snapshotReasoning.length)
+          }
+          if (reasoningChanged) {
+            return snapshotReasoning.length
+          }
+          return prevPlayedLength
+        })()
+        const playedLengthChanged = resolvedPlayedLength !== prevPlayedLength
         const snapshotToolEvents = Array.isArray(snapshot.toolEvents) ? snapshot.toolEvents : null
         const normalizedToolEvents =
           snapshotToolEvents && snapshotToolEvents.length > 0
@@ -433,7 +471,12 @@ export const createChatStoreRuntime = (
               }))
             : null
 
-        if (contentChanged || reasoningChanged || (normalizedToolEvents && normalizedToolEvents.length > 0)) {
+        if (
+          contentChanged ||
+          reasoningChanged ||
+          playedLengthChanged ||
+          (normalizedToolEvents && normalizedToolEvents.length > 0)
+        ) {
           const bodies = ensureBodies()
           bodies[key] = {
             ...prevBody,
@@ -441,6 +484,7 @@ export const createChatStoreRuntime = (
             stableKey: prevBody.stableKey || meta.stableKey,
             content: contentChanged ? snapshotContent : prevBody.content,
             reasoning: reasoningChanged ? snapshotReasoning : prevBody.reasoning,
+            reasoningPlayedLength: resolvedPlayedLength,
             version: prevBody.version + (contentChanged ? 1 : 0),
             reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
             toolEvents:
@@ -520,7 +564,14 @@ export const createChatStoreRuntime = (
       const key = messageKey(message.id)
       const prevBody = ensureBody(state.messageBodies[key], message.id, serverMeta.stableKey)
       const contentChanged = prevBody.content !== contentPayload
-      const reasoningChanged = hasReasoningPayload && (prevBody.reasoning ?? '') !== reasoningPayload
+      const prevReasoningText = prevBody.reasoning ?? ''
+      const prevPlayedLength =
+        typeof prevBody.reasoningPlayedLength === 'number'
+          ? Math.max(0, Math.min(prevBody.reasoningPlayedLength, prevReasoningText.length))
+          : prevReasoningText.length
+      const reasoningChanged = hasReasoningPayload && prevReasoningText !== reasoningPayload
+      const nextPlayedLength = hasReasoningPayload ? reasoningPayload.length : prevPlayedLength
+      const playedChanged = nextPlayedLength !== prevPlayedLength
       const hasToolUpdates = normalizedToolEvents.length > 0
 
       let nextBodies = state.messageBodies
@@ -554,7 +605,7 @@ export const createChatStoreRuntime = (
         return nextMetas
       }
 
-      if (contentChanged || reasoningChanged || hasToolUpdates) {
+      if (contentChanged || reasoningChanged || playedChanged || hasToolUpdates) {
         const bodies = ensureBodies()
         bodies[key] = {
           ...prevBody,
@@ -562,6 +613,7 @@ export const createChatStoreRuntime = (
           stableKey: serverMeta.stableKey,
           content: contentPayload,
           reasoning: hasReasoningPayload ? reasoningPayload : prevBody.reasoning,
+          reasoningPlayedLength: nextPlayedLength,
           version: prevBody.version + (contentChanged ? 1 : 0),
           reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
           toolEvents: hasToolUpdates ? normalizedToolEvents : prevBody.toolEvents,
@@ -653,6 +705,7 @@ export const createChatStoreRuntime = (
           clientMessageId: message.clientMessageId ?? null,
           content: contentPayload,
           reasoning: reasoningPayload,
+          reasoningPlayedLength: reasoningPayload.length,
           toolEvents: normalizedToolEvents.length > 0 ? normalizedToolEvents : undefined,
           reasoningStatus: message.reasoningStatus,
           streamStatus: message.streamStatus,
@@ -755,6 +808,7 @@ export const createChatStoreRuntime = (
       active.reasoning += active.pendingReasoning
       active.pendingReasoning = ''
     }
+    active.reasoningPlayedLength = active.reasoning.length
 
     const metaPatch = active.pendingMeta
     active.pendingMeta = {}
@@ -800,8 +854,15 @@ export const createChatStoreRuntime = (
 
       const contentChanged = prevBody.content !== active.content
       const reasoningChanged = prevBody.reasoning !== active.reasoning
+      const prevReasoningText = prevBody.reasoning ?? ''
+      const prevPlayedLength =
+        typeof prevBody.reasoningPlayedLength === 'number'
+          ? Math.max(0, Math.min(prevBody.reasoningPlayedLength, prevReasoningText.length))
+          : prevReasoningText.length
+      const nextPlayedLength = active.reasoningPlayedLength
+      const playedChanged = nextPlayedLength !== prevPlayedLength
 
-      if (!contentChanged && !reasoningChanged && !metaChanged) {
+      if (!contentChanged && !reasoningChanged && !metaChanged && !playedChanged) {
         return state
       }
 
@@ -811,6 +872,7 @@ export const createChatStoreRuntime = (
         stableKey: prevBody.stableKey || prevMeta.stableKey,
         content: contentChanged ? active.content : prevBody.content,
         reasoning: reasoningChanged ? active.reasoning : prevBody.reasoning,
+        reasoningPlayedLength: nextPlayedLength,
         version: prevBody.version + (contentChanged ? 1 : 0),
         reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
       }

@@ -54,6 +54,7 @@ export interface StreamCompletionSnapshot {
   clientMessageId: string | null
   content: string
   reasoning: string
+  reasoningPlayedLength?: number | null
   usage?: StreamUsageSnapshot | null
   toolEvents?: ToolEvent[]
   reasoningStatus?: MessageMeta['reasoningStatus']
@@ -66,6 +67,7 @@ export interface StreamAccumulator {
   assistantId: MessageId
   content: string
   reasoning: string
+  reasoningPlayedLength: number
   pendingContent: string
   pendingReasoning: string
   pendingMeta: Partial<Pick<MessageMeta, 'reasoningStatus' | 'reasoningIdleMs' | 'reasoningDurationSeconds'>>

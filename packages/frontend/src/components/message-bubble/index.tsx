@@ -65,6 +65,10 @@ function MessageBubbleComponent({
   const [isCopied, setIsCopied] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
   const reasoningRaw = body.reasoning || ''
+  const reasoningPlayedLength =
+    typeof body.reasoningPlayedLength === 'number'
+      ? body.reasoningPlayedLength
+      : reasoningRaw.length
   const reasoningText = reasoningRaw.trim()
   const isUser = meta.role === 'user'
   const content = body.content || ''
@@ -240,6 +244,7 @@ function MessageBubbleComponent({
               meta={meta}
               reasoningRaw={reasoningRaw}
               reasoningHtml={reasoningHtml || undefined}
+              reasoningPlayedLength={reasoningPlayedLength}
               timeline={toolTimeline}
               summary={toolSummary}
               defaultExpanded={defaultShouldShowReasoning}

@@ -217,11 +217,13 @@ export const createBody = (message: Message, stableKeyOverride?: string | null):
     { id: message.id, clientMessageId: message.clientMessageId ?? null, stableKey: message.stableKey ?? null },
     stableKeyOverride,
   )
+  const reasoningText = message.reasoning ?? message.streamReasoning ?? ''
   return {
     id: message.id,
     stableKey,
     content: message.content || '',
-    reasoning: message.reasoning ?? message.streamReasoning ?? '',
+    reasoning: reasoningText,
+    reasoningPlayedLength: reasoningText.length || undefined,
     version: message.content ? 1 : 0,
     reasoningVersion: message.reasoning || message.streamReasoning ? 1 : 0,
     toolEvents: normalizeToolEvents(message),
@@ -229,7 +231,7 @@ export const createBody = (message: Message, stableKeyOverride?: string | null):
 }
 
 export const ensureBody = (body: MessageBody | undefined, id: MessageId, stableKey: string): MessageBody =>
-  body ?? { id, stableKey, content: '', reasoning: '', version: 0, reasoningVersion: 0 }
+  body ?? { id, stableKey, content: '', reasoning: '', reasoningPlayedLength: 0, version: 0, reasoningVersion: 0 }
 
 export const mergeImages = (message: Message, cache: Record<string, string[]>): Message => {
   const serverImages = Array.isArray(message.images) ? message.images : []

@@ -241,6 +241,19 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         return `session:${sessionId}:tool:${toolLogSequence}`;
       };
 
+      const mergeToolLogDetails = (
+        previous?: ToolLogEntry['details'],
+        next?: ToolLogEntry['details'],
+      ): ToolLogEntry['details'] | undefined => {
+        if (!previous && !next) return undefined;
+        if (!previous) return next;
+        if (!next) return previous;
+        return {
+          ...previous,
+          ...next,
+        };
+      };
+
       const recordToolLog = (payload: Record<string, unknown>) => {
         const stage = payload.stage;
         if (stage !== 'start' && stage !== 'result' && stage !== 'error') return;
@@ -278,6 +291,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             error: entry.error ?? existing.error,
             summary: entry.summary ?? existing.summary,
             createdAt: existing.createdAt,
+            details: mergeToolLogDetails(existing.details, entry.details),
           };
         }
         toolLogsDirty = true;

@@ -9,6 +9,7 @@ interface ReasoningSectionProps {
   meta: MessageMeta
   reasoningRaw: string
   reasoningHtml?: string
+  reasoningPlayedLength?: number
   timeline: ToolEvent[]
   summary: ToolTimelineSummary | null
   defaultExpanded: boolean
@@ -18,6 +19,7 @@ export function ReasoningSection({
   meta,
   reasoningRaw,
   reasoningHtml,
+  reasoningPlayedLength,
   timeline,
   summary,
   defaultExpanded,
@@ -68,6 +70,7 @@ export function ReasoningSection({
         meta={meta}
         reasoningRaw={reasoningRaw}
         reasoningHtml={reasoningHtml}
+        reasoningPlayedLength={reasoningPlayedLength}
         summary={summary}
         timeline={timeline}
         expanded={showReasoning}

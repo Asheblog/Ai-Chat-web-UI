@@ -8,6 +8,7 @@ interface ToolTimelineProps {
   meta: MessageMeta
   reasoningRaw: string
   reasoningHtml?: string
+  reasoningPlayedLength?: number
   summary: ToolTimelineSummary | null
   timeline: ToolEvent[]
   expanded: boolean
@@ -18,6 +19,7 @@ export function ToolTimeline({
   meta,
   reasoningRaw,
   reasoningHtml,
+  reasoningPlayedLength,
   summary,
   timeline,
   expanded,
@@ -32,6 +34,7 @@ export function ToolTimeline({
       onToggle={onToggle}
       reasoningRaw={reasoningRaw}
       reasoningHtml={reasoningHtml}
+      reasoningPlayedLength={reasoningPlayedLength}
       isStreaming={meta.reasoningStatus === 'streaming'}
       toolSummary={summary}
       toolTimeline={timeline}

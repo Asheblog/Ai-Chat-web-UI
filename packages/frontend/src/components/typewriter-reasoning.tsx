@@ -14,6 +14,8 @@ interface TypewriterReasoningProps {
   text: string
   /** 是否正在流式传输中 */
   isStreaming: boolean
+  /** 初始已播放的字符数，用于刷新恢复 */
+  initialPlayedLength?: number
   /** 打字速度（毫秒/字符），默认20ms */
   speed?: number
   /** 长文本阈值，超过此长度自动批量显示（默认500字符） */
@@ -25,18 +27,33 @@ interface TypewriterReasoningProps {
 export function TypewriterReasoning({
   text,
   isStreaming,
+  initialPlayedLength = 0,
   speed = 20,
   longTextThreshold = 500,
   batchSize = 3,
 }: TypewriterReasoningProps) {
-  const [displayText, setDisplayText] = useState('')
+  const clampedInitial = useMemo(
+    () => Math.max(0, Math.min(Math.floor(initialPlayedLength), text.length)),
+    [initialPlayedLength, text.length],
+  )
+  const [displayText, setDisplayText] = useState(() => text.slice(0, clampedInitial))
   const rafRef = useRef<number>()
   const lastTimeRef = useRef(0)
-  const indexRef = useRef(0)
+  const indexRef = useRef(clampedInitial)
+  const initialSyncRef = useRef(clampedInitial)
 
   // 判断是否为长文本，启用批量模式
   const isLongText = useMemo(() => text.length > longTextThreshold, [text.length, longTextThreshold])
   const charsPerFrame = isLongText ? batchSize : 1
+
+  useEffect(() => {
+    // 刷新/Hydrate 后同步已播放长度，避免重复动画
+    if (clampedInitial > initialSyncRef.current || indexRef.current < clampedInitial) {
+      indexRef.current = clampedInitial
+      initialSyncRef.current = clampedInitial
+      setDisplayText(text.slice(0, clampedInitial))
+    }
+  }, [clampedInitial, text])
 
   useEffect(() => {
     // 如果不在流式传输中，或文本已完全显示，直接显示全部内容

@@ -116,6 +116,7 @@ interface ReasoningPanelProps {
   onToggle: () => void
   reasoningRaw: string
   reasoningHtml?: string
+  reasoningPlayedLength?: number
   isStreaming: boolean
   toolSummary: { total: number; summaryText: string; label: string } | null
   toolTimeline: ToolEvent[]
@@ -135,6 +136,7 @@ function ReasoningPanelComponent({
   onToggle,
   reasoningRaw,
   reasoningHtml,
+  reasoningPlayedLength,
   isStreaming,
   toolSummary,
   toolTimeline,
@@ -224,7 +226,12 @@ function ReasoningPanelComponent({
                 />
               ) : (
                 <div className="reasoning-item reasoning-markdown--typewriter">
-                  <TypewriterReasoning text={reasoningRaw} isStreaming={isStreaming} speed={20} />
+                  <TypewriterReasoning
+                    text={reasoningRaw}
+                    isStreaming={isStreaming}
+                    initialPlayedLength={reasoningPlayedLength}
+                    speed={20}
+                  />
                 </div>
               )
             ) : (
