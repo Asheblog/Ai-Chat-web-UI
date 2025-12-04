@@ -199,6 +199,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
   preferred_model: modelPreferenceSchema.optional(),
   avatar: z.union([imagePayloadSchema, z.null()]).optional(),
   username: z.string().regex(/^[a-zA-Z0-9_]{3,20}$/).optional(),
+  personal_prompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).nullable().optional(),
 })), async (c) => {
   try {
     const user = c.get('user');
@@ -225,6 +226,7 @@ settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', 
         preferred_model: updated.preferred_model,
         avatar_url: updated.avatar_url,
         username: updated.username,
+        personal_prompt: updated.personal_prompt,
       },
       message: 'Personal settings updated successfully',
     });

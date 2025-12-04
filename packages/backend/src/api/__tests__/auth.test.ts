@@ -33,11 +33,11 @@ const makeConfig = (cookieSecure: boolean): AppConfig => ({
 const createMockAuthService = (): AuthService => {
   const svc: Partial<AuthService> = {
     register: jest.fn(async () => ({
-      user: { id: 1, username: 'u', role: 'USER', status: 'ACTIVE', avatarUrl: null },
+      user: { id: 1, username: 'u', role: 'USER', status: 'ACTIVE', avatarUrl: null, personalPrompt: null },
       token: 't',
     })),
     login: jest.fn(async () => ({
-      user: { id: 1, username: 'u', role: 'USER', status: 'ACTIVE', avatarUrl: null },
+      user: { id: 1, username: 'u', role: 'USER', status: 'ACTIVE', avatarUrl: null, personalPrompt: null },
       token: 't',
     })),
     resolveActorContext: jest.fn(),

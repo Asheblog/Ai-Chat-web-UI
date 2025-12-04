@@ -241,14 +241,18 @@ export function useChatComposer() {
     : null
 
   const systemPromptFallback = (systemSettings?.chatSystemPrompt ?? '').trim()
+  const personalPromptFallback = (user?.personalPrompt ?? '').trim()
+  const effectiveFallbackPrompt = personalPromptFallback || systemPromptFallback
   const sessionPromptSourceLabel =
     currentSession?.systemPrompt && currentSession.systemPrompt.trim()
       ? '当前会话自定义生效'
-      : systemPromptFallback
-        ? '使用全局提示词'
-        : '未设置提示词'
-  const sessionPromptPlaceholder = systemPromptFallback
-    ? `留空以继承全局提示词：${systemPromptFallback.slice(0, 60)}${systemPromptFallback.length > 60 ? '...' : ''}`
+      : personalPromptFallback
+        ? '使用个人提示词'
+        : systemPromptFallback
+          ? '使用全局提示词'
+          : '未设置提示词'
+  const sessionPromptPlaceholder = effectiveFallbackPrompt
+    ? `留空以继承${personalPromptFallback ? '个人提示词' : '全局提示词'}：${effectiveFallbackPrompt.slice(0, 60)}${effectiveFallbackPrompt.length > 60 ? '...' : ''}`
     : '为空则不附加系统提示词'
 
   const handleSend = useCallback(async () => {

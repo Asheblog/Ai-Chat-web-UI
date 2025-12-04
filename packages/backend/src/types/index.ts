@@ -12,6 +12,7 @@ export interface User {
   status: 'PENDING' | 'ACTIVE' | 'DISABLED';
   preferredModel?: ModelPreference | null;
   avatarUrl?: string | null;
+  personalPrompt?: string | null;
 }
 
 export type Actor = UserActor | AnonymousActor;
@@ -26,6 +27,7 @@ export interface UserActor {
   preferredModel?: ModelPreference | null;
   avatarPath?: string | null;
   avatarUrl?: string | null;
+  personalPrompt?: string | null;
 }
 
 export interface AnonymousActor {
@@ -121,6 +123,7 @@ export interface RegisterResponse {
     role: 'ADMIN' | 'USER';
     status: 'PENDING' | 'ACTIVE' | 'DISABLED';
     avatarUrl?: string | null;
+    personalPrompt?: string | null;
   };
   token?: string;
 }
@@ -161,6 +164,7 @@ export interface ActorContext {
     status: 'PENDING' | 'ACTIVE' | 'DISABLED';
     createdAt: Date;
     avatarUrl?: string | null;
+    personalPrompt?: string | null;
   } | null;
   preferredModel?: ModelPreference | null;
   assistantAvatarUrl?: string | null;

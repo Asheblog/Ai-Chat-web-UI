@@ -150,4 +150,54 @@ describe('ChatRequestBuilder', () => {
     expect(prepared.providerRequest.url).toContain('/openai/deployments/')
     expect(prepared.providerRequest.body.stream).toBe(false)
   })
+
+  it('prefers session prompt over personal and system prompts', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'chat_system_prompt', value: 'global prompt' },
+    ])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: { ...baseSession, systemPrompt: 'session prompt' } as any,
+      payload: { sessionId: 1, content: 'hi' } as any,
+      content: 'hi',
+      mode: 'stream',
+      personalPrompt: 'personal prompt',
+    })
+
+    expect(prepared.messagesPayload[0]).toMatchObject({
+      role: 'system',
+      content: 'session prompt',
+    })
+  })
+
+  it('uses personal prompt when session prompt missing but global exists', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'chat_system_prompt', value: 'global prompt' },
+    ])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: 'hi' } as any,
+      content: 'hi',
+      mode: 'stream',
+      personalPrompt: 'personal prompt',
+    })
+
+    expect(prepared.messagesPayload[0]).toMatchObject({
+      role: 'system',
+      content: 'personal prompt',
+    })
+  })
 })

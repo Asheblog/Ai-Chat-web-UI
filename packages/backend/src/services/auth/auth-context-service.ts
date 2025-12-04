@@ -66,6 +66,7 @@ export class AuthContextService {
           preferredConnectionId: true,
           preferredModelRawId: true,
           avatarPath: true,
+          personalPrompt: true,
         },
       })
       if (!user) {
@@ -87,6 +88,7 @@ export class AuthContextService {
             rawId: user.preferredModelRawId ?? null,
           },
           avatarPath: user.avatarPath ?? null,
+          personalPrompt: user.personalPrompt ?? null,
         }),
       }
     }
@@ -111,6 +113,7 @@ export class AuthContextService {
     status: 'PENDING' | 'ACTIVE' | 'DISABLED'
     preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null
     avatarPath?: string | null
+    personalPrompt?: string | null
   }): UserActor {
     return {
       type: 'user',
@@ -121,6 +124,7 @@ export class AuthContextService {
       identifier: `user:${payload.id}`,
       preferredModel: payload.preferredModel ?? null,
       avatarPath: payload.avatarPath ?? null,
+      personalPrompt: payload.personalPrompt ?? null,
     }
   }
 

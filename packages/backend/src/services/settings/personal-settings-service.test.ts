@@ -43,6 +43,7 @@ describe('PersonalSettingsService', () => {
       preferredConnectionId: 2,
       preferredModelRawId: 'raw1',
       avatarPath: '/avatar/a.png',
+      personalPrompt: 'keep calm',
     })
     const result = await service.getPersonalSettings({ userId: 1, request: buildRequest() })
     expect(determineProfileImageBaseUrl).toHaveBeenCalled()
@@ -53,6 +54,7 @@ describe('PersonalSettingsService', () => {
       rawId: 'raw1',
     })
     expect(result.context_token_limit).toBe(5000)
+    expect(result.personal_prompt).toBe('keep calm')
   })
 
   it('updates preferred model and avatar when provided', async () => {
@@ -64,6 +66,7 @@ describe('PersonalSettingsService', () => {
       preferredConnectionId: null,
       preferredModelRawId: null,
       avatarPath: '/avatar/old.png',
+      personalPrompt: null,
     })
     prisma.user.findUnique.mockResolvedValueOnce(null)
     prisma.user.update.mockResolvedValueOnce({})
@@ -77,6 +80,7 @@ describe('PersonalSettingsService', () => {
         context_token_limit: 6000,
         theme: 'dark',
         username: 'new_admin',
+        personal_prompt: ' make things short ',
       },
     })
 
@@ -88,6 +92,7 @@ describe('PersonalSettingsService', () => {
         preferredModelRawId: 'raw2',
         avatarPath: '/avatar/new.png',
         username: 'new_admin',
+        personalPrompt: 'make things short',
       },
     })
     expect(replaceProfileImage).toHaveBeenCalled()
@@ -96,6 +101,7 @@ describe('PersonalSettingsService', () => {
     expect(result.theme).toBe('dark')
     expect(result.avatar_url).toContain('/avatar/new.png')
     expect(result.username).toBe('new_admin')
+    expect(result.personal_prompt).toBe('make things short')
   })
 
   it('skips update when no fields change', async () => {
@@ -107,6 +113,7 @@ describe('PersonalSettingsService', () => {
       preferredConnectionId: 4,
       preferredModelRawId: 'raw4',
       avatarPath: '/avatar/existing.png',
+      personalPrompt: 'stay friendly',
     })
     const result = await service.updatePersonalSettings({
       userId: 6,
@@ -115,6 +122,7 @@ describe('PersonalSettingsService', () => {
     })
     expect(prisma.user.update).not.toHaveBeenCalled()
     expect(result.preferred_model.connectionId).toBe(4)
+    expect(result.personal_prompt).toBe('stay friendly')
   })
 
   it('rejects duplicate usernames', async () => {

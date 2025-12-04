@@ -62,6 +62,7 @@ describe('AuthService', () => {
       role: 'ADMIN',
       status: 'ACTIVE',
       avatarPath: null,
+      personalPrompt: null,
     })
     const service = createService(prisma)
 
@@ -69,6 +70,7 @@ describe('AuthService', () => {
 
     expect(result.user.role).toBe('ADMIN')
     expect(result.user.status).toBe('ACTIVE')
+    expect(result.user.personalPrompt).toBeNull()
     expect(result.token).toBe('jwt-token')
     expect(prisma.user.create).toHaveBeenCalled()
   })
@@ -97,6 +99,7 @@ describe('AuthService', () => {
       preferredModelId: null,
       preferredConnectionId: null,
       preferredModelRawId: null,
+      personalPrompt: null,
     })
     const service = createService(prisma)
 
@@ -118,6 +121,7 @@ describe('AuthService', () => {
       preferredModelId: 'gpt-4',
       preferredConnectionId: 9,
       preferredModelRawId: 'gpt-4o',
+      personalPrompt: 'play nice',
     })
     const service = createService(prisma)
 
@@ -125,6 +129,7 @@ describe('AuthService', () => {
 
     expect(result.token).toBe('jwt-token')
     expect(result.user.avatarUrl).toBe('http://example.com/avatar.png')
+    expect(result.user.personalPrompt).toBe('play nice')
     expect(result.quota).toBeTruthy()
   })
 
@@ -167,6 +172,7 @@ describe('AuthService', () => {
         preferredConnectionId: 2,
         preferredModelRawId: 'raw',
         avatarPath: 'icon.png',
+        personalPrompt: null,
       })
       .mockResolvedValueOnce({ createdAt })
     const service = createService(prisma)
@@ -184,6 +190,7 @@ describe('AuthService', () => {
 
     expect(result.actor).toMatchObject({ id: 5 })
     expect(result.user?.avatarUrl).toBe('http://example.com/icon.png')
+    expect(result.user?.personalPrompt).toBeNull()
     expect(result.preferredModel?.modelId).toBe('m1')
     expect(result.quota).toBeTruthy()
   })

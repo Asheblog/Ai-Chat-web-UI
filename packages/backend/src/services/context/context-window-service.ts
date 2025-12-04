@@ -26,7 +26,10 @@ const KNOWN_GOOGLE_CONTEXT_WINDOWS: Array<{ match: RegExp; tokens: number }> = [
   { match: /^gemini-1\.5-flash(-.*)?$/i, tokens: 1_000_000 },
 ]
 
-const KNOWN_COMPLETION_LIMITS: Array<{ provider?: Provider; match: RegExp; tokens: number }> = []
+const KNOWN_COMPLETION_LIMITS: Array<{ provider?: Provider; match: RegExp; tokens: number }> = [
+  { match: /^deepseek-chat(-.*)?$/i, tokens: 4_096 },
+  { match: /^deepseek-r1(-.*)?$/i, tokens: 8_192 },
+]
 
 const coercePositive = (value: number): number => {
   if (!Number.isFinite(value) || value <= 0) return 0

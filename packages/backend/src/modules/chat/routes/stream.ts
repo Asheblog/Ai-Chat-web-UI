@@ -259,6 +259,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         images,
         mode: 'stream',
         historyUpperBound: userMessageRecord?.createdAt ?? null,
+        personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
       });
 
       const promptTokens = preparedRequest.promptTokens;

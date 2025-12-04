@@ -375,6 +375,7 @@ export const updatePersonalSettings = async (
     preferredModel?: { modelId: string; connectionId: number | null; rawId: string | null } | null
     avatar?: ImageUploadPayload | null
     username?: string
+    personalPrompt?: string | null
   },
   signal?: AbortSignal,
 ) => {
@@ -394,6 +395,10 @@ export const updatePersonalSettings = async (
   }
   if (Object.prototype.hasOwnProperty.call(settings, 'username')) {
     payload.username = settings.username
+  }
+  if (Object.prototype.hasOwnProperty.call(settings, 'personalPrompt')) {
+    payload.personal_prompt =
+      typeof settings.personalPrompt === 'string' ? settings.personalPrompt : null
   }
   const response = await client.put<ApiResponse<any>>('/settings/personal', payload, { signal })
   return response.data?.data

@@ -6,6 +6,7 @@ export interface User {
   createdAt: string;
   status: 'PENDING' | 'ACTIVE' | 'DISABLED';
   avatarUrl?: string | null;
+  personalPrompt?: string | null;
 }
 
 export interface ModelPreferenceDTO {
@@ -54,6 +55,7 @@ export type UserActorProfile = {
   identifier: string;
   preferredModel?: ModelPreferenceDTO | null;
   avatarUrl?: string | null;
+  personalPrompt?: string | null;
 };
 
 export type ActorProfile = AnonymousActorProfile | UserActorProfile;

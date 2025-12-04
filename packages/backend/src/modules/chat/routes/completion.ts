@@ -152,6 +152,7 @@ export const registerChatCompletionRoutes = (
           images,
           quotaSnapshot,
           traceRecorder,
+          personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
         });
       } catch (error) {
         if (error instanceof ChatCompletionServiceError) {

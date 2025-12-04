@@ -42,6 +42,7 @@ type SimpleUser = {
   preferredModelId?: string | null
   preferredConnectionId?: number | null
   preferredModelRawId?: string | null
+  personalPrompt?: string | null
 }
 
 export interface RegisterResult {
@@ -125,6 +126,7 @@ export class AuthService {
         role: true,
         status: true,
         avatarPath: true,
+        personalPrompt: true,
       },
     })
 
@@ -144,6 +146,7 @@ export class AuthService {
         role: user.role as 'ADMIN' | 'USER',
         status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
         avatarPath: user.avatarPath ?? null,
+        personalPrompt: user.personalPrompt ?? null,
       },
       token,
     }
@@ -164,6 +167,7 @@ export class AuthService {
         preferredModelId: true,
         preferredConnectionId: true,
         preferredModelRawId: true,
+        personalPrompt: true,
       },
     })
 
@@ -203,6 +207,7 @@ export class AuthService {
       preferredModelId: user.preferredModelId ?? null,
       preferredConnectionId: user.preferredConnectionId ?? null,
       preferredModelRawId: user.preferredModelRawId ?? null,
+      personalPrompt: user.personalPrompt ?? null,
     }
 
     const quota = await this.inspectActorQuota({
@@ -245,6 +250,7 @@ export class AuthService {
           preferredConnectionId: true,
           preferredModelRawId: true,
           avatarPath: true,
+          personalPrompt: true,
         },
       })
       if (user) {
@@ -257,6 +263,7 @@ export class AuthService {
           preferredModelId: user.preferredModelId ?? null,
           preferredConnectionId: user.preferredConnectionId ?? null,
           preferredModelRawId: user.preferredModelRawId ?? null,
+          personalPrompt: user.personalPrompt ?? null,
         }
         preferredModel = {
           modelId: user.preferredModelId ?? null,
@@ -277,6 +284,7 @@ export class AuthService {
             status: profile.status,
             createdAt: await this.resolveUserCreatedAt(profile.id),
             avatarUrl: profile.avatarUrl ?? null,
+            personalPrompt: profile.personalPrompt ?? null,
           }
         : null,
       preferredModel,

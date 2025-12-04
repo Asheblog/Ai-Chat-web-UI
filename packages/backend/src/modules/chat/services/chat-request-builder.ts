@@ -53,6 +53,7 @@ export interface PrepareChatRequestParams {
   images?: Array<{ data: string; mime: string }>
   historyUpperBound?: Date | null
   mode: 'stream' | 'completion'
+  personalPrompt?: string | null
 }
 
 export interface ChatRequestBuilderDeps {
@@ -103,12 +104,12 @@ export class ChatRequestBuilder {
 
     const systemPrompts: Array<{ role: 'system'; content: string }> = []
     const globalPrompt = (systemSettings.chat_system_prompt || '').toString().trim()
-    if (globalPrompt) {
-      systemPrompts.push({ role: 'system', content: globalPrompt })
-    }
+    const personalPrompt = (params.personalPrompt || '').toString().trim()
     const sessionPrompt = (params.session as any).systemPrompt
-    if (typeof sessionPrompt === 'string' && sessionPrompt.trim()) {
-      systemPrompts.push({ role: 'system', content: sessionPrompt.trim() })
+    const sessionPromptNormalized = typeof sessionPrompt === 'string' ? sessionPrompt.trim() : ''
+    const primaryPrompt = sessionPromptNormalized || personalPrompt || globalPrompt
+    if (primaryPrompt) {
+      systemPrompts.push({ role: 'system', content: primaryPrompt })
     }
 
     const requestedFeatures = params.payload?.features || {}

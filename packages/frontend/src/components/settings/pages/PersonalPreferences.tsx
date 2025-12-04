@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { CardTitle, CardDescription } from "@/components/ui/card"
@@ -23,6 +24,9 @@ export function PersonalPreferencesPage(){
   const [usernameSaving, setUsernameSaving] = useState(false)
   const [usernameError, setUsernameError] = useState<string | null>(null)
   const [preferencesSaving, setPreferencesSaving] = useState(false)
+  const [personalPromptDraft, setPersonalPromptDraft] = useState(user?.personalPrompt ?? "")
+  const [personalPromptSaving, setPersonalPromptSaving] = useState(false)
+  const [personalPromptError, setPersonalPromptError] = useState<string | null>(null)
 
   useEffect(() => {
     setAvatarPreview(user?.avatarUrl ?? null)
@@ -31,6 +35,10 @@ export function PersonalPreferencesPage(){
   useEffect(() => {
     setUsername(user?.username ?? "")
   }, [user?.username])
+
+  useEffect(() => {
+    setPersonalPromptDraft(user?.personalPrompt ?? "")
+  }, [user?.personalPrompt])
 
   const validateUsername = (value: string) => {
     if (!value.trim()) return "用户名不能为空"
@@ -69,12 +77,40 @@ export function PersonalPreferencesPage(){
     }
   }
 
+  const handlePersonalPromptSave = async (options?: { silent?: boolean }): Promise<boolean> => {
+    if (!user || personalPromptSaving) return false
+    const normalized = personalPromptDraft.trim()
+    const nextPayload = normalized ? normalized : null
+    const current = user.personalPrompt ?? null
+    if (current === nextPayload) {
+      setPersonalPromptError(null)
+      return true
+    }
+    setPersonalPromptSaving(true)
+    setPersonalPromptError(null)
+    try {
+      await updatePersonalSettings({ personalPrompt: nextPayload })
+      await fetchActor()
+      if (!options?.silent) {
+        toast({ title: '个人提示词已更新' })
+      }
+      return true
+    } catch (error: any) {
+      const message = error?.response?.data?.error || error?.message || '更新提示词失败'
+      setPersonalPromptError(message)
+      return false
+    } finally {
+      setPersonalPromptSaving(false)
+    }
+  }
+
   const handleSavePreferences = async () => {
     if (!user || preferencesSaving) return
     setPreferencesSaving(true)
     try {
       const usernameOk = await handleUsernameSave({ silent: true })
-      if (usernameOk) {
+      const promptOk = await handlePersonalPromptSave({ silent: true })
+      if (usernameOk && promptOk) {
         toast({ title: '偏好设置已保存' })
       }
     } finally {
@@ -235,13 +271,41 @@ export function PersonalPreferencesPage(){
         >
           <Switch checked={contextEnabled} onCheckedChange={(v)=>setContextEnabled(!!v)} />
         </SettingRow>
+
+        <SettingRow
+          title="个人提示词"
+          description="为所有会话提供默认系统提示词，若某个会话设置了提示词则优先生效"
+          align="start"
+        >
+          <div className="w-full space-y-2">
+            <Textarea
+              value={personalPromptDraft}
+              onChange={(event) => {
+                setPersonalPromptDraft(event.target.value)
+                if (personalPromptError) {
+                  setPersonalPromptError(null)
+                }
+              }}
+              onBlur={() => handlePersonalPromptSave()}
+              placeholder="为空时继承系统级提示词"
+              className="min-h-[120px] resize-none"
+              disabled={!user || personalPromptSaving}
+            />
+            {personalPromptError && (
+              <p className="text-sm text-destructive">{personalPromptError}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              建议描述语气/身份/回复风格；会话提示词优先于个人提示词，个人提示词优先于系统提示词。
+            </p>
+          </div>
+        </SettingRow>
       </div>
 
       <div className="flex justify-end pt-4">
         <Button
           type="button"
           onClick={handleSavePreferences}
-          disabled={!user || preferencesSaving || usernameSaving || avatarSaving}
+          disabled={!user || preferencesSaving || usernameSaving || avatarSaving || personalPromptSaving}
           className="w-full sm:w-auto"
         >
           {preferencesSaving ? '保存中...' : (

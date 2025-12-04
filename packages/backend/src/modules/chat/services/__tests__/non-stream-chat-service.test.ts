@@ -122,9 +122,13 @@ describe('NonStreamChatService', () => {
       content: 'hello',
       images: [],
       quotaSnapshot: null,
+      personalPrompt: 'stay polite',
     })
 
     expect(requestBuilder.prepare).toHaveBeenCalled()
+    expect(requestBuilder.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ personalPrompt: 'stay polite' }),
+    )
     expect(prisma.message.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ sessionId: 1, content: 'world' }),
@@ -162,6 +166,7 @@ describe('NonStreamChatService', () => {
         content: 'hello',
         images: [],
         quotaSnapshot: null,
+        personalPrompt: null,
       }),
     ).rejects.toThrow(ChatCompletionServiceError)
   })

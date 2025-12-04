@@ -22,6 +22,7 @@ export interface PersonalSettingsPayload {
   preferred_model?: Nullable<PreferredModelInput>
   avatar?: Nullable<{ data: string; mime: string }>
   username?: string
+  personal_prompt?: string | null
 }
 
 export interface PersonalSettingsResult {
@@ -34,6 +35,7 @@ export interface PersonalSettingsResult {
   }
   avatar_url: string | null
   username?: string
+  personal_prompt: string | null
 }
 
 export class PersonalSettingsError extends Error {
@@ -81,6 +83,7 @@ export class PersonalSettingsService {
         preferredConnectionId: true,
         preferredModelRawId: true,
         avatarPath: true,
+        personalPrompt: true,
       },
     })
     const baseUrl = this.determineProfileImageBaseUrl({ request: params.request })
@@ -94,6 +97,7 @@ export class PersonalSettingsService {
       },
       avatar_url: this.resolveProfileImageUrl(record?.avatarPath ?? null, baseUrl),
       username: record?.username,
+      personal_prompt: record?.personalPrompt ?? null,
     }
   }
 
@@ -111,6 +115,7 @@ export class PersonalSettingsService {
         preferredConnectionId: true,
         preferredModelRawId: true,
         avatarPath: true,
+        personalPrompt: true,
       },
     })
 
@@ -151,6 +156,14 @@ export class PersonalSettingsService {
       updates.avatarPath = avatarPathResult
     }
 
+    let nextPersonalPrompt = currentProfile.personalPrompt ?? null
+    if (Object.prototype.hasOwnProperty.call(params.payload, 'personal_prompt')) {
+      const incoming = params.payload.personal_prompt
+      const normalized = typeof incoming === 'string' ? incoming.trim() : ''
+      nextPersonalPrompt = normalized ? normalized : null
+      updates.personalPrompt = nextPersonalPrompt
+    }
+
     if (Object.keys(updates).length > 0) {
       await this.prisma.user.update({ where: { id: params.userId }, data: updates })
     }
@@ -168,6 +181,7 @@ export class PersonalSettingsService {
       },
       avatar_url: this.resolveProfileImageUrl(avatarPathResult, baseUrl),
       username: updatedUsername ?? currentProfile.username,
+      personal_prompt: nextPersonalPrompt,
     }
   }
 }

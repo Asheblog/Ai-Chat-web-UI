@@ -127,6 +127,8 @@ export const useAuthStore = create<AuthStore>()(
           const createdAtSource = profile?.createdAt ?? null
           const createdAt = createdAtSource ? new Date(createdAtSource).toISOString() : new Date().toISOString()
           const actorAvatar = context.actor.type === 'user' ? context.actor.avatarUrl ?? null : null
+          const actorPersonalPrompt = context.actor.personalPrompt ?? null
+          const resolvedPersonalPrompt = profile?.personalPrompt ?? actorPersonalPrompt ?? null
           user = {
             id: profile?.id ?? context.actor.id,
             username: profile?.username ?? context.actor.username,
@@ -134,6 +136,7 @@ export const useAuthStore = create<AuthStore>()(
             status: profile?.status ?? context.actor.status,
             createdAt,
             avatarUrl: profile?.avatarUrl ?? actorAvatar ?? null,
+            personalPrompt: resolvedPersonalPrompt,
           }
         }
         set({

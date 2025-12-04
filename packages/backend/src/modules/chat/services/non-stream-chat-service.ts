@@ -26,6 +26,7 @@ interface NonStreamChatRequest {
   images?: Array<{ data: string; mime: string }>
   quotaSnapshot: UsageQuotaSnapshot | null
   traceRecorder?: TaskTraceRecorder | null
+  personalPrompt?: string | null
 }
 
 export interface NonStreamChatResult {
@@ -71,13 +72,14 @@ export class NonStreamChatService {
   }
 
   async execute(request: NonStreamChatRequest): Promise<NonStreamChatResult> {
-    const { session, payload, content, images = [], quotaSnapshot, traceRecorder } = request
+    const { session, payload, content, images = [], quotaSnapshot, traceRecorder, personalPrompt } = request
     const prepared = await this.requestBuilder.prepare({
       session,
       payload,
       content,
       images,
       mode: 'completion',
+      personalPrompt,
     })
 
     const response = await this.performProviderRequest({
