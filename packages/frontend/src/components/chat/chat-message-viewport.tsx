@@ -39,10 +39,18 @@ export function ChatMessageViewport({
   sessionTitle,
 }: ChatMessageViewportProps) {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
-  const { shareSelection, enterShareSelectionMode, toggleShareSelection, clearShareSelection, exitShareSelectionMode } = useChatStore((state) => ({
+  const {
+    shareSelection,
+    enterShareSelectionMode,
+    toggleShareSelection,
+    setShareSelection,
+    clearShareSelection,
+    exitShareSelectionMode,
+  } = useChatStore((state) => ({
     shareSelection: state.shareSelection,
     enterShareSelectionMode: state.enterShareSelectionMode,
     toggleShareSelection: state.toggleShareSelection,
+    setShareSelection: state.setShareSelection,
     clearShareSelection: state.clearShareSelection,
     exitShareSelectionMode: state.exitShareSelectionMode,
   }))
@@ -64,6 +72,22 @@ export function ChatMessageViewport({
   }, [shareModeActive, isShareDialogOpen])
 
   const selectedMessageIds = shareModeActive ? shareSelection.selectedMessageIds : []
+  const shareSelectableMessageIds = useMemo(() => {
+    const ids: number[] = []
+    const seen = new Set<number>()
+    metas.forEach((meta) => {
+      if (meta.sessionId !== sessionId || typeof meta.id !== 'number') return
+      if (!Number.isFinite(meta.id) || meta.pendingSync) return
+      if (seen.has(meta.id)) return
+      ids.push(meta.id)
+      seen.add(meta.id)
+    })
+    return ids
+  }, [metas, sessionId])
+  const selectedIdSet = useMemo(() => new Set(selectedMessageIds), [selectedMessageIds])
+  const selectableCount = shareSelectableMessageIds.length
+  const isAllSelectableChosen =
+    shareModeActive && selectableCount > 0 && shareSelectableMessageIds.every((id) => selectedIdSet.has(id))
 
   const handleShareNext = () => {
     if (!shareModeActive || selectedCount === 0) return
@@ -73,6 +97,15 @@ export function ChatMessageViewport({
   const handleExitShareMode = () => {
     setIsShareDialogOpen(false)
     exitShareSelectionMode()
+  }
+
+  const handleToggleSelectAll = () => {
+    if (!shareModeActive || selectableCount === 0) return
+    if (isAllSelectableChosen) {
+      clearShareSelection()
+      return
+    }
+    setShareSelection(sessionId, shareSelectableMessageIds)
   }
 
   return (
@@ -95,6 +128,15 @@ export function ChatMessageViewport({
                 />
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleToggleSelectAll}
+                  disabled={selectableCount === 0}
+                >
+                  {isAllSelectableChosen ? '反选' : '全选'}
+                </Button>
                 <Button
                   type="button"
                   size="sm"
@@ -144,13 +186,24 @@ export function ChatMessageViewport({
       </div>
       {shareModeActive && (
         <div className="lg:hidden fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
-          <div className="pointer-events-auto rounded-full border border-primary/30 bg-background/95 shadow-lg px-4 py-3 flex items-center justify-between">
+          <div className="pointer-events-auto rounded-full border border-primary/30 bg-background/95 shadow-lg px-4 py-3 flex items-center justify-between gap-3">
             <span className="text-sm text-foreground">
               已选 <span className="font-semibold text-primary">{selectedCount}</span> 条消息
             </span>
-            <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
-              下一步
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={handleToggleSelectAll}
+                disabled={selectableCount === 0}
+              >
+                {isAllSelectableChosen ? '反选' : '全选'}
+              </Button>
+              <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
+                下一步
+              </Button>
+            </div>
           </div>
         </div>
       )}

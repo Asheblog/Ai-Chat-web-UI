@@ -44,6 +44,29 @@ export const createShareSlice: ChatSliceCreator<
     })
   },
 
+  setShareSelection: (sessionId: number, messageIds: number[]) => {
+    if (!Number.isFinite(sessionId)) return
+    set((state) => {
+      if (!state.shareSelection.enabled || state.shareSelection.sessionId !== sessionId) {
+        return {}
+      }
+      const validIds = Array.isArray(messageIds)
+        ? messageIds.filter((id): id is number => typeof id === 'number' && Number.isFinite(id))
+        : []
+      const normalized = Array.from(new Set(validIds))
+      const current = state.shareSelection.selectedMessageIds
+      if (current.length === normalized.length && current.every((id, index) => id === normalized[index])) {
+        return {}
+      }
+      return {
+        shareSelection: {
+          ...state.shareSelection,
+          selectedMessageIds: normalized,
+        },
+      }
+    })
+  },
+
   clearShareSelection: () => {
     set((state) => {
       if (!state.shareSelection.enabled || state.shareSelection.selectedMessageIds.length === 0) {

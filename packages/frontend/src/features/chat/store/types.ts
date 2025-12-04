@@ -145,6 +145,7 @@ export interface StreamSlice {
 export interface ShareSlice {
   enterShareSelectionMode: (sessionId: number, messageId?: number) => void
   toggleShareSelection: (sessionId: number, messageId: number) => void
+  setShareSelection: (sessionId: number, messageIds: number[]) => void
   clearShareSelection: () => void
   exitShareSelectionMode: () => void
 }
