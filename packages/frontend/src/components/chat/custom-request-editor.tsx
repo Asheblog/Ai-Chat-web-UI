@@ -8,6 +8,7 @@ export interface CustomRequestEditorProps {
   onAddHeader: () => void
   onHeaderChange: (index: number, field: 'name' | 'value', value: string) => void
   onRemoveHeader: (index: number) => void
+  canAddHeader?: boolean
   customBody: string
   onCustomBodyChange: (value: string) => void
   customBodyError?: string | null
@@ -18,6 +19,7 @@ export function CustomRequestEditor({
   onAddHeader,
   onHeaderChange,
   onRemoveHeader,
+  canAddHeader = true,
   customBody,
   onCustomBodyChange,
   customBodyError,
@@ -30,12 +32,20 @@ export function CustomRequestEditor({
             <p className="text-sm font-medium">自定义请求头</p>
             <p className="text-xs text-muted-foreground">最多 10 条，敏感头将被忽略。</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onAddHeader} aria-label="添加请求头">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onAddHeader}
+            aria-label="添加请求头"
+            disabled={!canAddHeader}
+          >
             <Plus className="h-4 w-4" />
           </Button>
         </div>
         {customHeaders.length === 0 ? (
-          <p className="text-xs text-muted-foreground">暂未添加请求头，可点击右上角添加。</p>
+          <p className="text-xs text-muted-foreground">
+            {canAddHeader ? '暂未添加请求头，可点击右上角添加。' : '已达到请求头数量上限。'}
+          </p>
         ) : (
           <div className="space-y-2">
             {customHeaders.map((item, idx) => (

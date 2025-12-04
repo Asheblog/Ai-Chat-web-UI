@@ -67,6 +67,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     addCustomHeader,
     updateCustomHeader,
     removeCustomHeader,
+    canAddCustomHeader,
     sessionPromptDraft,
     sessionPromptSaving,
     sessionPromptSourceLabel,
@@ -165,6 +166,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     onAddCustomHeader: addCustomHeader,
     onCustomHeaderChange: updateCustomHeader,
     onRemoveCustomHeader: removeCustomHeader,
+    canAddCustomHeader,
     customBody: customBodyInput,
     onCustomBodyChange: (value) => {
       setCustomBodyError(null)

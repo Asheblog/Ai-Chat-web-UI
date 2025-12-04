@@ -16,17 +16,6 @@ import {
 } from '@/features/chat/composer'
 import type { ComposerImage } from '@/features/chat/composer'
 
-const FORBIDDEN_HEADER_NAMES = new Set([
-  'authorization',
-  'proxy-authorization',
-  'cookie',
-  'set-cookie',
-  'host',
-  'connection',
-  'transfer-encoding',
-  'content-length',
-  'accept-encoding',
-])
 
 export type ChatComposerImage = ComposerImage
 
@@ -58,10 +47,11 @@ export function useChatComposer() {
     customBodyError,
     setCustomBodyError,
     customHeaders,
-    setCustomHeaders,
-    addCustomHeader,
-    updateCustomHeader,
-    removeCustomHeader,
+    addCustomHeader: appendCustomHeader,
+    updateCustomHeader: patchCustomHeader,
+    removeCustomHeader: deleteCustomHeader,
+    canAddHeader,
+    buildRequestPayload,
   } = useAdvancedRequest({ sessionId: currentSession?.id })
 
   const [sessionPromptDraft, setSessionPromptDraft] = useState<string>('')
@@ -208,28 +198,12 @@ export function useChatComposer() {
     limits: DEFAULT_CHAT_IMAGE_LIMITS,
     toast,
   })
-  const addCustomHeader = useCallback(() => {
-    if (customHeaders.length >= 10) {
-      toast({
-        title: '已达到上限',
-        description: '最多添加 10 个自定义请求头',
-        variant: 'destructive',
-      })
-      return
+  const handleAddCustomHeader = useCallback(() => {
+    const result = appendCustomHeader()
+    if (!result.ok && result.reason) {
+      toast({ title: '已达到上限', description: result.reason, variant: 'destructive' })
     }
-    setCustomHeaders((prev) => [...prev, { name: '', value: '' }])
-  }, [customHeaders.length, setCustomHeaders, toast])
-  const updateCustomHeader = useCallback(
-    (index: number, field: 'name' | 'value', value: string) => {
-      setCustomHeaders((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
-      )
-    },
-    [setCustomHeaders],
-  )
-  const removeCustomHeader = useCallback((index: number) => {
-    setCustomHeaders((prev) => prev.filter((_, i) => i !== index))
-  }, [setCustomHeaders])
+  }, [appendCustomHeader, toast])
 
   const handleSessionPromptSave = useCallback(async () => {
     if (!currentSession) return
@@ -299,58 +273,10 @@ export function useChatComposer() {
       if (prevSelectedImages.length > 0) {
         setSelectedImages([])
       }
-      let parsedCustomBody: Record<string, any> | undefined
-      if (customBodyInput.trim()) {
-        try {
-          const parsed = JSON.parse(customBodyInput)
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            throw new Error('自定义请求体必须是 JSON 对象')
-          }
-          parsedCustomBody = parsed
-          setCustomBodyError(null)
-        } catch (err: any) {
-          const message = err instanceof Error ? err.message : '自定义请求体解析失败'
-          setCustomBodyError(message)
-          toast({ title: '发送失败', description: message, variant: 'destructive' })
-          return
-        }
-      } else {
-        setCustomBodyError(null)
-      }
-      const sanitizedHeaders: Array<{ name: string; value: string }> = []
-      if (customHeaders.length > 0) {
-        for (const item of customHeaders) {
-          const name = (item?.name || '').trim()
-          const value = (item?.value || '').trim()
-          if (!name && !value) continue
-          if (!name) {
-            toast({ title: '请求头无效', description: '请输入请求头名称', variant: 'destructive' })
-            return
-          }
-          if (name.length > 64) {
-            toast({ title: '请求头过长', description: '名称需 ≤ 64 字符', variant: 'destructive' })
-            return
-          }
-          if (value.length > 2048) {
-            toast({ title: '请求头值过长', description: '值需 ≤ 2048 字符', variant: 'destructive' })
-            return
-          }
-          const lower = name.toLowerCase()
-          if (FORBIDDEN_HEADER_NAMES.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-')) {
-            toast({
-              title: '请求头被拒绝',
-              description: '敏感或被保护的请求头无法覆盖，请更换名称',
-              variant: 'destructive',
-            })
-            return
-          }
-          const existingIdx = sanitizedHeaders.findIndex((h) => h.name.toLowerCase() === lower)
-          if (existingIdx >= 0) {
-            sanitizedHeaders.splice(existingIdx, 1)
-          }
-          if (!value) continue
-          sanitizedHeaders.push({ name, value })
-        }
+      const requestPayload = buildRequestPayload()
+      if (!requestPayload.ok) {
+        toast({ title: '发送失败', description: requestPayload.reason, variant: 'destructive' })
+        return
       }
       const featureFlags: Record<string, any> = {}
       if (webSearchEnabled && canUseWebSearch) {
@@ -369,8 +295,8 @@ export function useChatComposer() {
         saveReasoning: !noSaveThisRound,
         features: Object.keys(featureFlags).length ? featureFlags : undefined,
         traceEnabled: canUseTrace ? traceEnabled : undefined,
-        customBody: parsedCustomBody,
-        customHeaders: sanitizedHeaders.length ? sanitizedHeaders : undefined,
+        customBody: requestPayload.customBody,
+        customHeaders: requestPayload.customHeaders,
       }
       await streamMessage(currentSession.id, message, imagesPayload, options)
       setNoSaveThisRound(false)
@@ -408,9 +334,7 @@ export function useChatComposer() {
     systemSettings?.webSearchIncludeRaw,
     canUseTrace,
     traceEnabled,
-    customBodyInput,
-    customHeaders,
-    setCustomBodyError,
+    buildRequestPayload,
     canUsePythonTool,
     pythonToolEnabled,
     setSelectedImages,
@@ -482,10 +406,9 @@ export function useChatComposer() {
     setCustomBodyInput,
     setCustomBodyError,
     setSessionPromptDraft,
-    addCustomHeader,
-    updateCustomHeader,
-    removeCustomHeader,
-    setCustomHeaders,
+    addCustomHeader: handleAddCustomHeader,
+    updateCustomHeader: patchCustomHeader,
+    removeCustomHeader: deleteCustomHeader,
     setSelectedImages,
     handleSend,
     handleStop,
@@ -511,5 +434,6 @@ export function useChatComposer() {
     onToggleTrace: handleTraceToggle,
     canUseTrace,
     onSaveSessionPrompt: handleSessionPromptSave,
+    canAddCustomHeader: canAddHeader,
   }
 }

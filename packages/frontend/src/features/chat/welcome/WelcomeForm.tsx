@@ -194,6 +194,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               onAddHeader={advancedDialog.onAddHeader}
               onHeaderChange={advancedDialog.onHeaderChange}
               onRemoveHeader={advancedDialog.onRemoveHeader}
+              canAddHeader={advancedDialog.canAddHeader}
               customBody={advancedDialog.customBodyInput}
               onCustomBodyChange={advancedDialog.onCustomBodyChange}
               customBodyError={advancedDialog.customBodyError}

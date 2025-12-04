@@ -15,17 +15,6 @@ import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
 
-const FORBIDDEN_HEADER_NAMES = new Set([
-  'authorization',
-  'proxy-authorization',
-  'cookie',
-  'set-cookie',
-  'host',
-  'connection',
-  'transfer-encoding',
-  'content-length',
-  'accept-encoding',
-])
 
 export const useWelcomeScreenViewModel = () => {
   const router = useRouter()
@@ -86,7 +75,11 @@ export const useWelcomeScreenViewModel = () => {
     customBodyError,
     setCustomBodyError,
     customHeaders,
-    setCustomHeaders,
+    addCustomHeader: appendCustomHeader,
+    updateCustomHeader: patchCustomHeader,
+    removeCustomHeader: deleteCustomHeader,
+    canAddHeader,
+    buildRequestPayload,
   } = useAdvancedRequest({ sessionId: null })
 
   const {
@@ -298,31 +291,24 @@ export const useWelcomeScreenViewModel = () => {
   }, [])
 
   const handleAddCustomHeader = useCallback(() => {
-    if (customHeaders.length >= 10) {
-      toast({
-        title: '已达到上限',
-        description: '最多添加 10 个自定义请求头',
-        variant: 'destructive',
-      })
-      return
+    const result = appendCustomHeader()
+    if (!result.ok && result.reason) {
+      toast({ title: '已达到上限', description: result.reason, variant: 'destructive' })
     }
-    setCustomHeaders((prev) => [...prev, { name: '', value: '' }])
-  }, [customHeaders.length, setCustomHeaders, toast])
+  }, [appendCustomHeader, toast])
 
   const handleHeaderChange = useCallback(
     (index: number, field: 'name' | 'value', value: string) => {
-      setCustomHeaders((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
-      )
+      patchCustomHeader(index, field, value)
     },
-    [setCustomHeaders],
+    [patchCustomHeader],
   )
 
   const handleRemoveHeader = useCallback(
     (index: number) => {
-      setCustomHeaders((prev) => prev.filter((_, i) => i !== index))
+      deleteCustomHeader(index)
     },
-    [setCustomHeaders],
+    [deleteCustomHeader],
   )
 
   const handleModelChange = useCallback(
@@ -374,57 +360,10 @@ export const useWelcomeScreenViewModel = () => {
     const text = query.trim()
 
     try {
-      let parsedCustomBody: Record<string, any> | undefined
-      if (customBodyInput.trim()) {
-        try {
-          const parsed = JSON.parse(customBodyInput)
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            throw new Error('自定义请求体必须是 JSON 对象')
-          }
-          parsedCustomBody = parsed
-          setCustomBodyError(null)
-        } catch (err: any) {
-          const message = err instanceof Error ? err.message : '自定义请求体解析失败'
-          setCustomBodyError(message)
-          toast({ title: '创建失败', description: message, variant: 'destructive' })
-          return
-        }
-      } else {
-        setCustomBodyError(null)
-      }
-
-      const sanitizedHeaders: Array<{ name: string; value: string }> = []
-      if (customHeaders.length > 0) {
-        for (const item of customHeaders) {
-          const name = (item?.name || '').trim()
-          const value = (item?.value || '').trim()
-          if (!name && !value) continue
-          if (!name) {
-            toast({ title: '请求头无效', description: '请输入请求头名称', variant: 'destructive' })
-            return
-          }
-          if (name.length > 64) {
-            toast({ title: '请求头过长', description: '名称需 ≤ 64 字符', variant: 'destructive' })
-            return
-          }
-          if (value.length > 2048) {
-            toast({ title: '请求头值过长', description: '值需 ≤ 2048 字符', variant: 'destructive' })
-            return
-          }
-          const lower = name.toLowerCase()
-          if (FORBIDDEN_HEADER_NAMES.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-')) {
-            toast({
-              title: '请求头被拒绝',
-              description: '敏感或被保护的请求头无法覆盖，请更换名称',
-              variant: 'destructive',
-            })
-            return
-          }
-          const existingIdx = sanitizedHeaders.findIndex((h) => h.name.toLowerCase() === lower)
-          if (existingIdx >= 0) sanitizedHeaders.splice(existingIdx, 1)
-          if (!value) continue
-          sanitizedHeaders.push({ name, value })
-        }
+      const requestPayload = buildRequestPayload()
+      if (!requestPayload.ok) {
+        toast({ title: '创建失败', description: requestPayload.reason, variant: 'destructive' })
+        return
       }
 
       const title = text ? text.slice(0, 50) : '新的对话'
@@ -477,8 +416,10 @@ export const useWelcomeScreenViewModel = () => {
           if (thinkingTouched) options.reasoningEnabled = thinkingEnabled
           if (effortTouched && effort !== 'unset') options.reasoningEffort = effort
           if (Object.keys(featureFlags).length > 0) options.features = featureFlags
-          if (parsedCustomBody) options.customBody = parsedCustomBody
-          if (sanitizedHeaders.length) options.customHeaders = sanitizedHeaders
+          if (requestPayload.customBody) options.customBody = requestPayload.customBody
+          if (requestPayload.customHeaders && requestPayload.customHeaders.length) {
+            options.customHeaders = requestPayload.customHeaders
+          }
           await streamMessage(
             session.id,
             text,
@@ -503,10 +444,8 @@ export const useWelcomeScreenViewModel = () => {
     isCreating,
     quotaExhausted,
     query,
-    customBodyInput,
-    setCustomBodyError,
     toast,
-    customHeaders,
+    buildRequestPayload,
     models,
     sessionPromptDraft,
     createSession,
@@ -642,6 +581,7 @@ export const useWelcomeScreenViewModel = () => {
         onAddHeader: handleAddCustomHeader,
         onHeaderChange: handleHeaderChange,
         onRemoveHeader: handleRemoveHeader,
+        canAddHeader,
         customBodyInput,
         onCustomBodyChange: setCustomBodyInput,
         customBodyError,

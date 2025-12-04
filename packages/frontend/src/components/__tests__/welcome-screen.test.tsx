@@ -89,6 +89,7 @@ vi.mock('@/features/chat/welcome/useWelcomeScreenViewModel', () => ({
         onAddHeader: vi.fn(),
         onHeaderChange: vi.fn(),
         onRemoveHeader: vi.fn(),
+        canAddHeader: true,
         customBodyInput: '',
         onCustomBodyChange: vi.fn(),
         customBodyError: null,

@@ -62,6 +62,7 @@ export interface ChatComposerPanelProps {
   onAddCustomHeader: () => void
   onCustomHeaderChange: (index: number, field: 'name' | 'value', value: string) => void
   onRemoveCustomHeader: (index: number) => void
+  canAddCustomHeader: boolean
   customBody: string
   onCustomBodyChange: (value: string) => void
   customBodyError?: string | null
@@ -119,6 +120,7 @@ export function ChatComposerPanel({
   onAddCustomHeader,
   onCustomHeaderChange,
   onRemoveCustomHeader,
+  canAddCustomHeader,
   customBody,
   onCustomBodyChange,
   customBodyError,
@@ -179,6 +181,7 @@ export function ChatComposerPanel({
                     onAddHeader={onAddCustomHeader}
                     onHeaderChange={onCustomHeaderChange}
                     onRemoveHeader={onRemoveCustomHeader}
+                    canAddHeader={canAddCustomHeader}
                     customBody={customBody}
                     onCustomBodyChange={onCustomBodyChange}
                     customBodyError={customBodyError}
