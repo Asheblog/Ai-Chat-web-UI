@@ -1,4 +1,10 @@
-import { apiClient } from "@/lib/api"
+import {
+  createSystemConnection as createSystemConnectionApi,
+  deleteSystemConnection as deleteSystemConnectionApi,
+  getSystemConnections,
+  updateSystemConnection as updateSystemConnectionApi,
+  verifySystemConnection as verifySystemConnectionApi,
+} from '@/features/system/api'
 
 export interface SystemConnection {
   id: number
@@ -32,22 +38,22 @@ export interface SystemConnectionPayload {
 }
 
 export async function fetchSystemConnections(): Promise<SystemConnection[]> {
-  const response = await apiClient.getSystemConnections()
+  const response = await getSystemConnections()
   return response?.data ?? []
 }
 
 export async function createSystemConnection(payload: SystemConnectionPayload) {
-  return apiClient.createSystemConnection(payload)
+  return createSystemConnectionApi(payload)
 }
 
 export async function updateSystemConnection(id: number, payload: SystemConnectionPayload) {
-  return apiClient.updateSystemConnection(id, payload)
+  return updateSystemConnectionApi(id, payload)
 }
 
 export async function deleteSystemConnection(id: number) {
-  return apiClient.deleteSystemConnection(id)
+  return deleteSystemConnectionApi(id)
 }
 
 export async function verifySystemConnection(payload: SystemConnectionPayload) {
-  return apiClient.verifySystemConnection(payload)
+  return verifySystemConnectionApi(payload)
 }

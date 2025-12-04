@@ -187,6 +187,18 @@ aichat/
 └── 构建命令.txt
 ```
 
+### 前端模块化约定
+
+- `packages/frontend/src/features/{chat,auth,settings,share,system}/api.ts` 拆分为按领域的 API 层，不再直接引用 `lib/api`。`lib/api.ts` 仅负责创建 Axios 单例与未授权处理。
+- `packages/frontend/src/features/chat/store` 继续保持 slice + runtime 结构，流式/usage/message 等模块之间只共享显式的 util。
+- Task Trace 控件拆分为 `TaskTraceConsole.tsx + TaskTraceDetailDialog.tsx + TaskTraceTable.tsx`，利于后续拓展分页/筛选。
+
+### 行数守卫脚本
+
+- `pnpm lint:lines`：扫描 `packages/frontend/src/**/*.{ts,tsx}`，超出 `--max 300` 行或平均 `--avg 150` 行即失败，可在迁移期通过 `--whitelist="<glob>"` 豁免旧文件。
+- 命令输出会列出超限文件（按行数降序），阶段性 refactor 完成后请更新 `解耦计划.md` 并在 PR 说明中附上剩余清单。
+- 典型使用：`pnpm lint:lines`、`pnpm lint:lines --whitelist "features/chat/store/runtime.ts"`。
+
 数据持久化
 - SQLite 数据文件位于容器内 `/app/data/app.db`，通过 compose 中的 `backend_data` 卷（或你自定义的宿主机路径）持久化。
 

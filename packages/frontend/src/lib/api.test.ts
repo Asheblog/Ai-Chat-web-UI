@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiClient } from './api'
+import { streamChat } from '@/features/chat/api'
 import type { ChatStreamChunk } from '@/types'
 
 const encoder = new TextEncoder()
@@ -33,7 +33,7 @@ describe('ApiClient.streamChat', () => {
 
     const emitted: ChatStreamChunk[] = []
 
-    for await (const chunk of apiClient.streamChat(1, 'hello world')) {
+    for await (const chunk of streamChat(1, 'hello world')) {
       emitted.push(chunk)
     }
 

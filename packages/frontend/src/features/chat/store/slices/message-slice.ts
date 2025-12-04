@@ -1,4 +1,4 @@
-import { apiClient } from '@/lib/api'
+import { getMessages } from '@/features/chat/api'
 import type { Message } from '@/types'
 import type { MessageSlice } from '../types'
 import type { ChatSliceCreator, MessageId } from '../types'
@@ -38,7 +38,7 @@ export const createMessageSlice: ChatSliceCreator<
   fetchMessages: async (sessionId: number) => {
     set({ isMessagesLoading: true, error: null })
     try {
-      const response = await apiClient.getMessages(sessionId)
+      const response = await getMessages(sessionId)
       const cache = get().messageImageCache
       const rawMessages = Array.isArray(response.data) ? response.data : []
       const normalized = rawMessages.map((msg) => mergeImages(msg, cache))

@@ -9,8 +9,8 @@ import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/components/ui/use-toast"
-import { apiClient } from "@/lib/api"
+import { useToast } from '@/components/ui/use-toast'
+import { cleanupTaskTraces, getTaskTraces } from '@/features/system/api'
 import { ShieldCheck, Thermometer, Trash2 } from "lucide-react"
 import { SettingRow } from "../components/setting-row"
 
@@ -52,7 +52,7 @@ export function SystemMonitoringPage() {
   const fetchTraceStats = useCallback(async () => {
     if (!isAdmin) return
     try {
-      const res = await apiClient.getTaskTraces({ page: 1, pageSize: 1 })
+      const res = await getTaskTraces({ page: 1, pageSize: 1 })
       setTraceTotal(res.data?.total ?? null)
     } catch (error: any) {
       console.warn('[SystemMonitoringPage] fetch stats failed', error)
@@ -89,7 +89,7 @@ export function SystemMonitoringPage() {
       if (!Number.isNaN(input)) {
         payload.retentionDays = input
       }
-      const res = await apiClient.cleanupTaskTraces(payload.retentionDays)
+      const res = await cleanupTaskTraces(payload.retentionDays)
       toast({
         title: '已清理历史追踪',
         description: `依据 ${res.data?.retentionDays ?? payload.retentionDays ?? settings?.taskTraceRetentionDays ?? 7} 天保留策略删除 ${res.data?.deleted ?? 0} 条记录`,

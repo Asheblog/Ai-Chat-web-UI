@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ModelPreferenceDTO } from '@/types'
 import type { ModelItem } from '@/store/models-store'
-import { apiClient } from '@/lib/api'
+import { updatePersonalSettings } from '@/features/settings/api'
 
 export interface PreferredModelState {
   modelId: string
@@ -81,7 +81,7 @@ export const persistPreferredModel = async (model: ModelItem | null, options?: P
   }
 
   try {
-    await apiClient.updatePersonalSettings({
+    await updatePersonalSettings({
       preferredModel: model
         ? {
             modelId: model.id,

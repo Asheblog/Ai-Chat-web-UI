@@ -3,10 +3,10 @@ import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { CardTitle, CardDescription } from "@/components/ui/card"
-import { apiClient } from "@/lib/api"
-import { Lock, Check } from "lucide-react"
-import { SettingRow } from "../components/setting-row"
+import { CardTitle, CardDescription } from '@/components/ui/card'
+import { changePassword } from '@/features/auth/api'
+import { Lock, Check } from 'lucide-react'
+import { SettingRow } from '../components/setting-row'
 
 export function PersonalSecurityPage() {
   const { toast } = useToast()
@@ -33,7 +33,7 @@ export function PersonalSecurityPage() {
     if (msg) { setError(msg); return }
     setSubmitting(true); setError(null)
     try {
-      await apiClient.changePassword(currentPassword, newPassword)
+      await changePassword(currentPassword, newPassword)
       toast({ title: '密码已更新' })
       setCurrentPassword(""); setNewPassword(""); setConfirmPassword("")
     } catch (e: any) {

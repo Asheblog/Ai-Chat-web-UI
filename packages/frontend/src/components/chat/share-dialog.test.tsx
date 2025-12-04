@@ -2,12 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { vi } from "vitest"
 import { ShareDialog } from "./share-dialog"
 import { useChatStore } from "@/store/chat-store"
-import { apiClient } from "@/lib/api"
+import { createChatShare } from "@/features/share/api"
 
-vi.mock("@/lib/api", () => ({
-  apiClient: {
-    createChatShare: vi.fn(),
-  },
+vi.mock("@/features/share/api", () => ({
+  createChatShare: vi.fn(),
 }))
 
 vi.mock("@/components/ui/use-toast", () => ({
@@ -15,7 +13,7 @@ vi.mock("@/components/ui/use-toast", () => ({
 }))
 
 const mockCreateShare = () => {
-  const spy = apiClient.createChatShare as ReturnType<typeof vi.fn>
+  const spy = createChatShare as ReturnType<typeof vi.fn>
   spy.mockResolvedValue({
     success: true,
     data: {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatSession } from '@/types'
 import { createChatStoreInstance } from '@/features/chat/store'
 import { messageKey } from '@/features/chat/store/utils'
-import { apiClient } from '@/lib/api'
+import * as chatApi from '@/features/chat/api'
 
 function createMockZustandStore<T extends Record<string, any>>(state: T) {
   let storeState = state
@@ -56,15 +56,13 @@ const {
   },
 }))
 
-vi.mock('@/lib/api', () => ({
-  apiClient: {
-    streamChat: vi.fn(),
-    getUsage: vi.fn().mockResolvedValue({ data: { totals: null, last_round: null, current: null } }),
-    getSessionsUsage: vi.fn().mockResolvedValue({ data: [] }),
-    getMessageByClientId: vi.fn().mockResolvedValue({ data: null }),
-    cancelAgentStream: vi.fn().mockResolvedValue(undefined),
-    cancelStream: vi.fn(),
-  },
+vi.mock('@/features/chat/api', () => ({
+  streamChat: vi.fn(),
+  getUsage: vi.fn().mockResolvedValue({ data: { totals: null, last_round: null, current: null } }),
+  getSessionsUsage: vi.fn().mockResolvedValue({ data: [] }),
+  getMessageByClientId: vi.fn().mockResolvedValue({ data: null }),
+  cancelAgentStream: vi.fn().mockResolvedValue(undefined),
+  cancelStream: vi.fn(),
 }))
 
 vi.mock('@/store/settings-store', () => ({
@@ -115,7 +113,7 @@ describe('stream slice', () => {
       currentSession: session,
     })
 
-    vi.mocked(apiClient.streamChat).mockImplementation(async function* mockStream() {
+    vi.mocked(chatApi.streamChat).mockImplementation(async function* mockStream() {
       yield { type: 'start', messageId: session.id + 100, assistantMessageId: session.id + 200 }
       yield { type: 'content', content: 'Hello ' }
       yield { type: 'content', content: 'World' }
@@ -126,9 +124,9 @@ describe('stream slice', () => {
     await store.getState().streamMessage(session.id, 'Say hi')
     await flushMicrotasks()
 
-    expect(apiClient.streamChat).toHaveBeenCalledTimes(1)
-    expect(apiClient.getUsage).toHaveBeenCalledWith(session.id)
-    expect(apiClient.getSessionsUsage).toHaveBeenCalledTimes(1)
+    expect(chatApi.streamChat).toHaveBeenCalledTimes(1)
+    expect(chatApi.getUsage).toHaveBeenCalledWith(session.id)
+    expect(chatApi.getSessionsUsage).toHaveBeenCalledTimes(1)
 
     const state = store.getState()
     expect(state.isStreaming).toBe(false)
@@ -161,7 +159,7 @@ describe('stream slice', () => {
     const abortError = new Error('aborted')
     abortError.name = 'AbortError'
 
-    vi.mocked(apiClient.streamChat).mockImplementation(async function* streamUntilAbort() {
+    vi.mocked(chatApi.streamChat).mockImplementation(async function* streamUntilAbort() {
       yield { type: 'start', messageId: 999, assistantMessageId: 1000 }
       yield { type: 'content', content: 'partial' }
       await new Promise((_resolve, reject) => {
@@ -170,7 +168,7 @@ describe('stream slice', () => {
       })
     })
 
-    vi.mocked(apiClient.cancelStream).mockImplementation(() => {
+    vi.mocked(chatApi.cancelStream).mockImplementation(() => {
       abortReject?.(abortError)
     })
 
@@ -180,8 +178,8 @@ describe('stream slice', () => {
     await pending
     await flushMicrotasks()
 
-    expect(apiClient.cancelAgentStream).toHaveBeenCalledTimes(1)
-    expect(apiClient.cancelStream).toHaveBeenCalledTimes(1)
+    expect(chatApi.cancelAgentStream).toHaveBeenCalledTimes(1)
+    expect(chatApi.cancelStream).toHaveBeenCalledTimes(1)
     const state = store.getState()
     expect(state.isStreaming).toBe(false)
     const assistantMeta = state.messageMetas.find((meta) => meta.role === 'assistant')

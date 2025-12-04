@@ -1,4 +1,4 @@
-import { apiClient } from '@/lib/api'
+import { getMessageProgress } from '@/features/chat/api'
 import type { ChatState, Message, MessageBody, MessageMeta, ToolEvent } from '@/types'
 import {
   buildVariantSelections,
@@ -707,7 +707,7 @@ export const createChatStoreRuntime = (
         return
       }
       try {
-        const response = await apiClient.getMessageProgress(sessionId, messageId)
+        const response = await getMessageProgress(sessionId, messageId)
         const payload = response?.data?.message ?? (response?.data as Message | undefined)
         if (payload) {
           applyServerMessageSnapshot(payload)

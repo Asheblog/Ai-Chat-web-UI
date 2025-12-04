@@ -10,8 +10,8 @@ import { SettingRow } from "../components/setting-row"
 import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
-import { apiClient } from "@/lib/api"
-import { Button } from "@/components/ui/button"
+import { updatePersonalSettings } from '@/features/settings/api'
+import { Button } from '@/components/ui/button'
 
 export function PersonalPreferencesPage(){
   const { theme, setTheme, maxTokens, setMaxTokens, contextEnabled, setContextEnabled } = useSettingsStore()
@@ -54,7 +54,7 @@ export function PersonalPreferencesPage(){
     setUsernameSaving(true)
     setUsernameError(null)
     try {
-      await apiClient.updatePersonalSettings({ username: trimmed })
+      await updatePersonalSettings({ username: trimmed })
       await fetchActor()
       if (!options?.silent) {
         toast({ title: '用户名已更新' })
@@ -88,7 +88,7 @@ export function PersonalPreferencesPage(){
     setAvatarPreview(previewUrl)
     setAvatarSaving(true)
     try {
-      await apiClient.updatePersonalSettings({ avatar: { data, mime } })
+      await updatePersonalSettings({ avatar: { data, mime } })
       await fetchActor()
       toast({ title: '头像已更新' })
     } catch (error: any) {
@@ -109,7 +109,7 @@ export function PersonalPreferencesPage(){
     setAvatarPreview(null)
     setAvatarSaving(true)
     try {
-      await apiClient.updatePersonalSettings({ avatar: null })
+      await updatePersonalSettings({ avatar: null })
       await fetchActor()
       toast({ title: '已恢复默认头像' })
     } catch (error: any) {

@@ -3,12 +3,18 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { SettingsLayoutClient } from "@/app/main/settings/_components/settings-layout-client"
-import { SystemGeneralPage } from "@/features/settings/pages/system-general"
-import { SystemModelsPage } from "@/features/settings/pages/system-models"
-import { SystemNetworkPage } from "@/components/settings/pages/SystemNetwork"
-import { SystemReasoningPage } from "@/components/settings/pages/SystemReasoning"
-import { SystemWebSearchPage } from "@/components/settings/pages/SystemWebSearch"
-import type { SystemSettings } from "@/types"
+import { SystemGeneralPage } from '@/features/settings/pages/system-general'
+import { SystemModelsPage } from '@/features/settings/pages/system-models'
+import { SystemNetworkPage } from '@/components/settings/pages/SystemNetwork'
+import { SystemReasoningPage } from '@/components/settings/pages/SystemReasoning'
+import { SystemWebSearchPage } from '@/components/settings/pages/SystemWebSearch'
+import type { SystemSettings } from '@/types'
+import {
+  adminAuthState,
+  baseSettings,
+  sampleModelList,
+  userAuthState,
+} from './system-settings-pages.fixtures'
 
 type MockSystemSettingsResult = {
   settings: SystemSettings | null
@@ -48,113 +54,18 @@ vi.mock("next/navigation", () => ({
   usePathname: () => pathnameMock(),
 }))
 
-vi.mock("@/lib/api", () => ({
-  apiClient: {
-    syncAnonymousQuota: vi.fn(),
-    refreshImageAttachments: vi.fn(),
-    getTaskTraces: vi.fn().mockResolvedValue({ data: { total: 0 } }),
-    cleanupTaskTraces: vi.fn().mockResolvedValue({ data: { deleted: 0 } }),
-  },
+vi.mock('@/features/settings/api', () => ({
+  syncAnonymousQuota: vi.fn(),
+  refreshImageAttachments: vi.fn(),
 }))
 
-const adminAuthState = { actorState: "authenticated", user: { role: "ADMIN" } } as const
-const userAuthState = { actorState: "authenticated", user: { role: "USER" } } as const
+vi.mock('@/features/system/api', () => ({
+  getTaskTraces: vi.fn().mockResolvedValue({ data: { total: 0 } }),
+  cleanupTaskTraces: vi.fn().mockResolvedValue({ data: { deleted: 0 } }),
+}))
 
 const refreshSpy = vi.fn<[], Promise<void>>(() => Promise.resolve())
 const updateSpy = vi.fn<[Partial<SystemSettings>], Promise<void>>(() => Promise.resolve())
-
-const baseSettings: SystemSettings = {
-  allowRegistration: true,
-  systemModels: [],
-  brandText: "AIChat",
-  siteBaseUrl: "https://chat.example.com",
-  chatImageRetentionDays: 30,
-  assistantReplyHistoryLimit: 5,
-  anonymousRetentionDays: 10,
-  anonymousDailyQuota: 5,
-  defaultUserDailyQuota: 50,
-  modelAccessDefaultAnonymous: 'deny',
-  modelAccessDefaultUser: 'allow',
-  assistantAvatarUrl: null,
-  reasoningEnabled: true,
-  reasoningDefaultExpand: false,
-  reasoningSaveToDb: true,
-  reasoningTagsMode: "default",
-  reasoningCustomTags: "",
-  streamDeltaChunkSize: 1,
-  streamDeltaFlushIntervalMs: 800,
-  streamReasoningFlushIntervalMs: 1000,
-  streamKeepaliveIntervalMs: 5000,
-  openaiReasoningEffort: "unset",
-  reasoningMaxOutputTokensDefault: 32000,
-  ollamaThink: false,
-  sseHeartbeatIntervalMs: 15000,
-  providerMaxIdleMs: 60000,
-  providerTimeoutMs: 300000,
-  providerInitialGraceMs: 120000,
-  providerReasoningIdleMs: 300000,
-  reasoningKeepaliveIntervalMs: 0,
-  usageEmit: true,
-  usageProviderOnly: false,
-  webSearchAgentEnable: true,
-  webSearchDefaultEngine: "tavily",
-  webSearchResultLimit: 4,
-  webSearchDomainFilter: ["example.com"],
-  webSearchHasApiKey: true,
-  webSearchHasApiKeyTavily: true,
-  webSearchHasApiKeyBrave: false,
-  webSearchHasApiKeyMetaso: false,
-  pythonToolEnable: false,
-  pythonToolCommand: "python3",
-  pythonToolArgs: [],
-  pythonToolTimeoutMs: 8000,
-  pythonToolMaxOutputChars: 4000,
-  pythonToolMaxSourceChars: 4000,
-  taskTraceEnabled: true,
-  taskTraceDefaultOn: true,
-  taskTraceAdminOnly: true,
-  taskTraceEnv: "dev",
-  taskTraceRetentionDays: 7,
-  taskTraceMaxEvents: 2000,
-  taskTraceIdleTimeoutMs: 30000,
-}
-
-const sampleModelList = [
-  {
-    connectionId: "openai",
-    rawId: "gpt-4o-mini",
-    id: "gpt-4o-mini",
-    name: "GPT-4o mini",
-    provider: "OpenAI",
-    overridden: true,
-    capabilitySource: "manual",
-    tags: [{ name: "vision" }],
-    capabilities: {
-      vision: true,
-      file_upload: false,
-      web_search: true,
-      image_generation: false,
-      code_interpreter: false,
-    },
-  },
-  {
-    connectionId: "local",
-    rawId: "phi-3",
-    id: "phi-3",
-    name: "Phi-3 Turbo",
-    provider: "Azure",
-    overridden: false,
-    capabilitySource: "provider",
-    tags: [{ name: "code_interpreter" }],
-    capabilities: {
-      vision: false,
-      file_upload: true,
-      web_search: false,
-      image_generation: false,
-      code_interpreter: true,
-    },
-  },
-] as const
 
 const mockUseAuthStore = (state: typeof adminAuthState | typeof userAuthState) => {
   useAuthStoreMock.mockImplementation((selector: any) => {

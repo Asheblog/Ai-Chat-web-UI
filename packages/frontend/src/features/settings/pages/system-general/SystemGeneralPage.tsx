@@ -20,7 +20,7 @@ import {
 import { useSystemSettings } from "@/hooks/use-system-settings"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
-import { apiClient } from "@/lib/api"
+import { refreshImageAttachments, syncAnonymousQuota } from '@/features/settings/api'
 import { useAuthStore } from "@/store/auth-store"
 import { UserPlus, Palette, Clock } from "lucide-react"
 import { SettingRow } from "@/components/settings/components/setting-row"
@@ -117,7 +117,7 @@ export function SystemGeneralPage() {
     if (!isAdmin || syncingAnonymousQuota) return
     setSyncingAnonymousQuota(true)
     try {
-      await apiClient.syncAnonymousQuota({ resetUsed: true })
+      await syncAnonymousQuota({ resetUsed: true })
       await fetchSystemSettings()
       toast({ title: '已同步匿名额度', description: '匿名访客额度已更新为当前默认值，并清零今日用量。' })
     } catch (err: any) {
@@ -429,7 +429,7 @@ export function SystemGeneralPage() {
               variant="secondary"
               onClick={async () => {
                 try {
-                  const res = await apiClient.refreshImageAttachments()
+                  const res = await refreshImageAttachments()
                   if (res.success) {
                     const sample = Array.isArray(res.data?.samples) && res.data.samples.length > 0 ? res.data.samples[0].url : '已刷新'
                     toast({ title: '刷新成功', description: `当前域名：${res.data?.baseUrl || '未识别'}\n示例：${sample}` })

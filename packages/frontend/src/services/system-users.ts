@@ -1,5 +1,14 @@
-import { apiClient } from "@/lib/api"
-import type { ActorQuota } from "@/types"
+import {
+  approveUser as approveUserApi,
+  deleteUser as deleteUserApi,
+  getUserQuota as getUserQuotaApi,
+  getUsers,
+  rejectUser as rejectUserApi,
+  updateUserQuota as updateUserQuotaApi,
+  updateUserRole as updateUserRoleApi,
+  updateUserStatus as updateUserStatusApi,
+} from '@/features/system/api'
+import type { ActorQuota } from '@/types'
 
 export type SystemUserRow = {
   id: number
@@ -28,36 +37,36 @@ export type ListUsersParams = {
 }
 
 export async function listUsers(params?: ListUsersParams): Promise<SystemUsersPageData | null> {
-  const response = await apiClient.getUsers(params)
+  const response = await getUsers(params)
   return response.data ?? null
 }
 
 export async function getUserQuota(userId: number): Promise<ActorQuota | null> {
-  const response = await apiClient.getUserQuota(userId)
+  const response = await getUserQuotaApi(userId)
   return response.data?.quota ?? null
 }
 
 export async function updateUserQuota(userId: number, payload: { dailyLimit: number | null; resetUsed?: boolean }) {
-  const response = await apiClient.updateUserQuota(userId, payload)
+  const response = await updateUserQuotaApi(userId, payload)
   return response.data?.quota ?? null
 }
 
 export async function approveUser(userId: number) {
-  await apiClient.approveUser(userId)
+  await approveUserApi(userId)
 }
 
 export async function rejectUser(userId: number, reason?: string) {
-  await apiClient.rejectUser(userId, reason)
+  await rejectUserApi(userId, reason)
 }
 
 export async function updateUserStatus(userId: number, status: 'ACTIVE' | 'DISABLED', reason?: string) {
-  await apiClient.updateUserStatus(userId, status, reason)
+  await updateUserStatusApi(userId, status, reason)
 }
 
 export async function deleteUser(userId: number) {
-  await apiClient.deleteUser(userId)
+  await deleteUserApi(userId)
 }
 
 export async function updateUserRole(userId: number, role: 'ADMIN' | 'USER') {
-  await apiClient.updateUserRole(userId, role)
+  await updateUserRoleApi(userId, role)
 }

@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Copy } from 'lucide-react'
 import { useChatMessages } from '@/store/chat-store'
-import { apiClient } from '@/lib/api'
+import { createChatShare } from '@/features/share/api'
 import { copyToClipboard, formatDate } from '@/lib/utils'
 import type { ChatShare } from '@/types'
 import { useToast } from '@/components/ui/use-toast'
@@ -134,7 +134,7 @@ export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open,
         title: titleInput.trim() || undefined,
         expiresInHours,
       }
-      const response = await apiClient.createChatShare(payload)
+      const response = await createChatShare(payload)
       if (!response?.success || !response.data) {
         throw new Error(response?.error || '分享返回结果为空')
       }

@@ -1,4 +1,10 @@
-import { apiClient } from '@/lib/api'
+import {
+  createSessionByModelId,
+  deleteSession as deleteSessionApi,
+  getSessions,
+  updateSession as updateSessionApi,
+  updateSessionModel as updateSessionModelApi,
+} from '@/features/chat/api'
 import type { ChatSession } from '@/types'
 import type { ModelItem } from '@/store/models-store'
 import type { SessionSlice } from '../types'
@@ -19,7 +25,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
   fetchSessions: async () => {
     set({ isSessionsLoading: true, error: null })
     try {
-      const response = await apiClient.getSessions()
+      const response = await getSessions()
       set({
         sessions: response.data || [],
         isSessionsLoading: false,
@@ -37,7 +43,13 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
     runtime.stopAllMessagePollers()
     set({ isSessionsLoading: true, error: null })
     try {
-      const response = await apiClient.createSessionByModelId(modelId, title, connectionId, rawId, systemPrompt ?? undefined)
+      const response = await createSessionByModelId(
+        modelId,
+        title,
+        connectionId,
+        rawId,
+        systemPrompt ?? undefined,
+      )
       const newSession = response.data as ChatSession
       set((state) => ({
         sessions: [newSession, ...state.sessions],
@@ -99,7 +111,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
 
   deleteSession: async (sessionId: number) => {
     try {
-      await apiClient.deleteSession(sessionId)
+      await deleteSessionApi(sessionId)
       set((state) => {
         const newSessions = state.sessions.filter((s) => s.id !== sessionId)
         const shouldClear = state.currentSession?.id === sessionId
@@ -122,7 +134,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
 
   updateSessionTitle: async (sessionId: number, title: string) => {
     try {
-      await apiClient.updateSession(sessionId, { title })
+      await updateSessionApi(sessionId, { title })
       set((state) => ({
         sessions: state.sessions.map((session) =>
           session.id === sessionId ? { ...session, title } : session,
@@ -141,7 +153,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
 
   switchSessionModel: async (sessionId: number, model: ModelItem) => {
     try {
-      const resp = await apiClient.updateSessionModel(sessionId, {
+      const resp = await updateSessionModelApi(sessionId, {
         modelId: model.id,
         connectionId: model.connectionId,
         rawId: model.rawId || model.id,
@@ -175,7 +187,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
 
   updateSessionPrefs: async (sessionId, prefs) => {
     try {
-      await apiClient.updateSession(sessionId, prefs as any)
+      await updateSessionApi(sessionId, prefs as any)
       set((state) => ({
         sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, ...prefs } : s)),
         currentSession:

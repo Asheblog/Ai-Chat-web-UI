@@ -1,4 +1,9 @@
-import { apiClient } from '@/lib/api'
+import {
+  cancelAgentStream,
+  cancelStream,
+  getMessageByClientId,
+  streamChat,
+} from '@/features/chat/api'
 import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
 import type { Message } from '@/types'
@@ -278,7 +283,7 @@ export const createStreamSlice: ChatSliceCreator<
       options || {}
 
     const startStream = () =>
-      apiClient.streamChat(sessionId, content, isRegenerate ? undefined : images, {
+      streamChat(sessionId, content, isRegenerate ? undefined : images, {
         ...forwardOptions,
         contextEnabled,
         clientMessageId: userClientMessageId ?? undefined,
@@ -651,7 +656,7 @@ export const createStreamSlice: ChatSliceCreator<
           if (!trimmed || seen.has(trimmed)) continue
           seen.add(trimmed)
           try {
-            const res = await apiClient.getMessageByClientId(sessionId, trimmed)
+            const res = await getMessageByClientId(sessionId, trimmed)
             const serverMessage = res?.data?.message
             if (serverMessage) {
               const merged = mergeImages(serverMessage, get().messageImageCache)
@@ -780,16 +785,14 @@ export const createStreamSlice: ChatSliceCreator<
           stream.pendingMeta.reasoningIdleMs = null
         }
         if (stream.sessionId && (stream.clientMessageId || stream.assistantId)) {
-          apiClient
-            .cancelAgentStream(stream.sessionId, {
+          cancelAgentStream(stream.sessionId, {
               clientMessageId: stream.clientMessageId ?? stream.assistantClientMessageId ?? undefined,
               messageId:
                 typeof stream.assistantId === 'number' ? Number(stream.assistantId) : undefined,
-            })
-            .catch(() => {})
+            }).catch(() => {})
         }
         try {
-          apiClient.cancelStream(stream.streamKey)
+          cancelStream(stream.streamKey)
         } catch {
           // ignore
         }
@@ -816,12 +819,10 @@ export const createStreamSlice: ChatSliceCreator<
       typeof streamingMeta?.id === 'number' ? streamingMeta.id : null
     const fallbackClientId = streamingMeta?.clientMessageId ?? null
     if (currentSessionId && (fallbackAssistantId || fallbackClientId)) {
-      apiClient
-        .cancelAgentStream(currentSessionId, {
+      cancelAgentStream(currentSessionId, {
           clientMessageId: fallbackClientId ?? undefined,
           messageId: fallbackAssistantId ?? undefined,
-        })
-        .catch(() => {})
+        }).catch(() => {})
       if (fallbackAssistantId != null) {
         set((state) => {
           const key = messageKey(fallbackAssistantId)

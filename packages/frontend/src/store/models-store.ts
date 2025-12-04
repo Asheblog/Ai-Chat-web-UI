@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { apiClient } from '@/lib/api'
+import { getAggregatedModels } from '@/features/system/api'
 
 export type ModelItem = {
   id: string
@@ -39,7 +39,7 @@ export const useModelsStore = create<ModelsStoreState>((set, get) => ({
   fetchAll: async () => {
     set({ isLoading: true, error: null })
     try {
-      const res = await apiClient.getAggregatedModels()
+      const res = await getAggregatedModels()
       set({ models: res?.data || [], isLoading: false })
     } catch (e: any) {
       set({ error: e?.message || '加载模型失败', isLoading: false })

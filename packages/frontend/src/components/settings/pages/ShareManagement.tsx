@@ -11,10 +11,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Copy, Loader2, RefreshCw, ShieldX } from "lucide-react"
-import { apiClient } from "@/lib/api"
-import type { ChatShareSummary } from "@/types"
-import { copyToClipboard, formatDate } from "@/lib/utils"
-import { useToast } from "@/components/ui/use-toast"
+import { listChatShares, revokeChatShare, updateChatShare } from '@/features/share/api'
+import type { ChatShareSummary } from '@/types'
+import { copyToClipboard, formatDate } from '@/lib/utils'
+import { useToast } from '@/components/ui/use-toast'
 
 const EXPIRATION_SHORTCUTS: Array<{ label: string; value: number | null }> = [
   { label: "24 小时", value: 24 },
@@ -42,7 +42,7 @@ export function ShareManagementPanel() {
     setLoading(true)
     setError(null)
     try {
-      const response = await apiClient.listChatShares({ status: "all", limit: 100 })
+      const response = await listChatShares({ status: "all", limit: 100 })
       if (response?.success && response.data) {
         setShares(response.data.shares)
       } else {
@@ -80,7 +80,7 @@ export function ShareManagementPanel() {
   const handleRevoke = async (shareId: number) => {
     setUpdatingId(shareId)
     try {
-      const response = await apiClient.revokeChatShare(shareId)
+      const response = await revokeChatShare(shareId)
       if (response?.success && response.data) {
         toast({ title: "已撤销分享链接" })
         setShares((prev) => prev.map((item) => (item.id === shareId ? response.data : item)))
@@ -101,7 +101,7 @@ export function ShareManagementPanel() {
   const handleExpiryChange = async (shareId: number, hours: number | null) => {
     setUpdatingId(shareId)
     try {
-      const response = await apiClient.updateChatShare(shareId, { expiresInHours: hours })
+      const response = await updateChatShare(shareId, { expiresInHours: hours })
       if (response?.success && response.data) {
         toast({ title: "有效期已更新" })
         setShares((prev) => prev.map((item) => (item.id === shareId ? response.data : item)))

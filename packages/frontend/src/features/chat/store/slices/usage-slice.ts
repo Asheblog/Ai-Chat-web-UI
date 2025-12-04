@@ -1,4 +1,4 @@
-import { apiClient } from '@/lib/api'
+import { getSessionsUsage, getUsage } from '@/features/chat/api'
 import type { UsageSlice } from '../types'
 import type { ChatSliceCreator } from '../types'
 
@@ -17,7 +17,7 @@ export const createUsageSlice: ChatSliceCreator<
 
   fetchSessionsUsage: async () => {
     try {
-      const res = await apiClient.getSessionsUsage()
+      const res = await getSessionsUsage()
       const arr = res.data as Array<{ sessionId: number; totals: import('@/types').UsageTotals }>
       const map: Record<number, import('@/types').UsageTotals> = {}
       ;(arr || []).forEach((item) => {
@@ -34,7 +34,7 @@ export const createUsageSlice: ChatSliceCreator<
 
   fetchUsage: async (sessionId: number) => {
     try {
-      const res = await apiClient.getUsage(sessionId)
+      const res = await getUsage(sessionId)
       const data = res.data || {}
       set({
         usageTotals: data.totals || null,

@@ -1,4 +1,9 @@
-import { apiClient } from "@/lib/api"
+import {
+  deleteAllModelOverrides as deleteAllModelOverridesApi,
+  deleteModelOverrides as deleteModelOverridesApi,
+  refreshModelCatalog as refreshModelCatalogApi,
+  updateModelTags,
+} from '@/features/system/api'
 
 export async function updateModelCapabilities(
   connectionId: number,
@@ -10,17 +15,17 @@ export async function updateModelCapabilities(
     accessPolicy?: { anonymous?: 'allow' | 'deny' | 'inherit'; user?: 'allow' | 'deny' | 'inherit' } | null
   }
 ) {
-  return apiClient.updateModelTags(connectionId, rawId, options)
+  return updateModelTags(connectionId, rawId, options)
 }
 
 export async function refreshModelCatalog() {
-  return apiClient.refreshModelCatalog()
+  return refreshModelCatalogApi()
 }
 
 export async function deleteModelOverrides(items: Array<{ connectionId: number; rawId: string }>) {
-  return apiClient.deleteModelOverrides(items)
+  return deleteModelOverridesApi(items)
 }
 
 export async function deleteAllModelOverrides() {
-  return apiClient.deleteAllModelOverrides()
+  return deleteAllModelOverridesApi()
 }

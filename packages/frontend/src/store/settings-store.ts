@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { SettingsState, SystemSettings } from '@/types'
-import { apiClient } from '@/lib/api'
+import {
+  getPublicBranding as getPublicBrandingApi,
+  getSystemSettings as fetchSystemSettingsApi,
+  updateSystemSettings as updateSystemSettingsApi,
+} from '@/features/settings/api'
 
 const avatarReadyCache = new Map<string, boolean>()
 const preloadImage = (url: string): Promise<boolean> => {
@@ -114,7 +118,7 @@ export const useSettingsStore = create<SettingsStore>()(
         fetchSystemSettings: async () => {
           set({ isLoading: true, error: null })
           try {
-            const response = await apiClient.getSystemSettings()
+            const response = await fetchSystemSettingsApi()
             const prevSettings = get().systemSettings
             const merged = mergeSystemSettings(prevSettings, response.data)
             const normalizedBrand = normalizeBrandText(merged.brandText)
@@ -135,7 +139,7 @@ export const useSettingsStore = create<SettingsStore>()(
         updateSystemSettings: async (settings: SystemSettingsUpdatePayload) => {
           set({ isLoading: true, error: null })
           try {
-            const response = await apiClient.updateSystemSettings(settings)
+            const response = await updateSystemSettingsApi(settings)
             const prevSettings = get().systemSettings
             const updatedSettings = mergeSystemSettings(prevSettings, response.data)
             const normalizedBrand = normalizeBrandText(updatedSettings.brandText)
@@ -156,7 +160,7 @@ export const useSettingsStore = create<SettingsStore>()(
 
       fetchPublicBranding: async () => {
         try {
-          const response = await apiClient.getPublicBranding()
+          const response = await getPublicBrandingApi()
           const normalized = normalizeBrandText(response.data?.brand_text)
           if (!normalized) return false
           set((state) => ({

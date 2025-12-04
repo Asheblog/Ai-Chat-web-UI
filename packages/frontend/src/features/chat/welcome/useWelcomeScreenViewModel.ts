@@ -497,9 +497,7 @@ export const useWelcomeScreenViewModel = () => {
       isCreating,
     },
     hero: {
-      brandText,
       quotaExhausted,
-      quotaLabel,
     },
     form: {
       query,

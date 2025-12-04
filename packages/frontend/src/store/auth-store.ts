@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { AuthState, User, ActorContextDTO, RegisterResponse } from '@/types'
-import { apiClient } from '@/lib/api'
+import {
+  getActorContext as fetchActorContext,
+  login as loginApi,
+  logout as logoutApi,
+  register as registerApi,
+} from '@/features/auth/api'
 import { useModelPreferenceStore } from '@/store/model-preference-store'
 
 interface AuthStore extends AuthState {
@@ -28,7 +33,7 @@ export const useAuthStore = create<AuthStore>()(
       login: async (username: string, password: string) => {
         set({ isLoading: true, error: null })
         try {
-          await apiClient.login(username, password)
+          await loginApi(username, password)
           await get().fetchActor()
         } catch (error: any) {
           const status = error.response?.data?.data?.status
@@ -52,7 +57,7 @@ export const useAuthStore = create<AuthStore>()(
       register: async (username: string, password: string) => {
         set({ isLoading: true, error: null })
         try {
-          const result = await apiClient.register(username, password)
+          const result = await registerApi(username, password)
           if (result.token) {
             await get().fetchActor()
           } else {
@@ -71,7 +76,7 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         try {
-          await apiClient.logout()
+          await logoutApi()
         } catch {}
         useModelPreferenceStore.getState().clear()
         set({
@@ -87,7 +92,7 @@ export const useAuthStore = create<AuthStore>()(
       fetchActor: async () => {
         set({ isLoading: true })
         try {
-          const context = await apiClient.getActorContext()
+          const context = await fetchActorContext()
           get().setActorContext(context)
         } catch (error: any) {
           console.error('Failed to fetch actor:', error)

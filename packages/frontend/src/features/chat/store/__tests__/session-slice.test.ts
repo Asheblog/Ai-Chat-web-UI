@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createChatStoreInstance } from '@/features/chat/store'
 import type { ChatSession } from '@/types'
-import { apiClient } from '@/lib/api'
+import * as chatApi from '@/features/chat/api'
 
-vi.mock('@/lib/api', () => ({
-  apiClient: {
-    getSessions: vi.fn(),
-    getSessionsUsage: vi.fn(),
-    updateSession: vi.fn(),
-  },
+vi.mock('@/features/chat/api', () => ({
+  getSessions: vi.fn(),
+  getSessionsUsage: vi.fn(),
+  updateSession: vi.fn(),
 }))
 
 const mockSessions = (count = 2): ChatSession[] =>
@@ -29,13 +27,13 @@ describe('session slice', () => {
   it('fetchSessions should load sessions list and stop loading flag', async () => {
     const store = createChatStoreInstance()
     const sessions = mockSessions()
-    vi.mocked(apiClient.getSessions).mockResolvedValue({ data: sessions })
-    vi.mocked(apiClient.getSessionsUsage).mockResolvedValue({ data: [] })
+    vi.mocked(chatApi.getSessions).mockResolvedValue({ data: sessions })
+    vi.mocked(chatApi.getSessionsUsage).mockResolvedValue({ data: [] })
 
     await store.getState().fetchSessions()
 
-    expect(apiClient.getSessions).toHaveBeenCalledTimes(1)
-    expect(apiClient.getSessionsUsage).toHaveBeenCalledTimes(1)
+    expect(chatApi.getSessions).toHaveBeenCalledTimes(1)
+    expect(chatApi.getSessionsUsage).toHaveBeenCalledTimes(1)
     expect(store.getState().sessions).toEqual(sessions)
     expect(store.getState().isSessionsLoading).toBe(false)
     expect(store.getState().error).toBeNull()
@@ -48,7 +46,7 @@ describe('session slice', () => {
       sessions,
       currentSession: sessions[0],
     })
-    vi.mocked(apiClient.updateSession).mockResolvedValue({ success: true })
+    vi.mocked(chatApi.updateSession).mockResolvedValue({ success: true })
 
     const result = await store.getState().updateSessionPrefs(sessions[0].id, {
       reasoningEnabled: false,
