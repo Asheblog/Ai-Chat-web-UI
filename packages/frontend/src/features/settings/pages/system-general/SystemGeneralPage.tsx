@@ -23,8 +23,12 @@ import { useToast } from "@/components/ui/use-toast"
 import { apiClient } from "@/lib/api"
 import { useAuthStore } from "@/store/auth-store"
 import { UserPlus, Palette, Clock } from "lucide-react"
-import { SettingRow } from "../components/setting-row"
-import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
+import { SettingRow } from "@/components/settings/components/setting-row"
+import { AvatarUploadField, type AvatarUploadResult } from "@/components/settings/components/avatar-upload-field"
+
+/**
+ * 系统通用设置页面：抽离到 features 层，供系统页和弹窗共用。
+ */
 
 export function SystemGeneralPage() {
   const {

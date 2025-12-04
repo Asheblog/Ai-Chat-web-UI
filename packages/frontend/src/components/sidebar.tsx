@@ -29,7 +29,7 @@ import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
-import { sessionItemVariants, sessionListVariants } from '@/lib/animations'
+import { sessionItemVariants, sessionListVariants } from '@/lib/animations/sidebar'
 import { APP_VERSION, PROJECT_URL } from '@/lib/app-meta'
 
 const formatUsageLine = (usage?: UsageTotals) => {

@@ -11,7 +11,7 @@ import {
   welcomeScreenVariants,
   chatInterfaceVariants,
   pageTransition,
-} from '@/lib/animations'
+} from '@/lib/animations/page'
 
 interface ChatPageClientProps {
   initialSessionId?: number | null

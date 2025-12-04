@@ -33,8 +33,12 @@ import {
   Upload,
   Trash2,
   RotateCcw,
-  HelpCircle
+  HelpCircle,
 } from 'lucide-react'
+
+/**
+ * 系统模型管理页面：集中模型覆写、能力开关与批量操作。
+ */
 
 const modelKey = (model: any) => `${model.connectionId}:${model.id}`
 

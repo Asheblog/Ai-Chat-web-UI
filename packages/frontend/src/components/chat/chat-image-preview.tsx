@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
-import { imageUploadVariants } from '@/lib/animations'
+import { imageUploadVariants } from '@/lib/animations/chat'
 import { cn } from '@/lib/utils'
 
 interface ChatImagePreviewProps {

@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { SettingsLayoutClient } from "@/app/main/settings/_components/settings-layout-client"
-import { SystemGeneralPage } from "@/components/settings/pages/SystemGeneral"
+import { SystemGeneralPage } from "@/features/settings/pages/system-general"
+import { SystemModelsPage } from "@/features/settings/pages/system-models"
 import { SystemNetworkPage } from "@/components/settings/pages/SystemNetwork"
 import { SystemReasoningPage } from "@/components/settings/pages/SystemReasoning"
 import { SystemWebSearchPage } from "@/components/settings/pages/SystemWebSearch"
@@ -21,6 +22,11 @@ type MockSystemSettingsResult = {
 const useSystemSettingsMock = vi.hoisted(() => vi.fn())
 vi.mock("@/hooks/use-system-settings", () => ({
   useSystemSettings: useSystemSettingsMock,
+}))
+
+const useSystemModelsMock = vi.hoisted(() => vi.fn())
+vi.mock("@/components/settings/system-models/use-system-models", () => ({
+  useSystemModels: () => useSystemModelsMock(),
 }))
 
 const useAuthStoreMock = vi.hoisted(() => vi.fn())
@@ -113,6 +119,43 @@ const baseSettings: SystemSettings = {
   taskTraceIdleTimeoutMs: 30000,
 }
 
+const sampleModelList = [
+  {
+    connectionId: "openai",
+    rawId: "gpt-4o-mini",
+    id: "gpt-4o-mini",
+    name: "GPT-4o mini",
+    provider: "OpenAI",
+    overridden: true,
+    capabilitySource: "manual",
+    tags: [{ name: "vision" }],
+    capabilities: {
+      vision: true,
+      file_upload: false,
+      web_search: true,
+      image_generation: false,
+      code_interpreter: false,
+    },
+  },
+  {
+    connectionId: "local",
+    rawId: "phi-3",
+    id: "phi-3",
+    name: "Phi-3 Turbo",
+    provider: "Azure",
+    overridden: false,
+    capabilitySource: "provider",
+    tags: [{ name: "code_interpreter" }],
+    capabilities: {
+      vision: false,
+      file_upload: true,
+      web_search: false,
+      image_generation: false,
+      code_interpreter: true,
+    },
+  },
+] as const
+
 const mockUseAuthStore = (state: typeof adminAuthState | typeof userAuthState) => {
   useAuthStoreMock.mockImplementation((selector: any) => {
     if (typeof selector === "function") return selector(state)
@@ -134,6 +177,45 @@ const mockSystemSettings = (
     ...extras,
   }
   useSystemSettingsMock.mockReturnValue(payload)
+}
+
+const mockSystemModels = (overrides: Record<string, any> = {}) => {
+  const defaultState = {
+    list: sampleModelList,
+    isLoading: false,
+    q: "",
+    setQ: vi.fn(),
+    onlyOverridden: false,
+    setOnlyOverridden: vi.fn(),
+    sortField: "name",
+    sortOrder: "asc",
+    toggleSort: vi.fn(),
+    selectedKeys: new Set<string>(),
+    toggleSelectAll: vi.fn(),
+    toggleSelectRow: vi.fn(),
+    clearSelection: vi.fn(),
+    savingKey: "",
+    refreshing: false,
+    manualRefresh: vi.fn(),
+    reload: vi.fn(),
+    clearDialogOpen: false,
+    setClearDialogOpen: vi.fn(),
+    clearing: false,
+    handleClearAll: vi.fn(),
+    handleExport: vi.fn(),
+    handleImportFile: vi.fn(),
+    handleToggleCapability: vi.fn(),
+    handleSaveMaxTokens: vi.fn(),
+    resetModel: vi.fn(),
+    handleBatchReset: vi.fn(),
+    hasCapability: (model: any, key: string) => Boolean(model?.capabilities?.[key]),
+    recommendTag: () => "推荐:通用对话",
+    bulkUpdateCapability: vi.fn(),
+    batchUpdating: false,
+    ...overrides,
+  }
+  useSystemModelsMock.mockReturnValue(defaultState)
+  return defaultState
 }
 
 beforeEach(() => {
@@ -279,5 +361,18 @@ describe("系统设置页面", () => {
         }),
       )
     })
+  })
+})
+
+describe("视图快照", () => {
+  test("SystemGeneralPage 渲染保持稳定", () => {
+    const { container } = render(<SystemGeneralPage />)
+    expect(container).toMatchSnapshot()
+  })
+
+  test("SystemModelsPage 渲染保持稳定", () => {
+    mockSystemModels()
+    const { container } = render(<SystemModelsPage />)
+    expect(container).toMatchSnapshot()
   })
 })

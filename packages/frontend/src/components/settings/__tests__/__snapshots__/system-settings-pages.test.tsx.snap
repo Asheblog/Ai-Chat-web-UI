@@ -1,0 +1,1893 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
+<div>
+  <div
+    class="space-y-6"
+  >
+    <div
+      class="space-y-4"
+    >
+      <div
+        class="flex items-center gap-3 pb-3 border-b"
+      >
+        <svg
+          class="w-5 h-5 text-primary"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle
+            cx="13.5"
+            cy="6.5"
+            r=".5"
+          />
+          <circle
+            cx="17.5"
+            cy="10.5"
+            r=".5"
+          />
+          <circle
+            cx="8.5"
+            cy="7.5"
+            r=".5"
+          />
+          <circle
+            cx="6.5"
+            cy="12.5"
+            r=".5"
+          />
+          <path
+            d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"
+          />
+        </svg>
+        <div>
+          <h3
+            class="font-semibold tracking-tight text-lg"
+          >
+            AI 头像
+          </h3>
+          <p
+            class="text-sm text-muted-foreground"
+          >
+            设置全局生效的 AI 回复头像
+          </p>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-center"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            AI 回复头像
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            修改后对所有用户立即生效，最大 1MB
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex items-center gap-4"
+          >
+            <span
+              class="relative flex h-10 w-10 overflow-hidden rounded-full shrink-0"
+              style="height: 64px; width: 64px;"
+            >
+              <span
+                class="flex h-full w-full items-center justify-center rounded-full bg-muted"
+              >
+                A
+              </span>
+            </span>
+            <div
+              class="flex flex-col gap-2 text-sm text-muted-foreground"
+            >
+              <div
+                class="flex flex-wrap gap-2"
+              >
+                <button
+                  class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+                  type="button"
+                >
+                  上传头像
+                </button>
+                <button
+                  class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+                  disabled=""
+                  type="button"
+                >
+                  恢复默认
+                </button>
+              </div>
+            </div>
+            <input
+              accept="image/*"
+              class="hidden"
+              type="file"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="space-y-4"
+    >
+      <div
+        class="flex items-center gap-3 pb-3 border-b"
+      >
+        <svg
+          class="w-5 h-5 text-primary"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+          />
+          <circle
+            cx="9"
+            cy="7"
+            r="4"
+          />
+          <line
+            x1="19"
+            x2="19"
+            y1="8"
+            y2="14"
+          />
+          <line
+            x1="22"
+            x2="16"
+            y1="11"
+            y2="11"
+          />
+        </svg>
+        <div>
+          <h3
+            class="font-semibold tracking-tight text-lg"
+          >
+            用户注册
+          </h3>
+          <p
+            class="text-sm text-muted-foreground"
+          >
+            控制新用户的注册和访客访问
+          </p>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-center"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            <div
+              class="flex items-center gap-2"
+            >
+              开放用户注册
+              <div
+                class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              >
+                推荐
+              </div>
+            </div>
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            允许新用户自行注册账号，关闭后只能由管理员手动创建用户
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <button
+            aria-checked="true"
+            class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input"
+            data-state="checked"
+            id="allowRegistration"
+            role="switch"
+            type="button"
+            value="on"
+          >
+            <span
+              class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+              data-state="checked"
+            />
+          </button>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            匿名访客每日额度
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            未登录用户每天可使用的对话次数（设置为 0 表示禁用匿名访问）
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="anonymousDailyQuota"
+              min="0"
+              type="number"
+              value="5"
+            />
+            <span
+              class="text-sm text-muted-foreground whitespace-nowrap"
+            >
+              次/天
+            </span>
+            <button
+              aria-controls="radix-:rj:"
+              aria-expanded="false"
+              aria-haspopup="dialog"
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              data-state="closed"
+              type="button"
+            >
+              同步
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            注册用户默认每日额度
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            新注册用户的初始每日对话额度，可在用户管理中单独调整
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="defaultUserDailyQuota"
+              min="0"
+              type="number"
+              value="50"
+            />
+            <span
+              class="text-sm text-muted-foreground whitespace-nowrap"
+            >
+              次/天
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="space-y-4"
+    >
+      <div
+        class="flex items-center gap-3 pb-3 border-b"
+      >
+        <svg
+          class="w-5 h-5 text-primary"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle
+            cx="13.5"
+            cy="6.5"
+            r=".5"
+          />
+          <circle
+            cx="17.5"
+            cy="10.5"
+            r=".5"
+          />
+          <circle
+            cx="8.5"
+            cy="7.5"
+            r=".5"
+          />
+          <circle
+            cx="6.5"
+            cy="12.5"
+            r=".5"
+          />
+          <path
+            d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"
+          />
+        </svg>
+        <div>
+          <h3
+            class="font-semibold tracking-tight text-lg"
+          >
+            品牌定制
+          </h3>
+          <p
+            class="text-sm text-muted-foreground"
+          >
+            自定义系统的品牌标识和外观
+          </p>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            文字 LOGO
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            显示在页面顶部的品牌名称，最多 40 个字符
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-[320px]"
+              id="brandText"
+              maxlength="40"
+              placeholder="例如：AIChat 或公司名"
+              value="AIChat"
+            />
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            全局系统提示词
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            留空则不注入；会话未设置时自动继承
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="w-full space-y-2"
+          >
+            <textarea
+              class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="例如：你是一位专业助教，请使用简洁、结构化的回答。"
+              rows="4"
+            />
+            <p
+              class="text-xs text-muted-foreground"
+            >
+              生效顺序：会话自定义 &gt; 全局默认
+            </p>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            图片访问域名
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            用户上传图片的公开访问地址前缀（需包含协议）
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-[320px]"
+              id="chatImageDomain"
+              placeholder="例如：https://chat.example.com"
+              type="text"
+              value="https://chat.example.com"
+            />
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+            >
+              刷新
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="space-y-4"
+    >
+      <div
+        class="flex items-center gap-3 pb-3 border-b"
+      >
+        <svg
+          class="w-5 h-5 text-primary"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+          />
+          <polyline
+            points="12 6 12 12 16 14"
+          />
+        </svg>
+        <div>
+          <h3
+            class="font-semibold tracking-tight text-lg"
+          >
+            数据保留策略
+          </h3>
+          <p
+            class="text-sm text-muted-foreground"
+          >
+            控制系统数据的自动清理规则
+          </p>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            <div
+              class="flex items-center gap-2"
+            >
+              聊天图片保留天数
+              <div
+                class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+              >
+                存储优化
+              </div>
+            </div>
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            超过此天数的聊天图片将被自动清理（设置为 0 表示永久保留）
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="chatImageRetentionDays"
+              inputmode="numeric"
+              max="3650"
+              min="0"
+              type="number"
+              value="30"
+            />
+            <span
+              class="text-sm text-muted-foreground"
+            >
+              天
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            单条消息 AI 回答上限
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            同一条用户消息最多保留的 AI 回答数量，超过后自动删除最旧的回答
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="assistantReplyHistoryLimit"
+              inputmode="numeric"
+              max="20"
+              min="1"
+              type="number"
+              value="5"
+            />
+            <span
+              class="text-sm text-muted-foreground"
+            >
+              条
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            匿名访客数据保留天数
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            匿名用户的聊天记录保留时长（设置为 0 表示永久保留）
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="anonymousRetentionDays"
+              max="15"
+              min="0"
+              type="number"
+              value="10"
+            />
+            <span
+              class="text-sm text-muted-foreground"
+            >
+              天
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:justify-end"
+    >
+      <button
+        class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+        disabled=""
+      >
+        还原更改
+      </button>
+      <button
+        class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+        disabled=""
+      >
+        保存通用设置
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
+<div>
+  <div
+    class="space-y-6 min-w-0"
+  >
+    <div
+      class="space-y-4"
+    >
+      <div
+        class="flex items-center gap-3 pb-3 border-b"
+      >
+        <svg
+          class="w-5 h-5 text-primary"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <rect
+            height="16"
+            rx="2"
+            width="16"
+            x="4"
+            y="4"
+          />
+          <rect
+            height="6"
+            width="6"
+            x="9"
+            y="9"
+          />
+          <path
+            d="M15 2v2"
+          />
+          <path
+            d="M15 20v2"
+          />
+          <path
+            d="M2 15h2"
+          />
+          <path
+            d="M2 9h2"
+          />
+          <path
+            d="M20 15h2"
+          />
+          <path
+            d="M20 9h2"
+          />
+          <path
+            d="M9 2v2"
+          />
+          <path
+            d="M9 20v2"
+          />
+        </svg>
+        <div>
+          <h3
+            class="font-semibold tracking-tight text-lg"
+          >
+            模型管理
+          </h3>
+          <p
+            class="text-sm text-muted-foreground"
+          >
+            为模型开启/关闭能力标签:图片理解、文件上传、联网搜索、图像生成、代码解释器
+          </p>
+        </div>
+      </div>
+      <div
+        class="rounded-lg border bg-card text-card-foreground shadow-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+      >
+        <div
+          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div
+            class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 flex-1"
+          >
+            <div
+              class="relative flex-1 max-w-sm"
+            >
+              <svg
+                class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="8"
+                />
+                <path
+                  d="m21 21-4.3-4.3"
+                />
+              </svg>
+              <input
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-9"
+                placeholder="搜索模型/提供方..."
+                value=""
+              />
+            </div>
+            <div
+              class="flex items-center gap-2 px-3 py-2 rounded border bg-background"
+            >
+              <input
+                class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                id="only-overridden"
+                type="checkbox"
+              />
+              <label
+                class="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-sm font-normal cursor-pointer"
+                for="only-overridden"
+              >
+                仅显示已手动设置
+              </label>
+            </div>
+          </div>
+          <div
+            class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2"
+          >
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 w-full sm:w-auto"
+            >
+              <svg
+                class="w-4 h-4 mr-1 "
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"
+                />
+                <path
+                  d="M21 3v5h-5"
+                />
+                <path
+                  d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"
+                />
+                <path
+                  d="M8 16H3v5"
+                />
+              </svg>
+              重新加载
+            </button>
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-3 w-full sm:w-auto"
+            >
+              <svg
+                class="w-4 h-4 mr-1 "
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"
+                />
+                <path
+                  d="M21 3v5h-5"
+                />
+                <path
+                  d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"
+                />
+                <path
+                  d="M8 16H3v5"
+                />
+              </svg>
+              手动获取最新
+            </button>
+            <button
+              aria-expanded="false"
+              aria-haspopup="menu"
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 w-full sm:w-auto"
+              data-state="closed"
+              id="radix-:rm:"
+              type="button"
+            >
+              <svg
+                class="w-4 h-4 mr-1"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="1"
+                />
+                <circle
+                  cx="12"
+                  cy="5"
+                  r="1"
+                />
+                <circle
+                  cx="12"
+                  cy="19"
+                  r="1"
+                />
+              </svg>
+              更多操作
+            </button>
+            <input
+              accept="application/json"
+              class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 hidden"
+              type="file"
+            />
+          </div>
+        </div>
+        <div
+          class="flex flex-wrap items-center gap-4 text-xs text-muted-foreground mt-4 pt-4 border-t"
+        >
+          <div
+            class="flex items-center gap-1.5"
+          >
+            <div
+              class="w-2 h-2 rounded-full bg-emerald-500"
+            />
+            <span>
+              已开启
+            </span>
+          </div>
+          <div
+            class="flex items-center gap-1.5"
+          >
+            <div
+              class="w-2 h-2 rounded-full bg-muted border"
+            />
+            <span>
+              未开启
+            </span>
+          </div>
+          <div
+            class="ml-auto text-xs"
+          >
+            <div
+              class="flex items-center gap-1 cursor-help"
+              data-state="closed"
+            >
+              <svg
+                class="w-3 h-3"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="10"
+                />
+                <path
+                  d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"
+                />
+                <path
+                  d="M12 17h.01"
+                />
+              </svg>
+              <span>
+                小提示
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="rounded-lg border bg-card text-card-foreground shadow-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+    >
+      <div
+        class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <h3
+          class="font-semibold tracking-tight text-base"
+        >
+          批量开关能力
+        </h3>
+        <div
+          class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground"
+        >
+          <span>
+            当前筛选 
+            2
+             个模型，操作会遍历所有页
+          </span>
+          <span>
+            每页渲染 
+            80
+             个以避免卡顿
+          </span>
+        </div>
+      </div>
+      <div
+        class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        <div
+          class="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+        >
+          <div
+            class="flex items-center gap-2 text-sm"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r="3"
+              />
+            </svg>
+            <span>
+              图片理解
+            </span>
+          </div>
+          <div
+            class="flex items-center gap-1"
+          >
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+            >
+              开启
+            </button>
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+        <div
+          class="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+        >
+          <div
+            class="flex items-center gap-2 text-sm"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"
+              />
+              <polyline
+                points="14 2 14 8 20 8"
+              />
+              <path
+                d="M12 12v6"
+              />
+              <path
+                d="m15 15-3-3-3 3"
+              />
+            </svg>
+            <span>
+              文件上传
+            </span>
+          </div>
+          <div
+            class="flex items-center gap-1"
+          >
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+            >
+              开启
+            </button>
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+        <div
+          class="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+        >
+          <div
+            class="flex items-center gap-2 text-sm"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+              />
+              <line
+                x1="2"
+                x2="22"
+                y1="12"
+                y2="12"
+              />
+              <path
+                d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+              />
+            </svg>
+            <span>
+              联网搜索
+            </span>
+          </div>
+          <div
+            class="flex items-center gap-1"
+          >
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+            >
+              开启
+            </button>
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+        <div
+          class="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+        >
+          <div
+            class="flex items-center gap-2 text-sm"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                height="18"
+                rx="2"
+                ry="2"
+                width="18"
+                x="3"
+                y="3"
+              />
+              <circle
+                cx="9"
+                cy="9"
+                r="2"
+              />
+              <path
+                d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"
+              />
+            </svg>
+            <span>
+              图像生成
+            </span>
+          </div>
+          <div
+            class="flex items-center gap-1"
+          >
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+            >
+              开启
+            </button>
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+        <div
+          class="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+        >
+          <div
+            class="flex items-center gap-2 text-sm"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="m18 16 4-4-4-4"
+              />
+              <path
+                d="m6 8-4 4 4 4"
+              />
+              <path
+                d="m14.5 4-5 16"
+              />
+            </svg>
+            <span>
+              代码解释器
+            </span>
+          </div>
+          <div
+            class="flex items-center gap-1"
+          >
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+            >
+              开启
+            </button>
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="space-y-4"
+    >
+      <div
+        class="flex items-center justify-between"
+      >
+        <h3
+          class="font-semibold tracking-tight text-lg"
+        >
+          模型列表 (
+          2
+          )
+        </h3>
+      </div>
+      <div
+        class="rounded-lg border bg-card text-card-foreground shadow-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+      >
+        <div
+          class="overflow-x-auto"
+        >
+          <div
+            class="relative w-full overflow-x-auto"
+          >
+            <table
+              class="caption-bottom text-sm w-full table-fixed"
+            >
+              <thead
+                class="[&_tr]:border-b sticky top-0 z-30 bg-muted/50"
+              >
+                <tr
+                  class="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                >
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 w-12 text-center"
+                  >
+                    <input
+                      class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      type="checkbox"
+                    />
+                  </th>
+                  <th
+                    class="h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 w-[200px] cursor-pointer hover:bg-muted/80 transition-colors"
+                  >
+                    模型 
+                    ↑
+                  </th>
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
+                  >
+                    <div
+                      class="flex items-center justify-center gap-1 cursor-help"
+                      data-state="closed"
+                    >
+                      <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"
+                        />
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="3"
+                        />
+                      </svg>
+                    </div>
+                  </th>
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
+                  >
+                    <div
+                      class="flex items-center justify-center gap-1 cursor-help"
+                      data-state="closed"
+                    >
+                      <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"
+                        />
+                        <polyline
+                          points="14 2 14 8 20 8"
+                        />
+                        <path
+                          d="M12 12v6"
+                        />
+                        <path
+                          d="m15 15-3-3-3 3"
+                        />
+                      </svg>
+                    </div>
+                  </th>
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
+                  >
+                    <div
+                      class="flex items-center justify-center gap-1 cursor-help"
+                      data-state="closed"
+                    >
+                      <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="10"
+                        />
+                        <line
+                          x1="2"
+                          x2="22"
+                          y1="12"
+                          y2="12"
+                        />
+                        <path
+                          d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                        />
+                      </svg>
+                    </div>
+                  </th>
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
+                  >
+                    <div
+                      class="flex items-center justify-center gap-1 cursor-help"
+                      data-state="closed"
+                    >
+                      <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <rect
+                          height="18"
+                          rx="2"
+                          ry="2"
+                          width="18"
+                          x="3"
+                          y="3"
+                        />
+                        <circle
+                          cx="9"
+                          cy="9"
+                          r="2"
+                        />
+                        <path
+                          d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"
+                        />
+                      </svg>
+                    </div>
+                  </th>
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
+                  >
+                    <div
+                      class="flex items-center justify-center gap-1 cursor-help"
+                      data-state="closed"
+                    >
+                      <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="m18 16 4-4-4-4"
+                        />
+                        <path
+                          d="m6 8-4 4 4 4"
+                        />
+                        <path
+                          d="m14.5 4-5 16"
+                        />
+                      </svg>
+                    </div>
+                  </th>
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[56px]"
+                  >
+                    手动
+                  </th>
+                  <th
+                    class="h-12 px-4 align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[64px]"
+                  >
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody
+                class="[&_tr:last-child]:border-0"
+              >
+                <tr
+                  class="border-b data-[state=selected]:bg-muted hover:bg-muted/30 transition-colors"
+                >
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 text-center"
+                  >
+                    <input
+                      class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      type="checkbox"
+                    />
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3"
+                  >
+                    <div
+                      class="font-medium whitespace-normal break-words"
+                    >
+                      GPT-4o mini
+                    </div>
+                    <div
+                      class="mt-1 flex items-center gap-2 flex-wrap text-xs"
+                    >
+                      <div
+                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-[11px] font-normal"
+                      >
+                        推荐:通用对话
+                      </div>
+                      <div
+                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 text-[10px] font-normal"
+                      >
+                        OpenAI
+                      </div>
+                      <div
+                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-secondary/80 text-[10px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                      >
+                        手动设置
+                      </div>
+                    </div>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="true"
+                      aria-label="图片理解开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="checked"
+                      id="openai-gpt-4o-mini-vision"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="checked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="false"
+                      aria-label="文件上传开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="unchecked"
+                      id="openai-gpt-4o-mini-file_upload"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="unchecked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="true"
+                      aria-label="联网搜索开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="checked"
+                      id="openai-gpt-4o-mini-web_search"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="checked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="false"
+                      aria-label="图像生成开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="unchecked"
+                      id="openai-gpt-4o-mini-image_generation"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="unchecked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="false"
+                      aria-label="代码解释器开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="unchecked"
+                      id="openai-gpt-4o-mini-code_interpreter"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="unchecked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <div
+                      class="inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs"
+                    >
+                      是
+                    </div>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-expanded="false"
+                      aria-haspopup="menu"
+                      class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 rounded-full"
+                      data-state="closed"
+                      id="radix-:r11:"
+                      type="button"
+                    >
+                      <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="1"
+                        />
+                        <circle
+                          cx="12"
+                          cy="5"
+                          r="1"
+                        />
+                        <circle
+                          cx="12"
+                          cy="19"
+                          r="1"
+                        />
+                      </svg>
+                      <span
+                        class="sr-only"
+                      >
+                        更多操作
+                      </span>
+                    </button>
+                  </td>
+                </tr>
+                <tr
+                  class="border-b data-[state=selected]:bg-muted hover:bg-muted/30 transition-colors"
+                >
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 text-center"
+                  >
+                    <input
+                      class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      type="checkbox"
+                    />
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3"
+                  >
+                    <div
+                      class="font-medium whitespace-normal break-words"
+                    >
+                      Phi-3 Turbo
+                    </div>
+                    <div
+                      class="mt-1 flex items-center gap-2 flex-wrap text-xs"
+                    >
+                      <div
+                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-[11px] font-normal"
+                      >
+                        推荐:通用对话
+                      </div>
+                      <div
+                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 text-[10px] font-normal"
+                      >
+                        Azure
+                      </div>
+                      <div
+                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-secondary/80 text-[10px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                      >
+                        供应商标注
+                      </div>
+                    </div>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="false"
+                      aria-label="图片理解开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="unchecked"
+                      id="local-phi-3-vision"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="unchecked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="true"
+                      aria-label="文件上传开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="checked"
+                      id="local-phi-3-file_upload"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="checked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="false"
+                      aria-label="联网搜索开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="unchecked"
+                      id="local-phi-3-web_search"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="unchecked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="false"
+                      aria-label="图像生成开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="unchecked"
+                      id="local-phi-3-image_generation"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="unchecked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-checked="true"
+                      aria-label="代码解释器开关"
+                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      data-state="checked"
+                      id="local-phi-3-code_interpreter"
+                      role="switch"
+                      type="button"
+                      value="on"
+                    >
+                      <span
+                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        data-state="checked"
+                      />
+                    </button>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <span
+                      class="text-xs text-muted-foreground"
+                    >
+                      否
+                    </span>
+                  </td>
+                  <td
+                    class="p-4 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                  >
+                    <button
+                      aria-expanded="false"
+                      aria-haspopup="menu"
+                      class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 rounded-full"
+                      data-state="closed"
+                      id="radix-:r13:"
+                      type="button"
+                    >
+                      <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="1"
+                        />
+                        <circle
+                          cx="12"
+                          cy="5"
+                          r="1"
+                        />
+                        <circle
+                          cx="12"
+                          cy="19"
+                          r="1"
+                        />
+                      </svg>
+                      <span
+                        class="sr-only"
+                      >
+                        更多操作
+                      </span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div
+          class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground mt-3"
+        >
+          <div>
+            当前筛选 
+            2
+             个模型，每页 
+            80
+             个
+          </div>
+          <div
+            class="flex items-center gap-2"
+          >
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              disabled=""
+            >
+              上一页
+            </button>
+            <span>
+              第 
+              1
+               / 
+              1
+               页
+            </span>
+            <button
+              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              disabled=""
+            >
+              下一页
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
