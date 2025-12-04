@@ -61,7 +61,7 @@ export const updateSessionModel = async (
   sessionId: number,
   payload: { modelId: string; connectionId?: number; rawId?: string },
 ) => {
-  const response = await client.post<ApiResponse<any>>(
+  const response = await client.put<ApiResponse<any>>(
     `/sessions/${sessionId}/model`,
     payload,
   )
