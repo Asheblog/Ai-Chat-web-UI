@@ -1,0 +1,289 @@
+'use client'
+
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useToast } from '@/components/ui/use-toast'
+import { copyToClipboard, formatDate } from '@/lib/utils'
+import { requestMarkdownRender } from '@/lib/markdown-worker-client'
+import { useChatStore } from '@/store/chat-store'
+import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
+import { useSettingsStore } from '@/store/settings-store'
+import { useAuthStore } from '@/store/auth-store'
+import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
+import { ReasoningSection } from './reasoning-section'
+import { MessageBodyContent } from './message-body-content'
+import { MessageHeader } from './message-header'
+import { ShareBadge } from './share-badge'
+
+const toReasoningMarkdown = (input: string) =>
+  input
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trimEnd()
+      if (trimmed.length === 0) return '>'
+      return trimmed.startsWith('>') ? trimmed : `> ${trimmed}`
+    })
+    .join('\n')
+
+interface MessageBubbleProps {
+  meta: MessageMeta
+  body: MessageBody
+  renderCache?: MessageRenderCacheEntry
+  isStreaming?: boolean
+  variantInfo?: {
+    total: number
+    index: number
+    onPrev: () => void
+    onNext: () => void
+    onRegenerate: () => void
+  }
+  shareSelection?: {
+    active: boolean
+    selectable: boolean
+    selected: boolean
+    onToggle?: () => void
+    onStart?: () => void
+  }
+}
+
+function MessageBubbleComponent({
+  meta,
+  body,
+  renderCache,
+  isStreaming,
+  variantInfo,
+  shareSelection,
+}: MessageBubbleProps) {
+  const { toast } = useToast()
+  const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
+  const currentUser = useAuthStore((state) => state.user)
+  const { reasoningDefaultExpand, assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
+    reasoningDefaultExpand: Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
+    assistantAvatarUrl: state.systemSettings?.assistantAvatarUrl ?? null,
+    assistantAvatarReady: state.assistantAvatarReady,
+  }))
+  const [isCopied, setIsCopied] = useState(false)
+  const [isRendering, setIsRendering] = useState(false)
+  const reasoningRaw = body.reasoning || ''
+  const reasoningText = reasoningRaw.trim()
+  const isUser = meta.role === 'user'
+  const content = body.content || ''
+  const outsideText = content.replace(/```[\s\S]*?```/g, '').trim()
+  const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
+  const hasContent = content.length > 0
+  const hasReasoningState = typeof meta.reasoningStatus === 'string'
+  const shouldShowReasoningSection =
+    !isUser &&
+    (reasoningText.length > 0 ||
+      (hasReasoningState && meta.reasoningStatus !== 'done') ||
+      (isStreaming && meta.role === 'assistant' && hasReasoningState))
+  const shouldShowStreamingPlaceholder = Boolean(
+    isStreaming && !hasContent && meta.role === 'assistant',
+  )
+  const { timeline: toolTimeline, summary: toolSummary } = useToolTimeline({
+    sessionId: meta.sessionId,
+    messageId: meta.id,
+    bodyEvents: body.toolEvents,
+  })
+
+  const cacheMatches =
+    renderCache &&
+    renderCache.contentVersion === body.version &&
+    renderCache.reasoningVersion === body.reasoningVersion
+  const contentHtml = cacheMatches ? renderCache.contentHtml ?? '' : ''
+  const reasoningHtml = cacheMatches && renderCache?.reasoningHtml ? renderCache.reasoningHtml : ''
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await copyToClipboard(content)
+      setIsCopied(true)
+      toast({
+        title: '已复制',
+        description: '消息内容已复制到剪贴板',
+        duration: 2000,
+      })
+      setTimeout(() => setIsCopied(false), 2000)
+    } catch (error) {
+      toast({
+        title: '复制失败',
+        description: '无法复制消息内容',
+        variant: 'destructive',
+      })
+    }
+  }, [content, toast])
+
+  useEffect(() => {
+    if (isUser) return
+    const hasReasoning = Boolean(body.reasoning && body.reasoning.trim().length > 0)
+    if (!hasContent && !hasReasoning) return
+    if (!hasContent && body.reasoningVersion === 0) return
+    if (cacheMatches) return
+
+    let cancelled = false
+    const delay = isStreaming ? 160 : 40
+    const timer = window.setTimeout(() => {
+      setIsRendering(true)
+      const reasoningMarkdown = hasReasoning ? toReasoningMarkdown(body.reasoning!) : ''
+      requestMarkdownRender({
+        messageId: meta.id,
+        content: body.content,
+        reasoning: reasoningMarkdown,
+        contentVersion: body.version,
+        reasoningVersion: body.reasoningVersion,
+      })
+        .then((result) => {
+          if (cancelled) return
+          applyRenderedContent(meta.id, result)
+        })
+        .catch((error) => {
+          if (process.env.NODE_ENV !== 'production') {
+            // eslint-disable-next-line no-console
+            console.warn('[MessageBubble] Markdown render failed', error)
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsRendering(false)
+          }
+        })
+    }, delay)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    applyRenderedContent,
+    body.content,
+    body.reasoning,
+    body.reasoningVersion,
+    body.version,
+    cacheMatches,
+    hasContent,
+    isStreaming,
+    isUser,
+    meta.id,
+  ])
+
+  const bubbleClass = `inline-block max-w-full box-border rounded-lg ${
+    isUser ? 'px-4 py-3' : isCodeOnly ? 'p-0' : 'px-4 py-3'
+  } ${
+    isUser
+      ? 'bg-muted text-foreground ml-auto'
+      : isCodeOnly
+      ? 'bg-transparent border-0 text-foreground'
+      : 'bg-background text-foreground'
+  }`
+
+  const avatarSrc = isUser ? currentUser?.avatarUrl ?? undefined : assistantAvatarUrl ?? undefined
+  const avatarFallbackText = isUser
+    ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
+    : 'A'
+  const assistantFallbackHidden = !isUser && assistantAvatarReady && Boolean(assistantAvatarUrl)
+  const showVariantControls = Boolean(variantInfo)
+  const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
+  const shareableMessageId = typeof meta.id === 'number' ? meta.id : null
+  const shareState = shareSelection ?? null
+  const shareModeActive = Boolean(shareState?.active)
+  const shareSelectable = Boolean(shareState?.selectable)
+  const shareSelected = Boolean(shareState?.selected)
+  const shareToggle = shareState?.onToggle
+  const shareEntryHandler = shareState?.onStart
+  const shareEntryAvailable =
+    !shareModeActive &&
+    Boolean(shareEntryHandler) &&
+    shareableMessageId !== null &&
+    !meta.pendingSync &&
+    !isStreaming
+  const selectionWrapperClass = shareModeActive
+    ? `rounded-2xl border ${
+        shareSelected
+          ? 'border-primary/50 bg-primary/5'
+          : shareSelectable
+          ? 'border-dashed border-primary/40 bg-muted/40'
+          : 'border-dashed border-border/60 bg-muted/30'
+      } p-2 transition-colors`
+    : ''
+
+  const defaultShouldShowReasoning = useMemo(() => {
+    if (meta.role !== 'assistant') return false
+    if (typeof meta.reasoningStatus === 'string') {
+      if (meta.reasoningStatus === 'done') {
+        return reasoningDefaultExpand && reasoningText.length > 0
+      }
+      return true
+    }
+    if (reasoningText.length === 0) return false
+    return reasoningDefaultExpand
+  }, [meta.reasoningStatus, meta.role, reasoningDefaultExpand, reasoningText])
+
+  const shareBadgePosition = isUser ? 'right-3' : 'left-3'
+
+  return (
+    <div className={`relative ${selectionWrapperClass}`}>
+      <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+        <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
+          <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
+          <AvatarFallback
+            className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
+              assistantFallbackHidden ? 'opacity-0' : ''
+            }`}
+            aria-hidden={assistantFallbackHidden ? 'true' : undefined}
+          >
+            {avatarFallbackText}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className={`flex-1 min-w-0 max-w-full lg:max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
+          {!isUser && shouldShowReasoningSection && (
+            <ReasoningSection
+              meta={meta}
+              reasoningRaw={reasoningRaw}
+              reasoningHtml={reasoningHtml || undefined}
+              timeline={toolTimeline}
+              summary={toolSummary}
+              defaultExpanded={defaultShouldShowReasoning}
+            />
+          )}
+
+          <MessageBodyContent
+            isUser={isUser}
+            meta={meta}
+            bubbleClass={bubbleClass}
+            contentHtml={contentHtml}
+            content={content}
+            shouldShowStreamingPlaceholder={shouldShowStreamingPlaceholder}
+            isStreaming={Boolean(isStreaming)}
+            isRendering={isRendering}
+          />
+
+          <MessageHeader
+            isUser={isUser}
+            timestamp={formatDate(meta.createdAt)}
+            isCopied={isCopied}
+            onCopy={handleCopy}
+            shareEntryAvailable={shareEntryAvailable}
+            onShareStart={shareEntryHandler}
+            showVariantControls={showVariantControls}
+            showVariantNavigation={showVariantNavigation}
+            variantInfo={variantInfo}
+            isStreaming={Boolean(isStreaming)}
+          />
+          {!isUser && meta.pendingSync && (
+            <div className="text-xs text-amber-600 mt-1">等待后端同步</div>
+          )}
+        </div>
+      </div>
+
+      <ShareBadge
+        positionClass={shareBadgePosition}
+        shareModeActive={shareModeActive}
+        shareSelectable={shareSelectable}
+        shareSelected={shareSelected}
+        onToggle={shareToggle}
+      />
+    </div>
+  )
+}
+
+export const MessageBubble = memo(MessageBubbleComponent)

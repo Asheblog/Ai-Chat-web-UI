@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { MessageBubble } from './message-bubble'
 import { TypingIndicator } from './typing-indicator'
-import { useChatStore } from '@/store/chat-store'
+import { useChatMessages } from '@/store/chat-store'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
 
@@ -59,8 +59,10 @@ function MessageListComponent({
   onShareToggle,
   onShareStart,
 }: MessageListProps) {
-  const regenerateAssistantMessage = useChatStore((state) => state.regenerateAssistantMessage)
-  const cycleAssistantVariant = useChatStore((state) => state.cycleAssistantVariant)
+  const { regenerateAssistantMessage, cycleAssistantVariant } = useChatMessages((state) => ({
+    regenerateAssistantMessage: state.regenerateAssistantMessage,
+    cycleAssistantVariant: state.cycleAssistantVariant,
+  }))
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
 

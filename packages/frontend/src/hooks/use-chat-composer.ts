@@ -1,6 +1,6 @@
 'use client'
 
-import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
 import { useToast } from '@/components/ui/use-toast'
 import { useChatStore } from '@/store/chat-store'
@@ -9,6 +9,12 @@ import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
+import {
+  useAdvancedRequest,
+  useComposerFeatureFlags,
+  useImageAttachments,
+} from '@/features/chat/composer'
+import type { ComposerImage } from '@/features/chat/composer'
 
 const FORBIDDEN_HEADER_NAMES = new Set([
   'authorization',
@@ -22,22 +28,13 @@ const FORBIDDEN_HEADER_NAMES = new Set([
   'accept-encoding',
 ])
 
-export interface ChatComposerImage {
-  dataUrl: string
-  mime: string
-  size: number
-}
+export type ChatComposerImage = ComposerImage
 
 export function useChatComposer() {
   const [input, setInput] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedImages, setSelectedImages] = useState<ChatComposerImage[]>([])
-  const [thinkingEnabled, setThinkingEnabled] = useState<boolean>(false)
-  const [effort, setEffort] = useState<'low' | 'medium' | 'high' | 'unset'>('unset')
-  const [ollamaThink, setOllamaThink] = useState<boolean>(false)
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
   const {
     currentSession,
@@ -54,15 +51,21 @@ export function useChatComposer() {
     assistantVariantSelections,
     updateSessionPrefs,
   } = useChatStore()
-  const [customBodyInput, setCustomBodyInput] = useState<string>('')
-  const [customBodyError, setCustomBodyError] = useState<string | null>(null)
-  const [customHeaders, setCustomHeaders] = useState<Array<{ name: string; value: string }>>([])
+
+  const {
+    customBodyInput,
+    setCustomBodyInput,
+    customBodyError,
+    setCustomBodyError,
+    customHeaders,
+    setCustomHeaders,
+    addCustomHeader,
+    updateCustomHeader,
+    removeCustomHeader,
+  } = useAdvancedRequest({ sessionId: currentSession?.id })
+
   const [sessionPromptDraft, setSessionPromptDraft] = useState<string>('')
   const [sessionPromptSaving, setSessionPromptSaving] = useState<boolean>(false)
-  const cacheKey = useMemo(() => {
-    if (!currentSession?.id) return null
-    return `aichat:custom-request:${currentSession.id}`
-  }, [currentSession?.id])
 
   const { systemSettings } = useSettingsStore()
   const { toast } = useToast()
@@ -70,77 +73,10 @@ export function useChatComposer() {
   const { actorState, user } = useAuthStore((state) => ({ actorState: state.actorState, user: state.user }))
   const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
 
-  const {
-    maxCount: MAX_IMAGE_COUNT,
-    maxMb: MAX_IMAGE_MB,
-    maxEdge: MAX_IMAGE_EDGE,
-    maxTotalMb: MAX_TOTAL_IMAGE_MB,
-  } = DEFAULT_CHAT_IMAGE_LIMITS
-  const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
-  const [webSearchScope, setWebSearchScope] = useState('webpage')
-  const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
-  const [pythonToolTouched, setPythonToolTouched] = useState(false)
-  const [traceEnabled, setTraceEnabled] = useState(false)
-  const tracePreferenceRef = useRef<Record<number, boolean>>({})
   const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
   const storedPythonPreference = usePythonToolPreferenceStore((state) => state.lastSelection)
   const persistPythonPreference = usePythonToolPreferenceStore((state) => state.setLastSelection)
-  const scopePreferenceKey = 'web_search_scope_preference'
-  const setWebSearchEnabled = useCallback(
-    (value: boolean) => {
-      setWebSearchEnabledState(value)
-      persistWebSearchPreference(value)
-    },
-    [persistWebSearchPreference],
-  )
-  const setPythonToolEnabledState = useCallback(
-    (value: boolean) => {
-      setPythonToolEnabled(value)
-      persistPythonPreference(value)
-    },
-    [persistPythonPreference],
-  )
-
-  useEffect(() => {
-    if (!cacheKey) {
-      setCustomBodyInput('')
-      setCustomHeaders([])
-      return
-    }
-    try {
-      const raw = localStorage.getItem(cacheKey)
-      if (!raw) {
-        setCustomBodyInput('')
-        setCustomHeaders([])
-        return
-      }
-      const parsed = JSON.parse(raw) as { body?: string; headers?: Array<{ name: string; value: string }> }
-      setCustomBodyInput(typeof parsed?.body === 'string' ? parsed.body : '')
-      if (Array.isArray(parsed?.headers)) {
-        setCustomHeaders(
-          parsed.headers
-            .filter((item) => item && typeof item.name === 'string' && typeof item.value === 'string')
-            .map((item) => ({ name: item.name, value: item.value })),
-        )
-      } else {
-        setCustomHeaders([])
-      }
-    } catch {
-      setCustomBodyInput('')
-      setCustomHeaders([])
-    }
-  }, [cacheKey])
-
-  useEffect(() => {
-    if (!cacheKey) return
-    try {
-      const payload = JSON.stringify({ body: customBodyInput, headers: customHeaders })
-      localStorage.setItem(cacheKey, payload)
-    } catch {
-      // ignore storage errors
-    }
-  }, [cacheKey, customBodyInput, customHeaders])
 
   const modelsCount = allModels.length
   useEffect(() => {
@@ -181,6 +117,10 @@ export function useChatComposer() {
     systemSettings?.reasoningEnabled,
     systemSettings?.openaiReasoningEffort,
     systemSettings?.ollamaThink,
+    setThinkingEnabled,
+    setEffort,
+    setOllamaThink,
+    setSessionPromptDraft,
   ])
 
   useEffect(() => {
@@ -215,48 +155,59 @@ export function useChatComposer() {
     )
   }, [allModels, currentSession])
 
-  const providerSupportsTools = useMemo(() => {
-    const provider = activeModel?.provider?.toLowerCase()
-    if (!provider) return true
-    return provider === 'openai' || provider === 'azure_openai'
-  }, [activeModel])
+  const {
+    thinkingEnabled,
+    setThinkingEnabled,
+    effort,
+    setEffort,
+    ollamaThink,
+    setOllamaThink,
+    webSearchEnabled,
+    setWebSearchEnabled,
+    webSearchScope,
+    setWebSearchScope,
+    pythonToolEnabled,
+    setPythonToolEnabled,
+    traceEnabled,
+    onToggleTrace,
+    canUseTrace,
+    canUseWebSearch,
+    canUsePythonTool,
+    webSearchDisabledNote,
+    pythonToolDisabledNote,
+    isMetasoEngine,
+    showWebSearchScope,
+    isVisionEnabled,
+  } = useComposerFeatureFlags({
+    currentSession,
+    systemSettings,
+    activeModel,
+    storedWebSearchPreference,
+    persistWebSearchPreference,
+    storedPythonPreference,
+    persistPythonPreference,
+    isAdmin,
+  })
 
-  const isVisionEnabled = useMemo(() => {
-    const cap = activeModel?.capabilities?.vision
-    return typeof cap === 'boolean' ? cap : true
-  }, [activeModel])
-
-  const isWebSearchCapable = useMemo(() => {
-    const cap = activeModel?.capabilities?.web_search
-    return typeof cap === 'boolean' ? cap : true
-  }, [activeModel])
-
-  const pythonToolCapable = useMemo(() => {
-    const cap = activeModel?.capabilities?.code_interpreter
-    return typeof cap === 'boolean' ? cap : true
-  }, [activeModel])
-
-  const canUseWebSearch =
-    Boolean(systemSettings?.webSearchAgentEnable && systemSettings?.webSearchHasApiKey) &&
-    isWebSearchCapable &&
-    providerSupportsTools
-  const canUsePythonTool =
-    Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable && providerSupportsTools
-  const webSearchDisabledNote = useMemo(() => {
-    if (!systemSettings?.webSearchAgentEnable) return '管理员未启用联网搜索'
-    if (!systemSettings?.webSearchHasApiKey) return '尚未配置搜索 API Key'
-    if (!providerSupportsTools) return '当前连接不支持工具调用'
-    if (!isWebSearchCapable) return '当前模型未开放联网搜索'
-    return undefined
-  }, [providerSupportsTools, systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey, isWebSearchCapable])
-  const pythonToolDisabledNote = useMemo(() => {
-    if (!systemSettings?.pythonToolEnable) return '管理员未开启 Python 工具'
-    if (!providerSupportsTools) return '当前连接不支持工具调用'
-    if (!pythonToolCapable) return '当前模型未启用 Python 工具'
-    return undefined
-  }, [providerSupportsTools, pythonToolCapable, systemSettings?.pythonToolEnable])
-  const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
-  const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
+  const {
+    fileInputRef,
+    selectedImages,
+    setSelectedImages,
+    pickImages,
+    onFilesSelected,
+    removeImage,
+    validateImage,
+    limits: {
+      maxCount: MAX_IMAGE_COUNT,
+      maxMb: MAX_IMAGE_MB,
+      maxEdge: MAX_IMAGE_EDGE,
+      maxTotalMb: MAX_TOTAL_IMAGE_MB,
+    },
+  } = useImageAttachments({
+    isVisionEnabled,
+    limits: DEFAULT_CHAT_IMAGE_LIMITS,
+    toast,
+  })
   const addCustomHeader = useCallback(() => {
     if (customHeaders.length >= 10) {
       toast({
@@ -267,18 +218,18 @@ export function useChatComposer() {
       return
     }
     setCustomHeaders((prev) => [...prev, { name: '', value: '' }])
-  }, [customHeaders.length, toast])
+  }, [customHeaders.length, setCustomHeaders, toast])
   const updateCustomHeader = useCallback(
     (index: number, field: 'name' | 'value', value: string) => {
       setCustomHeaders((prev) =>
         prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
       )
     },
-    [],
+    [setCustomHeaders],
   )
   const removeCustomHeader = useCallback((index: number) => {
     setCustomHeaders((prev) => prev.filter((_, i) => i !== index))
-  }, [])
+  }, [setCustomHeaders])
 
   const handleSessionPromptSave = useCallback(async () => {
     if (!currentSession) return
@@ -325,120 +276,6 @@ export function useChatComposer() {
   const sessionPromptPlaceholder = systemPromptFallback
     ? `留空以继承全局提示词：${systemPromptFallback.slice(0, 60)}${systemPromptFallback.length > 60 ? '...' : ''}`
     : '为空则不附加系统提示词'
-
-  useEffect(() => {
-    if (!canUseWebSearch) {
-      if (webSearchEnabled) {
-        setWebSearchEnabledState(false)
-      }
-      return
-    }
-    const desired =
-      typeof storedWebSearchPreference === 'boolean' ? storedWebSearchPreference : true
-    if (webSearchEnabled !== desired) {
-      setWebSearchEnabledState(desired)
-    }
-  }, [canUseWebSearch, storedWebSearchPreference, webSearchEnabled])
-
-  useEffect(() => {
-    if (!canUsePythonTool) {
-      if (pythonToolEnabled) {
-        setPythonToolEnabledState(false)
-      }
-      return
-    }
-    const desired =
-      typeof storedPythonPreference === 'boolean' ? storedPythonPreference : false
-    if (pythonToolEnabled !== desired) {
-      setPythonToolEnabledState(desired)
-    }
-  }, [canUsePythonTool, pythonToolEnabled, setPythonToolEnabledState, storedPythonPreference])
-
-  useEffect(() => {
-    if (!canUseWebSearch || !isMetasoEngine) {
-      setWebSearchScope('webpage')
-      return
-    }
-    const stored = (() => {
-      try {
-        return localStorage.getItem(scopePreferenceKey) || ''
-      } catch {
-        return ''
-      }
-    })()
-    const fromSetting = systemSettings?.webSearchScope || 'webpage'
-    const next = stored || fromSetting || 'webpage'
-    if (next && webSearchScope !== next) {
-      setWebSearchScope(next)
-    }
-    if (!stored && next) {
-      try {
-        localStorage.setItem(scopePreferenceKey, next)
-      } catch {
-        // ignore storage error
-      }
-    }
-  }, [canUseWebSearch, isMetasoEngine, systemSettings?.webSearchScope, webSearchScope, scopePreferenceKey])
-
-  useEffect(() => {
-    if (!canUseTrace) {
-      setTraceEnabled(false)
-      return
-    }
-    if (!currentSession) return
-    const stored = tracePreferenceRef.current[currentSession.id]
-    if (typeof stored === 'boolean') {
-      setTraceEnabled(stored)
-    } else {
-      setTraceEnabled(Boolean(systemSettings?.taskTraceDefaultOn))
-    }
-  }, [canUseTrace, currentSession, currentSession?.id, systemSettings?.taskTraceDefaultOn])
-
-  useEffect(() => {
-    if (!isVisionEnabled && selectedImages.length > 0) {
-      setSelectedImages([])
-      toast({
-        title: '已清空图片',
-        description: '当前模型不支持图片输入',
-        variant: 'destructive',
-      })
-    }
-  }, [isVisionEnabled, selectedImages.length, toast])
-
-  const validateImage = useCallback(
-    (file: File): Promise<{ ok: boolean; reason?: string; dataUrl?: string; mime?: string; size?: number }> => {
-      return new Promise((resolve) => {
-        if (!file.type.startsWith('image/')) {
-          resolve({ ok: false, reason: '不支持的文件类型' })
-          return
-        }
-        const sizeMB = file.size / (1024 * 1024)
-        if (sizeMB > MAX_IMAGE_MB) {
-          resolve({ ok: false, reason: `图片大小超过限制（>${MAX_IMAGE_MB}MB）` })
-          return
-        }
-        const reader = new FileReader()
-        reader.onload = () => {
-          const dataUrl = reader.result as string
-          const img = new Image()
-          img.onload = () => {
-            const w = img.naturalWidth
-            const h = img.naturalHeight
-            if (w > MAX_IMAGE_EDGE || h > MAX_IMAGE_EDGE) {
-              resolve({ ok: false, reason: `分辨率过大（>${MAX_IMAGE_EDGE}像素）` })
-            } else {
-              resolve({ ok: true, dataUrl, mime: file.type, size: file.size })
-            }
-          }
-          img.onerror = () => resolve({ ok: false, reason: '图片读取失败' })
-          img.src = dataUrl
-        }
-        reader.onerror = () => resolve({ ok: false, reason: '文件读取失败' })
-        reader.readAsDataURL(file)
-      })
-    },
-    [],
-  )
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || !currentSession) return
@@ -573,78 +410,15 @@ export function useChatComposer() {
     traceEnabled,
     customBodyInput,
     customHeaders,
+    setCustomBodyError,
+    canUsePythonTool,
+    pythonToolEnabled,
+    setSelectedImages,
   ])
 
   const handleStop = useCallback(() => {
     stopStreaming()
   }, [stopStreaming])
-
-  const handleTraceToggle = useCallback((value: boolean) => {
-    if (!currentSession) return
-    tracePreferenceRef.current[currentSession.id] = value
-    setTraceEnabled(value)
-  }, [currentSession])
-
-  const handleWebSearchScopeChange = useCallback((next: string) => {
-    setWebSearchScope(next)
-    try {
-      localStorage.setItem(scopePreferenceKey, next)
-    } catch {
-      // ignore storage error
-    }
-  }, [scopePreferenceKey])
-
-  const pickImages = useCallback(() => {
-    if (!isVisionEnabled) {
-      toast({
-        title: '当前模型不支持图片',
-        description: '请在模型能力中开启 Vision（连接/模型管理可配置）',
-        variant: 'destructive',
-      })
-      return
-    }
-    fileInputRef.current?.click()
-  }, [isVisionEnabled, toast])
-
-  const onFilesSelected = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || [])
-      if (files.length === 0) return
-      const existingBytes = selectedImages.reduce((sum, img) => sum + img.size, 0)
-      const incomingBytes = files.reduce((sum, f) => sum + f.size, 0)
-      const totalMb = (existingBytes + incomingBytes) / (1024 * 1024)
-      if (totalMb > MAX_TOTAL_IMAGE_MB) {
-        toast({
-          title: '超过总大小限制',
-          description: `所有图片合计需 ≤ ${MAX_TOTAL_IMAGE_MB}MB，请压缩后再试`,
-          variant: 'destructive',
-        })
-        return
-      }
-      if (selectedImages.length + files.length > MAX_IMAGE_COUNT) {
-        toast({
-          title: '超过数量限制',
-          description: `每次最多上传 ${MAX_IMAGE_COUNT} 张图片`,
-          variant: 'destructive',
-        })
-        return
-      }
-      for (const f of files) {
-        const r = await validateImage(f)
-        if (!r.ok) {
-          toast({ title: '图片不符合要求', description: r.reason, variant: 'destructive' })
-        } else {
-          setSelectedImages((prev) => [...prev, { dataUrl: r.dataUrl!, mime: r.mime!, size: r.size! }])
-        }
-      }
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    },
-    [MAX_IMAGE_COUNT, MAX_TOTAL_IMAGE_MB, selectedImages, toast, validateImage],
-  )
-
-  const removeImage = useCallback((idx: number) => {
-    setSelectedImages((prev) => prev.filter((_, i) => i !== idx))
-  }, [])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -659,6 +433,10 @@ export function useChatComposer() {
   const handleTextareaChange = useCallback((value: string) => {
     setInput(value)
   }, [])
+
+  const handleWebSearchScopeChange = setWebSearchScope
+  const handleTraceToggle = onToggleTrace
+  const setPythonToolEnabledState = setPythonToolEnabled
 
   return {
     // 状态
@@ -724,7 +502,7 @@ export function useChatComposer() {
     webSearchDisabledNote,
     webSearchScope,
     setWebSearchScope: handleWebSearchScopeChange,
-    showWebSearchScope: canUseWebSearch && isMetasoEngine,
+    showWebSearchScope,
     pythonToolEnabled,
     setPythonToolEnabled: setPythonToolEnabledState,
     canUsePythonTool,

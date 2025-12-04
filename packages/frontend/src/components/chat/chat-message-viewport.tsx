@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MessageList } from '@/components/message-list'
@@ -8,8 +8,10 @@ import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { ChatErrorBanner } from '@/components/chat/chat-error-banner'
 import { Button } from '@/components/ui/button'
 import { Share2 } from 'lucide-react'
-import { useChatStore } from '@/store/chat-store'
+import { useChatMessages, useChatStore } from '@/store/chat-store'
 import { ShareDialog } from '@/components/chat/share-dialog'
+import { messageKey } from '@/features/chat/store/utils'
+import { ShareSelectionToolSummary } from '@/components/chat/share-selection-tool-summary'
 
 export interface ChatMessageViewportProps {
   scrollAreaRef: MutableRefObject<HTMLDivElement | null>
@@ -44,8 +46,15 @@ export function ChatMessageViewport({
     clearShareSelection: state.clearShareSelection,
     exitShareSelectionMode: state.exitShareSelectionMode,
   }))
+  const messageBodiesMap = useChatMessages((state) => state.messageBodies)
   const shareModeActive = shareSelection.enabled && shareSelection.sessionId === sessionId
   const selectedCount = shareModeActive ? shareSelection.selectedMessageIds.length : 0
+  const highlightedShareMessageId = shareModeActive ? shareSelection.selectedMessageIds[0] ?? null : null
+  const highlightedBodyEvents = useMemo(() => {
+    if (highlightedShareMessageId == null) return null
+    const key = messageKey(highlightedShareMessageId)
+    return messageBodiesMap[key]?.toolEvents ?? null
+  }, [highlightedShareMessageId, messageBodiesMap])
   const showShareEntry = metas.length > 0 && !shareModeActive
 
   useEffect(() => {
@@ -77,6 +86,13 @@ export function ChatMessageViewport({
                 <p className="text-xs text-primary/80 mt-1">
                   已选 {selectedCount} 条消息 · 仅当前会话可分享，切换会话将自动清空选择
                 </p>
+                <ShareSelectionToolSummary
+                  sessionId={sessionId}
+                  messageId={highlightedShareMessageId}
+                  bodyEvents={highlightedBodyEvents ?? undefined}
+                  title="首条选中消息的工具调用"
+                  className="mt-2 max-w-md"
+                />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button

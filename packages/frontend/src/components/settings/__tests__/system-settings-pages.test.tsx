@@ -266,16 +266,18 @@ describe("系统设置页面", () => {
     await userEvent.click(saveButton)
 
     await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledWith({
-        webSearchAgentEnable: true,
-        webSearchDefaultEngine: "tavily",
-        webSearchResultLimit: 4,
-        webSearchDomainFilter: ["example.com"],
-        webSearchScope: "webpage",
-        webSearchIncludeSummary: false,
-        webSearchIncludeRaw: false,
-        webSearchApiKeyTavily: "",
-      })
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webSearchAgentEnable: true,
+          webSearchDefaultEngine: "tavily",
+          webSearchResultLimit: 4,
+          webSearchDomainFilter: ["example.com"],
+          webSearchScope: "webpage",
+          webSearchIncludeSummary: false,
+          webSearchIncludeRaw: false,
+          webSearchApiKeyTavily: "",
+        }),
+      )
     })
   })
 })

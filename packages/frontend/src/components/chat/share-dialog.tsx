@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Copy } from 'lucide-react'
-import { useChatStore } from '@/store/chat-store'
+import { useChatMessages } from '@/store/chat-store'
 import { apiClient } from '@/lib/api'
 import { copyToClipboard, formatDate } from '@/lib/utils'
 import type { ChatShare } from '@/types'
@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { messageKey } from '@/features/chat/store/utils'
+import { ShareSelectionToolSummary } from '@/components/chat/share-selection-tool-summary'
 
 const EXPIRATION_OPTIONS = [
   { value: '24', label: '24 小时' },
@@ -45,7 +47,10 @@ interface ShareDialogProps {
 
 export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open, onOpenChange, onShareCompleted }: ShareDialogProps) {
   const { toast } = useToast()
-  const messageMetas = useChatStore((state) => state.messageMetas)
+  const { messageMetas, messageBodies } = useChatMessages((state) => ({
+    messageMetas: state.messageMetas,
+    messageBodies: state.messageBodies,
+  }))
   const [shareResult, setShareResult] = useState<{ detail: ChatShare; url: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -69,6 +74,12 @@ export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open,
         return orderA - orderB
       })
   }, [messageMetas, selectedMessageIds, sessionId])
+  const previewMessageId = sortedMessageIds[0] ?? null
+  const previewBodyEvents = useMemo(() => {
+    if (previewMessageId == null) return null
+    const key = messageKey(previewMessageId)
+    return messageBodies[key]?.toolEvents ?? null
+  }, [previewMessageId, messageBodies])
 
   useEffect(() => {
     if (!open) {
@@ -220,6 +231,13 @@ export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open,
                 <p className="text-xs text-destructive">暂无选中内容，请在聊天界面勾选要分享的消息。</p>
               )}
             </div>
+
+            <ShareSelectionToolSummary
+              sessionId={sessionId}
+              messageId={previewMessageId}
+              bodyEvents={previewBodyEvents ?? undefined}
+              title="首条选中消息的工具调用"
+            />
 
             <div className="space-y-4">
               <div className="space-y-2">
