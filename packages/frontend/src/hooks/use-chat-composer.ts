@@ -75,6 +75,53 @@ export function useChatComposer() {
     }
   }, [modelsCount, fetchModels])
 
+  const activeModel = useMemo(() => {
+    if (!currentSession) return null
+    const cid = currentSession.connectionId ?? null
+    const rid = currentSession.modelRawId ?? currentSession.modelLabel ?? null
+    return (
+      allModels.find((m) => {
+        const cidMatch = cid != null ? m.connectionId === cid : true
+        const ridMatch = rid ? m.rawId === rid || m.id === rid : false
+        return cidMatch && ridMatch
+      }) ?? null
+    )
+  }, [allModels, currentSession])
+
+  const {
+    thinkingEnabled,
+    setThinkingEnabled,
+    effort,
+    setEffort,
+    ollamaThink,
+    setOllamaThink,
+    webSearchEnabled,
+    setWebSearchEnabled,
+    webSearchScope,
+    setWebSearchScope,
+    pythonToolEnabled,
+    setPythonToolEnabled,
+    traceEnabled,
+    onToggleTrace,
+    canUseTrace,
+    canUseWebSearch,
+    canUsePythonTool,
+    webSearchDisabledNote,
+    pythonToolDisabledNote,
+    isMetasoEngine,
+    showWebSearchScope,
+    isVisionEnabled,
+  } = useComposerFeatureFlags({
+    currentSession,
+    systemSettings,
+    activeModel,
+    storedWebSearchPreference,
+    persistWebSearchPreference,
+    storedPythonPreference,
+    persistPythonPreference,
+    isAdmin,
+  })
+
   useEffect(() => {
     if (!currentSession) return
 
@@ -131,53 +178,6 @@ export function useChatComposer() {
     if (active && active !== document.body && active !== textareaRef.current) return
     textareaRef.current.focus()
   }, [isStreaming])
-
-  const activeModel = useMemo(() => {
-    if (!currentSession) return null
-    const cid = currentSession.connectionId ?? null
-    const rid = currentSession.modelRawId ?? currentSession.modelLabel ?? null
-    return (
-      allModels.find((m) => {
-        const cidMatch = cid != null ? m.connectionId === cid : true
-        const ridMatch = rid ? m.rawId === rid || m.id === rid : false
-        return cidMatch && ridMatch
-      }) ?? null
-    )
-  }, [allModels, currentSession])
-
-  const {
-    thinkingEnabled,
-    setThinkingEnabled,
-    effort,
-    setEffort,
-    ollamaThink,
-    setOllamaThink,
-    webSearchEnabled,
-    setWebSearchEnabled,
-    webSearchScope,
-    setWebSearchScope,
-    pythonToolEnabled,
-    setPythonToolEnabled,
-    traceEnabled,
-    onToggleTrace,
-    canUseTrace,
-    canUseWebSearch,
-    canUsePythonTool,
-    webSearchDisabledNote,
-    pythonToolDisabledNote,
-    isMetasoEngine,
-    showWebSearchScope,
-    isVisionEnabled,
-  } = useComposerFeatureFlags({
-    currentSession,
-    systemSettings,
-    activeModel,
-    storedWebSearchPreference,
-    persistWebSearchPreference,
-    storedPythonPreference,
-    persistPythonPreference,
-    isAdmin,
-  })
 
   const {
     fileInputRef,
