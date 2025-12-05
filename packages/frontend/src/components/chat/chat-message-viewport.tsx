@@ -54,6 +54,7 @@ export function ChatMessageViewport({
     clearShareSelection: state.clearShareSelection,
     exitShareSelectionMode: state.exitShareSelectionMode,
   }))
+  const messageMetrics = useChatStore((state) => state.messageMetrics || {})
   const messageBodiesMap = useChatMessages((state) => state.messageBodies)
   const shareModeActive = shareSelection.enabled && shareSelection.sessionId === sessionId
   const selectedCount = shareModeActive ? shareSelection.selectedMessageIds.length : 0
@@ -179,6 +180,7 @@ export function ChatMessageViewport({
           isLoading={isLoading}
           scrollRootRef={scrollAreaRef}
           variantSelections={variantSelections}
+          metrics={messageMetrics}
           shareSelection={shareSelection}
           onShareToggle={(messageId) => toggleShareSelection(sessionId, messageId)}
           onShareStart={(messageId) => enterShareSelectionMode(sessionId, messageId)}

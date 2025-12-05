@@ -20,6 +20,10 @@ interface MessageHeaderProps {
     onRegenerate: () => void
   }
   isStreaming: boolean
+  metrics?: {
+    latencyText?: number | null
+    speedText?: string | null
+  } | null
 }
 
 export function MessageHeader({
@@ -33,6 +37,7 @@ export function MessageHeader({
   showVariantNavigation,
   variantInfo,
   isStreaming,
+  metrics,
 }: MessageHeaderProps) {
   if (isUser) {
     return (
@@ -111,7 +116,16 @@ export function MessageHeader({
           </Button>
         </div>
       )}
-      <span className="ml-auto">{timestamp}</span>
+      <div className="ml-auto flex items-center gap-2">
+        {metrics && (metrics.latencyText != null || metrics.speedText != null) && (
+          <div className="inline-flex items-center gap-2 rounded-full bg-muted/70 px-2.5 py-1 text-[11px]">
+            {metrics.latencyText != null && <span>首字时延 {metrics.latencyText} ms</span>}
+            {metrics.latencyText != null && metrics.speedText != null && <span className="opacity-60">|</span>}
+            {metrics.speedText != null && <span>每秒 {metrics.speedText} tokens</span>}
+          </div>
+        )}
+        <span>{timestamp}</span>
+      </div>
     </div>
   )
 }

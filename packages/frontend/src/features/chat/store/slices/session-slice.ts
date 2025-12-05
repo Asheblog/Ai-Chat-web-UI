@@ -9,7 +9,7 @@ import type { ChatSession } from '@/types'
 import type { ModelItem } from '@/store/models-store'
 import type { SessionSlice } from '../types'
 import type { ChatSliceCreator } from '../types'
-import { createInitialShareSelection } from '../utils'
+import { createInitialShareSelection, messageKey } from '../utils'
 
 export const createSessionSlice: ChatSliceCreator<SessionSlice & {
   currentSession: ChatSession | null
@@ -58,6 +58,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
         assistantVariantSelections: {},
         messageBodies: {},
         messageRenderCache: {},
+        messageMetrics: {},
         messagesHydrated: { ...state.messagesHydrated, [newSession.id]: true },
         isMessagesLoading: false,
         isSessionsLoading: false,
@@ -98,6 +99,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       assistantVariantSelections: {},
       messageBodies: {},
       messageRenderCache: {},
+      messageMetrics: {},
       usageCurrent: null,
       usageLastRound: null,
       usageTotals: null,
@@ -115,6 +117,13 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       set((state) => {
         const newSessions = state.sessions.filter((s) => s.id !== sessionId)
         const shouldClear = state.currentSession?.id === sessionId
+        const metrics = { ...(state.messageMetrics || {}) }
+        const relatedKeys = state.messageMetas
+          .filter((meta) => meta.sessionId === sessionId)
+          .map((meta) => messageKey(meta.id))
+        relatedKeys.forEach((key) => {
+          delete metrics[key]
+        })
         return {
           sessions: newSessions,
           currentSession: shouldClear ? null : state.currentSession,
@@ -122,6 +131,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
           assistantVariantSelections: shouldClear ? {} : state.assistantVariantSelections,
           messageBodies: shouldClear ? {} : state.messageBodies,
           messageRenderCache: shouldClear ? {} : state.messageRenderCache,
+          messageMetrics: shouldClear ? {} : metrics,
           shareSelection: shouldClear ? createInitialShareSelection() : state.shareSelection,
         }
       })

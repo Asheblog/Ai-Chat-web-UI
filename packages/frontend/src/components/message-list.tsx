@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
+import { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { MessageBubble } from './message-bubble'
 import { TypingIndicator } from './typing-indicator'
 import { useChatMessages } from '@/store/chat-store'
@@ -38,6 +38,7 @@ interface MessageListProps {
   isLoading?: boolean
   scrollRootRef?: RefObject<HTMLElement | null>
   variantSelections?: Record<string, number | string>
+  metrics?: Record<string, MessageStreamMetrics>
   shareSelection?: {
     enabled: boolean
     sessionId: number | null
@@ -55,6 +56,7 @@ function MessageListComponent({
   isLoading,
   scrollRootRef,
   variantSelections,
+  metrics,
   shareSelection,
   onShareToggle,
   onShareStart,
@@ -167,6 +169,7 @@ function MessageListComponent({
         const body = bodies[storageKey]
         if (!body) return null
         const cache = renderCache[storageKey]
+        const metricEntry = metrics?.[storageKey]
         const parentKey = meta.parentMessageId != null ? messageKey(meta.parentMessageId) : null
         const siblings = parentKey ? variantGroups.get(parentKey) || [] : []
         const siblingIndex = parentKey
@@ -212,6 +215,7 @@ function MessageListComponent({
               body={body}
               renderCache={cache}
               isStreaming={streamingForMessage}
+              metrics={metricEntry}
               variantInfo={variantInfo}
               shareSelection={
                 shareSelectable || shareModeActive

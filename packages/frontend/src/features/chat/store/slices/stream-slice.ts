@@ -6,7 +6,7 @@ import {
 } from '@/features/chat/api'
 import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
-import type { Message } from '@/types'
+import type { Message, MessageStreamMetrics } from '@/types'
 import type { StreamSlice } from '../types'
 import type { ChatSliceCreator } from '../types'
 import { StreamSendOptions } from '../types'
@@ -20,6 +20,59 @@ import {
   messageKey,
   resolveProviderSafetyMessage,
 } from '../utils'
+
+const computeStreamMetrics = (
+  params: {
+    startedAt?: number | null
+    firstChunkAt?: number | null
+    completedAt?: number | null
+  },
+  usage?: import('../types').StreamUsageSnapshot | null,
+): MessageStreamMetrics | null => {
+  const normalizeNumber = (value: unknown) => {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : null
+  }
+  const startedAt = normalizeNumber(params.startedAt)
+  const firstChunkAt = normalizeNumber(params.firstChunkAt)
+  const completedAt = normalizeNumber(params.completedAt)
+  const promptTokens = normalizeNumber(usage?.prompt_tokens)
+  const completionTokens = normalizeNumber(usage?.completion_tokens)
+  const totalTokens = normalizeNumber(usage?.total_tokens)
+
+  const firstTokenLatencyMs =
+    startedAt != null && firstChunkAt != null && firstChunkAt >= startedAt
+      ? firstChunkAt - startedAt
+      : null
+  const responseTimeMs =
+    startedAt != null && completedAt != null && completedAt >= startedAt
+      ? completedAt - startedAt
+      : null
+  const speedDurationMs =
+    completedAt != null
+      ? completedAt - (firstChunkAt ?? startedAt ?? completedAt)
+      : null
+  const tokensPerSecond =
+    completionTokens != null && speedDurationMs != null && speedDurationMs > 0
+      ? completionTokens / (speedDurationMs / 1000)
+      : null
+
+  const metrics: MessageStreamMetrics = {
+    firstTokenLatencyMs,
+    responseTimeMs,
+    tokensPerSecond,
+    promptTokens,
+    completionTokens:
+      completionTokens != null
+        ? completionTokens
+        : totalTokens != null && promptTokens != null
+          ? totalTokens - promptTokens
+          : null,
+    totalTokens,
+  }
+  const hasValue = Object.values(metrics).some((value) => typeof value === 'number')
+  return hasValue ? metrics : null
+}
 
 export const createStreamSlice: ChatSliceCreator<
   StreamSlice & {
@@ -275,6 +328,9 @@ export const createStreamSlice: ChatSliceCreator<
       assistantClientMessageId: null,
       webSearchRequested: Boolean(options?.features?.web_search),
       lastUsage: null,
+      startedAt: Date.now(),
+      firstChunkAt: null,
+      completedAt: null,
       streamKey,
       stopRequested: false,
     }
@@ -493,6 +549,9 @@ export const createStreamSlice: ChatSliceCreator<
         }
 
         if (evt?.type === 'content' && evt.content) {
+          if (!active.firstChunkAt) {
+            active.firstChunkAt = Date.now()
+          }
           active.pendingContent += evt.content
           runtime.scheduleFlush(active)
           continue
@@ -564,6 +623,7 @@ export const createStreamSlice: ChatSliceCreator<
           const activeBuffer = active
           if (activeBuffer) {
             activeBuffer.pendingMeta.reasoningStatus = 'done'
+            activeBuffer.completedAt = Date.now()
           }
           runtime.scheduleFlush(active)
           continue
@@ -576,9 +636,21 @@ export const createStreamSlice: ChatSliceCreator<
           ? get().toolEvents.filter(
               (event) =>
                 event.sessionId === sessionId &&
-                messageKey(event.messageId) === messageKey(finalStream.assistantId),
+              messageKey(event.messageId) === messageKey(finalStream.assistantId),
             )
           : []
+      const completedAtMs = finalStream?.completedAt ?? Date.now()
+      const computedMetrics =
+        finalStream && finalStream.sessionId === sessionId
+          ? computeStreamMetrics(
+              {
+                startedAt: finalStream.startedAt,
+                firstChunkAt: finalStream.firstChunkAt,
+                completedAt: completedAtMs,
+              },
+              finalStream.lastUsage as import('../types').StreamUsageSnapshot,
+            )
+          : null
       const completedSnapshot = finalStream
         ? {
             assistantId: finalStream.assistantId,
@@ -588,6 +660,7 @@ export const createStreamSlice: ChatSliceCreator<
             usage: finalStream.lastUsage,
             toolEvents: snapshotToolEvents,
             sessionId,
+            metrics: computedMetrics,
           }
         : null
       const completedAssistantId =
@@ -614,8 +687,15 @@ export const createStreamSlice: ChatSliceCreator<
           toolEvents: completedSnapshot.toolEvents,
           streamStatus: 'done',
           reasoningStatus: 'done',
-          completedAt: Date.now(),
+          completedAt: completedAtMs,
+          metrics: computedMetrics,
         })
+        if (computedMetrics && completedAssistantId != null) {
+          const metricsKey = messageKey(completedAssistantId)
+          set((state) => ({
+            messageMetrics: { ...(state.messageMetrics || {}), [metricsKey]: computedMetrics },
+          }))
+        }
       }
       if (typeof completedAssistantId !== 'undefined' && completedAssistantId !== null) {
         runtime.updateMetaStreamStatus(completedAssistantId, 'done')

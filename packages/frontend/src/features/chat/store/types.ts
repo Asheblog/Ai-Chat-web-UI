@@ -5,6 +5,7 @@ import type {
   MessageBody,
   MessageMeta,
   MessageRenderCacheEntry,
+  MessageStreamMetrics,
   ToolEvent,
 } from '@/types'
 import type { ModelItem } from '@/store/models-store'
@@ -60,6 +61,7 @@ export interface StreamCompletionSnapshot {
   reasoningStatus?: MessageMeta['reasoningStatus']
   streamStatus?: MessageMeta['streamStatus']
   completedAt: number
+  metrics?: MessageStreamMetrics | null
 }
 
 export interface StreamAccumulator {
@@ -78,6 +80,9 @@ export interface StreamAccumulator {
   webSearchRequested: boolean
   assistantClientMessageId?: string | null
   lastUsage?: StreamUsageSnapshot | null
+  startedAt: number
+  firstChunkAt?: number | null
+  completedAt?: number | null
 }
 
 export type ActiveStreamEntry = StreamAccumulator & {

@@ -312,6 +312,7 @@ export interface ChatState {
   sessionUsageTotalsMap: Record<number, UsageTotals>;
   toolEvents: ToolEvent[];
   assistantVariantSelections: Record<string, number | string>;
+  messageMetrics: Record<string, MessageStreamMetrics>;
   shareSelection: {
     enabled: boolean;
     sessionId: number | null;
@@ -423,6 +424,15 @@ export interface UsageTotals {
 export interface SessionUsageTotalsItem {
   sessionId: number;
   totals: UsageTotals;
+}
+
+export interface MessageStreamMetrics {
+  firstTokenLatencyMs?: number | null;
+  responseTimeMs?: number | null;
+  tokensPerSecond?: number | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
 }
 
 // 扩展聊天状态的 usage 字段

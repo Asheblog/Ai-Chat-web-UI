@@ -19,6 +19,7 @@ export const createMessageSlice: ChatSliceCreator<
     messageMetas: import('@/types').MessageMeta[]
     messageBodies: Record<string, import('@/types').MessageBody>
     messageRenderCache: Record<string, import('@/types').MessageRenderCacheEntry>
+    messageMetrics: Record<string, import('@/types').MessageStreamMetrics>
     messageImageCache: Record<string, string[]>
     messagesHydrated: Record<number, boolean>
     isMessagesLoading: boolean
@@ -29,6 +30,7 @@ export const createMessageSlice: ChatSliceCreator<
   messageMetas: [],
   messageBodies: {},
   messageRenderCache: {},
+  messageMetrics: {},
   messageImageCache: {},
   messagesHydrated: {},
   isMessagesLoading: false,
@@ -55,6 +57,7 @@ export const createMessageSlice: ChatSliceCreator<
         const metaByStableKey = new Map(existingSessionMetas.map((meta) => [meta.stableKey, meta]))
         const bodyEntryByStableKey = new Map<string, { key: string; body: import('@/types').MessageBody }>()
         const sessionBodyKeys = new Set<string>()
+        const prevSessionKeys = existingSessionMetas.map((meta) => messageKey(meta.id))
         existingSessionMetas.forEach((meta) => {
           const key = messageKey(meta.id)
           sessionBodyKeys.add(key)
@@ -130,12 +133,17 @@ export const createMessageSlice: ChatSliceCreator<
         Array.from(sessionBodyKeys).forEach((key) => {
           delete nextRenderCache[key]
         })
+        const nextMetrics = { ...(state.messageMetrics || {}) }
+        prevSessionKeys.forEach((key) => {
+          delete nextMetrics[key]
+        })
 
         return {
           messageMetas: nextMetas,
           assistantVariantSelections: buildVariantSelections(nextMetas),
           messageBodies: nextBodies,
           messageRenderCache: nextRenderCache,
+          messageMetrics: nextMetrics,
           messageImageCache: nextCache,
           messagesHydrated: { ...state.messagesHydrated, [sessionId]: true },
           isMessagesLoading: false,

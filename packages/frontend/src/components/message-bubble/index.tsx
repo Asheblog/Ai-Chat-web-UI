@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { copyToClipboard, formatDate } from '@/lib/utils'
 import { requestMarkdownRender } from '@/lib/markdown-worker-client'
 import { useChatStore } from '@/store/chat-store'
-import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
+import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { useSettingsStore } from '@/store/settings-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
@@ -30,6 +30,7 @@ interface MessageBubbleProps {
   body: MessageBody
   renderCache?: MessageRenderCacheEntry
   isStreaming?: boolean
+  metrics?: MessageStreamMetrics | null
   variantInfo?: {
     total: number
     index: number
@@ -51,6 +52,7 @@ function MessageBubbleComponent({
   body,
   renderCache,
   isStreaming,
+  metrics,
   variantInfo,
   shareSelection,
 }: MessageBubbleProps) {
@@ -221,6 +223,19 @@ function MessageBubbleComponent({
     return reasoningDefaultExpand
   }, [meta.reasoningStatus, meta.role, reasoningDefaultExpand, reasoningText])
 
+  const normalizeLatency = (value?: number | null) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null
+    return Math.max(0, Math.round(value))
+  }
+  const normalizeSpeed = (value?: number | null) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null
+    return value
+  }
+  const latencyText = normalizeLatency(metrics?.firstTokenLatencyMs)
+  const speedValue = normalizeSpeed(metrics?.tokensPerSecond)
+  const speedText =
+    speedValue != null ? (speedValue >= 10 ? speedValue.toFixed(0) : speedValue.toFixed(1)) : null
+
   const shareBadgePosition = isUser ? 'right-3' : 'left-3'
 
   return (
@@ -269,19 +284,27 @@ function MessageBubbleComponent({
             onCopy={handleCopy}
             shareEntryAvailable={shareEntryAvailable}
             onShareStart={shareEntryHandler}
-            showVariantControls={showVariantControls}
-            showVariantNavigation={showVariantNavigation}
-            variantInfo={variantInfo}
-            isStreaming={Boolean(isStreaming)}
-          />
-          {!isUser && meta.pendingSync && (
-            <div className="text-xs text-amber-600 mt-1">等待后端同步</div>
-          )}
-        </div>
+          showVariantControls={showVariantControls}
+          showVariantNavigation={showVariantNavigation}
+          variantInfo={variantInfo}
+          isStreaming={Boolean(isStreaming)}
+          metrics={
+            !isUser
+              ? {
+                  latencyText,
+                  speedText,
+                }
+              : undefined
+          }
+        />
+        {!isUser && meta.pendingSync && (
+          <div className="text-xs text-amber-600 mt-1">等待后端同步</div>
+        )}
       </div>
+    </div>
 
-      <ShareBadge
-        positionClass={shareBadgePosition}
+    <ShareBadge
+      positionClass={shareBadgePosition}
         shareModeActive={shareModeActive}
         shareSelectable={shareSelectable}
         shareSelected={shareSelected}

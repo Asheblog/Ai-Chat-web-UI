@@ -1,5 +1,12 @@
 import { getMessageProgress } from '@/features/chat/api'
-import type { ChatState, Message, MessageBody, MessageMeta, ToolEvent } from '@/types'
+import type {
+  ChatState,
+  Message,
+  MessageBody,
+  MessageMeta,
+  MessageStreamMetrics,
+  ToolEvent,
+} from '@/types'
 import {
   buildVariantSelections,
   createBody,
@@ -41,6 +48,25 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
         const rawPlayed = Number((item as any).reasoningPlayedLength)
         const reasoningPlayedLength =
           Number.isFinite(rawPlayed) && rawPlayed > 0 ? Math.min(rawPlayed, reasoningText.length) : undefined
+        const normalizeMetricNumber = (value: any) => {
+          const n = Number(value)
+          return Number.isFinite(n) ? n : null
+        }
+        const metricsRaw = (item as any).metrics
+        const metrics =
+          metricsRaw && typeof metricsRaw === 'object'
+            ? ({
+                firstTokenLatencyMs: normalizeMetricNumber((metricsRaw as any).firstTokenLatencyMs),
+                responseTimeMs: normalizeMetricNumber((metricsRaw as any).responseTimeMs),
+                tokensPerSecond: normalizeMetricNumber((metricsRaw as any).tokensPerSecond),
+                promptTokens: normalizeMetricNumber((metricsRaw as any).promptTokens),
+                completionTokens: normalizeMetricNumber((metricsRaw as any).completionTokens),
+                totalTokens: normalizeMetricNumber((metricsRaw as any).totalTokens),
+              } satisfies MessageStreamMetrics)
+            : null
+        const hasMetricValue = metrics
+          ? Object.values(metrics).some((value) => typeof value === 'number')
+          : false
         return {
           sessionId,
           messageId:
@@ -68,6 +94,7 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
               ? ((item as any).streamStatus as MessageMeta['streamStatus'])
               : undefined,
           completedAt,
+          metrics: hasMetricValue ? metrics : null,
         } as StreamCompletionSnapshot
       })
       .filter((item): item is StreamCompletionSnapshot => Boolean(item && now - item.completedAt <= STREAM_SNAPSHOT_TTL_MS))
@@ -129,6 +156,7 @@ const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
       toolEvents: snapshot.toolEvents ?? existing.toolEvents,
       reasoningStatus: snapshot.reasoningStatus ?? existing.reasoningStatus,
       streamStatus: snapshot.streamStatus ?? existing.streamStatus,
+      metrics: snapshot.metrics ?? existing.metrics,
       reasoningPlayedLength:
         typeof snapshot.reasoningPlayedLength === 'number'
           ? snapshot.reasoningPlayedLength
@@ -384,10 +412,12 @@ export const createChatStoreRuntime = (
       let nextBodies = state.messageBodies
       let nextRenderCache = state.messageRenderCache
       let nextToolEvents = state.toolEvents
+      let nextMetrics = state.messageMetrics || {}
       let metasMutated = false
       let bodiesMutated = false
       let renderCacheMutated = false
       let toolEventsMutated = false
+      let metricsMutated = false
 
       const ensureMetas = () => {
         if (!metasMutated) {
@@ -409,6 +439,13 @@ export const createChatStoreRuntime = (
           renderCacheMutated = true
         }
         return nextRenderCache
+      }
+      const ensureMetrics = () => {
+        if (!metricsMutated) {
+          nextMetrics = { ...(state.messageMetrics || {}) }
+          metricsMutated = true
+        }
+        return nextMetrics
       }
 
       snapshots.forEach((snapshot) => {
@@ -530,9 +567,20 @@ export const createChatStoreRuntime = (
             pendingSync: nextStreamStatus === 'done' ? true : meta.pendingSync,
           }
         }
+
+        if (snapshot.metrics) {
+          const metricsMap = ensureMetrics()
+          metricsMap[key] = snapshot.metrics
+        }
       })
 
-      if (!metasMutated && !bodiesMutated && !renderCacheMutated && !toolEventsMutated) {
+      if (
+        !metasMutated &&
+        !bodiesMutated &&
+        !renderCacheMutated &&
+        !toolEventsMutated &&
+        !metricsMutated
+      ) {
         return state
       }
 
@@ -549,6 +597,9 @@ export const createChatStoreRuntime = (
       }
       if (toolEventsMutated) {
         partial.toolEvents = nextToolEvents
+      }
+      if (metricsMutated) {
+        partial.messageMetrics = nextMetrics
       }
       return partial
     })
