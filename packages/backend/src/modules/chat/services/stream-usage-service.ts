@@ -86,22 +86,14 @@ export class StreamUsageService {
         }
 
     const timing = params.timing
-    const firstTokenLatencyMs =
-      timing && typeof timing.firstChunkAt === 'number'
-        ? Math.max(0, timing.firstChunkAt - timing.requestStartedAt)
-        : null
-    const responseTimeMs =
-      timing && typeof timing.completedAt === 'number'
-        ? Math.max(0, timing.completedAt - timing.requestStartedAt)
-        : null
-    const speedWindowMs =
-      timing && typeof timing.completedAt === 'number'
-        ? timing.completedAt - (typeof timing.firstChunkAt === 'number' ? timing.firstChunkAt : timing?.requestStartedAt)
-        : null
+    const startedAt = Math.max(0, Number(timing?.requestStartedAt) || Date.now())
+    const firstChunkAt = Math.max(0, Number(timing?.firstChunkAt ?? startedAt) || startedAt)
+    const completedAt = Math.max(0, Number(timing?.completedAt) || Date.now())
+    const firstTokenLatencyMs = Math.max(0, Math.round(firstChunkAt - startedAt))
+    const responseTimeMs = Math.max(0, Math.round(completedAt - startedAt))
+    const speedWindowMs = Math.max(1, completedAt - firstChunkAt || completedAt - startedAt || 1)
     const tokensPerSecond =
-      speedWindowMs && speedWindowMs > 0
-        ? finalUsage.completion / (speedWindowMs / 1000)
-        : null
+      finalUsage.completion > 0 ? finalUsage.completion / (speedWindowMs / 1000) : 0
 
     let persistedAssistantMessageId = params.assistantMessageId
     const trimmedContent = params.content.trim()

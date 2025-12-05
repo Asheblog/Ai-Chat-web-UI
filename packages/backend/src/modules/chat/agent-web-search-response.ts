@@ -100,6 +100,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let idleWatchTimer: ReturnType<typeof setInterval> | null = null;
       let lastChunkAt = Date.now();
       let idleWarned = false;
+      const startedAt = Date.now();
+      let firstChunkAt: number | null = null;
 
       const toolLogs: ToolLogEntry[] = [];
       let toolLogSequence = 0;
@@ -754,6 +756,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               }
               const choice = parsed.choices?.[0];
               if (!choice) continue;
+              if (firstChunkAt == null) {
+                firstChunkAt = Date.now();
+              }
               const delta = choice.delta ?? {};
               if (delta.reasoning_content) {
                 if (!reasoningStartedAt) reasoningStartedAt = Date.now();
@@ -920,27 +925,37 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           total: promptTokens + completionTokensFallback,
         };
         const finalUsageNumbers = providerUsageValid ? providerUsageNumbers : fallbackUsageNumbers;
-        const finalUsagePayload = {
-          prompt_tokens: finalUsageNumbers.prompt,
-          completion_tokens: finalUsageNumbers.completion,
-          total_tokens: finalUsageNumbers.total,
-          context_limit: contextLimit,
-          context_remaining: Math.max(0, contextLimit - promptTokens),
-        };
+            const finalUsagePayload = {
+              prompt_tokens: finalUsageNumbers.prompt,
+              completion_tokens: finalUsageNumbers.completion,
+              total_tokens: finalUsageNumbers.total,
+              context_limit: contextLimit,
+              context_remaining: Math.max(0, contextLimit - promptTokens),
+            };
 
-        if (!providerUsageSeen || !providerUsageValid) {
-          safeEnqueue({ type: 'usage', usage: finalUsagePayload });
-        }
-        safeEnqueue({ type: 'complete' });
-        traceMetadataExtras.finalUsage = finalUsagePayload;
-        traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
+            if (!providerUsageSeen || !providerUsageValid) {
+              safeEnqueue({ type: 'usage', usage: finalUsagePayload });
+            }
+            safeEnqueue({ type: 'complete' });
+            traceMetadataExtras.finalUsage = finalUsagePayload;
+            traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
 
-        let persistedAssistantMessageId: number | null = activeAssistantMessageId;
-        try {
-          const sessionStillExists = async () => {
-            const count = await prisma.chatSession.count({ where: { id: sessionId } });
-            return count > 0;
-          };
+            const completedAt = Date.now();
+            const firstTokenLatencyMs =
+              firstChunkAt != null ? Math.max(0, firstChunkAt - startedAt) : null;
+            const responseTimeMs = Math.max(0, completedAt - startedAt);
+            const speedWindowMs = completedAt - (firstChunkAt ?? startedAt);
+            const tokensPerSecond =
+              finalUsageNumbers.completion > 0 && speedWindowMs > 0
+                ? finalUsageNumbers.completion / (speedWindowMs / 1000)
+                : null;
+
+            let persistedAssistantMessageId: number | null = activeAssistantMessageId;
+            try {
+            const sessionStillExists = async () => {
+              const count = await prisma.chatSession.count({ where: { id: sessionId } });
+              return count > 0;
+            };
 
           if (finalContent && (await sessionStillExists())) {
             const reasoningTrimmed = reasoningText.trim();
@@ -956,11 +971,11 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               }
             })();
             const finalToolLogsJson = toolLogs.length > 0 ? JSON.stringify(toolLogs) : null;
-            const persistedId = await persistAssistantFinalResponse({
-              sessionId,
-              existingMessageId: activeAssistantMessageId,
-              assistantClientMessageId,
-              fallbackClientMessageId: clientMessageId,
+              const persistedId = await persistAssistantFinalResponse({
+                sessionId,
+                existingMessageId: activeAssistantMessageId,
+                assistantClientMessageId,
+                fallbackClientMessageId: clientMessageId,
               parentMessageId: userMessageRecord?.id ?? null,
               replyHistoryLimit: assistantReplyHistoryLimit,
               content: finalContent,
@@ -969,15 +984,20 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
               streamError: null,
               toolLogsJson: finalToolLogsJson,
-              usage: {
-                promptTokens: finalUsageNumbers.prompt,
-                completionTokens: finalUsageNumbers.completion,
-                totalTokens: finalUsageNumbers.total,
-                contextLimit,
-              },
-              model: session.modelRawId,
-              provider: providerHost ?? undefined,
-            });
+                usage: {
+                  promptTokens: finalUsageNumbers.prompt,
+                  completionTokens: finalUsageNumbers.completion,
+                  totalTokens: finalUsageNumbers.total,
+                  contextLimit,
+                },
+                metrics: {
+                  firstTokenLatencyMs,
+                  responseTimeMs,
+                  tokensPerSecond,
+                },
+                model: session.modelRawId,
+                provider: providerHost ?? undefined,
+              });
             if (persistedId) {
               persistedAssistantMessageId = persistedId;
               activeAssistantMessageId = persistedId;
