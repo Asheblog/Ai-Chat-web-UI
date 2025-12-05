@@ -405,7 +405,9 @@ export function SystemGeneralPage() {
               rows={4}
               disabled={!isAdmin}
             />
-            <p className="text-xs text-muted-foreground">生效顺序：会话自定义 &gt; 全局默认</p>
+            <p className="text-xs text-muted-foreground">
+              {'生效顺序：会话 > 个人 > 全局；支持使用 {day time}（将替换为服务器当前时间）。三层均为空时默认提示词为“今天日期是{day time}”。'}
+            </p>
           </div>
         </SettingRow>
 

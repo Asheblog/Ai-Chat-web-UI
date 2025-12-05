@@ -228,7 +228,9 @@ export function ChatComposerPanel({
                     placeholder={sessionPromptPlaceholder}
                     className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   />
-                  <p className="text-xs text-muted-foreground">生效顺序：会话 &gt; 全局。留空则继承全局提示词。</p>
+                  <p className="text-xs text-muted-foreground">
+                    {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用“今天日期是{day time}”。'}
+                  </p>
                 </div>
                 <div className="flex items-center justify-between border-t border-border/60 px-5 py-3">
                   <Button variant="ghost" onClick={() => onSessionPromptChange('')} disabled={sessionPromptSaving}>

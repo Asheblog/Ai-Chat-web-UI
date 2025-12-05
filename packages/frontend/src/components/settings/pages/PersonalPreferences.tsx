@@ -295,7 +295,7 @@ export function PersonalPreferencesPage(){
               <p className="text-sm text-destructive">{personalPromptError}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              建议描述语气/身份/回复风格；会话提示词优先于个人提示词，个人提示词优先于系统提示词。
+              {'建议描述语气/身份/回复风格；会话提示词优先于个人提示词，个人提示词优先于系统提示词。支持使用 {day time}（替换为服务器当前时间），三层均为空时默认使用“今天日期是{day time}”。'}
             </p>
           </div>
         </SettingRow>

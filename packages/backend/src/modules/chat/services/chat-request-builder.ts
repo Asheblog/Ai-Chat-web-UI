@@ -84,6 +84,7 @@ export class ChatRequestBuilder {
   private resolveCompletionLimit: typeof defaultResolveCompletionLimit
   private cleanupExpiredChatImages: typeof defaultCleanupExpiredChatImages
   private authUtils: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
+  private readonly defaultSessionPromptTemplate = '今天日期是{day time}'
 
   constructor(deps: ChatRequestBuilderDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
@@ -103,11 +104,17 @@ export class ChatRequestBuilder {
     this.scheduleImageCleanup(systemSettings)
 
     const systemPrompts: Array<{ role: 'system'; content: string }> = []
+    const now = new Date()
+    const templateVariables = this.buildPromptVariables(now)
     const globalPrompt = (systemSettings.chat_system_prompt || '').toString().trim()
     const personalPrompt = (params.personalPrompt || '').toString().trim()
     const sessionPrompt = (params.session as any).systemPrompt
     const sessionPromptNormalized = typeof sessionPrompt === 'string' ? sessionPrompt.trim() : ''
-    const primaryPrompt = sessionPromptNormalized || personalPrompt || globalPrompt
+    const primaryPrompt =
+      this.applyPromptTemplate(sessionPromptNormalized, templateVariables) ||
+      this.applyPromptTemplate(personalPrompt, templateVariables) ||
+      this.applyPromptTemplate(globalPrompt, templateVariables) ||
+      this.applyPromptTemplate(this.defaultSessionPromptTemplate, templateVariables)
     if (primaryPrompt) {
       systemPrompts.push({ role: 'system', content: primaryPrompt })
     }
@@ -289,6 +296,40 @@ export class ChatRequestBuilder {
       }
     }
     return payload
+  }
+
+  private buildPromptVariables(now: Date) {
+    const pad = (value: number) => value.toString().padStart(2, '0')
+    const year = now.getFullYear()
+    const month = pad(now.getMonth() + 1)
+    const day = pad(now.getDate())
+    const hour = pad(now.getHours())
+    const minute = pad(now.getMinutes())
+    const second = pad(now.getSeconds())
+    const offsetMinutes = -now.getTimezoneOffset()
+    const sign = offsetMinutes >= 0 ? '+' : '-'
+    const absMinutes = Math.abs(offsetMinutes)
+    const offsetHours = pad(Math.floor(absMinutes / 60))
+    const offsetRest = pad(absMinutes % 60)
+    const timezoneOffset = `UTC${sign}${offsetHours}:${offsetRest}`
+    const localTime = `${year}-${month}-${day} ${hour}:${minute}:${second}`
+    const dayTimeValue = `${localTime} (${timezoneOffset})`
+    return { 'day time': dayTimeValue }
+  }
+
+  private applyPromptTemplate(
+    template: string | null | undefined,
+    variables: Record<string, string>,
+  ) {
+    const normalized = (template || '').toString().trim()
+    if (!normalized) return ''
+    let result = normalized
+    for (const [key, value] of Object.entries(variables)) {
+      if (!key) continue
+      const pattern = new RegExp(`\\{\\s*${key.replace(/\s+/g, '\\s+')}\\s*\\}`, 'gi')
+      result = result.replace(pattern, value)
+    }
+    return result
   }
 
   private resolveReasoningOptions(params: {

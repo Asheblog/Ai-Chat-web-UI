@@ -253,7 +253,7 @@ export function useChatComposer() {
           : '未设置提示词'
   const sessionPromptPlaceholder = effectiveFallbackPrompt
     ? `留空以继承${personalPromptFallback ? '个人提示词' : '全局提示词'}：${effectiveFallbackPrompt.slice(0, 60)}${effectiveFallbackPrompt.length > 60 ? '...' : ''}`
-    : '为空则不附加系统提示词'
+    : '留空将使用默认提示词：今天日期是{day time}（{day time} 会替换为服务器当前时间）'
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || !currentSession) return

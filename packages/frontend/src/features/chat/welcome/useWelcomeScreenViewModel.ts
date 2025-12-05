@@ -604,7 +604,7 @@ export const useWelcomeScreenViewModel = () => {
           ? `留空以继承全局提示词：${systemSettings.chatSystemPrompt.slice(0, 80)}${
               systemSettings.chatSystemPrompt.length > 80 ? '...' : ''
             }`
-          : '为空则不附加系统提示词',
+          : '留空将使用默认提示词：今天日期是{day time}（{day time} 会替换为服务器当前时间）',
       },
     },
     footerNote,

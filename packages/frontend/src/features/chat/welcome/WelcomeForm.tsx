@@ -208,26 +208,28 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={sessionPromptDialog.open} onOpenChange={(open) => (!open ? sessionPromptDialog.onClose() : null)}>
-        <DialogContent className="max-w-2xl w-full max-h-[80vh] overflow-hidden p-0 sm:rounded-2xl">
-          <DialogHeader className="px-5 py-4 border-b">
-            <DialogTitle>会话系统提示词</DialogTitle>
-            <DialogDescription>
-              {sessionPromptDialog.value.trim()
-                ? '当前会话将使用该提示词'
-                : sessionPromptDialog.placeholder || '留空不附加系统提示词'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-5 py-4 space-y-3">
-            <textarea
-              value={sessionPromptDialog.value}
-              onChange={(event) => sessionPromptDialog.onChange(event.target.value)}
-              rows={6}
-              placeholder={sessionPromptDialog.placeholder}
-              className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            />
-            <p className="text-xs text-muted-foreground">生效顺序：会话 &gt; 全局。</p>
-          </div>
+          <Dialog open={sessionPromptDialog.open} onOpenChange={(open) => (!open ? sessionPromptDialog.onClose() : null)}>
+            <DialogContent className="max-w-2xl w-full max-h-[80vh] overflow-hidden p-0 sm:rounded-2xl">
+              <DialogHeader className="px-5 py-4 border-b">
+                <DialogTitle>会话系统提示词</DialogTitle>
+                <DialogDescription>
+                  {sessionPromptDialog.value.trim()
+                    ? '当前会话将使用该提示词'
+                    : sessionPromptDialog.placeholder || '留空继承上级或使用默认提示词'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="px-5 py-4 space-y-3">
+                <textarea
+                  value={sessionPromptDialog.value}
+                  onChange={(event) => sessionPromptDialog.onChange(event.target.value)}
+                  rows={6}
+                  placeholder={sessionPromptDialog.placeholder}
+                  className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用“今天日期是{day time}”。'}
+                </p>
+              </div>
           <div className="flex items-center justify-between border-t px-5 py-3">
             <Button variant="ghost" onClick={sessionPromptDialog.onClear}>
               清空
