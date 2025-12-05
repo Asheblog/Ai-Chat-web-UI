@@ -15,7 +15,7 @@ import type { MessageId } from '../types'
 
 export const STREAM_FLUSH_INTERVAL = 0
 export const STREAM_SNAPSHOT_STORAGE_KEY = 'aichat:stream-completions'
-export const STREAM_SNAPSHOT_TTL_MS = 30 * 60 * 1000
+export const STREAM_SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 export const messageKey = (id: MessageId) => (typeof id === 'string' ? id : String(id))
 

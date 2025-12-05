@@ -1303,6 +1303,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
             // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
             try {
+              const completedAt = Date.now();
               const usageResult = await streamUsageService.finalize({
                 sessionId,
                 modelRawId: session.modelRawId!,
@@ -1326,6 +1327,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
                     : REASONING_SAVE_TO_DB,
                 assistantReplyHistoryLimit,
                 traceRecorder,
+                timing: {
+                  requestStartedAt,
+                  firstChunkAt,
+                  completedAt,
+                },
               });
               assistantMessageId = usageResult.assistantMessageId;
               traceMetadataExtras.finalUsage = {

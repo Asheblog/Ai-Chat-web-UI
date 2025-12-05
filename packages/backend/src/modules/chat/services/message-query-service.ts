@@ -31,6 +31,19 @@ const messageSelectFields = {
   streamCursor: true,
   streamReasoning: true,
   streamError: true,
+  usageMetrics: {
+    select: {
+      promptTokens: true,
+      completionTokens: true,
+      totalTokens: true,
+      firstTokenLatencyMs: true,
+      responseTimeMs: true,
+      tokensPerSecond: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+  },
 } as const
 
 type RawMessage = Prisma.MessageGetPayload<{ select: typeof messageSelectFields }>
@@ -53,6 +66,14 @@ export interface NormalizedMessage {
   streamError: string | null
   images: string[]
   toolEvents?: ToolLogEntry[]
+  metrics?: {
+    promptTokens?: number | null
+    completionTokens?: number | null
+    totalTokens?: number | null
+    firstTokenLatencyMs?: number | null
+    responseTimeMs?: number | null
+    tokensPerSecond?: number | null
+  } | null
 }
 
 export interface ListMessagesResult {
@@ -170,15 +191,34 @@ export class ChatMessageQueryService {
   }
 
   private normalizeMessage(raw: RawMessage, baseUrl: string): NormalizedMessage {
-    const { attachments, toolLogsJson, ...rest } = raw as RawMessage & {
+    const { attachments, toolLogsJson, usageMetrics, ...rest } = raw as RawMessage & {
       attachments?: Array<{ relativePath: string }>
       toolLogsJson?: string | null
+      usageMetrics?: Array<{
+        promptTokens: number
+        completionTokens: number
+        totalTokens: number
+        firstTokenLatencyMs: number | null
+        responseTimeMs: number | null
+        tokensPerSecond: number | null
+      }>
     }
+    const usage = Array.isArray(usageMetrics) && usageMetrics.length > 0 ? usageMetrics[0] : null
     const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
     return {
       ...rest,
       images: this.resolveChatImageUrls(rel, baseUrl),
       toolEvents: this.parseToolLogsJson(toolLogsJson),
+      metrics: usage
+        ? {
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            totalTokens: usage.totalTokens,
+            firstTokenLatencyMs: usage.firstTokenLatencyMs,
+            responseTimeMs: usage.responseTimeMs,
+            tokensPerSecond: usage.tokensPerSecond,
+          }
+        : null,
     }
   }
 }

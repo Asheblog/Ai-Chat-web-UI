@@ -125,6 +125,7 @@ export interface Message {
   // 可选图片：可能为 data URL（本地预览）或服务端返回的可访问 URL
   images?: string[];
   toolEvents?: ToolEvent[];
+  metrics?: MessageStreamMetrics | null;
 }
 
 export interface MessageMeta {

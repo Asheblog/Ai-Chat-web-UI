@@ -32,6 +32,11 @@ export interface FinalizeParams {
   reasoningSaveToDb: boolean
   assistantReplyHistoryLimit: number
   traceRecorder?: TaskTraceRecorder
+  timing?: {
+    requestStartedAt: number
+    firstChunkAt?: number | null
+    completedAt: number
+  }
 }
 
 export interface FinalizeResult {
@@ -80,6 +85,24 @@ export class StreamUsageService {
           total: params.promptTokens + params.completionTokensFallback,
         }
 
+    const timing = params.timing
+    const firstTokenLatencyMs =
+      timing && typeof timing.firstChunkAt === 'number'
+        ? Math.max(0, timing.firstChunkAt - timing.requestStartedAt)
+        : null
+    const responseTimeMs =
+      timing && typeof timing.completedAt === 'number'
+        ? Math.max(0, timing.completedAt - timing.requestStartedAt)
+        : null
+    const speedWindowMs =
+      timing && typeof timing.completedAt === 'number'
+        ? timing.completedAt - (typeof timing.firstChunkAt === 'number' ? timing.firstChunkAt : timing?.requestStartedAt)
+        : null
+    const tokensPerSecond =
+      speedWindowMs && speedWindowMs > 0
+        ? finalUsage.completion / (speedWindowMs / 1000)
+        : null
+
     let persistedAssistantMessageId = params.assistantMessageId
     const trimmedContent = params.content.trim()
     if (trimmedContent) {
@@ -105,6 +128,11 @@ export class StreamUsageService {
           completionTokens: finalUsage.completion,
           totalTokens: finalUsage.total,
           contextLimit: params.contextLimit,
+        },
+        metrics: {
+          firstTokenLatencyMs,
+          responseTimeMs,
+          tokensPerSecond,
         },
         model: params.modelRawId,
         provider: params.providerHost ?? undefined,

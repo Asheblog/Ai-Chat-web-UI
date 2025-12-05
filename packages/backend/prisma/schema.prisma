@@ -149,6 +149,9 @@ model UsageMetric {
   promptTokens     Int       @default(0)
   completionTokens Int       @default(0)
   totalTokens      Int       @default(0)
+  firstTokenLatencyMs Int?
+  responseTimeMs   Int?
+  tokensPerSecond  Float?
   contextLimit     Int?
   createdAt        DateTime  @default(now())
 

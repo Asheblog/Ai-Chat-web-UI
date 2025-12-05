@@ -29,12 +29,39 @@ import type {
   StreamCompletionSnapshot,
 } from './types'
 
+const getSnapshotStorages = (): Storage[] => {
+  if (typeof window === 'undefined') return []
+  const storages: Storage[] = []
+  try {
+    if (window.localStorage) storages.push(window.localStorage)
+  } catch {
+    // ignore
+  }
+  try {
+    if (window.sessionStorage) storages.push(window.sessionStorage)
+  } catch {
+    // ignore
+  }
+  return storages
+}
+
 const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
   if (typeof window === 'undefined') return []
+  const storages = getSnapshotStorages()
+  if (storages.length === 0) return []
   try {
-    const raw = window.sessionStorage.getItem(STREAM_SNAPSHOT_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
+    const targetStorage = storages[0] ?? null
+    let parsed: any[] | null = null
+    let sourceStorage: Storage | null = null
+    for (const storage of storages) {
+      const raw = storage.getItem(STREAM_SNAPSHOT_STORAGE_KEY)
+      if (raw) {
+        parsed = JSON.parse(raw)
+        sourceStorage = storage
+        break
+      }
+    }
+    if (!parsed) return []
     if (!Array.isArray(parsed)) return []
     const now = Date.now()
     const sanitized = parsed
@@ -98,8 +125,11 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
         } as StreamCompletionSnapshot
       })
       .filter((item): item is StreamCompletionSnapshot => Boolean(item && now - item.completedAt <= STREAM_SNAPSHOT_TTL_MS))
-    if (sanitized.length !== parsed.length) {
-      window.sessionStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(sanitized))
+    if (sanitized.length !== parsed.length && sourceStorage) {
+      sourceStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(sanitized))
+    }
+    if (targetStorage && sourceStorage && targetStorage !== sourceStorage) {
+      targetStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(sanitized))
     }
     return sanitized
   } catch {
@@ -109,8 +139,11 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
 
 const writeCompletionSnapshots = (records: StreamCompletionSnapshot[]) => {
   if (typeof window === 'undefined') return
+  const storages = getSnapshotStorages()
+  const storage = storages[0]
+  if (!storage) return
   try {
-    window.sessionStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(records))
+    storage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(records))
   } catch {
     // ignore quota errors
   }
@@ -426,6 +459,13 @@ export const createChatStoreRuntime = (
         }
         return nextMetas
       }
+      const ensureMetrics = () => {
+        if (!metricsMutated) {
+          nextMetrics = { ...(state.messageMetrics || {}) }
+          metricsMutated = true
+        }
+        return nextMetrics
+      }
       const ensureBodies = () => {
         if (!bodiesMutated) {
           nextBodies = { ...state.messageBodies }
@@ -439,13 +479,6 @@ export const createChatStoreRuntime = (
           renderCacheMutated = true
         }
         return nextRenderCache
-      }
-      const ensureMetrics = () => {
-        if (!metricsMutated) {
-          nextMetrics = { ...(state.messageMetrics || {}) }
-          metricsMutated = true
-        }
-        return nextMetrics
       }
 
       snapshots.forEach((snapshot) => {
@@ -629,6 +662,7 @@ export const createChatStoreRuntime = (
       let nextRenderCache = state.messageRenderCache
       let nextToolEvents = state.toolEvents
       let nextMetas = state.messageMetas
+      let nextMetrics = state.messageMetrics || {}
       let metasMutated = false
       let bodiesMutated = false
       let renderCacheMutated = false
@@ -724,7 +758,18 @@ export const createChatStoreRuntime = (
         }
       }
 
-      if (!metasMutated && !bodiesMutated && !renderCacheMutated && !toolEventsMutated) {
+      if (message.role === 'assistant' && message.metrics) {
+        const metricsMap = ensureMetrics()
+        metricsMap[key] = message.metrics
+      }
+
+      if (
+        !metasMutated &&
+        !bodiesMutated &&
+        !renderCacheMutated &&
+        !toolEventsMutated &&
+        !metricsMutated
+      ) {
         return state
       }
 
@@ -741,6 +786,9 @@ export const createChatStoreRuntime = (
       }
       if (toolEventsMutated) {
         partial.toolEvents = nextToolEvents
+      }
+      if (metricsMutated) {
+        partial.messageMetrics = nextMetrics
       }
       return partial
     })

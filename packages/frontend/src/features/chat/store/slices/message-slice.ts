@@ -58,6 +58,7 @@ export const createMessageSlice: ChatSliceCreator<
         const bodyEntryByStableKey = new Map<string, { key: string; body: import('@/types').MessageBody }>()
         const sessionBodyKeys = new Set<string>()
         const prevSessionKeys = existingSessionMetas.map((meta) => messageKey(meta.id))
+        const sessionMetricsEntries: Array<[string, import('@/types').MessageStreamMetrics]> = []
         existingSessionMetas.forEach((meta) => {
           const key = messageKey(meta.id)
           sessionBodyKeys.add(key)
@@ -98,6 +99,9 @@ export const createMessageSlice: ChatSliceCreator<
             }
           }
           nextSessionBodyEntries.push([messageKey(body.id), body])
+          if (msg.role === 'assistant' && msg.metrics) {
+            sessionMetricsEntries.push([messageKey(body.id), msg.metrics])
+          }
         })
 
         metaByStableKey.forEach((meta) => {
@@ -136,6 +140,9 @@ export const createMessageSlice: ChatSliceCreator<
         const nextMetrics = { ...(state.messageMetrics || {}) }
         prevSessionKeys.forEach((key) => {
           delete nextMetrics[key]
+        })
+        sessionMetricsEntries.forEach(([key, metrics]) => {
+          nextMetrics[key] = metrics
         })
 
         return {

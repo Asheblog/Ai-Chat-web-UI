@@ -114,6 +114,11 @@ export interface PersistAssistantFinalResponseParams {
     totalTokens: number;
     contextLimit?: number | null;
   };
+  metrics?: {
+    firstTokenLatencyMs?: number | null;
+    responseTimeMs?: number | null;
+    tokensPerSecond?: number | null;
+  };
   model?: string | null;
   provider?: string | null;
 }
@@ -204,6 +209,7 @@ export const persistAssistantFinalResponse = async ({
   streamError,
   toolLogsJson,
   usage,
+  metrics,
   model,
   provider,
 }: PersistAssistantFinalResponseParams): Promise<number | null> => {
@@ -271,6 +277,18 @@ export const persistAssistantFinalResponse = async ({
           totalTokens: Math.max(0, usage.totalTokens || 0),
           contextLimit:
             typeof usage.contextLimit === 'number' ? usage.contextLimit : usage.contextLimit ?? null,
+          firstTokenLatencyMs:
+            typeof metrics?.firstTokenLatencyMs === 'number'
+              ? Math.max(0, Math.round(metrics.firstTokenLatencyMs))
+              : null,
+          responseTimeMs:
+            typeof metrics?.responseTimeMs === 'number'
+              ? Math.max(0, Math.round(metrics.responseTimeMs))
+              : null,
+          tokensPerSecond:
+            typeof metrics?.tokensPerSecond === 'number' && Number.isFinite(metrics.tokensPerSecond)
+              ? metrics.tokensPerSecond
+              : null,
         },
       });
 
