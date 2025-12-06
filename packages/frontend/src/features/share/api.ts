@@ -2,6 +2,7 @@ import { apiHttpClient } from '@/lib/api'
 import type { ApiResponse, ChatShare, ChatShareSummary, ShareListResponse } from '@/types'
 
 const client = apiHttpClient
+const SHARE_BASE = '/shares'
 
 export const listChatShares = async (params?: {
   sessionId?: number
@@ -9,9 +10,7 @@ export const listChatShares = async (params?: {
   page?: number
   limit?: number
 }) => {
-  const response = await client.get<ApiResponse<ShareListResponse>>('/chat/share', {
-    params,
-  })
+  const response = await client.get<ApiResponse<ShareListResponse>>(SHARE_BASE, { params })
   return response.data
 }
 
@@ -21,7 +20,7 @@ export const createChatShare = async (payload: {
   title?: string
   expiresInHours?: number | null
 }) => {
-  const response = await client.post<ApiResponse<ChatShare>>('/chat/share', payload)
+  const response = await client.post<ApiResponse<ChatShare>>(SHARE_BASE, payload)
   return response.data
 }
 
@@ -29,16 +28,13 @@ export const updateChatShare = async (
   shareId: number,
   payload: { title?: string; expiresInHours?: number | null },
 ) => {
-  const response = await client.put<ApiResponse<ChatShare>>(
-    `/chat/share/${shareId}`,
-    payload,
-  )
+  const response = await client.patch<ApiResponse<ChatShare>>(`${SHARE_BASE}/${shareId}`, payload)
   return response.data
 }
 
 export const revokeChatShare = async (shareId: number) => {
-  const response = await client.delete<ApiResponse<ChatShareSummary>>(
-    `/chat/share/${shareId}`,
+  const response = await client.post<ApiResponse<ChatShareSummary>>(
+    `${SHARE_BASE}/${shareId}/revoke`,
   )
   return response.data
 }
