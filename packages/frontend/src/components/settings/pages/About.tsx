@@ -53,6 +53,24 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">fdcc2d9</span>
+              <span className="text-muted-foreground leading-relaxed">
+                分享接口路径提取 SHARE_BASE 并统一 list/create/update/revoke 路径，更新改用 PATCH、撤销改用 POST，接口语义更一致。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2a8abdb</span>
+              <span className="text-muted-foreground leading-relaxed">
+                上下文超限错误解析后端/前端一致化，提取 token 上限与占用并返回中文提示，保留结构化 payload 便于友好呈现。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8865b5a</span>
+              <span className="text-muted-foreground leading-relaxed">
+                修复刷新后轮询覆盖本地快照导致内容/推理回退，流式 watcher 清理与智能合并持久化，刷新后前端状态即时同步。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
               <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">46742a1</span>
               <span className="text-muted-foreground leading-relaxed">
                 推理折叠状态持久化，跨刷新与会话保持展开偏好，并对本地存储自动裁剪。
@@ -144,7 +162,7 @@ export function AboutPage(){
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-12-05 推送变更摘要
+            以上为 2025-12-06 推送变更摘要
           </p>
         </Card>
       </div>
