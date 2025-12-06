@@ -359,6 +359,10 @@ const PROVIDER_SAFETY_MARKERS = [
   'data_inspection_failed',
   'input data may contain inappropriate content',
 ]
+const CONTEXT_LIMIT_HINT =
+  '超过模型上下文长度限制，请缩短输入、减少历史或降低期望回复长度后重试。'
+const CONTEXT_LIMIT_REGEX =
+  /maximum context length is (\d+)\s*tokens[\s\S]*?requested\s+(\d+)\s*tokens(?:[\s\S]*?\((\d+)\s+in the messages,\s+(\d+)\s+in the completion\))?/i
 
 const containsProviderSafetyMarker = (text: string) => {
   const lower = text.toLowerCase()
@@ -382,6 +386,26 @@ const stringifyCandidate = (candidate: unknown): string | null => {
     } catch {
       return null
     }
+  }
+  return null
+}
+
+const resolveContextLimitHint = (text: string): string | null => {
+  const detailedMatch = text.match(CONTEXT_LIMIT_REGEX)
+  if (detailedMatch) {
+    const [, limit, requested, messageTokens, completionTokens] = detailedMatch
+    const parts: string[] = []
+    if (limit && requested) {
+      parts.push(`最大 ${limit} tokens，当前 ${requested}`)
+    }
+    if (messageTokens && completionTokens) {
+      parts.push(`消息 ${messageTokens}，补全 ${completionTokens}`)
+    }
+    const detail = parts.length > 0 ? `（${parts.join('；')}）` : ''
+    return `超过模型上下文长度限制${detail}，请缩短输入、减少历史或降低期望回复长度后重试。`
+  }
+  if (/context[_\s-]?length[\s\S]*exceed/i.test(text)) {
+    return CONTEXT_LIMIT_HINT
   }
   return null
 }
@@ -423,7 +447,10 @@ export const resolveProviderSafetyMessage = (error: unknown): string | null => {
 
   for (const candidate of inspected) {
     const text = stringifyCandidate(candidate)
-    if (text && containsProviderSafetyMarker(text)) {
+    if (!text) continue
+    const contextLimit = resolveContextLimitHint(text)
+    if (contextLimit) return contextLimit
+    if (containsProviderSafetyMarker(text)) {
       return PROVIDER_SAFETY_HINT
     }
   }

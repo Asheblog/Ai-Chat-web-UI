@@ -49,6 +49,64 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
 
   let activeAssistantMessageId = assistantMessageId ?? null;
 
+  const resolveContextLimitErrorMessage = (error: unknown): string | null => {
+    const candidates: unknown[] = [];
+    const pushCandidate = (value: unknown) => {
+      if (value == null) return;
+      if (Array.isArray(value)) {
+        value.forEach(pushCandidate);
+        return;
+      }
+      candidates.push(value);
+    };
+
+    pushCandidate(error);
+    if (error && typeof error === 'object') {
+      const errObj = error as Record<string, unknown>;
+      pushCandidate(errObj.message);
+      if ('payload' in errObj) {
+        pushCandidate((errObj as any).payload);
+      }
+    }
+
+    for (const candidate of candidates) {
+      const text =
+        typeof candidate === 'string'
+          ? candidate
+          : typeof candidate === 'number' || typeof candidate === 'boolean'
+            ? String(candidate)
+            : candidate && typeof candidate === 'object'
+              ? (() => {
+                  try {
+                    return JSON.stringify(candidate);
+                  } catch {
+                    return null;
+                  }
+                })()
+              : null;
+      if (!text) continue;
+      const contextMatch = text.match(
+        /maximum context length is (\d+)\s*tokens[\s\S]*?requested\s+(\d+)\s*tokens(?:[\s\S]*?\((\d+)\s+in the messages,\s+(\d+)\s+in the completion\))?/i,
+      );
+      if (contextMatch) {
+        const [, limit, requested, messageTokens, completionTokens] = contextMatch;
+        const parts: string[] = [];
+        if (limit && requested) {
+          parts.push(`最大 ${limit} tokens，当前 ${requested}`);
+        }
+        if (messageTokens && completionTokens) {
+          parts.push(`消息 ${messageTokens}，补全 ${completionTokens}`);
+        }
+        const detail = parts.length > 0 ? `（${parts.join('；')}）` : '';
+        return `超过模型上下文长度限制${detail}，请缩短输入、减少历史或降低期望回复长度后重试。`;
+      }
+      if (/context[_\s-]?length[\s\S]*exceed/i.test(text)) {
+        return '超过模型上下文长度限制，请缩短输入、减少历史或降低期望回复长度后重试。';
+      }
+    }
+    return null;
+  };
+
   const resolvedClientMessageId =
     clientMessageId ??
     userMessageRecord?.clientMessageId ??
@@ -699,7 +757,20 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           });
           if (!response.ok) {
             const text = await response.text();
-            throw new Error(`AI provider request failed (${response.status}): ${text}`);
+            let parsed: any = null;
+            try {
+              parsed = JSON.parse(text);
+            } catch {
+              // ignore
+            }
+            const requestError: any = new Error(
+              `AI provider request failed (${response.status}): ${text}`,
+            );
+            requestError.status = response.status;
+            if (parsed) {
+              requestError.payload = parsed;
+            }
+            throw requestError;
           }
           return response;
         } catch (error) {
@@ -1067,12 +1138,13 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           return;
         }
         traceStatus = 'error';
-        traceErrorMessage = error?.message || 'Web search agent failed';
+        const friendlyContextError = resolveContextLimitErrorMessage(error);
+        traceErrorMessage = friendlyContextError || error?.message || 'Web search agent failed';
         traceRecorder.log('stream:error', { message: traceErrorMessage });
         log.error('Agent web search failed', error);
         safeEnqueue({
           type: 'error',
-          error: error?.message || 'Web search agent failed',
+          error: traceErrorMessage,
         });
         const persistErrorStatus = async () => {
           const reasoningSnapshot = reasoningBuffer.trim().length ? reasoningBuffer.trim() : null;
@@ -1118,7 +1190,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         };
         await persistErrorStatus();
         const agentError =
-          error instanceof Error ? error : new Error(error?.message || 'Web search agent failed');
+          error instanceof Error ? error : new Error(traceErrorMessage || 'Web search agent failed');
+        if (agentError instanceof Error && traceErrorMessage) {
+          (agentError as Error).message = traceErrorMessage;
+        }
         (agentError as any).handled = 'agent_error';
         (agentError as any).status = error?.status ?? 500;
         throw agentError;
