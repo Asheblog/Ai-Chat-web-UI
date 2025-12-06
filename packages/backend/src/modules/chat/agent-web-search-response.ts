@@ -232,6 +232,28 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
       };
 
+      // 检查取消状态（包括直接取消标志和待取消标记）
+      // 修复：刷新页面后停止按钮无效的问题
+      const checkCancelled = (): boolean => {
+        if (streamMeta?.cancelled) return true;
+        // 检查 pendingCancelMarker（处理刷新页面后取消请求的情况）
+        const cancelKeys = [
+          buildPendingCancelKeyByMessageId(sessionId, activeAssistantMessageId),
+          buildPendingCancelKeyByClientId(sessionId, assistantPlaceholderClientMessageId),
+          buildPendingCancelKeyByClientId(sessionId, resolvedClientMessageId),
+        ].filter(Boolean) as string[];
+        for (const key of cancelKeys) {
+          if (hasPendingStreamCancelKey(key)) {
+            deletePendingStreamCancelKey(key);
+            if (streamMeta) {
+              streamMeta.cancelled = true;
+            }
+            return true;
+          }
+        }
+        return false;
+      };
+
       const ensureToolLogId = (payload: Record<string, unknown>) => {
         if (typeof payload.id === 'string' && payload.id.trim()) {
           return (payload.id as string).trim();
@@ -866,7 +888,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           break;
         }
 
-        if (streamMeta?.cancelled) {
+        if (checkCancelled()) {
           await persistAssistantProgress({ force: true, status: 'cancelled' });
           log.debug('Agent stream cancelled by client', {
             sessionId,
@@ -1034,7 +1056,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           );
         }
       } catch (error: any) {
-        if (streamMeta?.cancelled) {
+        if (checkCancelled()) {
           await persistAssistantProgress({ force: true, status: 'cancelled' });
           log.debug('Agent stream aborted after client cancellation', {
             sessionId,
@@ -1290,6 +1312,10 @@ import {
   registerStreamMeta,
   releaseStreamMeta,
   updateStreamMetaController,
+  buildPendingCancelKeyByMessageId,
+  buildPendingCancelKeyByClientId,
+  hasPendingStreamCancelKey,
+  deletePendingStreamCancelKey,
 } from './stream-state';
 
 export interface AgentWebSearchConfig {

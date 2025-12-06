@@ -1527,6 +1527,19 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
     const matchedMeta =
       meta && meta.actorId === actor.identifier && meta.sessionId === sessionId ? meta : null;
+
+    // 调试日志：检测流元数据匹配失败的情况
+    if (meta && !matchedMeta) {
+      log.warn('Stream cancel: meta found but actor mismatch', {
+        sessionId,
+        messageId,
+        clientMessageId: normalizedClientMessageId,
+        metaActorId: meta.actorId,
+        requestActorId: actor.identifier,
+        metaSessionId: meta.sessionId,
+      });
+    }
+
     const assistantClientIdFromRequest = resolveAssistantClientIdFromRequest(normalizedClientMessageId);
     const effectiveAssistantClientId =
       matchedMeta?.assistantClientMessageId ?? assistantClientIdFromRequest ?? normalizedClientMessageId ?? null;
@@ -1542,12 +1555,24 @@ export const registerChatStreamRoutes = (router: Hono) => {
         clientMessageId: normalizedClientMessageId,
         assistantClientMessageId: matchedMeta.assistantClientMessageId ?? effectiveAssistantClientId,
       });
+      log.debug('Stream cancel: direct cancellation via streamMeta', {
+        sessionId,
+        messageId: matchedMeta.assistantMessageId,
+        streamKey: matchedMeta.streamKey,
+      });
     } else {
       registerPendingCancelMarker({
         sessionId,
         messageId: typeof messageId === 'number' || typeof messageId === 'string' ? messageId : null,
         clientMessageId: normalizedClientMessageId,
         assistantClientMessageId: effectiveAssistantClientId,
+      });
+      log.debug('Stream cancel: registered pending cancel marker (no active stream found)', {
+        sessionId,
+        messageId,
+        clientMessageId: normalizedClientMessageId,
+        assistantClientMessageId: effectiveAssistantClientId,
+        metaFound: !!meta,
       });
     }
 

@@ -312,11 +312,15 @@ export const createChatStoreRuntime = (
       clearInterval(timer)
       streamingPollers.delete(messageId)
     }
+    // 同时从 activeWatchers 中删除，停止 startMessageProgressWatcher 的轮询
+    activeWatchers.delete(messageId)
   }
 
   const stopAllMessagePollers = () => {
     streamingPollers.forEach((timer) => clearInterval(timer))
     streamingPollers.clear()
+    // 同时清空 activeWatchers，停止所有 startMessageProgressWatcher 的轮询
+    activeWatchers.clear()
   }
 
   const persistSnapshotForStream = (stream: ActiveStreamEntry | null) => {
@@ -640,21 +644,41 @@ export const createChatStoreRuntime = (
 
   const applyServerMessageSnapshot = (message: Message) => {
     const normalizedToolEvents = normalizeToolEvents(message)
-    const contentPayload = message.content || ''
+    const serverContentPayload = message.content || ''
     const reasoningPayload = message.reasoning ?? message.streamReasoning ?? ''
     const hasReasoningPayload = typeof reasoningPayload === 'string' && reasoningPayload.length > 0
     set((state) => {
       const serverMeta = createMeta(message)
       const key = messageKey(message.id)
       const prevBody = ensureBody(state.messageBodies[key], message.id, serverMeta.stableKey)
+
+      // 智能内容合并：如果当前内容比服务器内容更新（更长），保留当前内容
+      // 这处理了持久化延迟导致的内容回退问题（刷新页面后轮询获取的数据库内容可能比 localStorage 快照旧）
+      const shouldPreserveLocalContent =
+        message.streamStatus === 'streaming' &&
+        prevBody.content.length > serverContentPayload.length &&
+        serverContentPayload.length > 0 &&
+        prevBody.content.startsWith(serverContentPayload)
+
+      const contentPayload = shouldPreserveLocalContent ? prevBody.content : serverContentPayload
       const contentChanged = prevBody.content !== contentPayload
       const prevReasoningText = prevBody.reasoning ?? ''
       const prevPlayedLength =
         typeof prevBody.reasoningPlayedLength === 'number'
           ? Math.max(0, Math.min(prevBody.reasoningPlayedLength, prevReasoningText.length))
           : prevReasoningText.length
-      const reasoningChanged = hasReasoningPayload && prevReasoningText !== reasoningPayload
-      const nextPlayedLength = hasReasoningPayload ? reasoningPayload.length : prevPlayedLength
+
+      // 智能推理内容合并：如果当前推理内容比服务器内容更新（更长），保留当前内容
+      // 这处理了持久化延迟导致的推理内容回退问题（刷新页面后轮询获取的数据库内容可能比 localStorage 快照旧）
+      const shouldPreserveLocalReasoning =
+        message.streamStatus === 'streaming' &&
+        prevReasoningText.length > reasoningPayload.length &&
+        reasoningPayload.length > 0 &&
+        prevReasoningText.startsWith(reasoningPayload)
+
+      const finalReasoningPayload = shouldPreserveLocalReasoning ? prevReasoningText : reasoningPayload
+      const reasoningChanged = hasReasoningPayload && prevReasoningText !== finalReasoningPayload
+      const nextPlayedLength = hasReasoningPayload ? finalReasoningPayload.length : prevPlayedLength
       const playedChanged = nextPlayedLength !== prevPlayedLength
       const hasToolUpdates = normalizedToolEvents.length > 0
 
@@ -667,6 +691,7 @@ export const createChatStoreRuntime = (
       let bodiesMutated = false
       let renderCacheMutated = false
       let toolEventsMutated = false
+      let metricsMutated = false
 
       const ensureBodies = () => {
         if (!bodiesMutated) {
@@ -689,6 +714,13 @@ export const createChatStoreRuntime = (
         }
         return nextMetas
       }
+      const ensureMetrics = () => {
+        if (!metricsMutated) {
+          nextMetrics = { ...(state.messageMetrics || {}) }
+          metricsMutated = true
+        }
+        return nextMetrics
+      }
 
       if (contentChanged || reasoningChanged || playedChanged || hasToolUpdates) {
         const bodies = ensureBodies()
@@ -697,7 +729,7 @@ export const createChatStoreRuntime = (
           id: message.id,
           stableKey: serverMeta.stableKey,
           content: contentPayload,
-          reasoning: hasReasoningPayload ? reasoningPayload : prevBody.reasoning,
+          reasoning: hasReasoningPayload ? finalReasoningPayload : prevBody.reasoning,
           reasoningPlayedLength: nextPlayedLength,
           version: prevBody.version + (contentChanged ? 1 : 0),
           reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
@@ -794,7 +826,7 @@ export const createChatStoreRuntime = (
     })
     if (message.streamStatus === 'streaming') {
       const shouldPersist =
-        contentPayload.length > 0 ||
+        serverContentPayload.length > 0 ||
         reasoningPayload.length > 0 ||
         normalizedToolEvents.length > 0
       if (shouldPersist) {
@@ -802,7 +834,7 @@ export const createChatStoreRuntime = (
           sessionId: message.sessionId,
           messageId: typeof message.id === 'number' ? Number(message.id) : null,
           clientMessageId: message.clientMessageId ?? null,
-          content: contentPayload,
+          content: serverContentPayload,
           reasoning: reasoningPayload,
           reasoningPlayedLength: reasoningPayload.length,
           toolEvents: normalizedToolEvents.length > 0 ? normalizedToolEvents : undefined,
