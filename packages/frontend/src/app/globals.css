@@ -178,7 +178,7 @@
 }
 
 .reasoning-body {
-  padding: 1.1rem 1.25rem 1.25rem;
+  padding: 0.8rem 0.65rem 0.95rem;
   background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.3));
 }
 
@@ -189,7 +189,7 @@
 }
 
 .reasoning-timeline {
-  --timeline-line-left: 0.55rem;
+  --timeline-line-left: 0.22rem;
   position: relative;
   padding-left: 0;
   margin-left: 0;
@@ -213,7 +213,7 @@
 .reasoning-item,
 .reasoning-markdown > * {
   position: relative;
-  padding-left: calc(var(--timeline-line-left) + 0.85rem);
+  padding-left: calc(var(--timeline-line-left) + 0.45rem);
   margin-left: 0;
 }
 
@@ -239,7 +239,26 @@
 .reasoning-placeholder {
   font-size: 0.82rem;
   color: hsl(var(--muted-foreground));
-  padding-left: 1.2rem;
+  padding-left: calc(var(--timeline-line-left) + 0.45rem);
+}
+
+@media (max-width: 640px) {
+  .reasoning-body {
+    padding: 0.75rem 0.55rem 0.85rem;
+  }
+
+  .reasoning-timeline {
+    --timeline-line-left: 0.18rem;
+  }
+
+  .reasoning-item,
+  .reasoning-markdown > * {
+    padding-left: calc(var(--timeline-line-left) + 0.42rem);
+  }
+
+  .reasoning-placeholder {
+    padding-left: calc(var(--timeline-line-left) + 0.42rem);
+  }
 }
 
 .reasoning-tools {

@@ -583,9 +583,18 @@ export const createChatStoreRuntime = (
           }
         }
 
-        const nextStreamStatus =
-          snapshot.streamStatus ?? meta.streamStatus ?? (meta.pendingSync ? 'done' : 'streaming')
-        const nextReasoningStatus = snapshot.reasoningStatus ?? meta.reasoningStatus
+        const baseStreamStatus = meta.streamStatus ?? (meta.pendingSync ? 'done' : 'streaming')
+        const baseReasoningStatus = meta.reasoningStatus
+        let nextStreamStatus =
+          snapshot.streamStatus ?? baseStreamStatus
+        // 如果服务器状态已结束/取消/错误，忽略本地“streaming”快照，避免刷新后状态回滚
+        if (baseStreamStatus && baseStreamStatus !== 'streaming' && nextStreamStatus === 'streaming') {
+          nextStreamStatus = baseStreamStatus
+        }
+        let nextReasoningStatus = snapshot.reasoningStatus ?? baseReasoningStatus
+        if (nextStreamStatus !== 'streaming' && nextReasoningStatus === 'streaming') {
+          nextReasoningStatus = baseReasoningStatus ?? 'done'
+        }
         const nextStreamError = nextStreamStatus === 'error' ? meta.streamError : null
         const metaNeedsUpdate =
           nextStreamStatus !== meta.streamStatus ||
