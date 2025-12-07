@@ -883,6 +883,20 @@ export const createStreamSlice: ChatSliceCreator<
         if (typeof stream.assistantId === 'number') {
           runtime.updateMetaStreamStatus(stream.assistantId, 'cancelled', '已停止生成')
         }
+        const assistantNumericId =
+          typeof stream.assistantId === 'number' && Number.isFinite(stream.assistantId)
+            ? Number(stream.assistantId)
+            : null
+        const resolvedClientId =
+          typeof stream.assistantClientMessageId === 'string' && stream.assistantClientMessageId.trim()
+            ? stream.assistantClientMessageId.trim()
+            : typeof stream.clientMessageId === 'string' && stream.clientMessageId.trim()
+              ? stream.clientMessageId.trim()
+              : null
+        runtime.removeCompletionSnapshot(stream.sessionId, {
+          messageId: assistantNumericId,
+          clientMessageId: resolvedClientId,
+        })
       })
       set((state) => ({
         ...runtime.streamingFlagUpdate(state, currentSessionId, false),
@@ -923,6 +937,12 @@ export const createStreamSlice: ChatSliceCreator<
           return { messageMetas: nextMetas }
         })
         runtime.updateMetaStreamStatus(fallbackAssistantId, 'cancelled', '已停止生成')
+        const resolvedFallbackClientId =
+          typeof fallbackClientId === 'string' && fallbackClientId.trim() ? fallbackClientId.trim() : null
+        runtime.removeCompletionSnapshot(currentSessionId, {
+          messageId: fallbackAssistantId,
+          clientMessageId: resolvedFallbackClientId,
+        })
       }
       set((state) => ({
         ...runtime.streamingFlagUpdate(state, currentSessionId, false),
