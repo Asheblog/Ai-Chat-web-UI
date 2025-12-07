@@ -189,7 +189,7 @@ function ReasoningPanelComponent({
   }, [durationLabel, idleLabel, status])
 
   return (
-    <div className="reasoning-panel">
+    <div className={`reasoning-panel${expanded ? ' reasoning-panel--expanded' : ''}`}>
       <button
         type="button"
         className="reasoning-header"
@@ -209,7 +209,7 @@ function ReasoningPanelComponent({
         <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="reasoning-body">
+        <>
           {status === 'idle' && (
             <div className="reasoning-hint">
               模型正在思考…
@@ -346,7 +346,7 @@ function ReasoningPanelComponent({
               )}
             </div>
           )}
-        </div>
+        </>
       )}
       {activePythonCall && (
         <Dialog open onOpenChange={(open) => { if (!open) setActivePythonCallId(null) }}>

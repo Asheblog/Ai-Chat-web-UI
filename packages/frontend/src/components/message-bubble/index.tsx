@@ -240,8 +240,8 @@ function MessageBubbleComponent({
 
   return (
     <div className={`relative ${selectionWrapperClass}`}>
-      <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted'}`}>
+      <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+        <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted mt-1.5'}`}>
           <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
           <AvatarFallback
             className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
