@@ -51,6 +51,8 @@ model ChatSession {
   modelRawId      String?   // 供应商原始模型ID（不含前缀）
   title           String    // 可由首条消息自动生成
   createdAt       DateTime  @default(now())
+  // 可选置顶：非空表示置顶时间
+  pinnedAt        DateTime?
   // 会话级推理默认：为空表示遵循系统设置
   reasoningEnabled Boolean?
   reasoningEffort  String?   // 'low' | 'medium' | 'high'
@@ -67,6 +69,8 @@ model ChatSession {
 
   @@index([expiresAt])
   @@index([anonymousKey])
+  @@index([userId, pinnedAt])
+  @@index([anonymousKey, pinnedAt])
 
   @@map("chat_sessions")
 }

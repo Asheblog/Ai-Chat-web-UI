@@ -20,6 +20,7 @@ const createSessionSchema = z.object({
 
 const updateSessionSchema = z.object({
   title: z.string().min(1).max(200).optional(),
+  pinned: z.boolean().optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),

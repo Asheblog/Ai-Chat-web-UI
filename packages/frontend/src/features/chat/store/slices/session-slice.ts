@@ -11,6 +11,17 @@ import type { SessionSlice } from '../types'
 import type { ChatSliceCreator } from '../types'
 import { createInitialShareSelection, messageKey } from '../utils'
 
+const sortSessions = (sessions: ChatSession[]) => {
+  return [...sessions].sort((a, b) => {
+    const pa = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0
+    const pb = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0
+    if (pa !== pb) return pb - pa
+    const ca = new Date(a.createdAt).getTime() || 0
+    const cb = new Date(b.createdAt).getTime() || 0
+    return cb - ca
+  })
+}
+
 export const createSessionSlice: ChatSliceCreator<SessionSlice & {
   currentSession: ChatSession | null
   sessions: ChatSession[]
@@ -27,7 +38,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
     try {
       const response = await getSessions()
       set({
-        sessions: response.data || [],
+        sessions: sortSessions(response.data || []),
         isSessionsLoading: false,
       })
       get().fetchSessionsUsage().catch(() => {})
@@ -52,7 +63,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       )
       const newSession = response.data as ChatSession
       set((state) => ({
-        sessions: [newSession, ...state.sessions],
+        sessions: sortSessions([newSession, ...state.sessions]),
         currentSession: newSession,
         messageMetas: [],
         assistantVariantSelections: {},
@@ -208,6 +219,37 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       return true
     } catch (error: any) {
       set({ error: error?.response?.data?.error || error?.message || '更新会话偏好失败' })
+      return false
+    }
+  },
+
+  toggleSessionPin: async (sessionId, pinned) => {
+    try {
+      const resp = await updateSessionApi(sessionId, { pinned })
+      const updatedSession = (resp?.data as ChatSession | undefined) || undefined
+      const nextPinnedAt =
+        Object.prototype.hasOwnProperty.call(resp || {}, 'data') && updatedSession
+          ? updatedSession.pinnedAt ?? null
+          : pinned
+            ? new Date().toISOString()
+            : null
+
+      set((state) => {
+        const sessions = sortSessions(
+          state.sessions.map((s) =>
+            s.id === sessionId ? { ...s, pinnedAt: nextPinnedAt } : s,
+          ),
+        )
+        const currentSession =
+          state.currentSession?.id === sessionId
+            ? { ...(state.currentSession as ChatSession), pinnedAt: nextPinnedAt }
+            : state.currentSession
+
+        return { sessions, currentSession }
+      })
+      return true
+    } catch (error: any) {
+      set({ error: error?.response?.data?.error || error?.message || '更新会话置顶状态失败' })
       return false
     }
   },

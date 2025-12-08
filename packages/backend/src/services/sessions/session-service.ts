@@ -31,6 +31,7 @@ const sessionSelect = {
   modelRawId: true,
   title: true,
   createdAt: true,
+  pinnedAt: true,
   reasoningEnabled: true,
   reasoningEffort: true,
   ollamaThink: true,
@@ -109,7 +110,7 @@ export class SessionService {
       this.prisma.chatSession.findMany({
         where,
         select: sessionSelect,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ pinnedAt: 'desc' }, { createdAt: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -206,6 +207,7 @@ export class SessionService {
     sessionId: number,
     updates: {
       title?: string
+      pinned?: boolean
       reasoningEnabled?: boolean
       reasoningEffort?: string
       ollamaThink?: boolean
@@ -224,6 +226,9 @@ export class SessionService {
       where: { id: sessionId },
       data: {
         ...(typeof updates.title === 'string' ? { title: updates.title } : {}),
+        ...(Object.prototype.hasOwnProperty.call(updates, 'pinned')
+          ? { pinnedAt: updates.pinned ? new Date() : null }
+          : {}),
         ...(typeof updates.reasoningEnabled === 'boolean'
           ? { reasoningEnabled: updates.reasoningEnabled }
           : {}),

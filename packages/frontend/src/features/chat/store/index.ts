@@ -27,7 +27,7 @@ const buildSelector =
   (state: ChatStore) =>
     selector(state)
 
-export const useChatSessions = <TSelected,>(selector: (slice: Pick<ChatStore, 'sessions' | 'currentSession' | 'isSessionsLoading' | 'error' | 'fetchSessions' | 'createSession' | 'selectSession' | 'deleteSession' | 'updateSessionTitle' | 'switchSessionModel' | 'updateSessionPrefs'>) => TSelected) =>
+export const useChatSessions = <TSelected,>(selector: (slice: Pick<ChatStore, 'sessions' | 'currentSession' | 'isSessionsLoading' | 'error' | 'fetchSessions' | 'createSession' | 'selectSession' | 'deleteSession' | 'updateSessionTitle' | 'switchSessionModel' | 'updateSessionPrefs' | 'toggleSessionPin'>) => TSelected) =>
   useChatStore(buildSelector(selector))
 
 export const useChatMessages = <TSelected,>(selector: (slice: Pick<ChatStore, 'messageMetas' | 'messageBodies' | 'messageRenderCache' | 'messageImageCache' | 'messagesHydrated' | 'isMessagesLoading' | 'toolEvents' | 'assistantVariantSelections' | 'fetchMessages' | 'addMessage' | 'applyRenderedContent' | 'invalidateRenderedContent' | 'regenerateAssistantMessage' | 'cycleAssistantVariant'>) => TSelected) =>

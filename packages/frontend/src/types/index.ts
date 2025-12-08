@@ -88,6 +88,7 @@ export interface ChatSession {
   modelLabel?: string | null;
   title: string;
   createdAt: string;
+  pinnedAt?: string | null;
   reasoningEnabled?: boolean | null;
   reasoningEffort?: 'low' | 'medium' | 'high' | null;
   ollamaThink?: boolean | null;

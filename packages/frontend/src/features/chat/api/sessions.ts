@@ -44,6 +44,7 @@ export const updateSession = async (
   sessionId: number,
   updates: Partial<{
     title: string
+    pinned: boolean
     reasoningEnabled: boolean
     reasoningEffort: 'low' | 'medium' | 'high'
     ollamaThink: boolean

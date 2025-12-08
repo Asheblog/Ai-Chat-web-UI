@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Github, Plus, Settings, Trash2 } from 'lucide-react'
+import { Github, Pin, PinOff, Plus, Settings, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +52,7 @@ export function Sidebar() {
     selectSession,
     deleteSession,
     createSession,
+    toggleSessionPin,
     sessionUsageTotalsMap,
     isSessionsLoading,
   } = useChatStore()
@@ -309,8 +310,11 @@ export function Sidebar() {
                   transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium" title={session.title}>
-                      {clipTitle(session.title, 15)}
+                    <p className="truncate text-sm font-medium flex items-center gap-1" title={session.title}>
+                      {session.pinnedAt ? (
+                        <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
+                      ) : null}
+                      <span className="truncate">{clipTitle(session.title, 15)}</span>
                     </p>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs text-muted-foreground">
@@ -323,22 +327,48 @@ export function Sidebar() {
                       )}
                     </div>
                   </div>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 sm:h-6 sm:w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
-                          onClick={(e) => requestDeleteSession(session.id, e)}
-                          aria-label="删除会话"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>删除会话</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <div className="flex items-center gap-1">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 sm:h-6 sm:w-6 text-amber-500/80 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleSessionPin(session.id, !session.pinnedAt)
+                            }}
+                            aria-label={session.pinnedAt ? '取消置顶' : '置顶会话'}
+                          >
+                            {session.pinnedAt ? (
+                              <PinOff className="h-4 w-4" />
+                            ) : (
+                              <Pin className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{session.pinnedAt ? '取消置顶' : '置顶'}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 sm:h-6 sm:w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                            onClick={(e) => requestDeleteSession(session.id, e)}
+                            aria-label="删除会话"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>删除会话</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>

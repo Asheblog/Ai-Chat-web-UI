@@ -112,6 +112,7 @@ export interface SessionSlice {
       systemPrompt: string | null
     }>,
   ) => Promise<boolean>
+  toggleSessionPin: (sessionId: number, pinned: boolean) => Promise<boolean>
 }
 
 export interface UsageSlice {
