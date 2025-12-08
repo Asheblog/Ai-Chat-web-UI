@@ -215,9 +215,9 @@
   --timeline-line-left: 0.22rem;
   position: relative;
   margin: var(--reasoning-padding-top) 0 0;
-  padding: 0 0 var(--reasoning-padding-bottom);
+  padding: 0 var(--reasoning-padding-x) var(--reasoning-padding-bottom);
   margin-left: 0;
-  transform: translateX(var(--timeline-offset-x));
+  transform: none;
 }
 
 .reasoning-hint + .reasoning-timeline {
