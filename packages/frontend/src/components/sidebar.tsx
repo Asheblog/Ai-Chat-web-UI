@@ -176,8 +176,8 @@ export function Sidebar() {
     setDeleteTargetId(sessionId)
   }
 
-  // 将标题限制在 15 个字符以内（按 Unicode 码点计数），超出添加省略号
-  const clipTitle = (s: string, max = 15) => {
+  // 将标题限制在 12 个字符以内（按 Unicode 码点计数），超出添加省略号
+  const clipTitle = (s: string, max = 12) => {
     try {
       const arr = Array.from(s || '')
       return arr.length > max ? arr.slice(0, max).join('') + '…' : s
@@ -314,7 +314,7 @@ export function Sidebar() {
                       {session.pinnedAt ? (
                         <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
                       ) : null}
-                      <span className="truncate">{clipTitle(session.title, 15)}</span>
+                      <span className="truncate">{clipTitle(session.title, 12)}</span>
                     </p>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs text-muted-foreground">
