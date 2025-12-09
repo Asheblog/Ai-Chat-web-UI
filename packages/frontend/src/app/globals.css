@@ -360,10 +360,14 @@
   flex-direction: column;
   gap: 0.4rem;
   font-size: 0.78rem;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .reasoning-tools__hits a {
   color: hsl(var(--primary));
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .reasoning-tools__hits p {
