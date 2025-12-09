@@ -267,7 +267,7 @@ export function Sidebar() {
         <div className="border-t border-slate-200 dark:border-slate-800" />
       </div>
       {/* 会话列表 */}
-      <ScrollArea className="flex-1 px-4">
+      <ScrollArea className="flex-1 px-4 overflow-hidden">
         <div className="space-y-2">
           {/* 加载骨架 */}
           {isSessionsLoading && sessions.length === 0 && (
