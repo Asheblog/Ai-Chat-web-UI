@@ -18,11 +18,18 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useSystemSettings } from "@/hooks/use-system-settings"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { refreshImageAttachments, syncAnonymousQuota } from '@/features/settings/api'
 import { useAuthStore } from "@/store/auth-store"
-import { UserPlus, Palette, Clock } from "lucide-react"
+import { UserPlus, Palette, Clock, Type } from "lucide-react"
 import { SettingRow } from "@/components/settings/components/setting-row"
 import { AvatarUploadField, type AvatarUploadResult } from "@/components/settings/components/avatar-upload-field"
 
@@ -59,6 +66,10 @@ export function SystemGeneralPage() {
   const [saving, setSaving] = useState(false)
   const [assistantAvatarPreview, setAssistantAvatarPreview] = useState<string | null>(null)
   const [assistantAvatarSaving, setAssistantAvatarSaving] = useState(false)
+  // 标题智能总结设置
+  const [titleSummaryEnabledDraft, setTitleSummaryEnabledDraft] = useState(false)
+  const [titleSummaryMaxLengthDraft, setTitleSummaryMaxLengthDraft] = useState(20)
+  const [titleSummaryModelSourceDraft, setTitleSummaryModelSourceDraft] = useState<'current' | 'specified'>('current')
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   const resetDrafts = useCallback(() => {
@@ -73,6 +84,10 @@ export function SystemGeneralPage() {
     setDefaultUserQuotaDraft(String(systemSettings.defaultUserDailyQuota ?? 200))
     setAnonymousRetentionDraft(String(systemSettings.anonymousRetentionDays ?? 15))
     setAssistantAvatarPreview(systemSettings.assistantAvatarUrl || null)
+    // 标题总结
+    setTitleSummaryEnabledDraft(Boolean(systemSettings.titleSummaryEnabled))
+    setTitleSummaryMaxLengthDraft(systemSettings.titleSummaryMaxLength ?? 20)
+    setTitleSummaryModelSourceDraft(systemSettings.titleSummaryModelSource ?? 'current')
   }, [systemSettings])
 
   useEffect(() => {
@@ -179,6 +194,9 @@ export function SystemGeneralPage() {
         chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
         assistantReplyHistoryLimit: String(systemSettings.assistantReplyHistoryLimit ?? 5),
         anonymousRetentionDays: String(systemSettings.anonymousRetentionDays ?? 15),
+        titleSummaryEnabled: Boolean(systemSettings.titleSummaryEnabled),
+        titleSummaryMaxLength: systemSettings.titleSummaryMaxLength ?? 20,
+        titleSummaryModelSource: systemSettings.titleSummaryModelSource ?? 'current',
       }
     : null
 
@@ -193,7 +211,10 @@ export function SystemGeneralPage() {
       siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
       retentionDraft !== normalizedInitials.chatImageRetentionDays ||
       replyHistoryLimitDraft !== normalizedInitials.assistantReplyHistoryLimit ||
-      anonymousRetentionDraft !== normalizedInitials.anonymousRetentionDays
+      anonymousRetentionDraft !== normalizedInitials.anonymousRetentionDays ||
+      titleSummaryEnabledDraft !== normalizedInitials.titleSummaryEnabled ||
+      titleSummaryMaxLengthDraft !== normalizedInitials.titleSummaryMaxLength ||
+      titleSummaryModelSourceDraft !== normalizedInitials.titleSummaryModelSource
     )
 
   const handleSaveGeneral = async () => {
@@ -236,6 +257,9 @@ export function SystemGeneralPage() {
         chatImageRetentionDays: parsedRetention,
         assistantReplyHistoryLimit: parsedReplyHistoryLimit,
         anonymousRetentionDays: parsedAnonymousRetention,
+        titleSummaryEnabled: titleSummaryEnabledDraft,
+        titleSummaryMaxLength: titleSummaryMaxLengthDraft,
+        titleSummaryModelSource: titleSummaryModelSourceDraft,
       })
       toast({ title: '已保存通用配置' })
     } finally {
@@ -523,6 +547,80 @@ export function SystemGeneralPage() {
             />
             <span className="text-sm text-muted-foreground">天</span>
           </div>
+        </SettingRow>
+      </div>
+
+      {/* 标题智能总结区块 */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <Type className="w-5 h-5 text-primary" />
+          <div>
+            <CardTitle className="text-lg">标题智能总结</CardTitle>
+            <CardDescription>使用 AI 自动为对话生成简洁标题</CardDescription>
+          </div>
+        </div>
+
+        <SettingRow
+          title={(
+            <div className="flex items-center gap-2">
+              启用智能标题
+              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">实验性</Badge>
+            </div>
+          )}
+          description="发送首条消息时自动调用模型生成对话标题"
+        >
+          <Switch
+            id="titleSummaryEnabled"
+            checked={titleSummaryEnabledDraft}
+            disabled={!isAdmin}
+            onCheckedChange={(checked) => setTitleSummaryEnabledDraft(Boolean(checked))}
+          />
+        </SettingRow>
+
+        <SettingRow
+          title="标题最大长度"
+          description="生成的标题字数限制（5-50字）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="titleSummaryMaxLength"
+              type="number"
+              inputMode="numeric"
+              min={5}
+              max={50}
+              value={titleSummaryMaxLengthDraft}
+              onChange={(e) => {
+                const val = Number.parseInt(e.target.value, 10)
+                if (!Number.isNaN(val)) {
+                  setTitleSummaryMaxLengthDraft(Math.max(5, Math.min(50, val)))
+                }
+              }}
+              className="w-full sm:w-28 text-right"
+              disabled={!isAdmin || !titleSummaryEnabledDraft}
+            />
+            <span className="text-sm text-muted-foreground">字</span>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="模型选择"
+          description="选择用于生成标题的模型来源"
+          align="start"
+        >
+          <Select
+            value={titleSummaryModelSourceDraft}
+            onValueChange={(value: 'current' | 'specified') => setTitleSummaryModelSourceDraft(value)}
+            disabled={!isAdmin || !titleSummaryEnabledDraft}
+          >
+            <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectValue placeholder="选择模型来源" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">使用当前会话模型</SelectItem>
+              <SelectItem value="specified">指定模型（暂不支持）</SelectItem>
+            </SelectContent>
+          </Select>
         </SettingRow>
       </div>
 

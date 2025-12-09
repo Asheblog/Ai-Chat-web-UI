@@ -213,6 +213,28 @@ export const getSystemSettings = async () => {
     }
     return 1
   })()
+  // 标题智能总结设置
+  const titleSummaryEnabled = Boolean(raw.title_summary_enabled ?? false)
+  const titleSummaryMaxLength = (() => {
+    const v = raw.title_summary_max_length
+    if (typeof v === 'number') return Math.max(5, Math.min(50, v))
+    if (typeof v === 'string' && v.trim() !== '') {
+      const parsed = Number.parseInt(v, 10)
+      if (Number.isFinite(parsed)) return Math.max(5, Math.min(50, parsed))
+    }
+    return 20
+  })()
+  const titleSummaryModelSource = (raw.title_summary_model_source === 'specified' ? 'specified' : 'current') as 'current' | 'specified'
+  const titleSummaryConnectionId = (() => {
+    const v = raw.title_summary_connection_id
+    if (typeof v === 'number' && v > 0) return v
+    return null
+  })()
+  const titleSummaryModelId = (() => {
+    const v = raw.title_summary_model_id
+    if (typeof v === 'string' && v.trim().length > 0) return v
+    return null
+  })()
   return {
     data: {
       allowRegistration,
@@ -274,6 +296,11 @@ export const getSystemSettings = async () => {
       taskTraceMaxEvents,
       taskTraceIdleTimeoutMs,
       chatMaxConcurrentStreams,
+      titleSummaryEnabled,
+      titleSummaryMaxLength,
+      titleSummaryModelSource,
+      titleSummaryConnectionId,
+      titleSummaryModelId,
     } as any,
   }
 }
@@ -359,6 +386,18 @@ export const updateSystemSettings = async (
   if (typeof rest.taskTraceIdleTimeoutMs === 'number') payload.task_trace_idle_timeout_ms = rest.taskTraceIdleTimeoutMs
   if (typeof rest.chatMaxConcurrentStreams === 'number') {
     payload.chat_max_concurrent_streams = Math.max(1, Math.min(8, Math.floor(rest.chatMaxConcurrentStreams)))
+  }
+  // 标题智能总结设置
+  if (typeof rest.titleSummaryEnabled === 'boolean') payload.title_summary_enabled = rest.titleSummaryEnabled
+  if (typeof rest.titleSummaryMaxLength === 'number') {
+    payload.title_summary_max_length = Math.max(5, Math.min(50, Math.floor(rest.titleSummaryMaxLength)))
+  }
+  if (typeof rest.titleSummaryModelSource === 'string') payload.title_summary_model_source = rest.titleSummaryModelSource
+  if (Object.prototype.hasOwnProperty.call(rest, 'titleSummaryConnectionId')) {
+    payload.title_summary_connection_id = rest.titleSummaryConnectionId ?? null
+  }
+  if (Object.prototype.hasOwnProperty.call(rest, 'titleSummaryModelId')) {
+    payload.title_summary_model_id = rest.titleSummaryModelId ?? null
   }
   if (assistantAvatarUpload) {
     payload.assistant_avatar = assistantAvatarUpload

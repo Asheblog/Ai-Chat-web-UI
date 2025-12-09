@@ -107,6 +107,12 @@ const systemSettingSchema = z.object({
   task_trace_max_events: z.number().int().min(100).max(200000).optional(),
   task_trace_idle_timeout_ms: z.number().int().min(1000).max(600000).optional(),
   chat_max_concurrent_streams: z.number().int().min(1).max(8).optional(),
+  // 标题智能总结设置
+  title_summary_enabled: z.boolean().optional(),
+  title_summary_max_length: z.number().int().min(5).max(50).optional(),
+  title_summary_model_source: z.enum(['current', 'specified']).optional(),
+  title_summary_connection_id: z.number().int().positive().nullable().optional(),
+  title_summary_model_id: z.string().min(1).nullable().optional(),
 });
 
 const resetAnonymousQuotaSchema = z.object({

@@ -68,3 +68,17 @@ export const updateSessionModel = async (
   )
   return response.data
 }
+
+export const summarizeSessionTitle = async (
+  sessionId: number,
+  content: string,
+): Promise<{ title: string }> => {
+  const response = await client.post<ApiResponse<{ title: string }>>(
+    `/chat/sessions/${sessionId}/summarize-title`,
+    { content },
+  )
+  if (!response.data.success || !response.data.data) {
+    throw new Error(response.data.error || 'Failed to summarize title')
+  }
+  return response.data.data
+}

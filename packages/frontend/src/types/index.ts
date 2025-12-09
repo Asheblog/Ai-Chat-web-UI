@@ -291,6 +291,12 @@ export interface SystemSettings {
   taskTraceMaxEvents?: number;
   taskTraceIdleTimeoutMs?: number;
   chatMaxConcurrentStreams?: number;
+  // 标题智能总结设置
+  titleSummaryEnabled?: boolean;
+  titleSummaryMaxLength?: number;
+  titleSummaryModelSource?: 'current' | 'specified';
+  titleSummaryConnectionId?: number | null;
+  titleSummaryModelId?: string | null;
 }
 
 // UI 状态类型

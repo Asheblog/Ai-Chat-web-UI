@@ -4,6 +4,7 @@ import {
   getMessageByClientId,
   streamChat,
 } from '@/features/chat/api'
+import { summarizeSessionTitle } from '@/features/chat/api/sessions'
 import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
 import type { Message, MessageStreamMetrics } from '@/types'
@@ -132,41 +133,91 @@ export const createStreamSlice: ChatSliceCreator<
         const noUserMessagesYet = userMessageCount === 0
 
         if (isTarget && isDefaultTitle && noUserMessagesYet && content) {
-          const deriveTitle = (text: string) => {
-            let s = text
-              .replace(/```[\s\S]*?```/g, ' ')
-              .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
-              .replace(/^[#>\-\*\s]+/gm, '')
-              .replace(/\n+/g, ' ')
-              .trim()
-            const limit = 30
-            return s.length > limit ? s.slice(0, limit) : s
-          }
-          const titleCandidate = deriveTitle(content)
-          if (titleCandidate) {
-            const prevTitle = snapshot.currentSession?.title || '新的对话'
-            set((state) => ({
-              sessions: state.sessions.map((s) =>
-                s.id === sessionId ? { ...s, title: titleCandidate } : s,
-              ),
-              currentSession:
-                state.currentSession?.id === sessionId
-                  ? { ...state.currentSession, title: titleCandidate }
-                  : state.currentSession,
-            }))
-            get()
-              .updateSessionTitle(sessionId, titleCandidate)
-              .catch(() => {
-                set((state) => ({
-                  sessions: state.sessions.map((s) =>
-                    s.id === sessionId ? { ...s, title: prevTitle } : s,
-                  ),
-                  currentSession:
-                    state.currentSession?.id === sessionId
-                      ? { ...state.currentSession, title: prevTitle }
-                      : state.currentSession,
-                }))
-              })
+          // 获取系统设置，判断是否启用智能标题总结
+          const systemSettings = useSettingsStore.getState().systemSettings
+          const titleSummaryEnabled = systemSettings?.titleSummaryEnabled === true
+
+          if (titleSummaryEnabled) {
+            // 异步调用智能标题总结 API（不阻塞消息发送）
+            ;(async () => {
+              try {
+                const result = await summarizeSessionTitle(sessionId, content)
+                if (result?.title) {
+                  set((state) => ({
+                    sessions: state.sessions.map((s) =>
+                      s.id === sessionId ? { ...s, title: result.title } : s,
+                    ),
+                    currentSession:
+                      state.currentSession?.id === sessionId
+                        ? { ...state.currentSession, title: result.title }
+                        : state.currentSession,
+                  }))
+                }
+              } catch {
+                // 智能总结失败，fallback 到简单截断
+                const deriveTitle = (text: string) => {
+                  let s = text
+                    .replace(/```[\s\S]*?```/g, ' ')
+                    .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
+                    .replace(/^[#>\-\*\s]+/gm, '')
+                    .replace(/\n+/g, ' ')
+                    .trim()
+                  const limit = 30
+                  return s.length > limit ? s.slice(0, limit) : s
+                }
+                const titleCandidate = deriveTitle(content)
+                if (titleCandidate) {
+                  set((state) => ({
+                    sessions: state.sessions.map((s) =>
+                      s.id === sessionId ? { ...s, title: titleCandidate } : s,
+                    ),
+                    currentSession:
+                      state.currentSession?.id === sessionId
+                        ? { ...state.currentSession, title: titleCandidate }
+                        : state.currentSession,
+                  }))
+                  get().updateSessionTitle(sessionId, titleCandidate).catch(() => {})
+                }
+              }
+            })()
+          } else {
+            // 智能总结未启用，使用原有的截断逻辑
+            const deriveTitle = (text: string) => {
+              let s = text
+                .replace(/```[\s\S]*?```/g, ' ')
+                .replace(/!\[[^\]]*\]\([^\)]*\)/g, ' ')
+                .replace(/^[#>\-\*\s]+/gm, '')
+                .replace(/\n+/g, ' ')
+                .trim()
+              const limit = 30
+              return s.length > limit ? s.slice(0, limit) : s
+            }
+            const titleCandidate = deriveTitle(content)
+            if (titleCandidate) {
+              const prevTitle = snapshot.currentSession?.title || '新的对话'
+              set((state) => ({
+                sessions: state.sessions.map((s) =>
+                  s.id === sessionId ? { ...s, title: titleCandidate } : s,
+                ),
+                currentSession:
+                  state.currentSession?.id === sessionId
+                    ? { ...state.currentSession, title: titleCandidate }
+                    : state.currentSession,
+              }))
+              get()
+                .updateSessionTitle(sessionId, titleCandidate)
+                .catch(() => {
+                  set((state) => ({
+                    sessions: state.sessions.map((s) =>
+                      s.id === sessionId ? { ...s, title: prevTitle } : s,
+                    ),
+                    currentSession:
+                      state.currentSession?.id === sessionId
+                        ? { ...state.currentSession, title: prevTitle }
+                        : state.currentSession,
+                  }))
+                })
+            }
           }
         }
       } catch {

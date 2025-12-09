@@ -5,6 +5,7 @@ import { registerChatStreamRoutes } from '../modules/chat/routes/stream';
 import { registerChatCompletionRoutes } from '../modules/chat/routes/completion';
 import { registerChatControlRoutes } from '../modules/chat/routes/control';
 import { registerChatUsageRoutes } from '../modules/chat/routes/usage';
+import { registerTitleSummaryRoutes } from '../modules/chat/routes/title-summary';
 export const createChatApi = () => {
   const chat = new Hono();
 
@@ -14,6 +15,7 @@ export const createChatApi = () => {
   registerChatCompletionRoutes(chat);
   registerChatControlRoutes(chat);
   registerChatUsageRoutes(chat);
+  registerTitleSummaryRoutes(chat);
 
   return chat;
 };

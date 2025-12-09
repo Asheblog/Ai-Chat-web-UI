@@ -204,6 +204,12 @@ export class SettingsService {
       assistant_avatar_path: settingsObj.assistant_avatar_path || null,
       model_access_default_anonymous: parseAccessDefault(map.get('model_access_default_anonymous'), 'deny'),
       model_access_default_user: parseAccessDefault(map.get('model_access_default_user'), 'allow'),
+      // 标题智能总结设置
+      title_summary_enabled: this.parseBoolean(settingsObj.title_summary_enabled, process.env.TITLE_SUMMARY_ENABLED || 'false'),
+      title_summary_max_length: this.parseIntInRange(settingsObj.title_summary_max_length, process.env.TITLE_SUMMARY_MAX_LENGTH, 5, 50, 20),
+      title_summary_model_source: (settingsObj.title_summary_model_source || process.env.TITLE_SUMMARY_MODEL_SOURCE || 'current') as 'current' | 'specified',
+      title_summary_connection_id: settingsObj.title_summary_connection_id ? Number(settingsObj.title_summary_connection_id) : null,
+      title_summary_model_id: settingsObj.title_summary_model_id || null,
     }
 
     const assistantAvatarBase = determineProfileImageBaseUrl({
@@ -236,6 +242,12 @@ export class SettingsService {
         assistant_avatar_url: formatted.assistant_avatar_url,
         chat_system_prompt: formatted.chat_system_prompt,
         chat_max_concurrent_streams: formatted.chat_max_concurrent_streams,
+        // 标题总结设置（所有用户可见）
+        title_summary_enabled: formatted.title_summary_enabled,
+        title_summary_max_length: formatted.title_summary_max_length,
+        title_summary_model_source: formatted.title_summary_model_source,
+        title_summary_connection_id: formatted.title_summary_connection_id,
+        title_summary_model_id: formatted.title_summary_model_id,
       }
     }
     return formatted
@@ -286,6 +298,8 @@ export class SettingsService {
     assignIfNumber('task_trace_max_events', payload.task_trace_max_events)
     assignIfNumber('task_trace_idle_timeout_ms', payload.task_trace_idle_timeout_ms)
     assignIfNumber('chat_max_concurrent_streams', payload.chat_max_concurrent_streams)
+    assignIfNumber('title_summary_max_length', payload.title_summary_max_length)
+    assignIfNumber('title_summary_connection_id', payload.title_summary_connection_id)
 
     const boolFields = [
       'usage_emit',
@@ -301,6 +315,7 @@ export class SettingsService {
       'task_trace_enabled',
       'task_trace_default_on',
       'task_trace_admin_only',
+      'title_summary_enabled',
     ] as const
     boolFields.forEach((key) => {
       if (typeof payload[key] === 'boolean') {
@@ -336,6 +351,8 @@ export class SettingsService {
       { key: 'python_tool_command', value: payload.python_tool_command },
       { key: 'python_tool_args', value: Array.isArray(payload.python_tool_args) ? JSON.stringify(payload.python_tool_args) : undefined },
       { key: 'task_trace_env', value: payload.task_trace_env },
+      { key: 'title_summary_model_source', value: payload.title_summary_model_source },
+      { key: 'title_summary_model_id', value: payload.title_summary_model_id },
     ]
     stringFields.forEach(({ key, value }) => {
       if (typeof value === 'string') {
