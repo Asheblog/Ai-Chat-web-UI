@@ -227,7 +227,7 @@
 .reasoning-timeline::before {
   content: '';
   position: absolute;
-  left: var(--timeline-line-left);
+  left: calc(var(--reasoning-padding-x) + var(--timeline-line-left));
   top: 0;
   bottom: 0.3rem;
   width: 1px;
