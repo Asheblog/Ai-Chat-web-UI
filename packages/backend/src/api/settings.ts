@@ -200,8 +200,6 @@ settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {
 
 // 更新用户个人设置
 settings.put('/personal', actorMiddleware, requireUserActor, zValidator('json', z.object({
-  context_token_limit: z.number().int().min(1000).max(32000).optional(),
-  theme: z.enum(['light', 'dark']).optional(),
   preferred_model: modelPreferenceSchema.optional(),
   avatar: z.union([imagePayloadSchema, z.null()]).optional(),
   username: z.string().regex(/^[a-zA-Z0-9_]{3,20}$/).optional(),

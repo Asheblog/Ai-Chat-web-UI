@@ -225,7 +225,6 @@ export interface SystemSetting {
 export interface SystemSettings {
   allowRegistration: boolean;
   brandText?: string;
-  systemModels: any[]; // 已废弃：保留字段占位，改用聚合模型
   assistantAvatarUpload?: { data: string; mime: string } | null;
   assistantAvatarRemove?: boolean;
   // 流式/稳定性相关（系统级）
@@ -279,7 +278,6 @@ export interface SystemSettings {
   agentMaxToolIterations?: number;
   assistantAvatarUrl?: string | null;
   chatSystemPrompt?: string;
-  webSearchApiKey?: string;
   webSearchApiKeyTavily?: string;
   webSearchApiKeyBrave?: string;
   webSearchApiKeyMetaso?: string;
@@ -373,7 +371,6 @@ export interface AuthState {
 
 export interface SettingsState {
   theme: 'light' | 'dark' | 'system';
-  maxTokens: number;
   contextEnabled: boolean;
   systemSettings: SystemSettings | null;
   isLoading: boolean;

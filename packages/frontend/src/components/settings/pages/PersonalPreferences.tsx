@@ -15,7 +15,7 @@ import { updatePersonalSettings } from '@/features/settings/api'
 import { Button } from '@/components/ui/button'
 
 export function PersonalPreferencesPage(){
-  const { theme, setTheme, maxTokens, setMaxTokens, contextEnabled, setContextEnabled } = useSettingsStore()
+  const { theme, setTheme, contextEnabled, setContextEnabled } = useSettingsStore()
   const { toast } = useToast()
   const { user, fetchActor } = useAuthStore((state) => ({ user: state.user, fetchActor: state.fetchActor }))
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl ?? null)
@@ -246,22 +246,6 @@ export function PersonalPreferencesPage(){
             <CardDescription>管理对话上下文和历史消息</CardDescription>
           </div>
         </div>
-
-        <SettingRow
-          title="上下文限制 (Tokens)"
-          description="更大值提供更多上下文但消耗更多资源"
-        >
-          <Input
-            id="maxTokens"
-            className="w-full sm:w-[220px] text-right"
-            type="number"
-            min="1000"
-            max="32000"
-            step="1000"
-            value={maxTokens}
-            onChange={e=>setMaxTokens(parseInt(e.target.value)||4000)}
-          />
-        </SettingRow>
 
         <SettingRow
           title="上下文开关"

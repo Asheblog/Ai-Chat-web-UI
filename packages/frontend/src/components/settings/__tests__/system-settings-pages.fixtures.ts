@@ -2,7 +2,6 @@ import type { SystemSettings } from '@/types'
 
 export const baseSettings: SystemSettings = {
   allowRegistration: true,
-  systemModels: [],
   brandText: 'AIChat',
   siteBaseUrl: 'https://chat.example.com',
   chatImageRetentionDays: 30,

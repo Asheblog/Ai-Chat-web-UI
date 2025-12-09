@@ -21,7 +21,6 @@ const buildService = () => {
     replaceProfileImage,
     resolveProfileImageUrl,
     determineProfileImageBaseUrl,
-    defaultContextLimit: () => 5000,
   })
 
   return {
@@ -53,7 +52,6 @@ describe('PersonalSettingsService', () => {
       connectionId: 2,
       rawId: 'raw1',
     })
-    expect(result.context_token_limit).toBe(5000)
     expect(result.personal_prompt).toBe('keep calm')
   })
 
@@ -77,8 +75,6 @@ describe('PersonalSettingsService', () => {
       payload: {
         preferred_model: { modelId: 'm2', connectionId: 3, rawId: 'raw2' },
         avatar: { data: 'base64', mime: 'image/png' },
-        context_token_limit: 6000,
-        theme: 'dark',
         username: 'new_admin',
         personal_prompt: ' make things short ',
       },
@@ -97,8 +93,6 @@ describe('PersonalSettingsService', () => {
     })
     expect(replaceProfileImage).toHaveBeenCalled()
     expect(result.preferred_model.modelId).toBe('m2')
-    expect(result.context_token_limit).toBe(6000)
-    expect(result.theme).toBe('dark')
     expect(result.avatar_url).toContain('/avatar/new.png')
     expect(result.username).toBe('new_admin')
     expect(result.personal_prompt).toBe('make things short')

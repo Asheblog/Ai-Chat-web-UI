@@ -28,7 +28,6 @@ export const getSystemSettings = async () => {
   const raw: any = settingsRes.data.data || {}
   const allowRegistration = !!raw.registration_enabled
   const brandText = raw.brand_text || 'AIChat'
-  const systemModels: any[] = []
   const sseHeartbeatIntervalMs = Number(raw.sse_heartbeat_interval_ms ?? 15000)
   const providerMaxIdleMs = Number(raw.provider_max_idle_ms ?? 60000)
   const providerTimeoutMs = Number(raw.provider_timeout_ms ?? 300000)
@@ -239,7 +238,6 @@ export const getSystemSettings = async () => {
     data: {
       allowRegistration,
       brandText,
-      systemModels,
       sseHeartbeatIntervalMs,
       providerMaxIdleMs,
       providerTimeoutMs,
@@ -376,7 +374,6 @@ export const updateSystemSettings = async (
   if (typeof rest.webSearchApiKeyTavily === 'string') payload.web_search_api_key_tavily = rest.webSearchApiKeyTavily
   if (typeof rest.webSearchApiKeyBrave === 'string') payload.web_search_api_key_brave = rest.webSearchApiKeyBrave
   if (typeof rest.webSearchApiKeyMetaso === 'string') payload.web_search_api_key_metaso = rest.webSearchApiKeyMetaso
-  if (typeof (rest as any).webSearchApiKey === 'string') payload.web_search_api_key = (rest as any).webSearchApiKey
   if (typeof rest.taskTraceEnabled === 'boolean') payload.task_trace_enabled = rest.taskTraceEnabled
   if (typeof rest.taskTraceDefaultOn === 'boolean') payload.task_trace_default_on = rest.taskTraceDefaultOn
   if (typeof rest.taskTraceAdminOnly === 'boolean') payload.task_trace_admin_only = rest.taskTraceAdminOnly

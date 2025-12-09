@@ -32,7 +32,6 @@ interface SettingsStore extends SettingsState {
   fetchPublicBranding: () => Promise<boolean>
   bootstrapBrandText: (brandText?: string | null) => void
   setTheme: (theme: 'light' | 'dark' | 'system') => void
-  setMaxTokens: (maxTokens: number) => void
   setContextEnabled: (enabled: boolean) => void
   // UI：侧边栏折叠
   sidebarCollapsed: boolean
@@ -105,7 +104,6 @@ export const useSettingsStore = create<SettingsStore>()(
 
       return {
         theme: 'system',
-        maxTokens: 4000,
         contextEnabled: true,
         sidebarCollapsed: false,
         systemSettings: null,
@@ -208,10 +206,6 @@ export const useSettingsStore = create<SettingsStore>()(
         }
       },
 
-      setMaxTokens: (maxTokens: number) => {
-        set({ maxTokens })
-      },
-
       setContextEnabled: (enabled: boolean) => {
         set({ contextEnabled: !!enabled })
       },
@@ -227,7 +221,6 @@ export const useSettingsStore = create<SettingsStore>()(
       name: 'settings-storage',
       partialize: (state) => ({
         theme: state.theme,
-        maxTokens: state.maxTokens,
         contextEnabled: state.contextEnabled,
         sidebarCollapsed: state.sidebarCollapsed,
       }),

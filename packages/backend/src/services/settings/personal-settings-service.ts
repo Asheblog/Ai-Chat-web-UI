@@ -17,8 +17,6 @@ export interface PreferredModelInput {
 }
 
 export interface PersonalSettingsPayload {
-  context_token_limit?: number
-  theme?: 'light' | 'dark'
   preferred_model?: Nullable<PreferredModelInput>
   avatar?: Nullable<{ data: string; mime: string }>
   username?: string
@@ -26,8 +24,6 @@ export interface PersonalSettingsPayload {
 }
 
 export interface PersonalSettingsResult {
-  context_token_limit: number
-  theme: 'light' | 'dark'
   preferred_model: {
     modelId: string | null
     connectionId: number | null
@@ -52,18 +48,13 @@ export interface PersonalSettingsServiceDeps {
   replaceProfileImage?: typeof defaultReplaceProfileImage
   resolveProfileImageUrl?: typeof defaultResolveProfileImageUrl
   determineProfileImageBaseUrl?: typeof defaultDetermineProfileImageBaseUrl
-  defaultContextLimit?: () => number
 }
-
-const DEFAULT_CONTEXT_LIMIT = () =>
-  Number.parseInt(process.env.DEFAULT_CONTEXT_TOKEN_LIMIT || '4000', 10) || 4000
 
 export class PersonalSettingsService {
   private prisma: PrismaClient
   private replaceProfileImage: typeof defaultReplaceProfileImage
   private resolveProfileImageUrl: typeof defaultResolveProfileImageUrl
   private determineProfileImageBaseUrl: typeof defaultDetermineProfileImageBaseUrl
-  private defaultContextLimit: () => number
 
   constructor(deps: PersonalSettingsServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
@@ -71,7 +62,6 @@ export class PersonalSettingsService {
     this.resolveProfileImageUrl = deps.resolveProfileImageUrl ?? defaultResolveProfileImageUrl
     this.determineProfileImageBaseUrl =
       deps.determineProfileImageBaseUrl ?? defaultDetermineProfileImageBaseUrl
-    this.defaultContextLimit = deps.defaultContextLimit ?? DEFAULT_CONTEXT_LIMIT
   }
 
   async getPersonalSettings(params: { userId: number; request: Request }): Promise<PersonalSettingsResult> {
@@ -88,8 +78,6 @@ export class PersonalSettingsService {
     })
     const baseUrl = this.determineProfileImageBaseUrl({ request: params.request })
     return {
-      context_token_limit: this.defaultContextLimit(),
-      theme: 'light',
       preferred_model: {
         modelId: record?.preferredModelId ?? null,
         connectionId: record?.preferredConnectionId ?? null,
@@ -105,7 +93,7 @@ export class PersonalSettingsService {
     userId: number
     payload: PersonalSettingsPayload
     request: Request
-  }): Promise<PersonalSettingsResult & { theme?: 'light' | 'dark' }> {
+  }): Promise<PersonalSettingsResult> {
     const currentProfile = await this.prisma.user.findUnique({
       where: { id: params.userId },
       select: {
@@ -171,9 +159,6 @@ export class PersonalSettingsService {
     const baseUrl = this.determineProfileImageBaseUrl({ request: params.request })
 
     return {
-      context_token_limit:
-        params.payload.context_token_limit ?? this.defaultContextLimit(),
-      theme: params.payload.theme ?? 'light',
       preferred_model: {
         modelId: updates.preferredModelId ?? currentProfile.preferredModelId ?? null,
         connectionId: updates.preferredConnectionId ?? currentProfile.preferredConnectionId ?? null,
