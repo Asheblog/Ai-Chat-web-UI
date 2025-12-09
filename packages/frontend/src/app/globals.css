@@ -184,6 +184,11 @@
   color: #15803d;
 }
 
+.reasoning-status-icon.none {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
 .reasoning-header__title {
   display: block;
   font-weight: 600;

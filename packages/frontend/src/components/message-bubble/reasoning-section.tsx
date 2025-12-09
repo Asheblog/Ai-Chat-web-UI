@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer } from 'react'
 import type { MessageMeta, ToolEvent } from '@/types'
 import type { ToolTimelineSummary } from '@/features/chat/tool-events/useToolTimeline'
 import { ToolTimeline } from './tool-timeline'
@@ -59,6 +59,45 @@ interface ReasoningSectionProps {
   defaultExpanded: boolean
 }
 
+type ExpandSource = 'user' | 'auto' | 'default'
+
+interface ExpandState {
+  expanded: boolean
+  source: ExpandSource
+}
+
+type ExpandAction =
+  | { type: 'init'; defaultExpanded: boolean }
+  | { type: 'set-default'; defaultExpanded: boolean }
+  | { type: 'load-persisted'; expanded: boolean | null }
+  | { type: 'auto-expand' }
+  | { type: 'hide-if-empty'; hasAnyData: boolean }
+  | { type: 'toggle' }
+
+const expandReducer = (state: ExpandState, action: ExpandAction): ExpandState => {
+  switch (action.type) {
+    case 'init':
+      return { expanded: action.defaultExpanded, source: 'default' }
+    case 'set-default':
+      if (state.source !== 'default') return state
+      return { ...state, expanded: action.defaultExpanded }
+    case 'load-persisted':
+      if (action.expanded == null) return state
+      return { expanded: action.expanded, source: 'user' }
+    case 'auto-expand':
+      if (state.source === 'user' || state.expanded) return state
+      return { expanded: true, source: 'auto' }
+    case 'hide-if-empty':
+      if (state.source === 'user') return state
+      if (action.hasAnyData) return state
+      return { expanded: false, source: 'default' }
+    case 'toggle':
+      return { expanded: !state.expanded, source: 'user' }
+    default:
+      return state
+  }
+}
+
 export function ReasoningSection({
   meta,
   reasoningRaw,
@@ -74,45 +113,41 @@ export function ReasoningSection({
     if (meta.clientMessageId) return `msg:${meta.clientMessageId}`
     return ''
   }, [meta.clientMessageId, meta.id, meta.stableKey])
-  const [showReasoning, setShowReasoning] = useState(defaultExpanded)
-  const [reasoningManuallyToggled, setReasoningManuallyToggled] = useState(false)
   const reasoningTextLength = useMemo(() => reasoningRaw.trim().length, [reasoningRaw])
   const hasReasoningState = typeof meta.reasoningStatus === 'string'
+  const [{ expanded: showReasoning }, dispatch] = useReducer(
+    expandReducer,
+    { expanded: defaultExpanded, source: 'default' },
+    () => expandReducer({ expanded: false, source: 'default' }, { type: 'init', defaultExpanded }),
+  )
+  const hasAnyContent = hasReasoningState || reasoningTextLength > 0 || timeline.length > 0
+  const isAssistant = meta.role === 'assistant'
+  const isActiveReasoning =
+    isAssistant && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming')
 
   useEffect(() => {
     if (!persistenceKey) return
     const persisted = loadPersistedVisibility(persistenceKey)
-    if (persisted == null) return
-    setShowReasoning(persisted)
-    setReasoningManuallyToggled(true)
+    dispatch({ type: 'load-persisted', expanded: persisted })
   }, [persistenceKey])
 
   useEffect(() => {
-    if (reasoningManuallyToggled) return
-    setShowReasoning(defaultExpanded)
-  }, [defaultExpanded, reasoningManuallyToggled])
+    dispatch({ type: 'set-default', defaultExpanded })
+  }, [defaultExpanded])
 
   useEffect(() => {
-    if (reasoningManuallyToggled) return
-    if (!hasReasoningState && reasoningTextLength === 0 && timeline.length === 0) {
-      setShowReasoning(false)
-      setReasoningManuallyToggled(false)
-    }
-  }, [hasReasoningState, reasoningManuallyToggled, reasoningTextLength, timeline.length])
+    dispatch({ type: 'hide-if-empty', hasAnyData: hasAnyContent })
+  }, [hasAnyContent])
 
   useEffect(() => {
-    if (meta.role === 'assistant' && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming') && !showReasoning && !reasoningManuallyToggled) {
-      setShowReasoning(true)
-    }
-  }, [meta.reasoningStatus, meta.role, reasoningManuallyToggled, showReasoning])
+    if (isActiveReasoning) dispatch({ type: 'auto-expand' })
+  }, [isActiveReasoning])
 
   useEffect(() => {
-    if (meta.role !== 'assistant') return
-    if (reasoningManuallyToggled) return
-    if (timeline.length === 0 || showReasoning) return
-    setShowReasoning(true)
-    setReasoningManuallyToggled(true)
-  }, [meta.role, reasoningManuallyToggled, showReasoning, timeline.length])
+    if (!isAssistant) return
+    if (timeline.length === 0) return
+    dispatch({ type: 'auto-expand' })
+  }, [isAssistant, timeline.length])
 
   if (
     reasoningTextLength === 0 &&
@@ -133,12 +168,9 @@ export function ReasoningSection({
         timeline={timeline}
         expanded={showReasoning}
         onToggle={() => {
-          setReasoningManuallyToggled(true)
-          setShowReasoning((v) => {
-            const next = !v
-            if (persistenceKey) persistVisibility(persistenceKey, next)
-            return next
-          })
+          dispatch({ type: 'toggle' })
+          const next = !showReasoning
+          if (persistenceKey) persistVisibility(persistenceKey, next)
         }}
       />
     </div>

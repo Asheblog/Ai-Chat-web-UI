@@ -198,7 +198,7 @@ function ReasoningPanelComponent({
         title="思维链（可折叠）"
       >
         <span className="reasoning-header__left">
-          <span className={`reasoning-status-icon ${status ?? 'idle'}`}>
+          <span className={`reasoning-status-icon ${status ?? 'none'}`}>
             {status === 'streaming' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
           </span>
           <span>

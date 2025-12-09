@@ -12,6 +12,7 @@ import { useChatMessages, useChatStore } from '@/store/chat-store'
 import { ShareDialog } from '@/components/chat/share-dialog'
 import { messageKey } from '@/features/chat/store/utils'
 import { ShareSelectionToolSummary } from '@/components/chat/share-selection-tool-summary'
+import { cn } from '@/lib/utils'
 
 export interface ChatMessageViewportProps {
   scrollAreaRef: MutableRefObject<HTMLDivElement | null>
@@ -111,7 +112,7 @@ export function ChatMessageViewport({
 
   return (
     <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 md:px-6">
-      <div className="pt-4 md:pt-6 pb-36 md:pb-6">
+      <div className={cn('pt-4 md:pt-6', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
         {shareModeActive ? (
           <div className="mb-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
