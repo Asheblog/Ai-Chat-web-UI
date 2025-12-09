@@ -21,7 +21,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { UsageTotals } from '@/types'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
@@ -34,8 +33,23 @@ import { APP_VERSION, PROJECT_URL } from '@/lib/app-meta'
 
 const formatUsageLine = (usage?: UsageTotals) => {
   if (!usage) return ''
-  const formatTokens = (value?: number) => Number(value ?? 0).toLocaleString()
-  return `输入${formatTokens(usage.prompt_tokens)} | 输出${formatTokens(usage.completion_tokens)}`
+  const formatTokens = (value?: number) => {
+    const num = Number(value ?? 0)
+    if (num >= 10000) return (num / 1000).toFixed(0) + 'k'
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k'
+    return num.toLocaleString()
+  }
+  return `${formatTokens(usage.prompt_tokens)}/${formatTokens(usage.completion_tokens)}`
+}
+
+// 侧边栏时间显示：固定月/日/时:分，避免同日仅显示时间导致长度不一
+const formatSidebarDate = (date: string | Date): string => {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date))
 }
 
 export function Sidebar() {
@@ -176,8 +190,8 @@ export function Sidebar() {
     setDeleteTargetId(sessionId)
   }
 
-  // 将标题限制在 12 个字符以内（按 Unicode 码点计数），超出添加省略号
-  const clipTitle = (s: string, max = 12) => {
+  // 将标题限制在 10 个字符以内（按 Unicode 码点计数），超出添加省略号
+  const clipTitle = (s: string, max = 10) => {
     try {
       const arr = Array.from(s || '')
       return arr.length > max ? arr.slice(0, max).join('') + '…' : s
@@ -309,25 +323,24 @@ export function Sidebar() {
                   whileHover={{ x: 4 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 pr-1">
                     <p className="truncate text-sm font-medium flex items-center gap-1" title={session.title}>
                       {session.pinnedAt ? (
                         <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
                       ) : null}
-                      <span className="truncate">{clipTitle(session.title, 12)}</span>
+                      <span className="truncate">{clipTitle(session.title, 10)}</span>
                     </p>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(session.createdAt)}
-                      </p>
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
+                      <span className="truncate">{formatSidebarDate(session.createdAt)}</span>
                       {sessionUsageTotalsMap?.[session.id] && (
-                        <p className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          {formatUsageLine(sessionUsageTotalsMap[session.id])}
-                        </p>
+                        <>
+                          <span className="opacity-60 shrink-0">·</span>
+                          <span className="shrink-0">{formatUsageLine(sessionUsageTotalsMap[session.id])}</span>
+                        </>
                       )}
-                    </div>
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>

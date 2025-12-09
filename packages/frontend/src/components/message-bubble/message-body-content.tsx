@@ -77,26 +77,27 @@ export function MessageBodyContent({
             )}>
               {showCollapsed ? previewContent : content}
             </p>
-            {showCollapsed && (
-              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-primary/20 to-transparent pointer-events-none" />
-            )}
           </div>
           {shouldCollapse && (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               className={cn(
-                "mt-2 flex items-center gap-1 text-xs text-primary-foreground/70 hover:text-primary-foreground transition-colors",
-                "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1 py-0.5"
+                "mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-md",
+                "text-sm font-medium",
+                "bg-foreground/5 hover:bg-foreground/10 text-foreground",
+                "border border-foreground/20 shadow-sm",
+                "transition-colors duration-200",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
               )}
             >
               <ChevronDown
                 className={cn(
-                  "h-3.5 w-3.5 transition-transform duration-200",
+                  "h-4 w-4 transition-transform duration-200",
                   isExpanded && "rotate-180"
                 )}
               />
               <span>
-                {isExpanded ? '收起' : `展开全部 (${lineCount} 行)`}
+                {isExpanded ? '收起内容' : `展开查看全部 (${lineCount} 行)`}
               </span>
             </button>
           )}
