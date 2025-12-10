@@ -78,7 +78,12 @@ export const applyDefaultInterceptors = (
         // ignore logging failures
       }
       if (error?.response?.status === 401) {
-        hooks?.onUnauthorized?.()
+        // 登录/注册接口的401应该由业务逻辑处理，不触发全局跳转
+        const url = error?.config?.url || ''
+        const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register')
+        if (!isAuthEndpoint) {
+          hooks?.onUnauthorized?.()
+        }
       }
       return Promise.reject(error)
     },
