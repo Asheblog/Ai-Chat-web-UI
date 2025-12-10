@@ -58,7 +58,7 @@ import { chatService, ChatServiceError } from '../../../services/chat';
 import { providerRequester } from '../services/provider-requester';
 import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
 import { assistantProgressService } from '../services/assistant-progress-service';
-import { streamUsageService } from '../services/stream-usage-service';
+import { streamUsageService, computeStreamMetrics } from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
 
@@ -1293,9 +1293,25 @@ export const registerChatStreamRoutes = (router: Hono) => {
               traceMetadataExtras.providerUsageSource = providerUsageSeen ? 'provider' : 'fallback';
             }
 
-            // 发送完成事件
+            // 计算流式响应的性能指标
+            const completedAt = Date.now();
+            const streamMetrics = computeStreamMetrics({
+              timing: {
+                requestStartedAt,
+                firstChunkAt,
+                completedAt,
+              },
+              completionTokens: completionTokensFallback || 0,
+            });
+
+            // 发送完成事件（包含后端计算的 metrics）
             const completeEvent = `data: ${JSON.stringify({
               type: 'complete',
+              metrics: {
+                firstTokenLatencyMs: streamMetrics.firstTokenLatencyMs,
+                responseTimeMs: streamMetrics.responseTimeMs,
+                tokensPerSecond: streamMetrics.tokensPerSecond,
+              },
             })}\n\n`;
             safeEnqueue(completeEvent);
             traceStatus = 'completed';
@@ -1303,7 +1319,6 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
             // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
             try {
-              const completedAt = Date.now();
               const usageResult = await streamUsageService.finalize({
                 sessionId,
                 modelRawId: session.modelRawId!,
@@ -1332,6 +1347,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   firstChunkAt,
                   completedAt,
                 },
+                precomputedMetrics: streamMetrics,
               });
               assistantMessageId = usageResult.assistantMessageId;
               traceMetadataExtras.finalUsage = {

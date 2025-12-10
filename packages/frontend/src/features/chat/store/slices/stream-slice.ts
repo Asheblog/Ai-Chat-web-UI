@@ -675,6 +675,17 @@ export const createStreamSlice: ChatSliceCreator<
           if (activeBuffer) {
             activeBuffer.pendingMeta.reasoningStatus = 'done'
             activeBuffer.completedAt = Date.now()
+            // 保存后端发送的 metrics
+            if (evt.metrics) {
+              activeBuffer.serverMetrics = {
+                firstTokenLatencyMs: evt.metrics.firstTokenLatencyMs ?? null,
+                responseTimeMs: evt.metrics.responseTimeMs ?? null,
+                tokensPerSecond: evt.metrics.tokensPerSecond ?? null,
+                promptTokens: null,
+                completionTokens: null,
+                totalTokens: null,
+              }
+            }
           }
           runtime.scheduleFlush(active)
           continue
@@ -691,17 +702,29 @@ export const createStreamSlice: ChatSliceCreator<
             )
           : []
       const completedAtMs = finalStream?.completedAt ?? Date.now()
-      const computedMetrics =
-        finalStream && finalStream.sessionId === sessionId
-          ? computeStreamMetrics(
-              {
-                startedAt: finalStream.startedAt,
-                firstChunkAt: finalStream.firstChunkAt,
-                completedAt: completedAtMs,
-              },
-              finalStream.lastUsage as import('../types').StreamUsageSnapshot,
-            )
-          : null
+      // 优先使用后端发送的 serverMetrics，否则降级到本地计算
+      const fallbackMetrics = finalStream && finalStream.sessionId === sessionId
+        ? computeStreamMetrics(
+            {
+              startedAt: finalStream.startedAt,
+              firstChunkAt: finalStream.firstChunkAt,
+              completedAt: completedAtMs,
+            },
+            finalStream.lastUsage as import('../types').StreamUsageSnapshot,
+          )
+        : null
+      // 合并后端 metrics（时延和速度）与本地 usage（tokens）
+      const computedMetrics: import('@/types').MessageStreamMetrics | null =
+        finalStream?.serverMetrics
+          ? {
+              firstTokenLatencyMs: finalStream.serverMetrics.firstTokenLatencyMs,
+              responseTimeMs: finalStream.serverMetrics.responseTimeMs,
+              tokensPerSecond: finalStream.serverMetrics.tokensPerSecond,
+              promptTokens: fallbackMetrics?.promptTokens ?? null,
+              completionTokens: fallbackMetrics?.completionTokens ?? null,
+              totalTokens: fallbackMetrics?.totalTokens ?? null,
+            }
+          : fallbackMetrics
       const completedSnapshot = finalStream
         ? {
             assistantId: finalStream.assistantId,

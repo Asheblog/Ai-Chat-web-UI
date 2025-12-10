@@ -409,6 +409,12 @@ export interface ChatStreamChunk {
   hits?: WebSearchHit[];
   meta?: Record<string, unknown>;
   details?: ToolEventDetails;
+  /** 后端计算的性能指标（仅在 complete 事件中） */
+  metrics?: {
+    firstTokenLatencyMs?: number | null;
+    responseTimeMs?: number | null;
+    tokensPerSecond?: number | null;
+  };
 }
 
 // Usage 统计类型（OpenAI 兼容字段为主）

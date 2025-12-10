@@ -83,6 +83,8 @@ export interface StreamAccumulator {
   startedAt: number
   firstChunkAt?: number | null
   completedAt?: number | null
+  /** 后端发送的 metrics，优先使用 */
+  serverMetrics?: MessageStreamMetrics | null
 }
 
 export type ActiveStreamEntry = StreamAccumulator & {

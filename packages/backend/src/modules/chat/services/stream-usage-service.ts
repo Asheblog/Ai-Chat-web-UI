@@ -37,6 +37,8 @@ export interface FinalizeParams {
     firstChunkAt?: number | null
     completedAt: number
   }
+  /** 预计算的 metrics，如果提供则直接使用，否则从 timing 计算 */
+  precomputedMetrics?: StreamMetrics
 }
 
 export interface FinalizeResult {
@@ -53,6 +55,41 @@ const extractUsageNumbers = (u: ProviderUsageSnapshot | null): { prompt: number;
     return { prompt, completion, total }
   } catch {
     return { prompt: 0, completion: 0, total: 0 }
+  }
+}
+
+export interface StreamMetrics {
+  firstTokenLatencyMs: number
+  responseTimeMs: number
+  tokensPerSecond: number
+}
+
+export interface ComputeMetricsParams {
+  timing: {
+    requestStartedAt: number
+    firstChunkAt?: number | null
+    completedAt: number
+  }
+  completionTokens: number
+}
+
+/**
+ * 计算流式响应的性能指标（纯计算，不涉及持久化）
+ */
+export const computeStreamMetrics = (params: ComputeMetricsParams): StreamMetrics => {
+  const { timing, completionTokens } = params
+  const startedAt = Math.max(0, Number(timing.requestStartedAt) || Date.now())
+  const firstChunkAt = Math.max(0, Number(timing.firstChunkAt ?? startedAt) || startedAt)
+  const completedAt = Math.max(0, Number(timing.completedAt) || Date.now())
+  const firstTokenLatencyMs = Math.max(0, Math.round(firstChunkAt - startedAt))
+  const responseTimeMs = Math.max(0, Math.round(completedAt - startedAt))
+  const speedWindowMs = Math.max(1, completedAt - firstChunkAt || completedAt - startedAt || 1)
+  const tokensPerSecond = completionTokens > 0 ? completionTokens / (speedWindowMs / 1000) : 0
+
+  return {
+    firstTokenLatencyMs,
+    responseTimeMs,
+    tokensPerSecond,
   }
 }
 
@@ -85,15 +122,19 @@ export class StreamUsageService {
           total: params.promptTokens + params.completionTokensFallback,
         }
 
-    const timing = params.timing
-    const startedAt = Math.max(0, Number(timing?.requestStartedAt) || Date.now())
-    const firstChunkAt = Math.max(0, Number(timing?.firstChunkAt ?? startedAt) || startedAt)
-    const completedAt = Math.max(0, Number(timing?.completedAt) || Date.now())
-    const firstTokenLatencyMs = Math.max(0, Math.round(firstChunkAt - startedAt))
-    const responseTimeMs = Math.max(0, Math.round(completedAt - startedAt))
-    const speedWindowMs = Math.max(1, completedAt - firstChunkAt || completedAt - startedAt || 1)
-    const tokensPerSecond =
-      finalUsage.completion > 0 ? finalUsage.completion / (speedWindowMs / 1000) : 0
+    // 使用预计算的 metrics，如果没有则现场计算
+    const metrics = params.precomputedMetrics ?? (params.timing
+      ? computeStreamMetrics({
+          timing: {
+            requestStartedAt: params.timing.requestStartedAt,
+            firstChunkAt: params.timing.firstChunkAt,
+            completedAt: params.timing.completedAt,
+          },
+          completionTokens: finalUsage.completion,
+        })
+      : { firstTokenLatencyMs: 0, responseTimeMs: 0, tokensPerSecond: 0 })
+
+    const { firstTokenLatencyMs, responseTimeMs, tokensPerSecond } = metrics
 
     let persistedAssistantMessageId = params.assistantMessageId
     const trimmedContent = params.content.trim()
