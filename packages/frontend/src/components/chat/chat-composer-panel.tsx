@@ -296,6 +296,8 @@ export function ChatComposerPanel({
         onWebSearchScopeChange={onWebSearchScopeChange}
         showWebSearchScope={showWebSearchScope}
         pickImages={pickImages}
+        pickDocuments={pickDocuments}
+        hasDocuments={hasDocuments}
         canUseWebSearch={canUseWebSearch}
         webSearchDisabledNote={webSearchDisabledNote}
         pythonToolEnabled={pythonToolEnabled}

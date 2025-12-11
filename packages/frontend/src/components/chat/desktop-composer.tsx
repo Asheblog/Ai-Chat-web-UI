@@ -2,7 +2,7 @@
 
 import type { KeyboardEventHandler, MutableRefObject } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Maximize2, ImagePlus, Send, Square, Paperclip } from 'lucide-react'
+import { Plus, Maximize2, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
-import { cn } from '@/lib/utils'
+import { AttachmentMenu } from '@/components/chat/attachment-menu'
 
 interface DesktopComposerProps {
   input: string
@@ -177,49 +177,16 @@ export function DesktopComposer({
             </TooltipProvider>
           )}
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="h-12 w-12 inline-flex items-center justify-center rounded-full border hover:bg-muted"
-                  onClick={pickImages}
-                  disabled={isStreaming || !isVisionEnabled}
-                  aria-label="添加图片"
-                >
-                  <ImagePlus className="h-5 w-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isVisionEnabled
-                  ? `添加图片（限制：最多 ${imageLimits.maxCount} 张，单张 ≤ ${imageLimits.maxMb}MB，总体积 ≤ ${imageLimits.maxTotalMb}MB，最大边长 ≤ ${imageLimits.maxEdge}px）`
-                  : '当前模型不支持图片'}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* 文档附件按钮 */}
-          {pickDocuments && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className={cn(
-                      "h-12 w-12 inline-flex items-center justify-center rounded-full border hover:bg-muted",
-                      hasDocuments && "text-blue-500 border-blue-300"
-                    )}
-                    onClick={pickDocuments}
-                    disabled={isStreaming}
-                    aria-label="添加文档"
-                  >
-                    <Paperclip className="h-5 w-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  添加文档（支持 PDF、DOCX、CSV、TXT、Markdown）
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          <AttachmentMenu
+            onPickImages={pickImages}
+            onPickDocuments={pickDocuments}
+            disableImages={isStreaming || !isVisionEnabled}
+            disableDocuments={isStreaming}
+            hasImages={selectedImages.length > 0}
+            hasDocuments={hasDocuments}
+            ariaLabel="上传附件"
+            className="border"
+          />
 
           <TooltipProvider>
             <Tooltip>

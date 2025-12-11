@@ -13,7 +13,7 @@ import {
 } from '@/store/model-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
-import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
+import { useAdvancedRequest, useDocumentAttachments, useImageAttachments } from '@/features/chat/composer'
 
 
 export const useWelcomeScreenViewModel = () => {
@@ -92,6 +92,22 @@ export const useWelcomeScreenViewModel = () => {
   } = useImageAttachments({
     isVisionEnabled: true,
     limits: DEFAULT_CHAT_IMAGE_LIMITS,
+    toast,
+  })
+
+  const {
+    fileInputRef: documentInputRef,
+    documents: attachedDocuments,
+    pickDocuments,
+    onFilesSelected: onDocumentFilesSelected,
+    removeDocument,
+    clearDocuments,
+  } = useDocumentAttachments({
+    sessionId: null,
+    limits: {
+      maxFileSize: 50 * 1024 * 1024,
+      allowedTypes: ['pdf', 'docx', 'doc', 'csv', 'txt', 'md'],
+    },
     toast,
   })
 
@@ -377,6 +393,25 @@ export const useWelcomeScreenViewModel = () => {
         normalizedPrompt || undefined,
       )
       if (created?.id) {
+        if (attachedDocuments.length) {
+          for (const doc of attachedDocuments) {
+            try {
+              await fetch(`/api/documents/${doc.id}/attach`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ sessionId: created.id }),
+              })
+            } catch (error) {
+              console.warn('Attach document failed', error)
+              toast({
+                title: '文档附加失败',
+                description: `${doc.originalName} 未能附加到会话，可稍后在会话内重试`,
+                variant: 'destructive',
+              })
+            }
+          }
+        }
         router.push(`/main/${created.id}`)
       }
 
@@ -430,6 +465,10 @@ export const useWelcomeScreenViewModel = () => {
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
           }
+          clearDocuments()
+          if (documentInputRef.current) {
+            documentInputRef.current.value = ''
+          }
         }
       }
     } catch (error) {
@@ -467,6 +506,9 @@ export const useWelcomeScreenViewModel = () => {
     canUsePythonTool,
     pythonToolEnabled,
     fileInputRef,
+    attachedDocuments,
+    clearDocuments,
+    documentInputRef,
   ])
 
   const handleKeyDown = useCallback(
@@ -528,6 +570,11 @@ export const useWelcomeScreenViewModel = () => {
         onRemoveImage: removeImage,
         onFilesSelected,
         onPickImages: handlePickImages,
+        documents: attachedDocuments,
+        onRemoveDocument: removeDocument,
+        onPickDocuments: pickDocuments,
+        onDocumentFilesSelected,
+        documentInputRef,
       },
       advancedOptions: {
         disabled: creationDisabled,

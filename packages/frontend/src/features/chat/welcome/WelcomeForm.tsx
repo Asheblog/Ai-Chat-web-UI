@@ -2,10 +2,13 @@ import { ChangeEvent, KeyboardEvent, RefObject } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Maximize2, ImagePlus } from 'lucide-react'
+import { Maximize2 } from 'lucide-react'
 import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { AdvancedOptions } from './AdvancedOptions'
 import { ImagePreviewList } from './ImagePreviewList'
+import { AttachmentMenu } from '@/components/chat/attachment-menu'
+import { DocumentAttachmentInput, DocumentPreviewList } from '@/features/chat/composer'
+import type { AttachedDocument } from '@/features/chat/composer/use-document-attachments'
 
 type Effort = 'unset' | 'low' | 'medium' | 'high'
 
@@ -36,6 +39,11 @@ interface WelcomeFormProps {
       onRemoveImage: (index: number) => void
       onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
       onPickImages: () => void
+      documents: AttachedDocument[]
+      onRemoveDocument: (id: number) => void
+      onPickDocuments: () => void
+      onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
+      documentInputRef: RefObject<HTMLInputElement>
     }
     advancedOptions: {
       disabled: boolean
@@ -132,17 +140,16 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               <Maximize2 className="h-4 w-4" />
             </Button>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-10 w-10 rounded-full"
-            onClick={attachments.onPickImages}
-            disabled={creationDisabled}
-            aria-label="添加图片"
-          >
-            <ImagePlus className="h-5 w-5" />
-          </Button>
+          <AttachmentMenu
+            onPickImages={attachments.onPickImages}
+            onPickDocuments={attachments.onPickDocuments}
+            disableImages={creationDisabled}
+            disableDocuments={creationDisabled}
+            hasImages={attachments.selectedImages.length > 0}
+            hasDocuments={attachments.documents.length > 0}
+            className="h-10 w-10"
+            ariaLabel="添加附件"
+          />
         </div>
       </div>
 
@@ -156,6 +163,8 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         onChange={attachments.onFilesSelected}
         disabled={creationDisabled}
       />
+      <DocumentPreviewList documents={attachments.documents} onRemove={attachments.onRemoveDocument} />
+      <DocumentAttachmentInput inputRef={attachments.documentInputRef} onFilesSelected={attachments.onDocumentFilesSelected} />
 
       <Dialog open={expand.open} onOpenChange={(open) => (open ? onOpenExpand() : expand.onClose())}>
         <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 sm:rounded-2xl overflow-hidden flex flex-col">

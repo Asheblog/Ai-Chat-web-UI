@@ -3,15 +3,15 @@
 import type { KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Square, ImagePlus, Brain, Globe, Plus } from 'lucide-react'
+import { Send, Square, Brain, Globe, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
+import { AttachmentMenu } from '@/components/chat/attachment-menu'
 
 interface MobileComposerProps {
   input: string
@@ -35,6 +35,8 @@ interface MobileComposerProps {
   onWebSearchScopeChange: (value: string) => void
   showWebSearchScope: boolean
   pickImages: () => void
+  pickDocuments?: () => void
+  hasDocuments?: boolean
   canUseWebSearch: boolean
   webSearchDisabledNote?: string
   pythonToolEnabled: boolean
@@ -72,6 +74,8 @@ export function MobileComposer({
   onWebSearchScopeChange,
   showWebSearchScope,
   pickImages,
+  pickDocuments,
+  hasDocuments,
   canUseWebSearch,
   webSearchDisabledNote,
   pythonToolEnabled,
@@ -241,24 +245,18 @@ export function MobileComposer({
               />
             </DropdownMenu>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-10 w-10 rounded-full ml-auto"
-                    onClick={pickImages}
-                    disabled={isStreaming || !isVisionEnabled}
-                    aria-label="上传图片"
-                  >
-                    <ImagePlus className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>上传图片</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div className="ml-auto">
+              <AttachmentMenu
+                onPickImages={pickImages}
+                onPickDocuments={pickDocuments}
+                disableImages={isStreaming || !isVisionEnabled}
+                disableDocuments={isStreaming || !pickDocuments}
+                hasImages={selectedImages.length > 0}
+                hasDocuments={hasDocuments}
+                ariaLabel="上传附件"
+                className="h-10 w-10"
+              />
+            </div>
           </div>
         </div>
       </div>
