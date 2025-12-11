@@ -35,6 +35,7 @@ model User {
   connections   Connection[]
   usageQuotas   UsageQuota[]
   chatShares    ChatShare[] @relation("UserChatShares")
+  documents     Document[]
 
   @@index([status])
   @@map("users")
@@ -66,6 +67,7 @@ model ChatSession {
   usageMetrics UsageMetric[]
   taskTraces  TaskTrace[]
   shares      ChatShare[]
+  sessionDocuments SessionDocument[]
 
   @@index([expiresAt])
   @@index([anonymousKey])
@@ -298,4 +300,76 @@ model LatexTrace {
 
   @@index([status])
   @@map("latex_traces")
+}
+
+// ============================================
+// 文档解析 (RAG) 相关模型
+// ============================================
+
+// 文档表 - 存储上传的文档元数据
+model Document {
+  id              Int       @id @default(autoincrement())
+  userId          Int?
+  anonymousKey    String?
+  filename        String    // 存储文件名 (UUID.ext)
+  originalName    String    // 原始文件名
+  mimeType        String
+  fileSize        Int       // 字节数
+  filePath        String    // 存储路径
+  status          String    @default("pending") // pending | processing | ready | error
+  errorMessage    String?
+  contentHash     String?   // 用于去重
+  chunkCount      Int       @default(0)
+  collectionName  String?   // 向量数据库 collection 名称
+  metadata        String    @default("{}") // JSON: 页数、字数等
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  expiresAt       DateTime? // 自动清理时间
+  lastAccessedAt  DateTime? // 最后访问时间
+  accessCount     Int       @default(0)
+
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks           DocumentChunk[]
+  sessionDocuments SessionDocument[]
+
+  @@index([userId])
+  @@index([anonymousKey])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([contentHash])
+  @@map("documents")
+}
+
+// 文档块表 - 存储分块后的文档内容
+model DocumentChunk {
+  id          Int      @id @default(autoincrement())
+  documentId  Int
+  chunkIndex  Int
+  content     String
+  tokenCount  Int      @default(0)
+  metadata    String   @default("{}") // JSON: 页码、标题等
+  vectorId    String?  // 向量数据库中的ID
+  createdAt   DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
+  @@map("document_chunks")
+}
+
+// 会话-文档关联表 (临时附加模式)
+model SessionDocument {
+  id         Int      @id @default(autoincrement())
+  sessionId  Int
+  documentId Int
+  addedAt    DateTime @default(now())
+
+  session  ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  document Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, documentId])
+  @@index([sessionId])
+  @@index([documentId])
+  @@map("session_documents")
 }
