@@ -54,6 +54,8 @@ export interface PrepareChatRequestParams {
   historyUpperBound?: Date | null
   mode: 'stream' | 'completion'
   personalPrompt?: string | null
+  /** RAG 增强上下文（从文档检索获取） */
+  ragContext?: string | null
 }
 
 export interface ChatRequestBuilderDeps {
@@ -132,6 +134,14 @@ export class ChatRequestBuilder {
         role: 'system',
         content:
           '只有在需要精确计算或表格/数组等结构化处理时，才调用 python_runner。请提供简短、确定性的 Python3 代码，并通过 print() 输出最终答案。避免执行危险操作或访问文件系统。',
+      })
+    }
+
+    // RAG 文档上下文增强
+    if (params.ragContext && params.ragContext.trim()) {
+      systemPrompts.push({
+        role: 'system',
+        content: params.ragContext.trim(),
       })
     }
 

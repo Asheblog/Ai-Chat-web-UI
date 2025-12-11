@@ -5,6 +5,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
+import type { ToastHandler } from './types'
 
 export interface AttachedDocument {
   id: number
@@ -20,10 +21,6 @@ export interface AttachedDocument {
 export interface DocumentLimits {
   maxFileSize: number // 字节
   allowedTypes: string[]
-}
-
-export interface ToastHandler {
-  (options: { title: string; description?: string; variant?: 'default' | 'destructive' }): void
 }
 
 interface UseDocumentAttachmentsOptions {

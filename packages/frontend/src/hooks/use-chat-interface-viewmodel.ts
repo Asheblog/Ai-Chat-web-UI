@@ -77,6 +77,15 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     traceEnabled,
     canUseTrace,
     onToggleTrace,
+    // 文档附件
+    documentInputRef,
+    attachedDocuments,
+    isUploadingDocuments,
+    hasReadyDocuments,
+    hasProcessingDocuments,
+    pickDocuments,
+    onDocumentFilesSelected,
+    removeDocument,
   } = useChatComposer()
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
@@ -179,6 +188,14 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     sessionPromptPlaceholder,
     onSessionPromptChange: setSessionPromptDraft,
     onSessionPromptSave: onSaveSessionPrompt,
+    // 文档附件
+    documentInputRef,
+    attachedDocuments,
+    isUploadingDocuments,
+    hasDocuments: attachedDocuments.length > 0,
+    pickDocuments,
+    onDocumentFilesSelected,
+    onRemoveDocument: removeDocument,
   }
 
   return {

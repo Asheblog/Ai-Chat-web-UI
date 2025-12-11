@@ -14,5 +14,5 @@ export interface ComposerImage {
 export type ToastHandler = (payload: {
   title: string
   description?: string
-  variant?: 'default' | 'destructive' | 'success'
+  variant?: 'default' | 'destructive'
 }) => void

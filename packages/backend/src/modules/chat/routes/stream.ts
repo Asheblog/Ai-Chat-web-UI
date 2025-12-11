@@ -61,6 +61,8 @@ import { assistantProgressService } from '../services/assistant-progress-service
 import { streamUsageService, computeStreamMetrics } from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
+import { RAGContextBuilder } from '../../chat/rag-context-builder';
+import { getDocumentServices } from '../../../services/document-services-factory';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -252,6 +254,33 @@ export const registerChatStreamRoutes = (router: Hono) => {
         });
       }
 
+      // RAG 文档检索增强
+      let ragContext: string | null = null;
+      try {
+        const docServices = getDocumentServices();
+        if (docServices) {
+          const ragContextBuilder = new RAGContextBuilder(docServices.ragService);
+          const shouldEnhance = await ragContextBuilder.shouldEnhance(sessionId);
+          if (shouldEnhance) {
+            log.debug('RAG enhancement enabled for session', { sessionId });
+            const ragResult = await ragContextBuilder.enhance(sessionId, content);
+            if (ragResult.context) {
+              ragContext = ragContextBuilder.buildSystemPrompt(ragResult.context);
+              log.debug('RAG context built', {
+                sessionId,
+                hitsCount: ragResult.result.hits.length,
+                queryTimeMs: ragResult.result.queryTime,
+              });
+            }
+          }
+        }
+      } catch (ragError) {
+        log.warn('RAG enhancement failed, continuing without', {
+          sessionId,
+          error: ragError instanceof Error ? ragError.message : ragError,
+        });
+      }
+
       const preparedRequest = await chatRequestBuilder.prepare({
         session,
         payload,
@@ -260,6 +289,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         mode: 'stream',
         historyUpperBound: userMessageRecord?.createdAt ?? null,
         personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
+        ragContext,
       });
 
       const promptTokens = preparedRequest.promptTokens;

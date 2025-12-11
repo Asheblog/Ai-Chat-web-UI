@@ -2,7 +2,7 @@
 
 import type { KeyboardEventHandler, MutableRefObject } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Maximize2, ImagePlus, Send, Square } from 'lucide-react'
+import { Plus, Maximize2, ImagePlus, Send, Square, Paperclip } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
+import { cn } from '@/lib/utils'
 
 interface DesktopComposerProps {
   input: string
@@ -53,6 +54,9 @@ interface DesktopComposerProps {
   onStop: () => void
   desktopSendDisabled: boolean
   sendLockedReason: string | null
+  // 文档附件
+  hasDocuments?: boolean
+  pickDocuments?: () => void
 }
 
 export function DesktopComposer({
@@ -96,6 +100,8 @@ export function DesktopComposer({
   onStop,
   desktopSendDisabled,
   sendLockedReason,
+  hasDocuments,
+  pickDocuments,
 }: DesktopComposerProps) {
   const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
 
@@ -190,6 +196,30 @@ export function DesktopComposer({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
+          {/* 文档附件按钮 */}
+          {pickDocuments && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={cn(
+                      "h-12 w-12 inline-flex items-center justify-center rounded-full border hover:bg-muted",
+                      hasDocuments && "text-blue-500 border-blue-300"
+                    )}
+                    onClick={pickDocuments}
+                    disabled={isStreaming}
+                    aria-label="添加文档"
+                  >
+                    <Paperclip className="h-5 w-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  添加文档（支持 PDF、DOCX、CSV、TXT、Markdown）
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
 
           <TooltipProvider>
             <Tooltip>

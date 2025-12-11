@@ -295,6 +295,18 @@ export interface SystemSettings {
   titleSummaryModelSource?: 'current' | 'specified';
   titleSummaryConnectionId?: number | null;
   titleSummaryModelId?: string | null;
+  // RAG 文档解析设置
+  ragEnabled?: boolean;
+  ragEmbeddingEngine?: 'openai' | 'ollama';
+  ragEmbeddingModel?: string;
+  ragEmbeddingApiUrl?: string;
+  ragTopK?: number;
+  ragRelevanceThreshold?: number;
+  ragMaxContextTokens?: number;
+  ragChunkSize?: number;
+  ragChunkOverlap?: number;
+  ragMaxFileSizeMb?: number;
+  ragRetentionDays?: number;
 }
 
 // UI 状态类型

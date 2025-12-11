@@ -9,6 +9,7 @@ const SYSTEM_SECTIONS: Array<{ key: string; label: string; description: string; 
   { key: "network", label: "网络与流式", description: "SSE 与请求超时", href: "/main/settings/system/network" },
   { key: "reasoning", label: "推理链（CoT）", description: "推理开关与标签策略", href: "/main/settings/system/reasoning" },
   { key: "web-search", label: "联网搜索", description: "代理和搜索引擎", href: "/main/settings/system/web-search" },
+  { key: "rag", label: "RAG 文档解析", description: "文档上传与向量检索", href: "/main/settings/system/rag" },
   { key: "connections", label: "连接管理", description: "Upstream 连接与凭据", href: "/main/settings/system/connections" },
   { key: "models", label: "模型管理", description: "聚合模型编排", href: "/main/settings/system/models" },
   { key: "users", label: "用户管理", description: "审批、额度与角色", href: "/main/settings/system/users" },

@@ -2,12 +2,13 @@
 
 import { type ChangeEvent, type KeyboardEventHandler, type MutableRefObject, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ChatComposerImage } from '@/hooks/use-chat-composer'
+import type { ChatComposerImage, AttachedDocument } from '@/hooks/use-chat-composer'
 import { MobileComposer } from './mobile-composer'
 import { DesktopComposer } from './desktop-composer'
 import { ExpandEditorDialog } from './expand-editor-dialog'
 import { CustomRequestEditor } from './custom-request-editor'
 import { Button } from '@/components/ui/button'
+import { DocumentPreviewList, DocumentAttachmentInput } from '@/features/chat/composer'
 
 interface ImageLimitConfig {
   maxCount: number
@@ -72,6 +73,14 @@ export interface ChatComposerPanelProps {
   onSessionPromptChange: (value: string) => void
   onSessionPromptSave: () => void
   sessionPromptSaving: boolean
+  // 文档附件
+  documentInputRef: MutableRefObject<HTMLInputElement | null>
+  attachedDocuments: AttachedDocument[]
+  isUploadingDocuments: boolean
+  hasDocuments: boolean
+  pickDocuments: () => void
+  onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
+  onRemoveDocument: (documentId: number) => void
 }
 
 export function ChatComposerPanel({
@@ -130,6 +139,14 @@ export function ChatComposerPanel({
   sessionPromptPlaceholder,
   onSessionPromptChange,
   onSessionPromptSave,
+  // 文档附件
+  documentInputRef,
+  attachedDocuments,
+  isUploadingDocuments,
+  hasDocuments,
+  pickDocuments,
+  onDocumentFilesSelected,
+  onRemoveDocument,
 }: ChatComposerPanelProps) {
   const portalRoot = useMemo(() => (typeof document !== 'undefined' ? document.body : null), [])
   const [expandOpen, setExpandOpen] = useState(false)
@@ -335,7 +352,19 @@ export function ChatComposerPanel({
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}
         sendLockedReason={sendLockedReason}
+        hasDocuments={hasDocuments}
+        pickDocuments={pickDocuments}
       />
+
+      {/* 文档预览列表 */}
+      {attachedDocuments.length > 0 && (
+        <div className="mx-auto max-w-3xl px-4 md:px-6">
+          <DocumentPreviewList
+            documents={attachedDocuments}
+            onRemove={onRemoveDocument}
+          />
+        </div>
+      )}
 
       <input
         ref={fileInputRef}
@@ -345,6 +374,12 @@ export function ChatComposerPanel({
         className="hidden"
         onChange={onFilesSelected}
         disabled={!isVisionEnabled}
+      />
+
+      {/* 文档上传输入框 */}
+      <DocumentAttachmentInput
+        inputRef={documentInputRef}
+        onFilesSelected={onDocumentFilesSelected}
       />
 
       <ExpandEditorDialog

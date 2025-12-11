@@ -113,6 +113,18 @@ const systemSettingSchema = z.object({
   title_summary_model_source: z.enum(['current', 'specified']).optional(),
   title_summary_connection_id: z.number().int().positive().nullable().optional(),
   title_summary_model_id: z.string().min(1).nullable().optional(),
+  // RAG 文档解析设置
+  rag_enabled: z.boolean().optional(),
+  rag_embedding_engine: z.enum(['openai', 'ollama']).optional(),
+  rag_embedding_model: z.string().min(1).max(64).optional(),
+  rag_embedding_api_url: z.string().max(256).optional(),
+  rag_top_k: z.number().int().min(1).max(20).optional(),
+  rag_relevance_threshold: z.number().min(0).max(1).optional(),
+  rag_max_context_tokens: z.number().int().min(500).max(32000).optional(),
+  rag_chunk_size: z.number().int().min(100).max(8000).optional(),
+  rag_chunk_overlap: z.number().int().min(0).max(1000).optional(),
+  rag_max_file_size_mb: z.number().int().min(1).max(200).optional(),
+  rag_retention_days: z.number().int().min(1).max(365).optional(),
 });
 
 const resetAnonymousQuotaSchema = z.object({

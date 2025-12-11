@@ -13,8 +13,11 @@ import {
   useAdvancedRequest,
   useComposerFeatureFlags,
   useImageAttachments,
+  useDocumentAttachments,
 } from '@/features/chat/composer'
-import type { ComposerImage } from '@/features/chat/composer'
+import type { ComposerImage, AttachedDocument } from '@/features/chat/composer'
+
+export type { AttachedDocument }
 
 
 export type ChatComposerImage = ComposerImage
@@ -198,6 +201,27 @@ export function useChatComposer() {
     limits: DEFAULT_CHAT_IMAGE_LIMITS,
     toast,
   })
+
+  // 文档附件
+  const {
+    fileInputRef: documentInputRef,
+    documents: attachedDocuments,
+    isUploading: isUploadingDocuments,
+    hasReadyDocuments,
+    hasProcessingDocuments,
+    pickDocuments,
+    onFilesSelected: onDocumentFilesSelected,
+    removeDocument,
+    clearDocuments,
+  } = useDocumentAttachments({
+    sessionId: currentSession?.id ?? null,
+    limits: {
+      maxFileSize: 50 * 1024 * 1024, // 50MB
+      allowedTypes: ['pdf', 'docx', 'doc', 'csv', 'txt', 'md'],
+    },
+    toast,
+  })
+
   const handleAddCustomHeader = useCallback(() => {
     const result = appendCustomHeader()
     if (!result.ok && result.reason) {
@@ -439,5 +463,15 @@ export function useChatComposer() {
     canUseTrace,
     onSaveSessionPrompt: handleSessionPromptSave,
     canAddCustomHeader: canAddHeader,
+    // 文档附件
+    documentInputRef,
+    attachedDocuments,
+    isUploadingDocuments,
+    hasReadyDocuments,
+    hasProcessingDocuments,
+    pickDocuments,
+    onDocumentFilesSelected,
+    removeDocument,
+    clearDocuments,
   }
 }
