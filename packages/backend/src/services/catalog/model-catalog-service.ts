@@ -261,6 +261,7 @@ export class ModelCatalogService {
           connectionBaseUrl: conn.baseUrl,
           connectionId: row.connectionId,
           connectionType: row.connectionType,
+          modelType: row.modelType || 'chat',
           tags,
           capabilities,
           capabilitySource: capabilitySource || undefined,

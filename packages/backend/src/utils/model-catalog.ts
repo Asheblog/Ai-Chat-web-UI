@@ -8,6 +8,7 @@ import {
   type ConnectionConfig,
   buildHeaders,
   computeCapabilities,
+  detectModelType,
 } from './providers'
 import { BackendLogger as log } from './logger'
 import { guessKnownContextWindow, guessKnownCompletionLimit, invalidateCompletionLimitCache, invalidateContextWindowCache } from './context-window'
@@ -247,6 +248,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     ].filter((layer): layer is CapabilityEnvelope => Boolean(layer)))
     const resolvedCapabilities = mergeCapabilityLayers(capabilityLayers)
     const capabilitiesJson = serializeCapabilityEnvelope(resolvedCapabilities)
+    const modelType = detectModelType(item.rawId, item.tags)
 
     if (contextWindow && (!row?.manualOverride || metaInput.context_window == null)) {
       metaInput.context_window = contextWindow
@@ -270,6 +272,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
           name: item.name,
           provider: item.provider,
           connectionType: item.connectionType,
+          modelType,
       tagsJson,
       metaJson,
       capabilitiesJson,
@@ -288,6 +291,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
       name: item.name,
       provider: item.provider,
       connectionType: item.connectionType,
+      modelType,
       lastFetchedAt: now,
       expiresAt,
       metaJson,

@@ -192,8 +192,11 @@ export function SystemConnectionsPage() {
               <Input
                 value={form.modelIds}
                 onChange={(e) => setForm((prev) => ({ ...prev, modelIds: e.target.value }))}
-                placeholder="gpt-4o, gpt-4o-mini"
+                placeholder="gpt-4o, gpt-4o-mini, text-embedding-3-small"
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                提示：可添加 Embedding 模型用于 RAG 文档解析，如 text-embedding-3-small、nomic-embed-text 等
+              </p>
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">

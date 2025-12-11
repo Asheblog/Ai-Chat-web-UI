@@ -124,6 +124,13 @@ const messageCreateSchema = z.object({
     .optional(),
 });
 
+const embeddingsSchema = z.object({
+  model: z.string().min(1),
+  input: z.union([z.string(), z.array(z.string())]),
+  encoding_format: z.enum(['float', 'base64']).optional(),
+  dimensions: z.number().int().positive().optional(),
+});
+
 function flattenMessageContent(content: z.infer<typeof messageContentSchema>): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
@@ -221,6 +228,72 @@ async function buildProviderRequest(opts: ProviderRequestOptions) {
     };
   } else {
     throw new Error('Unsupported provider');
+  }
+
+  return { url, headers, payload };
+}
+
+interface EmbeddingsRequestOptions {
+  connection: Connection;
+  rawModelId: string;
+  provider: ProviderType;
+  body: z.infer<typeof embeddingsSchema>;
+}
+
+async function buildEmbeddingsRequest(opts: EmbeddingsRequestOptions) {
+  const baseUrl = opts.connection.baseUrl.replace(/\/$/, '');
+  const extraHeaders = opts.connection.headersJson ? JSON.parse(opts.connection.headersJson) : undefined;
+  const decryptedKey =
+    opts.connection.authType === 'bearer' && opts.connection.apiKey
+      ? AuthUtils.decryptApiKey(opts.connection.apiKey)
+      : undefined;
+
+  const headers = await buildHeaders(
+    opts.provider as any,
+    opts.connection.authType as any,
+    decryptedKey,
+    extraHeaders,
+  );
+
+  let url = '';
+  let payload: any = {};
+
+  if (opts.provider === 'openai') {
+    url = `${baseUrl}/embeddings`;
+    payload = {
+      model: opts.rawModelId,
+      input: opts.body.input,
+      encoding_format: opts.body.encoding_format || 'float',
+    };
+    if (opts.body.dimensions) {
+      payload.dimensions = opts.body.dimensions;
+    }
+  } else if (opts.provider === 'azure_openai') {
+    const apiVersion = opts.connection.azureApiVersion || '2024-02-15-preview';
+    url = `${baseUrl}/openai/deployments/${encodeURIComponent(opts.rawModelId)}/embeddings?api-version=${encodeURIComponent(apiVersion)}`;
+    payload = {
+      input: opts.body.input,
+      encoding_format: opts.body.encoding_format || 'float',
+    };
+    if (opts.body.dimensions) {
+      payload.dimensions = opts.body.dimensions;
+    }
+  } else if (opts.provider === 'ollama') {
+    url = `${baseUrl}/api/embeddings`;
+    // Ollama 使用不同的 API 格式，只支持单个文本
+    const input = opts.body.input;
+    payload = {
+      model: opts.rawModelId,
+      prompt: Array.isArray(input) ? input[0] : input,
+    };
+  } else if (opts.provider === 'google_genai') {
+    url = `${baseUrl}/models/${encodeURIComponent(opts.rawModelId)}:embedContent`;
+    const text = Array.isArray(opts.body.input) ? opts.body.input[0] : opts.body.input;
+    payload = {
+      content: { parts: [{ text }] },
+    };
+  } else {
+    throw new Error('Unsupported provider for embeddings');
   }
 
   return { url, headers, payload };
@@ -932,6 +1005,101 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
       });
 
       return c.json(formatMessage(message));
+    },
+  );
+
+  // Embeddings API - 用于 RAG 文档向量化
+  openaiCompat.post(
+    '/embeddings',
+    actorMiddleware,
+    requireUserActor,
+    zValidator('json', embeddingsSchema),
+    async (c) => {
+      const user = c.get('user')!;
+      const actor = c.get('actor') as Actor;
+      const body = c.req.valid('json');
+
+      try {
+        const resolved = deps.modelResolverService
+          ? await deps.modelResolverService.resolveModelForRequest({ actor, userId: user.id, modelId: body.model })
+          : await resolveModelForActor({ actor, modelId: body.model });
+
+        if (!resolved) {
+          return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
+        }
+
+        const provider = resolved.connection.provider as ProviderType;
+
+        const request = await buildEmbeddingsRequest({
+          connection: resolved.connection,
+          rawModelId: resolved.rawModelId,
+          provider,
+          body,
+        });
+
+        const executor = (signal: AbortSignal) =>
+          fetchImpl(request.url, {
+            method: 'POST',
+            headers: request.headers,
+            body: JSON.stringify(request.payload),
+            signal,
+          });
+
+        const response = await requestWithBackoff(executor);
+
+        if (!response.ok && response.status !== 200) {
+          const errorPayload = await response.text();
+          return c.newResponse(errorPayload, toStatusCode(response.status), {
+            'Content-Type': response.headers.get('Content-Type') || 'application/json',
+          });
+        }
+
+        // 转换 Ollama 响应为 OpenAI 格式
+        if (provider === 'ollama') {
+          const json = (await response.json()) as { embedding: number[] };
+          return c.json({
+            object: 'list',
+            data: [
+              {
+                object: 'embedding',
+                embedding: json.embedding || [],
+                index: 0,
+              },
+            ],
+            model: body.model,
+            usage: { prompt_tokens: 0, total_tokens: 0 },
+          });
+        }
+
+        // 转换 Google Generative AI 响应为 OpenAI 格式
+        if (provider === 'google_genai') {
+          const json = (await response.json()) as { embedding?: { values?: number[] } };
+          return c.json({
+            object: 'list',
+            data: [
+              {
+                object: 'embedding',
+                embedding: json.embedding?.values || [],
+                index: 0,
+              },
+            ],
+            model: body.model,
+            usage: { prompt_tokens: 0, total_tokens: 0 },
+          });
+        }
+
+        // OpenAI / Azure 直接返回
+        const json = await response.json();
+        return c.json(json);
+      } catch (error: any) {
+        return c.json(
+          {
+            error: 'provider_error',
+            message: error?.message || 'Failed to call embeddings provider',
+          },
+          500,
+        );
+      }
     },
   );
 

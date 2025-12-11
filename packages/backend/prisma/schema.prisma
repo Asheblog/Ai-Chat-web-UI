@@ -229,6 +229,7 @@ model ModelCatalog {
   name           String
   provider       String
   connectionType String
+  modelType      String    @default("chat") // 'chat' | 'embedding' | 'both'
   tagsJson       String    @default("[]")
   metaJson       String    @default("{}")
   capabilitiesJson String  @default("{}")
@@ -240,6 +241,7 @@ model ModelCatalog {
 
   @@unique([connectionId, modelId])
   @@index([connectionId])
+  @@index([modelType])
   @@map("model_catalog")
 }
 

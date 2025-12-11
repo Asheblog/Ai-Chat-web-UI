@@ -320,3 +320,45 @@ export function convertOpenAIReasoningPayload(payload: any): any {
   }
   return payload
 }
+
+/**
+ * 检测模型类型（chat / embedding / both）
+ * 优先使用标签，其次基于模型ID启发式推断
+ */
+export type ModelType = 'chat' | 'embedding' | 'both'
+
+export function detectModelType(rawId: string, tags?: Array<{ name: string }>): ModelType {
+  const tnames = (tags || []).map((t) => (t?.name || '').toLowerCase())
+
+  // 标签优先
+  const hasEmbeddingTag = tnames.includes('embedding')
+  const hasChatTag = tnames.includes('chat')
+
+  if (hasEmbeddingTag && hasChatTag) return 'both'
+  if (hasEmbeddingTag) return 'embedding'
+
+  const id = (rawId || '').toLowerCase()
+
+  // 常见 embedding 模型模式
+  const embeddingPatterns = [
+    'embedding',
+    'embed',
+    'ada-002',
+    'text-embedding',
+    'bge-',
+    'e5-',
+    'nomic-embed',
+    'mxbai-embed',
+    'snowflake-arctic-embed',
+    'all-minilm',
+    'gte-',
+    'jina-embed',
+    'voyage-',
+  ]
+
+  if (embeddingPatterns.some((p) => id.includes(p))) {
+    return 'embedding'
+  }
+
+  return 'chat'
+}

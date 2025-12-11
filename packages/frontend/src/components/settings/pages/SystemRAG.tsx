@@ -70,17 +70,42 @@ export function SystemRAGPage() {
     setRetentionDays(Number(systemSettings.ragRetentionDays ?? 30))
   }, [systemSettings])
 
-  // 筛选模型列表
+  // 筛选模型列表 - 优先显示 embedding 类型的模型
   const filteredModels = useMemo(() => {
     if (!models) return []
+
+    // 首先筛选出 embedding 类型的模型（embedding 或 both）
+    let filtered = models.filter((m: ModelItem) => {
+      const modelType = m.modelType || 'chat'
+      return modelType === 'embedding' || modelType === 'both'
+    })
+
+    // 如果没有专门的 embedding 模型，则显示所有模型（兼容旧数据）
+    if (filtered.length === 0) {
+      filtered = models
+    }
+
+    // 应用关键词筛选
     const kw = modelFilter.trim().toLowerCase()
-    if (!kw) return models
-    return models.filter((m: ModelItem) =>
-      [m.id, m.rawId, m.name, m.provider, m.channelName].some(v =>
-        String(v || "").toLowerCase().includes(kw)
+    if (kw) {
+      filtered = filtered.filter((m: ModelItem) =>
+        [m.id, m.rawId, m.name, m.provider, m.channelName].some(v =>
+          String(v || "").toLowerCase().includes(kw)
+        )
       )
-    )
+    }
+
+    return filtered
   }, [models, modelFilter])
+
+  // 检查是否有专门的 embedding 模型
+  const hasEmbeddingModels = useMemo(() => {
+    if (!models) return false
+    return models.some((m: ModelItem) => {
+      const modelType = m.modelType || 'chat'
+      return modelType === 'embedding' || modelType === 'both'
+    })
+  }, [models])
 
   // 获取当前选中的模型信息
   const selectedModel = useMemo(() => {
@@ -160,7 +185,10 @@ export function SystemRAGPage() {
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          请从已配置的连接中选择支持 Embedding 的模型。修改设置后需要重启后端才能生效。
+          {hasEmbeddingModels
+            ? "请从已配置的连接中选择 Embedding 模型。修改设置后需要重启后端才能生效。"
+            : "未检测到专门的 Embedding 模型。请在「连接管理」中添加 Embedding 模型（如 text-embedding-3-small、nomic-embed-text 等）。当前显示所有模型供选择。"
+          }
         </AlertDescription>
       </Alert>
 
