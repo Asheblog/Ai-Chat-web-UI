@@ -7,9 +7,8 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import type { DocumentService } from '../services/document/document-service'
-import type { RAGService } from '../services/document/rag-service'
 import { getSupportedMimeTypes } from '../modules/document/loaders'
+import { getDocumentServices } from '../services/document-services-factory'
 
 const uploadSchema = z.object({
   sessionId: z.number().int().positive().optional(),
@@ -25,13 +24,34 @@ const searchSchema = z.object({
   documentIds: z.array(z.number().int().positive()).optional(),
 })
 
-export interface DocumentsApiDeps {
-  documentService: DocumentService
-  ragService: RAGService
+/**
+ * 获取文档服务，如果不可用返回 null
+ */
+const getServices = () => {
+  const services = getDocumentServices()
+  if (!services) return null
+  return {
+    documentService: services.documentService,
+    ragService: services.ragService,
+  }
 }
 
-export const createDocumentsApi = (deps: DocumentsApiDeps) => {
-  const { documentService, ragService } = deps
+/**
+ * 检查 RAG 服务是否可用的中间件
+ */
+const requireRAGEnabled = async (c: any, next: () => Promise<void>) => {
+  const services = getServices()
+  if (!services) {
+    return c.json<ApiResponse>(
+      { success: false, error: 'RAG document services are not enabled. Please enable RAG in system settings.' },
+      503
+    )
+  }
+  c.set('docServices', services)
+  await next()
+}
+
+export const createDocumentsApi = () => {
   const router = new Hono()
 
   /**
@@ -47,9 +67,10 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * 上传文档
    */
-  router.post('/upload', actorMiddleware, async (c) => {
+  router.post('/upload', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const actor = c.get('actor') as Actor
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
 
       const formData = await c.req.formData()
       const file = formData.get('file') as File | null
@@ -61,7 +82,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
 
       const buffer = Buffer.from(await file.arrayBuffer())
 
-      const result = await documentService.uploadDocument(
+      const result = await documentService!.uploadDocument(
         {
           buffer,
           originalName: file.name,
@@ -75,12 +96,12 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
       if (sessionIdStr) {
         const sessionId = parseInt(sessionIdStr, 10)
         if (!isNaN(sessionId)) {
-          await documentService.attachToSession(result.documentId, sessionId)
+          await documentService!.attachToSession(result.documentId, sessionId)
         }
       }
 
       // 异步处理文档（不等待完成）
-      documentService.processDocument(result.documentId).catch((err) => {
+      documentService!.processDocument(result.documentId).catch((err) => {
         console.error(`[Documents] Failed to process document ${result.documentId}:`, err)
       })
 
@@ -98,14 +119,15 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * 获取文档列表
    */
-  router.get('/', actorMiddleware, async (c) => {
+  router.get('/', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const actor = c.get('actor') as Actor
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
 
       const documents =
         actor.type === 'user'
-          ? await documentService.getUserDocuments(actor.id)
-          : await documentService.getAnonymousDocuments(actor.key)
+          ? await documentService!.getUserDocuments(actor.id)
+          : await documentService!.getAnonymousDocuments(actor.key)
 
       return c.json<ApiResponse>({
         success: true,
@@ -130,14 +152,15 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * 获取文档详情
    */
-  router.get('/:id', actorMiddleware, async (c) => {
+  router.get('/:id', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const documentId = parseInt(c.req.param('id'), 10)
       if (isNaN(documentId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
 
-      const document = await documentService.getDocument(documentId)
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
+      const document = await documentService!.getDocument(documentId)
       if (!document) {
         return c.json<ApiResponse>({ success: false, error: 'Document not found' }, 404)
       }
@@ -176,14 +199,15 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * 删除文档
    */
-  router.delete('/:id', actorMiddleware, async (c) => {
+  router.delete('/:id', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const documentId = parseInt(c.req.param('id'), 10)
       if (isNaN(documentId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
 
-      const document = await documentService.getDocument(documentId)
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
+      const document = await documentService!.getDocument(documentId)
       if (!document) {
         return c.json<ApiResponse>({ success: false, error: 'Document not found' }, 404)
       }
@@ -197,7 +221,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
         return c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403)
       }
 
-      await documentService.deleteDocument(documentId)
+      await documentService!.deleteDocument(documentId)
 
       return c.json<ApiResponse>({ success: true, data: { deleted: true } })
     } catch (error) {
@@ -209,7 +233,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * 将文档附加到会话
    */
-  router.post('/:id/attach', actorMiddleware, zValidator('json', attachSchema), async (c) => {
+  router.post('/:id/attach', actorMiddleware, requireRAGEnabled, zValidator('json', attachSchema), async (c) => {
     try {
       const documentId = parseInt(c.req.param('id'), 10)
       if (isNaN(documentId)) {
@@ -217,8 +241,9 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
       }
 
       const { sessionId } = c.req.valid('json')
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
 
-      await documentService.attachToSession(documentId, sessionId)
+      await documentService!.attachToSession(documentId, sessionId)
 
       return c.json<ApiResponse>({ success: true, data: { attached: true } })
     } catch (error) {
@@ -230,7 +255,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * 从会话移除文档
    */
-  router.delete('/:id/detach/:sessionId', actorMiddleware, async (c) => {
+  router.delete('/:id/detach/:sessionId', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const documentId = parseInt(c.req.param('id'), 10)
       const sessionId = parseInt(c.req.param('sessionId'), 10)
@@ -239,7 +264,8 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
       }
 
-      await documentService.detachFromSession(documentId, sessionId)
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
+      await documentService!.detachFromSession(documentId, sessionId)
 
       return c.json<ApiResponse>({ success: true, data: { detached: true } })
     } catch (error) {
@@ -251,14 +277,15 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * 获取会话的文档列表
    */
-  router.get('/session/:sessionId', actorMiddleware, async (c) => {
+  router.get('/session/:sessionId', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const sessionId = parseInt(c.req.param('sessionId'), 10)
       if (isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
 
-      const documents = await documentService.getSessionDocuments(sessionId)
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
+      const documents = await documentService!.getSessionDocuments(sessionId)
 
       return c.json<ApiResponse>({
         success: true,
@@ -281,15 +308,16 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   /**
    * RAG 搜索
    */
-  router.post('/search', actorMiddleware, zValidator('json', searchSchema), async (c) => {
+  router.post('/search', actorMiddleware, requireRAGEnabled, zValidator('json', searchSchema), async (c) => {
     try {
       const { query, sessionId, documentIds } = c.req.valid('json')
+      const { ragService } = c.get('docServices') as ReturnType<typeof getServices>
 
       let result
       if (sessionId) {
-        result = await ragService.searchInSession(sessionId, query)
+        result = await ragService!.searchInSession(sessionId, query)
       } else if (documentIds && documentIds.length > 0) {
-        result = await ragService.searchInDocuments(documentIds, query)
+        result = await ragService!.searchInDocuments(documentIds, query)
       } else {
         return c.json<ApiResponse>(
           { success: false, error: 'Either sessionId or documentIds is required' },

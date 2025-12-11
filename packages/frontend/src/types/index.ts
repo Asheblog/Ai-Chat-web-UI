@@ -297,9 +297,8 @@ export interface SystemSettings {
   titleSummaryModelId?: string | null;
   // RAG 文档解析设置
   ragEnabled?: boolean;
-  ragEmbeddingEngine?: 'openai' | 'ollama';
-  ragEmbeddingModel?: string;
-  ragEmbeddingApiUrl?: string;
+  ragEmbeddingConnectionId?: number | null;
+  ragEmbeddingModelId?: string;
   ragTopK?: number;
   ragRelevanceThreshold?: number;
   ragMaxContextTokens?: number;

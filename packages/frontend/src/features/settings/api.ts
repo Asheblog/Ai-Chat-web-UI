@@ -299,6 +299,53 @@ export const getSystemSettings = async () => {
       titleSummaryModelSource,
       titleSummaryConnectionId,
       titleSummaryModelId,
+      // RAG 设置
+      ragEnabled: Boolean(raw.rag_enabled ?? false),
+      ragEmbeddingConnectionId: (() => {
+        const v = raw.rag_embedding_connection_id
+        if (typeof v === 'number' && v > 0) return v
+        return null
+      })(),
+      ragEmbeddingModelId: (() => {
+        const v = raw.rag_embedding_model_id
+        if (typeof v === 'string' && v.trim().length > 0) return v
+        return undefined
+      })(),
+      ragTopK: (() => {
+        const v = raw.rag_top_k
+        if (typeof v === 'number') return Math.max(1, Math.min(20, v))
+        return 5
+      })(),
+      ragRelevanceThreshold: (() => {
+        const v = raw.rag_relevance_threshold
+        if (typeof v === 'number') return Math.max(0, Math.min(1, v))
+        return 0.3
+      })(),
+      ragMaxContextTokens: (() => {
+        const v = raw.rag_max_context_tokens
+        if (typeof v === 'number') return Math.max(500, Math.min(32000, v))
+        return 4000
+      })(),
+      ragChunkSize: (() => {
+        const v = raw.rag_chunk_size
+        if (typeof v === 'number') return Math.max(100, Math.min(8000, v))
+        return 1500
+      })(),
+      ragChunkOverlap: (() => {
+        const v = raw.rag_chunk_overlap
+        if (typeof v === 'number') return Math.max(0, Math.min(1000, v))
+        return 100
+      })(),
+      ragMaxFileSizeMb: (() => {
+        const v = raw.rag_max_file_size_mb
+        if (typeof v === 'number') return Math.max(1, Math.min(200, v))
+        return 50
+      })(),
+      ragRetentionDays: (() => {
+        const v = raw.rag_retention_days
+        if (typeof v === 'number') return Math.max(1, Math.min(365, v))
+        return 30
+      })(),
     } as any,
   }
 }
@@ -396,6 +443,19 @@ export const updateSystemSettings = async (
   if (Object.prototype.hasOwnProperty.call(rest, 'titleSummaryModelId')) {
     payload.title_summary_model_id = rest.titleSummaryModelId ?? null
   }
+  // RAG 设置
+  if (typeof rest.ragEnabled === 'boolean') payload.rag_enabled = rest.ragEnabled
+  if (Object.prototype.hasOwnProperty.call(rest, 'ragEmbeddingConnectionId')) {
+    payload.rag_embedding_connection_id = rest.ragEmbeddingConnectionId ?? null
+  }
+  if (typeof rest.ragEmbeddingModelId === 'string') payload.rag_embedding_model_id = rest.ragEmbeddingModelId
+  if (typeof rest.ragTopK === 'number') payload.rag_top_k = rest.ragTopK
+  if (typeof rest.ragRelevanceThreshold === 'number') payload.rag_relevance_threshold = rest.ragRelevanceThreshold
+  if (typeof rest.ragMaxContextTokens === 'number') payload.rag_max_context_tokens = rest.ragMaxContextTokens
+  if (typeof rest.ragChunkSize === 'number') payload.rag_chunk_size = rest.ragChunkSize
+  if (typeof rest.ragChunkOverlap === 'number') payload.rag_chunk_overlap = rest.ragChunkOverlap
+  if (typeof rest.ragMaxFileSizeMb === 'number') payload.rag_max_file_size_mb = rest.ragMaxFileSizeMb
+  if (typeof rest.ragRetentionDays === 'number') payload.rag_retention_days = rest.ragRetentionDays
   if (assistantAvatarUpload) {
     payload.assistant_avatar = assistantAvatarUpload
   } else if (assistantAvatarRemove) {

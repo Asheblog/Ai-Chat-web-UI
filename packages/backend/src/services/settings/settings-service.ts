@@ -210,6 +210,17 @@ export class SettingsService {
       title_summary_model_source: (settingsObj.title_summary_model_source || process.env.TITLE_SUMMARY_MODEL_SOURCE || 'current') as 'current' | 'specified',
       title_summary_connection_id: settingsObj.title_summary_connection_id ? Number(settingsObj.title_summary_connection_id) : null,
       title_summary_model_id: settingsObj.title_summary_model_id || null,
+      // RAG 文档解析设置
+      rag_enabled: this.parseBoolean(settingsObj.rag_enabled, 'false'),
+      rag_embedding_connection_id: settingsObj.rag_embedding_connection_id ? Number(settingsObj.rag_embedding_connection_id) : null,
+      rag_embedding_model_id: settingsObj.rag_embedding_model_id || null,
+      rag_top_k: this.parseIntInRange(settingsObj.rag_top_k, '5', 1, 20, 5),
+      rag_relevance_threshold: this.parseFloat(settingsObj.rag_relevance_threshold, 0.3),
+      rag_max_context_tokens: this.parseIntInRange(settingsObj.rag_max_context_tokens, '4000', 500, 32000, 4000),
+      rag_chunk_size: this.parseIntInRange(settingsObj.rag_chunk_size, '1500', 100, 8000, 1500),
+      rag_chunk_overlap: this.parseIntInRange(settingsObj.rag_chunk_overlap, '100', 0, 1000, 100),
+      rag_max_file_size_mb: this.parseIntInRange(settingsObj.rag_max_file_size_mb, '50', 1, 200, 50),
+      rag_retention_days: this.parseIntInRange(settingsObj.rag_retention_days, '30', 1, 365, 30),
     }
 
     const assistantAvatarBase = determineProfileImageBaseUrl({
@@ -300,6 +311,14 @@ export class SettingsService {
     assignIfNumber('chat_max_concurrent_streams', payload.chat_max_concurrent_streams)
     assignIfNumber('title_summary_max_length', payload.title_summary_max_length)
     assignIfNumber('title_summary_connection_id', payload.title_summary_connection_id)
+    // RAG 数字字段
+    assignIfNumber('rag_top_k', payload.rag_top_k)
+    assignIfNumber('rag_relevance_threshold', payload.rag_relevance_threshold)
+    assignIfNumber('rag_max_context_tokens', payload.rag_max_context_tokens)
+    assignIfNumber('rag_chunk_size', payload.rag_chunk_size)
+    assignIfNumber('rag_chunk_overlap', payload.rag_chunk_overlap)
+    assignIfNumber('rag_max_file_size_mb', payload.rag_max_file_size_mb)
+    assignIfNumber('rag_retention_days', payload.rag_retention_days)
 
     const boolFields = [
       'usage_emit',
@@ -316,6 +335,7 @@ export class SettingsService {
       'task_trace_default_on',
       'task_trace_admin_only',
       'title_summary_enabled',
+      'rag_enabled',
     ] as const
     boolFields.forEach((key) => {
       if (typeof payload[key] === 'boolean') {
@@ -353,12 +373,20 @@ export class SettingsService {
       { key: 'task_trace_env', value: payload.task_trace_env },
       { key: 'title_summary_model_source', value: payload.title_summary_model_source },
       { key: 'title_summary_model_id', value: payload.title_summary_model_id },
+      { key: 'rag_embedding_model_id', value: payload.rag_embedding_model_id },
     ]
     stringFields.forEach(({ key, value }) => {
       if (typeof value === 'string') {
         updates.push(upsert(key, value))
       }
     })
+
+    // RAG embedding connection ID (需要特殊处理 null 值)
+    if (typeof payload.rag_embedding_connection_id === 'number') {
+      updates.push(upsert('rag_embedding_connection_id', String(payload.rag_embedding_connection_id)))
+    } else if (payload.rag_embedding_connection_id === null) {
+      updates.push(upsert('rag_embedding_connection_id', ''))
+    }
 
     if (typeof payload.anonymous_retention_days === 'number') {
       updates.push(upsert('anonymous_retention_days', String(payload.anonymous_retention_days)))
@@ -429,6 +457,15 @@ export class SettingsService {
     const parsed = Number.parseInt(String(value ?? fallback ?? ''), 10)
     if (Number.isFinite(parsed)) {
       return Math.max(min, Math.min(max, parsed))
+    }
+    return defaultValue
+  }
+
+  private parseFloat(value: unknown, defaultValue: number) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const parsed = Number.parseFloat(value)
+      if (Number.isFinite(parsed)) return parsed
     }
     return defaultValue
   }

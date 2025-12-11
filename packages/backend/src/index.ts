@@ -20,7 +20,8 @@ import { createTaskTraceApi } from './api/task-trace';
 import { setChatConfig } from './modules/chat/chat-common';
 import { createSharesApi } from './api/shares';
 import { createDocumentsApi } from './api/documents';
-import { initDocumentServices, setDocumentServices, getDocumentServices } from './services/document-services-factory';
+import { getDocumentServices } from './services/document-services-factory';
+import { setRAGInitializerDeps, reloadRAGServices } from './services/rag-initializer';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -29,96 +30,9 @@ const container = createAppContainer();
 const appContext = container.context;
 setChatConfig(appContext.config);
 
-// 初始化文档服务（从数据库设置或环境变量读取配置）
-async function initializeDocumentServicesFromSettings() {
-  try {
-    // 从数据库读取 RAG 设置
-    const settings = await appContext.prisma.systemSetting.findMany({
-      where: {
-        key: {
-          in: [
-            'rag_enabled',
-            'rag_embedding_engine',
-            'rag_embedding_model',
-            'rag_embedding_api_url',
-            'rag_top_k',
-            'rag_relevance_threshold',
-            'rag_max_context_tokens',
-            'rag_chunk_size',
-            'rag_chunk_overlap',
-            'rag_max_file_size_mb',
-            'rag_retention_days',
-          ],
-        },
-      },
-    });
-
-    const settingsMap = settings.reduce<Record<string, string>>((acc, s) => {
-      acc[s.key] = s.value ?? '';
-      return acc;
-    }, {});
-
-    // 检查是否启用 RAG（数据库设置优先，默认为 false）
-    const ragEnabled = settingsMap.rag_enabled?.toLowerCase() === 'true';
-    if (!ragEnabled) {
-      console.log('ℹ️  Document RAG services disabled (rag_enabled=false in system settings)');
-      console.log('   To enable: set rag_enabled=true in system settings');
-      return;
-    }
-
-    // 从数据库或环境变量获取配置
-    const ragEmbeddingEngine = (settingsMap.rag_embedding_engine || process.env.RAG_EMBEDDING_ENGINE || 'openai') as 'openai' | 'ollama';
-    const ragEmbeddingModel = settingsMap.rag_embedding_model || process.env.RAG_EMBEDDING_MODEL || (ragEmbeddingEngine === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small');
-    const ragEmbeddingApiUrl = settingsMap.rag_embedding_api_url || process.env.RAG_EMBEDDING_API_URL || process.env.OPENAI_API_URL || (ragEmbeddingEngine === 'ollama' ? process.env.OLLAMA_API_URL : undefined);
-    const ragApiKey = process.env.OPENAI_API_KEY; // API Key 只从环境变量读取，不存储在数据库
-
-    // 检查是否有必要的配置
-    const canInitialize =
-      (ragEmbeddingEngine === 'openai' && Boolean(ragApiKey)) ||
-      (ragEmbeddingEngine === 'ollama' && Boolean(ragEmbeddingApiUrl));
-
-    if (!canInitialize) {
-      console.log('⚠️  Document RAG enabled but missing API configuration');
-      console.log(`   Engine: ${ragEmbeddingEngine}`);
-      if (ragEmbeddingEngine === 'openai') {
-        console.log('   Missing: OPENAI_API_KEY environment variable');
-      } else {
-        console.log('   Missing: rag_embedding_api_url setting or OLLAMA_API_URL environment variable');
-      }
-      return;
-    }
-
-    const documentServices = initDocumentServices(appContext.prisma, {
-      dataDir: './data',
-      embedding: {
-        engine: ragEmbeddingEngine,
-        model: ragEmbeddingModel,
-        apiKey: ragApiKey,
-        apiUrl: ragEmbeddingApiUrl,
-      },
-      document: {
-        maxFileSize: (parseInt(settingsMap.rag_max_file_size_mb || '50', 10) || 50) * 1024 * 1024,
-        chunkSize: parseInt(settingsMap.rag_chunk_size || '1500', 10) || 1500,
-        chunkOverlap: parseInt(settingsMap.rag_chunk_overlap || '100', 10) || 100,
-        retentionDays: parseInt(settingsMap.rag_retention_days || '30', 10) || 30,
-      },
-      rag: {
-        topK: parseInt(settingsMap.rag_top_k || '5', 10) || 5,
-        relevanceThreshold: parseFloat(settingsMap.rag_relevance_threshold || '0.3') || 0.3,
-        maxContextTokens: parseInt(settingsMap.rag_max_context_tokens || '4000', 10) || 4000,
-      },
-    });
-    setDocumentServices(documentServices);
-    documentServices.cleanupScheduler.start();
-    console.log('✅ Document RAG services initialized');
-    console.log(`   Engine: ${ragEmbeddingEngine}, Model: ${ragEmbeddingModel}`);
-  } catch (error) {
-    console.warn('⚠️  Failed to initialize document services:', error instanceof Error ? error.message : error);
-  }
-}
-
-// 异步初始化 RAG 服务
-initializeDocumentServicesFromSettings();
+// 设置 RAG 初始化器依赖并启动
+setRAGInitializerDeps({ prisma: appContext.prisma });
+reloadRAGServices();
 
 const app = new Hono();
 
@@ -172,14 +86,8 @@ app.route('/api/task-trace', createTaskTraceApi({
 }));
 app.route('/api/shares', createSharesApi({ shareService: container.shareService }));
 
-// 仅在文档服务初始化成功时注册文档路由
-const docServices = getDocumentServices();
-if (docServices) {
-  app.route('/api/documents', createDocumentsApi({
-    documentService: docServices.documentService,
-    ragService: docServices.ragService,
-  }));
-}
+// 文档路由（RAG 服务状态在请求时动态检查）
+app.route('/api/documents', createDocumentsApi());
 
 app.route(
   '/v1',
@@ -257,19 +165,17 @@ app.get('/api', (c) => {
         'PUT /api/users/:id/role': '更新用户角色（管理员）',
         'DELETE /api/users/:id': '删除用户（管理员）',
       },
-      ...(getDocumentServices() ? {
-        documents: {
-          'GET /api/documents/supported-types': '获取支持的文件类型',
-          'POST /api/documents/upload': '上传文档',
-          'GET /api/documents': '获取文档列表',
-          'GET /api/documents/:id': '获取文档详情',
-          'DELETE /api/documents/:id': '删除文档',
-          'POST /api/documents/:id/attach': '附加文档到会话',
-          'DELETE /api/documents/:id/detach/:sessionId': '从会话移除文档',
-          'GET /api/documents/session/:sessionId': '获取会话文档列表',
-          'POST /api/documents/search': 'RAG 文档搜索',
-        },
-      } : {}),
+      documents: {
+        'GET /api/documents/supported-types': '获取支持的文件类型',
+        'POST /api/documents/upload': '上传文档（需开启RAG）',
+        'GET /api/documents': '获取文档列表（需开启RAG）',
+        'GET /api/documents/:id': '获取文档详情（需开启RAG）',
+        'DELETE /api/documents/:id': '删除文档（需开启RAG）',
+        'POST /api/documents/:id/attach': '附加文档到会话（需开启RAG）',
+        'DELETE /api/documents/:id/detach/:sessionId': '从会话移除文档（需开启RAG）',
+        'GET /api/documents/session/:sessionId': '获取会话文档列表（需开启RAG）',
+        'POST /api/documents/search': 'RAG 文档搜索（需开启RAG）',
+      },
     },
   });
 });

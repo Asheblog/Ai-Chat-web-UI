@@ -6,6 +6,7 @@ import type { ApiResponse, Actor } from '../types';
 import { settingsFacade, SettingsServiceError, HealthServiceError } from '../services/settings/settings-facade'
 import type { SettingsFacade } from '../services/settings/settings-facade'
 import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
+import { reloadRAGServices } from '../services/rag-initializer'
 
 export interface SettingsApiDeps {
   settingsFacade?: SettingsFacade
@@ -115,9 +116,8 @@ const systemSettingSchema = z.object({
   title_summary_model_id: z.string().min(1).nullable().optional(),
   // RAG 文档解析设置
   rag_enabled: z.boolean().optional(),
-  rag_embedding_engine: z.enum(['openai', 'ollama']).optional(),
-  rag_embedding_model: z.string().min(1).max(64).optional(),
-  rag_embedding_api_url: z.string().max(256).optional(),
+  rag_embedding_connection_id: z.number().int().positive().nullable().optional(),
+  rag_embedding_model_id: z.string().min(1).max(128).optional(),
   rag_top_k: z.number().int().min(1).max(20).optional(),
   rag_relevance_threshold: z.number().min(0).max(1).optional(),
   rag_max_context_tokens: z.number().int().min(500).max(32000).optional(),
@@ -162,6 +162,15 @@ settings.put(
     try {
       const payload = c.req.valid('json')
       await facade.updateSystemSettings(payload)
+
+      // 如果更新了 RAG 相关设置，自动重载 RAG 服务
+      const ragKeys = ['rag_enabled', 'rag_embedding_connection_id', 'rag_embedding_model_id']
+      const hasRagChanges = ragKeys.some(key => key in payload)
+      if (hasRagChanges) {
+        const ragResult = await reloadRAGServices()
+        console.log(`🔄 RAG services reload: ${ragResult.message}`)
+      }
+
       return c.json<ApiResponse>({ success: true, message: 'System settings updated successfully' })
     } catch (error) {
       return handleServiceError(c, error, 'Failed to update system settings', 'Update system settings error:')

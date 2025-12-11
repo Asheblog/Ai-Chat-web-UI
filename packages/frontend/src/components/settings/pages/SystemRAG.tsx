@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
@@ -8,15 +8,23 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 import { useToast } from "@/components/ui/use-toast"
-import { FileText, AlertCircle } from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { FileText, AlertCircle, Search, Check, ChevronsUpDown } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useModelsStore, type ModelItem } from "@/store/models-store"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 
 export function SystemRAGPage() {
   const {
@@ -27,11 +35,11 @@ export function SystemRAGPage() {
     error,
   } = useSystemSettings()
   const { toast } = useToast()
+  const { models, isLoading: modelsLoading, fetchAll: fetchModels } = useModelsStore()
 
   const [enabled, setEnabled] = useState(false)
-  const [engine, setEngine] = useState<'openai' | 'ollama'>('openai')
-  const [model, setModel] = useState('')
-  const [apiUrl, setApiUrl] = useState('')
+  const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null)
+  const [selectedModelId, setSelectedModelId] = useState<string>("")
   const [topK, setTopK] = useState(5)
   const [relevanceThreshold, setRelevanceThreshold] = useState(0.3)
   const [maxContextTokens, setMaxContextTokens] = useState(4000)
@@ -40,16 +48,19 @@ export function SystemRAGPage() {
   const [maxFileSizeMb, setMaxFileSizeMb] = useState(50)
   const [retentionDays, setRetentionDays] = useState(30)
 
+  const [modelSelectOpen, setModelSelectOpen] = useState(false)
+  const [modelFilter, setModelFilter] = useState("")
+
   useEffect(() => {
     fetchSystemSettings().catch(() => {})
-  }, [fetchSystemSettings])
+    fetchModels().catch(() => {})
+  }, [fetchSystemSettings, fetchModels])
 
   useEffect(() => {
     if (!systemSettings) return
     setEnabled(Boolean(systemSettings.ragEnabled ?? false))
-    setEngine((systemSettings.ragEmbeddingEngine as 'openai' | 'ollama') || 'openai')
-    setModel(systemSettings.ragEmbeddingModel || '')
-    setApiUrl(systemSettings.ragEmbeddingApiUrl || '')
+    setSelectedConnectionId(systemSettings.ragEmbeddingConnectionId ?? null)
+    setSelectedModelId(systemSettings.ragEmbeddingModelId || "")
     setTopK(Number(systemSettings.ragTopK ?? 5))
     setRelevanceThreshold(Number(systemSettings.ragRelevanceThreshold ?? 0.3))
     setMaxContextTokens(Number(systemSettings.ragMaxContextTokens ?? 4000))
@@ -58,6 +69,33 @@ export function SystemRAGPage() {
     setMaxFileSizeMb(Number(systemSettings.ragMaxFileSizeMb ?? 50))
     setRetentionDays(Number(systemSettings.ragRetentionDays ?? 30))
   }, [systemSettings])
+
+  // 筛选模型列表
+  const filteredModels = useMemo(() => {
+    if (!models) return []
+    const kw = modelFilter.trim().toLowerCase()
+    if (!kw) return models
+    return models.filter((m: ModelItem) =>
+      [m.id, m.rawId, m.name, m.provider, m.channelName].some(v =>
+        String(v || "").toLowerCase().includes(kw)
+      )
+    )
+  }, [models, modelFilter])
+
+  // 获取当前选中的模型信息
+  const selectedModel = useMemo(() => {
+    if (!selectedConnectionId || !selectedModelId) return null
+    return models?.find((m: ModelItem) =>
+      m.connectionId === selectedConnectionId && m.id === selectedModelId
+    ) || null
+  }, [models, selectedConnectionId, selectedModelId])
+
+  const handleModelSelect = (model: ModelItem) => {
+    setSelectedConnectionId(model.connectionId)
+    setSelectedModelId(model.id)
+    setModelSelectOpen(false)
+    setModelFilter("")
+  }
 
   if (isLoading && !systemSettings) {
     return (
@@ -83,9 +121,8 @@ export function SystemRAGPage() {
     try {
       await updateSystemSettings({
         ragEnabled: enabled,
-        ragEmbeddingEngine: engine,
-        ragEmbeddingModel: model || undefined,
-        ragEmbeddingApiUrl: apiUrl || undefined,
+        ragEmbeddingConnectionId: selectedConnectionId ?? undefined,
+        ragEmbeddingModelId: selectedModelId || undefined,
         ragTopK: topK,
         ragRelevanceThreshold: relevanceThreshold,
         ragMaxContextTokens: maxContextTokens,
@@ -104,7 +141,9 @@ export function SystemRAGPage() {
     }
   }
 
-  const defaultModel = engine === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small'
+  const modelDisplayText = selectedModel
+    ? `${selectedModel.name || selectedModel.id} (${selectedModel.provider || selectedModel.channelName})`
+    : "选择 Embedding 模型..."
 
   return (
     <div className="space-y-6 p-1">
@@ -121,9 +160,7 @@ export function SystemRAGPage() {
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          启用 RAG 需要配置 Embedding API。OpenAI 需要设置 <code className="text-xs bg-muted px-1 py-0.5 rounded">OPENAI_API_KEY</code> 环境变量；
-          Ollama 需要配置 API URL（如 <code className="text-xs bg-muted px-1 py-0.5 rounded">http://localhost:11434</code>）。
-          修改设置后需要重启后端才能生效。
+          请从已配置的连接中选择支持 Embedding 的模型。修改设置后需要重启后端才能生效。
         </AlertDescription>
       </Alert>
 
@@ -141,51 +178,68 @@ export function SystemRAGPage() {
 
         {enabled && (
           <>
-            {/* Embedding 引擎 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Embedding 引擎</label>
-                <Select value={engine} onValueChange={(v) => setEngine(v as 'openai' | 'ollama')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="ollama">Ollama (本地)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {engine === 'openai' ? '需要 OPENAI_API_KEY 环境变量' : '需要本地运行 Ollama 服务'}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Embedding 模型</label>
-                <Input
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder={defaultModel}
-                />
-                <p className="text-xs text-muted-foreground">
-                  留空使用默认: {defaultModel}
-                </p>
-              </div>
+            {/* Embedding 模型选择 */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Embedding 模型</label>
+              <Popover open={modelSelectOpen} onOpenChange={setModelSelectOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={modelSelectOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">{modelDisplayText}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[480px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="搜索模型..."
+                      value={modelFilter}
+                      onValueChange={setModelFilter}
+                    />
+                    <CommandList className="max-h-[300px]">
+                      <CommandEmpty>
+                        {modelsLoading ? "加载中..." : "未找到匹配的模型"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {filteredModels.map((model: ModelItem) => {
+                          const isSelected = model.connectionId === selectedConnectionId && model.id === selectedModelId
+                          return (
+                            <CommandItem
+                              key={`${model.connectionId}:${model.id}`}
+                              value={`${model.connectionId}:${model.id}`}
+                              onSelect={() => handleModelSelect(model)}
+                              className="flex items-center gap-2"
+                            >
+                              <Check
+                                className={cn(
+                                  "h-4 w-4 shrink-0",
+                                  isSelected ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">
+                                  {model.name || model.id}
+                                </div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {model.provider || model.channelName} · {model.rawId}
+                                </div>
+                              </div>
+                            </CommandItem>
+                          )
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                从已配置的连接中选择支持 Embedding 的模型（如 text-embedding-3-small、embedding-3 等）
+              </p>
             </div>
-
-            {/* API URL (Ollama) */}
-            {engine === 'ollama' && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Ollama API URL</label>
-                <Input
-                  value={apiUrl}
-                  onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder="http://localhost:11434"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Ollama 服务地址，留空使用 OLLAMA_API_URL 环境变量
-                </p>
-              </div>
-            )}
 
             {/* 检索参数 */}
             <div className="border-t pt-4">
