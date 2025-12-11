@@ -20,6 +20,7 @@ import { SystemModelAccessPage } from "./pages/SystemModelAccess"
 import { SystemConnectionsPage } from "./pages/SystemConnections"
 import { SystemWebSearchPage } from "./pages/SystemWebSearch"
 import { SystemMonitoringPage } from "./pages/SystemMonitoring"
+import { SystemRAGPage } from "./pages/SystemRAG"
 
 interface SettingsDialogProps {
   open: boolean
@@ -192,6 +193,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
                 case 'system.network': return <SystemNetworkPage />
                 case 'system.reasoning': return <SystemReasoningPage />
                 case 'system.web-search': return <SystemWebSearchPage />
+                case 'system.rag': return <SystemRAGPage />
                 case 'system.connections': return <SystemConnectionsPage />
                 case 'system.models': return <SystemModelsPage />
                 case 'system.model-access': return <SystemModelAccessPage />
