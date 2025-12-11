@@ -57,6 +57,8 @@ interface DesktopComposerProps {
   // 文档附件
   hasDocuments?: boolean
   pickDocuments?: () => void
+  onOpenAttachmentManager?: () => void
+  attachedDocumentsLength?: number
 }
 
 export function DesktopComposer({
@@ -102,6 +104,8 @@ export function DesktopComposer({
   sendLockedReason,
   hasDocuments,
   pickDocuments,
+  onOpenAttachmentManager,
+  attachedDocumentsLength = 0,
 }: DesktopComposerProps) {
   const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
 
@@ -184,6 +188,9 @@ export function DesktopComposer({
             disableDocuments={isStreaming}
             hasImages={selectedImages.length > 0}
             hasDocuments={hasDocuments}
+            onOpenManager={onOpenAttachmentManager}
+            manageDisabled={!hasDocuments && selectedImages.length === 0}
+            manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
             ariaLabel="上传附件"
             className="border"
           />

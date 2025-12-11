@@ -8,7 +8,7 @@ import { DesktopComposer } from './desktop-composer'
 import { ExpandEditorDialog } from './expand-editor-dialog'
 import { CustomRequestEditor } from './custom-request-editor'
 import { Button } from '@/components/ui/button'
-import { DocumentPreviewList, DocumentAttachmentInput } from '@/features/chat/composer'
+import { AttachmentTray, DocumentAttachmentInput } from '@/features/chat/composer'
 
 interface ImageLimitConfig {
   maxCount: number
@@ -153,6 +153,8 @@ export function ChatComposerPanel({
   const [expandDraft, setExpandDraft] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [sessionPromptOpen, setSessionPromptOpen] = useState(false)
+  const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false)
+  const attachmentsCount = selectedImages.length + attachedDocuments.length
 
   const openExpand = () => {
     setExpandDraft(input)
@@ -311,6 +313,8 @@ export function ChatComposerPanel({
         onToggleTrace={onToggleTrace}
         onOpenAdvanced={() => setAdvancedOpen(true)}
         onOpenSessionPrompt={() => setSessionPromptOpen(true)}
+        onOpenAttachmentManager={() => setAttachmentViewerOpen(true)}
+        attachmentsCount={attachmentsCount}
       />
 
       <DesktopComposer
@@ -356,16 +360,17 @@ export function ChatComposerPanel({
         sendLockedReason={sendLockedReason}
         hasDocuments={hasDocuments}
         pickDocuments={pickDocuments}
+        onOpenAttachmentManager={() => setAttachmentViewerOpen(true)}
+        attachedDocumentsLength={attachedDocuments.length}
       />
 
-      {/* 文档预览列表 */}
-      {attachedDocuments.length > 0 && (
-        <div className="mx-auto max-w-3xl px-4 md:px-6">
-          <DocumentPreviewList
-            documents={attachedDocuments}
-            onRemove={onRemoveDocument}
-          />
-        </div>
+      {attachmentViewerOpen && (
+        <AttachmentTray
+          documents={attachedDocuments}
+          onRemove={onRemoveDocument}
+          open={attachmentViewerOpen}
+          onOpenChange={setAttachmentViewerOpen}
+        />
       )}
 
       <input

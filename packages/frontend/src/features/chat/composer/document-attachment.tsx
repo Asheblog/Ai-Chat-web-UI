@@ -2,9 +2,10 @@
  * 文档附件按钮和预览组件
  */
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Paperclip, File, FileText, Table, X, Loader2, AlertCircle, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import type { AttachedDocument } from './use-document-attachments'
 
@@ -177,5 +178,61 @@ export const DocumentPreviewList: React.FC<DocumentPreviewListProps> = ({
         />
       ))}
     </div>
+  )
+}
+
+interface AttachmentTrayProps {
+  documents: AttachedDocument[]
+  onRemove: (documentId: number) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title?: string
+}
+
+/**
+ * 附件收纳条：默认占一行，点击查看/管理附件，减少占位。
+ */
+export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
+  documents,
+  onRemove,
+  open,
+  onOpenChange,
+  title = '附件管理',
+}) => {
+  const summary = useMemo(() => {
+    const names = documents.slice(0, 2).map((d) => d.originalName)
+    const rest = Math.max(0, documents.length - 2)
+    return { names, rest }
+  }, [documents])
+
+  if (documents.length === 0) return null
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" showCloseButton>
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">{title}</div>
+            <span className="text-xs text-muted-foreground">
+              {documents.length} 个
+              {summary.names.length > 0 && (
+                <span className="ml-2 hidden sm:inline">
+                  {summary.names.join('、')}
+                  {summary.rest > 0 ? ` +${summary.rest}` : ''}
+                </span>
+              )}
+            </span>
+          </div>
+          <DocumentPreviewList documents={documents} onRemove={onRemove} />
+          <div className="flex justify-end">
+            <SheetClose asChild>
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                关闭
+              </Button>
+            </SheetClose>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }

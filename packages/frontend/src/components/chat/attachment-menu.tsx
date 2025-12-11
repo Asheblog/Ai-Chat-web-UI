@@ -1,4 +1,4 @@
-import { Paperclip, ImagePlus, FilePlus2 } from 'lucide-react'
+import { Paperclip, ImagePlus, FilePlus2, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -15,6 +15,9 @@ interface AttachmentMenuProps {
   disableDocuments?: boolean
   hasImages?: boolean
   hasDocuments?: boolean
+  onOpenManager?: () => void
+  manageDisabled?: boolean
+  manageCount?: number
   ariaLabel?: string
   className?: string
 }
@@ -29,6 +32,9 @@ export function AttachmentMenu({
   disableDocuments,
   hasImages,
   hasDocuments,
+  onOpenManager,
+  manageDisabled,
+  manageCount,
   ariaLabel = '添加附件',
   className,
 }: AttachmentMenuProps) {
@@ -63,6 +69,15 @@ export function AttachmentMenu({
           <FilePlus2 className="mr-2 h-4 w-4" />
           <span>文档上传</span>
         </DropdownMenuItem>
+        {onOpenManager && (
+          <DropdownMenuItem
+            onSelect={onOpenManager}
+            disabled={manageDisabled}
+          >
+            <FolderOpen className="mr-2 h-4 w-4" />
+            <span>附件管理{typeof manageCount === 'number' ? ` (${manageCount})` : ''}</span>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

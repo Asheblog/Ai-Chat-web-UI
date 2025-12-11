@@ -37,6 +37,8 @@ interface MobileComposerProps {
   pickImages: () => void
   pickDocuments?: () => void
   hasDocuments?: boolean
+  onOpenAttachmentManager?: () => void
+  attachmentsCount?: number
   canUseWebSearch: boolean
   webSearchDisabledNote?: string
   pythonToolEnabled: boolean
@@ -76,6 +78,8 @@ export function MobileComposer({
   pickImages,
   pickDocuments,
   hasDocuments,
+  onOpenAttachmentManager,
+  attachmentsCount = 0,
   canUseWebSearch,
   webSearchDisabledNote,
   pythonToolEnabled,
@@ -253,6 +257,9 @@ export function MobileComposer({
                 disableDocuments={isStreaming || !pickDocuments}
                 hasImages={selectedImages.length > 0}
                 hasDocuments={hasDocuments}
+                onOpenManager={onOpenAttachmentManager}
+                manageDisabled={!hasDocuments && selectedImages.length === 0}
+                manageCount={attachmentsCount}
                 ariaLabel="上传附件"
                 className="h-10 w-10"
               />

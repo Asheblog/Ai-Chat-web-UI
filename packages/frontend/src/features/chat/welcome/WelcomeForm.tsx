@@ -1,4 +1,4 @@
-import { ChangeEvent, KeyboardEvent, RefObject } from 'react'
+import { ChangeEvent, KeyboardEvent, RefObject, useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -7,7 +7,7 @@ import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { AdvancedOptions } from './AdvancedOptions'
 import { ImagePreviewList } from './ImagePreviewList'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
-import { DocumentAttachmentInput, DocumentPreviewList } from '@/features/chat/composer'
+import { AttachmentTray, DocumentAttachmentInput } from '@/features/chat/composer'
 import type { AttachedDocument } from '@/features/chat/composer/use-document-attachments'
 
 type Effort = 'unset' | 'low' | 'medium' | 'high'
@@ -89,6 +89,7 @@ interface WelcomeFormProps {
 }
 
 export function WelcomeForm({ form }: WelcomeFormProps) {
+  const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false)
   const {
     query,
     isComposing,
@@ -149,6 +150,9 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             hasDocuments={attachments.documents.length > 0}
             className="h-10 w-10"
             ariaLabel="添加附件"
+            onOpenManager={() => setAttachmentViewerOpen(true)}
+            manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
+            manageCount={attachments.selectedImages.length + attachments.documents.length}
           />
         </div>
       </div>
@@ -163,7 +167,14 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         onChange={attachments.onFilesSelected}
         disabled={creationDisabled}
       />
-      <DocumentPreviewList documents={attachments.documents} onRemove={attachments.onRemoveDocument} />
+      {attachmentViewerOpen && (
+        <AttachmentTray
+          documents={attachments.documents}
+          onRemove={attachments.onRemoveDocument}
+          open={attachmentViewerOpen}
+          onOpenChange={setAttachmentViewerOpen}
+        />
+      )}
       <DocumentAttachmentInput inputRef={attachments.documentInputRef} onFilesSelected={attachments.onDocumentFilesSelected} />
 
       <Dialog open={expand.open} onOpenChange={(open) => (open ? onOpenExpand() : expand.onClose())}>
