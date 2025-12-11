@@ -198,6 +198,18 @@ export class DocumentService {
       const texts = chunks.map((c) => c.content)
       const embeddings = await this.embeddingService.embedBatch(texts)
 
+      // 验证 embeddings 完整性
+      if (!embeddings || embeddings.length !== texts.length) {
+        throw new Error(`Embedding count mismatch: expected ${texts.length}, got ${embeddings?.length ?? 0}`)
+      }
+
+      for (let i = 0; i < embeddings.length; i++) {
+        if (!embeddings[i] || !Array.isArray(embeddings[i]) || embeddings[i].length === 0) {
+          console.error(`[Document] Invalid embedding at index ${i}:`, embeddings[i])
+          throw new Error(`Invalid embedding at chunk ${i}: embedding is missing or empty`)
+        }
+      }
+
       // 4. 存储到向量数据库
       report({ stage: 'storing', progress: 80, message: '正在存储到向量数据库...' })
 

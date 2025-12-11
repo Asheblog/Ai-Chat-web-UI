@@ -3,7 +3,7 @@
  * 用于管理文档上传和状态
  */
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { ToastHandler } from './types'
 
@@ -51,6 +51,52 @@ export const useDocumentAttachments = ({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [documents, setDocuments] = useState<AttachedDocument[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  // 当 sessionId 变化时，从后端加载已关联的文档
+  useEffect(() => {
+    if (!sessionId) {
+      setDocuments([])
+      return
+    }
+
+    let cancelled = false
+    const loadSessionDocuments = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch(`/api/documents/session/${sessionId}`, {
+          credentials: 'include',
+        })
+        const result = await response.json()
+
+        if (!cancelled && result.success && Array.isArray(result.data)) {
+          const loadedDocs: AttachedDocument[] = result.data.map((doc: any) => ({
+            id: doc.id,
+            filename: doc.filename,
+            originalName: doc.originalName,
+            mimeType: doc.mimeType,
+            fileSize: doc.fileSize,
+            status: doc.status as AttachedDocument['status'],
+          }))
+          setDocuments(loadedDocs)
+          onDocumentsChange?.(loadedDocs)
+        }
+      } catch (error) {
+        // 静默处理加载错误（可能是 RAG 未启用）
+        console.warn('[Documents] Failed to load session documents:', error)
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadSessionDocuments()
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, onDocumentsChange])
 
   const updateDocuments = useCallback(
     (updater: (prev: AttachedDocument[]) => AttachedDocument[]) => {
@@ -283,6 +329,7 @@ export const useDocumentAttachments = ({
     fileInputRef,
     documents,
     isUploading,
+    isLoading,
     hasReadyDocuments,
     hasProcessingDocuments,
     pickDocuments,

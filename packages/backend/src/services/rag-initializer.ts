@@ -4,6 +4,7 @@
  */
 
 import type { PrismaClient } from '@prisma/client'
+import { AuthUtils } from '../utils/auth'
 import {
   createDocumentServices,
   getDocumentServices,
@@ -101,13 +102,16 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       return { success: false, message: `Connection not found: ${connectionId}` }
     }
 
-    // 获取连接的 API URL 和密钥
+    // 获取连接的 API URL 和密钥（密钥是加密存储的，需要解密）
     const apiUrl = connection.baseUrl || 'https://api.openai.com/v1'
-    const apiKey = connection.apiKey
+    const encryptedApiKey = connection.apiKey
 
-    if (!apiKey) {
+    if (!encryptedApiKey) {
       return { success: false, message: `Connection has no API key: ${connection.name || connectionId}` }
     }
+
+    // 解密 API Key
+    const apiKey = AuthUtils.decryptApiKey(encryptedApiKey)
 
     // 创建新的文档服务
     const documentServices = createDocumentServices(prisma, {

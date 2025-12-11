@@ -46,7 +46,8 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     this.apiKey = config.apiKey
     this.apiUrl = config.apiUrl || 'https://api.openai.com/v1'
     this.model = config.model || 'text-embedding-3-small'
-    this.batchSize = config.batchSize || 100
+    // 默认 batchSize 为 1，因为很多 OpenAI 兼容 API 不支持批量
+    this.batchSize = config.batchSize || 1
 
     // 设置维度
     if (this.model === 'text-embedding-3-large') {
@@ -90,6 +91,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
       body: JSON.stringify({
         input: texts,
         model: this.model,
+        encoding_format: 'float',
       }),
     })
 
@@ -98,13 +100,25 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
       throw new Error(`OpenAI API error: ${response.status} ${error}`)
     }
 
-    const data = (await response.json()) as {
-      data: Array<{ embedding: number[]; index: number }>
+    const data = await response.json()
+
+    // 验证响应格式
+    if (!data || !Array.isArray(data.data)) {
+      console.error('[Embedding] Unexpected API response format:', JSON.stringify(data).slice(0, 500))
+      throw new Error('Invalid embedding API response: missing data array')
+    }
+
+    // 检查每个 embedding 是否有效
+    for (const item of data.data) {
+      if (!item || !Array.isArray(item.embedding) || item.embedding.length === 0) {
+        console.error('[Embedding] Invalid embedding item:', JSON.stringify(item).slice(0, 200))
+        throw new Error('Invalid embedding in API response: embedding array is missing or empty')
+      }
     }
 
     // 按照原始顺序排序
-    const sorted = data.data.sort((a, b) => a.index - b.index)
-    return sorted.map((item) => item.embedding)
+    const sorted = data.data.sort((a: any, b: any) => a.index - b.index)
+    return sorted.map((item: any) => item.embedding)
   }
 
   getDimension(): number {
