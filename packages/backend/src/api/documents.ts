@@ -100,11 +100,6 @@ export const createDocumentsApi = () => {
         }
       }
 
-      // 异步处理文档（不等待完成）
-      documentService!.processDocument(result.documentId).catch((err) => {
-        console.error(`[Documents] Failed to process document ${result.documentId}:`, err)
-      })
-
       return c.json<ApiResponse>({
         success: true,
         data: result,

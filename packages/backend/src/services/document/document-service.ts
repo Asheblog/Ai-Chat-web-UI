@@ -135,11 +135,31 @@ export class DocumentService {
         fileSize: file.buffer.length,
         filePath,
         status: 'pending',
+        processingStage: 'pending',
+        processingProgress: 0,
         contentHash,
         collectionName: `doc_${uuidv4().replace(/-/g, '')}`,
         expiresAt,
       },
     })
+
+    // 创建处理任务（由 worker 消费）
+    try {
+      await this.prisma.documentProcessingJob.create({
+        data: {
+          documentId: document.id,
+          status: 'pending',
+        },
+      })
+    } catch (e) {
+      // 若创建任务失败，标记文档为 error，避免前端一直 pending
+      const msg = e instanceof Error ? e.message : 'Failed to enqueue document'
+      await this.prisma.document.update({
+        where: { id: document.id },
+        data: { status: 'error', errorMessage: msg, processingStage: 'error', processingProgress: 0 },
+      })
+      throw e
+    }
 
     return {
       documentId: document.id,
@@ -160,13 +180,29 @@ export class DocumentService {
       if (onProgress) {
         onProgress(progress)
       }
+      // 持久化进度（worker 可据此展示/自愈）
+      this.prisma.document.update({
+        where: { id: documentId },
+        data: {
+          processingStage: progress.stage,
+          processingProgress: Math.max(0, Math.min(100, progress.progress)),
+          processingHeartbeatAt: new Date(),
+        },
+      }).catch(() => {})
     }
 
     try {
       // 更新状态为处理中
       await this.prisma.document.update({
         where: { id: documentId },
-        data: { status: 'processing' },
+        data: {
+          status: 'processing',
+          processingStage: 'parsing',
+          processingProgress: 0,
+          processingStartedAt: new Date(),
+          processingHeartbeatAt: new Date(),
+          processingFinishedAt: null,
+        },
       })
 
       const document = await this.prisma.document.findUnique({
@@ -255,6 +291,9 @@ export class DocumentService {
         where: { id: documentId },
         data: {
           status: 'ready',
+          processingStage: 'done',
+          processingProgress: 100,
+          processingFinishedAt: new Date(),
           chunkCount: chunks.length,
           metadata: JSON.stringify({
             pageCount,
@@ -273,6 +312,9 @@ export class DocumentService {
         data: {
           status: 'error',
           errorMessage,
+          processingStage: 'error',
+          processingProgress: 0,
+          processingFinishedAt: new Date(),
         },
       })
 

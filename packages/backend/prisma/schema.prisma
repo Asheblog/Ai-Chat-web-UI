@@ -319,6 +319,11 @@ model Document {
   fileSize        Int       // 字节数
   filePath        String    // 存储路径
   status          String    @default("pending") // pending | processing | ready | error
+  processingStage String?   @default("pending") // parsing | chunking | embedding | storing | done | error
+  processingProgress Int    @default(0) // 0-100
+  processingStartedAt DateTime?
+  processingHeartbeatAt DateTime?
+  processingFinishedAt DateTime?
   errorMessage    String?
   contentHash     String?   // 用于去重
   chunkCount      Int       @default(0)
@@ -333,6 +338,7 @@ model Document {
   user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   chunks           DocumentChunk[]
   sessionDocuments SessionDocument[]
+  processingJob    DocumentProcessingJob?
 
   @@index([userId])
   @@index([anonymousKey])
@@ -340,6 +346,27 @@ model Document {
   @@index([expiresAt])
   @@index([contentHash])
   @@map("documents")
+}
+
+// 文档处理任务表 - Worker 队列
+model DocumentProcessingJob {
+  id          Int      @id @default(autoincrement())
+  documentId  Int      @unique
+  status      String   @default("pending") // pending | running | retrying | failed | canceled | done
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(2)
+  nextRunAt   DateTime?
+  workerId    String?
+  lockedAt    DateTime?
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([nextRunAt])
+  @@map("document_processing_jobs")
 }
 
 // 文档块表 - 存储分块后的文档内容

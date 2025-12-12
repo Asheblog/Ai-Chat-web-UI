@@ -45,6 +45,39 @@ services:
           memory: 256M
           cpus: '0.2'
 
+  # 文档解析 Worker (开发环境)
+  rag-worker:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+      target: development
+    container_name: ai-chat-web-ui-rag-worker-dev
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=file:./data/dev.db
+      - JWT_SECRET=dev-jwt-secret-key
+      - LOG_LEVEL=debug
+      - NODE_OPTIONS=--max-old-space-size=1024
+    volumes:
+      - ./packages/backend:/app
+      - /app/node_modules
+      - backend_dev_data:/app/data
+      - backend_dev_logs:/app/logs
+    command: ["sh", "-lc", "[ -d node_modules ] && [ \"$(ls -A node_modules 2>/dev/null)\" ] || npm install; npm run dev:worker"]
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - ai-chat-web-ui-dev-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.2'
+
   # 前端服务 (开发环境)
   frontend:
     build:

@@ -37,6 +37,11 @@
    - 文档上传、解析、处理完整流程
    - 文件: `packages/backend/src/services/document/document-service.ts`
 
+7.1. **Document Worker (新增)**
+   - 独立后台任务进程，消费 `document_processing_jobs` 队列
+   - 解决大文档解析阻塞 API/导致前端卡圈圈问题
+   - 文件: `packages/backend/src/workers/document-worker.ts`
+
 8. **RAGService**
    - 向量检索 + 上下文构建
    - 文件: `packages/backend/src/services/document/rag-service.ts`
