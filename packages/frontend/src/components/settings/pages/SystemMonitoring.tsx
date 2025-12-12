@@ -225,7 +225,7 @@ export function SystemMonitoringPage() {
 
           <SettingRow
             title="保留天数"
-            description="超过该天数的历史追踪会被自动清理"
+            description="超过该天数的历史追踪会被自动清理（范围 1-365）"
             align="start"
           >
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -256,7 +256,7 @@ export function SystemMonitoringPage() {
 
           <SettingRow
             title="单条追踪最大事件数"
-            description="默认 2000，可按需调高以记录长流程（建议逐步提升避免写入过大）"
+            description="默认 2000，可按需调高以记录长流程（范围 100-200000，建议逐步提升避免写入过大）"
             align="start"
           >
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -289,7 +289,7 @@ export function SystemMonitoringPage() {
 
           <SettingRow
             title="心跳超时告警（毫秒）"
-            description="超过该时长未收到上游片段时会写入 keepalive_timeout 事件"
+            description="超过该时长未收到上游片段时会写入 keepalive_timeout 事件（范围 1000-600000 ms）"
             align="start"
           >
             <div className="flex w-full flex-wrap items-center justify-end gap-2">

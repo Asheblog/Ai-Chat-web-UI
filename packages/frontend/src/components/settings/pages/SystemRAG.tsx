@@ -53,6 +53,18 @@ export function SystemRAGPage() {
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
   const [modelFilter, setModelFilter] = useState("")
 
+  const ranges = {
+    topK: { min: 1, max: 20 },
+    relevanceThreshold: { min: 0, max: 1 },
+    maxContextTokens: { min: 500, max: 32000 },
+    chunkSize: { min: 100, max: 8000 },
+    chunkOverlap: { min: 0, max: 1000 },
+    maxFileSizeMb: { min: 1, max: 200 },
+    retentionDays: { min: 1, max: 365 },
+    embeddingBatchSize: { min: 1, max: 128 },
+    embeddingConcurrency: { min: 1, max: 16 },
+  }
+
   useEffect(() => {
     fetchSystemSettings().catch(() => {})
     fetchModels().catch(() => {})
@@ -152,15 +164,36 @@ export function SystemRAGPage() {
         ragEnabled: enabled,
         ragEmbeddingConnectionId: selectedConnectionId ?? undefined,
         ragEmbeddingModelId: selectedModelId || undefined,
-        ragEmbeddingBatchSize: Math.max(1, Math.min(128, Math.floor(embeddingBatchSize || 1))),
-        ragEmbeddingConcurrency: Math.max(1, Math.min(16, Math.floor(embeddingConcurrency || 1))),
-        ragTopK: topK,
-        ragRelevanceThreshold: relevanceThreshold,
-        ragMaxContextTokens: maxContextTokens,
-        ragChunkSize: chunkSize,
-        ragChunkOverlap: chunkOverlap,
-        ragMaxFileSizeMb: maxFileSizeMb,
-        ragRetentionDays: retentionDays,
+        ragEmbeddingBatchSize: Math.max(
+          ranges.embeddingBatchSize.min,
+          Math.min(ranges.embeddingBatchSize.max, Math.floor(embeddingBatchSize || ranges.embeddingBatchSize.min)),
+        ),
+        ragEmbeddingConcurrency: Math.max(
+          ranges.embeddingConcurrency.min,
+          Math.min(ranges.embeddingConcurrency.max, Math.floor(embeddingConcurrency || ranges.embeddingConcurrency.min)),
+        ),
+        ragTopK: Math.max(ranges.topK.min, Math.min(ranges.topK.max, Math.floor(topK || ranges.topK.min))),
+        ragRelevanceThreshold: Math.max(
+          ranges.relevanceThreshold.min,
+          Math.min(ranges.relevanceThreshold.max, relevanceThreshold || ranges.relevanceThreshold.min),
+        ),
+        ragMaxContextTokens: Math.max(
+          ranges.maxContextTokens.min,
+          Math.min(ranges.maxContextTokens.max, Math.floor(maxContextTokens || ranges.maxContextTokens.min)),
+        ),
+        ragChunkSize: Math.max(ranges.chunkSize.min, Math.min(ranges.chunkSize.max, Math.floor(chunkSize || ranges.chunkSize.min))),
+        ragChunkOverlap: Math.max(
+          ranges.chunkOverlap.min,
+          Math.min(ranges.chunkOverlap.max, Math.floor(chunkOverlap || ranges.chunkOverlap.min)),
+        ),
+        ragMaxFileSizeMb: Math.max(
+          ranges.maxFileSizeMb.min,
+          Math.min(ranges.maxFileSizeMb.max, Math.floor(maxFileSizeMb || ranges.maxFileSizeMb.min)),
+        ),
+        ragRetentionDays: Math.max(
+          ranges.retentionDays.min,
+          Math.min(ranges.retentionDays.max, Math.floor(retentionDays || ranges.retentionDays.min)),
+        ),
       })
       toast({ title: "RAG 设置已保存", description: "已自动重载并生效" })
     } catch (e: any) {
@@ -288,7 +321,7 @@ export function SystemRAGPage() {
                     value={embeddingBatchSize}
                     onChange={(e) => setEmbeddingBatchSize(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">单次 embedding 请求包含的 chunk 数，越大越快但更易触发限流</p>
+                  <p className="text-xs text-muted-foreground">单次 embedding 请求包含的 chunk 数（{ranges.embeddingBatchSize.min}-{ranges.embeddingBatchSize.max}），越大越快但更易触发限流</p>
                 </div>
 
                 <div className="space-y-2">
@@ -300,7 +333,7 @@ export function SystemRAGPage() {
                     value={embeddingConcurrency}
                     onChange={(e) => setEmbeddingConcurrency(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">批量请求的并发执行数，建议逐步调大观察稳定性</p>
+                  <p className="text-xs text-muted-foreground">批量请求的并发执行数（{ranges.embeddingConcurrency.min}-{ranges.embeddingConcurrency.max}），建议逐步调大观察稳定性</p>
                 </div>
               </div>
             </div>
@@ -318,7 +351,7 @@ export function SystemRAGPage() {
                     value={topK}
                     onChange={(e) => setTopK(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">返回最相关的文档片段数</p>
+                  <p className="text-xs text-muted-foreground">返回最相关的文档片段数（{ranges.topK.min}-{ranges.topK.max}）</p>
                 </div>
 
                 <div className="space-y-2">
@@ -331,7 +364,7 @@ export function SystemRAGPage() {
                     value={relevanceThreshold}
                     onChange={(e) => setRelevanceThreshold(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">低于此分数的结果将被过滤</p>
+                  <p className="text-xs text-muted-foreground">低于此分数的结果将被过滤（范围 {ranges.relevanceThreshold.min}-{ranges.relevanceThreshold.max}）</p>
                 </div>
 
                 <div className="space-y-2">
@@ -343,7 +376,7 @@ export function SystemRAGPage() {
                     value={maxContextTokens}
                     onChange={(e) => setMaxContextTokens(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">注入到提示词的最大 token 数</p>
+                  <p className="text-xs text-muted-foreground">注入到提示词的最大 token 数（{ranges.maxContextTokens.min}-{ranges.maxContextTokens.max}）</p>
                 </div>
               </div>
             </div>
@@ -361,7 +394,7 @@ export function SystemRAGPage() {
                     value={chunkSize}
                     onChange={(e) => setChunkSize(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">每个文档片段的字符数</p>
+                  <p className="text-xs text-muted-foreground">每个文档片段的字符数（{ranges.chunkSize.min}-{ranges.chunkSize.max}）</p>
                 </div>
 
                 <div className="space-y-2">
@@ -373,7 +406,7 @@ export function SystemRAGPage() {
                     value={chunkOverlap}
                     onChange={(e) => setChunkOverlap(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">相邻片段的重叠字符数</p>
+                  <p className="text-xs text-muted-foreground">相邻片段的重叠字符数（{ranges.chunkOverlap.min}-{ranges.chunkOverlap.max}）</p>
                 </div>
 
                 <div className="space-y-2">
@@ -385,7 +418,7 @@ export function SystemRAGPage() {
                     value={maxFileSizeMb}
                     onChange={(e) => setMaxFileSizeMb(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted-foreground">允许上传的单文件最大大小</p>
+                  <p className="text-xs text-muted-foreground">允许上传的单文件最大大小（{ranges.maxFileSizeMb.min}-{ranges.maxFileSizeMb.max} MB）</p>
                 </div>
               </div>
             </div>
@@ -402,7 +435,7 @@ export function SystemRAGPage() {
                   value={retentionDays}
                   onChange={(e) => setRetentionDays(Number(e.target.value))}
                 />
-                <p className="text-xs text-muted-foreground">超过此天数的未使用文档将被自动清理</p>
+                <p className="text-xs text-muted-foreground">超过此天数的未使用文档将被自动清理（{ranges.retentionDays.min}-{ranges.retentionDays.max} 天）</p>
               </div>
             </div>
           </>

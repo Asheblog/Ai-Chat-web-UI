@@ -215,14 +215,14 @@ export function SystemReasoningPage() {
 
         <SettingRow
           title="流式增量聚合（分片大小）"
-          description="越大则刷新更平滑但延迟稍增"
+          description="越大则刷新更平滑但延迟稍增（范围 1-100）"
         >
           <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-full sm:w-32 text-right" />
         </SettingRow>
 
         <SettingRow
           title="正文 flush 间隔（毫秒）"
-          description="推荐 800ms；0 表示仅按分片大小触发"
+          description="推荐 800ms；0 表示仅按分片大小触发（范围 0-3600000 ms）"
         >
           <Input
             type="number"
@@ -236,7 +236,7 @@ export function SystemReasoningPage() {
 
         <SettingRow
           title="推理 flush 间隔（毫秒）"
-          description="推荐 1000ms；0 表示仅当标签闭合时推送"
+          description="推荐 1000ms；0 表示仅当标签闭合时推送（范围 0-3600000 ms）"
         >
           <Input
             type="number"
@@ -250,7 +250,7 @@ export function SystemReasoningPage() {
 
         <SettingRow
           title="Keepalive 间隔（毫秒）"
-          description="推荐 5000ms；0 表示仅在推理 keepalive 触发"
+          description="推荐 5000ms；0 表示仅在推理 keepalive 触发（范围 0-3600000 ms）"
         >
           <Input
             type="number"

@@ -128,10 +128,10 @@ export function SystemNetworkPage() {
         </div>
         <SettingRow
           title="SSE 心跳间隔"
-          description={`推荐 10–15 秒，当前约 ${msToSec(hbMs)}`}
+          description={`推荐 10–15 秒，当前约 ${msToSec(hbMs)}（范围 ${hbRange.min}-${hbRange.max} ms）`}
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input id="sseHeartbeat" type="number" value={hbMs} onChange={(e)=>setHbMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
+            <Input id="sseHeartbeat" type="number" min={hbRange.min} max={hbRange.max} value={hbMs} onChange={(e)=>setHbMs(Number(e.target.value||0))} className={!hbValid ? "w-full sm:w-32 text-right border-destructive" : "w-full sm:w-32 text-right"} />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setHbMs(15000)}>重置</Button>
           </div>
@@ -139,10 +139,10 @@ export function SystemNetworkPage() {
 
         <SettingRow
           title="上游最大空闲"
-          description={`建议 ≥ 心跳间隔，当前约 ${msToSec(idleMs)}`}
+          description={`建议 ≥ 心跳间隔，当前约 ${msToSec(idleMs)}（范围 ${idleRange.min}-${idleRange.max} ms）`}
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input id="providerMaxIdle" type="number" value={idleMs} onChange={(e)=>setIdleMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
+            <Input id="providerMaxIdle" type="number" min={idleRange.min} max={idleRange.max} value={idleMs} onChange={(e)=>setIdleMs(Number(e.target.value||0))} className={!idleValid ? "w-full sm:w-32 text-right border-destructive" : "w-full sm:w-32 text-right"} />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setIdleMs(60000)}>重置</Button>
           </div>
@@ -150,10 +150,10 @@ export function SystemNetworkPage() {
 
         <SettingRow
           title="推理初始宽限"
-          description={`等待模型首帧前的最大空闲，当前约 ${msToSec(initialGraceMs)}`}
+          description={`等待模型首帧前的最大空闲，当前约 ${msToSec(initialGraceMs)}（范围 ${initialRange.min}-${initialRange.max} ms）`}
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input id="initialGrace" type="number" value={initialGraceMs} onChange={(e)=>setInitialGraceMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
+            <Input id="initialGrace" type="number" min={initialRange.min} max={initialRange.max} value={initialGraceMs} onChange={(e)=>setInitialGraceMs(Number(e.target.value||0))} className={!initialValid ? "w-full sm:w-32 text-right border-destructive" : "w-full sm:w-32 text-right"} />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setInitialGraceMs(120000)}>重置</Button>
           </div>
@@ -161,10 +161,10 @@ export function SystemNetworkPage() {
 
         <SettingRow
           title="推理阶段空闲上限"
-          description={`收到首帧后思考阶段的最长静默，当前约 ${msToSec(reasoningIdleMs)}`}
+          description={`收到首帧后思考阶段的最长静默，当前约 ${msToSec(reasoningIdleMs)}（范围 ${reasoningIdleRange.min}-${reasoningIdleRange.max} ms）`}
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input id="reasoningIdle" type="number" value={reasoningIdleMs} onChange={(e)=>setReasoningIdleMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
+            <Input id="reasoningIdle" type="number" min={reasoningIdleRange.min} max={reasoningIdleRange.max} value={reasoningIdleMs} onChange={(e)=>setReasoningIdleMs(Number(e.target.value||0))} className={!reasoningIdleValid ? "w-full sm:w-32 text-right border-destructive" : "w-full sm:w-32 text-right"} />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setReasoningIdleMs(300000)}>重置</Button>
           </div>
@@ -172,10 +172,10 @@ export function SystemNetworkPage() {
 
         <SettingRow
           title="推理保活提示间隔"
-          description='大于 0 时在推理静默期间周期性发送“思考中”事件'
+          description={`大于 0 时在推理静默期间周期性发送“思考中”事件（范围 ${keepaliveRange.min}-${keepaliveRange.max} ms）`}
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input id="keepalive" type="number" value={keepaliveMs} onChange={(e)=>setKeepaliveMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
+            <Input id="keepalive" type="number" min={keepaliveRange.min} max={keepaliveRange.max} value={keepaliveMs} onChange={(e)=>setKeepaliveMs(Number(e.target.value||0))} className={!keepaliveValid ? "w-full sm:w-32 text-right border-destructive" : "w-full sm:w-32 text-right"} />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setKeepaliveMs(0)}>禁用</Button>
           </div>
@@ -183,10 +183,10 @@ export function SystemNetworkPage() {
 
         <SettingRow
           title="上游总体超时"
-          description={`整个请求的最长等待时间，当前约 ${msToSec(timeoutMs)}`}
+          description={`整个请求的最长等待时间，当前约 ${msToSec(timeoutMs)}（范围 ${toutRange.min}-${toutRange.max} ms）`}
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input id="providerTimeout" type="number" value={timeoutMs} onChange={(e)=>setTimeoutMs(Number(e.target.value||0))} className="w-full sm:w-32 text-right" />
+            <Input id="providerTimeout" type="number" min={toutRange.min} max={toutRange.max} value={timeoutMs} onChange={(e)=>setTimeoutMs(Number(e.target.value||0))} className={!toutValid ? "w-full sm:w-32 text-right border-destructive" : "w-full sm:w-32 text-right"} />
             <span className="text-sm text-muted-foreground">ms</span>
             <Button size="sm" variant="outline" onClick={()=>setTimeoutMs(300000)}>重置</Button>
           </div>

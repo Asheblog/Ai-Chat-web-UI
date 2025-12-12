@@ -503,7 +503,7 @@ export function SystemWebSearchPage() {
         className={!agentIterationValid ? "border-destructive" : undefined}
       />
       <p className="text-xs text-muted-foreground">
-        建议根据资源情况设置合适次数，0 表示允许模型无限次调用工具。
+        建议根据资源情况设置合适次数（范围 {agentIterationRange.min}-{agentIterationRange.max}），0 表示允许模型无限次调用工具。
       </p>
     </div>
   </div>

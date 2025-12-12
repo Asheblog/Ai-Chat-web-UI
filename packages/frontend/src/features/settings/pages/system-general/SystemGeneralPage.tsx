@@ -418,7 +418,7 @@ export function SystemGeneralPage() {
 
         <SettingRow
           title="全局系统提示词"
-          description="留空则不注入；会话未设置时自动继承"
+          description="留空则不注入；会话未设置时自动继承（默认上限 12000 字符，可通过后端环境变量调整）"
           align="start"
         >
           <div className="w-full space-y-2">
@@ -489,7 +489,7 @@ export function SystemGeneralPage() {
               <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">存储优化</Badge>
             </div>
           )}
-          description="超过此天数的聊天图片将被自动清理（设置为 0 表示永久保留）"
+          description="超过此天数的聊天图片将被自动清理（0 表示永久保留，范围 0-3650 天）"
           align="start"
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -510,7 +510,7 @@ export function SystemGeneralPage() {
 
         <SettingRow
           title="单条消息 AI 回答上限"
-          description="同一条用户消息最多保留的 AI 回答数量，超过后自动删除最旧的回答"
+          description="同一条用户消息最多保留的 AI 回答数量（范围 1-20），超过后自动删除最旧的回答"
           align="start"
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -531,7 +531,7 @@ export function SystemGeneralPage() {
 
         <SettingRow
           title="匿名访客数据保留天数"
-          description="匿名用户的聊天记录保留时长（设置为 0 表示永久保留）"
+          description="匿名用户的聊天记录保留时长（0 表示永久保留，范围 0-15 天）"
           align="start"
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
