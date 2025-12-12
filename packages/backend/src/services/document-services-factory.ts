@@ -45,11 +45,17 @@ export interface DocumentServices {
   cleanupScheduler: CleanupScheduler
 }
 
+function resolveDefaultDataDir(): string {
+  const fromEnv = process.env.APP_DATA_DIR || process.env.RAG_DATA_DIR || process.env.DATA_DIR
+  if (fromEnv && String(fromEnv).trim()) return String(fromEnv).trim()
+  return './data'
+}
+
 /**
  * 默认配置
  */
 export const DEFAULT_DOCUMENT_SERVICES_CONFIG: DocumentServicesConfig = {
-  dataDir: './data',
+  dataDir: resolveDefaultDataDir(),
   embedding: {
     engine: 'openai',
     model: 'text-embedding-3-small',

@@ -86,6 +86,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     pickDocuments,
     onDocumentFilesSelected,
     removeDocument,
+    cancelDocument,
   } = useChatComposer()
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
@@ -196,6 +197,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     pickDocuments,
     onDocumentFilesSelected,
     onRemoveDocument: removeDocument,
+    onCancelDocument: cancelDocument,
   }
 
   return {

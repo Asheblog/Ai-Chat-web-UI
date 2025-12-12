@@ -5,6 +5,7 @@ FROM node:20-slim AS base
 ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 ENV DATABASE_URL="file:/app/data/app.db"
+ENV APP_DATA_DIR="/app/data"
 
 # 安装必要的系统依赖（最小化安装）
 RUN apt-get update && \
@@ -91,6 +92,7 @@ ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 ENV DATABASE_URL="file:/app/data/app.db"
+ENV APP_DATA_DIR="/app/data"
 
 # 只安装运行时必需的系统依赖
 RUN apt-get update && \

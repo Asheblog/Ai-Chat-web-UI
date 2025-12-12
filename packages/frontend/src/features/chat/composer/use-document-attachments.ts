@@ -15,6 +15,8 @@ export interface AttachedDocument {
   fileSize: number
   status: 'uploading' | 'pending' | 'processing' | 'ready' | 'error'
   progress?: number
+  processingStage?: string
+  processingProgress?: number
   errorMessage?: string
 }
 
@@ -76,9 +78,19 @@ export const useDocumentAttachments = ({
             mimeType: doc.mimeType,
             fileSize: doc.fileSize,
             status: doc.status as AttachedDocument['status'],
+            processingStage: doc.processingStage,
+            processingProgress: doc.processingProgress,
+            errorMessage: doc.errorMessage,
           }))
           setDocuments(loadedDocs)
           onDocumentsChange?.(loadedDocs)
+
+          // 对未完成的文档持续轮询，确保刷新页面后仍能更新状态
+          loadedDocs.forEach((d) => {
+            if (d.status === 'pending' || d.status === 'processing') {
+              pollDocumentStatus(d.id)
+            }
+          })
         }
       } catch (error) {
         // 静默处理加载错误（可能是 RAG 未启用）
@@ -262,9 +274,6 @@ export const useDocumentAttachments = ({
 
   const pollDocumentStatus = useCallback(
     async (documentId: number) => {
-      const maxRetries = 60 // 最多轮询 60 次（约 2 分钟）
-      let retries = 0
-
       const poll = async () => {
         try {
           const response = await fetch(`/api/documents/${documentId}`, {
@@ -278,20 +287,24 @@ export const useDocumentAttachments = ({
             updateDocuments((prev) =>
               prev.map((d) =>
                 d.id === documentId
-                  ? { ...d, status, errorMessage: result.data.errorMessage }
+                  ? {
+                      ...d,
+                      status,
+                      processingStage: result.data.processingStage,
+                      processingProgress: result.data.processingProgress,
+                      errorMessage: result.data.errorMessage,
+                    }
                   : d
               )
             )
 
             if (status === 'pending' || status === 'processing') {
-              if (retries < maxRetries) {
-                retries++
-                setTimeout(poll, 2000)
-              }
+              setTimeout(poll, 2000)
             }
           }
         } catch {
           // 忽略轮询错误
+          setTimeout(poll, 4000)
         }
       }
 
@@ -299,6 +312,22 @@ export const useDocumentAttachments = ({
       setTimeout(poll, 2000)
     },
     [updateDocuments]
+  )
+
+  const cancelDocument = useCallback(
+    async (documentId: number) => {
+      try {
+        await fetch(`/api/documents/${documentId}/cancel`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        // 取消后会被后端标记为 error
+        pollDocumentStatus(documentId)
+      } catch {
+        // 忽略取消错误
+      }
+    },
+    [pollDocumentStatus]
   )
 
   const removeDocument = useCallback(
@@ -338,6 +367,7 @@ export const useDocumentAttachments = ({
     pickDocuments,
     onFilesSelected,
     removeDocument,
+    cancelDocument,
     clearDocuments,
   }
 }

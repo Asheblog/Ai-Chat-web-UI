@@ -40,6 +40,21 @@ function isWin() {
   return process.platform === 'win32'
 }
 
+function isWSL() {
+  if (process.platform !== 'linux') return false
+  if (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP) return true
+  try {
+    const version = fs.readFileSync('/proc/version', 'utf8')
+    return /microsoft/i.test(version)
+  } catch (_) {
+    return false
+  }
+}
+
+function isOnDrvfs(cwdPath) {
+  return typeof cwdPath === 'string' && /^\/mnt\/[a-z]\//i.test(cwdPath)
+}
+
 function commandExists(cmd) {
   try {
     const checker = isWin() ? 'where' : 'which'
@@ -67,7 +82,9 @@ function runAsync(label, cmd, args, opts = {}) {
   })
 
   function prefix(type) {
-    return type === 'backend' ? '[backend] ' : '[frontend] '
+    if (type === 'backend') return '[backend] '
+    if (type === 'worker') return '[worker] '
+    return '[frontend] '
   }
 
   child.stdout.on('data', (data) => {
@@ -302,6 +319,8 @@ function maybeDbFilePaths(dbUrl) {
   const ret = []
   if (!dbUrl || !dbUrl.startsWith('file:')) return ret
   let p = dbUrl.replace(/^file:/, '')
+  // 去掉 query 参数（如 ?connection_limit=1）
+  p = p.split('?')[0]
   // 去掉可能的引号
   p = p.replace(/^\"|\"$/g, '')
   if (p.startsWith('./')) {
@@ -478,9 +497,73 @@ async function main() {
 
   // 兜底：仅在开发模式设置默认 SQLite 路径
   if (mode === 'dev') {
-    if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
-      process.env.DATABASE_URL = 'file:./data/dev.db'
-      logWarn('未检测到 DATABASE_URL，已为开发环境注入默认值 file:./data/dev.db')
+    const rawDbUrl = String(process.env.DATABASE_URL || '').trim()
+
+    const shouldRelocateSqliteOnWSL =
+      isWSL() &&
+      isOnDrvfs(process.cwd()) &&
+      rawDbUrl.startsWith('file:')
+
+    const ensureConnectionLimit1 = (url) => {
+      if (!url || !String(url).startsWith('file:')) return url
+      const u = String(url)
+      if (/connection_limit\s*=\s*\d+/i.test(u)) return u
+      return u.includes('?') ? `${u}&connection_limit=1` : `${u}?connection_limit=1`
+    }
+
+    const relocateToLinuxFs = (preferFileName) => {
+      const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
+      const defaultDataDir = path.join(homeDir, '.aichat', 'data')
+      if (!process.env.APP_DATA_DIR || !String(process.env.APP_DATA_DIR).trim()) {
+        process.env.APP_DATA_DIR = defaultDataDir
+      }
+      try {
+        fs.mkdirSync(process.env.APP_DATA_DIR, { recursive: true })
+      } catch (_) {
+        // ignore mkdir error; Prisma will surface if path truly invalid
+      }
+      const targetName = (preferFileName && String(preferFileName).trim()) ? String(preferFileName).trim() : 'dev.db'
+      const devDbPath = path.join(process.env.APP_DATA_DIR, targetName)
+      process.env.DATABASE_URL = ensureConnectionLimit1(`file:${devDbPath}`)
+      logWarn(`检测到 WSL + Windows 挂载盘，已将开发数据库迁移到 Linux 文件系统：${process.env.DATABASE_URL}`)
+    }
+
+    if (!rawDbUrl) {
+      if (shouldRelocateSqliteOnWSL) {
+        relocateToLinuxFs()
+      } else {
+        process.env.DATABASE_URL = ensureConnectionLimit1('file:./data/dev.db')
+        logWarn('未检测到 DATABASE_URL，已为开发环境注入默认值 file:./data/dev.db')
+      }
+    } else if (shouldRelocateSqliteOnWSL) {
+      // WSL 场景下，如果 file: 路径是相对路径或绝对落在 /mnt/*，自动迁移
+      const filePath = rawDbUrl.replace(/^file:/, '').replace(/^\"|\"$/g, '')
+      const isRelative = !filePath.startsWith('/')
+      const isDrvfsAbs = /^\/mnt\/[a-z]\//i.test(filePath)
+      if (isRelative || isDrvfsAbs) {
+        const preferName = (() => {
+          try {
+            const clean = filePath.split('?')[0]
+            const name = path.basename(clean)
+            return name || undefined
+          } catch (_) {
+            return undefined
+          }
+        })()
+        relocateToLinuxFs(preferName)
+      } else if (!process.env.APP_DATA_DIR || !String(process.env.APP_DATA_DIR).trim()) {
+        // 用户显式给了 ext4 上的绝对 DB 路径，则默认以其目录作为 APP_DATA_DIR
+        process.env.APP_DATA_DIR = path.dirname(filePath)
+      }
+      process.env.DATABASE_URL = ensureConnectionLimit1(process.env.DATABASE_URL)
+    } else {
+      // 非 WSL 迁移场景，SQLite 仍建议 connection_limit=1
+      process.env.DATABASE_URL = ensureConnectionLimit1(process.env.DATABASE_URL)
+    }
+
+    // 帮助定位 WSL/挂载盘下的 SQLite 问题：明确打印最终 DB 与数据目录（不含敏感信息）
+    if (isWSL() && isOnDrvfs(process.cwd())) {
+      logInfo(`开发模式 DB 已就绪：DATABASE_URL=${process.env.DATABASE_URL} APP_DATA_DIR=${process.env.APP_DATA_DIR || ''}`)
     }
   } else {
     if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
@@ -518,14 +601,17 @@ async function main() {
 
   if (mode === 'dev') {
     // 并发启动前后端（开发）
-    logInfo('并发启动前端与后端（开发模式）...')
+    logInfo('并发启动前端、后端与文档解析 Worker（开发模式）...')
     const be = workspaceScript(pm, '@aichat/backend', 'dev')
+    const we = workspaceScript(pm, '@aichat/backend', 'dev:worker')
     const fe = workspaceScript(pm, '@aichat/frontend', 'dev')
     const backend = runAsync('backend', be.cmd, be.args, { cwd: backendCwd })
+    const worker = runAsync('worker', we.cmd, we.args, { cwd: backendCwd })
     const frontend = runAsync('frontend', fe.cmd, fe.args, { cwd: frontendCwd })
     const shutdown = () => {
       logInfo('收到退出信号，正在关闭子进程...')
       if (backend.pid) killProcessTree(backend.pid)
+      if (worker.pid) killProcessTree(worker.pid)
       if (frontend.pid) killProcessTree(frontend.pid)
       process.exit(0)
     }
@@ -543,12 +629,15 @@ async function main() {
       process.exit(1)
     }
     const be = workspaceScript(pm, '@aichat/backend', 'start')
+    const we = workspaceScript(pm, '@aichat/backend', 'start:worker')
     const fe = workspaceScript(pm, '@aichat/frontend', 'start')
     const backend = runAsync('backend', be.cmd, be.args, { cwd: backendCwd })
+    const worker = runAsync('worker', we.cmd, we.args, { cwd: backendCwd })
     const frontend = runAsync('frontend', fe.cmd, fe.args, { cwd: frontendCwd })
     const shutdown = () => {
       logInfo('收到退出信号，正在关闭生产服务...')
       if (backend.pid) killProcessTree(backend.pid)
+      if (worker.pid) killProcessTree(worker.pid)
       if (frontend.pid) killProcessTree(frontend.pid)
       process.exit(0)
     }

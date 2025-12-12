@@ -213,6 +213,7 @@ export function useChatComposer() {
     pickDocuments,
     onFilesSelected: onDocumentFilesSelected,
     removeDocument,
+    cancelDocument,
     clearDocuments,
   } = useDocumentAttachments({
     sessionId: currentSession?.id ?? null,
@@ -474,6 +475,7 @@ export function useChatComposer() {
     pickDocuments,
     onDocumentFilesSelected,
     removeDocument,
+    cancelDocument,
     clearDocuments,
   }
 }

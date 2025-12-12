@@ -101,6 +101,7 @@ export const useWelcomeScreenViewModel = () => {
     pickDocuments,
     onFilesSelected: onDocumentFilesSelected,
     removeDocument,
+    cancelDocument,
     clearDocuments,
   } = useDocumentAttachments({
     sessionId: null,
@@ -572,6 +573,7 @@ export const useWelcomeScreenViewModel = () => {
         onPickImages: handlePickImages,
         documents: attachedDocuments,
         onRemoveDocument: removeDocument,
+        onCancelDocument: cancelDocument,
         onPickDocuments: pickDocuments,
         onDocumentFilesSelected,
         documentInputRef,

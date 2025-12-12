@@ -78,7 +78,7 @@ async function runWorker() {
       })
 
       try {
-        await services.documentService.processDocument(job.documentId)
+        await services.documentService.processDocument(job.documentId, undefined, job.id)
 
         await prisma.documentProcessingJob.update({
           where: { id: job.id },
@@ -98,6 +98,20 @@ async function runWorker() {
         })
         const attempts = fresh?.attempts ?? 1
         const maxAttempts = fresh?.maxAttempts ?? 2
+
+        if (fresh?.status === 'canceled') {
+          await prisma.documentProcessingJob.update({
+            where: { id: job.id },
+            data: {
+              status: 'canceled',
+              lastError: message,
+              lockedAt: null,
+              nextRunAt: null,
+            },
+          })
+          log.info('[DocumentWorker] Job canceled', { jobId: job.id })
+          continue
+        }
 
         if (attempts >= maxAttempts) {
           await prisma.documentProcessingJob.update({
@@ -139,4 +153,3 @@ runWorker().catch((err) => {
   log.error('[DocumentWorker] Fatal error', err)
   process.exit(1)
 })
-

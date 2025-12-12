@@ -3,7 +3,7 @@
  */
 
 import React, { useMemo } from 'react'
-import { Paperclip, File, FileText, Table, X, Loader2, AlertCircle, Check } from 'lucide-react'
+import { Paperclip, File, FileText, Table, X, Loader2, AlertCircle, Check, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
@@ -100,6 +100,25 @@ function getStatusText(status: AttachedDocument['status']) {
   }
 }
 
+function getStageText(stage?: string): string {
+  switch (stage) {
+    case 'parsing':
+      return '解析中'
+    case 'chunking':
+      return '分块中'
+    case 'embedding':
+      return '生成向量中'
+    case 'storing':
+      return '写入中'
+    case 'done':
+      return '就绪'
+    case 'error':
+      return '失败'
+    default:
+      return ''
+  }
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -109,12 +128,19 @@ function formatFileSize(bytes: number): string {
 interface DocumentPreviewItemProps {
   document: AttachedDocument
   onRemove: () => void
+  onCancel?: () => void
 }
 
 const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
   document,
   onRemove,
+  onCancel,
 }) => {
+  const stageText = getStageText(document.processingStage) || getStatusText(document.status)
+  const progress = typeof document.processingProgress === 'number'
+    ? Math.max(0, Math.min(100, document.processingProgress))
+    : undefined
+  const canCancel = (document.status === 'pending' || document.status === 'processing') && typeof onCancel === 'function'
   return (
     <div
       className={cn(
@@ -134,7 +160,7 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
           <span>{formatFileSize(document.fileSize)}</span>
           <span className="flex items-center gap-1">
             {getStatusIcon(document.status)}
-            {getStatusText(document.status)}
+            {progress != null ? `${stageText} ${progress}%` : stageText}
           </span>
           {document.errorMessage && (
             <span className="text-red-500 truncate" title={document.errorMessage}>
@@ -142,6 +168,14 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
             </span>
           )}
         </div>
+        {progress != null && (document.status === 'pending' || document.status === 'processing') && (
+          <div className="mt-1 h-1.5 w-full rounded bg-muted">
+            <div
+              className="h-1.5 rounded bg-blue-500 transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
       </div>
 
       <Button
@@ -149,9 +183,10 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
         variant="ghost"
         size="icon"
         className="h-6 w-6 rounded-full hover:bg-destructive/10 hover:text-destructive"
-        onClick={onRemove}
+        onClick={canCancel ? onCancel : onRemove}
+        title={canCancel ? '取消处理' : '移除'}
       >
-        <X className="h-3 w-3" />
+        {canCancel ? <Ban className="h-3 w-3" /> : <X className="h-3 w-3" />}
       </Button>
     </div>
   )
@@ -160,11 +195,13 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
 interface DocumentPreviewListProps {
   documents: AttachedDocument[]
   onRemove: (documentId: number) => void
+  onCancel?: (documentId: number) => void
 }
 
 export const DocumentPreviewList: React.FC<DocumentPreviewListProps> = ({
   documents,
   onRemove,
+  onCancel,
 }) => {
   if (documents.length === 0) return null
 
@@ -175,6 +212,7 @@ export const DocumentPreviewList: React.FC<DocumentPreviewListProps> = ({
           key={doc.id}
           document={doc}
           onRemove={() => onRemove(doc.id)}
+          onCancel={onCancel ? () => onCancel(doc.id) : undefined}
         />
       ))}
     </div>
@@ -184,6 +222,7 @@ export const DocumentPreviewList: React.FC<DocumentPreviewListProps> = ({
 interface AttachmentTrayProps {
   documents: AttachedDocument[]
   onRemove: (documentId: number) => void
+  onCancel?: (documentId: number) => void
   open: boolean
   onOpenChange: (open: boolean) => void
   title?: string
@@ -195,6 +234,7 @@ interface AttachmentTrayProps {
 export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
   documents,
   onRemove,
+  onCancel,
   open,
   onOpenChange,
   title = '附件管理',
@@ -223,7 +263,7 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
               )}
             </span>
           </div>
-          <DocumentPreviewList documents={documents} onRemove={onRemove} />
+          <DocumentPreviewList documents={documents} onRemove={onRemove} onCancel={onCancel} />
           <div className="flex justify-end">
             <SheetClose asChild>
               <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

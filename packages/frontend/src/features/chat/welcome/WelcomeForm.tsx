@@ -41,6 +41,7 @@ interface WelcomeFormProps {
       onPickImages: () => void
       documents: AttachedDocument[]
       onRemoveDocument: (id: number) => void
+      onCancelDocument: (id: number) => void
       onPickDocuments: () => void
       onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
       documentInputRef: RefObject<HTMLInputElement>
@@ -171,6 +172,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         <AttachmentTray
           documents={attachments.documents}
           onRemove={attachments.onRemoveDocument}
+          onCancel={attachments.onCancelDocument}
           open={attachmentViewerOpen}
           onOpenChange={setAttachmentViewerOpen}
         />

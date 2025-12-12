@@ -10,7 +10,7 @@ import crypto from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 
 import { loadDocument, isSupportedMimeType } from '../../modules/document/loaders'
-import { splitText, estimateTokenCount, type TextChunk } from './chunking-service'
+import { iterateTextChunks, estimateTokenCount, type TextChunk } from './chunking-service'
 import { EmbeddingService, type EmbeddingConfig } from './embedding-service'
 import { type VectorDBClient, type VectorItem } from '../../modules/document/vector'
 
@@ -174,7 +174,8 @@ export class DocumentService {
    */
   async processDocument(
     documentId: number,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    jobId?: number
   ): Promise<void> {
     const report = (progress: ProcessingProgress) => {
       if (onProgress) {
@@ -192,6 +193,14 @@ export class DocumentService {
     }
 
     try {
+      const checkCanceled = async () => {
+        if (!jobId) return
+        const job = await this.prisma.documentProcessingJob.findUnique({ where: { id: jobId } })
+        if (job?.status === 'canceled') {
+          throw new Error('Document processing canceled')
+        }
+      }
+
       // 更新状态为处理中
       await this.prisma.document.update({
         where: { id: documentId },
@@ -224,63 +233,108 @@ export class DocumentService {
       // 合并所有内容
       const fullText = contents.map((c) => c.pageContent).join('\n\n')
 
-      // 2. 分块
-      report({ stage: 'chunking', progress: 30, message: '正在分块...' })
-      const chunks = splitText(fullText, {
+      // 2. 流式分块 + 增量 embedding/写库
+      const totalChars = fullText.length
+      report({ stage: 'chunking', progress: 25, message: '正在分块并生成 embedding...' })
+
+      // 断点续跑：跳过已存在的 chunks
+      const existingChunkCount = await this.prisma.documentChunk.count({ where: { documentId } })
+      const startIndex = existingChunkCount
+
+      const embeddingConfig = this.embeddingService.getConfig()
+      const batchSize = Math.max(1, Math.floor(embeddingConfig.batchSize || 1))
+
+      let batchChunks: TextChunk[] = []
+      let batchTexts: string[] = []
+      let processedChars = 0
+      let totalChunksProcessed = startIndex
+
+      const flushBatch = async () => {
+        if (batchTexts.length === 0) return
+        await checkCanceled()
+
+        report({
+          stage: 'embedding',
+          progress: 30 + Math.floor(60 * (processedChars / Math.max(1, totalChars))),
+          message: `正在生成 embedding (${totalChunksProcessed + batchTexts.length} 块)...`,
+        })
+
+        const embeddings = await this.embeddingService.embedBatch(batchTexts)
+
+        if (!embeddings || embeddings.length !== batchTexts.length) {
+          throw new Error(`Embedding count mismatch: expected ${batchTexts.length}, got ${embeddings?.length ?? 0}`)
+        }
+
+        for (let i = 0; i < embeddings.length; i++) {
+          if (!embeddings[i] || !Array.isArray(embeddings[i]) || embeddings[i].length === 0) {
+            console.error(`[Document] Invalid embedding at index ${i}:`, embeddings[i])
+            throw new Error(`Invalid embedding at chunk ${batchChunks[i].index}: embedding is missing or empty`)
+          }
+        }
+
+        const vectorItems: VectorItem[] = batchChunks.map((chunk, i) => ({
+          id: `${documentId}_${chunk.index}`,
+          text: chunk.content,
+          vector: embeddings[i],
+          metadata: {
+            documentId,
+            chunkIndex: chunk.index,
+            ...chunk.metadata,
+          },
+        }))
+
+        await this.vectorDB.insert(document.collectionName!, vectorItems)
+
+        const chunkRecords = batchChunks.map((chunk) => ({
+          documentId,
+          chunkIndex: chunk.index,
+          content: chunk.content,
+          tokenCount: estimateTokenCount(chunk.content),
+          metadata: JSON.stringify(chunk.metadata),
+          vectorId: `${documentId}_${chunk.index}`,
+        }))
+
+        await this.prisma.documentChunk.createMany({
+          data: chunkRecords,
+          skipDuplicates: true,
+        })
+
+        totalChunksProcessed += batchChunks.length
+        batchChunks = []
+        batchTexts = []
+
+        report({
+          stage: 'storing',
+          progress: 30 + Math.floor(60 * (processedChars / Math.max(1, totalChars))),
+          message: '正在存储到向量数据库...',
+        })
+      }
+
+      for (const chunk of iterateTextChunks(fullText, {
         chunkSize: this.config.chunkSize,
         chunkOverlap: this.config.chunkOverlap,
-      })
+      })) {
+        if (chunk.index < startIndex) {
+          processedChars = (chunk.metadata.endChar as number) || processedChars
+          continue
+        }
 
-      if (chunks.length === 0) {
-        throw new Error('No chunks created from document')
-      }
+        await checkCanceled()
 
-      // 3. 生成 embedding
-      report({ stage: 'embedding', progress: 50, message: `正在生成 embedding (${chunks.length} 块)...` })
-      const texts = chunks.map((c) => c.content)
-      const embeddings = await this.embeddingService.embedBatch(texts)
+        batchChunks.push(chunk)
+        batchTexts.push(chunk.content)
+        processedChars = (chunk.metadata.endChar as number) || processedChars
 
-      // 验证 embeddings 完整性
-      if (!embeddings || embeddings.length !== texts.length) {
-        throw new Error(`Embedding count mismatch: expected ${texts.length}, got ${embeddings?.length ?? 0}`)
-      }
-
-      for (let i = 0; i < embeddings.length; i++) {
-        if (!embeddings[i] || !Array.isArray(embeddings[i]) || embeddings[i].length === 0) {
-          console.error(`[Document] Invalid embedding at index ${i}:`, embeddings[i])
-          throw new Error(`Invalid embedding at chunk ${i}: embedding is missing or empty`)
+        if (batchTexts.length >= batchSize) {
+          await flushBatch()
         }
       }
 
-      // 4. 存储到向量数据库
-      report({ stage: 'storing', progress: 80, message: '正在存储到向量数据库...' })
+      await flushBatch()
 
-      const vectorItems: VectorItem[] = chunks.map((chunk, index) => ({
-        id: `${documentId}_${chunk.index}`,
-        text: chunk.content,
-        vector: embeddings[index],
-        metadata: {
-          documentId,
-          chunkIndex: chunk.index,
-          ...chunk.metadata,
-        },
-      }))
-
-      await this.vectorDB.insert(document.collectionName!, vectorItems)
-
-      // 5. 保存 chunks 到数据库
-      const chunkRecords = chunks.map((chunk, index) => ({
-        documentId,
-        chunkIndex: chunk.index,
-        content: chunk.content,
-        tokenCount: estimateTokenCount(chunk.content),
-        metadata: JSON.stringify(chunk.metadata),
-        vectorId: `${documentId}_${chunk.index}`,
-      }))
-
-      await this.prisma.documentChunk.createMany({
-        data: chunkRecords,
-      })
+      if (totalChunksProcessed === 0) {
+        throw new Error('No chunks created from document')
+      }
 
       // 6. 更新文档状态
       const pageCount = contents.reduce((acc, c) => {
@@ -294,7 +348,7 @@ export class DocumentService {
           processingStage: 'done',
           processingProgress: 100,
           processingFinishedAt: new Date(),
-          chunkCount: chunks.length,
+          chunkCount: totalChunksProcessed,
           metadata: JSON.stringify({
             pageCount,
             charCount: fullText.length,
@@ -382,6 +436,34 @@ export class DocumentService {
     return this.prisma.documentChunk.findMany({
       where: { documentId },
       orderBy: { chunkIndex: 'asc' },
+    })
+  }
+
+  /**
+   * 取消文档处理任务
+   */
+  async cancelProcessing(documentId: number): Promise<void> {
+    await this.prisma.documentProcessingJob.updateMany({
+      where: {
+        documentId,
+        status: { in: ['pending', 'running', 'retrying'] },
+      },
+      data: {
+        status: 'canceled',
+        lockedAt: null,
+        nextRunAt: null,
+      },
+    })
+
+    await this.prisma.document.update({
+      where: { id: documentId },
+      data: {
+        status: 'error',
+        errorMessage: '用户已取消处理',
+        processingStage: 'error',
+        processingProgress: 0,
+        processingFinishedAt: new Date(),
+      },
     })
   }
 

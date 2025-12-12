@@ -178,6 +178,8 @@ export const createDocumentsApi = () => {
           mimeType: document.mimeType,
           fileSize: document.fileSize,
           status: document.status,
+          processingStage: (document as any).processingStage,
+          processingProgress: (document as any).processingProgress,
           errorMessage: document.errorMessage,
           chunkCount: document.chunkCount,
           metadata: document.metadata,
@@ -188,6 +190,39 @@ export const createDocumentsApi = () => {
     } catch (error) {
       console.error('[Documents] Get error:', error)
       return c.json<ApiResponse>({ success: false, error: 'Failed to get document' }, 500)
+    }
+  })
+
+  /**
+   * 取消文档处理
+   */
+  router.post('/:id/cancel', actorMiddleware, requireRAGEnabled, async (c) => {
+    try {
+      const documentId = parseInt(c.req.param('id'), 10)
+      if (isNaN(documentId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
+      }
+
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
+      const document = await documentService!.getDocument(documentId)
+      if (!document) {
+        return c.json<ApiResponse>({ success: false, error: 'Document not found' }, 404)
+      }
+
+      const actor = c.get('actor') as Actor
+      if (actor.type === 'user' && document.userId !== actor.id) {
+        return c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403)
+      }
+      if (actor.type === 'anonymous' && document.anonymousKey !== actor.key) {
+        return c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403)
+      }
+
+      await documentService!.cancelProcessing(documentId)
+
+      return c.json<ApiResponse>({ success: true, data: { canceled: true } })
+    } catch (error) {
+      console.error('[Documents] Cancel error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to cancel document' }, 500)
     }
   })
 

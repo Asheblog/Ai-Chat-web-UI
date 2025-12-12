@@ -199,6 +199,70 @@ export function splitText(
 }
 
 /**
+ * 流式分块生成器（增量产出 chunk，避免一次性持有全部 chunk/embedding）
+ *
+ * 规则：
+ * - 每次取 [pos, pos+chunkSize] 窗口
+ * - 在窗口内按 separators 的优先级寻找最后一个分隔符作为切点
+ * - 若找不到分隔符则硬切 chunkSize
+ * - 下一段从 cut - chunkOverlap 开始
+ */
+export function* iterateTextChunks(
+  text: string,
+  options: ChunkingOptions = { chunkSize: 1500, chunkOverlap: 100 }
+): Generator<TextChunk> {
+  const chunkSize = options.chunkSize
+  const chunkOverlap = options.chunkOverlap
+  const separators = options.separators || DEFAULT_SEPARATORS
+
+  if (chunkOverlap >= chunkSize) {
+    throw new Error('chunkOverlap must be less than chunkSize')
+  }
+
+  const totalLen = text.length
+  let pos = 0
+  let index = 0
+
+  while (pos < totalLen) {
+    const windowEnd = Math.min(totalLen, pos + chunkSize)
+    let cut = windowEnd
+
+    for (const sep of separators) {
+      if (!sep) continue
+      const last = text.lastIndexOf(sep, windowEnd)
+      if (last > pos) {
+        cut = last + sep.length
+        break
+      }
+    }
+
+    if (cut <= pos) {
+      cut = windowEnd
+    }
+
+    const chunkText = text.slice(pos, cut)
+    if (chunkText.trim()) {
+      yield {
+        content: chunkText,
+        index,
+        metadata: {
+          startChar: pos,
+          endChar: cut,
+        },
+      }
+      index++
+    }
+
+    if (cut >= totalLen) {
+      break
+    }
+
+    // 保留 overlap，且确保前进至少 1 字符避免死循环
+    pos = Math.max(cut - chunkOverlap, pos + 1)
+  }
+}
+
+/**
  * 估算 token 数量（简单估算：中文1字≈1.5token，英文4字符≈1token）
  */
 export function estimateTokenCount(text: string): number {

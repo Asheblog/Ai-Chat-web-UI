@@ -50,16 +50,32 @@ export class SQLiteVectorClient implements VectorDBClient {
     }
 
     this.db = new Database(dataPath)
-    this.db.pragma('journal_mode = WAL')
+    // 注意：WSL/部分文件系统下，WAL 或锁操作可能出现 SQLITE_PROTOCOL。
+    // 这里使用 best-effort：初始化失败不应导致整个 RAG 服务不可用。
+    try {
+      this.db.pragma('journal_mode = WAL')
+    } catch (e) {
+      console.warn('[VectorDB] Failed to enable WAL journal mode, continuing:', (e as any)?.message || e)
+    }
+    // 多进程/多线程并发写入时，避免瞬时锁冲突直接失败
+    try {
+      this.db.pragma('busy_timeout = 5000')
+    } catch (e) {
+      console.warn('[VectorDB] Failed to set busy_timeout, continuing:', (e as any)?.message || e)
+    }
 
     // 创建元数据表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS vector_collections (
-        name TEXT PRIMARY KEY,
-        dimension INTEGER,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
+    try {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS vector_collections (
+          name TEXT PRIMARY KEY,
+          dimension INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+    } catch (e) {
+      console.warn('[VectorDB] Failed to init vector_collections table, continuing:', (e as any)?.message || e)
+    }
   }
 
   async hasCollection(collectionName: string): Promise<boolean> {

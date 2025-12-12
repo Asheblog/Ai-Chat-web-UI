@@ -81,6 +81,7 @@ export interface ChatComposerPanelProps {
   pickDocuments: () => void
   onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
   onRemoveDocument: (documentId: number) => void
+  onCancelDocument: (documentId: number) => void
 }
 
 export function ChatComposerPanel({
@@ -147,6 +148,7 @@ export function ChatComposerPanel({
   pickDocuments,
   onDocumentFilesSelected,
   onRemoveDocument,
+  onCancelDocument,
 }: ChatComposerPanelProps) {
   const portalRoot = useMemo(() => (typeof document !== 'undefined' ? document.body : null), [])
   const [expandOpen, setExpandOpen] = useState(false)
@@ -368,6 +370,7 @@ export function ChatComposerPanel({
         <AttachmentTray
           documents={attachedDocuments}
           onRemove={onRemoveDocument}
+          onCancel={onCancelDocument}
           open={attachmentViewerOpen}
           onOpenChange={setAttachmentViewerOpen}
         />
