@@ -299,6 +299,8 @@ export interface SystemSettings {
   ragEnabled?: boolean;
   ragEmbeddingConnectionId?: number | null;
   ragEmbeddingModelId?: string;
+  ragEmbeddingBatchSize?: number;
+  ragEmbeddingConcurrency?: number;
   ragTopK?: number;
   ragRelevanceThreshold?: number;
   ragMaxContextTokens?: number;

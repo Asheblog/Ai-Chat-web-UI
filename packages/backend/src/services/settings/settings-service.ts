@@ -214,6 +214,8 @@ export class SettingsService {
       rag_enabled: this.parseBoolean(settingsObj.rag_enabled, 'false'),
       rag_embedding_connection_id: settingsObj.rag_embedding_connection_id ? Number(settingsObj.rag_embedding_connection_id) : null,
       rag_embedding_model_id: settingsObj.rag_embedding_model_id || null,
+      rag_embedding_batch_size: this.parseIntInRange(settingsObj.rag_embedding_batch_size, '1', 1, 128, 1),
+      rag_embedding_concurrency: this.parseIntInRange(settingsObj.rag_embedding_concurrency, '1', 1, 16, 1),
       rag_top_k: this.parseIntInRange(settingsObj.rag_top_k, '5', 1, 20, 5),
       rag_relevance_threshold: this.parseFloat(settingsObj.rag_relevance_threshold, 0.3),
       rag_max_context_tokens: this.parseIntInRange(settingsObj.rag_max_context_tokens, '4000', 500, 32000, 4000),
@@ -319,6 +321,8 @@ export class SettingsService {
     assignIfNumber('rag_chunk_overlap', payload.rag_chunk_overlap)
     assignIfNumber('rag_max_file_size_mb', payload.rag_max_file_size_mb)
     assignIfNumber('rag_retention_days', payload.rag_retention_days)
+    assignIfNumber('rag_embedding_batch_size', payload.rag_embedding_batch_size)
+    assignIfNumber('rag_embedding_concurrency', payload.rag_embedding_concurrency)
 
     const boolFields = [
       'usage_emit',

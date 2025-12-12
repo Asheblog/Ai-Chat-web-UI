@@ -118,6 +118,8 @@ const systemSettingSchema = z.object({
   rag_enabled: z.boolean().optional(),
   rag_embedding_connection_id: z.number().int().positive().nullable().optional(),
   rag_embedding_model_id: z.string().min(1).max(128).optional(),
+  rag_embedding_batch_size: z.number().int().min(1).max(128).optional(),
+  rag_embedding_concurrency: z.number().int().min(1).max(16).optional(),
   rag_top_k: z.number().int().min(1).max(20).optional(),
   rag_relevance_threshold: z.number().min(0).max(1).optional(),
   rag_max_context_tokens: z.number().int().min(500).max(32000).optional(),
@@ -164,7 +166,20 @@ settings.put(
       await facade.updateSystemSettings(payload)
 
       // 如果更新了 RAG 相关设置，自动重载 RAG 服务
-      const ragKeys = ['rag_enabled', 'rag_embedding_connection_id', 'rag_embedding_model_id']
+      const ragKeys = [
+        'rag_enabled',
+        'rag_embedding_connection_id',
+        'rag_embedding_model_id',
+        'rag_embedding_batch_size',
+        'rag_embedding_concurrency',
+        'rag_top_k',
+        'rag_relevance_threshold',
+        'rag_max_context_tokens',
+        'rag_chunk_size',
+        'rag_chunk_overlap',
+        'rag_max_file_size_mb',
+        'rag_retention_days',
+      ]
       const hasRagChanges = ragKeys.some(key => key in payload)
       if (hasRagChanges) {
         const ragResult = await reloadRAGServices()

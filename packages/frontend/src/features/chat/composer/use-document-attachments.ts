@@ -33,14 +33,13 @@ interface UseDocumentAttachmentsOptions {
 const SUPPORTED_MIME_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
   'text/csv',
   'application/csv',
   'text/plain',
   'text/markdown',
 ]
 
-const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.csv', '.txt', '.md']
+const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.csv', '.txt', '.md']
 
 export const useDocumentAttachments = ({
   sessionId,
@@ -170,9 +169,13 @@ export const useDocumentAttachments = ({
       const validFiles: File[] = []
       for (const file of files) {
         if (!isSupportedFile(file)) {
+          const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+          const docHint = ext === '.doc'
+            ? `${file.name} 为旧版 .doc 格式，请先转为 .docx 再上传`
+            : `${file.name} 不是支持的文档格式`
           toast({
             title: '不支持的文件类型',
-            description: `${file.name} 不是支持的文档格式`,
+            description: docHint,
             variant: 'destructive',
           })
           continue

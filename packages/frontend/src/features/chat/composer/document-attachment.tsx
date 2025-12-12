@@ -51,7 +51,7 @@ export const DocumentAttachmentInput: React.FC<DocumentAttachmentInputProps> = (
     <input
       ref={inputRef}
       type="file"
-      accept=".pdf,.docx,.doc,.csv,.txt,.md"
+      accept=".pdf,.docx,.csv,.txt,.md"
       multiple
       className="hidden"
       onChange={onFilesSelected}

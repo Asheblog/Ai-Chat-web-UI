@@ -47,6 +47,8 @@ export function SystemRAGPage() {
   const [chunkOverlap, setChunkOverlap] = useState(100)
   const [maxFileSizeMb, setMaxFileSizeMb] = useState(50)
   const [retentionDays, setRetentionDays] = useState(30)
+  const [embeddingBatchSize, setEmbeddingBatchSize] = useState(1)
+  const [embeddingConcurrency, setEmbeddingConcurrency] = useState(1)
 
   const [modelSelectOpen, setModelSelectOpen] = useState(false)
   const [modelFilter, setModelFilter] = useState("")
@@ -61,6 +63,8 @@ export function SystemRAGPage() {
     setEnabled(Boolean(systemSettings.ragEnabled ?? false))
     setSelectedConnectionId(systemSettings.ragEmbeddingConnectionId ?? null)
     setSelectedModelId(systemSettings.ragEmbeddingModelId || "")
+    setEmbeddingBatchSize(Number(systemSettings.ragEmbeddingBatchSize ?? 1))
+    setEmbeddingConcurrency(Number(systemSettings.ragEmbeddingConcurrency ?? 1))
     setTopK(Number(systemSettings.ragTopK ?? 5))
     setRelevanceThreshold(Number(systemSettings.ragRelevanceThreshold ?? 0.3))
     setMaxContextTokens(Number(systemSettings.ragMaxContextTokens ?? 4000))
@@ -148,6 +152,8 @@ export function SystemRAGPage() {
         ragEnabled: enabled,
         ragEmbeddingConnectionId: selectedConnectionId ?? undefined,
         ragEmbeddingModelId: selectedModelId || undefined,
+        ragEmbeddingBatchSize: Math.max(1, Math.min(128, Math.floor(embeddingBatchSize || 1))),
+        ragEmbeddingConcurrency: Math.max(1, Math.min(16, Math.floor(embeddingConcurrency || 1))),
         ragTopK: topK,
         ragRelevanceThreshold: relevanceThreshold,
         ragMaxContextTokens: maxContextTokens,
@@ -156,7 +162,7 @@ export function SystemRAGPage() {
         ragMaxFileSizeMb: maxFileSizeMb,
         ragRetentionDays: retentionDays,
       })
-      toast({ title: "RAG 设置已保存", description: "重启后端后生效" })
+      toast({ title: "RAG 设置已保存", description: "已自动重载并生效" })
     } catch (e: any) {
       toast({
         title: "保存失败",
@@ -186,7 +192,7 @@ export function SystemRAGPage() {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           {hasEmbeddingModels
-            ? "请从已配置的连接中选择 Embedding 模型。修改设置后需要重启后端才能生效。"
+            ? "请从已配置的连接中选择 Embedding 模型。修改设置后会自动重载并生效。"
             : "未检测到专门的 Embedding 模型。请在「连接管理」中添加 Embedding 模型（如 text-embedding-3-small、nomic-embed-text 等）。当前显示所有模型供选择。"
           }
         </AlertDescription>
@@ -267,6 +273,36 @@ export function SystemRAGPage() {
               <p className="text-xs text-muted-foreground">
                 从已配置的连接中选择支持 Embedding 的模型（如 text-embedding-3-small、embedding-3 等）
               </p>
+            </div>
+
+            {/* Embedding 性能参数 */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3">Embedding 性能参数</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">批量大小</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={128}
+                    value={embeddingBatchSize}
+                    onChange={(e) => setEmbeddingBatchSize(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">单次 embedding 请求包含的 chunk 数，越大越快但更易触发限流</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">并发数</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={16}
+                    value={embeddingConcurrency}
+                    onChange={(e) => setEmbeddingConcurrency(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">批量请求的并发执行数，建议逐步调大观察稳定性</p>
+                </div>
+              </div>
             </div>
 
             {/* 检索参数 */}

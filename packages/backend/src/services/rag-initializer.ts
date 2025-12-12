@@ -52,6 +52,8 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
             'rag_enabled',
             'rag_embedding_connection_id',
             'rag_embedding_model_id',
+            'rag_embedding_batch_size',
+            'rag_embedding_concurrency',
             'rag_top_k',
             'rag_relevance_threshold',
             'rag_max_context_tokens',
@@ -114,6 +116,15 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
     const apiKey = AuthUtils.decryptApiKey(encryptedApiKey)
 
     // 创建新的文档服务
+    const embeddingBatchSize = Math.max(
+      1,
+      Math.min(128, parseInt(settingsMap.rag_embedding_batch_size || '1', 10) || 1)
+    )
+    const embeddingConcurrency = Math.max(
+      1,
+      Math.min(16, parseInt(settingsMap.rag_embedding_concurrency || '1', 10) || 1)
+    )
+
     const documentServices = createDocumentServices(prisma, {
       dataDir: './data',
       embedding: {
@@ -121,6 +132,8 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
         model: modelId,
         apiKey: apiKey,
         apiUrl: apiUrl,
+        batchSize: embeddingBatchSize,
+        concurrency: embeddingConcurrency,
       },
       document: {
         maxFileSize: (parseInt(settingsMap.rag_max_file_size_mb || '50', 10) || 50) * 1024 * 1024,

@@ -311,6 +311,16 @@ export const getSystemSettings = async () => {
         if (typeof v === 'string' && v.trim().length > 0) return v
         return undefined
       })(),
+      ragEmbeddingBatchSize: (() => {
+        const v = raw.rag_embedding_batch_size
+        if (typeof v === 'number') return Math.max(1, Math.min(128, v))
+        return 1
+      })(),
+      ragEmbeddingConcurrency: (() => {
+        const v = raw.rag_embedding_concurrency
+        if (typeof v === 'number') return Math.max(1, Math.min(16, v))
+        return 1
+      })(),
       ragTopK: (() => {
         const v = raw.rag_top_k
         if (typeof v === 'number') return Math.max(1, Math.min(20, v))
@@ -449,6 +459,8 @@ export const updateSystemSettings = async (
     payload.rag_embedding_connection_id = rest.ragEmbeddingConnectionId ?? null
   }
   if (typeof rest.ragEmbeddingModelId === 'string') payload.rag_embedding_model_id = rest.ragEmbeddingModelId
+  if (typeof rest.ragEmbeddingBatchSize === 'number') payload.rag_embedding_batch_size = rest.ragEmbeddingBatchSize
+  if (typeof rest.ragEmbeddingConcurrency === 'number') payload.rag_embedding_concurrency = rest.ragEmbeddingConcurrency
   if (typeof rest.ragTopK === 'number') payload.rag_top_k = rest.ragTopK
   if (typeof rest.ragRelevanceThreshold === 'number') payload.rag_relevance_threshold = rest.ragRelevanceThreshold
   if (typeof rest.ragMaxContextTokens === 'number') payload.rag_max_context_tokens = rest.ragMaxContextTokens

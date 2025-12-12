@@ -94,6 +94,12 @@ export class DocumentService {
       )
     }
 
+    // 明确不支持旧版 Word .doc
+    const extLower = path.extname(file.originalName || '').toLowerCase()
+    if (extLower === '.doc') {
+      throw new Error('仅支持 DOCX，请先将 .doc 转为 .docx 再上传')
+    }
+
     // 验证文件类型
     if (!isSupportedMimeType(file.mimeType)) {
       throw new Error(`Unsupported file type: ${file.mimeType}`)
