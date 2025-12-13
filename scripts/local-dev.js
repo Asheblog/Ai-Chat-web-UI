@@ -337,7 +337,10 @@ function maybeDbFilePaths(dbUrl) {
 function ensureDatabase(pm) {
   const backendDir = path.join(process.cwd(), 'packages', 'backend')
   const envPath = path.join(backendDir, '.env')
-  const dbUrl = fs.existsSync(envPath) ? parseDatabaseUrl(envPath) : null
+  // 优先使用进程环境变量（可能由根 .env/.env.example 或脚本注入/重写），避免误判 DB 不存在
+  const dbUrlFromEnv = String(process.env.DATABASE_URL || '').trim()
+  const dbUrlFromFile = fs.existsSync(envPath) ? parseDatabaseUrl(envPath) : null
+  const dbUrl = dbUrlFromEnv || dbUrlFromFile
   const candidates = maybeDbFilePaths(dbUrl)
 
   let inited = false

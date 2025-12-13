@@ -184,7 +184,7 @@ export class QuotaService {
     options: ProcessOptions,
   ): Promise<ProcessResult> {
     const { scope, identifier, userId } = resolveScope(actor)
-    const { anonymousDailyQuota, defaultUserDailyQuota } = await this.getQuotaPolicy()
+    const { anonymousDailyQuota, defaultUserDailyQuota } = await this.getQuotaPolicy(client)
     const defaultLimit = scope === 'USER' ? defaultUserDailyQuota : anonymousDailyQuota
 
     let record = await client.usageQuota.findUnique({

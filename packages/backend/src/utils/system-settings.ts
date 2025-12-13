@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../db'
 
 export interface SystemQuotaPolicy {
@@ -87,7 +88,9 @@ export const invalidateReasoningMaxOutputTokensDefaultCache = () => {
   cachedReasoningMaxTokens = null
 }
 
-export const getQuotaPolicy = async (): Promise<SystemQuotaPolicy> => {
+export const getQuotaPolicy = async (
+  client: PrismaClient | Prisma.TransactionClient = prisma,
+): Promise<SystemQuotaPolicy> => {
   const now = Date.now()
   if (cachedPolicy && cachedPolicy.expiresAt > now) {
     return cachedPolicy.value
@@ -99,7 +102,7 @@ export const getQuotaPolicy = async (): Promise<SystemQuotaPolicy> => {
     'default_user_daily_quota',
   ] as const
 
-  const settings = await prisma.systemSetting.findMany({
+  const settings = await client.systemSetting.findMany({
     where: { key: { in: keys as unknown as string[] } },
     select: { key: true, value: true },
   })
