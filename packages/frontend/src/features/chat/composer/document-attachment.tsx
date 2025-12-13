@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import type { AttachedDocument } from './use-document-attachments'
+import { DOCUMENT_ACCEPT_TYPES } from './use-document-attachments'
 
 interface DocumentAttachmentButtonProps {
   onClick: () => void
@@ -51,7 +52,7 @@ export const DocumentAttachmentInput: React.FC<DocumentAttachmentInputProps> = (
     <input
       ref={inputRef}
       type="file"
-      accept=".pdf,.docx,.csv,.txt,.md"
+      accept={DOCUMENT_ACCEPT_TYPES}
       multiple
       className="hidden"
       onChange={onFilesSelected}

@@ -37,16 +37,71 @@ interface UseDocumentAttachmentsOptions {
   draftKey?: string
 }
 
+/**
+ * 支持的 MIME 类型（必须与后端 loaders 保持一致）
+ * - PDF: pdf-loader.ts
+ * - DOCX: docx-loader.ts
+ * - CSV: csv-loader.ts
+ * - Text/Code: text-loader.ts
+ */
 const SUPPORTED_MIME_TYPES = [
+  // PDF
   'application/pdf',
+  // DOCX
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  // CSV
   'text/csv',
   'application/csv',
+  // 文本和代码文件
   'text/plain',
   'text/markdown',
+  'text/x-markdown',
+  'application/json',
+  'text/javascript',
+  'application/javascript',
+  'text/typescript',
+  'text/x-python',
+  'text/x-java',
+  'text/css',
+  'text/html',
+  'text/xml',
+  'application/xml',
 ]
 
-const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.csv', '.txt', '.md']
+/**
+ * 支持的文件扩展名（用于浏览器未正确识别 MIME 类型时的回退检测）
+ */
+const SUPPORTED_EXTENSIONS = [
+  // 文档
+  '.pdf',
+  '.docx',
+  '.csv',
+  // 文本
+  '.txt',
+  '.md',
+  '.markdown',
+  // 代码文件
+  '.json',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.ts',
+  '.mts',
+  '.cts',
+  '.jsx',
+  '.tsx',
+  '.py',
+  '.java',
+  '.css',
+  '.html',
+  '.htm',
+  '.xml',
+]
+
+/**
+ * HTML input accept 属性值
+ */
+export const DOCUMENT_ACCEPT_TYPES = SUPPORTED_EXTENSIONS.join(',')
 
 export const useDocumentAttachments = ({
   sessionId,
@@ -263,12 +318,19 @@ export const useDocumentAttachments = ({
       for (const file of files) {
         if (!isSupportedFile(file)) {
           const ext = '.' + file.name.split('.').pop()?.toLowerCase()
-          const docHint = ext === '.doc'
-            ? `${file.name} 为旧版 .doc 格式，请先转为 .docx 再上传`
-            : `${file.name} 不是支持的文档格式`
+          let hint: string
+          if (ext === '.doc') {
+            hint = `${file.name} 为旧版 .doc 格式，请先转为 .docx 再上传`
+          } else if (ext === '.xls' || ext === '.xlsx') {
+            hint = `${file.name} 为 Excel 格式，暂不支持，请导出为 CSV 后上传`
+          } else if (ext === '.ppt' || ext === '.pptx') {
+            hint = `${file.name} 为 PPT 格式，暂不支持`
+          } else {
+            hint = `${file.name} 不是支持的文件格式。支持: PDF、DOCX、CSV、TXT、MD、代码文件(JSON/JS/TS/PY/JAVA/CSS/HTML/XML)`
+          }
           toast({
             title: '不支持的文件类型',
-            description: docHint,
+            description: hint,
             variant: 'destructive',
           })
           continue
