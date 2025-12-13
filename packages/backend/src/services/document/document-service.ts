@@ -3,7 +3,7 @@
  * 处理文档上传、解析、分块、embedding 存储的完整流程
  */
 
-import { PrismaClient, Document, DocumentChunk } from '@prisma/client'
+import { Prisma, PrismaClient, Document, DocumentChunk } from '@prisma/client'
 import path from 'path'
 import fs from 'fs/promises'
 import crypto from 'crypto'
@@ -294,10 +294,29 @@ export class DocumentService {
           vectorId: `${documentId}_${chunk.index}`,
         }))
 
-        await this.prisma.documentChunk.createMany({
-          data: chunkRecords,
-          skipDuplicates: true,
-        })
+        try {
+          await this.prisma.documentChunk.createMany({ data: chunkRecords })
+        } catch (e) {
+          // SQLite 下 createMany 不支持 skipDuplicates；并发/断点续跑时也可能触发唯一键冲突
+          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+            for (const record of chunkRecords) {
+              await this.prisma.documentChunk.upsert({
+                where: {
+                  documentId_chunkIndex: { documentId: record.documentId, chunkIndex: record.chunkIndex },
+                },
+                create: record,
+                update: {
+                  content: record.content,
+                  tokenCount: record.tokenCount,
+                  metadata: record.metadata,
+                  vectorId: record.vectorId,
+                },
+              })
+            }
+          } else {
+            throw e
+          }
+        }
 
         totalChunksProcessed += batchChunks.length
         batchChunks = []
