@@ -212,8 +212,9 @@ export class CleanupScheduler {
       try {
         await fs.unlink(doc.filePath)
         storageCleaned += doc.fileSize
-      } catch {
-        // 忽略
+        console.log(`[CleanupScheduler] Deleted expired file: ${doc.filePath}`)
+      } catch (err) {
+        console.warn(`[CleanupScheduler] Failed to delete file ${doc.filePath}:`, err instanceof Error ? err.message : err)
       }
     }
 
@@ -263,8 +264,9 @@ export class CleanupScheduler {
       try {
         await fs.unlink(doc.filePath)
         storageCleaned += doc.fileSize
-      } catch {
-        // 忽略
+        console.log(`[CleanupScheduler] Deleted orphaned file: ${doc.filePath}`)
+      } catch (err) {
+        console.warn(`[CleanupScheduler] Failed to delete file ${doc.filePath}:`, err instanceof Error ? err.message : err)
       }
     }
 

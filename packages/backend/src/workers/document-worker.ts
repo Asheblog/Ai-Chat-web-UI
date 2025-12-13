@@ -19,6 +19,11 @@ const POLL_INTERVAL_MS = Number.parseInt(
   process.env.DOCUMENT_WORKER_POLL_INTERVAL_MS || '2000',
   10
 )
+// 当 RAG 服务未启用时，定期尝试重新加载配置的间隔（默认 10 秒）
+const RAG_RELOAD_INTERVAL_MS = Number.parseInt(
+  process.env.DOCUMENT_WORKER_RAG_RELOAD_INTERVAL_MS || '10000',
+  10
+)
 
 async function claimNextJob(prisma: any) {
   const now = new Date()
@@ -57,12 +62,30 @@ async function runWorker() {
 
   log.info(`[DocumentWorker] Started, id=${WORKER_ID}, poll=${POLL_INTERVAL_MS}ms`)
 
+  // 记录上次尝试 reload RAG 配置的时间
+  let lastRagReloadAttempt = Date.now()
+
   while (true) {
     try {
-      const services = getDocumentServices()
+      let services = getDocumentServices()
+
+      // 如果 services 为 null，定期尝试重新加载 RAG 配置
+      // 这样当用户在前端开启 RAG 后，worker 能够感知到变更
       if (!services) {
-        await sleep(POLL_INTERVAL_MS)
-        continue
+        const now = Date.now()
+        if (now - lastRagReloadAttempt >= RAG_RELOAD_INTERVAL_MS) {
+          lastRagReloadAttempt = now
+          const result = await reloadRAGServices()
+          if (result.success && result.message !== 'RAG services disabled') {
+            log.info('[DocumentWorker] RAG services reloaded', { message: result.message })
+            services = getDocumentServices()
+          }
+        }
+
+        if (!services) {
+          await sleep(POLL_INTERVAL_MS)
+          continue
+        }
       }
 
       const job = await claimNextJob(prisma)

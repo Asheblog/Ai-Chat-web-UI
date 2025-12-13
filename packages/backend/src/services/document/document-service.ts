@@ -508,8 +508,10 @@ export class DocumentService {
     // 删除物理文件
     try {
       await fs.unlink(document.filePath)
-    } catch {
-      // 忽略文件删除错误
+      console.log(`[DocumentService] Deleted file: ${document.filePath}`)
+    } catch (err) {
+      // 文件可能已被删除或不存在，记录但不抛出错误
+      console.warn(`[DocumentService] Failed to delete file ${document.filePath}:`, err instanceof Error ? err.message : err)
     }
 
     // 删除数据库记录（级联删除 chunks 和 session_documents）
