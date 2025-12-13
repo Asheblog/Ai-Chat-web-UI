@@ -31,6 +31,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
   assistantReplyHistoryLimit,
   maxConcurrentStreams,
   concurrencyErrorMessage,
+  ragService,
 } = params;
 
   const traceMetadataExtras: Record<string, unknown> = {};
@@ -701,6 +702,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           },
         });
       }
+      // 添加文档工具（如果启用且有 ragService）
+      const documentToolHandler = ragService && toolFlags.document
+        ? new DocumentToolHandler(ragService, sessionId)
+        : null;
+      if (documentToolHandler) {
+        for (const toolDef of documentToolDefinitions) {
+          allowedToolNames.add(toolDef.function.name);
+          toolDefinitions.push(toolDef);
+        }
+      }
       if (toolDefinitions.length === 0) {
         throw new Error('Agent 工具未启用');
       }
@@ -933,6 +944,59 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 await handleWebSearchToolCall(toolCall, args as { query?: string; num_results?: number });
               } else if (toolName === 'python_runner') {
                 await handlePythonToolCall(toolCall, args as { code?: string; input?: string });
+              } else if (documentToolNames.has(toolName) && documentToolHandler) {
+                // 处理文档工具调用
+                const callId = toolCall.id || randomUUID();
+                const reasoningMeta = { kind: 'tool', tool: toolName, callId };
+
+                emitReasoning(formatDocumentToolReasoning(toolName, args, 'start'), {
+                  ...reasoningMeta,
+                  stage: 'start',
+                });
+                sendToolEvent({
+                  id: callId,
+                  tool: toolName,
+                  stage: 'start',
+                  query: (args.query as string) || (args.page_number ? `第 ${args.page_number} 页` : undefined),
+                });
+
+                const result = await documentToolHandler.handleToolCall(toolName, args);
+
+                if (result.success) {
+                  emitReasoning(formatDocumentToolReasoning(toolName, args, 'result'), {
+                    ...reasoningMeta,
+                    stage: 'result',
+                  });
+                  sendToolEvent({
+                    id: callId,
+                    tool: toolName,
+                    stage: 'result',
+                    summary: JSON.stringify(result.result).slice(0, 200),
+                  });
+                  workingMessages.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolName,
+                    content: JSON.stringify(result.result),
+                  });
+                } else {
+                  emitReasoning(`文档工具失败：${result.error}`, {
+                    ...reasoningMeta,
+                    stage: 'error',
+                  });
+                  sendToolEvent({
+                    id: callId,
+                    tool: toolName,
+                    stage: 'error',
+                    error: result.error,
+                  });
+                  workingMessages.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolName,
+                    content: JSON.stringify({ error: result.error }),
+                  });
+                }
               } else {
                 sendToolEvent({
                   id: toolCall.id || randomUUID(),
@@ -1392,6 +1456,13 @@ import {
   hasPendingStreamCancelKey,
   deletePendingStreamCancelKey,
 } from './stream-state';
+import {
+  documentToolDefinitions,
+  documentToolNames,
+  DocumentToolHandler,
+  formatDocumentToolReasoning,
+} from './document-tools';
+import type { RAGService } from '../../services/document/rag-service';
 
 export interface AgentWebSearchConfig {
   enabled: boolean;
@@ -1428,7 +1499,7 @@ export type AgentResponseParams = {
   agentConfig: AgentWebSearchConfig;
   pythonToolConfig: AgentPythonToolConfig;
   agentMaxToolIterations: number;
-  toolFlags: { webSearch: boolean; python: boolean };
+  toolFlags: { webSearch: boolean; python: boolean; document?: boolean };
   provider: string;
   baseUrl: string;
   authHeader: Record<string, string>;
@@ -1446,4 +1517,5 @@ export type AgentResponseParams = {
   assistantReplyHistoryLimit: number;
   maxConcurrentStreams: number;
   concurrencyErrorMessage: string;
+  ragService?: RAGService | null;
 };

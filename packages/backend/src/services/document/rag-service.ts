@@ -291,4 +291,187 @@ ${context}
   updateConfig(config: Partial<RAGConfig>): void {
     this.config = { ...this.config, ...config }
   }
+
+  /**
+   * 获取会话文档的概要信息
+   */
+  async getSessionDocumentOutline(sessionId: number): Promise<{
+    documents: Array<{
+      id: number
+      name: string
+      pageCount: number
+      chunkCount: number
+      hasPageInfo: boolean
+      status: string
+    }>
+  }> {
+    const sessionDocs = await this.prisma.sessionDocument.findMany({
+      where: { sessionId },
+      include: { document: true },
+    })
+
+    const documents = sessionDocs.map((sd) => {
+      const doc = sd.document
+      const metadata = doc.metadata ? JSON.parse(doc.metadata) : {}
+      return {
+        id: doc.id,
+        name: doc.originalName,
+        pageCount: metadata.pageCount || 1,
+        chunkCount: doc.chunkCount || 0,
+        hasPageInfo: metadata.hasPageInfo || false,
+        status: doc.status,
+      }
+    })
+
+    return { documents }
+  }
+
+  /**
+   * 按页码获取文档内容
+   * 返回指定页码的所有chunks
+   */
+  async getPageContent(
+    sessionId: number,
+    pageNumber: number
+  ): Promise<{
+    pageNumber: number
+    content: string
+    documentName: string
+    documentId: number
+    chunks: Array<{
+      chunkIndex: number
+      content: string
+    }>
+  } | null> {
+    // 获取会话关联的文档
+    const sessionDocs = await this.prisma.sessionDocument.findMany({
+      where: { sessionId },
+      include: { document: true },
+    })
+
+    if (sessionDocs.length === 0) {
+      return null
+    }
+
+    // 查找包含该页码的文档chunks
+    for (const sd of sessionDocs) {
+      const doc = sd.document
+      if (doc.status !== 'ready') continue
+
+      // 查询该文档中页码匹配的chunks
+      const chunks = await this.prisma.documentChunk.findMany({
+        where: { documentId: doc.id },
+        orderBy: { chunkIndex: 'asc' },
+      })
+
+      // 过滤出指定页码的chunks
+      const pageChunks = chunks.filter((chunk) => {
+        try {
+          const metadata = JSON.parse(chunk.metadata || '{}')
+          return metadata.pageNumber === pageNumber
+        } catch {
+          return false
+        }
+      })
+
+      if (pageChunks.length > 0) {
+        return {
+          pageNumber,
+          content: pageChunks.map((c) => c.content).join('\n'),
+          documentName: doc.originalName,
+          documentId: doc.id,
+          chunks: pageChunks.map((c) => ({
+            chunkIndex: c.chunkIndex,
+            content: c.content,
+          })),
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * 按页码范围获取文档内容
+   */
+  async getPageRangeContent(
+    sessionId: number,
+    startPage: number,
+    endPage: number
+  ): Promise<{
+    pages: Array<{
+      pageNumber: number
+      content: string
+      documentName: string
+    }>
+    totalPages: number
+  }> {
+    const pages: Array<{
+      pageNumber: number
+      content: string
+      documentName: string
+    }> = []
+
+    // 获取会话关联的文档
+    const sessionDocs = await this.prisma.sessionDocument.findMany({
+      where: { sessionId },
+      include: { document: true },
+    })
+
+    for (const sd of sessionDocs) {
+      const doc = sd.document
+      if (doc.status !== 'ready') continue
+
+      // 查询该文档的所有chunks
+      const chunks = await this.prisma.documentChunk.findMany({
+        where: { documentId: doc.id },
+        orderBy: { chunkIndex: 'asc' },
+      })
+
+      // 按页码分组
+      const pageMap = new Map<number, string[]>()
+      for (const chunk of chunks) {
+        try {
+          const metadata = JSON.parse(chunk.metadata || '{}')
+          const pageNum = metadata.pageNumber as number
+          if (pageNum >= startPage && pageNum <= endPage) {
+            if (!pageMap.has(pageNum)) {
+              pageMap.set(pageNum, [])
+            }
+            pageMap.get(pageNum)!.push(chunk.content)
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
+
+      // 转换为数组
+      for (const [pageNum, contents] of pageMap) {
+        pages.push({
+          pageNumber: pageNum,
+          content: contents.join('\n'),
+          documentName: doc.originalName,
+        })
+      }
+    }
+
+    // 按页码排序
+    pages.sort((a, b) => a.pageNumber - b.pageNumber)
+
+    return {
+      pages,
+      totalPages: pages.length,
+    }
+  }
+
+  /**
+   * 获取会话中所有文档的ID列表
+   */
+  async getSessionDocumentIds(sessionId: number): Promise<number[]> {
+    const sessionDocs = await this.prisma.sessionDocument.findMany({
+      where: { sessionId },
+      select: { documentId: true },
+    })
+    return sessionDocs.map((sd) => sd.documentId)
+  }
 }

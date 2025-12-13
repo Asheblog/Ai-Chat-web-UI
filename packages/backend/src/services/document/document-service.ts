@@ -10,7 +10,14 @@ import crypto from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 
 import { loadDocument, isSupportedMimeType } from '../../modules/document/loaders'
-import { iterateTextChunks, estimateTokenCount, type TextChunk } from './chunking-service'
+import {
+  iterateTextChunks,
+  iteratePageAwareChunks,
+  estimateTokenCount,
+  type TextChunk,
+  type PageContent,
+  type PageAwareTextChunk,
+} from './chunking-service'
 import { EmbeddingService, type EmbeddingConfig } from './embedding-service'
 import { type VectorDBClient, type VectorItem } from '../../modules/document/vector'
 
@@ -230,11 +237,14 @@ export class DocumentService {
         throw new Error('No content extracted from document')
       }
 
-      // 合并所有内容
+      // 检测是否有页码信息（PDF等按页解析的文档）
+      const hasPageInfo = contents.some((c) => typeof c.metadata.pageNumber === 'number')
+
+      // 计算总字符数（用于进度显示）
       const fullText = contents.map((c) => c.pageContent).join('\n\n')
+      const totalChars = fullText.length
 
       // 2. 流式分块 + 增量 embedding/写库
-      const totalChars = fullText.length
       report({ stage: 'chunking', progress: 25, message: '正在分块并生成 embedding...' })
 
       // 断点续跑：跳过已存在的 chunks
@@ -244,7 +254,7 @@ export class DocumentService {
       const embeddingConfig = this.embeddingService.getConfig()
       const batchSize = Math.max(1, Math.floor(embeddingConfig.batchSize || 1))
 
-      let batchChunks: TextChunk[] = []
+      let batchChunks: (TextChunk | PageAwareTextChunk)[] = []
       let batchTexts: string[] = []
       let processedChars = 0
       let totalChunksProcessed = startIndex
@@ -329,23 +339,56 @@ export class DocumentService {
         })
       }
 
-      for (const chunk of iterateTextChunks(fullText, {
-        chunkSize: this.config.chunkSize,
-        chunkOverlap: this.config.chunkOverlap,
-      })) {
-        if (chunk.index < startIndex) {
-          processedChars = (chunk.metadata.endChar as number) || processedChars
-          continue
+      // 根据是否有页码信息选择不同的分块策略
+      if (hasPageInfo) {
+        // 使用按页分块：保留页码元数据
+        const pages: PageContent[] = contents
+          .filter((c) => typeof c.metadata.pageNumber === 'number')
+          .map((c) => ({
+            pageContent: c.pageContent,
+            pageNumber: c.metadata.pageNumber as number,
+            metadata: c.metadata,
+          }))
+
+        for (const chunk of iteratePageAwareChunks(pages, {
+          chunkSize: this.config.chunkSize,
+          chunkOverlap: this.config.chunkOverlap,
+        })) {
+          if (chunk.index < startIndex) {
+            processedChars += chunk.content.length
+            continue
+          }
+
+          await checkCanceled()
+
+          batchChunks.push(chunk)
+          batchTexts.push(chunk.content)
+          processedChars += chunk.content.length
+
+          if (batchTexts.length >= batchSize) {
+            await flushBatch()
+          }
         }
+      } else {
+        // 使用传统分块：无页码信息
+        for (const chunk of iterateTextChunks(fullText, {
+          chunkSize: this.config.chunkSize,
+          chunkOverlap: this.config.chunkOverlap,
+        })) {
+          if (chunk.index < startIndex) {
+            processedChars = (chunk.metadata.endChar as number) || processedChars
+            continue
+          }
 
-        await checkCanceled()
+          await checkCanceled()
 
-        batchChunks.push(chunk)
-        batchTexts.push(chunk.content)
-        processedChars = (chunk.metadata.endChar as number) || processedChars
+          batchChunks.push(chunk)
+          batchTexts.push(chunk.content)
+          processedChars = (chunk.metadata.endChar as number) || processedChars
 
-        if (batchTexts.length >= batchSize) {
-          await flushBatch()
+          if (batchTexts.length >= batchSize) {
+            await flushBatch()
+          }
         }
       }
 
@@ -356,9 +399,10 @@ export class DocumentService {
       }
 
       // 6. 更新文档状态
-      const pageCount = contents.reduce((acc, c) => {
-        return acc + (c.metadata.totalPages || 1)
-      }, 0)
+      // 计算页数：有页码信息时取最大页码，否则取第一个content的totalPages
+      const pageCount = hasPageInfo
+        ? Math.max(...contents.map((c) => (c.metadata.pageNumber as number) || 0))
+        : (contents[0]?.metadata.totalPages as number) || 1
 
       await this.prisma.document.update({
         where: { id: documentId },
@@ -372,6 +416,7 @@ export class DocumentService {
             pageCount,
             charCount: fullText.length,
             wordCount: fullText.split(/\s+/).length,
+            hasPageInfo, // 记录是否有页码信息，便于后续查询
           }),
         },
       })

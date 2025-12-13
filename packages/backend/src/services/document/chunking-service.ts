@@ -279,3 +279,121 @@ export function estimateTokenCount(text: string): number {
 
   return Math.ceil(count)
 }
+
+/**
+ * 页面内容定义
+ */
+export interface PageContent {
+  pageContent: string
+  pageNumber: number
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * 带页码的文本分块
+ */
+export interface PageAwareTextChunk extends TextChunk {
+  metadata: TextChunk['metadata'] & {
+    pageNumber: number
+    pageStart?: number // chunk 开始的页码
+    pageEnd?: number // chunk 结束的页码（跨页时）
+  }
+}
+
+/**
+ * 按页分块生成器
+ * 对每个页面独立分块，保留页码信息
+ *
+ * 策略：
+ * - 每页独立分块，不跨页合并
+ * - 如果单页内容小于 chunkSize，整页作为一个 chunk
+ * - 如果单页内容大于 chunkSize，在页内分块
+ * - 每个 chunk 的 metadata 包含 pageNumber
+ */
+export function* iteratePageAwareChunks(
+  pages: PageContent[],
+  options: ChunkingOptions = { chunkSize: 1500, chunkOverlap: 100 }
+): Generator<PageAwareTextChunk> {
+  const chunkSize = options.chunkSize
+  const chunkOverlap = options.chunkOverlap
+  const separators = options.separators || DEFAULT_SEPARATORS
+
+  if (chunkOverlap >= chunkSize) {
+    throw new Error('chunkOverlap must be less than chunkSize')
+  }
+
+  let globalIndex = 0
+
+  for (const page of pages) {
+    const pageText = page.pageContent
+    const pageNumber = page.pageNumber
+
+    // 跳过空页
+    if (!pageText.trim()) {
+      continue
+    }
+
+    // 如果页面内容小于等于 chunkSize，整页作为一个 chunk
+    if (pageText.length <= chunkSize) {
+      yield {
+        content: pageText,
+        index: globalIndex++,
+        metadata: {
+          startChar: 0,
+          endChar: pageText.length,
+          pageNumber,
+          pageStart: pageNumber,
+          pageEnd: pageNumber,
+          ...page.metadata,
+        },
+      }
+      continue
+    }
+
+    // 页面内容大于 chunkSize，在页内分块
+    let pos = 0
+    const totalLen = pageText.length
+
+    while (pos < totalLen) {
+      const windowEnd = Math.min(totalLen, pos + chunkSize)
+      let cut = windowEnd
+
+      // 在窗口内按分隔符优先级寻找最后一个分隔符作为切点
+      for (const sep of separators) {
+        if (!sep) continue
+        const last = pageText.lastIndexOf(sep, windowEnd)
+        if (last > pos) {
+          cut = last + sep.length
+          break
+        }
+      }
+
+      if (cut <= pos) {
+        cut = windowEnd
+      }
+
+      const chunkText = pageText.slice(pos, cut)
+      if (chunkText.trim()) {
+        yield {
+          content: chunkText,
+          index: globalIndex++,
+          metadata: {
+            startChar: pos,
+            endChar: cut,
+            pageNumber,
+            pageStart: pageNumber,
+            pageEnd: pageNumber,
+            ...page.metadata,
+          },
+        }
+      }
+
+      if (cut >= totalLen) {
+        break
+      }
+
+      // 保留 overlap，且确保前进至少 1 字符避免死循环
+      pos = Math.max(cut - chunkOverlap, pos + 1)
+    }
+  }
+}

@@ -62,6 +62,7 @@ import { streamUsageService, computeStreamMetrics } from '../services/stream-usa
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
+import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
 
 export const registerChatStreamRoutes = (router: Hono) => {
@@ -256,11 +257,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       // RAG 文档检索增强
       let ragContext: string | null = null;
+      let hasSessionDocuments = false;
+      let sessionRagService: RAGService | null = null;
       try {
         const docServices = getDocumentServices();
         if (docServices) {
+          sessionRagService = docServices.ragService;
           const ragContextBuilder = new RAGContextBuilder(docServices.ragService);
           const shouldEnhance = await ragContextBuilder.shouldEnhance(sessionId);
+          hasSessionDocuments = shouldEnhance;
           if (shouldEnhance) {
             log.debug('RAG enhancement enabled for session', { sessionId });
             const ragResult = await ragContextBuilder.enhance(sessionId, content);
@@ -487,7 +492,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
           agentConfig: agentWebSearchConfig,
           pythonToolConfig,
           agentMaxToolIterations,
-          toolFlags: { webSearch: agentWebSearchActive, python: pythonToolActive },
+          toolFlags: {
+            webSearch: agentWebSearchActive,
+            python: pythonToolActive,
+            document: hasSessionDocuments, // 如果会话有文档则启用文档工具
+          },
           provider,
           baseUrl,
           authHeader,
@@ -505,6 +514,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           assistantReplyHistoryLimit,
           maxConcurrentStreams: resolvedMaxConcurrentStreams,
           concurrencyErrorMessage,
+          ragService: sessionRagService, // 传递 RAG 服务实例
         });
       }
 
