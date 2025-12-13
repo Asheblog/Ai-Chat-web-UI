@@ -53,50 +53,62 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cc87acc</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cb1c39e</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天标题栏新增模型总结展示，并修正构建错误确保流程稳定。
+                WSL 环境 SQLite 兼容性增强：自动检测运行环境并配置 PRAGMA 参数，解决跨平台数据库访问问题。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">beb38d9</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d331efa</span>
               <span className="text-muted-foreground leading-relaxed">
-                侧边栏标题截断阈值由 15 缩至 12 字符，长标题展示更稳妥。
+                向量数据库单例模式重构，实现环境感知的 SQLite 配置优化。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a5ef4c5</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5fa77bc</span>
               <span className="text-muted-foreground leading-relaxed">
-                推理时间线使用横向间距变量并移除偏移，版面对齐更一致。
+                欢迎页文档附件刷新后可恢复，提升用户体验。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5bad50a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">38badc3</span>
               <span className="text-muted-foreground leading-relaxed">
-                会话支持置顶：后端新增 pinned 字段与接口、数据库迁移，前端提供置顶/取消入口并按时间排序。
+                配额策略支持事务感知获取，确保数据一致性。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2ac9e82</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d5c323d</span>
               <span className="text-muted-foreground leading-relaxed">
-                推理面板文本截断与溢出处理，受限空间下保持排版稳定。
+                RAG 文档处理支持取消操作，WSL 兼容性改进。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">51e5efa</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">9af45e0</span>
               <span className="text-muted-foreground leading-relaxed">
-                推理面板 UI 强化：统一间距变量、头部渐变与阴影、头像对齐、移动端间距优化，并清理冗余样式。
+                系统设置新增输入验证和范围说明，防止配置错误。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">724061e</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2937afb</span>
               <span className="text-muted-foreground leading-relaxed">
-                推理区间距收紧并补充移动端适配，修复刷新后流状态回退与同步异常。
+                RAG 嵌入性能控制优化，文档验证逻辑增强。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">50d712c</span>
+              <span className="text-muted-foreground leading-relaxed">
+                聊天输入框新增附件管理托盘，统一文件上传交互。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">42cf28a</span>
+              <span className="text-muted-foreground leading-relaxed">
+                后端新增文档 RAG 支持：文件上传、向量搜索、知识库检索全流程。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-12-09 推送变更摘要
+            以上为 2025-12-13 推送变更摘要
           </p>
         </Card>
       </div>
