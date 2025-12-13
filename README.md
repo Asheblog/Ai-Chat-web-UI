@@ -63,7 +63,7 @@ services:
       - backend_logs:/app/logs
       - backend_images:/app/storage/chat-images
     ports:
-      - "3556:8001" #后端端口可以改 
+      - "3556:8001" #后端端口可以改
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1"]
@@ -75,6 +75,28 @@ services:
       ai-chat-web-ui-network:
         aliases:
           - backend
+
+  rag-worker:
+    image: ghcr.io/asheblog/aichat-backend:latest
+    container_name: ai-chat-web-ui-rag-worker
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./data/app.db
+      - JWT_SECRET=请改成强随机密码 #与backend保持一致
+      - LOG_LEVEL=info
+      - NODE_OPTIONS=--max-old-space-size=1024
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/app/logs
+      - backend_images:/app/storage/chat-images
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai-chat-web-ui-network
+    working_dir: /app/packages/backend
+    command: ["node", "dist/workers/document-worker.js"]
 
   frontend:
     image: ghcr.io/asheblog/aichat-frontend:latest
