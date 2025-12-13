@@ -105,6 +105,10 @@ export const useWelcomeScreenViewModel = () => {
     clearDocuments,
   } = useDocumentAttachments({
     sessionId: null,
+    draftKey:
+      actor?.type === 'user'
+        ? `aichat:welcome:documents:draft:user:${actor.id}`
+        : 'aichat:welcome:documents:draft:anon',
     limits: {
       maxFileSize: 50 * 1024 * 1024,
       allowedTypes: ['pdf', 'docx', 'doc', 'csv', 'txt', 'md'],
@@ -413,6 +417,10 @@ export const useWelcomeScreenViewModel = () => {
             }
           }
         }
+        clearDocuments()
+        if (documentInputRef.current) {
+          documentInputRef.current.value = ''
+        }
         router.push(`/main/${created.id}`)
       }
 
@@ -465,10 +473,6 @@ export const useWelcomeScreenViewModel = () => {
           setSelectedImages([])
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
-          }
-          clearDocuments()
-          if (documentInputRef.current) {
-            documentInputRef.current.value = ''
           }
         }
       }

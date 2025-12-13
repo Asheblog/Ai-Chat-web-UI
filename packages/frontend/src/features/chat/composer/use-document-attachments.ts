@@ -30,6 +30,11 @@ interface UseDocumentAttachmentsOptions {
   limits: DocumentLimits
   toast: ToastHandler
   onDocumentsChange?: (documents: AttachedDocument[]) => void
+  /**
+   * 草稿存储 Key（用于 sessionId 为空时在页面刷新后恢复附件）
+   * 仅在 sessionId === null 时生效，存储介质为 sessionStorage。
+   */
+  draftKey?: string
 }
 
 const SUPPORTED_MIME_TYPES = [
@@ -48,16 +53,88 @@ export const useDocumentAttachments = ({
   limits,
   toast,
   onDocumentsChange,
+  draftKey,
 }: UseDocumentAttachmentsOptions) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [documents, setDocuments] = useState<AttachedDocument[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
+  const draftEnabled = sessionId === null && typeof draftKey === 'string' && draftKey.trim().length > 0
+
+  const readDraftDocuments = useCallback((): AttachedDocument[] => {
+    if (!draftEnabled || typeof window === 'undefined') return []
+    try {
+      const raw = sessionStorage.getItem(draftKey!)
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as any
+      const payload = Array.isArray(parsed) ? parsed : parsed?.documents
+      if (!Array.isArray(payload)) return []
+      return payload
+        .filter((item: any) => item && typeof item.id === 'number' && typeof item.originalName === 'string')
+        .map((item: any) => ({
+          id: item.id,
+          filename: typeof item.filename === 'string' ? item.filename : '',
+          originalName: item.originalName,
+          mimeType: typeof item.mimeType === 'string' ? item.mimeType : 'application/octet-stream',
+          fileSize: typeof item.fileSize === 'number' ? item.fileSize : 0,
+          status: (item.status || 'processing') as AttachedDocument['status'],
+          processingStage: typeof item.processingStage === 'string' ? item.processingStage : undefined,
+          processingProgress: typeof item.processingProgress === 'number' ? item.processingProgress : undefined,
+          errorMessage: typeof item.errorMessage === 'string' ? item.errorMessage : undefined,
+        }))
+    } catch {
+      return []
+    }
+  }, [draftEnabled, draftKey])
+
+  const writeDraftDocuments = useCallback(
+    (nextDocuments: AttachedDocument[]) => {
+      if (!draftEnabled || typeof window === 'undefined') return
+      const payload = nextDocuments
+        .filter((d) => d.status !== 'uploading')
+        .map((d) => ({
+          id: d.id,
+          filename: d.filename,
+          originalName: d.originalName,
+          mimeType: d.mimeType,
+          fileSize: d.fileSize,
+          status: d.status,
+          processingStage: d.processingStage,
+          processingProgress: d.processingProgress,
+          errorMessage: d.errorMessage,
+        }))
+
+      try {
+        if (payload.length === 0) {
+          sessionStorage.removeItem(draftKey!)
+          return
+        }
+        sessionStorage.setItem(draftKey!, JSON.stringify({ version: 1, documents: payload }))
+      } catch {
+        // ignore storage error
+      }
+    },
+    [draftEnabled, draftKey],
+  )
+
   // 当 sessionId 变化时，从后端加载已关联的文档
   useEffect(() => {
-    if (!sessionId) {
-      setDocuments([])
+    if (sessionId === null) {
+      if (!draftEnabled) {
+        setDocuments([])
+        onDocumentsChange?.([])
+        return
+      }
+
+      const restored = readDraftDocuments()
+      setDocuments(restored)
+      onDocumentsChange?.(restored)
+      restored.forEach((d) => {
+        if (d.status === 'pending' || d.status === 'processing') {
+          pollDocumentStatus(d.id)
+        }
+      })
       return
     }
 
@@ -107,7 +184,11 @@ export const useDocumentAttachments = ({
     return () => {
       cancelled = true
     }
-  }, [sessionId, onDocumentsChange])
+  }, [draftEnabled, onDocumentsChange, readDraftDocuments, sessionId])
+
+  useEffect(() => {
+    writeDraftDocuments(documents)
+  }, [documents, writeDraftDocuments])
 
   const updateDocuments = useCallback(
     (updater: (prev: AttachedDocument[]) => AttachedDocument[]) => {
@@ -350,7 +431,14 @@ export const useDocumentAttachments = ({
 
   const clearDocuments = useCallback(() => {
     updateDocuments(() => [])
-  }, [updateDocuments])
+    if (draftEnabled && typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem(draftKey!)
+      } catch {
+        // ignore storage error
+      }
+    }
+  }, [draftEnabled, draftKey, updateDocuments])
 
   const hasReadyDocuments = documents.some((d) => d.status === 'ready')
   const hasProcessingDocuments = documents.some(
