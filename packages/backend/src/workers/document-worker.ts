@@ -6,6 +6,7 @@
  */
 
 import os from 'os'
+import crypto from 'crypto'
 import { createAppContainer } from '../container/app-container'
 import { setRAGInitializerDeps, reloadRAGServices } from '../services/rag-initializer'
 import { getDocumentServices } from '../services/document-services-factory'
@@ -19,11 +20,43 @@ const POLL_INTERVAL_MS = Number.parseInt(
   process.env.DOCUMENT_WORKER_POLL_INTERVAL_MS || '2000',
   10
 )
-// 当 RAG 服务未启用时，定期尝试重新加载配置的间隔（默认 10 秒）
-const RAG_RELOAD_INTERVAL_MS = Number.parseInt(
-  process.env.DOCUMENT_WORKER_RAG_RELOAD_INTERVAL_MS || '10000',
+// 定期检查 RAG 配置变更的间隔（默认 10 秒）
+const RAG_CONFIG_CHECK_INTERVAL_MS = Number.parseInt(
+  process.env.DOCUMENT_WORKER_RAG_CONFIG_CHECK_INTERVAL_MS || '10000',
   10
 )
+
+// RAG 相关配置键
+const RAG_CONFIG_KEYS = [
+  'rag_enabled',
+  'rag_embedding_connection_id',
+  'rag_embedding_model_id',
+  'rag_embedding_batch_size',
+  'rag_embedding_concurrency',
+  'rag_top_k',
+  'rag_relevance_threshold',
+  'rag_max_context_tokens',
+  'rag_chunk_size',
+  'rag_chunk_overlap',
+  'rag_max_file_size_mb',
+  'rag_retention_days',
+]
+
+/**
+ * 获取 RAG 配置的 hash 值，用于检测配置变更
+ */
+async function getRAGConfigHash(prisma: any): Promise<string> {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: { key: { in: RAG_CONFIG_KEYS } },
+      orderBy: { key: 'asc' },
+    })
+    const configStr = settings.map((s: any) => `${s.key}=${s.value ?? ''}`).join('|')
+    return crypto.createHash('md5').update(configStr).digest('hex')
+  } catch {
+    return ''
+  }
+}
 
 async function claimNextJob(prisma: any) {
   const now = new Date()
@@ -60,32 +93,37 @@ async function runWorker() {
   setRAGInitializerDeps({ prisma })
   await reloadRAGServices()
 
-  log.info(`[DocumentWorker] Started, id=${WORKER_ID}, poll=${POLL_INTERVAL_MS}ms`)
+  log.info(`[DocumentWorker] Started, id=${WORKER_ID}, poll=${POLL_INTERVAL_MS}ms, configCheck=${RAG_CONFIG_CHECK_INTERVAL_MS}ms`)
 
-  // 记录上次尝试 reload RAG 配置的时间
-  let lastRagReloadAttempt = Date.now()
+  // 记录当前配置 hash 和上次检查时间
+  let currentConfigHash = await getRAGConfigHash(prisma)
+  let lastConfigCheckTime = Date.now()
 
   while (true) {
     try {
+      // 定期检查 RAG 配置是否变更
+      const now = Date.now()
+      if (now - lastConfigCheckTime >= RAG_CONFIG_CHECK_INTERVAL_MS) {
+        lastConfigCheckTime = now
+        const newConfigHash = await getRAGConfigHash(prisma)
+
+        if (newConfigHash !== currentConfigHash) {
+          log.info('[DocumentWorker] RAG config changed, reloading services...', {
+            oldHash: currentConfigHash.slice(0, 8),
+            newHash: newConfigHash.slice(0, 8),
+          })
+          currentConfigHash = newConfigHash
+          const result = await reloadRAGServices()
+          log.info('[DocumentWorker] RAG services reloaded', { message: result.message })
+        }
+      }
+
       let services = getDocumentServices()
 
-      // 如果 services 为 null，定期尝试重新加载 RAG 配置
-      // 这样当用户在前端开启 RAG 后，worker 能够感知到变更
+      // 如果 services 为 null，等待下一次配置检查
       if (!services) {
-        const now = Date.now()
-        if (now - lastRagReloadAttempt >= RAG_RELOAD_INTERVAL_MS) {
-          lastRagReloadAttempt = now
-          const result = await reloadRAGServices()
-          if (result.success && result.message !== 'RAG services disabled') {
-            log.info('[DocumentWorker] RAG services reloaded', { message: result.message })
-            services = getDocumentServices()
-          }
-        }
-
-        if (!services) {
-          await sleep(POLL_INTERVAL_MS)
-          continue
-        }
+        await sleep(POLL_INTERVAL_MS)
+        continue
       }
 
       const job = await claimNextJob(prisma)
