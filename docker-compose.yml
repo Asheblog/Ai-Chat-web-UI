@@ -14,7 +14,7 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=8001
-      - DATABASE_URL=file:./data/app.db
+      - DATABASE_URL=file:/app/data/app.db
       - JWT_SECRET=${JWT_SECRET:-aichat-super-secret-jwt-key-2025-production-change-me}
       - DEFAULT_REGISTRATION_ENABLED=${DEFAULT_REGISTRATION_ENABLED:-true}
       - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-4000}
@@ -55,7 +55,7 @@ services:
     container_name: ai-chat-web-ui-rag-worker
     environment:
       - NODE_ENV=${NODE_ENV:-production}
-      - DATABASE_URL=file:./data/app.db
+      - DATABASE_URL=file:/app/data/app.db
       - JWT_SECRET=${JWT_SECRET:-aichat-super-secret-jwt-key-2025-production-change-me}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # Worker 需要更大的堆内存，默认 1024MB，可按需调整

@@ -50,7 +50,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8001
-      - DATABASE_URL=file:./data/app.db
+      - DATABASE_URL=file:/app/data/app.db
       - JWT_SECRET=请改成强随机密码 #这里要改
       - DEFAULT_REGISTRATION_ENABLED=true
       - DEFAULT_CONTEXT_TOKEN_LIMIT=120000 #这里后面大概率就要废弃的
@@ -81,7 +81,7 @@ services:
     container_name: ai-chat-web-ui-rag-worker
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:./data/app.db
+      - DATABASE_URL=file:/app/data/app.db
       - JWT_SECRET=请改成强随机密码 #与backend保持一致
       - LOG_LEVEL=info
       - NODE_OPTIONS=--max-old-space-size=1024
