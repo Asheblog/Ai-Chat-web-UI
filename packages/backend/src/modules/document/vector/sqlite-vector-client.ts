@@ -1,12 +1,36 @@
 /**
  * 基于 SQLite 的轻量级向量数据库实现
  * 使用余弦相似度进行向量搜索
+ *
+ * 支持环境自适应:
+ * - WSL/特殊文件系统: 使用 DELETE journal 模式，避免锁协议问题
+ * - 标准 Linux/Docker: 使用 WAL 模式，获得更好性能
  */
 
 import Database from 'better-sqlite3'
 import path from 'path'
 import fs from 'fs'
 import type { VectorDBClient, VectorItem, SearchResult } from './types'
+
+/**
+ * 检测是否运行在 WSL 环境
+ */
+function isWSLEnvironment(): boolean {
+  try {
+    const version = fs.readFileSync('/proc/version', 'utf8')
+    return /microsoft|wsl/i.test(version)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 获取推荐的 journal 模式
+ * WSL 环境使用 DELETE 模式避免锁问题，其他环境使用 WAL 获得更好性能
+ */
+function getRecommendedJournalMode(): 'WAL' | 'DELETE' {
+  return isWSLEnvironment() ? 'DELETE' : 'WAL'
+}
 
 /**
  * 计算两个向量的余弦相似度
@@ -35,10 +59,16 @@ function cosineSimilarity(a: number[], b: number[]): number {
 /**
  * SQLite 向量数据库客户端
  * 适用于中小规模文档检索场景
+ *
+ * 特性:
+ * - 环境自适应 journal 模式 (WSL: DELETE, Docker/Linux: WAL)
+ * - 增强的锁超时容错 (30秒)
+ * - 支持单例模式复用连接
  */
 export class SQLiteVectorClient implements VectorDBClient {
   private db: Database.Database
   private dataPath: string
+  private initialized: boolean = false
 
   constructor(dataPath: string) {
     this.dataPath = dataPath
@@ -50,32 +80,80 @@ export class SQLiteVectorClient implements VectorDBClient {
     }
 
     this.db = new Database(dataPath)
-    // 注意：WSL/部分文件系统下，WAL 或锁操作可能出现 SQLITE_PROTOCOL。
-    // 这里使用 best-effort：初始化失败不应导致整个 RAG 服务不可用。
+
+    // 环境自适应的 journal 模式
+    const journalMode = getRecommendedJournalMode()
+    const isWSL = isWSLEnvironment()
+
     try {
-      this.db.pragma('journal_mode = WAL')
+      this.db.pragma(`journal_mode = ${journalMode}`)
+      if (isWSL) {
+        console.log('[VectorDB] WSL detected, using DELETE journal mode for compatibility')
+      }
     } catch (e) {
-      console.warn('[VectorDB] Failed to enable WAL journal mode, continuing:', (e as any)?.message || e)
+      console.warn('[VectorDB] Failed to set journal mode, continuing:', (e as any)?.message || e)
     }
-    // 多进程/多线程并发写入时，避免瞬时锁冲突直接失败
+
+    // 增强的锁超时: 30秒，避免并发操作时过早失败
     try {
-      this.db.pragma('busy_timeout = 5000')
+      this.db.pragma('busy_timeout = 30000')
     } catch (e) {
       console.warn('[VectorDB] Failed to set busy_timeout, continuing:', (e as any)?.message || e)
     }
 
     // 创建元数据表
-    try {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS vector_collections (
-          name TEXT PRIMARY KEY,
-          dimension INTEGER,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      `)
-    } catch (e) {
-      console.warn('[VectorDB] Failed to init vector_collections table, continuing:', (e as any)?.message || e)
+    this.initTables()
+  }
+
+  /**
+   * 初始化数据库表，支持重试
+   */
+  private initTables(): void {
+    const maxRetries = 3
+    const retryDelay = 1000
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS vector_collections (
+            name TEXT PRIMARY KEY,
+            dimension INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `)
+        this.initialized = true
+        return
+      } catch (e) {
+        const message = (e as any)?.message || String(e)
+        const isLockError = /locking protocol|database is locked|SQLITE_BUSY/i.test(message)
+
+        if (isLockError && attempt < maxRetries) {
+          console.warn(`[VectorDB] Table init failed (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`)
+          // 同步等待 - 构造函数中不能用 async
+          const start = Date.now()
+          while (Date.now() - start < retryDelay) {
+            // busy wait
+          }
+        } else {
+          console.warn('[VectorDB] Failed to init vector_collections table, continuing:', message)
+          return
+        }
+      }
     }
+  }
+
+  /**
+   * 检查数据库是否已初始化
+   */
+  isInitialized(): boolean {
+    return this.initialized
+  }
+
+  /**
+   * 获取数据库文件路径
+   */
+  getDataPath(): string {
+    return this.dataPath
   }
 
   async hasCollection(collectionName: string): Promise<boolean> {

@@ -1,6 +1,11 @@
 /**
  * RAG 服务初始化器
  * 支持动态加载/重载 RAG 服务配置
+ *
+ * 优化特性:
+ * - 复用向量数据库连接（单例模式）
+ * - 减少不必要的服务重建
+ * - 增强的错误容错
  */
 
 import type { PrismaClient } from '@prisma/client'
@@ -24,7 +29,11 @@ function isSqliteLockingProtocolError(error: unknown): boolean {
   const anyErr = error as any
   const code = String(anyErr?.code || '')
   const message = String(anyErr?.message || '')
-  return code === 'SQLITE_PROTOCOL' || /locking protocol/i.test(message)
+  return (
+    code === 'SQLITE_PROTOCOL' ||
+    code === 'SQLITE_BUSY' ||
+    /locking protocol|database is locked/i.test(message)
+  )
 }
 
 /**
@@ -36,6 +45,12 @@ export function setRAGInitializerDeps(d: RAGInitializerDeps): void {
 
 /**
  * 从数据库设置初始化/重载 RAG 服务
+ *
+ * 优化说明:
+ * - 向量数据库客户端通过单例模式自动复用，无需重新创建连接
+ * - 只重建 Embedding/Document/RAG 等服务层，减少锁冲突
+ * - 增加重试次数和退避时间，提高容错能力
+ *
  * @returns 是否成功初始化
  */
 export async function reloadRAGServices(): Promise<{ success: boolean; message: string }> {
@@ -45,10 +60,13 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
 
   const { prisma } = deps
 
-  const maxAttempts = 2
+  // 增加重试次数，配合更长的 busy_timeout
+  const maxAttempts = 3
+  const retryDelays = [1000, 2000, 3000] // 递增的退避时间
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      // 停止现有服务
+      // 停止现有服务的调度器（但不关闭向量数据库连接，因为会被复用）
       const existingServices = getDocumentServices()
       if (existingServices) {
         existingServices.cleanupScheduler.stop()
@@ -184,10 +202,12 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
         return { success: false, message }
       }
 
-      // 退避与降级：锁协议错误通常来自启动竞态/文件锁暂不可用，等待 2s 后重试 1 次
-      await sleep(2000)
+      // 递增的退避时间，给数据库锁释放更多时间
+      const delay = retryDelays[attempt - 1] || 3000
+      console.log(`   Retrying in ${delay}ms...`)
+      await sleep(delay)
     }
   }
 
-  return { success: false, message: 'Failed to reload RAG services' }
+  return { success: false, message: 'Failed to reload RAG services after multiple attempts' }
 }

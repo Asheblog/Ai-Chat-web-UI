@@ -1,11 +1,15 @@
 /**
  * 文档服务工厂
  * 初始化和配置文档相关服务
+ *
+ * 特性:
+ * - 向量数据库客户端自动复用（通过 createVectorDBClient 单例模式）
+ * - 支持配置热重载，无需重建数据库连接
  */
 
 import { PrismaClient } from '@prisma/client'
 import path from 'path'
-import { createVectorDBClient } from '../modules/document/vector'
+import { createVectorDBClient, getVectorDBClient } from '../modules/document/vector'
 import { EmbeddingService, type EmbeddingConfig } from './document/embedding-service'
 import { DocumentService, type DocumentServiceConfig } from './document/document-service'
 import { RAGService, type RAGConfig } from './document/rag-service'
@@ -85,6 +89,9 @@ export const DEFAULT_DOCUMENT_SERVICES_CONFIG: DocumentServicesConfig = {
 
 /**
  * 创建文档相关服务
+ *
+ * 注意: 向量数据库客户端通过单例模式自动复用，
+ * 多次调用此函数不会创建多个数据库连接
  */
 export function createDocumentServices(
   prisma: PrismaClient,
@@ -100,11 +107,19 @@ export function createDocumentServices(
     cleanup: { ...DEFAULT_DOCUMENT_SERVICES_CONFIG.cleanup, ...config.cleanup },
   }
 
-  // 创建向量数据库客户端
-  const vectorDB = createVectorDBClient({
+  const vectorDataPath = path.join(fullConfig.dataDir, 'vector')
+
+  // 优先复用已存在的向量数据库客户端，避免重复创建
+  // createVectorDBClient 内部已实现单例模式，这里显式检查只是为了日志清晰
+  const existingClient = getVectorDBClient(vectorDataPath)
+  const vectorDB = existingClient || createVectorDBClient({
     type: 'sqlite',
-    dataPath: path.join(fullConfig.dataDir, 'vector'),
+    dataPath: vectorDataPath,
   })
+
+  if (existingClient) {
+    console.log('[DocumentServices] Reusing existing vector database connection')
+  }
 
   // 创建 Embedding 服务
   const embeddingService = new EmbeddingService(fullConfig.embedding)
