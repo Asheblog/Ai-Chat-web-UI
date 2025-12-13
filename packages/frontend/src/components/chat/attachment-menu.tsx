@@ -48,13 +48,18 @@ export function AttachmentMenu({
           variant="outline"
           size="icon"
           className={cn(
-            'h-12 w-12 rounded-full',
+            'h-12 w-12 rounded-full relative',
             hasAny && 'border-blue-300 text-blue-600 dark:text-blue-300',
             className,
           )}
           aria-label={ariaLabel}
         >
           <Paperclip className="h-5 w-5" />
+          {typeof manageCount === 'number' && manageCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-medium text-white">
+              {manageCount > 99 ? '99+' : manageCount}
+            </span>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">

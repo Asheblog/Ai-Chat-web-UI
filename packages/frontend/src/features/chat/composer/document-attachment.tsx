@@ -2,7 +2,7 @@
  * 文档附件按钮和预览组件
  */
 
-import React, { useMemo } from 'react'
+import React from 'react'
 import { Paperclip, File, FileText, Table, X, Loader2, AlertCircle, Check, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet'
@@ -239,30 +239,13 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
   onOpenChange,
   title = '附件管理',
 }) => {
-  const summary = useMemo(() => {
-    const names = documents.slice(0, 2).map((d) => d.originalName)
-    const rest = Math.max(0, documents.length - 2)
-    return { names, rest }
-  }, [documents])
-
   if (documents.length === 0) return null
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" showCloseButton>
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-medium">{title}</div>
-            <span className="text-xs text-muted-foreground">
-              {documents.length} 个
-              {summary.names.length > 0 && (
-                <span className="ml-2 hidden sm:inline">
-                  {summary.names.join('、')}
-                  {summary.rest > 0 ? ` +${summary.rest}` : ''}
-                </span>
-              )}
-            </span>
-          </div>
+          <div className="text-sm font-medium">{title}</div>
           <DocumentPreviewList documents={documents} onRemove={onRemove} onCancel={onCancel} />
           <div className="flex justify-end">
             <SheetClose asChild>
