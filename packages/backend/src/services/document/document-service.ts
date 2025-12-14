@@ -192,19 +192,23 @@ export class DocumentService {
     onProgress?: ProgressCallback,
     jobId?: number
   ): Promise<void> {
-    const report = (progress: ProcessingProgress) => {
+    const report = async (progress: ProcessingProgress) => {
       if (onProgress) {
         onProgress(progress)
       }
       // 持久化进度（worker 可据此展示/自愈）
-      this.prisma.document.update({
-        where: { id: documentId },
-        data: {
-          processingStage: progress.stage,
-          processingProgress: Math.max(0, Math.min(100, progress.progress)),
-          processingHeartbeatAt: new Date(),
-        },
-      }).catch(() => {})
+      try {
+        await this.prisma.document.update({
+          where: { id: documentId },
+          data: {
+            processingStage: progress.stage,
+            processingProgress: Math.max(0, Math.min(100, progress.progress)),
+            processingHeartbeatAt: new Date(),
+          },
+        })
+      } catch {
+        // 忽略进度更新错误，不影响主流程
+      }
     }
 
     try {
@@ -265,7 +269,7 @@ export class DocumentService {
         if (batchTexts.length === 0) return
         await checkCanceled()
 
-        report({
+        await report({
           stage: 'embedding',
           progress: 30 + Math.floor(60 * (processedPages / Math.max(1, maxPages))),
           message: `正在生成 embedding (${totalChunksProcessed + batchTexts.length} 块)...`,
@@ -334,7 +338,7 @@ export class DocumentService {
         batchChunks = []
         batchTexts = []
 
-        report({
+        await report({
           stage: 'storing',
           progress: 30 + Math.floor(60 * (processedPages / Math.max(1, maxPages))),
           message: '正在存储到向量数据库...',
@@ -346,7 +350,7 @@ export class DocumentService {
 
       if (isPdf) {
         // 使用流式处理 PDF
-        report({ stage: 'parsing', progress: 10, message: '正在流式解析文档...' })
+        await report({ stage: 'parsing', progress: 10, message: '正在流式解析文档...' })
 
         const streamResult = await loadDocumentStream(
           document.filePath,
@@ -395,7 +399,7 @@ export class DocumentService {
               }
 
               // 更新进度
-              report({
+              await report({
                 stage: 'chunking',
                 progress: 20 + Math.floor(10 * (processedPages / Math.max(1, maxPages))),
                 message: `正在处理第 ${processedPages} 页...`,
@@ -408,7 +412,7 @@ export class DocumentService {
         wasTruncated = streamResult.skipped
       } else {
         // 非 PDF 使用传统全量加载
-        report({ stage: 'parsing', progress: 10, message: '正在解析文档...' })
+        await report({ stage: 'parsing', progress: 10, message: '正在解析文档...' })
         const contents = await loadDocument(document.filePath, document.mimeType)
 
         if (contents.length === 0) {
@@ -420,7 +424,7 @@ export class DocumentService {
         const fullText = contents.map((c) => c.pageContent).join('\n\n')
         totalChars = fullText.length
 
-        report({ stage: 'chunking', progress: 25, message: '正在分块并生成 embedding...' })
+        await report({ stage: 'chunking', progress: 25, message: '正在分块并生成 embedding...' })
 
         if (hasPageInfo) {
           const pages: PageContent[] = contents
@@ -503,7 +507,7 @@ export class DocumentService {
       const truncateMsg = wasTruncated
         ? ` (已截断，仅处理前 ${maxPages} 页，共 ${totalPages} 页)`
         : ''
-      report({ stage: 'done', progress: 100, message: `处理完成${truncateMsg}` })
+      await report({ stage: 'done', progress: 100, message: `处理完成${truncateMsg}` })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
@@ -518,7 +522,7 @@ export class DocumentService {
         },
       })
 
-      report({ stage: 'error', progress: 0, message: '处理失败', error: errorMessage })
+      await report({ stage: 'error', progress: 0, message: '处理失败', error: errorMessage })
       throw error
     }
   }
