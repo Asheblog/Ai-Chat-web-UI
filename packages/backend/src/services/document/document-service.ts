@@ -240,7 +240,8 @@ export class DocumentService {
       // 获取配置
       const maxPages = this.config.maxPages ?? 200
       const embeddingConfig = this.embeddingService.getConfig()
-      const batchSize = Math.max(1, Math.floor(embeddingConfig.batchSize || 1))
+      // 每次传给 embedding 服务的文本数量 = batchSize × concurrency，以充分利用并发
+      const batchSize = Math.max(1, Math.floor((embeddingConfig.batchSize || 1) * (embeddingConfig.concurrency || 1)))
 
       // 断点续跑：跳过已存在的 chunks
       const existingChunkCount = await this.prisma.documentChunk.count({ where: { documentId } })

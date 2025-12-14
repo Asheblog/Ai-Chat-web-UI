@@ -188,6 +188,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
 
       console.log('✅ Document RAG services reloaded')
       console.log(`   Connection: ${connection.name || connectionId}, Model: ${modelId}`)
+      console.log(`   BatchSize: ${embeddingBatchSize}, Concurrency: ${embeddingConcurrency}`)
 
       return { success: true, message: `RAG services initialized with model: ${modelId}` }
     } catch (error) {
