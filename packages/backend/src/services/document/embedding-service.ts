@@ -3,8 +3,6 @@
  * 支持 OpenAI 和 Ollama 双引擎
  */
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
 async function runWithConcurrency<T>(
   items: T[],
   concurrency: number,
@@ -106,7 +104,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     }
 
     await runWithConcurrency(batches, this.concurrency, async (batch) => {
-      const batchResults = await this.callOpenAIWithRetry(batch.texts)
+      const batchResults = await this.callOpenAI(batch.texts)
       for (let j = 0; j < batchResults.length; j++) {
         results[batch.start + j] = batchResults[j]
       }
@@ -115,71 +113,47 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     return results
   }
 
-  private async callOpenAIWithRetry(texts: string[]): Promise<number[][]> {
-    const maxRetries = 1
-    let attempt = 0
+  private async callOpenAI(texts: string[]): Promise<number[][]> {
+    const response = await fetch(`${this.apiUrl}/embeddings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        input: texts,
+        model: this.model,
+        encoding_format: 'float',
+      }),
+    })
 
-    while (true) {
-      try {
-        const response = await fetch(`${this.apiUrl}/embeddings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify({
-            input: texts,
-            model: this.model,
-            encoding_format: 'float',
-          }),
-        })
+    if (!response.ok) {
+      const status = response.status
+      const errorText = await response.text()
 
-        if (!response.ok) {
-          const status = response.status
-          const errorText = await response.text()
+      if (status === 429) {
+        throw new Error(
+          `嵌入模型 API 限流 (HTTP 429)。建议：1) 在系统设置中将"嵌入并发数"调整为 1；2) 更换支持并发的 API 供应商。原始错误: ${errorText}`
+        )
+      }
 
-          if (status === 429 && attempt < maxRetries) {
-            await sleep(15000)
-            attempt++
-            continue
-          }
-          if (status >= 500 && status < 600 && attempt < maxRetries) {
-            await sleep(2000)
-            attempt++
-            continue
-          }
+      throw new Error(`OpenAI API error: ${status} ${errorText}`)
+    }
 
-          throw new Error(`OpenAI API error: ${status} ${errorText}`)
-        }
+    const data = (await response.json()) as { data?: Array<{ index: number; embedding: number[] }> }
 
-        const data = await response.json()
+    if (!data || !Array.isArray(data.data)) {
+      throw new Error('Invalid embedding API response: missing data array')
+    }
 
-        // 验证响应格式
-        if (!data || !Array.isArray(data.data)) {
-          console.error('[Embedding] Unexpected API response format:', JSON.stringify(data).slice(0, 500))
-          throw new Error('Invalid embedding API response: missing data array')
-        }
-
-        // 检查每个 embedding 是否有效
-        for (const item of data.data) {
-          if (!item || !Array.isArray(item.embedding) || item.embedding.length === 0) {
-            console.error('[Embedding] Invalid embedding item:', JSON.stringify(item).slice(0, 200))
-            throw new Error('Invalid embedding in API response: embedding array is missing or empty')
-          }
-        }
-
-        // 按照原始顺序排序
-        const sorted = data.data.sort((a: any, b: any) => a.index - b.index)
-        return sorted.map((item: any) => item.embedding)
-      } catch (err) {
-        if (attempt < maxRetries) {
-          await sleep(2000)
-          attempt++
-          continue
-        }
-        throw err
+    for (const item of data.data) {
+      if (!item || !Array.isArray(item.embedding) || item.embedding.length === 0) {
+        throw new Error('Invalid embedding in API response: embedding array is missing or empty')
       }
     }
+
+    const sorted = data.data.sort((a, b) => a.index - b.index)
+    return sorted.map((item) => item.embedding)
   }
 
   getDimension(): number {
