@@ -57,6 +57,81 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
+ * 最小堆实现，用于维护 Top-K 结果
+ * 堆顶为最小分数，方便淘汰低分结果
+ */
+class TopKHeap<T> {
+  private heap: T[] = []
+
+  constructor(
+    private maxSize: number,
+    private compare: (a: T, b: T) => number
+  ) {}
+
+  push(item: T): void {
+    if (this.heap.length < this.maxSize) {
+      this.heap.push(item)
+      this.bubbleUp(this.heap.length - 1)
+    } else if (this.compare(item, this.heap[0]) > 0) {
+      // 新元素比堆顶大，替换堆顶
+      this.heap[0] = item
+      this.bubbleDown(0)
+    }
+  }
+
+  get size(): number {
+    return this.heap.length
+  }
+
+  peek(): T | undefined {
+    return this.heap[0]
+  }
+
+  toSortedArray(): T[] {
+    // 返回降序排列的结果
+    return [...this.heap].sort((a, b) => this.compare(b, a))
+  }
+
+  private bubbleUp(index: number): void {
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2)
+      if (this.compare(this.heap[index], this.heap[parentIndex]) >= 0) {
+        break
+      }
+      this.swap(index, parentIndex)
+      index = parentIndex
+    }
+  }
+
+  private bubbleDown(index: number): void {
+    const length = this.heap.length
+    while (true) {
+      const leftChild = 2 * index + 1
+      const rightChild = 2 * index + 2
+      let smallest = index
+
+      if (leftChild < length && this.compare(this.heap[leftChild], this.heap[smallest]) < 0) {
+        smallest = leftChild
+      }
+      if (rightChild < length && this.compare(this.heap[rightChild], this.heap[smallest]) < 0) {
+        smallest = rightChild
+      }
+
+      if (smallest === index) break
+
+      this.swap(index, smallest)
+      index = smallest
+    }
+  }
+
+  private swap(i: number, j: number): void {
+    const temp = this.heap[i]
+    this.heap[i] = this.heap[j]
+    this.heap[j] = temp
+  }
+}
+
+/**
  * SQLite 向量数据库客户端
  * 适用于中小规模文档检索场景
  *
@@ -238,29 +313,50 @@ export class SQLiteVectorClient implements VectorDBClient {
 
     const tableName = `vec_${collectionName.replace(/[^a-zA-Z0-9_]/g, '_')}`
 
-    // 获取所有向量并计算相似度
-    const rows = this.db.prepare(`SELECT id, text, vector, metadata FROM "${tableName}"`).all() as Array<{
-      id: string
-      text: string
-      vector: string
-      metadata: string
-    }>
+    // 使用 TopKHeap 维护结果，避免全量排序
+    const topK = new TopKHeap<SearchResult>(limit, (a, b) => a.score - b.score)
 
-    const results: SearchResult[] = rows
-      .map((row) => {
-        const vector = JSON.parse(row.vector) as number[]
-        const score = cosineSimilarity(queryVector, vector)
-        return {
-          id: row.id,
-          text: row.text,
-          score,
-          metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    // 分批流式读取，每批约 10-25MB 内存
+    const BATCH_SIZE = 500
+
+    // 获取总数
+    const countResult = this.db.prepare(`SELECT COUNT(*) as cnt FROM "${tableName}"`).get() as { cnt: number }
+    const totalCount = countResult.cnt
+
+    if (totalCount === 0) return []
+
+    // 预编译查询语句
+    const stmt = this.db.prepare(`SELECT id, text, vector, metadata FROM "${tableName}" LIMIT ? OFFSET ?`)
+
+    let offset = 0
+    while (offset < totalCount) {
+      const rows = stmt.all(BATCH_SIZE, offset) as Array<{
+        id: string
+        text: string
+        vector: string
+        metadata: string
+      }>
+
+      for (const row of rows) {
+        try {
+          const vector = JSON.parse(row.vector) as number[]
+          const score = cosineSimilarity(queryVector, vector)
+          topK.push({
+            id: row.id,
+            text: row.text,
+            score,
+            metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+          })
+        } catch {
+          // 跳过解析失败的记录
+          continue
         }
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
+      }
 
-    return results
+      offset += BATCH_SIZE
+    }
+
+    return topK.toSortedArray()
   }
 
   async deleteByIds(collectionName: string, ids: string[]): Promise<void> {
