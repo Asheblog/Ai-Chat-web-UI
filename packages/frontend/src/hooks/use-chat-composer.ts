@@ -218,7 +218,7 @@ export function useChatComposer() {
   } = useDocumentAttachments({
     sessionId: currentSession?.id ?? null,
     limits: {
-      maxFileSize: 50 * 1024 * 1024, // 50MB
+      maxFileSize: (systemSettings?.ragMaxFileSizeMb ?? 50) * 1024 * 1024,
       allowedTypes: ['pdf', 'docx', 'doc', 'csv', 'txt', 'md'],
     },
     toast,

@@ -110,7 +110,7 @@ export const useWelcomeScreenViewModel = () => {
         ? `aichat:welcome:documents:draft:user:${actor.id}`
         : 'aichat:welcome:documents:draft:anon',
     limits: {
-      maxFileSize: 50 * 1024 * 1024,
+      maxFileSize: (systemSettings?.ragMaxFileSizeMb ?? 50) * 1024 * 1024,
       allowedTypes: ['pdf', 'docx', 'doc', 'csv', 'txt', 'md'],
     },
     toast,
