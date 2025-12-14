@@ -8,29 +8,26 @@ import {
   PrismaModelResolverRepository,
   type ModelResolverRepository,
 } from '../repositories/model-resolver-repository'
-import { ConnectionService, setConnectionService } from '../services/connections'
-import { ModelResolverService, setModelResolverServiceInstance } from '../services/catalog/model-resolver-service'
-import { setModelResolverService } from '../utils/model-resolver'
-import { setModelCatalogService } from '../services/catalog'
+import { ConnectionService } from '../services/connections'
+import { ModelResolverService } from '../services/catalog/model-resolver-service'
 import { ModelCatalogService } from '../services/catalog/model-catalog-service'
-import { SessionService, setSessionService } from '../services/sessions/session-service'
+import { SessionService } from '../services/sessions/session-service'
 import { UserService } from '../services/users/user-service'
-import { setUserService } from '../services/users'
-import { AuthService, setAuthService } from '../services/auth/auth-service'
-import { AuthContextService, setAuthContextService } from '../services/auth/auth-context-service'
-import { QuotaService, setQuotaService } from '../services/quota/quota-service'
-import { TokenizerService, setTokenizerService } from '../services/tokenizer/tokenizer-service'
-import { ContextWindowService, setContextWindowService } from '../services/context/context-window-service'
-import { OpenAICompatMessageService, setOpenAICompatMessageService } from '../services/openai-compat/message-service'
-import { SettingsService, setSettingsService } from '../services/settings'
-import { PersonalSettingsService, setPersonalSettingsService } from '../services/settings/personal-settings-service'
-import { SettingsFacade, setSettingsFacade } from '../services/settings/settings-facade'
-import { AppInfoService, setAppInfoService } from '../services/settings/app-info-service'
-import { HealthService, setHealthService } from '../services/settings/health-service'
-import { TaskTraceService, setTaskTraceService } from '../services/task-trace/task-trace-service'
-import { TaskTraceFileService, setTaskTraceFileService } from '../services/task-trace/task-trace-file-service'
-import { ChatService, setChatService } from '../services/chat/chat-service'
-import { ShareService, setShareService } from '../services/shares'
+import { AuthService } from '../services/auth/auth-service'
+import { AuthContextService } from '../services/auth/auth-context-service'
+import { QuotaService } from '../services/quota/quota-service'
+import { TokenizerService } from '../services/tokenizer/tokenizer-service'
+import { ContextWindowService } from '../services/context/context-window-service'
+import { OpenAICompatMessageService } from '../services/openai-compat/message-service'
+import { SettingsService } from '../services/settings'
+import { PersonalSettingsService } from '../services/settings/personal-settings-service'
+import { SettingsFacade } from '../services/settings/settings-facade'
+import { AppInfoService } from '../services/settings/app-info-service'
+import { HealthService } from '../services/settings/health-service'
+import { TaskTraceService } from '../services/task-trace/task-trace-service'
+import { TaskTraceFileService } from '../services/task-trace/task-trace-file-service'
+import { ChatService } from '../services/chat/chat-service'
+import { ShareService } from '../services/shares'
 import { AuthUtils } from '../utils/auth'
 import {
   refreshAllModelCatalog,
@@ -50,6 +47,8 @@ import { invalidateTaskTraceConfig } from '../utils/task-trace'
 import { syncSharedAnonymousQuota } from '../utils/quota'
 import { replaceProfileImage } from '../utils/profile-images'
 import { BackendLogger as log } from '../utils/logger'
+import { ServiceRegistry } from './service-registry'
+import { SERVICE_KEYS } from './service-accessor'
 
 export interface AppContainerDeps {
   context?: AppContext
@@ -103,18 +102,26 @@ export class AppContainer {
   readonly shareService: ShareService
 
   constructor(deps: AppContainerDeps = {}) {
+    const registry = ServiceRegistry.getInstance()
+
     this.context = deps.context ?? createAppContext()
+    registry.register(SERVICE_KEYS.context, this.context)
+
     this.connectionRepository =
       deps.connectionRepository ?? new PrismaConnectionRepository(this.context.prisma)
+    registry.register(SERVICE_KEYS.connectionRepository, this.connectionRepository)
+
     this.modelResolverRepository =
       deps.modelResolverRepository ?? new PrismaModelResolverRepository(this.context.prisma)
+    registry.register(SERVICE_KEYS.modelResolverRepository, this.modelResolverRepository)
+
     this.modelResolverService =
       deps.modelResolverService ??
       new ModelResolverService({
         repository: this.modelResolverRepository,
       })
-    setModelResolverServiceInstance(this.modelResolverService)
-    setModelResolverService(this.modelResolverService)
+    registry.register(SERVICE_KEYS.modelResolverService, this.modelResolverService)
+
     this.connectionService =
       deps.connectionService ??
       new ConnectionService({
@@ -124,18 +131,22 @@ export class AppContainer {
         verifyConnection,
         logger: log,
       })
-    setConnectionService(this.connectionService)
+    registry.register(SERVICE_KEYS.connectionService, this.connectionService)
+
     this.quotaService =
       deps.quotaService ??
       new QuotaService({
         prisma: this.context.prisma,
         getQuotaPolicy,
       })
-    setQuotaService(this.quotaService)
+    registry.register(SERVICE_KEYS.quotaService, this.quotaService)
+
     this.tokenizerService = deps.tokenizerService ?? new TokenizerService()
-    setTokenizerService(this.tokenizerService)
+    registry.register(SERVICE_KEYS.tokenizerService, this.tokenizerService)
+
     this.contextWindowService = deps.contextWindowService ?? new ContextWindowService()
-    setContextWindowService(this.contextWindowService)
+    registry.register(SERVICE_KEYS.contextWindowService, this.contextWindowService)
+
     this.sessionService =
       deps.sessionService ??
       new SessionService({
@@ -143,21 +154,24 @@ export class AppContainer {
         modelResolverService: this.modelResolverService,
         logger: this.context.logger,
       })
-    setSessionService(this.sessionService)
+    registry.register(SERVICE_KEYS.sessionService, this.sessionService)
+
     this.chatService =
       deps.chatService ??
       new ChatService({
         prisma: this.context.prisma,
         logger: this.context.logger,
       })
-    setChatService(this.chatService)
+    registry.register(SERVICE_KEYS.chatService, this.chatService)
+
     this.shareService =
       deps.shareService ??
       new ShareService({
         prisma: this.context.prisma,
         logger: this.context.logger,
       })
-    setShareService(this.shareService)
+    registry.register(SERVICE_KEYS.shareService, this.shareService)
+
     this.userService =
       deps.userService ??
       new UserService({
@@ -166,7 +180,8 @@ export class AppContainer {
         inspectActorQuota: (actor, options) => this.quotaService.inspectActorQuota(actor, options as any),
         logger: this.context.logger,
       })
-    setUserService(this.userService)
+    registry.register(SERVICE_KEYS.userService, this.userService)
+
     this.authContextService =
       deps.authContextService ??
       new AuthContextService({
@@ -174,7 +189,8 @@ export class AppContainer {
         authUtils: AuthUtils,
         getQuotaPolicy,
       })
-    setAuthContextService(this.authContextService)
+    registry.register(SERVICE_KEYS.authContextService, this.authContextService)
+
     this.authService =
       deps.authService ??
       new AuthService({
@@ -182,7 +198,8 @@ export class AppContainer {
         authUtils: AuthUtils,
         inspectActorQuota: (actor, options) => this.quotaService.inspectActorQuota(actor, options as any),
       })
-    setAuthService(this.authService)
+    registry.register(SERVICE_KEYS.authService, this.authService)
+
     this.modelCatalogService =
       deps.modelCatalogService ??
       new ModelCatalogService({
@@ -199,14 +216,16 @@ export class AppContainer {
         invalidateContextWindowCache,
         logger: log,
       })
-    setModelCatalogService(this.modelCatalogService)
+    registry.register(SERVICE_KEYS.modelCatalogService, this.modelCatalogService)
+
     this.openaiCompatMessageService =
       deps.openaiCompatMessageService ??
       new OpenAICompatMessageService({
         prisma: this.context.prisma,
         logger: this.context.logger,
       })
-    setOpenAICompatMessageService(this.openaiCompatMessageService)
+    registry.register(SERVICE_KEYS.openaiCompatMessageService, this.openaiCompatMessageService)
+
     this.settingsService =
       deps.settingsService ??
       new SettingsService({
@@ -218,25 +237,31 @@ export class AppContainer {
         syncSharedAnonymousQuota,
         replaceProfileImage,
       })
-    setSettingsService(this.settingsService)
+    registry.register(SERVICE_KEYS.settingsService, this.settingsService)
+
     this.personalSettingsService =
       deps.personalSettingsService ??
       new PersonalSettingsService({
         prisma: this.context.prisma,
       })
-    setPersonalSettingsService(this.personalSettingsService)
+    registry.register(SERVICE_KEYS.personalSettingsService, this.personalSettingsService)
+
     this.appInfoService = deps.appInfoService ?? new AppInfoService({ prisma: this.context.prisma })
-    setAppInfoService(this.appInfoService)
+    registry.register(SERVICE_KEYS.appInfoService, this.appInfoService)
+
     this.healthService = deps.healthService ?? new HealthService({ prisma: this.context.prisma })
-    setHealthService(this.healthService)
+    registry.register(SERVICE_KEYS.healthService, this.healthService)
+
     this.taskTraceFileService = deps.taskTraceFileService ?? new TaskTraceFileService()
-    setTaskTraceFileService(this.taskTraceFileService)
+    registry.register(SERVICE_KEYS.taskTraceFileService, this.taskTraceFileService)
+
     this.taskTraceService =
       deps.taskTraceService ??
       new TaskTraceService({
         prisma: this.context.prisma,
       })
-    setTaskTraceService(this.taskTraceService)
+    registry.register(SERVICE_KEYS.taskTraceService, this.taskTraceService)
+
     this.settingsFacade =
       deps.settingsFacade ??
       new SettingsFacade({
@@ -247,7 +272,9 @@ export class AppContainer {
         syncSharedAnonymousQuota,
         invalidateQuotaPolicyCache,
       })
-    setSettingsFacade(this.settingsFacade)
+    registry.register(SERVICE_KEYS.settingsFacade, this.settingsFacade)
+
+    registry.markInitialized()
   }
 }
 
