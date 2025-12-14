@@ -39,6 +39,7 @@ const RAG_CONFIG_KEYS = [
   'rag_chunk_size',
   'rag_chunk_overlap',
   'rag_max_file_size_mb',
+  'rag_max_pages',
   'rag_retention_days',
 ]
 

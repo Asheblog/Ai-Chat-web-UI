@@ -46,6 +46,7 @@ export function SystemRAGPage() {
   const [chunkSize, setChunkSize] = useState(1500)
   const [chunkOverlap, setChunkOverlap] = useState(100)
   const [maxFileSizeMb, setMaxFileSizeMb] = useState(50)
+  const [maxPages, setMaxPages] = useState(200)
   const [retentionDays, setRetentionDays] = useState(30)
   const [embeddingBatchSize, setEmbeddingBatchSize] = useState(1)
   const [embeddingConcurrency, setEmbeddingConcurrency] = useState(1)
@@ -60,6 +61,7 @@ export function SystemRAGPage() {
     chunkSize: { min: 100, max: 8000 },
     chunkOverlap: { min: 0, max: 1000 },
     maxFileSizeMb: { min: 1, max: 200 },
+    maxPages: { min: 10, max: 1000 },
     retentionDays: { min: 1, max: 365 },
     embeddingBatchSize: { min: 1, max: 128 },
     embeddingConcurrency: { min: 1, max: 16 },
@@ -83,6 +85,7 @@ export function SystemRAGPage() {
     setChunkSize(Number(systemSettings.ragChunkSize ?? 1500))
     setChunkOverlap(Number(systemSettings.ragChunkOverlap ?? 100))
     setMaxFileSizeMb(Number(systemSettings.ragMaxFileSizeMb ?? 50))
+    setMaxPages(Number(systemSettings.ragMaxPages ?? 200))
     setRetentionDays(Number(systemSettings.ragRetentionDays ?? 30))
   }, [systemSettings])
 
@@ -189,6 +192,10 @@ export function SystemRAGPage() {
         ragMaxFileSizeMb: Math.max(
           ranges.maxFileSizeMb.min,
           Math.min(ranges.maxFileSizeMb.max, Math.floor(maxFileSizeMb || ranges.maxFileSizeMb.min)),
+        ),
+        ragMaxPages: Math.max(
+          ranges.maxPages.min,
+          Math.min(ranges.maxPages.max, Math.floor(maxPages || ranges.maxPages.min)),
         ),
         ragRetentionDays: Math.max(
           ranges.retentionDays.min,
@@ -419,6 +426,18 @@ export function SystemRAGPage() {
                     onChange={(e) => setMaxFileSizeMb(Number(e.target.value))}
                   />
                   <p className="text-xs text-muted-foreground">允许上传的单文件最大大小（{ranges.maxFileSizeMb.min}-{ranges.maxFileSizeMb.max} MB）</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">最大页数限制</label>
+                  <Input
+                    type="number"
+                    min={10}
+                    max={1000}
+                    value={maxPages}
+                    onChange={(e) => setMaxPages(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">PDF 文档最大处理页数，超出将被截断（{ranges.maxPages.min}-{ranges.maxPages.max} 页）。轻量服务器建议 50-100 页。</p>
                 </div>
               </div>
             </div>

@@ -9,7 +9,8 @@ import fs from 'fs/promises'
 import crypto from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 
-import { loadDocument, isSupportedMimeType } from '../../modules/document/loaders'
+import { loadDocument, loadDocumentStream, isSupportedMimeType } from '../../modules/document/loaders'
+import type { DocumentContent } from '../../modules/document/loaders'
 import {
   iterateTextChunks,
   iteratePageAwareChunks,
@@ -46,6 +47,12 @@ export interface DocumentServiceConfig {
    * 文档过期天数（null 表示不过期）
    */
   retentionDays: number | null
+
+  /**
+   * 最大页数限制（0 表示不限制，默认 200）
+   * 用于防止超大 PDF 导致服务器崩溃
+   */
+  maxPages?: number
 }
 
 export interface UploadResult {
@@ -178,6 +185,7 @@ export class DocumentService {
 
   /**
    * 处理文档（解析、分块、embedding）
+   * 使用流式处理减少内存占用，支持大型 PDF
    */
   async processDocument(
     documentId: number,
@@ -229,43 +237,36 @@ export class DocumentService {
         throw new Error('Document not found')
       }
 
-      // 1. 解析文档
-      report({ stage: 'parsing', progress: 10, message: '正在解析文档...' })
-      const contents = await loadDocument(document.filePath, document.mimeType)
-
-      if (contents.length === 0) {
-        throw new Error('No content extracted from document')
-      }
-
-      // 检测是否有页码信息（PDF等按页解析的文档）
-      const hasPageInfo = contents.some((c) => typeof c.metadata.pageNumber === 'number')
-
-      // 计算总字符数（用于进度显示）
-      const fullText = contents.map((c) => c.pageContent).join('\n\n')
-      const totalChars = fullText.length
-
-      // 2. 流式分块 + 增量 embedding/写库
-      report({ stage: 'chunking', progress: 25, message: '正在分块并生成 embedding...' })
+      // 获取配置
+      const maxPages = this.config.maxPages ?? 200
+      const embeddingConfig = this.embeddingService.getConfig()
+      const batchSize = Math.max(1, Math.floor(embeddingConfig.batchSize || 1))
 
       // 断点续跑：跳过已存在的 chunks
       const existingChunkCount = await this.prisma.documentChunk.count({ where: { documentId } })
       const startIndex = existingChunkCount
 
-      const embeddingConfig = this.embeddingService.getConfig()
-      const batchSize = Math.max(1, Math.floor(embeddingConfig.batchSize || 1))
+      // 统计变量
+      let totalChunksProcessed = startIndex
+      let totalChars = 0
+      let processedChars = 0
+      let totalPages = 0
+      let processedPages = 0
+      let wasTruncated = false
 
+      // 批处理缓冲区
       let batchChunks: (TextChunk | PageAwareTextChunk)[] = []
       let batchTexts: string[] = []
-      let processedChars = 0
-      let totalChunksProcessed = startIndex
+      let chunkIndex = startIndex
 
+      // 刷新批次
       const flushBatch = async () => {
         if (batchTexts.length === 0) return
         await checkCanceled()
 
         report({
           stage: 'embedding',
-          progress: 30 + Math.floor(60 * (processedChars / Math.max(1, totalChars))),
+          progress: 30 + Math.floor(60 * (processedPages / Math.max(1, maxPages))),
           message: `正在生成 embedding (${totalChunksProcessed + batchTexts.length} 块)...`,
         })
 
@@ -334,62 +335,142 @@ export class DocumentService {
 
         report({
           stage: 'storing',
-          progress: 30 + Math.floor(60 * (processedChars / Math.max(1, totalChars))),
+          progress: 30 + Math.floor(60 * (processedPages / Math.max(1, maxPages))),
           message: '正在存储到向量数据库...',
         })
       }
 
-      // 根据是否有页码信息选择不同的分块策略
-      if (hasPageInfo) {
-        // 使用按页分块：保留页码元数据
-        const pages: PageContent[] = contents
-          .filter((c) => typeof c.metadata.pageNumber === 'number')
-          .map((c) => ({
-            pageContent: c.pageContent,
-            pageNumber: c.metadata.pageNumber as number,
-            metadata: c.metadata,
-          }))
+      // 检查文档类型是否支持流式处理（目前只有 PDF 支持）
+      const isPdf = document.mimeType === 'application/pdf'
 
-        for (const chunk of iteratePageAwareChunks(pages, {
-          chunkSize: this.config.chunkSize,
-          chunkOverlap: this.config.chunkOverlap,
-        })) {
-          if (chunk.index < startIndex) {
-            processedChars += chunk.content.length
-            continue
+      if (isPdf) {
+        // 使用流式处理 PDF
+        report({ stage: 'parsing', progress: 10, message: '正在流式解析文档...' })
+
+        const streamResult = await loadDocumentStream(
+          document.filePath,
+          document.mimeType,
+          {
+            maxPages,
+            onPage: async (content: DocumentContent, pageIndex: number) => {
+              await checkCanceled()
+              processedPages++
+
+              // 对每页内容进行分块
+              const pageText = content.pageContent
+              if (!pageText.trim()) return
+
+              totalChars += pageText.length
+
+              // 使用按页分块策略
+              const pageContent: PageContent = {
+                pageContent: pageText,
+                pageNumber: content.metadata.pageNumber || pageIndex + 1,
+                metadata: content.metadata,
+              }
+
+              for (const chunk of iteratePageAwareChunks([pageContent], {
+                chunkSize: this.config.chunkSize,
+                chunkOverlap: this.config.chunkOverlap,
+              })) {
+                // 重新编排 chunk index
+                const adjustedChunk: PageAwareTextChunk = {
+                  ...chunk,
+                  index: chunkIndex++,
+                }
+
+                if (adjustedChunk.index < startIndex) {
+                  processedChars += adjustedChunk.content.length
+                  continue
+                }
+
+                batchChunks.push(adjustedChunk)
+                batchTexts.push(adjustedChunk.content)
+                processedChars += adjustedChunk.content.length
+
+                if (batchTexts.length >= batchSize) {
+                  await flushBatch()
+                }
+              }
+
+              // 更新进度
+              report({
+                stage: 'chunking',
+                progress: 20 + Math.floor(10 * (processedPages / Math.max(1, maxPages))),
+                message: `正在处理第 ${processedPages} 页...`,
+              })
+            },
           }
+        )
 
-          await checkCanceled()
-
-          batchChunks.push(chunk)
-          batchTexts.push(chunk.content)
-          processedChars += chunk.content.length
-
-          if (batchTexts.length >= batchSize) {
-            await flushBatch()
-          }
-        }
+        totalPages = streamResult.totalPages
+        wasTruncated = streamResult.skipped
       } else {
-        // 使用传统分块：无页码信息
-        for (const chunk of iterateTextChunks(fullText, {
-          chunkSize: this.config.chunkSize,
-          chunkOverlap: this.config.chunkOverlap,
-        })) {
-          if (chunk.index < startIndex) {
-            processedChars = (chunk.metadata.endChar as number) || processedChars
-            continue
+        // 非 PDF 使用传统全量加载
+        report({ stage: 'parsing', progress: 10, message: '正在解析文档...' })
+        const contents = await loadDocument(document.filePath, document.mimeType)
+
+        if (contents.length === 0) {
+          throw new Error('No content extracted from document')
+        }
+
+        totalPages = contents.length
+        const hasPageInfo = contents.some((c) => typeof c.metadata.pageNumber === 'number')
+        const fullText = contents.map((c) => c.pageContent).join('\n\n')
+        totalChars = fullText.length
+
+        report({ stage: 'chunking', progress: 25, message: '正在分块并生成 embedding...' })
+
+        if (hasPageInfo) {
+          const pages: PageContent[] = contents
+            .filter((c) => typeof c.metadata.pageNumber === 'number')
+            .map((c) => ({
+              pageContent: c.pageContent,
+              pageNumber: c.metadata.pageNumber as number,
+              metadata: c.metadata,
+            }))
+
+          for (const chunk of iteratePageAwareChunks(pages, {
+            chunkSize: this.config.chunkSize,
+            chunkOverlap: this.config.chunkOverlap,
+          })) {
+            if (chunk.index < startIndex) {
+              processedChars += chunk.content.length
+              continue
+            }
+
+            await checkCanceled()
+
+            batchChunks.push(chunk)
+            batchTexts.push(chunk.content)
+            processedChars += chunk.content.length
+
+            if (batchTexts.length >= batchSize) {
+              await flushBatch()
+            }
           }
+        } else {
+          for (const chunk of iterateTextChunks(fullText, {
+            chunkSize: this.config.chunkSize,
+            chunkOverlap: this.config.chunkOverlap,
+          })) {
+            if (chunk.index < startIndex) {
+              processedChars = (chunk.metadata.endChar as number) || processedChars
+              continue
+            }
 
-          await checkCanceled()
+            await checkCanceled()
 
-          batchChunks.push(chunk)
-          batchTexts.push(chunk.content)
-          processedChars = (chunk.metadata.endChar as number) || processedChars
+            batchChunks.push(chunk)
+            batchTexts.push(chunk.content)
+            processedChars = (chunk.metadata.endChar as number) || processedChars
 
-          if (batchTexts.length >= batchSize) {
-            await flushBatch()
+            if (batchTexts.length >= batchSize) {
+              await flushBatch()
+            }
           }
         }
+        processedPages = contents.length
       }
 
       await flushBatch()
@@ -398,12 +479,7 @@ export class DocumentService {
         throw new Error('No chunks created from document')
       }
 
-      // 6. 更新文档状态
-      // 计算页数：有页码信息时取最大页码，否则取第一个content的totalPages
-      const pageCount = hasPageInfo
-        ? Math.max(...contents.map((c) => (c.metadata.pageNumber as number) || 0))
-        : (contents[0]?.metadata.totalPages as number) || 1
-
+      // 更新文档状态
       await this.prisma.document.update({
         where: { id: documentId },
         data: {
@@ -413,15 +489,20 @@ export class DocumentService {
           processingFinishedAt: new Date(),
           chunkCount: totalChunksProcessed,
           metadata: JSON.stringify({
-            pageCount,
-            charCount: fullText.length,
-            wordCount: fullText.split(/\s+/).length,
-            hasPageInfo, // 记录是否有页码信息，便于后续查询
+            pageCount: totalPages,
+            processedPages,
+            charCount: totalChars,
+            wordCount: Math.floor(totalChars / 5), // 估算
+            truncated: wasTruncated,
+            maxPagesLimit: wasTruncated ? maxPages : undefined,
           }),
         },
       })
 
-      report({ stage: 'done', progress: 100, message: '处理完成' })
+      const truncateMsg = wasTruncated
+        ? ` (已截断，仅处理前 ${maxPages} 页，共 ${totalPages} 页)`
+        : ''
+      report({ stage: 'done', progress: 100, message: `处理完成${truncateMsg}` })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 

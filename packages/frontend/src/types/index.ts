@@ -307,6 +307,7 @@ export interface SystemSettings {
   ragChunkSize?: number;
   ragChunkOverlap?: number;
   ragMaxFileSizeMb?: number;
+  ragMaxPages?: number;
   ragRetentionDays?: number;
 }
 

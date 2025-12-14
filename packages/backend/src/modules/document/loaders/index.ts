@@ -3,7 +3,7 @@
  * 根据 MIME 类型选择合适的加载器
  */
 
-import type { DocumentLoader, DocumentContent } from './types'
+import type { DocumentLoader, DocumentContent, StreamLoadOptions } from './types'
 import { TextLoader } from './text-loader'
 import { PdfLoader } from './pdf-loader'
 import { DocxLoader } from './docx-loader'
@@ -48,7 +48,7 @@ export function getSupportedMimeTypes(): string[] {
 }
 
 /**
- * 加载文档
+ * 加载文档（全量模式）
  */
 export async function loadDocument(
   filePath: string,
@@ -63,8 +63,61 @@ export async function loadDocument(
   return loader.load(filePath, mimeType)
 }
 
+/**
+ * 流式加载文档（按页处理，减少内存占用）
+ * 适用于大型 PDF 等文档
+ */
+export async function loadDocumentStream(
+  filePath: string,
+  mimeType: string,
+  options: StreamLoadOptions
+): Promise<{ totalPages: number; processedPages: number; skipped: boolean }> {
+  const loader = getLoaderForMimeType(mimeType)
+
+  if (!loader) {
+    throw new Error(`Unsupported file type: ${mimeType}`)
+  }
+
+  // 如果加载器支持流式加载，使用流式模式
+  if (loader.loadStream) {
+    return loader.loadStream(filePath, mimeType, options)
+  }
+
+  // 否则回退到全量加载，然后逐个调用回调
+  const contents = await loader.load(filePath, mimeType)
+  let processedPages = 0
+
+  for (let i = 0; i < contents.length; i++) {
+    if (options.maxPages && i >= options.maxPages) {
+      return {
+        totalPages: contents.length,
+        processedPages,
+        skipped: true,
+      }
+    }
+
+    if (options.onPage) {
+      const result = await options.onPage(contents[i], i)
+      if (result === false) {
+        return {
+          totalPages: contents.length,
+          processedPages,
+          skipped: true,
+        }
+      }
+    }
+    processedPages++
+  }
+
+  return {
+    totalPages: contents.length,
+    processedPages,
+    skipped: false,
+  }
+}
+
 // 导出类型
-export type { DocumentLoader, DocumentContent } from './types'
+export type { DocumentLoader, DocumentContent, StreamLoadOptions } from './types'
 
 // 导出加载器类
 export { TextLoader } from './text-loader'

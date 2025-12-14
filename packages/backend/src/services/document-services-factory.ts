@@ -71,6 +71,7 @@ export const DEFAULT_DOCUMENT_SERVICES_CONFIG: DocumentServicesConfig = {
     chunkSize: 1500,
     chunkOverlap: 100,
     retentionDays: 30,
+    maxPages: 200, // 最大页数限制，防止超大 PDF 导致服务器崩溃
   },
   rag: {
     topK: 5,

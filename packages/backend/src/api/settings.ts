@@ -126,6 +126,7 @@ const systemSettingSchema = z.object({
   rag_chunk_size: z.number().int().min(100).max(8000).optional(),
   rag_chunk_overlap: z.number().int().min(0).max(1000).optional(),
   rag_max_file_size_mb: z.number().int().min(1).max(200).optional(),
+  rag_max_pages: z.number().int().min(10).max(1000).optional(),
   rag_retention_days: z.number().int().min(1).max(365).optional(),
 });
 

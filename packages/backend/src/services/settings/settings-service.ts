@@ -222,6 +222,7 @@ export class SettingsService {
       rag_chunk_size: this.parseIntInRange(settingsObj.rag_chunk_size, '1500', 100, 8000, 1500),
       rag_chunk_overlap: this.parseIntInRange(settingsObj.rag_chunk_overlap, '100', 0, 1000, 100),
       rag_max_file_size_mb: this.parseIntInRange(settingsObj.rag_max_file_size_mb, '50', 1, 200, 50),
+      rag_max_pages: this.parseIntInRange(settingsObj.rag_max_pages, '200', 10, 1000, 200),
       rag_retention_days: this.parseIntInRange(settingsObj.rag_retention_days, '30', 1, 365, 30),
     }
 
@@ -320,6 +321,7 @@ export class SettingsService {
     assignIfNumber('rag_chunk_size', payload.rag_chunk_size)
     assignIfNumber('rag_chunk_overlap', payload.rag_chunk_overlap)
     assignIfNumber('rag_max_file_size_mb', payload.rag_max_file_size_mb)
+    assignIfNumber('rag_max_pages', payload.rag_max_pages)
     assignIfNumber('rag_retention_days', payload.rag_retention_days)
     assignIfNumber('rag_embedding_batch_size', payload.rag_embedding_batch_size)
     assignIfNumber('rag_embedding_concurrency', payload.rag_embedding_concurrency)

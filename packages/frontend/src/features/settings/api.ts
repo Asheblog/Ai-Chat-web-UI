@@ -351,6 +351,11 @@ export const getSystemSettings = async () => {
         if (typeof v === 'number') return Math.max(1, Math.min(200, v))
         return 50
       })(),
+      ragMaxPages: (() => {
+        const v = raw.rag_max_pages
+        if (typeof v === 'number') return Math.max(10, Math.min(1000, v))
+        return 200
+      })(),
       ragRetentionDays: (() => {
         const v = raw.rag_retention_days
         if (typeof v === 'number') return Math.max(1, Math.min(365, v))
@@ -467,6 +472,7 @@ export const updateSystemSettings = async (
   if (typeof rest.ragChunkSize === 'number') payload.rag_chunk_size = rest.ragChunkSize
   if (typeof rest.ragChunkOverlap === 'number') payload.rag_chunk_overlap = rest.ragChunkOverlap
   if (typeof rest.ragMaxFileSizeMb === 'number') payload.rag_max_file_size_mb = rest.ragMaxFileSizeMb
+  if (typeof rest.ragMaxPages === 'number') payload.rag_max_pages = rest.ragMaxPages
   if (typeof rest.ragRetentionDays === 'number') payload.rag_retention_days = rest.ragRetentionDays
   if (assistantAvatarUpload) {
     payload.assistant_avatar = assistantAvatarUpload

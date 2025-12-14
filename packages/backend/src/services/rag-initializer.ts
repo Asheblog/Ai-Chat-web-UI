@@ -89,6 +89,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
               'rag_chunk_size',
               'rag_chunk_overlap',
               'rag_max_file_size_mb',
+              'rag_max_pages',
               'rag_retention_days',
             ],
           },
@@ -173,6 +174,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
           chunkSize: parseInt(settingsMap.rag_chunk_size || '1500', 10) || 1500,
           chunkOverlap: parseInt(settingsMap.rag_chunk_overlap || '100', 10) || 100,
           retentionDays: parseInt(settingsMap.rag_retention_days || '30', 10) || 30,
+          maxPages: parseInt(settingsMap.rag_max_pages || '200', 10) || 200,
         },
         rag: {
           topK: parseInt(settingsMap.rag_top_k || '5', 10) || 5,
