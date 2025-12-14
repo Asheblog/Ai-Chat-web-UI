@@ -70,6 +70,7 @@ export function SystemModelsPage() {
     handleImportFile,
     handleToggleCapability,
     handleSaveMaxTokens,
+    handleSaveContextWindow,
     resetModel,
     handleBatchReset,
     hasCapability,
@@ -80,6 +81,9 @@ export function SystemModelsPage() {
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
   const [tokenDialogModel, setTokenDialogModel] = useState<any | null>(null)
   const [tokenDialogValue, setTokenDialogValue] = useState('')
+  const [contextDialogOpen, setContextDialogOpen] = useState(false)
+  const [contextDialogModel, setContextDialogModel] = useState<any | null>(null)
+  const [contextDialogValue, setContextDialogValue] = useState('')
   const [page, setPage] = useState(1)
   const pageSize = 80
 
@@ -95,12 +99,31 @@ export function SystemModelsPage() {
     setTokenDialogValue('')
   }
 
+  const openContextDialog = (model: any) => {
+    setContextDialogModel(model)
+    setContextDialogValue(typeof model.contextWindow === 'number' ? String(model.contextWindow) : '')
+    setContextDialogOpen(true)
+  }
+
+  const closeContextDialog = () => {
+    setContextDialogOpen(false)
+    setContextDialogModel(null)
+    setContextDialogValue('')
+  }
+
   const dialogSaving = tokenDialogModel ? savingKey === modelKey(tokenDialogModel) : false
+  const contextDialogSaving = contextDialogModel ? savingKey === modelKey(contextDialogModel) : false
 
   const handleTokenDialogSave = async () => {
     if (!tokenDialogModel) return
     await handleSaveMaxTokens(tokenDialogModel, tokenDialogValue)
     closeTokenDialog()
+  }
+
+  const handleContextDialogSave = async () => {
+    if (!contextDialogModel) return
+    await handleSaveContextWindow(contextDialogModel, contextDialogValue)
+    closeContextDialog()
   }
 
   useEffect(() => {
@@ -461,6 +484,9 @@ export function SystemModelsPage() {
                               <DropdownMenuItem onClick={()=>openTokenDialog(m)}>
                                 修改生成 Tokens
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={()=>openContextDialog(m)}>
+                                修改上下文窗口
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 disabled={!m.overridden || isBusy}
@@ -542,6 +568,49 @@ export function SystemModelsPage() {
               取消
             </Button>
             <Button onClick={handleTokenDialogSave} disabled={dialogSaving}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={contextDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (contextDialogSaving) return
+            closeContextDialog()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>修改上下文窗口</DialogTitle>
+            <DialogDescription>
+              {contextDialogModel?.name || contextDialogModel?.id || '未选择模型'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="number"
+              min={1}
+              placeholder="128000"
+              value={contextDialogValue}
+              onChange={(e)=>setContextDialogValue(e.target.value)}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={contextDialogSaving}
+            />
+            <p className="text-sm text-muted-foreground">留空表示恢复供应商默认。输入模型支持的最大上下文长度（如 128000）。</p>
+          </div>
+          <DialogFooter className="pt-4">
+            <Button
+              variant="outline"
+              onClick={closeContextDialog}
+              disabled={contextDialogSaving}
+            >
+              取消
+            </Button>
+            <Button onClick={handleContextDialogSave} disabled={contextDialogSaving}>
               保存
             </Button>
           </DialogFooter>

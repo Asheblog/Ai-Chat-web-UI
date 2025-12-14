@@ -177,6 +177,43 @@ export function useSystemModels() {
     }
   }
 
+  const handleSaveContextWindow = async (model: any, rawValue: string) => {
+    const key = keyOf(model)
+    const trimmed = rawValue.trim()
+    let payloadValue: number | null
+    if (trimmed === '') {
+      payloadValue = null
+    } else {
+      const parsed = Number.parseInt(trimmed, 10)
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        toast({
+          title: '上下文窗口无效',
+          description: '请输入大于 0 的整数，或留空使用默认值',
+          variant: 'destructive',
+        })
+        return
+      }
+      payloadValue = parsed
+    }
+    try {
+      setSavingKey(key)
+      await updateModelCapabilities(model.connectionId, model.rawId, { contextWindow: payloadValue })
+      await fetchAll()
+      toast({
+        title: '上下文窗口已更新',
+        description: payloadValue ? `已设置为 ${payloadValue.toLocaleString()} tokens` : '已恢复供应商默认值',
+      })
+    } catch (err: any) {
+      toast({
+        title: '保存失败',
+        description: err?.message || '更新上下文窗口失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingKey('')
+    }
+  }
+
   const handleUpdateAccessPolicy = async (
     model: any,
     target: 'anonymous' | 'user',
@@ -479,6 +516,7 @@ export function useSystemModels() {
     handleImportFile,
     handleToggleCapability,
     handleSaveMaxTokens,
+    handleSaveContextWindow,
     handleUpdateAccessPolicy,
     resetModel,
     handleBatchReset,

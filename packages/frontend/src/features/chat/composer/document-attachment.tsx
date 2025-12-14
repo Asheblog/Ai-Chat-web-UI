@@ -244,11 +244,13 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" showCloseButton>
-        <div className="p-4 space-y-3">
-          <div className="text-sm font-medium">{title}</div>
-          <DocumentPreviewList documents={documents} onRemove={onRemove} onCancel={onCancel} />
-          <div className="flex justify-end">
+      <SheetContent side="bottom" showCloseButton className="max-h-[70vh] flex flex-col">
+        <div className="p-4 space-y-3 flex flex-col min-h-0">
+          <div className="text-sm font-medium flex-shrink-0">{title}</div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <DocumentPreviewList documents={documents} onRemove={onRemove} onCancel={onCancel} />
+          </div>
+          <div className="flex justify-end flex-shrink-0">
             <SheetClose asChild>
               <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
                 关闭
