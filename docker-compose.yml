@@ -101,6 +101,8 @@ services:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
       - BACKEND_HOST=${BACKEND_HOST:-backend}
       - BACKEND_INTERNAL_PORT=${BACKEND_INTERNAL_PORT:-8001}
+      # 稳定的 Server Actions 加密密钥，避免重新构建后旧客户端调用失败
+      - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:-aichat-stable-server-actions-key-2025}
     depends_on:
       backend:
         condition: service_healthy

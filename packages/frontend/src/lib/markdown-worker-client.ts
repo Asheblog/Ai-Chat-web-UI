@@ -26,6 +26,7 @@ interface PendingJob {
 }
 
 let workerInstance: Worker | null = null
+let workerFailed = false // 标记 Worker 是否初始化失败，避免重复尝试
 const pendingJobs = new Map<string, PendingJob>()
 let jobCounter = 0
 
@@ -41,48 +42,75 @@ const createFallbackResponse = (
   errorMessage: errorMessage ?? undefined,
 })
 
-const ensureWorker = () => {
-  if (workerInstance || typeof window === 'undefined') {
+const ensureWorker = (): Worker | null => {
+  // 服务端渲染时直接返回 null
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  // 如果已有实例，直接返回
+  if (workerInstance) {
     return workerInstance
   }
-  workerInstance = new Worker(new URL('../workers/markdown-worker.ts', import.meta.url), {
-    type: 'module',
-  })
-  workerInstance.addEventListener('message', (event: MessageEvent<any>) => {
-    const data = event.data
-    if (!data || typeof data.jobId !== 'string') return
-    const pending = pendingJobs.get(data.jobId)
-    if (!pending) return
-    pendingJobs.delete(data.jobId)
-    if (data.errored) {
+
+  // 如果之前初始化失败过，不再尝试
+  if (workerFailed) {
+    return null
+  }
+
+  try {
+    // 使用 try-catch 包裹 Worker 初始化，捕获可能的错误
+    workerInstance = new Worker(new URL('../workers/markdown-worker.ts', import.meta.url), {
+      type: 'module',
+    })
+
+    workerInstance.addEventListener('message', (event: MessageEvent<any>) => {
+      const data = event.data
+      if (!data || typeof data.jobId !== 'string') return
+      const pending = pendingJobs.get(data.jobId)
+      if (!pending) return
+      pendingJobs.delete(data.jobId)
+      if (data.errored) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('[markdown-worker-client] Markdown worker fallback', data.errorMessage || '渲染失败')
+        }
+        pending.resolve(createFallbackResponse(pending.request, data.errorMessage))
+        return
+      }
+      pending.resolve({
+        contentHtml: data.contentHtml,
+        reasoningHtml: data.reasoningHtml ?? null,
+        contentVersion: data.contentVersion,
+        reasoningVersion: data.reasoningVersion,
+      })
+    })
+
+    workerInstance.addEventListener('error', (error) => {
+      const message = error instanceof ErrorEvent ? error.message : '渲染失败'
       if (process.env.NODE_ENV !== 'production') {
         // eslint-disable-next-line no-console
-        console.warn('[markdown-worker-client] Markdown worker fallback', data.errorMessage || '渲染失败')
+        console.warn('[markdown-worker-client] Worker error, falling back to main thread:', message)
       }
-      pending.resolve(createFallbackResponse(pending.request, data.errorMessage))
-      return
+      pendingJobs.forEach((job) => {
+        job.resolve(createFallbackResponse(job.request, message))
+      })
+      pendingJobs.clear()
+      workerInstance?.terminate()
+      workerInstance = null
+      workerFailed = true // 标记失败，后续使用 fallback
+    })
+
+    return workerInstance
+  } catch (err) {
+    // Worker 初始化失败（如 standalone 模式下文件不存在）
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn('[markdown-worker-client] Failed to initialize worker, using fallback:', err)
     }
-    pending.resolve({
-      contentHtml: data.contentHtml,
-      reasoningHtml: data.reasoningHtml ?? null,
-      contentVersion: data.contentVersion,
-      reasoningVersion: data.reasoningVersion,
-    })
-  })
-  workerInstance.addEventListener('error', (error) => {
-    const message = error instanceof Error ? error.message : '渲染失败'
-    pendingJobs.forEach((job) => {
-      if (process.env.NODE_ENV !== 'production') {
-        // eslint-disable-next-line no-console
-        console.warn('[markdown-worker-client] Markdown worker error fallback', message)
-      }
-      job.resolve(createFallbackResponse(job.request, message))
-    })
-    pendingJobs.clear()
-    workerInstance?.terminate()
-    workerInstance = null
-  })
-  return workerInstance
+    workerFailed = true
+    return null
+  }
 }
 
 export const requestMarkdownRender = async (payload: RenderRequest): Promise<RenderResponse> => {
