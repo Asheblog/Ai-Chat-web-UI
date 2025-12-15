@@ -92,10 +92,21 @@ function MessageBubbleComponent({
     bodyEvents: body.toolEvents,
   })
 
-  const cacheMatches =
+  // 缓存匹配逻辑：
+  // 1. 严格匹配：版本完全相同
+  // 2. 宽松匹配：缓存版本与当前版本差距不超过3，且有有效HTML内容
+  // 宽松匹配用于处理流式传输结束时的竞态条件
+  const strictCacheMatches =
     renderCache &&
     renderCache.contentVersion === body.version &&
     renderCache.reasoningVersion === body.reasoningVersion
+  const looseCacheMatches =
+    renderCache &&
+    renderCache.contentHtml &&
+    renderCache.contentHtml.length > 0 &&
+    body.version - renderCache.contentVersion <= 3 &&
+    body.reasoningVersion - renderCache.reasoningVersion <= 3
+  const cacheMatches = strictCacheMatches || (!isStreaming && looseCacheMatches)
   const contentHtml = cacheMatches ? renderCache.contentHtml ?? '' : ''
   const reasoningHtml = cacheMatches && renderCache?.reasoningHtml ? renderCache.reasoningHtml : ''
 
@@ -124,9 +135,12 @@ function MessageBubbleComponent({
     if (!hasContent && !hasReasoning) return
     if (!hasContent && body.reasoningVersion === 0) return
     if (cacheMatches) return
+    // 流式传输期间跳过 Worker 渲染，因为内容在不断变化
+    // 使用 ReactMarkdown fallback 进行实时渲染，流式结束后再用 Worker 渲染
+    if (isStreaming) return
 
     let cancelled = false
-    const delay = isStreaming ? 160 : 40
+    const delay = 40
     const timer = window.setTimeout(() => {
       setIsRendering(true)
       const reasoningMarkdown = hasReasoning ? toReasoningMarkdown(body.reasoning!) : ''

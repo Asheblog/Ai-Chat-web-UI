@@ -219,7 +219,9 @@ function ReasoningPanelComponent({
 
           <div className="reasoning-timeline">
             {hasReasoning ? (
-              reasoningHtml ? (
+              // 流式传输时始终使用 TypewriterReasoning，避免中途切换到预渲染HTML导致视觉跳转
+              // 只有在非流式且有预渲染HTML时才使用 dangerouslySetInnerHTML
+              !isStreaming && reasoningHtml ? (
                 <div
                   className="markdown-body markdown-body--reasoning reasoning-markdown"
                   dangerouslySetInnerHTML={{ __html: reasoningHtml }}

@@ -134,9 +134,11 @@ export const requestMarkdownRender = async (payload: RenderRequest): Promise<Ren
 
   const worker = ensureWorker()
   if (!worker) {
+    // Worker 不可用时，返回 null 让 MarkdownRenderer 使用 ReactMarkdown fallback
+    // 不能返回原始 content，因为那会被当作 HTML 直接插入导致显示原始 Markdown 文本
     return {
-      contentHtml: payload.content,
-      reasoningHtml: payload.reasoning,
+      contentHtml: null,
+      reasoningHtml: payload.reasoning ? null : undefined,
       contentVersion: payload.contentVersion,
       reasoningVersion: payload.reasoningVersion,
     }
