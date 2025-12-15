@@ -53,62 +53,62 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">cb1c39e</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">13667f9</span>
               <span className="text-muted-foreground leading-relaxed">
-                WSL 环境 SQLite 兼容性增强：自动检测运行环境并配置 PRAGMA 参数，解决跨平台数据库访问问题。
+                向量存储迁移至二进制格式，提升存储效率和查询性能。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d331efa</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">627ef6a</span>
               <span className="text-muted-foreground leading-relaxed">
-                向量数据库单例模式重构，实现环境感知的 SQLite 配置优化。
+                重构服务容器架构，采用集中式服务注册机制。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5fa77bc</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">df3c27c</span>
               <span className="text-muted-foreground leading-relaxed">
-                欢迎页文档附件刷新后可恢复，提升用户体验。
+                优化 SQLite 向量搜索，引入 TopK 堆和批处理策略。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">38badc3</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a8d0d3a</span>
               <span className="text-muted-foreground leading-relaxed">
-                配额策略支持事务感知获取，确保数据一致性。
+                嵌入批处理大小优化，支持并发处理计算。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d5c323d</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5c9103d</span>
               <span className="text-muted-foreground leading-relaxed">
-                RAG 文档处理支持取消操作，WSL 兼容性改进。
+                优化文档过多导致服务器资源耗尽问题。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">9af45e0</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7a8d981</span>
               <span className="text-muted-foreground leading-relaxed">
-                系统设置新增输入验证和范围说明，防止配置错误。
+                新增稳定的服务端加密密钥，提升 Markdown Worker 容错能力。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2937afb</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f28cf73</span>
               <span className="text-muted-foreground leading-relaxed">
-                RAG 嵌入性能控制优化，文档验证逻辑增强。
+                聊天集成文档工具，支持 RAG 增强对话。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">50d712c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c6f1ef4</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天输入框新增附件管理托盘，统一文件上传交互。
+                文档 Worker 新增 RAG 服务热重载能力。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">42cf28a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8035290</span>
               <span className="text-muted-foreground leading-relaxed">
-                后端新增文档 RAG 支持：文件上传、向量搜索、知识库检索全流程。
+                Docker 新增 RAG Worker 服务，优化容器配置。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-12-13 推送变更摘要
+            以上为 2025-12-15 推送变更摘要
           </p>
         </Card>
       </div>
