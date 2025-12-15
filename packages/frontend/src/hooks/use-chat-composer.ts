@@ -190,6 +190,7 @@ export function useChatComposer() {
     onFilesSelected,
     removeImage,
     validateImage,
+    handlePaste,
     limits: {
       maxCount: MAX_IMAGE_COUNT,
       maxMb: MAX_IMAGE_MB,
@@ -448,6 +449,7 @@ export function useChatComposer() {
     onFilesSelected,
     removeImage,
     validateImage,
+    handlePaste,
     clearError,
     webSearchEnabled,
     setWebSearchEnabled,

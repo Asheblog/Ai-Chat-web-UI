@@ -1,4 +1,4 @@
-import { ChangeEvent, KeyboardEvent, RefObject, useState } from 'react'
+import { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject, useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -39,6 +39,7 @@ interface WelcomeFormProps {
       onRemoveImage: (index: number) => void
       onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
       onPickImages: () => void
+      onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void
       documents: AttachedDocument[]
       onRemoveDocument: (id: number) => void
       onCancelDocument: (id: number) => void
@@ -124,6 +125,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             onKeyDown={onKeyDown}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
+            onPaste={attachments.onPaste}
             className="h-auto min-h-[40px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-2 leading-[1.4] text-left placeholder:text-muted-foreground"
             rows={1}
           />

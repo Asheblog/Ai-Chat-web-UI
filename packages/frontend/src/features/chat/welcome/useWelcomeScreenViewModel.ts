@@ -89,6 +89,7 @@ export const useWelcomeScreenViewModel = () => {
     pickImages,
     onFilesSelected,
     removeImage,
+    handlePaste,
   } = useImageAttachments({
     isVisionEnabled: true,
     limits: DEFAULT_CHAT_IMAGE_LIMITS,
@@ -575,6 +576,7 @@ export const useWelcomeScreenViewModel = () => {
         onRemoveImage: removeImage,
         onFilesSelected,
         onPickImages: handlePickImages,
+        onPaste: handlePaste,
         documents: attachedDocuments,
         onRemoveDocument: removeDocument,
         onCancelDocument: cancelDocument,

@@ -1,6 +1,6 @@
 'use client'
 
-import { type ChangeEvent, type KeyboardEventHandler, type MutableRefObject, useMemo, useState } from 'react'
+import { type ChangeEvent, type ClipboardEventHandler, type KeyboardEventHandler, type MutableRefObject, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatComposerImage, AttachedDocument } from '@/hooks/use-chat-composer'
 import { MobileComposer } from './mobile-composer'
@@ -47,6 +47,7 @@ export interface ChatComposerPanelProps {
   onRemoveImage: (index: number) => void
   onInputChange: (value: string) => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
+  onPaste: ClipboardEventHandler<HTMLTextAreaElement>
   onCompositionStart: () => void
   onCompositionEnd: () => void
   onSend: () => void
@@ -114,6 +115,7 @@ export function ChatComposerPanel({
   onRemoveImage,
   onInputChange,
   onKeyDown,
+  onPaste,
   onCompositionStart,
   onCompositionEnd,
   onSend,
@@ -283,6 +285,7 @@ export function ChatComposerPanel({
         textareaRef={textareaRef}
         onInputChange={onInputChange}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         onCompositionStart={onCompositionStart}
         onCompositionEnd={onCompositionEnd}
         isStreaming={isStreaming}
@@ -324,6 +327,7 @@ export function ChatComposerPanel({
         textareaRef={textareaRef}
         onInputChange={onInputChange}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         onCompositionStart={onCompositionStart}
         onCompositionEnd={onCompositionEnd}
         placeholder={basePlaceholder}

@@ -1,6 +1,6 @@
 'use client'
 
-import type { KeyboardEventHandler, MutableRefObject } from 'react'
+import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Send, Square, Brain, Globe, Plus } from 'lucide-react'
@@ -18,6 +18,7 @@ interface MobileComposerProps {
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   onInputChange: (value: string) => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
+  onPaste: ClipboardEventHandler<HTMLTextAreaElement>
   onCompositionStart: () => void
   onCompositionEnd: () => void
   isStreaming: boolean
@@ -59,6 +60,7 @@ export function MobileComposer({
   textareaRef,
   onInputChange,
   onKeyDown,
+  onPaste,
   onCompositionStart,
   onCompositionEnd,
   isStreaming,
@@ -110,6 +112,7 @@ export function MobileComposer({
                 value={input}
                 onChange={(e) => onInputChange(e.target.value)}
                 onKeyDown={onKeyDown}
+                onPaste={onPaste}
                 onCompositionStart={onCompositionStart}
                 onCompositionEnd={onCompositionEnd}
                 className="h-auto min-h-[40px] w-full resize-none rounded-2xl border-0 bg-muted/40 px-4 py-2 text-sm leading-[1.45] focus-visible:ring-0 focus-visible:ring-offset-0"

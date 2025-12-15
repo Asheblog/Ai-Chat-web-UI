@@ -1,6 +1,6 @@
 'use client'
 
-import type { KeyboardEventHandler, MutableRefObject } from 'react'
+import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Maximize2, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
@@ -18,6 +18,7 @@ interface DesktopComposerProps {
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   onInputChange: (value: string) => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
+  onPaste: ClipboardEventHandler<HTMLTextAreaElement>
   onCompositionStart: () => void
   onCompositionEnd: () => void
   placeholder: string
@@ -66,6 +67,7 @@ export function DesktopComposer({
   textareaRef,
   onInputChange,
   onKeyDown,
+  onPaste,
   onCompositionStart,
   onCompositionEnd,
   placeholder,
@@ -155,6 +157,7 @@ export function DesktopComposer({
               value={input}
               onChange={(e) => onInputChange(e.target.value)}
               onKeyDown={onKeyDown}
+              onPaste={onPaste}
               onCompositionStart={onCompositionStart}
               onCompositionEnd={onCompositionEnd}
               placeholder={isStreaming ? 'AI正在思考中...' : placeholder}

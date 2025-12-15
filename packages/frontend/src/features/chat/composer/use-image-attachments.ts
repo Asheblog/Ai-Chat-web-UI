@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, ClipboardEvent } from 'react'
 import type { ComposerImage, ImageLimits, ToastHandler } from './types'
 
 interface UseImageAttachmentsOptions {
@@ -112,7 +112,7 @@ export const useImageAttachments = ({
             variant: 'destructive',
           })
         } else if (result.dataUrl && result.mime && typeof result.size === 'number') {
-          setSelectedImages((prev) => [...prev, { dataUrl: result.dataUrl, mime: result.mime, size: result.size }])
+          setSelectedImages((prev) => [...prev, { dataUrl: result.dataUrl!, mime: result.mime!, size: result.size! }])
         }
       }
       if (fileInputRef.current) {
@@ -126,6 +126,70 @@ export const useImageAttachments = ({
     setSelectedImages((prev) => prev.filter((_, idx) => idx !== index))
   }, [])
 
+  const handlePaste = useCallback(
+    async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+      if (!isVisionEnabled) {
+        return
+      }
+
+      const items = event.clipboardData?.items
+      if (!items) return
+
+      const imageFiles: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            imageFiles.push(file)
+          }
+        }
+      }
+
+      if (imageFiles.length === 0) {
+        return
+      }
+
+      event.preventDefault()
+
+      const existingBytes = selectedImages.reduce((sum, img) => sum + img.size, 0)
+      const incomingBytes = imageFiles.reduce((sum, file) => sum + file.size, 0)
+      const totalMb = (existingBytes + incomingBytes) / (1024 * 1024)
+
+      if (totalMb > limits.maxTotalMb) {
+        toast({
+          title: '超过总大小限制',
+          description: `所有图片合计需 ≤ ${limits.maxTotalMb}MB，请压缩后再试`,
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (selectedImages.length + imageFiles.length > limits.maxCount) {
+        toast({
+          title: '超过数量限制',
+          description: `每次最多上传 ${limits.maxCount} 张图片`,
+          variant: 'destructive',
+        })
+        return
+      }
+
+      for (const file of imageFiles) {
+        const result = await validateImage(file)
+        if (!result.ok) {
+          toast({
+            title: '图片不符合要求',
+            description: result.reason || '图片校验失败',
+            variant: 'destructive',
+          })
+        } else if (result.dataUrl && result.mime && typeof result.size === 'number') {
+          setSelectedImages((prev) => [...prev, { dataUrl: result.dataUrl!, mime: result.mime!, size: result.size! }])
+        }
+      }
+    },
+    [isVisionEnabled, limits.maxCount, limits.maxTotalMb, selectedImages, toast, validateImage],
+  )
+
   const exposedLimits = useMemo(() => ({ ...limits }), [limits])
 
   return {
@@ -136,6 +200,7 @@ export const useImageAttachments = ({
     onFilesSelected,
     removeImage,
     validateImage,
+    handlePaste,
     limits: exposedLimits,
   }
 }
