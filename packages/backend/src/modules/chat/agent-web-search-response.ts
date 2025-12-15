@@ -7,12 +7,7 @@ import { Tokenizer } from '../../utils/tokenizer';
 import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../../utils/web-search';
 import { runPythonSnippet } from '../../utils/python-runner';
 import { serializeQuotaSnapshot } from '../../utils/quota';
-import {
-  parseBooleanSetting,
-  parseDomainListSetting,
-  parseNumberSetting,
-  truncateText,
-} from '../../utils/parsers';
+import { truncateText } from '../../utils/parsers';
 import type { UsageQuotaSnapshot } from '../../types';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
@@ -37,27 +32,17 @@ import {
   formatDocumentToolReasoning,
 } from './document-tools';
 import type { RAGService } from '../../services/document/rag-service';
+import { ToolLogManager } from './tool-log-manager';
+import { StreamEventEmitter } from './stream-event-emitter';
+import {
+  type AgentWebSearchConfig,
+  type AgentPythonToolConfig,
+  buildAgentWebSearchConfig,
+  buildAgentPythonToolConfig,
+} from './agent-tool-config';
 
-export interface AgentWebSearchConfig {
-  enabled: boolean;
-  engine: string;
-  apiKey?: string;
-  resultLimit: number;
-  domains: string[];
-  endpoint?: string;
-  scope?: string;
-  includeSummary?: boolean;
-  includeRawContent?: boolean;
-}
-
-export interface AgentPythonToolConfig {
-  enabled: boolean;
-  command: string;
-  args: string[];
-  timeoutMs: number;
-  maxOutputChars: number;
-  maxSourceChars: number;
-}
+// Re-export for backwards compatibility
+export { AgentWebSearchConfig, AgentPythonToolConfig, buildAgentWebSearchConfig, buildAgentPythonToolConfig };
 
 type ChatSessionWithConnection = ChatSession & { connection: Connection | null };
 
@@ -1390,106 +1375,4 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
   });
 
   return new Response(stream, { headers: sseHeaders });
-};
-
-export const buildAgentWebSearchConfig = (sysMap: Record<string, string>): AgentWebSearchConfig => {
-  const enabled = parseBooleanSetting(
-    sysMap.web_search_agent_enable ?? process.env.WEB_SEARCH_AGENT_ENABLE,
-    false,
-  );
-  const engine = (
-    sysMap.web_search_default_engine ||
-    process.env.WEB_SEARCH_DEFAULT_ENGINE ||
-    'tavily'
-  ).toLowerCase();
-  const engineUpper = engine.toUpperCase();
-  const apiKey =
-    sysMap[`web_search_api_key_${engine}`] ||
-    process.env[`WEB_SEARCH_API_KEY_${engineUpper}`] ||
-    '';
-  const limitRaw = sysMap.web_search_result_limit ?? process.env.WEB_SEARCH_RESULT_LIMIT ?? '4';
-  const parsedLimit = Number.parseInt(String(limitRaw), 10);
-  const resultLimit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(10, parsedLimit)) : 4;
-  const sysDomains = parseDomainListSetting(sysMap.web_search_domain_filter);
-  const envDomains = parseDomainListSetting(process.env.WEB_SEARCH_DOMAIN_FILTER);
-  const domainList = sysDomains.length > 0 ? sysDomains : envDomains;
-  const endpoint = sysMap.web_search_endpoint || process.env.WEB_SEARCH_ENDPOINT;
-  const scopeRaw = (sysMap.web_search_scope || process.env.WEB_SEARCH_SCOPE || '').trim().toLowerCase();
-  const scope =
-    scopeRaw && ['webpage', 'document', 'paper', 'image', 'video', 'podcast'].includes(scopeRaw)
-      ? scopeRaw
-      : undefined;
-  const includeSummary = parseBooleanSetting(
-    sysMap.web_search_include_summary ?? process.env.WEB_SEARCH_INCLUDE_SUMMARY,
-    false,
-  );
-  const includeRawContent = parseBooleanSetting(
-    sysMap.web_search_include_raw ?? process.env.WEB_SEARCH_INCLUDE_RAW,
-    false,
-  );
-  return {
-    enabled,
-    engine,
-    apiKey,
-    resultLimit,
-    domains: domainList,
-    endpoint,
-    scope,
-    includeSummary,
-    includeRawContent,
-  };
-};
-
-export const buildAgentPythonToolConfig = (sysMap: Record<string, string>): AgentPythonToolConfig => {
-  const enabled = parseBooleanSetting(
-    sysMap.python_tool_enable ?? process.env.PYTHON_TOOL_ENABLE,
-    false,
-  );
-  const command =
-    (sysMap.python_tool_command || process.env.PYTHON_TOOL_COMMAND || 'python3').trim() ||
-    'python3';
-  const argsRaw = sysMap.python_tool_args || process.env.PYTHON_TOOL_ARGS;
-  const args = parseDomainListSetting(argsRaw)?.map((arg) => arg.replace(/\s+$/g, '')) || [];
-  const parseNumber = (
-    value: string | undefined,
-    envValue: string | undefined,
-    min: number,
-    max: number,
-    fallback: number,
-  ) => {
-    const raw = value ?? envValue;
-    if (!raw) return fallback;
-    const parsed = Number.parseInt(String(raw), 10);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.min(max, Math.max(min, parsed));
-  };
-  const timeoutMs = parseNumber(
-    sysMap.python_tool_timeout_ms,
-    process.env.PYTHON_TOOL_TIMEOUT_MS,
-    1000,
-    60000,
-    8000,
-  );
-  const maxOutputChars = parseNumber(
-    sysMap.python_tool_max_output_chars,
-    process.env.PYTHON_TOOL_MAX_OUTPUT_CHARS,
-    256,
-    20000,
-    4000,
-  );
-  const maxSourceChars = parseNumber(
-    sysMap.python_tool_max_source_chars,
-    process.env.PYTHON_TOOL_MAX_SOURCE_CHARS,
-    256,
-    20000,
-    4000,
-  );
-  return {
-    enabled,
-    command,
-    args,
-    timeoutMs,
-    maxOutputChars,
-    maxSourceChars,
-  };
 };
