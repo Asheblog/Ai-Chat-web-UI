@@ -38,6 +38,7 @@ interface MobileComposerProps {
   pickImages: () => void
   pickDocuments?: () => void
   hasDocuments?: boolean
+  hasProcessingDocuments?: boolean
   onOpenAttachmentManager?: () => void
   attachmentsCount?: number
   canUseWebSearch: boolean
@@ -80,6 +81,7 @@ export function MobileComposer({
   pickImages,
   pickDocuments,
   hasDocuments,
+  hasProcessingDocuments,
   onOpenAttachmentManager,
   attachmentsCount = 0,
   canUseWebSearch,
@@ -96,7 +98,7 @@ export function MobileComposer({
   onOpenAdvanced,
   onOpenSessionPrompt,
 }: MobileComposerProps) {
-  const disabled = sendLocked || (!input.trim() && selectedImages.length === 0)
+  const disabled = sendLocked || hasProcessingDocuments || (!input.trim() && selectedImages.length === 0)
   const [plusOpen, setPlusOpen] = useState(false)
 
   return (

@@ -79,6 +79,7 @@ export interface ChatComposerPanelProps {
   attachedDocuments: AttachedDocument[]
   isUploadingDocuments: boolean
   hasDocuments: boolean
+  hasProcessingDocuments: boolean
   pickDocuments: () => void
   onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
   onRemoveDocument: (documentId: number) => void
@@ -147,6 +148,7 @@ export function ChatComposerPanel({
   attachedDocuments,
   isUploadingDocuments,
   hasDocuments,
+  hasProcessingDocuments,
   pickDocuments,
   onDocumentFilesSelected,
   onRemoveDocument,
@@ -305,6 +307,7 @@ export function ChatComposerPanel({
         pickImages={pickImages}
         pickDocuments={pickDocuments}
         hasDocuments={hasDocuments}
+        hasProcessingDocuments={hasProcessingDocuments}
         canUseWebSearch={canUseWebSearch}
         webSearchDisabledNote={webSearchDisabledNote}
         pythonToolEnabled={pythonToolEnabled}

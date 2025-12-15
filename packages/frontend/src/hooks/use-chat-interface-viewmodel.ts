@@ -104,7 +104,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     return null
   }
 
-  const desktopSendDisabled = sendLocked || ((!input.trim() && selectedImages.length === 0) && !isStreaming)
+  const desktopSendDisabled = sendLocked || hasProcessingDocuments || ((!input.trim() && selectedImages.length === 0) && !isStreaming)
   const textareaDisabled = isStreaming || sessionControls.quotaExhausted
   const imageLimits = {
     maxCount: MAX_IMAGE_COUNT,
@@ -196,6 +196,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     attachedDocuments,
     isUploadingDocuments,
     hasDocuments: attachedDocuments.length > 0,
+    hasProcessingDocuments,
     pickDocuments,
     onDocumentFilesSelected,
     onRemoveDocument: removeDocument,

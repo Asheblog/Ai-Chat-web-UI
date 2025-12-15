@@ -265,7 +265,9 @@ export function useChatComposer() {
   const concurrencyLocked = totalActiveStreams >= maxConcurrentStreams
   const sendLockedReason = concurrencyLocked
     ? `当前已有 ${totalActiveStreams}/${maxConcurrentStreams} 个请求生成中，请稍后再试或先停止部分任务。`
-    : null
+    : hasProcessingDocuments
+      ? '文档正在解析中，请等待解析完成后再发送消息。'
+      : null
 
   const systemPromptFallback = (systemSettings?.chatSystemPrompt ?? '').trim()
   const personalPromptFallback = (user?.personalPrompt ?? '').trim()
