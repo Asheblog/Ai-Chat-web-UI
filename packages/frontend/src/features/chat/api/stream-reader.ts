@@ -155,7 +155,12 @@ const normalizeChunk = (payload: any): ChatStreamChunk | null => {
       typeof payload.error === 'string' && payload.error.trim()
         ? payload.error
         : '工具调用失败，请稍后重试'
-    return { type: 'error', error: message }
+    return {
+      type: 'error',
+      error: message,
+      errorType: payload.errorType,
+      suggestion: payload.suggestion,
+    }
   }
   if (payload?.error) {
     throw new Error(payload.error)

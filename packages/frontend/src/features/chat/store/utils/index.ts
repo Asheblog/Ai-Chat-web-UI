@@ -355,9 +355,21 @@ export const mergeToolEventsForMessage = (
 
 const PROVIDER_SAFETY_HINT =
   '提问内容包含敏感或未脱敏信息，被上游模型拦截。请调整措辞或移除相关内容后再试。'
+const CONTENT_MODERATION_HINT =
+  '返回内容因安全审查被截断。当前 API 供应商对内容进行了安全过滤，建议更换其他 API 供应商或调整对话内容后重试。'
 const PROVIDER_SAFETY_MARKERS = [
   'data_inspection_failed',
   'input data may contain inappropriate content',
+]
+const CONTENT_MODERATION_MARKERS = [
+  'content exists risk',
+  'content_exists_risk',
+  'content filter',
+  'content moderation',
+  'content policy',
+  'safety filter',
+  'sensitive content',
+  'inappropriate content',
 ]
 const CONTEXT_LIMIT_HINT =
   '超过模型上下文长度限制，请缩短输入、减少历史或降低期望回复长度后重试。'
@@ -367,6 +379,11 @@ const CONTEXT_LIMIT_REGEX =
 const containsProviderSafetyMarker = (text: string) => {
   const lower = text.toLowerCase()
   return PROVIDER_SAFETY_MARKERS.some((marker) => lower.includes(marker))
+}
+
+const containsContentModerationMarker = (text: string) => {
+  const lower = text.toLowerCase()
+  return CONTENT_MODERATION_MARKERS.some((marker) => lower.includes(marker))
 }
 
 const stringifyCandidate = (candidate: unknown): string | null => {
@@ -450,6 +467,10 @@ export const resolveProviderSafetyMessage = (error: unknown): string | null => {
     if (!text) continue
     const contextLimit = resolveContextLimitHint(text)
     if (contextLimit) return contextLimit
+    // 先检查内容审查错误（更具体的描述）
+    if (containsContentModerationMarker(text)) {
+      return CONTENT_MODERATION_HINT
+    }
     if (containsProviderSafetyMarker(text)) {
       return PROVIDER_SAFETY_HINT
     }

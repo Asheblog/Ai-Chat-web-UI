@@ -413,6 +413,10 @@ export interface ChatStreamChunk {
   done?: boolean;
   duration?: number;
   error?: string;
+  /** 错误类型（用于区分不同类型的错误） */
+  errorType?: ApiErrorType;
+  /** 错误处理建议 */
+  suggestion?: string;
   keepalive?: boolean;
   idleMs?: number;
   quota?: ActorQuota;
@@ -421,6 +425,8 @@ export interface ChatStreamChunk {
   stage?: 'start' | 'result' | 'error';
   query?: string;
   hits?: WebSearchHit[];
+  /** 工具执行摘要 */
+  summary?: string;
   meta?: Record<string, unknown>;
   details?: ToolEventDetails;
   /** 后端计算的性能指标（仅在 complete 事件中） */
@@ -430,6 +436,18 @@ export interface ChatStreamChunk {
     tokensPerSecond?: number | null;
   };
 }
+
+/** API 错误类型 */
+export type ApiErrorType =
+  | 'content_moderation'    // 内容审查/安全过滤
+  | 'context_length'        // 上下文长度超限
+  | 'rate_limit'            // 请求频率限制
+  | 'quota_exceeded'        // 配额耗尽
+  | 'authentication'        // 认证失败
+  | 'invalid_request'       // 无效请求
+  | 'server_error'          // 服务器错误
+  | 'network'               // 网络错误
+  | 'unknown';              // 未知错误
 
 // Usage 统计类型（OpenAI 兼容字段为主）
 export interface UsageStats {
