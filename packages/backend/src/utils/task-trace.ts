@@ -1,98 +1,38 @@
+/**
+ * Task Trace Utils - 代理层
+ *
+ * 委托给 TaskTraceConfigService，无回退实现。
+ * TaskTraceRecorder 使用依赖注入模式。
+ */
+
 import { appendFile, mkdir } from 'node:fs/promises'
 import { resolve as resolvePath } from 'node:path'
 import { prisma } from '../db'
 import { BackendLogger as log } from './logger'
 import type { Actor } from '../types'
+import {
+  getTaskTraceConfigService,
+  getAppContext,
+} from '../container/service-accessor'
+import { resolveConfigFromMap, type TaskTraceConfig } from '../services/task-trace/task-trace-config-service'
 
 export type TaskTraceStatus = 'running' | 'completed' | 'error' | 'cancelled'
 
-export interface TaskTraceConfig {
-  enabled: boolean
-  defaultOn: boolean
-  adminOnly: boolean
-  env: 'dev' | 'prod' | 'both'
-  retentionDays: number
-  maxEvents: number
-  idleTimeoutMs: number
-}
+export type { TaskTraceConfig }
 
-interface TaskTraceConfigCache {
-  value: TaskTraceConfig
-  expiresAt: number
-}
+// ============================================================================
+// 公共 API（代理到 TaskTraceConfigService）
+// ============================================================================
 
-const CONFIG_KEYS = [
-  'task_trace_enabled',
-  'task_trace_default_on',
-  'task_trace_admin_only',
-  'task_trace_env',
-  'task_trace_retention_days',
-  'task_trace_max_events',
-  'task_trace_idle_timeout_ms',
-] as const
+export const getTaskTraceConfig = (map?: Record<string, string>): Promise<TaskTraceConfig> =>
+  getTaskTraceConfigService().getConfig(map)
 
-const CACHE_TTL_MS = 30_000
-let cachedConfig: TaskTraceConfigCache | null = null
+export const invalidateTaskTraceConfig = (): void =>
+  getTaskTraceConfigService().invalidateCache()
 
-const parseBoolean = (input: unknown, fallback: boolean): boolean => {
-  if (typeof input === 'boolean') return input
-  if (input == null) return fallback
-  const normalized = String(input).trim().toLowerCase()
-  if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true
-  if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false
-  return fallback
-}
-
-const clampNumber = (input: unknown, fallback: number, min: number, max: number): number => {
-  const parsed = Number.parseInt(String(input ?? ''), 10)
-  if (!Number.isFinite(parsed)) return fallback
-  if (parsed < min) return min
-  if (parsed > max) return max
-  return parsed
-}
-
-const resolveConfigFromMap = (map?: Record<string, string> | null): TaskTraceConfig => {
-  const enabled = parseBoolean(map?.task_trace_enabled, false)
-  const defaultOn = parseBoolean(map?.task_trace_default_on, false)
-  const adminOnly = parseBoolean(map?.task_trace_admin_only, true)
-  const rawEnv = (map?.task_trace_env || '').toLowerCase()
-  const env: TaskTraceConfig['env'] = rawEnv === 'both' || rawEnv === 'prod' ? (rawEnv as TaskTraceConfig['env']) : 'dev'
-  const retentionDays = clampNumber(map?.task_trace_retention_days ?? process.env.TASK_TRACE_RETENTION_DAYS, 7, 1, 365)
-  const maxEvents = clampNumber(map?.task_trace_max_events ?? process.env.TASK_TRACE_MAX_EVENTS ?? 2000, 200, 200000)
-  const idleTimeoutMs = clampNumber(map?.task_trace_idle_timeout_ms ?? process.env.TASK_TRACE_IDLE_TIMEOUT_MS ?? 30000, 1000, 600000)
-  return {
-    enabled,
-    defaultOn,
-    adminOnly,
-    env,
-    retentionDays,
-    maxEvents,
-    idleTimeoutMs,
-  }
-}
-
-export const getTaskTraceConfig = async (map?: Record<string, string>): Promise<TaskTraceConfig> => {
-  if (map) return resolveConfigFromMap(map)
-  const now = Date.now()
-  if (cachedConfig && cachedConfig.expiresAt > now) {
-    return cachedConfig.value
-  }
-  const rows = await prisma.systemSetting.findMany({
-    where: { key: { in: CONFIG_KEYS as unknown as string[] } },
-    select: { key: true, value: true },
-  })
-  const fetchedMap = rows.reduce((acc, row) => {
-    acc[row.key] = row.value
-    return acc
-  }, {} as Record<string, string>)
-  const value = resolveConfigFromMap(fetchedMap)
-  cachedConfig = { value, expiresAt: now + CACHE_TTL_MS }
-  return value
-}
-
-export const invalidateTaskTraceConfig = () => {
-  cachedConfig = null
-}
+// ============================================================================
+// shouldEnableTaskTrace
+// ============================================================================
 
 export interface ShouldEnableTaskTraceResult {
   enabled: boolean
@@ -137,6 +77,10 @@ export const shouldEnableTaskTrace = async (params: ShouldEnableParams): Promise
     config,
   }
 }
+
+// ============================================================================
+// TaskTraceRecorder（使用可注入的 prisma）
+// ============================================================================
 
 export interface TaskTraceRecorderOptions {
   enabled: boolean
@@ -200,6 +144,10 @@ export const sanitizePayload = (payload: unknown, depth = 0): any => {
   return null
 }
 
+interface TaskTraceRecorderDeps {
+  prisma: typeof prisma
+}
+
 export class TaskTraceRecorder {
   private enabled: boolean
   private traceId: number | null = null
@@ -219,8 +167,9 @@ export class TaskTraceRecorder {
   private finalized = false
   private logFilePath: string | null = null
   private logDirEnsured = false
+  private deps: TaskTraceRecorderDeps
 
-  private constructor(options: TaskTraceRecorderOptions) {
+  private constructor(options: TaskTraceRecorderOptions, deps: TaskTraceRecorderDeps) {
     this.enabled = options.enabled
     this.sessionId = options.sessionId ?? null
     this.messageId = options.messageId ?? null
@@ -231,15 +180,17 @@ export class TaskTraceRecorder {
     this.startedAt = new Date()
     this.batchSize = Math.max(1, options.batchSize ?? 20)
     this.maxEvents = Math.max(100, options.maxEvents ?? 2000)
+    this.deps = deps
   }
 
-  static async create(options: TaskTraceRecorderOptions): Promise<TaskTraceRecorder> {
-    const recorder = new TaskTraceRecorder(options)
+  static async create(options: TaskTraceRecorderOptions, deps?: TaskTraceRecorderDeps): Promise<TaskTraceRecorder> {
+    const effectiveDeps = deps ?? { prisma: getAppContext().prisma }
+    const recorder = new TaskTraceRecorder(options, effectiveDeps)
     if (!recorder.enabled) {
       return recorder
     }
     try {
-      const trace = await prisma.taskTrace.create({
+      const trace = await effectiveDeps.prisma.taskTrace.create({
         data: {
           sessionId: options.sessionId ?? undefined,
           messageId: options.messageId ?? undefined,
@@ -267,7 +218,7 @@ export class TaskTraceRecorder {
     const filePath = resolvePath(baseDir, `trace-${traceId}.log`)
     this.logFilePath = filePath
     try {
-      await prisma.taskTrace.update({
+      await this.deps.prisma.taskTrace.update({
         where: { id: traceId },
         data: {
           logFilePath: filePath,
@@ -390,7 +341,7 @@ export class TaskTraceRecorder {
       ? { ...(this.metadata || {}), ...sanitizePayload(extra.metadata) }
       : this.metadata
     try {
-      await prisma.taskTrace.update({
+      await this.deps.prisma.taskTrace.update({
         where: { id: this.traceId },
         data: {
           status,
@@ -405,6 +356,10 @@ export class TaskTraceRecorder {
     }
   }
 }
+
+// ============================================================================
+// SSE 汇总工具 (纯函数)
+// ============================================================================
 
 export const summarizeSsePayload = (payload: any): Record<string, unknown> => {
   if (!payload || typeof payload !== 'object') {

@@ -1,4 +1,10 @@
-import { prisma } from '../db'
+/**
+ * Model Access Policy Utils - 代理层
+ *
+ * 委托给 SystemSettingsService，无回退实现。
+ */
+
+import { getSystemSettingsService } from '../container/service-accessor'
 import type { Actor } from '../types'
 
 export type ModelAccessTriState = 'allow' | 'deny' | 'inherit'
@@ -18,9 +24,6 @@ export interface ModelAccessResolution {
   user: { decision: 'allow' | 'deny'; source: 'default' | 'override' }
 }
 
-const ACCESS_CACHE_TTL_MS = 30_000
-let cachedDefaults: { value: ModelAccessDefaults; expiresAt: number } | null = null
-
 const isTriState = (value: unknown): value is ModelAccessTriState =>
   value === 'allow' || value === 'deny' || value === 'inherit'
 
@@ -28,14 +31,14 @@ const parseAccessPolicy = (metaJson?: string | null): ModelAccessPolicy | null =
   if (!metaJson) return null
   try {
     const parsed = JSON.parse(metaJson)
-    const policy = (parsed as any)?.access_policy
+    const policy = (parsed as Record<string, unknown>)?.access_policy
     if (!policy || typeof policy !== 'object') return null
     const normalized: ModelAccessPolicy = {}
-    if (isTriState((policy as any).anonymous)) {
-      normalized.anonymous = (policy as any).anonymous
+    if (isTriState((policy as Record<string, unknown>).anonymous)) {
+      normalized.anonymous = (policy as Record<string, unknown>).anonymous as ModelAccessTriState
     }
-    if (isTriState((policy as any).user)) {
-      normalized.user = (policy as any).user
+    if (isTriState((policy as Record<string, unknown>).user)) {
+      normalized.user = (policy as Record<string, unknown>).user as ModelAccessTriState
     }
     return Object.keys(normalized).length ? normalized : null
   } catch {
@@ -43,30 +46,11 @@ const parseAccessPolicy = (metaJson?: string | null): ModelAccessPolicy | null =
   }
 }
 
-export const getModelAccessDefaults = async (): Promise<ModelAccessDefaults> => {
-  const now = Date.now()
-  if (cachedDefaults && cachedDefaults.expiresAt > now) {
-    return cachedDefaults.value
-  }
+export const getModelAccessDefaults = (): Promise<ModelAccessDefaults> =>
+  getSystemSettingsService().getModelAccessDefaults()
 
-  const rows = await prisma.systemSetting.findMany({
-    where: { key: { in: ['model_access_default_anonymous', 'model_access_default_user'] } },
-    select: { key: true, value: true },
-  })
-
-  const map = new Map(rows.map((row) => [row.key, row.value]))
-
-  const anonymous = map.get('model_access_default_anonymous') === 'allow' ? 'allow' : 'deny'
-  const user = map.get('model_access_default_user') === 'deny' ? 'deny' : 'allow'
-
-  const value: ModelAccessDefaults = { anonymous, user }
-  cachedDefaults = { value, expiresAt: now + ACCESS_CACHE_TTL_MS }
-  return value
-}
-
-export const invalidateModelAccessDefaultsCache = () => {
-  cachedDefaults = null
-}
+export const invalidateModelAccessDefaultsCache = (): void =>
+  getSystemSettingsService().invalidateModelAccessDefaultsCache()
 
 export const resolveModelAccessPolicy = (options: {
   metaJson?: string | null
@@ -95,11 +79,12 @@ export const decideModelAccessForActor = (
   if ('role' in actor && actor.type === 'user' && actor.role === 'ADMIN') {
     return 'allow'
   }
-  if ((actor as any).type === 'admin') return 'allow'
+  if ((actor as { type: string }).type === 'admin') return 'allow'
   if (actor.type === 'anonymous') {
     return resolved.anonymous.decision
   }
   return resolved.user.decision
 }
 
-export const parseAccessPolicyFromMeta = (metaJson?: string | null): ModelAccessPolicy | null => parseAccessPolicy(metaJson)
+export const parseAccessPolicyFromMeta = (metaJson?: string | null): ModelAccessPolicy | null =>
+  parseAccessPolicy(metaJson)

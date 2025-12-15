@@ -28,6 +28,13 @@ import { TaskTraceService } from '../services/task-trace/task-trace-service'
 import { TaskTraceFileService } from '../services/task-trace/task-trace-file-service'
 import { ChatService } from '../services/chat/chat-service'
 import { ShareService } from '../services/shares'
+
+// Phase 3: New Utils-layer Services
+import { SystemSettingsService } from '../services/settings/system-settings-service'
+import { AnonymousCleanupService } from '../services/cleanup/anonymous-cleanup-service'
+import { ChatImageService } from '../services/attachment/chat-image-service'
+import { TaskTraceConfigService } from '../services/task-trace/task-trace-config-service'
+
 import { AuthUtils } from '../utils/auth'
 import {
   refreshAllModelCatalog,
@@ -46,6 +53,7 @@ import { invalidateCompletionLimitCache, invalidateContextWindowCache } from '..
 import { invalidateTaskTraceConfig } from '../utils/task-trace'
 import { syncSharedAnonymousQuota } from '../utils/quota'
 import { replaceProfileImage } from '../utils/profile-images'
+import { deleteAttachmentsForSessions } from '../utils/chat-images'
 import { BackendLogger as log } from '../utils/logger'
 import { ServiceRegistry } from './service-registry'
 import { SERVICE_KEYS } from './service-accessor'
@@ -74,6 +82,12 @@ export interface AppContainerDeps {
   taskTraceFileService?: TaskTraceFileService
   chatService?: ChatService
   shareService?: ShareService
+
+  // Phase 3: New Utils-layer Services
+  systemSettingsService?: SystemSettingsService
+  anonymousCleanupService?: AnonymousCleanupService
+  chatImageService?: ChatImageService
+  taskTraceConfigService?: TaskTraceConfigService
 }
 
 export class AppContainer {
@@ -100,6 +114,12 @@ export class AppContainer {
   readonly taskTraceFileService: TaskTraceFileService
   readonly chatService: ChatService
   readonly shareService: ShareService
+
+  // Phase 3: New Utils-layer Services
+  readonly systemSettingsService: SystemSettingsService
+  readonly anonymousCleanupService: AnonymousCleanupService
+  readonly chatImageService: ChatImageService
+  readonly taskTraceConfigService: TaskTraceConfigService
 
   constructor(deps: AppContainerDeps = {}) {
     const registry = ServiceRegistry.getInstance()
@@ -273,6 +293,37 @@ export class AppContainer {
         invalidateQuotaPolicyCache,
       })
     registry.register(SERVICE_KEYS.settingsFacade, this.settingsFacade)
+
+    // Phase 3: New Utils-layer Services
+    this.systemSettingsService =
+      deps.systemSettingsService ??
+      new SystemSettingsService({
+        prisma: this.context.prisma,
+      })
+    registry.register(SERVICE_KEYS.systemSettingsService, this.systemSettingsService)
+
+    this.anonymousCleanupService =
+      deps.anonymousCleanupService ??
+      new AnonymousCleanupService({
+        prisma: this.context.prisma,
+        getQuotaPolicy,
+        deleteAttachmentsForSessions,
+      })
+    registry.register(SERVICE_KEYS.anonymousCleanupService, this.anonymousCleanupService)
+
+    this.chatImageService =
+      deps.chatImageService ??
+      new ChatImageService({
+        prisma: this.context.prisma,
+      })
+    registry.register(SERVICE_KEYS.chatImageService, this.chatImageService)
+
+    this.taskTraceConfigService =
+      deps.taskTraceConfigService ??
+      new TaskTraceConfigService({
+        prisma: this.context.prisma,
+      })
+    registry.register(SERVICE_KEYS.taskTraceConfigService, this.taskTraceConfigService)
 
     registry.markInitialized()
   }

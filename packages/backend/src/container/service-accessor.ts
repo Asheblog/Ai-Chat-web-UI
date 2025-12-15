@@ -35,6 +35,12 @@ export const SERVICE_KEYS = {
   chatService: 'chatService',
   shareService: 'shareService',
 
+  // Phase 3: New Utils-layer Services
+  systemSettingsService: 'systemSettingsService',
+  anonymousCleanupService: 'anonymousCleanupService',
+  chatImageService: 'chatImageService',
+  taskTraceConfigService: 'taskTraceConfigService',
+
   // Chat Module Services
   streamSseService: 'streamSseService',
   streamUsageService: 'streamUsageService',
@@ -78,6 +84,12 @@ import type { TaskTraceService } from '../services/task-trace/task-trace-service
 import type { TaskTraceFileService } from '../services/task-trace/task-trace-file-service'
 import type { ChatService } from '../services/chat/chat-service'
 import type { ShareService } from '../services/shares'
+
+// Phase 3: New Utils-layer Service types
+import type { SystemSettingsService } from '../services/settings/system-settings-service'
+import type { AnonymousCleanupService } from '../services/cleanup/anonymous-cleanup-service'
+import type { ChatImageService } from '../services/attachment/chat-image-service'
+import type { TaskTraceConfigService } from '../services/task-trace/task-trace-config-service'
 
 // Lazy type imports for chat module services (to avoid circular deps)
 type StreamSseService = import('../modules/chat/services/stream-sse-service').StreamSseService
@@ -168,6 +180,22 @@ export const getTaskTraceFileService = (): TaskTraceFileService =>
 export const getChatService = (): ChatService => getRegistry().resolve(SERVICE_KEYS.chatService)
 
 export const getShareService = (): ShareService => getRegistry().resolve(SERVICE_KEYS.shareService)
+
+// ============================================================================
+// Phase 3: Utils-layer Service Accessors
+// ============================================================================
+
+export const getSystemSettingsService = (): SystemSettingsService =>
+  getRegistry().resolve(SERVICE_KEYS.systemSettingsService)
+
+export const getAnonymousCleanupService = (): AnonymousCleanupService =>
+  getRegistry().resolve(SERVICE_KEYS.anonymousCleanupService)
+
+export const getChatImageService = (): ChatImageService =>
+  getRegistry().resolve(SERVICE_KEYS.chatImageService)
+
+export const getTaskTraceConfigService = (): TaskTraceConfigService =>
+  getRegistry().resolve(SERVICE_KEYS.taskTraceConfigService)
 
 // ============================================================================
 // Chat Module Service Accessors

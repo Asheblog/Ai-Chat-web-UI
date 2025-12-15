@@ -1,13 +1,13 @@
 /**
- * Latex Trace Utils - 代理层
+ * LatexTraceService - LaTeX Trace 服务
  *
- * LatexTraceRecorder 使用依赖注入模式。
+ * 从 utils/latex-trace.ts 迁移，使用依赖注入。
  */
 
+import type { PrismaClient } from '@prisma/client'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { resolve as resolvePath } from 'node:path'
-import { BackendLogger as log } from './logger'
-import { getAppContext } from '../container/service-accessor'
+import { BackendLogger as log } from '../../utils/logger'
 import type { LatexSegmentAudit } from '@aichat/shared/latex-normalizer'
 
 export type LatexTraceStatus = 'pending' | 'completed' | 'error'
@@ -30,7 +30,7 @@ const buildLogDir = () => {
   return resolvePath(process.cwd(), 'logs', 'latex-trace')
 }
 
-interface LatexTraceRecorderOptions {
+export interface LatexTraceRecorderOptions {
   taskTraceId: number
   matchedBlocks: number
   unmatchedBlocks: number
@@ -46,13 +46,13 @@ interface LatexTraceLogEntry {
   trimmed: string
 }
 
-interface LatexTraceRecorderDeps {
-  prisma: ReturnType<typeof getAppContext>['prisma']
+export interface LatexTraceServiceDeps {
+  prisma: PrismaClient
 }
 
-export class LatexTraceRecorder {
+export class LatexTraceRecorderService {
   private static baseDir = buildLogDir()
-  private deps: LatexTraceRecorderDeps
+  private prisma: PrismaClient
   private traceId: number | null = null
   private logFilePath: string | null = null
   private entries: LatexTraceLogEntry[] = []
@@ -62,13 +62,11 @@ export class LatexTraceRecorder {
   private matched: number
   private unmatched: number
   private metadata: Record<string, unknown>
+  private readonly taskTraceId: number
 
-  private constructor(
-    private readonly taskTraceId: number,
-    options: LatexTraceRecorderOptions,
-    deps: LatexTraceRecorderDeps,
-  ) {
-    this.deps = deps
+  private constructor(options: LatexTraceRecorderOptions, deps: LatexTraceServiceDeps) {
+    this.prisma = deps.prisma
+    this.taskTraceId = options.taskTraceId
     this.matched = Math.max(0, options.matchedBlocks)
     this.unmatched = Math.max(0, options.unmatchedBlocks)
     this.metadata = sanitizeMetadata(options.metadata)
@@ -76,15 +74,14 @@ export class LatexTraceRecorder {
 
   static async create(
     options: LatexTraceRecorderOptions,
-    deps?: LatexTraceRecorderDeps,
-  ): Promise<LatexTraceRecorder | null> {
-    const effectiveDeps = deps ?? { prisma: getAppContext().prisma }
-    const recorder = new LatexTraceRecorder(options.taskTraceId, options, effectiveDeps)
+    deps: LatexTraceServiceDeps,
+  ): Promise<LatexTraceRecorderService | null> {
+    const recorder = new LatexTraceRecorderService(options, deps)
     try {
-      const logDir = LatexTraceRecorder.baseDir
+      const logDir = LatexTraceRecorderService.baseDir
       await recorder.ensureDir(logDir)
       const filePath = resolvePath(logDir, `latex-trace-${options.taskTraceId}-${Date.now()}.log`)
-      const latexTrace = await effectiveDeps.prisma.latexTrace.upsert({
+      const latexTrace = await deps.prisma.latexTrace.upsert({
         where: { taskTraceId: options.taskTraceId },
         create: {
           taskTraceId: options.taskTraceId,
@@ -106,7 +103,7 @@ export class LatexTraceRecorder {
       recorder.logFilePath = filePath
       return recorder
     } catch (error) {
-      log.error('[latex-trace] create failed', error)
+      log.error('[latex-trace-service] create failed', error)
       return null
     }
   }
@@ -117,7 +114,7 @@ export class LatexTraceRecorder {
       await mkdir(dir, { recursive: true })
       this.ensured = true
     } catch (error) {
-      log.error('[latex-trace] ensure dir failed', error)
+      log.error('[latex-trace-service] ensure dir failed', error)
       this.enabled = false
     }
   }
@@ -150,7 +147,7 @@ export class LatexTraceRecorder {
         await appendFile(this.logFilePath, `${lines}\n`, { encoding: 'utf8' })
       }
     } catch (error) {
-      log.error('[latex-trace] write log failed', error)
+      log.error('[latex-trace-service] write log failed', error)
     }
 
     const mergedMeta = {
@@ -159,7 +156,7 @@ export class LatexTraceRecorder {
       ...(extra?.error ? { error: extra.error } : {}),
     }
     try {
-      await this.deps.prisma.latexTrace.update({
+      await this.prisma.latexTrace.update({
         where: { taskTraceId: this.taskTraceId },
         data: {
           status,
@@ -169,7 +166,16 @@ export class LatexTraceRecorder {
         },
       })
     } catch (error) {
-      log.error('[latex-trace] finalize update failed', error)
+      log.error('[latex-trace-service] finalize update failed', error)
     }
   }
+}
+
+// 服务实例管理（注：LatexTraceRecorderService 是按需创建的，不使用单例模式）
+// 仅提供创建工厂函数
+export const createLatexTraceRecorder = async (
+  options: LatexTraceRecorderOptions,
+  deps: LatexTraceServiceDeps,
+): Promise<LatexTraceRecorderService | null> => {
+  return LatexTraceRecorderService.create(options, deps)
 }
