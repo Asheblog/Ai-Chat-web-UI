@@ -33,6 +33,38 @@ function getRecommendedJournalMode(): 'WAL' | 'DELETE' {
 }
 
 /**
+ * 将 number[] 向量转换为二进制 Buffer (Float32)
+ * 内存占用：1536维 JSON ~30KB → Binary ~6KB
+ */
+function vectorToBuffer(vector: number[]): Buffer {
+  const float32 = new Float32Array(vector)
+  return Buffer.from(float32.buffer)
+}
+
+/**
+ * 将二进制 Buffer 转换回 number[] 向量
+ */
+function bufferToVector(buffer: Buffer): number[] {
+  const float32 = new Float32Array(
+    buffer.buffer,
+    buffer.byteOffset,
+    buffer.length / 4
+  )
+  return Array.from(float32)
+}
+
+/**
+ * 检测向量数据格式（JSON字符串 或 二进制Buffer）
+ */
+function parseVectorData(data: string | Buffer): number[] {
+  if (Buffer.isBuffer(data)) {
+    return bufferToVector(data)
+  }
+  // 兼容旧的JSON格式
+  return JSON.parse(data) as number[]
+}
+
+/**
  * 计算两个向量的余弦相似度
  */
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -287,7 +319,7 @@ export class SQLiteVectorClient implements VectorDBClient {
         stmt.run(
           item.id,
           item.text,
-          JSON.stringify(item.vector),
+          vectorToBuffer(item.vector), // 使用二进制格式存储
           JSON.stringify(item.metadata)
         )
       }
@@ -333,13 +365,13 @@ export class SQLiteVectorClient implements VectorDBClient {
       const rows = stmt.all(BATCH_SIZE, offset) as Array<{
         id: string
         text: string
-        vector: string
+        vector: string | Buffer  // 兼容 JSON 和二进制格式
         metadata: string
       }>
 
       for (const row of rows) {
         try {
-          const vector = JSON.parse(row.vector) as number[]
+          const vector = parseVectorData(row.vector) // 自动检测格式
           const score = cosineSimilarity(queryVector, vector)
           topK.push({
             id: row.id,
@@ -414,5 +446,132 @@ export class SQLiteVectorClient implements VectorDBClient {
    */
   vacuum(): void {
     this.db.exec('VACUUM')
+  }
+
+  /**
+   * 迁移现有 JSON 格式向量到二进制格式
+   * 返回迁移统计信息
+   */
+  async migrateToBufferFormat(): Promise<{
+    collectionsProcessed: number
+    recordsMigrated: number
+    recordsSkipped: number
+    errors: string[]
+  }> {
+    const stats = {
+      collectionsProcessed: 0,
+      recordsMigrated: 0,
+      recordsSkipped: 0,
+      errors: [] as string[],
+    }
+
+    // 获取所有 collection
+    const collections = this.db
+      .prepare('SELECT name FROM vector_collections')
+      .all() as Array<{ name: string }>
+
+    for (const { name } of collections) {
+      const tableName = `vec_${name.replace(/[^a-zA-Z0-9_]/g, '_')}`
+
+      try {
+        // 检查表是否存在
+        const tableExists = this.db
+          .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`)
+          .get(tableName)
+        if (!tableExists) {
+          continue
+        }
+
+        // 分批读取并迁移
+        const BATCH_SIZE = 100
+        const countResult = this.db.prepare(`SELECT COUNT(*) as cnt FROM "${tableName}"`).get() as { cnt: number }
+        const totalCount = countResult.cnt
+
+        if (totalCount === 0) {
+          stats.collectionsProcessed++
+          continue
+        }
+
+        const selectStmt = this.db.prepare(`SELECT rowid, id, vector FROM "${tableName}" LIMIT ? OFFSET ?`)
+        const updateStmt = this.db.prepare(`UPDATE "${tableName}" SET vector = ? WHERE rowid = ?`)
+
+        let offset = 0
+        while (offset < totalCount) {
+          const rows = selectStmt.all(BATCH_SIZE, offset) as Array<{
+            rowid: number
+            id: string
+            vector: string | Buffer
+          }>
+
+          const updateBatch = this.db.transaction(() => {
+            for (const row of rows) {
+              // 跳过已经是二进制格式的记录
+              if (Buffer.isBuffer(row.vector)) {
+                stats.recordsSkipped++
+                continue
+              }
+
+              try {
+                // 解析 JSON 并转换为二进制
+                const vectorArray = JSON.parse(row.vector) as number[]
+                const buffer = vectorToBuffer(vectorArray)
+                updateStmt.run(buffer, row.rowid)
+                stats.recordsMigrated++
+              } catch (e) {
+                stats.errors.push(`Failed to migrate ${row.id}: ${(e as Error).message}`)
+              }
+            }
+          })
+
+          updateBatch()
+          offset += BATCH_SIZE
+        }
+
+        stats.collectionsProcessed++
+      } catch (e) {
+        stats.errors.push(`Failed to process collection ${name}: ${(e as Error).message}`)
+      }
+    }
+
+    // 迁移完成后执行 VACUUM 压缩数据库
+    if (stats.recordsMigrated > 0) {
+      try {
+        this.vacuum()
+      } catch {
+        // 忽略 VACUUM 错误
+      }
+    }
+
+    return stats
+  }
+
+  /**
+   * 检查是否有需要迁移的 JSON 格式向量
+   */
+  async needsMigration(): Promise<boolean> {
+    const collections = this.db
+      .prepare('SELECT name FROM vector_collections')
+      .all() as Array<{ name: string }>
+
+    for (const { name } of collections) {
+      const tableName = `vec_${name.replace(/[^a-zA-Z0-9_]/g, '_')}`
+
+      try {
+        const tableExists = this.db
+          .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`)
+          .get(tableName)
+        if (!tableExists) continue
+
+        // 抽样检查第一条记录
+        const row = this.db.prepare(`SELECT vector FROM "${tableName}" LIMIT 1`).get() as { vector: string | Buffer } | undefined
+        if (row && typeof row.vector === 'string') {
+          return true
+        }
+      } catch {
+        continue
+      }
+    }
+
+    return false
   }
 }

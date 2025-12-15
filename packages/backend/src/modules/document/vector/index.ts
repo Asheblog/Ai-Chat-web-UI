@@ -43,6 +43,12 @@ export function createVectorDBClient(config: VectorDBConfig): VectorDBClient {
       // 创建新实例并缓存
       const client = new SQLiteVectorClient(dbPath)
       vectorDBInstances.set(normalizedPath, client)
+
+      // 异步执行迁移检查（不阻塞启动）
+      checkAndMigrateVectorDB(client).catch((e) =>
+        console.warn('[VectorDB] Migration check failed:', e)
+      )
+
       return client
     }
 
@@ -54,6 +60,34 @@ export function createVectorDBClient(config: VectorDBConfig): VectorDBClient {
 
     default:
       throw new Error(`Unknown vector DB type: ${config.type}`)
+  }
+}
+
+/**
+ * 检查并执行向量数据库迁移（JSON → 二进制格式）
+ */
+async function checkAndMigrateVectorDB(client: SQLiteVectorClient): Promise<void> {
+  try {
+    const needsMigration = await client.needsMigration()
+    if (!needsMigration) {
+      return
+    }
+
+    console.log('[VectorDB] Detected JSON format vectors, starting migration to binary format...')
+    const stats = await client.migrateToBufferFormat()
+
+    console.log(
+      `[VectorDB] Migration completed: ` +
+        `${stats.collectionsProcessed} collections, ` +
+        `${stats.recordsMigrated} records migrated, ` +
+        `${stats.recordsSkipped} already binary`
+    )
+
+    if (stats.errors.length > 0) {
+      console.warn(`[VectorDB] Migration had ${stats.errors.length} errors:`, stats.errors.slice(0, 5))
+    }
+  } catch (e) {
+    console.error('[VectorDB] Migration failed:', e)
   }
 }
 
