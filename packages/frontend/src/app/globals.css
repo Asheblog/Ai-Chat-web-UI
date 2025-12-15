@@ -78,6 +78,13 @@
   background: hsl(var(--muted-foreground) / 0.5);
 }
 
+/* 圆角容器内 textarea 滚动条优化 */
+.rounded-3xl textarea::-webkit-scrollbar-track,
+textarea.rounded-3xl::-webkit-scrollbar-track {
+  margin: 12px 0; /* 上下留出圆角空间 */
+  border-radius: 3px;
+}
+
 /* 打字机动画光标（禁用） */
 .typing-cursor::after {
   content: none;

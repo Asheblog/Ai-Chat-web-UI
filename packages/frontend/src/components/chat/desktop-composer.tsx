@@ -152,19 +152,21 @@ export function DesktopComposer({
           </DropdownMenu>
 
           <div className="flex-1">
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => onInputChange(e.target.value)}
-              onKeyDown={onKeyDown}
-              onPaste={onPaste}
-              onCompositionStart={onCompositionStart}
-              onCompositionEnd={onCompositionEnd}
-              placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
-              disabled={textareaDisabled}
-              className="h-auto min-h-[48px] w-full resize-none rounded-3xl border border-border/60 bg-muted/60 px-4 sm:px-5 py-3 leading-[1.4] text-left placeholder:text-muted-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              rows={1}
-            />
+            <div className="overflow-hidden rounded-3xl border border-border/60 shadow-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+              <Textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => onInputChange(e.target.value)}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                onCompositionStart={onCompositionStart}
+                onCompositionEnd={onCompositionEnd}
+                placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
+                disabled={textareaDisabled}
+                className="h-auto min-h-[48px] w-full resize-none border-0 bg-muted/60 px-4 sm:px-5 py-3 leading-[1.4] text-left placeholder:text-muted-foreground transition-[height] duration-150 ease-out focus-visible:ring-0 focus-visible:ring-offset-0"
+                rows={1}
+              />
+            </div>
           </div>
 
           {showExpand && (
