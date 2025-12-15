@@ -4,6 +4,8 @@
  * 统一解析系统设置和环境变量，提供类型安全的流式配置。
  */
 
+import { parseBooleanSetting, parseNumberSetting, clampNumber } from '../../../utils/parsers'
+
 export interface StreamConfig {
   // Usage 配置
   usageEmit: boolean
@@ -53,14 +55,16 @@ export interface StreamConfigResolverParams {
 export function resolveStreamConfig(params: StreamConfigResolverParams): StreamConfig {
   const { sysMap, env = process.env } = params
 
-  const parseIntWithDefault = (
+  const getConfigValue = (sysValue: string | undefined, envKey: string): string | undefined => {
+    return sysValue ?? env[envKey]
+  }
+
+  const parseIntConfig = (
     sysValue: string | undefined,
     envKey: string,
-    defaultValue: number
+    options: { min?: number; max?: number; fallback: number }
   ): number => {
-    const raw = sysValue ?? env[envKey] ?? String(defaultValue)
-    const parsed = parseInt(raw, 10)
-    return Number.isFinite(parsed) ? parsed : defaultValue
+    return parseNumberSetting(getConfigValue(sysValue, envKey), options)
   }
 
   const parseBool = (
@@ -68,55 +72,48 @@ export function resolveStreamConfig(params: StreamConfigResolverParams): StreamC
     envKey: string,
     defaultValue: boolean
   ): boolean => {
-    const raw = sysValue ?? env[envKey] ?? String(defaultValue)
-    return raw.toString().toLowerCase() !== 'false'
-  }
-
-  const parseBoolStrict = (
-    sysValue: string | undefined,
-    envKey: string,
-    defaultValue: boolean
-  ): boolean => {
-    const raw = sysValue ?? env[envKey] ?? String(defaultValue)
-    return raw.toString().toLowerCase() === 'true'
+    return parseBooleanSetting(getConfigValue(sysValue, envKey), defaultValue)
   }
 
   // Usage 配置
   const usageEmit = parseBool(sysMap.usage_emit, 'USAGE_EMIT', true)
-  const usageProviderOnly = parseBoolStrict(sysMap.usage_provider_only, 'USAGE_PROVIDER_ONLY', false)
+  const usageProviderOnly = parseBool(sysMap.usage_provider_only, 'USAGE_PROVIDER_ONLY', false)
 
   // 心跳与超时
-  const heartbeatIntervalMs = parseIntWithDefault(
+  const heartbeatIntervalMs = parseIntConfig(
     sysMap.sse_heartbeat_interval_ms,
     'SSE_HEARTBEAT_INTERVAL_MS',
-    15000
+    { fallback: 15000 }
   )
-  const providerMaxIdleMs = parseIntWithDefault(
+  const providerMaxIdleMs = parseIntConfig(
     sysMap.provider_max_idle_ms,
     'PROVIDER_MAX_IDLE_MS',
-    60000
+    { fallback: 60000 }
   )
-  const providerTimeoutMs = parseIntWithDefault(
+  const providerTimeoutMs = parseIntConfig(
     sysMap.provider_timeout_ms,
     'PROVIDER_TIMEOUT_MS',
-    120000
+    { fallback: 120000 }
   )
-  const providerInitialGraceMs = Math.max(
-    0,
-    parseIntWithDefault(sysMap.provider_initial_grace_ms, 'PROVIDER_INITIAL_GRACE_MS', 120000)
+  const providerInitialGraceMs = parseIntConfig(
+    sysMap.provider_initial_grace_ms,
+    'PROVIDER_INITIAL_GRACE_MS',
+    { min: 0, fallback: 120000 }
   )
-  const providerReasoningIdleMs = Math.max(
-    0,
-    parseIntWithDefault(sysMap.provider_reasoning_idle_ms, 'PROVIDER_REASONING_IDLE_MS', 300000)
+  const providerReasoningIdleMs = parseIntConfig(
+    sysMap.provider_reasoning_idle_ms,
+    'PROVIDER_REASONING_IDLE_MS',
+    { min: 0, fallback: 300000 }
   )
-  const reasoningKeepaliveIntervalMs = Math.max(
-    0,
-    parseIntWithDefault(sysMap.reasoning_keepalive_interval_ms, 'REASONING_KEEPALIVE_INTERVAL_MS', 0)
+  const reasoningKeepaliveIntervalMs = parseIntConfig(
+    sysMap.reasoning_keepalive_interval_ms,
+    'REASONING_KEEPALIVE_INTERVAL_MS',
+    { min: 0, fallback: 0 }
   )
 
   // 推理链配置
   const reasoningEnabled = parseBool(sysMap.reasoning_enabled, 'REASONING_ENABLED', true)
-  const reasoningSaveToDb = parseBoolStrict(sysMap.reasoning_save_to_db, 'REASONING_SAVE_TO_DB', true)
+  const reasoningSaveToDb = parseBool(sysMap.reasoning_save_to_db, 'REASONING_SAVE_TO_DB', true)
   const reasoningTagsMode = (
     sysMap.reasoning_tags_mode ?? env.REASONING_TAGS_MODE ?? 'default'
   ).toString()
@@ -138,64 +135,70 @@ export function resolveStreamConfig(params: StreamConfigResolverParams): StreamC
   })()
 
   // 流式分块配置
-  const streamDeltaChunkSize = Math.max(
-    1,
-    parseIntWithDefault(sysMap.stream_delta_chunk_size, 'STREAM_DELTA_CHUNK_SIZE', 1)
+  const streamDeltaChunkSize = parseIntConfig(
+    sysMap.stream_delta_chunk_size,
+    'STREAM_DELTA_CHUNK_SIZE',
+    { min: 1, fallback: 1 }
   )
-  const streamDeltaFlushIntervalMs = Math.max(
-    0,
-    parseIntWithDefault(sysMap.stream_delta_flush_interval_ms, 'STREAM_DELTA_FLUSH_INTERVAL_MS', 0)
+  const streamDeltaFlushIntervalMs = parseIntConfig(
+    sysMap.stream_delta_flush_interval_ms,
+    'STREAM_DELTA_FLUSH_INTERVAL_MS',
+    { min: 0, fallback: 0 }
   )
-  const streamReasoningFlushIntervalMs = Math.max(
-    0,
-    parseIntWithDefault(
-      sysMap.stream_reasoning_flush_interval_ms,
-      'STREAM_REASONING_FLUSH_INTERVAL_MS',
-      streamDeltaFlushIntervalMs
-    )
+  const streamReasoningFlushIntervalMs = parseIntConfig(
+    sysMap.stream_reasoning_flush_interval_ms,
+    'STREAM_REASONING_FLUSH_INTERVAL_MS',
+    { min: 0, fallback: streamDeltaFlushIntervalMs }
   )
-  const streamKeepaliveIntervalMs = Math.max(
-    0,
-    parseIntWithDefault(sysMap.stream_keepalive_interval_ms, 'STREAM_KEEPALIVE_INTERVAL_MS', 0)
+  const streamKeepaliveIntervalMs = parseIntConfig(
+    sysMap.stream_keepalive_interval_ms,
+    'STREAM_KEEPALIVE_INTERVAL_MS',
+    { min: 0, fallback: 0 }
   )
-  const streamProgressPersistIntervalMs = Math.max(
-    250,
-    parseIntWithDefault(
-      sysMap.stream_progress_persist_interval_ms,
-      'STREAM_PROGRESS_PERSIST_INTERVAL_MS',
-      800
-    )
+  const streamProgressPersistIntervalMs = parseIntConfig(
+    sysMap.stream_progress_persist_interval_ms,
+    'STREAM_PROGRESS_PERSIST_INTERVAL_MS',
+    { min: 250, fallback: 800 }
   )
 
   // 并发控制
-  const maxConcurrentStreamsRaw = parseIntWithDefault(
-    sysMap.chat_max_concurrent_streams,
-    'CHAT_MAX_CONCURRENT_STREAMS',
-    1
+  const maxConcurrentStreams = clampNumber(
+    parseIntConfig(
+      sysMap.chat_max_concurrent_streams,
+      'CHAT_MAX_CONCURRENT_STREAMS',
+      { fallback: 1 }
+    ),
+    1,
+    8
   )
-  const maxConcurrentStreams = Math.min(8, Math.max(1, maxConcurrentStreamsRaw))
   const concurrencyErrorMessage = '并发生成数已达系统上限，请稍候重试'
 
   // Agent 配置
-  const agentMaxToolIterationsRaw = parseIntWithDefault(
-    sysMap.agent_max_tool_iterations,
-    'AGENT_MAX_TOOL_ITERATIONS',
-    4
+  const agentMaxToolIterations = clampNumber(
+    parseIntConfig(
+      sysMap.agent_max_tool_iterations,
+      'AGENT_MAX_TOOL_ITERATIONS',
+      { fallback: 4 }
+    ),
+    0,
+    20
   )
-  const agentMaxToolIterations = Math.min(20, Math.max(0, agentMaxToolIterationsRaw))
 
-  const assistantReplyHistoryLimitRaw = parseIntWithDefault(
-    sysMap.assistant_reply_history_limit,
-    'ASSISTANT_REPLY_HISTORY_LIMIT',
-    5
+  const assistantReplyHistoryLimit = clampNumber(
+    parseIntConfig(
+      sysMap.assistant_reply_history_limit,
+      'ASSISTANT_REPLY_HISTORY_LIMIT',
+      { fallback: 5 }
+    ),
+    1,
+    20
   )
-  const assistantReplyHistoryLimit = Math.min(20, Math.max(1, assistantReplyHistoryLimitRaw))
 
   // Trace 配置 (从 traceDecision 传入，这里设置默认值)
-  const traceIdleTimeoutMs = parseIntWithDefault(
+  const traceIdleTimeoutMs = parseIntConfig(
     sysMap.trace_idle_timeout_ms,
     'TRACE_IDLE_TIMEOUT_MS',
-    0
+    { min: 0, fallback: 0 }
   )
 
   return {

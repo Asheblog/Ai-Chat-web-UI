@@ -1,3 +1,101 @@
+import { randomUUID } from 'node:crypto';
+import { Prisma, type ChatSession, type Connection } from '@prisma/client';
+import { prisma } from '../../db';
+import { BackendLogger as log } from '../../utils/logger';
+import { convertOpenAIReasoningPayload } from '../../utils/providers';
+import { Tokenizer } from '../../utils/tokenizer';
+import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../../utils/web-search';
+import { runPythonSnippet } from '../../utils/python-runner';
+import { serializeQuotaSnapshot } from '../../utils/quota';
+import {
+  parseBooleanSetting,
+  parseDomainListSetting,
+  parseNumberSetting,
+  truncateText,
+} from '../../utils/parsers';
+import type { UsageQuotaSnapshot } from '../../types';
+import { summarizeSsePayload } from '../../utils/task-trace';
+import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
+import type { ToolLogEntry } from './tool-logs';
+import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from './assistant-message-service';
+import {
+  buildAgentStreamKey,
+  deriveAssistantClientMessageId,
+  persistStreamMeta,
+  registerStreamMeta,
+  releaseStreamMeta,
+  updateStreamMetaController,
+  buildPendingCancelKeyByMessageId,
+  buildPendingCancelKeyByClientId,
+  hasPendingStreamCancelKey,
+  deletePendingStreamCancelKey,
+} from './stream-state';
+import {
+  documentToolDefinitions,
+  documentToolNames,
+  DocumentToolHandler,
+  formatDocumentToolReasoning,
+} from './document-tools';
+import type { RAGService } from '../../services/document/rag-service';
+
+export interface AgentWebSearchConfig {
+  enabled: boolean;
+  engine: string;
+  apiKey?: string;
+  resultLimit: number;
+  domains: string[];
+  endpoint?: string;
+  scope?: string;
+  includeSummary?: boolean;
+  includeRawContent?: boolean;
+}
+
+export interface AgentPythonToolConfig {
+  enabled: boolean;
+  command: string;
+  args: string[];
+  timeoutMs: number;
+  maxOutputChars: number;
+  maxSourceChars: number;
+}
+
+type ChatSessionWithConnection = ChatSession & { connection: Connection | null };
+
+export type AgentResponseParams = {
+  session: ChatSessionWithConnection;
+  sessionId: number;
+  requestData: Record<string, any>;
+  messagesPayload: any[];
+  promptTokens: number;
+  contextLimit: number;
+  contextRemaining: number;
+  quotaSnapshot: UsageQuotaSnapshot | null;
+  userMessageRecord: any;
+  sseHeaders: Record<string, string>;
+  agentConfig: AgentWebSearchConfig;
+  pythonToolConfig: AgentPythonToolConfig;
+  agentMaxToolIterations: number;
+  toolFlags: { webSearch: boolean; python: boolean; document?: boolean };
+  provider: string;
+  baseUrl: string;
+  authHeader: Record<string, string>;
+  extraHeaders: Record<string, string>;
+  reasoningEnabled: boolean;
+  reasoningSaveToDb: boolean;
+  clientMessageId?: string | null;
+  actorIdentifier: string;
+  requestSignal?: AbortSignal;
+  assistantMessageId: number | null;
+  assistantClientMessageId?: string | null;
+  streamProgressPersistIntervalMs: number;
+  traceRecorder: TaskTraceRecorder;
+  idleTimeoutMs: number;
+  assistantReplyHistoryLimit: number;
+  maxConcurrentStreams: number;
+  concurrencyErrorMessage: string;
+  ragService?: RAGService | null;
+};
+
 export const createAgentWebSearchResponse = async (params: AgentResponseParams): Promise<Response> => {
   const {
     session,
@@ -427,12 +525,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           payload.meta = meta;
         }
         safeEnqueue(payload);
-      };
-
-      const truncateText = (text: string, limit = 160) => {
-        const normalized = (text || '').trim();
-        if (!normalized) return '';
-        return normalized.length > limit ? `${normalized.slice(0, limit)}…` : normalized;
       };
 
       const handleWebSearchToolCall = async (
@@ -1300,35 +1392,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
   return new Response(stream, { headers: sseHeaders });
 };
 
-const truthyValues = new Set(['true', '1', 'yes', 'y', 'on']);
-const falsyValues = new Set(['false', '0', 'no', 'n', 'off']);
-
-const parseBooleanSetting = (value: string | undefined, fallback: boolean) => {
-  if (value === undefined || value === null) return fallback;
-  const normalized = value.toString().trim().toLowerCase();
-  if (truthyValues.has(normalized)) return true;
-  if (falsyValues.has(normalized)) return false;
-  return fallback;
-};
-
-const parseDomainListSetting = (raw?: string | null): string[] => {
-  if (!raw) return [];
-  const trimmed = raw.trim();
-  if (!trimmed) return [];
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) {
-      return parsed.map((d) => (typeof d === 'string' ? d.trim() : '')).filter(Boolean);
-    }
-  } catch {
-    // ignore json parse error
-  }
-  return trimmed
-    .split(',')
-    .map((d) => d.trim())
-    .filter(Boolean);
-};
-
 export const buildAgentWebSearchConfig = (sysMap: Record<string, string>): AgentWebSearchConfig => {
   const enabled = parseBooleanSetting(
     sysMap.web_search_agent_enable ?? process.env.WEB_SEARCH_AGENT_ENABLE,
@@ -1429,93 +1492,4 @@ export const buildAgentPythonToolConfig = (sysMap: Record<string, string>): Agen
     maxOutputChars,
     maxSourceChars,
   };
-};
-import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
-import { prisma } from '../../db';
-import { BackendLogger as log } from '../../utils/logger';
-import { convertOpenAIReasoningPayload } from '../../utils/providers';
-import { Tokenizer } from '../../utils/tokenizer';
-import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../../utils/web-search';
-import { runPythonSnippet } from '../../utils/python-runner';
-import { serializeQuotaSnapshot } from '../../utils/quota';
-import type { UsageQuotaSnapshot } from '../../types';
-import { summarizeSsePayload } from '../../utils/task-trace';
-import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
-import type { ToolLogEntry } from './tool-logs';
-import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from './assistant-message-service';
-import {
-  buildAgentStreamKey,
-  deriveAssistantClientMessageId,
-  persistStreamMeta,
-  registerStreamMeta,
-  releaseStreamMeta,
-  updateStreamMetaController,
-  buildPendingCancelKeyByMessageId,
-  buildPendingCancelKeyByClientId,
-  hasPendingStreamCancelKey,
-  deletePendingStreamCancelKey,
-} from './stream-state';
-import {
-  documentToolDefinitions,
-  documentToolNames,
-  DocumentToolHandler,
-  formatDocumentToolReasoning,
-} from './document-tools';
-import type { RAGService } from '../../services/document/rag-service';
-
-export interface AgentWebSearchConfig {
-  enabled: boolean;
-  engine: string;
-  apiKey?: string;
-  resultLimit: number;
-  domains: string[];
-  endpoint?: string;
-  scope?: string;
-  includeSummary?: boolean;
-  includeRawContent?: boolean;
-}
-
-export interface AgentPythonToolConfig {
-  enabled: boolean;
-  command: string;
-  args: string[];
-  timeoutMs: number;
-  maxOutputChars: number;
-  maxSourceChars: number;
-}
-
-export type AgentResponseParams = {
-  session: typeof prisma.chatSession.$inferSelect;
-  sessionId: number;
-  requestData: Record<string, any>;
-  messagesPayload: any[];
-  promptTokens: number;
-  contextLimit: number;
-  contextRemaining: number;
-  quotaSnapshot: UsageQuotaSnapshot | null;
-  userMessageRecord: any;
-  sseHeaders: Record<string, string>;
-  agentConfig: AgentWebSearchConfig;
-  pythonToolConfig: AgentPythonToolConfig;
-  agentMaxToolIterations: number;
-  toolFlags: { webSearch: boolean; python: boolean; document?: boolean };
-  provider: string;
-  baseUrl: string;
-  authHeader: Record<string, string>;
-  extraHeaders: Record<string, string>;
-  reasoningEnabled: boolean;
-  reasoningSaveToDb: boolean;
-  clientMessageId?: string | null;
-  actorIdentifier: string;
-  requestSignal?: AbortSignal;
-  assistantMessageId: number | null;
-  assistantClientMessageId?: string | null;
-  streamProgressPersistIntervalMs: number;
-  traceRecorder: TaskTraceRecorder;
-  idleTimeoutMs: number;
-  assistantReplyHistoryLimit: number;
-  maxConcurrentStreams: number;
-  concurrencyErrorMessage: string;
-  ragService?: RAGService | null;
 };
