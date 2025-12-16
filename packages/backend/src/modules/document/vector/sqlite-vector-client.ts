@@ -98,7 +98,7 @@ class TopKHeap<T> {
   constructor(
     private maxSize: number,
     private compare: (a: T, b: T) => number
-  ) {}
+  ) { }
 
   push(item: T): void {
     if (this.heap.length < this.maxSize) {
@@ -291,12 +291,23 @@ export class SQLiteVectorClient implements VectorDBClient {
       .run(collectionName, 0)
   }
 
-  async deleteCollection(collectionName: string): Promise<void> {
+  async deleteCollection(collectionName: string, vacuum: boolean = true): Promise<void> {
     const tableName = `vec_${collectionName.replace(/[^a-zA-Z0-9_]/g, '_')}`
 
     try {
       this.db.exec(`DROP TABLE IF EXISTS "${tableName}"`)
       this.db.prepare('DELETE FROM vector_collections WHERE name = ?').run(collectionName)
+
+      // 执行 VACUUM 释放磁盘空间
+      // SQLite 删除数据后不会自动缩小文件，需要 VACUUM 来回收空间
+      if (vacuum) {
+        try {
+          this.db.exec('VACUUM')
+          console.log(`[VectorDB] Collection "${collectionName}" deleted and database vacuumed`)
+        } catch (e) {
+          console.warn('[VectorDB] VACUUM failed after delete:', (e as any)?.message || e)
+        }
+      }
     } catch {
       // 表可能不存在，忽略错误
     }
@@ -420,8 +431,19 @@ export class SQLiteVectorClient implements VectorDBClient {
       .prepare('SELECT name FROM vector_collections')
       .all() as Array<{ name: string }>
 
+    // 批量删除时跳过单次 VACUUM，最后统一执行
     for (const { name } of collections) {
-      await this.deleteCollection(name)
+      await this.deleteCollection(name, false) // 不单独 VACUUM
+    }
+
+    // 统一执行一次 VACUUM 释放所有空间
+    if (collections.length > 0) {
+      try {
+        this.db.exec('VACUUM')
+        console.log(`[VectorDB] Reset complete, ${collections.length} collections deleted and database vacuumed`)
+      } catch (e) {
+        console.warn('[VectorDB] VACUUM failed after reset:', (e as any)?.message || e)
+      }
     }
   }
 

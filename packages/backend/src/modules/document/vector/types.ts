@@ -29,8 +29,9 @@ export interface VectorDBClient {
 
   /**
    * 删除 collection
+   * @param vacuum - 是否执行 VACUUM 释放磁盘空间，默认 true
    */
-  deleteCollection(collectionName: string): Promise<void>
+  deleteCollection(collectionName: string, vacuum?: boolean): Promise<void>
 
   /**
    * 插入向量

@@ -142,6 +142,7 @@ export class KnowledgeBaseService {
 
   /**
    * 删除知识库
+   * 同时彻底删除所有关联文档的物理文件和向量数据
    */
   async delete(id: number): Promise<void> {
     // 先获取知识库及其文档
@@ -156,10 +157,33 @@ export class KnowledgeBaseService {
 
     if (!kb) return
 
+    // 收集需要删除的文档ID
+    const documentIds = kb.documents.map((d) => d.documentId)
+
     // 删除知识库（级联删除关联关系）
     await this.prisma.knowledgeBase.delete({
       where: { id },
     })
+
+    // 彻底删除不再被任何知识库引用的文档
+    const services = getDocumentServices()
+    if (services && documentIds.length > 0) {
+      for (const documentId of documentIds) {
+        // 检查文档是否还被其他知识库引用
+        const otherReferences = await this.prisma.knowledgeBaseDocument.count({
+          where: { documentId },
+        })
+
+        if (otherReferences === 0) {
+          try {
+            await services.documentService.deleteDocument(documentId)
+            console.log(`[KnowledgeBaseService] Deleted orphaned document ${documentId} (file + vector data)`)
+          } catch (err) {
+            console.error(`[KnowledgeBaseService] Failed to delete document ${documentId}:`, err)
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -203,14 +227,34 @@ export class KnowledgeBaseService {
 
   /**
    * 从知识库移除文档
+   * 同时彻底删除文档的物理文件、向量数据和数据库记录
    */
   async removeDocument(knowledgeBaseId: number, documentId: number): Promise<void> {
+    // 首先删除关联关系
     await this.prisma.knowledgeBaseDocument.deleteMany({
       where: {
         knowledgeBaseId,
         documentId,
       },
     })
+
+    // 检查文档是否还被其他知识库引用
+    const otherReferences = await this.prisma.knowledgeBaseDocument.count({
+      where: { documentId },
+    })
+
+    // 如果没有其他引用，彻底删除文档
+    if (otherReferences === 0) {
+      const services = getDocumentServices()
+      if (services) {
+        try {
+          await services.documentService.deleteDocument(documentId)
+          console.log(`[KnowledgeBaseService] Fully deleted document ${documentId} (file + vector data)`)
+        } catch (err) {
+          console.error(`[KnowledgeBaseService] Failed to delete document ${documentId}:`, err)
+        }
+      }
+    }
 
     // 更新统计
     await this.updateStats(knowledgeBaseId)
