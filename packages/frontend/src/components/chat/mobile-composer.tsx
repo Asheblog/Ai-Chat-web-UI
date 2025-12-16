@@ -54,6 +54,10 @@ interface MobileComposerProps {
   onToggleTrace: (value: boolean) => void
   onOpenAdvanced: () => void
   onOpenSessionPrompt?: () => void
+  // 知识库
+  onOpenKnowledgeBase?: () => void
+  knowledgeBaseEnabled?: boolean
+  knowledgeBaseCount?: number
 }
 
 export function MobileComposer({
@@ -97,6 +101,10 @@ export function MobileComposer({
   onToggleTrace,
   onOpenAdvanced,
   onOpenSessionPrompt,
+  // 知识库
+  onOpenKnowledgeBase,
+  knowledgeBaseEnabled,
+  knowledgeBaseCount,
 }: MobileComposerProps) {
   const disabled = sendLocked || hasProcessingDocuments || (!input.trim() && selectedImages.length === 0)
   const [plusOpen, setPlusOpen] = useState(false)
@@ -133,9 +141,8 @@ export function MobileComposer({
             >
               <Button
                 type="button"
-                className={`h-12 w-12 shrink-0 rounded-full ${
-                  isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
-                }`}
+                className={`h-12 w-12 shrink-0 rounded-full ${isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
+                  }`}
                 onClick={() => {
                   if (isStreaming) {
                     onStop()
@@ -156,19 +163,17 @@ export function MobileComposer({
             <Button
               type="button"
               variant="outline"
-              className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${
-                thinkingEnabled
+              className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${thinkingEnabled
                   ? 'bg-primary/10 border-primary text-primary hover:bg-primary/20'
                   : 'bg-background border-border text-muted-foreground hover:bg-muted'
-              }`}
+                }`}
               onClick={() => onToggleThinking(!thinkingEnabled)}
               aria-pressed={thinkingEnabled}
               aria-label={thinkingEnabled ? '关闭思考模式' : '开启思考模式'}
             >
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                  thinkingEnabled ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground'
-                }`}
+                className={`flex h-6 w-6 items-center justify-center rounded-full ${thinkingEnabled ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground'
+                  }`}
               >
                 <Brain className="h-3.5 w-3.5" />
               </span>
@@ -178,20 +183,18 @@ export function MobileComposer({
             <Button
               type="button"
               variant="outline"
-              className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${
-                webSearchEnabled
+              className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${webSearchEnabled
                   ? 'bg-sky-100 border-sky-200 text-sky-700 dark:bg-sky-900/40 dark:border-sky-800 dark:text-sky-200'
                   : 'bg-background border-border text-muted-foreground hover:bg-muted'
-              }`}
+                }`}
               onClick={() => onToggleWebSearch(!webSearchEnabled)}
               aria-pressed={webSearchEnabled}
               disabled={!canUseWebSearch || isStreaming}
               aria-label="联网搜索"
             >
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                  webSearchEnabled ? 'bg-sky-600 text-white shadow-sm' : 'bg-muted text-muted-foreground'
-                }`}
+                className={`flex h-6 w-6 items-center justify-center rounded-full ${webSearchEnabled ? 'bg-sky-600 text-white shadow-sm' : 'bg-muted text-muted-foreground'
+                  }`}
               >
                 <Globe className="h-3.5 w-3.5" />
               </span>
@@ -203,11 +206,10 @@ export function MobileComposer({
                 <Button
                   type="button"
                   variant="outline"
-                  className={`h-10 rounded-full px-3 pr-3 flex items-center gap-2 transition-colors ${
-                    plusOpen
+                  className={`h-10 rounded-full px-3 pr-3 flex items-center gap-2 transition-colors ${plusOpen
                       ? 'bg-muted border-border text-foreground'
                       : 'bg-background border-border text-muted-foreground hover:bg-muted'
-                  }`}
+                    }`}
                   aria-label="更多操作"
                 >
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -216,25 +218,25 @@ export function MobileComposer({
                   <span className="text-xs font-medium">更多</span>
                 </Button>
               </DropdownMenuTrigger>
-                <PlusMenuContent
-                  thinkingEnabled={thinkingEnabled}
-                  onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
-                  webSearchEnabled={webSearchEnabled}
-                  onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-                  canUseWebSearch={canUseWebSearch}
-                  showWebSearchScope={showWebSearchScope}
-                  webSearchScope={webSearchScope}
-                  onWebSearchScopeChange={(value) => {
-                    onWebSearchScopeChange(value)
-                    setPlusOpen(false)
-                  }}
-                  webSearchDisabledNote={webSearchDisabledNote}
-                  pythonToolEnabled={pythonToolEnabled}
-                  onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-                  canUsePythonTool={canUsePythonTool}
-                  pythonToolDisabledNote={pythonToolDisabledNote}
-                  canUseTrace={canUseTrace}
-                  traceEnabled={traceEnabled}
+              <PlusMenuContent
+                thinkingEnabled={thinkingEnabled}
+                onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+                webSearchEnabled={webSearchEnabled}
+                onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+                canUseWebSearch={canUseWebSearch}
+                showWebSearchScope={showWebSearchScope}
+                webSearchScope={webSearchScope}
+                onWebSearchScopeChange={(value) => {
+                  onWebSearchScopeChange(value)
+                  setPlusOpen(false)
+                }}
+                webSearchDisabledNote={webSearchDisabledNote}
+                pythonToolEnabled={pythonToolEnabled}
+                onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+                canUsePythonTool={canUsePythonTool}
+                pythonToolDisabledNote={pythonToolDisabledNote}
+                canUseTrace={canUseTrace}
+                traceEnabled={traceEnabled}
                 onToggleTrace={(checked) => {
                   onToggleTrace(Boolean(checked))
                   setPlusOpen(false)
@@ -248,9 +250,9 @@ export function MobileComposer({
                 onOpenSessionPrompt={
                   onOpenSessionPrompt
                     ? () => {
-                        setPlusOpen(false)
-                        onOpenSessionPrompt()
-                      }
+                      setPlusOpen(false)
+                      onOpenSessionPrompt()
+                    }
                     : undefined
                 }
               />
@@ -269,6 +271,9 @@ export function MobileComposer({
                 manageCount={attachmentsCount}
                 ariaLabel="上传附件"
                 className="h-10 w-10"
+                onOpenKnowledgeBase={onOpenKnowledgeBase}
+                knowledgeBaseEnabled={knowledgeBaseEnabled}
+                knowledgeBaseCount={knowledgeBaseCount}
               />
             </div>
           </div>

@@ -343,6 +343,10 @@ export function ChatComposerPanel({
         onOpenSessionPrompt={() => setSessionPromptOpen(true)}
         onOpenAttachmentManager={() => setAttachmentViewerOpen(true)}
         attachmentsCount={attachmentsCount}
+        // 知识库
+        onOpenKnowledgeBase={() => setKbSelectorOpen(true)}
+        knowledgeBaseEnabled={knowledgeBaseEnabled}
+        knowledgeBaseCount={selectedKnowledgeBaseIds?.length ?? 0}
       />
 
       <DesktopComposer

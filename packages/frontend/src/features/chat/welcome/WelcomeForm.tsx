@@ -9,6 +9,7 @@ import { ImagePreviewList } from './ImagePreviewList'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import { AttachmentTray, DocumentAttachmentInput } from '@/features/chat/composer'
 import type { AttachedDocument } from '@/features/chat/composer/use-document-attachments'
+import { KnowledgeBaseSelector, type KnowledgeBaseItem } from '@/components/chat/knowledge-base-selector'
 
 type Effort = 'unset' | 'low' | 'medium' | 'high'
 
@@ -46,6 +47,20 @@ interface WelcomeFormProps {
       onPickDocuments: () => void
       onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
       documentInputRef: RefObject<HTMLInputElement>
+    }
+    knowledgeBase: {
+      enabled: boolean
+      availableKbs: KnowledgeBaseItem[]
+      selectedKbIds: number[]
+      isLoading: boolean
+      error: string | null
+      onToggle: (id: number) => void
+      onSelectAll: () => void
+      onClearAll: () => void
+      onRefresh: () => Promise<void>
+      selectorOpen: boolean
+      onOpenSelector: () => void
+      onSelectorOpenChange: (open: boolean) => void
     }
     advancedOptions: {
       disabled: boolean
@@ -106,6 +121,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     onOpenExpand,
     expand,
     attachments,
+    knowledgeBase,
     advancedOptions,
     advancedDialog,
     sessionPromptDialog,
@@ -156,6 +172,9 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             onOpenManager={() => setAttachmentViewerOpen(true)}
             manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
             manageCount={attachments.selectedImages.length + attachments.documents.length}
+            onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
+            knowledgeBaseEnabled={knowledgeBase.enabled}
+            knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
           />
         </div>
       </div>
@@ -180,6 +199,20 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         />
       )}
       <DocumentAttachmentInput inputRef={attachments.documentInputRef} onFilesSelected={attachments.onDocumentFilesSelected} />
+
+      {/* 知识库选择对话框 */}
+      <KnowledgeBaseSelector
+        open={knowledgeBase.selectorOpen}
+        onOpenChange={knowledgeBase.onSelectorOpenChange}
+        availableKbs={knowledgeBase.availableKbs}
+        selectedKbIds={knowledgeBase.selectedKbIds}
+        isLoading={knowledgeBase.isLoading}
+        error={knowledgeBase.error}
+        onToggle={knowledgeBase.onToggle}
+        onSelectAll={knowledgeBase.onSelectAll}
+        onClearAll={knowledgeBase.onClearAll}
+        onRefresh={knowledgeBase.onRefresh}
+      />
 
       <Dialog open={expand.open} onOpenChange={(open) => (open ? onOpenExpand() : expand.onClose())}>
         <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 sm:rounded-2xl overflow-hidden flex flex-col">
@@ -232,28 +265,28 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         </DialogContent>
       </Dialog>
 
-          <Dialog open={sessionPromptDialog.open} onOpenChange={(open) => (!open ? sessionPromptDialog.onClose() : null)}>
-            <DialogContent className="max-w-2xl w-full max-h-[80vh] overflow-hidden p-0 sm:rounded-2xl">
-              <DialogHeader className="px-5 py-4 border-b">
-                <DialogTitle>会话系统提示词</DialogTitle>
-                <DialogDescription>
-                  {sessionPromptDialog.value.trim()
-                    ? '当前会话将使用该提示词'
-                    : sessionPromptDialog.placeholder || '留空继承上级或使用默认提示词'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="px-5 py-4 space-y-3">
-                <textarea
-                  value={sessionPromptDialog.value}
-                  onChange={(event) => sessionPromptDialog.onChange(event.target.value)}
-                  rows={6}
-                  placeholder={sessionPromptDialog.placeholder}
-                  className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用“今天日期是{day time}”。'}
-                </p>
-              </div>
+      <Dialog open={sessionPromptDialog.open} onOpenChange={(open) => (!open ? sessionPromptDialog.onClose() : null)}>
+        <DialogContent className="max-w-2xl w-full max-h-[80vh] overflow-hidden p-0 sm:rounded-2xl">
+          <DialogHeader className="px-5 py-4 border-b">
+            <DialogTitle>会话系统提示词</DialogTitle>
+            <DialogDescription>
+              {sessionPromptDialog.value.trim()
+                ? '当前会话将使用该提示词'
+                : sessionPromptDialog.placeholder || '留空继承上级或使用默认提示词'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-5 py-4 space-y-3">
+            <textarea
+              value={sessionPromptDialog.value}
+              onChange={(event) => sessionPromptDialog.onChange(event.target.value)}
+              rows={6}
+              placeholder={sessionPromptDialog.placeholder}
+              className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            />
+            <p className="text-xs text-muted-foreground">
+              {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用“今天日期是{day time}”。'}
+            </p>
+          </div>
           <div className="flex items-center justify-between border-t px-5 py-3">
             <Button variant="ghost" onClick={sessionPromptDialog.onClear}>
               清空

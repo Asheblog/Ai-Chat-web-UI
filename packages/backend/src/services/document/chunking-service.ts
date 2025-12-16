@@ -397,3 +397,124 @@ export function* iteratePageAwareChunks(
     }
   }
 }
+
+/**
+ * 智能分块策略配置
+ * 根据文档类型返回最优的分块参数
+ */
+export interface SmartChunkingConfig {
+  chunkSize: number
+  chunkOverlap: number
+  separators: string[]
+}
+
+/**
+ * 根据文档类型获取最优分块参数
+ * 
+ * @param mimeType 文档的 MIME 类型
+ * @param filename 文件名（用于扩展名检测）
+ * @returns 优化后的分块配置
+ */
+export function getSmartChunkingConfig(
+  mimeType: string,
+  filename: string
+): SmartChunkingConfig {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+
+  // 代码文件：较大的 chunkSize，保持函数完整性
+  if (
+    ['js', 'ts', 'jsx', 'tsx', 'py', 'java', 'css', 'html', 'json', 'md'].includes(ext) ||
+    mimeType.includes('javascript') ||
+    mimeType.includes('typescript') ||
+    mimeType.includes('python')
+  ) {
+    return {
+      chunkSize: 2000,
+      chunkOverlap: 200,
+      separators: ['\n\n', '\nfunction ', '\nclass ', '\ndef ', '\n// ', '\n# ', '\n'],
+    }
+  }
+
+  // CSV/表格：较小的 chunkSize，每行独立
+  if (ext === 'csv' || mimeType.includes('csv')) {
+    return {
+      chunkSize: 500,
+      chunkOverlap: 50,
+      separators: ['\n'],
+    }
+  }
+
+  // 法律/合同文档：中等 chunkSize，按条款分割
+  // 可通过文件名关键词检测
+  if (
+    filename.toLowerCase().includes('合同') ||
+    filename.toLowerCase().includes('contract') ||
+    filename.toLowerCase().includes('协议') ||
+    filename.toLowerCase().includes('agreement')
+  ) {
+    return {
+      chunkSize: 1000,
+      chunkOverlap: 100,
+      separators: ['\n\n', '\n第', '\n（', '\n一、', '\n二、', '\n三、', '\n'],
+    }
+  }
+
+  // PDF/报告：默认配置
+  if (mimeType === 'application/pdf') {
+    return {
+      chunkSize: 1500,
+      chunkOverlap: 150,
+      separators: DEFAULT_SEPARATORS,
+    }
+  }
+
+  // 默认配置
+  return {
+    chunkSize: 1500,
+    chunkOverlap: 100,
+    separators: DEFAULT_SEPARATORS,
+  }
+}
+
+/**
+ * 提取内容锚点（用于快速定位）
+ * 返回内容的前几个有意义的词
+ */
+export function extractAnchor(content: string, maxLength: number = 40): string {
+  const trimmed = content.trim()
+  if (trimmed.length <= maxLength) {
+    return trimmed
+  }
+
+  // 尝试在词边界截断
+  const truncated = trimmed.substring(0, maxLength)
+  const lastSpace = truncated.lastIndexOf(' ')
+  const lastPunctuation = Math.max(
+    truncated.lastIndexOf('。'),
+    truncated.lastIndexOf('，'),
+    truncated.lastIndexOf('.'),
+    truncated.lastIndexOf(',')
+  )
+
+  const cutPoint = Math.max(lastSpace, lastPunctuation, maxLength - 10)
+  return truncated.substring(0, cutPoint) + '...'
+}
+
+/**
+ * 计算内容在页面中的位置
+ */
+export function calculatePagePosition(
+  chunkStartChar: number,
+  chunkEndChar: number,
+  totalPageChars: number
+): 'top' | 'middle' | 'bottom' {
+  const midpoint = (chunkStartChar + chunkEndChar) / 2
+  const relativePosition = midpoint / totalPageChars
+
+  if (relativePosition < 0.33) {
+    return 'top'
+  } else if (relativePosition > 0.67) {
+    return 'bottom'
+  }
+  return 'middle'
+}

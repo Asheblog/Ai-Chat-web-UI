@@ -59,11 +59,13 @@ export class RAGService {
   }
 
   /**
-   * 在会话文档中检索
+   * 在会话文档中检索（增强版）
+   * 支持不同的搜索模式
    */
   async searchInSession(
     sessionId: number,
-    query: string
+    query: string,
+    searchMode: 'precise' | 'broad' | 'overview' = 'precise'
   ): Promise<RAGResult> {
     const startTime = Date.now()
 
@@ -98,6 +100,28 @@ export class RAGService {
       }
     }
 
+    // 根据搜索模式调整参数
+    let relevanceThreshold = this.config.relevanceThreshold
+    let topK = this.config.topK
+
+    switch (searchMode) {
+      case 'precise':
+        // 精确模式：高阈值，少结果
+        relevanceThreshold = Math.max(this.config.relevanceThreshold, 0.5)
+        topK = Math.min(this.config.topK, 5)
+        break
+      case 'broad':
+        // 广泛模式：低阈值，多结果
+        relevanceThreshold = Math.min(this.config.relevanceThreshold, 0.3)
+        topK = Math.max(this.config.topK, 10)
+        break
+      case 'overview':
+        // 概览模式：从不同位置采样
+        relevanceThreshold = 0.2
+        topK = this.config.topK
+        break
+    }
+
     // 生成查询 embedding
     const queryVector = await this.embeddingService.embed(query)
 
@@ -110,12 +134,22 @@ export class RAGService {
       const results = await this.vectorDB.search(
         doc.collectionName,
         queryVector,
-        this.config.topK
+        topK * 2 // 多取一些用于后续过滤
       )
 
       for (const result of results) {
-        // 过滤低相关性结果
-        if (result.score < this.config.relevanceThreshold) continue
+        // 根据模式调整过滤
+        if (result.score < relevanceThreshold) continue
+
+        // 增强 metadata 添加页面位置信息
+        const pageNumber = (result.metadata.pageNumber as number) || 0
+        const totalPages = (result.metadata.totalPages as number) || 1
+        let pagePosition: 'top' | 'middle' | 'bottom' = 'middle'
+        if (pageNumber <= Math.ceil(totalPages * 0.2)) {
+          pagePosition = 'top'
+        } else if (pageNumber >= Math.ceil(totalPages * 0.8)) {
+          pagePosition = 'bottom'
+        }
 
         allHits.push({
           documentId: doc.id,
@@ -123,14 +157,28 @@ export class RAGService {
           chunkIndex: (result.metadata.chunkIndex as number) || 0,
           content: result.text,
           score: result.score,
-          metadata: result.metadata,
+          metadata: {
+            ...result.metadata,
+            pagePosition,
+          },
         })
       }
     }
 
-    // 按相关性排序并取 top K
+    // 按相关性排序
     allHits.sort((a, b) => b.score - a.score)
-    const topHits = allHits.slice(0, this.config.topK)
+
+    let topHits: RAGHit[]
+
+    if (searchMode === 'overview') {
+      // 概览模式：从不同页面位置采样
+      const topGroup = allHits.filter((h) => h.metadata.pagePosition === 'top').slice(0, 3)
+      const middleGroup = allHits.filter((h) => h.metadata.pagePosition === 'middle').slice(0, 3)
+      const bottomGroup = allHits.filter((h) => h.metadata.pagePosition === 'bottom').slice(0, 2)
+      topHits = [...topGroup, ...middleGroup, ...bottomGroup]
+    } else {
+      topHits = allHits.slice(0, topK)
+    }
 
     // 构建上下文
     const context = this.buildContext(topHits)
@@ -293,7 +341,8 @@ ${context}
   }
 
   /**
-   * 获取会话文档的概要信息
+   * 获取会话文档的概要信息（增强版）
+   * 包含摘要、目录结构和文档类型
    */
   async getSessionDocumentOutline(sessionId: number): Promise<{
     documents: Array<{
@@ -303,6 +352,10 @@ ${context}
       chunkCount: number
       hasPageInfo: boolean
       status: string
+      // 新增字段
+      summary: string | null
+      toc: Array<{ title: string; pageStart: number; pageEnd?: number }> | null
+      documentType: 'code' | 'table' | 'report' | 'contract' | 'general'
     }>
   }> {
     const sessionDocs = await this.prisma.sessionDocument.findMany({
@@ -310,20 +363,62 @@ ${context}
       include: { document: true },
     })
 
-    const documents = sessionDocs.map((sd) => {
-      const doc = sd.document
-      const metadata = doc.metadata ? JSON.parse(doc.metadata) : {}
-      return {
-        id: doc.id,
-        name: doc.originalName,
-        pageCount: metadata.pageCount || 1,
-        chunkCount: doc.chunkCount || 0,
-        hasPageInfo: metadata.hasPageInfo || false,
-        status: doc.status,
-      }
-    })
+    const documentsWithOutline = await Promise.all(
+      sessionDocs.map(async (sd) => {
+        const doc = sd.document
+        const metadata = doc.metadata ? JSON.parse(doc.metadata) : {}
 
-    return { documents }
+        // 获取文档类型（基于 mimeType 和文件扩展名）
+        let documentType: 'code' | 'table' | 'report' | 'contract' | 'general' = 'general'
+        const ext = doc.originalName.split('.').pop()?.toLowerCase() || ''
+        if (['js', 'ts', 'py', 'java', 'css', 'html', 'json', 'jsx', 'tsx'].includes(ext)) {
+          documentType = 'code'
+        } else if (['csv'].includes(ext)) {
+          documentType = 'table'
+        } else if (doc.mimeType === 'application/pdf') {
+          // 尝试检测合同关键词
+          documentType = 'report'
+        }
+
+        // 生成摘要：使用首个和最后一个 chunk 的内容
+        let summary: string | null = null
+        if (doc.status === 'ready' && doc.chunkCount && doc.chunkCount > 0) {
+          try {
+            const chunks = await this.prisma.documentChunk.findMany({
+              where: { documentId: doc.id },
+              orderBy: { chunkIndex: 'asc' },
+              take: 2,
+            })
+            if (chunks.length > 0) {
+              const firstContent = chunks[0].content.substring(0, 200)
+              summary = `${firstContent}${chunks[0].content.length > 200 ? '...' : ''}`
+            }
+          } catch {
+            // 忽略获取 chunk 的错误
+          }
+        }
+
+        // 提取目录结构（从 metadata 或分析 chunk 标题）
+        let toc: Array<{ title: string; pageStart: number; pageEnd?: number }> | null = null
+        if (metadata.toc) {
+          toc = metadata.toc
+        }
+
+        return {
+          id: doc.id,
+          name: doc.originalName,
+          pageCount: metadata.pageCount || 1,
+          chunkCount: doc.chunkCount || 0,
+          hasPageInfo: metadata.hasPageInfo || false,
+          status: doc.status,
+          summary,
+          toc,
+          documentType,
+        }
+      })
+    )
+
+    return { documents: documentsWithOutline }
   }
 
   /**

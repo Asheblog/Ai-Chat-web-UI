@@ -14,6 +14,7 @@ import {
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useAdvancedRequest, useDocumentAttachments, useImageAttachments } from '@/features/chat/composer'
+import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 
 
 export const useWelcomeScreenViewModel = () => {
@@ -58,6 +59,7 @@ export const useWelcomeScreenViewModel = () => {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [showExpand, setShowExpand] = useState(false)
   const [expandOpen, setExpandOpen] = useState(false)
+  const [kbSelectorOpen, setKbSelectorOpen] = useState(false)
   const [expandDraft, setExpandDraft] = useState('')
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -117,6 +119,21 @@ export const useWelcomeScreenViewModel = () => {
     toast,
   })
 
+  // 知识库 hook
+  const {
+    availableKbs,
+    selectedKbIds,
+    isEnabled: knowledgeBaseEnabled,
+    hasPermission: knowledgeBaseHasPermission,
+    isLoading: knowledgeBaseLoading,
+    error: knowledgeBaseError,
+    toggleKb,
+    setSelectedKbIds,
+    selectAll: selectAllKbs,
+    clearAll: clearAllKbs,
+    refresh: refreshKnowledgeBases,
+  } = useKnowledgeBase({ sessionId: null })
+
   const brandText = (systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'
   const basePlaceholder = quota
     ? quotaExhausted
@@ -134,7 +151,7 @@ export const useWelcomeScreenViewModel = () => {
 
   useEffect(() => {
     if (modelsCount === 0) {
-      fetchAll().catch(() => {})
+      fetchAll().catch(() => { })
     }
   }, [modelsCount, fetchAll])
 
@@ -188,9 +205,9 @@ export const useWelcomeScreenViewModel = () => {
 
   const canUseWebSearch = Boolean(
     systemSettings?.webSearchAgentEnable &&
-      systemSettings?.webSearchHasApiKey &&
-      isWebSearchCapable &&
-      providerSupportsTools,
+    systemSettings?.webSearchHasApiKey &&
+    isWebSearchCapable &&
+    providerSupportsTools,
   )
   const canUsePythonTool = Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable && providerSupportsTools
 
@@ -584,6 +601,20 @@ export const useWelcomeScreenViewModel = () => {
         onDocumentFilesSelected,
         documentInputRef,
       },
+      knowledgeBase: {
+        enabled: knowledgeBaseEnabled && knowledgeBaseHasPermission,
+        availableKbs,
+        selectedKbIds,
+        isLoading: knowledgeBaseLoading,
+        error: knowledgeBaseError,
+        onToggle: toggleKb,
+        onSelectAll: selectAllKbs,
+        onClearAll: clearAllKbs,
+        onRefresh: refreshKnowledgeBases,
+        selectorOpen: kbSelectorOpen,
+        onOpenSelector: () => setKbSelectorOpen(true),
+        onSelectorOpenChange: setKbSelectorOpen,
+      },
       advancedOptions: {
         disabled: creationDisabled,
         thinkingEnabled,
@@ -656,9 +687,8 @@ export const useWelcomeScreenViewModel = () => {
           setSessionPromptDraft('')
         },
         placeholder: systemSettings?.chatSystemPrompt
-          ? `留空以继承全局提示词：${systemSettings.chatSystemPrompt.slice(0, 80)}${
-              systemSettings.chatSystemPrompt.length > 80 ? '...' : ''
-            }`
+          ? `留空以继承全局提示词：${systemSettings.chatSystemPrompt.slice(0, 80)}${systemSettings.chatSystemPrompt.length > 80 ? '...' : ''
+          }`
           : '留空将使用默认提示词：今天日期是{day time}（{day time} 会替换为服务器当前时间）',
       },
     },
