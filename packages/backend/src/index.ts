@@ -20,6 +20,7 @@ import { createTaskTraceApi } from './api/task-trace';
 import { setChatConfig } from './modules/chat/chat-common';
 import { createSharesApi } from './api/shares';
 import { createDocumentsApi } from './api/documents';
+import { createKnowledgeBasesApi } from './api/knowledge-bases';
 import { getDocumentServices } from './services/document-services-factory';
 import { setRAGInitializerDeps, reloadRAGServices } from './services/rag-initializer';
 
@@ -88,6 +89,9 @@ app.route('/api/shares', createSharesApi({ shareService: container.shareService 
 
 // 文档路由（RAG 服务状态在请求时动态检查）
 app.route('/api/documents', createDocumentsApi());
+
+// 知识库路由
+app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 
 app.route(
   '/v1',

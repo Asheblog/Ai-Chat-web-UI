@@ -33,6 +33,7 @@ export type StreamSendOptions = {
   customBody?: Record<string, any>
   customHeaders?: Array<{ name: string; value: string }>
   streamKey?: string
+  knowledgeBaseIds?: number[]
 }
 
 export interface ShareSelectionState {

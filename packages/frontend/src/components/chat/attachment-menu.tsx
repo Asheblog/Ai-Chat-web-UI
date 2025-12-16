@@ -1,9 +1,10 @@
-import { Paperclip, ImagePlus, FilePlus2, FolderOpen } from 'lucide-react'
+import { Paperclip, ImagePlus, FilePlus2, FolderOpen, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,10 @@ interface AttachmentMenuProps {
   manageCount?: number
   ariaLabel?: string
   className?: string
+  // 知识库相关
+  onOpenKnowledgeBase?: () => void
+  knowledgeBaseEnabled?: boolean
+  knowledgeBaseCount?: number
 }
 
 /**
@@ -37,8 +42,11 @@ export function AttachmentMenu({
   manageCount,
   ariaLabel = '添加附件',
   className,
+  onOpenKnowledgeBase,
+  knowledgeBaseEnabled,
+  knowledgeBaseCount,
 }: AttachmentMenuProps) {
-  const hasAny = Boolean(hasImages || hasDocuments)
+  const hasAny = Boolean(hasImages || hasDocuments || (knowledgeBaseCount && knowledgeBaseCount > 0))
 
   return (
     <DropdownMenu>
@@ -62,7 +70,7 @@ export function AttachmentMenu({
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem onSelect={onPickImages} disabled={disableImages}>
           <ImagePlus className="mr-2 h-4 w-4" />
           <span>图片上传</span>
@@ -83,7 +91,17 @@ export function AttachmentMenu({
             <span>附件管理{typeof manageCount === 'number' ? ` (${manageCount})` : ''}</span>
           </DropdownMenuItem>
         )}
+        {knowledgeBaseEnabled && onOpenKnowledgeBase && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onOpenKnowledgeBase}>
+              <BookOpen className="mr-2 h-4 w-4" />
+              <span>知识库{typeof knowledgeBaseCount === 'number' && knowledgeBaseCount > 0 ? ` (${knowledgeBaseCount})` : ''}</span>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
+

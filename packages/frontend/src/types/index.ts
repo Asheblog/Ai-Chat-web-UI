@@ -309,6 +309,10 @@ export interface SystemSettings {
   ragMaxFileSizeMb?: number;
   ragMaxPages?: number;
   ragRetentionDays?: number;
+  // 知识库设置
+  knowledgeBaseEnabled?: boolean;
+  knowledgeBaseAllowAnonymous?: boolean;
+  knowledgeBaseAllowUsers?: boolean;
 }
 
 // UI 状态类型

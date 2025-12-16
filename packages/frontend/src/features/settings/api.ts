@@ -361,6 +361,10 @@ export const getSystemSettings = async () => {
         if (typeof v === 'number') return Math.max(1, Math.min(365, v))
         return 30
       })(),
+      // 知识库设置
+      knowledgeBaseEnabled: Boolean(raw.knowledge_base_enabled ?? false),
+      knowledgeBaseAllowAnonymous: Boolean(raw.knowledge_base_allow_anonymous ?? false),
+      knowledgeBaseAllowUsers: Boolean(raw.knowledge_base_allow_users ?? true),
     } as any,
   }
 }
@@ -474,6 +478,10 @@ export const updateSystemSettings = async (
   if (typeof rest.ragMaxFileSizeMb === 'number') payload.rag_max_file_size_mb = rest.ragMaxFileSizeMb
   if (typeof rest.ragMaxPages === 'number') payload.rag_max_pages = rest.ragMaxPages
   if (typeof rest.ragRetentionDays === 'number') payload.rag_retention_days = rest.ragRetentionDays
+  // 知识库设置
+  if (typeof rest.knowledgeBaseEnabled === 'boolean') payload.knowledge_base_enabled = rest.knowledgeBaseEnabled
+  if (typeof rest.knowledgeBaseAllowAnonymous === 'boolean') payload.knowledge_base_allow_anonymous = rest.knowledgeBaseAllowAnonymous
+  if (typeof rest.knowledgeBaseAllowUsers === 'boolean') payload.knowledge_base_allow_users = rest.knowledgeBaseAllowUsers
   if (assistantAvatarUpload) {
     payload.assistant_avatar = assistantAvatarUpload
   } else if (assistantAvatarRemove) {

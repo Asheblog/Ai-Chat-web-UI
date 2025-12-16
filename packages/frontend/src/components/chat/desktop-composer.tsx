@@ -60,6 +60,10 @@ interface DesktopComposerProps {
   pickDocuments?: () => void
   onOpenAttachmentManager?: () => void
   attachedDocumentsLength?: number
+  // 知识库
+  onOpenKnowledgeBase?: () => void
+  knowledgeBaseEnabled?: boolean
+  knowledgeBaseCount?: number
 }
 
 export function DesktopComposer({
@@ -108,6 +112,10 @@ export function DesktopComposer({
   pickDocuments,
   onOpenAttachmentManager,
   attachedDocumentsLength = 0,
+  // 知识库
+  onOpenKnowledgeBase,
+  knowledgeBaseEnabled,
+  knowledgeBaseCount,
 }: DesktopComposerProps) {
   const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
 
@@ -198,6 +206,9 @@ export function DesktopComposer({
             manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
             ariaLabel="上传附件"
             className="border"
+            onOpenKnowledgeBase={onOpenKnowledgeBase}
+            knowledgeBaseEnabled={knowledgeBaseEnabled}
+            knowledgeBaseCount={knowledgeBaseCount}
           />
 
           <TooltipProvider>
@@ -207,9 +218,8 @@ export function DesktopComposer({
                   onClick={isStreaming ? onStop : onSend}
                   disabled={desktopSendDisabled}
                   aria-label={isStreaming ? '停止生成' : '发送'}
-                  className={`h-12 w-12 inline-flex items-center justify-center rounded-full ${
-                    isStreaming ? 'bg-destructive text-destructive-foreground hover:opacity-90' : 'bg-primary text-primary-foreground hover:opacity-90'
-                  }`}
+                  className={`h-12 w-12 inline-flex items-center justify-center rounded-full ${isStreaming ? 'bg-destructive text-destructive-foreground hover:opacity-90' : 'bg-primary text-primary-foreground hover:opacity-90'
+                    }`}
                   variants={sendButtonVariants}
                   animate={isStreaming ? 'sending' : 'idle'}
                   whileHover={!isStreaming ? 'hover' : undefined}

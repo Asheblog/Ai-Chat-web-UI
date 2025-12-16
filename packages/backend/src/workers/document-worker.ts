@@ -142,6 +142,39 @@ async function runWorker() {
       try {
         await services.documentService.processDocument(job.documentId, undefined, job.id)
 
+        // 更新包含该文档的所有知识库的统计信息
+        try {
+          const kbDocs = await prisma.knowledgeBaseDocument.findMany({
+            where: { documentId: job.documentId },
+            select: { knowledgeBaseId: true },
+          })
+          for (const kbDoc of kbDocs) {
+            // 重新计算知识库的文档数和总分块数
+            const documentCount = await prisma.knowledgeBaseDocument.count({
+              where: { knowledgeBaseId: kbDoc.knowledgeBaseId },
+            })
+            const allKbDocs = await prisma.knowledgeBaseDocument.findMany({
+              where: { knowledgeBaseId: kbDoc.knowledgeBaseId },
+              include: { document: { select: { chunkCount: true } } },
+            })
+            const totalChunks = allKbDocs.reduce(
+              (sum: number, d: { document: { chunkCount: number | null } }) => sum + (d.document.chunkCount || 0),
+              0
+            )
+            await prisma.knowledgeBase.update({
+              where: { id: kbDoc.knowledgeBaseId },
+              data: { documentCount, totalChunks },
+            })
+            log.info('[DocumentWorker] Updated KB stats', {
+              knowledgeBaseId: kbDoc.knowledgeBaseId,
+              documentCount,
+              totalChunks,
+            })
+          }
+        } catch (kbErr) {
+          log.warn('[DocumentWorker] Failed to update KB stats', { error: kbErr })
+        }
+
         await prisma.documentProcessingJob.update({
           where: { id: job.id },
           data: {

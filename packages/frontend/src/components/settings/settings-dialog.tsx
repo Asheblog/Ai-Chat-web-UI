@@ -21,6 +21,7 @@ import { SystemConnectionsPage } from "./pages/SystemConnections"
 import { SystemWebSearchPage } from "./pages/SystemWebSearch"
 import { SystemMonitoringPage } from "./pages/SystemMonitoring"
 import { SystemRAGPage } from "./pages/SystemRAG"
+import { SystemKnowledgeBasePage } from "./pages/SystemKnowledgeBase"
 
 interface SettingsDialogProps {
   open: boolean
@@ -199,6 +200,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
                 case 'system.model-access': return <SystemModelAccessPage />
                 case 'system.logging': return <SystemMonitoringPage />
                 case 'system.users': return <SystemUsersPage />
+                case 'system.knowledge-base': return <SystemKnowledgeBasePage />
                 default:
                   return activeSub ? (
                     <div className="p-6 text-sm text-muted-foreground">

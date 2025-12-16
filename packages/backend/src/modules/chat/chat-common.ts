@@ -58,6 +58,7 @@ export const sendMessageSchema = z.object({
     .max(10)
     .optional(),
   traceEnabled: z.boolean().optional(),
+  knowledgeBaseIds: z.array(z.number().int().positive()).max(10).optional(),
 }).refine((value) => {
   const hasContent = typeof value.content === 'string' && value.content.trim().length > 0
   const hasReference =

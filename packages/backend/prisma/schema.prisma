@@ -36,6 +36,7 @@ model User {
   usageQuotas   UsageQuota[]
   chatShares    ChatShare[] @relation("UserChatShares")
   documents     Document[]
+  knowledgeBases KnowledgeBase[]
 
   @@index([status])
   @@map("users")
@@ -339,6 +340,7 @@ model Document {
   chunks           DocumentChunk[]
   sessionDocuments SessionDocument[]
   processingJob    DocumentProcessingJob?
+  knowledgeBaseDocuments KnowledgeBaseDocument[]
 
   @@index([userId])
   @@index([anonymousKey])
@@ -401,4 +403,46 @@ model SessionDocument {
   @@index([sessionId])
   @@index([documentId])
   @@map("session_documents")
+}
+
+// ============================================
+// 知识库 (Knowledge Base) 相关模型
+// ============================================
+
+// 知识库表 - 存储持久化的知识库
+model KnowledgeBase {
+  id            Int       @id @default(autoincrement())
+  name          String    // 知识库名称
+  description   String?   // 描述
+  ownerId       Int?      // null=系统级公共知识库，非空=用户私有
+  isPublic      Boolean   @default(true) // 是否对所有用户可见
+  status        String    @default("active") // active | disabled
+  documentCount Int       @default(0)
+  totalChunks   Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  owner     User?                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  documents KnowledgeBaseDocument[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([isPublic])
+  @@map("knowledge_bases")
+}
+
+// 知识库-文档关联表
+model KnowledgeBaseDocument {
+  id              Int      @id @default(autoincrement())
+  knowledgeBaseId Int
+  documentId      Int
+  addedAt         DateTime @default(now())
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  document      Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([knowledgeBaseId, documentId])
+  @@index([knowledgeBaseId])
+  @@index([documentId])
+  @@map("knowledge_base_documents")
 }

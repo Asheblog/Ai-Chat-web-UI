@@ -3,6 +3,7 @@
 import { useChatComposer } from '@/hooks/use-chat-composer'
 import { useTextareaAutoResize } from '@/hooks/use-textarea-auto-resize'
 import { useChatSessionControls } from '@/hooks/use-chat-session-controls'
+import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 import type { ChatToolbarProps } from '@/components/chat/chat-toolbar'
 import type { ChatComposerPanelProps } from '@/components/chat/chat-composer-panel'
 import type { ChatMessageViewportProps } from '@/components/chat/chat-message-viewport'
@@ -15,6 +16,9 @@ export interface ChatInterfaceViewModel {
 }
 
 export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewModel | null {
+  // 知识库 - 需要先于 useChatComposer 调用，以便传递 selectedKbIds
+  const knowledgeBase = useKnowledgeBase()
+
   const {
     input,
     setIsComposing,
@@ -88,7 +92,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     onDocumentFilesSelected,
     removeDocument,
     cancelDocument,
-  } = useChatComposer()
+  } = useChatComposer({ knowledgeBaseIds: knowledgeBase.selectedKbIds })
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
 
@@ -201,6 +205,15 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     onDocumentFilesSelected,
     onRemoveDocument: removeDocument,
     onCancelDocument: cancelDocument,
+    // 知识库
+    knowledgeBaseEnabled: knowledgeBase.isEnabled,
+    knowledgeBases: knowledgeBase.availableKbs,
+    selectedKnowledgeBaseIds: knowledgeBase.selectedKbIds,
+    onToggleKnowledgeBase: knowledgeBase.toggleKb,
+    onSelectAllKnowledgeBases: knowledgeBase.selectAll,
+    onClearKnowledgeBases: knowledgeBase.clearAll,
+    onRefreshKnowledgeBases: knowledgeBase.refresh,
+    isLoadingKnowledgeBases: knowledgeBase.isLoading,
   }
 
   return {

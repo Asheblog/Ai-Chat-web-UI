@@ -224,6 +224,10 @@ export class SettingsService {
       rag_max_file_size_mb: this.parseIntInRange(settingsObj.rag_max_file_size_mb, '50', 1, 200, 50),
       rag_max_pages: this.parseIntInRange(settingsObj.rag_max_pages, '200', 10, 1000, 200),
       rag_retention_days: this.parseIntInRange(settingsObj.rag_retention_days, '30', 1, 365, 30),
+      // 知识库设置
+      knowledge_base_enabled: this.parseBoolean(settingsObj.knowledge_base_enabled, 'false'),
+      knowledge_base_allow_anonymous: this.parseBoolean(settingsObj.knowledge_base_allow_anonymous, 'false'),
+      knowledge_base_allow_users: this.parseBoolean(settingsObj.knowledge_base_allow_users, 'true'),
     }
 
     const assistantAvatarBase = determineProfileImageBaseUrl({
@@ -342,6 +346,9 @@ export class SettingsService {
       'task_trace_admin_only',
       'title_summary_enabled',
       'rag_enabled',
+      'knowledge_base_enabled',
+      'knowledge_base_allow_anonymous',
+      'knowledge_base_allow_users',
     ] as const
     boolFields.forEach((key) => {
       if (typeof payload[key] === 'boolean') {

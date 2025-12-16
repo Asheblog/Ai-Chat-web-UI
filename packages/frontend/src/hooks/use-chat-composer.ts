@@ -22,7 +22,12 @@ export type { AttachedDocument }
 
 export type ChatComposerImage = ComposerImage
 
-export function useChatComposer() {
+export interface UseChatComposerOptions {
+  knowledgeBaseIds?: number[]
+}
+
+export function useChatComposer(options?: UseChatComposerOptions) {
+  const knowledgeBaseIds = options?.knowledgeBaseIds
   const [input, setInput] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -74,7 +79,7 @@ export function useChatComposer() {
   const modelsCount = allModels.length
   useEffect(() => {
     if (modelsCount === 0) {
-      fetchModels().catch(() => {})
+      fetchModels().catch(() => { })
     }
   }, [modelsCount, fetchModels])
 
@@ -330,6 +335,7 @@ export function useChatComposer() {
         traceEnabled: canUseTrace ? traceEnabled : undefined,
         customBody: requestPayload.customBody,
         customHeaders: requestPayload.customHeaders,
+        knowledgeBaseIds: knowledgeBaseIds?.length ? knowledgeBaseIds : undefined,
       }
       await streamMessage(currentSession.id, message, imagesPayload, options)
       setNoSaveThisRound(false)
@@ -371,6 +377,7 @@ export function useChatComposer() {
     canUsePythonTool,
     pythonToolEnabled,
     setSelectedImages,
+    knowledgeBaseIds,
   ])
 
   const handleStop = useCallback(() => {

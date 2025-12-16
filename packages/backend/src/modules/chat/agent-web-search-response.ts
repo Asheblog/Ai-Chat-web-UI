@@ -32,6 +32,13 @@ import {
   DocumentToolHandler,
   formatDocumentToolReasoning,
 } from './document-tools';
+import {
+  kbToolDefinitions,
+  kbToolNames,
+  KBToolHandler,
+  formatKBToolReasoning,
+} from './kb-tools';
+import { KnowledgeBaseService } from '../../services/knowledge-base';
 import type { RAGService } from '../../services/document/rag-service';
 import { ToolLogManager } from './tool-log-manager';
 import { StreamEventEmitter } from './stream-event-emitter';
@@ -61,7 +68,8 @@ export type AgentResponseParams = {
   agentConfig: AgentWebSearchConfig;
   pythonToolConfig: AgentPythonToolConfig;
   agentMaxToolIterations: number;
-  toolFlags: { webSearch: boolean; python: boolean; document?: boolean };
+  toolFlags: { webSearch: boolean; python: boolean; document?: boolean; knowledgeBase?: boolean };
+  knowledgeBaseIds?: number[];
   provider: string;
   baseUrl: string;
   authHeader: Record<string, string>;
@@ -110,13 +118,13 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     assistantMessageId,
     assistantClientMessageId,
     streamProgressPersistIntervalMs,
-  traceRecorder,
-  idleTimeoutMs,
-  assistantReplyHistoryLimit,
-  maxConcurrentStreams,
-  concurrencyErrorMessage,
-  ragService,
-} = params;
+    traceRecorder,
+    idleTimeoutMs,
+    assistantReplyHistoryLimit,
+    maxConcurrentStreams,
+    concurrencyErrorMessage,
+    ragService,
+  } = params;
 
   const traceMetadataExtras: Record<string, unknown> = {};
   let traceStatus: TaskTraceStatus = 'running';
@@ -411,7 +419,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           totalBuffered: toolLogs.length,
         });
         // 立即异步持久化工具事件，刷新页面也能看到最新工具日志
-        persistAssistantProgress({ includeReasoning: false }).catch(() => {});
+        persistAssistantProgress({ includeReasoning: false }).catch(() => { });
       };
 
       const sendToolEvent = (payload: Record<string, unknown>) => {
@@ -732,6 +740,17 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           toolDefinitions.push(toolDef);
         }
       }
+      // 添加知识库工具（如果启用知识库且有 ragService）
+      const knowledgeBaseIds = params.knowledgeBaseIds || [];
+      const kbToolHandler = ragService && toolFlags.knowledgeBase && knowledgeBaseIds.length > 0
+        ? new KBToolHandler(new KnowledgeBaseService(prisma), ragService, knowledgeBaseIds)
+        : null;
+      if (kbToolHandler) {
+        for (const toolDef of kbToolDefinitions) {
+          allowedToolNames.add(toolDef.function.name);
+          toolDefinitions.push(toolDef);
+        }
+      }
       if (toolDefinitions.length === 0) {
         throw new Error('Agent 工具未启用');
       }
@@ -906,9 +925,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                   if (toolDelta.type) existing.type = toolDelta.type;
                   if (toolDelta.function?.name) existing.function.name = toolDelta.function.name;
                   if (toolDelta.function?.arguments) {
-                    existing.function.arguments = `${existing.function.arguments || ''}${
-                      toolDelta.function.arguments
-                    }`;
+                    existing.function.arguments = `${existing.function.arguments || ''}${toolDelta.function.arguments
+                      }`;
                   }
                   toolCallBuffers.set(idx, existing);
                 }
@@ -924,7 +942,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             }
             if (streamFinished) break;
           }
-          await reader.cancel().catch(() => {});
+          await reader.cancel().catch(() => { });
           currentProviderController = null;
           setStreamController(null);
 
@@ -1001,6 +1019,59 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                   });
                 } else {
                   emitReasoning(`文档工具失败：${result.error}`, {
+                    ...reasoningMeta,
+                    stage: 'error',
+                  });
+                  sendToolEvent({
+                    id: callId,
+                    tool: toolName,
+                    stage: 'error',
+                    error: result.error,
+                  });
+                  workingMessages.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolName,
+                    content: JSON.stringify({ error: result.error }),
+                  });
+                }
+              } else if (kbToolNames.has(toolName) && kbToolHandler) {
+                // 处理知识库工具调用
+                const callId = toolCall.id || randomUUID();
+                const reasoningMeta = { kind: 'tool', tool: toolName, callId };
+
+                emitReasoning(formatKBToolReasoning(toolName, args, 'start'), {
+                  ...reasoningMeta,
+                  stage: 'start',
+                });
+                sendToolEvent({
+                  id: callId,
+                  tool: toolName,
+                  stage: 'start',
+                  query: (args.query as string) || (args.kb_id ? `知识库 ${args.kb_id}` : undefined),
+                });
+
+                const result = await kbToolHandler.handleToolCall(toolName, args);
+
+                if (result.success) {
+                  emitReasoning(formatKBToolReasoning(toolName, args, 'result'), {
+                    ...reasoningMeta,
+                    stage: 'result',
+                  });
+                  sendToolEvent({
+                    id: callId,
+                    tool: toolName,
+                    stage: 'result',
+                    summary: JSON.stringify(result.result).slice(0, 200),
+                  });
+                  workingMessages.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolName,
+                    content: JSON.stringify(result.result),
+                  });
+                } else {
+                  emitReasoning(`知识库工具失败：${result.error}`, {
                     ...reasoningMeta,
                     stage: 'error',
                   });
@@ -1102,37 +1173,37 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           total: promptTokens + completionTokensFallback,
         };
         const finalUsageNumbers = providerUsageValid ? providerUsageNumbers : fallbackUsageNumbers;
-            const finalUsagePayload = {
-              prompt_tokens: finalUsageNumbers.prompt,
-              completion_tokens: finalUsageNumbers.completion,
-              total_tokens: finalUsageNumbers.total,
-              context_limit: contextLimit,
-              context_remaining: Math.max(0, contextLimit - promptTokens),
-            };
+        const finalUsagePayload = {
+          prompt_tokens: finalUsageNumbers.prompt,
+          completion_tokens: finalUsageNumbers.completion,
+          total_tokens: finalUsageNumbers.total,
+          context_limit: contextLimit,
+          context_remaining: Math.max(0, contextLimit - promptTokens),
+        };
 
-            if (!providerUsageSeen || !providerUsageValid) {
-              safeEnqueue({ type: 'usage', usage: finalUsagePayload });
-            }
-            safeEnqueue({ type: 'complete' });
-            traceMetadataExtras.finalUsage = finalUsagePayload;
-            traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
+        if (!providerUsageSeen || !providerUsageValid) {
+          safeEnqueue({ type: 'usage', usage: finalUsagePayload });
+        }
+        safeEnqueue({ type: 'complete' });
+        traceMetadataExtras.finalUsage = finalUsagePayload;
+        traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
 
-            const completedAt = Date.now();
-            const firstTokenLatencyMs =
-              firstChunkAt != null ? Math.max(0, firstChunkAt - startedAt) : null;
-            const responseTimeMs = Math.max(0, completedAt - startedAt);
-            const speedWindowMs = completedAt - (firstChunkAt ?? startedAt);
-            const tokensPerSecond =
-              finalUsageNumbers.completion > 0 && speedWindowMs > 0
-                ? finalUsageNumbers.completion / (speedWindowMs / 1000)
-                : null;
+        const completedAt = Date.now();
+        const firstTokenLatencyMs =
+          firstChunkAt != null ? Math.max(0, firstChunkAt - startedAt) : null;
+        const responseTimeMs = Math.max(0, completedAt - startedAt);
+        const speedWindowMs = completedAt - (firstChunkAt ?? startedAt);
+        const tokensPerSecond =
+          finalUsageNumbers.completion > 0 && speedWindowMs > 0
+            ? finalUsageNumbers.completion / (speedWindowMs / 1000)
+            : null;
 
-            let persistedAssistantMessageId: number | null = activeAssistantMessageId;
-            try {
-            const sessionStillExists = async () => {
-              const count = await prisma.chatSession.count({ where: { id: sessionId } });
-              return count > 0;
-            };
+        let persistedAssistantMessageId: number | null = activeAssistantMessageId;
+        try {
+          const sessionStillExists = async () => {
+            const count = await prisma.chatSession.count({ where: { id: sessionId } });
+            return count > 0;
+          };
 
           if (finalContent && (await sessionStillExists())) {
             const reasoningTrimmed = reasoningText.trim();
@@ -1148,11 +1219,11 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               }
             })();
             const finalToolLogsJson = toolLogs.length > 0 ? JSON.stringify(toolLogs) : null;
-              const persistedId = await persistAssistantFinalResponse({
-                sessionId,
-                existingMessageId: activeAssistantMessageId,
-                assistantClientMessageId,
-                fallbackClientMessageId: clientMessageId,
+            const persistedId = await persistAssistantFinalResponse({
+              sessionId,
+              existingMessageId: activeAssistantMessageId,
+              assistantClientMessageId,
+              fallbackClientMessageId: clientMessageId,
               parentMessageId: userMessageRecord?.id ?? null,
               replyHistoryLimit: assistantReplyHistoryLimit,
               content: finalContent,
@@ -1161,20 +1232,20 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
               streamError: null,
               toolLogsJson: finalToolLogsJson,
-                usage: {
-                  promptTokens: finalUsageNumbers.prompt,
-                  completionTokens: finalUsageNumbers.completion,
-                  totalTokens: finalUsageNumbers.total,
-                  contextLimit,
-                },
-                metrics: {
-                  firstTokenLatencyMs,
-                  responseTimeMs,
-                  tokensPerSecond,
-                },
-                model: session.modelRawId,
-                provider: providerHost ?? undefined,
-              });
+              usage: {
+                promptTokens: finalUsageNumbers.prompt,
+                completionTokens: finalUsageNumbers.completion,
+                totalTokens: finalUsageNumbers.total,
+                contextLimit,
+              },
+              metrics: {
+                firstTokenLatencyMs,
+                responseTimeMs,
+                tokensPerSecond,
+              },
+              model: session.modelRawId,
+              provider: providerHost ?? undefined,
+            });
             if (persistedId) {
               persistedAssistantMessageId = persistedId;
               activeAssistantMessageId = persistedId;
@@ -1290,7 +1361,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       } finally {
         try {
           controller.close();
-        } catch {}
+        } catch { }
         if (idleWatchTimer) {
           clearInterval(idleWatchTimer);
           idleWatchTimer = null;

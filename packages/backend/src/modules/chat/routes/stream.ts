@@ -255,26 +255,45 @@ export const registerChatStreamRoutes = (router: Hono) => {
         });
       }
 
-      // RAG 文档检索增强
+      // RAG 文档检索增强（包括会话文档和知识库）
       let ragContext: string | null = null;
       let hasSessionDocuments = false;
+      let hasKnowledgeBases = false;
       let sessionRagService: RAGService | null = null;
+      const knowledgeBaseIds = Array.isArray(payload?.knowledgeBaseIds) ? payload.knowledgeBaseIds : [];
+
       try {
         const docServices = getDocumentServices();
         if (docServices) {
           sessionRagService = docServices.ragService;
           const ragContextBuilder = new RAGContextBuilder(docServices.ragService);
-          const shouldEnhance = await ragContextBuilder.shouldEnhance(sessionId);
-          hasSessionDocuments = shouldEnhance;
-          if (shouldEnhance) {
-            log.debug('RAG enhancement enabled for session', { sessionId });
-            const ragResult = await ragContextBuilder.enhance(sessionId, content);
+
+          // 检查会话文档
+          hasSessionDocuments = await ragContextBuilder.shouldEnhance(sessionId);
+          // 检查知识库
+          hasKnowledgeBases = await ragContextBuilder.hasKnowledgeBases(knowledgeBaseIds);
+
+          if (hasSessionDocuments || hasKnowledgeBases) {
+            log.debug('RAG enhancement enabled', {
+              sessionId,
+              hasSessionDocuments,
+              hasKnowledgeBases,
+              knowledgeBaseIds: knowledgeBaseIds.length,
+            });
+
+            // 组合检索：同时检索会话文档和知识库
+            const ragResult = await ragContextBuilder.enhanceCombined(
+              sessionId,
+              knowledgeBaseIds,
+              content
+            );
+
             if (ragResult.context) {
               ragContext = ragContextBuilder.buildSystemPrompt(ragResult.context);
               log.debug('RAG context built', {
                 sessionId,
-                hitsCount: ragResult.result.hits.length,
-                queryTimeMs: ragResult.result.queryTime,
+                sessionHits: ragResult.sessionResult?.hits.length ?? 0,
+                kbHits: ragResult.kbResult?.hits.length ?? 0,
               });
             }
           }
@@ -496,6 +515,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
             webSearch: agentWebSearchActive,
             python: pythonToolActive,
             document: hasSessionDocuments, // 如果会话有文档则启用文档工具
+            knowledgeBase: hasKnowledgeBases, // 如果有知识库则启用知识库工具
           },
           provider,
           baseUrl,
@@ -515,6 +535,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           maxConcurrentStreams: resolvedMaxConcurrentStreams,
           concurrencyErrorMessage,
           ragService: sessionRagService, // 传递 RAG 服务实例
+          knowledgeBaseIds, // 传递知识库 ID 列表
         });
       }
 
@@ -582,7 +603,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         if (currentProviderController) {
           try {
             currentProviderController.abort();
-          } catch {}
+          } catch { }
           currentProviderController = null;
         }
       };
@@ -614,7 +635,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           const raw = sysMap.reasoning_custom_tags || process.env.REASONING_CUSTOM_TAGS || '';
           const arr = raw ? JSON.parse(raw) : null;
           if (Array.isArray(arr) && arr.length === 2 && typeof arr[0] === 'string' && typeof arr[1] === 'string') return [[arr[0], arr[1]] as [string, string]];
-        } catch {}
+        } catch { }
         return null;
       })();
       const STREAM_DELTA_CHUNK_SIZE = Math.max(1, parseInt(sysMap.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'));
@@ -626,8 +647,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
         0,
         parseInt(
           sysMap.stream_reasoning_flush_interval_ms ||
-            process.env.STREAM_REASONING_FLUSH_INTERVAL_MS ||
-            `${streamDeltaFlushIntervalMs}`,
+          process.env.STREAM_REASONING_FLUSH_INTERVAL_MS ||
+          `${streamDeltaFlushIntervalMs}`,
         ),
       );
       const streamKeepaliveIntervalMs = Math.max(
@@ -699,7 +720,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         }
       };
 
-  let currentProviderController: AbortController | null = null;
+      let currentProviderController: AbortController | null = null;
 
       const providerRequestWithBackoff = async (): Promise<Response> =>
         providerRequester.requestWithBackoff({
@@ -732,7 +753,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
             currentProviderController = null
           },
         });
-     type NonStreamFallbackResult = {
+      type NonStreamFallbackResult = {
         text: string;
         reasoning?: string | null;
         usage?: ProviderChatCompletionResponse['usage'] | null;
@@ -760,10 +781,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
           },
         });
 
-        const stream = new ReadableStream({
-          async start(controller) {
+      const stream = new ReadableStream({
+        async start(controller) {
           let stopHeartbeat: (() => void) | null = null;
- 
+
           let downstreamAborted = false;
           let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
           const requestSignal = c.req.raw.signal;
@@ -784,10 +805,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
             downstreamAborted = true
             try {
               emitter.markClosed(reason)
-            } catch {}
+            } catch { }
             try {
               controller.close()
-            } catch {}
+            } catch { }
           }
           const safeEnqueue = (payload: string) => {
             if (downstreamAborted || emitter.isClosed()) return false
@@ -821,7 +842,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
               providerUsageSnapshot = fallbackResult.usage;
               traceMetadataExtras.finalUsage = fallbackResult.usage;
               traceMetadataExtras.providerUsageSource = 'fallback_non_stream';
-                const usageEvent = `data: ${JSON.stringify({ type: 'usage', usage: fallbackResult.usage })}\n\n`;
+              const usageEvent = `data: ${JSON.stringify({ type: 'usage', usage: fallbackResult.usage })}\n\n`;
               emitter.enqueue(usageEvent);
             }
 
@@ -843,10 +864,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
             const fallbackUsageNumbers = fallbackResult.usage
               ? extractUsageNumbers(fallbackResult.usage)
               : {
-                  prompt: promptTokens,
-                  completion: fallbackCompletionTokens,
-                  total: promptTokens + fallbackCompletionTokens,
-                };
+                prompt: promptTokens,
+                completion: fallbackCompletionTokens,
+                total: promptTokens + fallbackCompletionTokens,
+              };
             if (!fallbackResult.usage) {
               traceMetadataExtras.finalUsage = {
                 prompt_tokens: fallbackUsageNumbers.prompt,
@@ -1076,9 +1097,9 @@ export const registerChatStreamRoutes = (router: Hono) => {
               onTraceIdleTimeout: traceIdleWarned
                 ? undefined
                 : (idleMs) => {
-                    traceRecorder.log('stream.keepalive_timeout', { idleMs })
-                    traceIdleWarned = true
-                  },
+                  traceRecorder.log('stream.keepalive_timeout', { idleMs })
+                  traceIdleWarned = true
+                },
               onProviderInitialTimeout: (idleMs) => {
                 traceRecorder.log('stream.first_chunk_timeout', {
                   ...streamLogBase(),
@@ -1089,7 +1110,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 })
               },
               cancelProvider: () => {
-                try { (response as any)?.body?.cancel?.(); } catch {}
+                try { (response as any)?.body?.cancel?.(); } catch { }
               },
               flushReasoningDelta: (force) => flushReasoningDelta(force),
               flushVisibleDelta: (force) => flushVisibleDelta(force),
@@ -1468,12 +1489,12 @@ export const registerChatStreamRoutes = (router: Hono) => {
             if (requestSignal) {
               try {
                 requestSignal.removeEventListener('abort', handleAbort);
-              } catch {}
+              } catch { }
             }
             try {
               stopHeartbeat();
               controller.close();
-            } catch {}
+            } catch { }
             if (idleWatchTimer) {
               clearInterval(idleWatchTimer);
               idleWatchTimer = null;
@@ -1604,7 +1625,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
       matchedMeta.cancelled = true;
       try {
         matchedMeta.controller?.abort();
-      } catch {}
+      } catch { }
       clearPendingCancelMarkers({
         sessionId,
         messageId: matchedMeta.assistantMessageId,

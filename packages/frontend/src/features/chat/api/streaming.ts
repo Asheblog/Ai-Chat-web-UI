@@ -31,6 +31,7 @@ export const streamChat = async function* streamChat(
     customBody?: Record<string, any>
     customHeaders?: Array<{ name: string; value: string }>
     streamKey?: string
+    knowledgeBaseIds?: number[]
   },
 ): AsyncGenerator<ChatStreamChunk, void, unknown> {
   const doOnce = async (signal: AbortSignal) => {
@@ -74,8 +75,8 @@ export const streamChat = async function* streamChat(
     typeof options?.streamKey === 'string' && options.streamKey.trim().length > 0
       ? options.streamKey.trim()
       : `session:${sessionId}:${Date.now().toString(36)}:${Math.random()
-          .toString(36)
-          .slice(2)}`
+        .toString(36)
+        .slice(2)}`
 
   const controller = new AbortController()
   streamControllers.set(streamKey, controller)
