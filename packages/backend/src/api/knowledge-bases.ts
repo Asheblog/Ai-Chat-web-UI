@@ -336,6 +336,35 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
   })
 
   /**
+   * 批量从知识库移除文档
+   */
+  router.post('/:id/documents/batch-remove', actorMiddleware, adminOnlyMiddleware, zValidator('json', z.object({
+    documentIds: z.array(z.number().int().positive()).min(1).max(100),
+  })), async (c) => {
+    try {
+      const kbId = parseInt(c.req.param('id'), 10)
+      if (isNaN(kbId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid knowledge base ID' }, 400)
+      }
+
+      const { documentIds } = c.req.valid('json')
+      const result = await kbService.removeDocuments(kbId, documentIds)
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          removed: result.removed,
+          deleted: result.deleted,
+          requested: documentIds.length,
+        },
+      })
+    } catch (error) {
+      console.error('[KnowledgeBase] Batch remove documents error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to batch remove documents' }, 500)
+    }
+  })
+
+  /**
    * 在知识库中检索
    */
   router.post('/search', actorMiddleware, zValidator('json', searchSchema), async (c) => {

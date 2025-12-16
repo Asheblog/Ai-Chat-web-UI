@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 import { useToast } from "@/components/ui/use-toast"
-import { BookOpen, Plus, Trash2, Upload, FileText, RefreshCw, MoreHorizontal } from "lucide-react"
+import { BookOpen, Plus, Trash2, Upload, FileText, RefreshCw, MoreHorizontal, Loader2 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { apiHttpClient } from "@/lib/api"
 import type { ApiResponse } from "@/types"
@@ -85,6 +86,10 @@ export function SystemKnowledgeBasePage() {
   const [docsLoading, setDocsLoading] = useState(false)
 
   const [uploading, setUploading] = useState(false)
+
+  // 批量删除相关状态
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
+  const [batchDeleting, setBatchDeleting] = useState(false)
 
   const fetchKnowledgeBases = useCallback(async () => {
     setKbLoading(true)
@@ -277,6 +282,53 @@ export function SystemKnowledgeBasePage() {
         description: e?.message || "请稍后重试",
         variant: "destructive",
       })
+    }
+  }
+
+  const handleBatchRemoveDocuments = async () => {
+    if (!selectedKb || selectedDocIds.size === 0) return
+    if (!confirm(`确定要删除选中的 ${selectedDocIds.size} 个文档吗？`)) return
+
+    setBatchDeleting(true)
+    try {
+      const res = await apiHttpClient.post<ApiResponse<any>>(
+        `/knowledge-bases/${selectedKb.id}/documents/batch-remove`,
+        { documentIds: Array.from(selectedDocIds) }
+      )
+      if (res.data.success) {
+        toast({ title: `已删除 ${res.data.data.deleted} 个文档` })
+        setSelectedDocIds(new Set())
+        fetchKbDetail(selectedKb.id)
+        fetchKnowledgeBases()
+      }
+    } catch (e: any) {
+      toast({
+        title: "批量删除失败",
+        description: e?.message || "请稍后重试",
+        variant: "destructive",
+      })
+    } finally {
+      setBatchDeleting(false)
+    }
+  }
+
+  const toggleSelectDoc = (docId: number) => {
+    setSelectedDocIds(prev => {
+      const next = new Set(prev)
+      if (next.has(docId)) {
+        next.delete(docId)
+      } else {
+        next.add(docId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedDocIds.size === kbDocuments.length) {
+      setSelectedDocIds(new Set())
+    } else {
+      setSelectedDocIds(new Set(kbDocuments.map(d => d.id)))
     }
   }
 
@@ -592,57 +644,98 @@ export function SystemKnowledgeBasePage() {
                 <p className="text-sm">上传文档以构建知识库</p>
               </div>
             ) : (
-              <div className="max-h-[400px] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>文件名</TableHead>
-                      <TableHead>大小</TableHead>
-                      <TableHead>分块</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {kbDocuments.map((doc) => (
-                      <TableRow key={doc.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-muted-foreground" />
-                            <span className="truncate max-w-[200px]">{doc.originalName}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatFileSize(doc.fileSize)}</TableCell>
-                        <TableCell>{doc.chunkCount}</TableCell>
-                        <TableCell>
-                          <span className={`text-xs px-2 py-0.5 rounded ${doc.status === 'ready'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                            : doc.status === 'processing'
-                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-                              : doc.status === 'error'
-                                ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                            }`}>
-                            {doc.status === 'ready' ? '就绪' :
-                              doc.status === 'processing' ? '处理中' :
-                                doc.status === 'error' ? '错误' : doc.status}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            onClick={() => handleRemoveDocument(doc.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+              <>
+                {/* 批量操作栏 */}
+                <div className="flex items-center justify-between py-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedDocIds.size === kbDocuments.length && kbDocuments.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {selectedDocIds.size > 0 ? `已选择 ${selectedDocIds.size} 项` : '全选'}
+                    </span>
+                  </div>
+                  {selectedDocIds.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBatchRemoveDocuments}
+                      disabled={batchDeleting}
+                    >
+                      {batchDeleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          删除中...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          批量删除 ({selectedDocIds.size})
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                <div className="max-h-[400px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10"></TableHead>
+                        <TableHead>文件名</TableHead>
+                        <TableHead>大小</TableHead>
+                        <TableHead>分块</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead className="w-10"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {kbDocuments.map((doc) => (
+                        <TableRow key={doc.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedDocIds.has(doc.id)}
+                              onCheckedChange={() => toggleSelectDoc(doc.id)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <span className="truncate max-w-[200px]">{doc.originalName}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{formatFileSize(doc.fileSize)}</TableCell>
+                          <TableCell>{doc.chunkCount}</TableCell>
+                          <TableCell>
+                            <span className={`text-xs px-2 py-0.5 rounded ${doc.status === 'ready'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                              : doc.status === 'processing'
+                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                                : doc.status === 'error'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                              }`}>
+                              {doc.status === 'ready' ? '就绪' :
+                                doc.status === 'processing' ? '处理中' :
+                                  doc.status === 'error' ? '错误' : doc.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => handleRemoveDocument(doc.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>

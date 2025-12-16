@@ -260,6 +260,57 @@ export class KnowledgeBaseService {
     await this.updateStats(knowledgeBaseId)
   }
 
+  /**
+   * 批量从知识库移除文档
+   * @param knowledgeBaseId - 知识库ID
+   * @param documentIds - 要移除的文档ID列表
+   * @returns 成功移除的数量
+   */
+  async removeDocuments(knowledgeBaseId: number, documentIds: number[]): Promise<{ removed: number; deleted: number }> {
+    if (documentIds.length === 0) {
+      return { removed: 0, deleted: 0 }
+    }
+
+    // 批量删除关联关系
+    const result = await this.prisma.knowledgeBaseDocument.deleteMany({
+      where: {
+        knowledgeBaseId,
+        documentId: { in: documentIds },
+      },
+    })
+
+    // 检查哪些文档不再被任何知识库引用
+    const orphanedDocIds: number[] = []
+    for (const documentId of documentIds) {
+      const otherReferences = await this.prisma.knowledgeBaseDocument.count({
+        where: { documentId },
+      })
+      if (otherReferences === 0) {
+        orphanedDocIds.push(documentId)
+      }
+    }
+
+    // 批量删除不再被引用的文档
+    let deleted = 0
+    if (orphanedDocIds.length > 0) {
+      const services = getDocumentServices()
+      if (services) {
+        try {
+          const deleteResult = await services.documentService.deleteDocuments(orphanedDocIds)
+          deleted = deleteResult.deleted
+          console.log(`[KnowledgeBaseService] Batch removed ${result.count} refs, deleted ${deleted} orphaned documents`)
+        } catch (err) {
+          console.error(`[KnowledgeBaseService] Failed to batch delete documents:`, err)
+        }
+      }
+    }
+
+    // 更新统计
+    await this.updateStats(knowledgeBaseId)
+
+    return { removed: result.count, deleted }
+  }
+
 
   /**
    * 更新知识库统计信息（公开方法，可用于手动刷新）

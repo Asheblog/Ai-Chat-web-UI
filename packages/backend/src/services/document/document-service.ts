@@ -655,6 +655,71 @@ export class DocumentService {
   }
 
   /**
+   * 批量删除文档
+   * @param documentIds - 要删除的文档ID列表
+   * @returns 成功删除的数量
+   */
+  async deleteDocuments(documentIds: number[]): Promise<{ deleted: number; failed: number }> {
+    if (documentIds.length === 0) {
+      return { deleted: 0, failed: 0 }
+    }
+
+    let deleted = 0
+    let failed = 0
+
+    // 获取所有要删除的文档
+    const documents = await this.prisma.document.findMany({
+      where: { id: { in: documentIds } },
+    })
+
+    // 批量删除向量数据（不执行 VACUUM，最后统一执行）
+    for (const document of documents) {
+      if (document.collectionName) {
+        try {
+          await this.vectorDB.deleteCollection(document.collectionName, false) // 不单独 VACUUM
+        } catch {
+          // 忽略向量数据库删除错误
+        }
+      }
+    }
+
+    // 批量删除物理文件
+    for (const document of documents) {
+      try {
+        await fs.unlink(document.filePath)
+      } catch {
+        // 忽略文件删除错误
+      }
+    }
+
+    // 批量删除数据库记录
+    try {
+      const result = await this.prisma.document.deleteMany({
+        where: { id: { in: documentIds } },
+      })
+      deleted = result.count
+    } catch (err) {
+      console.error('[DocumentService] Batch delete failed:', err)
+      failed = documentIds.length
+    }
+
+    // 最后统一执行一次 VACUUM 释放空间
+    if (deleted > 0) {
+      try {
+        // 通过 vectorDB 执行 VACUUM
+        if ('vacuum' in this.vectorDB && typeof (this.vectorDB as any).vacuum === 'function') {
+          (this.vectorDB as any).vacuum()
+          console.log(`[DocumentService] Batch deleted ${deleted} documents and vacuumed database`)
+        }
+      } catch (e) {
+        console.warn('[DocumentService] VACUUM after batch delete failed:', e)
+      }
+    }
+
+    return { deleted, failed }
+  }
+
+  /**
    * 获取用户的所有文档
    */
   async getUserDocuments(userId: number): Promise<Document[]> {

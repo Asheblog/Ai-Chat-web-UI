@@ -261,6 +261,54 @@ export const createDocumentsApi = () => {
   })
 
   /**
+   * 批量删除文档
+   */
+  router.post('/batch-delete', actorMiddleware, requireRAGEnabled, zValidator('json', z.object({
+    documentIds: z.array(z.number().int().positive()).min(1).max(100),
+  })), async (c) => {
+    try {
+      const { documentIds } = c.req.valid('json')
+      const actor = c.get('actor') as Actor
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
+
+      // 验证所有文档的权限
+      const documents = await Promise.all(
+        documentIds.map((id) => documentService!.getDocument(id))
+      )
+
+      const validIds: number[] = []
+      for (let i = 0; i < documents.length; i++) {
+        const document = documents[i]
+        if (!document) continue
+
+        // 检查权限
+        if (actor.type === 'user' && document.userId !== actor.id) continue
+        if (actor.type === 'anonymous' && document.anonymousKey !== actor.key) continue
+
+        validIds.push(documentIds[i])
+      }
+
+      if (validIds.length === 0) {
+        return c.json<ApiResponse>({ success: false, error: 'No valid documents to delete' }, 400)
+      }
+
+      const result = await documentService!.deleteDocuments(validIds)
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          deleted: result.deleted,
+          failed: result.failed,
+          requested: documentIds.length,
+        },
+      })
+    } catch (error) {
+      console.error('[Documents] Batch delete error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to batch delete documents' }, 500)
+    }
+  })
+
+  /**
    * 将文档附加到会话
    */
   router.post('/:id/attach', actorMiddleware, requireRAGEnabled, zValidator('json', attachSchema), async (c) => {

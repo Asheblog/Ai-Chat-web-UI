@@ -2,10 +2,11 @@
  * 文档附件按钮和预览组件
  */
 
-import React from 'react'
-import { Paperclip, File, FileText, Table, X, Loader2, AlertCircle, Check, Ban } from 'lucide-react'
+import React, { useState, useCallback } from 'react'
+import { Paperclip, File, FileText, Table, X, Loader2, AlertCircle, Check, Ban, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetClose } from '@/components/ui/sheet'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import type { AttachedDocument } from './use-document-attachments'
 import { DOCUMENT_ACCEPT_TYPES } from './use-document-attachments'
@@ -130,12 +131,18 @@ interface DocumentPreviewItemProps {
   document: AttachedDocument
   onRemove: () => void
   onCancel?: () => void
+  selected?: boolean
+  onSelectChange?: (selected: boolean) => void
+  showCheckbox?: boolean
 }
 
 const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
   document,
   onRemove,
   onCancel,
+  selected = false,
+  onSelectChange,
+  showCheckbox = false,
 }) => {
   const stageText = getStageText(document.processingStage) || getStatusText(document.status)
   const progress = typeof document.processingProgress === 'number'
@@ -151,6 +158,12 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
         document.status === 'ready' && 'border-green-300 bg-green-50 dark:bg-green-950/20'
       )}
     >
+      {showCheckbox && (
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(checked) => onSelectChange?.(!!checked)}
+        />
+      )}
       {getFileIcon(document.mimeType)}
 
       <div className="flex-1 min-w-0">
@@ -223,6 +236,7 @@ export const DocumentPreviewList: React.FC<DocumentPreviewListProps> = ({
 interface AttachmentTrayProps {
   documents: AttachedDocument[]
   onRemove: (documentId: number) => void
+  onBatchRemove?: (documentIds: number[]) => void
   onCancel?: (documentId: number) => void
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -235,21 +249,119 @@ interface AttachmentTrayProps {
 export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
   documents,
   onRemove,
+  onBatchRemove,
   onCancel,
   open,
   onOpenChange,
   title = '附件管理',
 }) => {
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [batchMode, setBatchMode] = useState(false)
+
+  const toggleSelect = useCallback((id: number, selected: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (selected) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === documents.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(documents.map(d => d.id)))
+    }
+  }, [documents, selectedIds.size])
+
+  const handleBatchRemove = useCallback(() => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个文档吗？`)) return
+
+    if (onBatchRemove) {
+      onBatchRemove(Array.from(selectedIds))
+    } else {
+      // 如果没有批量删除回调，逐个删除
+      selectedIds.forEach(id => onRemove(id))
+    }
+    setSelectedIds(new Set())
+    setBatchMode(false)
+  }, [selectedIds, onBatchRemove, onRemove])
+
+  const exitBatchMode = useCallback(() => {
+    setBatchMode(false)
+    setSelectedIds(new Set())
+  }, [])
+
   if (documents.length === 0) return null
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) {
+        exitBatchMode()
+      }
+      onOpenChange(isOpen)
+    }}>
       <SheetContent side="bottom" showCloseButton className="max-h-[70vh] flex flex-col">
         <div className="p-4 space-y-3 flex flex-col min-h-0">
-          <div className="text-sm font-medium flex-shrink-0">{title}</div>
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <DocumentPreviewList documents={documents} onRemove={onRemove} onCancel={onCancel} />
+          <div className="flex items-center justify-between flex-shrink-0">
+            <div className="text-sm font-medium">{title}</div>
+            <div className="flex items-center gap-2">
+              {batchMode ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={exitBatchMode}>
+                    取消
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBatchRemove}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    删除 ({selectedIds.size})
+                  </Button>
+                </>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => setBatchMode(true)}>
+                  批量管理
+                </Button>
+              )}
+            </div>
           </div>
+
+          {batchMode && (
+            <div className="flex items-center gap-2 py-2 border-b flex-shrink-0">
+              <Checkbox
+                checked={selectedIds.size === documents.length && documents.length > 0}
+                onCheckedChange={toggleSelectAll}
+              />
+              <span className="text-sm text-muted-foreground">
+                {selectedIds.size > 0 ? `已选择 ${selectedIds.size} 项` : '全选'}
+              </span>
+            </div>
+          )}
+
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="flex flex-col gap-2 p-2">
+              {documents.map((doc) => (
+                <DocumentPreviewItem
+                  key={doc.id}
+                  document={doc}
+                  onRemove={() => onRemove(doc.id)}
+                  onCancel={onCancel ? () => onCancel(doc.id) : undefined}
+                  showCheckbox={batchMode}
+                  selected={selectedIds.has(doc.id)}
+                  onSelectChange={(selected) => toggleSelect(doc.id, selected)}
+                />
+              ))}
+            </div>
+          </div>
+
           <div className="flex justify-end flex-shrink-0">
             <SheetClose asChild>
               <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
@@ -262,3 +374,4 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
     </Sheet>
   )
 }
+
