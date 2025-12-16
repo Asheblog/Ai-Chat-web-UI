@@ -5,7 +5,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { actorMiddleware } from '../middleware/auth'
+import { actorMiddleware, adminOnlyMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import { getSupportedMimeTypes } from '../modules/document/loaders'
 import { getDocumentServices } from '../services/document-services-factory'
@@ -112,7 +112,7 @@ export const createDocumentsApi = () => {
   })
 
   /**
-   * 获取文档列表
+   * 获取文档列表（当前用户）
    */
   router.get('/', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
@@ -141,6 +141,35 @@ export const createDocumentsApi = () => {
     } catch (error) {
       console.error('[Documents] List error:', error)
       return c.json<ApiResponse>({ success: false, error: 'Failed to list documents' }, 500)
+    }
+  })
+
+  /**
+   * 获取所有文档列表（管理员）
+   */
+  router.get('/admin/all', actorMiddleware, adminOnlyMiddleware, requireRAGEnabled, async (c) => {
+    try {
+      const { documentService } = c.get('docServices') as ReturnType<typeof getServices>
+      const documents = await documentService!.getAllDocuments()
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: documents.map((doc) => ({
+          id: doc.id,
+          filename: doc.filename,
+          originalName: doc.originalName,
+          mimeType: doc.mimeType,
+          fileSize: doc.fileSize,
+          status: doc.status,
+          errorMessage: doc.errorMessage,
+          chunkCount: doc.chunkCount,
+          createdAt: doc.createdAt,
+          userId: doc.userId,
+        })),
+      })
+    } catch (error) {
+      console.error('[Documents] Admin list all error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to list all documents' }, 500)
     }
   })
 

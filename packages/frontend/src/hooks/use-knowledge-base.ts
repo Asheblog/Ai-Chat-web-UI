@@ -172,16 +172,26 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
   }, [selectedKbIds, writeStoredSelection])
 
   // 验证选中的 ID 在可用列表中
+  // 当知识库被删除后，自动清理无效的选择
   useEffect(() => {
-    if (availableKbs.length > 0 && selectedKbIds.length > 0) {
-      const validIds = selectedKbIds.filter((id) => 
+    if (selectedKbIds.length === 0) return
+
+    // 如果可用列表为空，清空所有选择
+    if (availableKbs.length === 0 && !isLoading) {
+      setSelectedKbIds([])
+      return
+    }
+
+    // 过滤掉不存在的知识库 ID
+    if (availableKbs.length > 0) {
+      const validIds = selectedKbIds.filter((id) =>
         availableKbs.some((kb) => kb.id === id)
       )
       if (validIds.length !== selectedKbIds.length) {
         setSelectedKbIds(validIds)
       }
     }
-  }, [availableKbs, selectedKbIds])
+  }, [availableKbs, selectedKbIds, isLoading])
 
   const toggleKb = useCallback((id: number) => {
     setSelectedKbIds((prev) => {

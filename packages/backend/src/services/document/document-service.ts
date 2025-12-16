@@ -738,4 +738,13 @@ export class DocumentService {
       orderBy: { createdAt: 'desc' },
     })
   }
+
+  /**
+   * 获取所有文档（管理员用）
+   */
+  async getAllDocuments(): Promise<Document[]> {
+    return this.prisma.document.findMany({
+      orderBy: { createdAt: 'desc' },
+    })
+  }
 }
