@@ -266,9 +266,14 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * 在知识库中检索
+   * 在知识库中检索（增强版）
+   * 支持搜索模式
    */
-  async search(knowledgeBaseIds: number[], query: string): Promise<RAGResult> {
+  async search(
+    knowledgeBaseIds: number[],
+    query: string,
+    searchMode: 'precise' | 'broad' | 'overview' = 'precise'
+  ): Promise<RAGResult> {
     const services = getDocumentServices()
     if (!services) {
       return {
@@ -291,8 +296,8 @@ export class KnowledgeBaseService {
       }
     }
 
-    // 使用 RAG 服务检索
-    return services.ragService.searchInDocuments(documentIds, query)
+    // 使用 RAG 服务检索，传递搜索模式
+    return services.ragService.searchInDocuments(documentIds, query, searchMode)
   }
 
   /**

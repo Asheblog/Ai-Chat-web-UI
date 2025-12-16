@@ -192,11 +192,13 @@ export class RAGService {
   }
 
   /**
-   * 在指定文档中检索
+   * 在指定文档中检索（增强版）
+   * 支持搜索模式
    */
   async searchInDocuments(
     documentIds: number[],
-    query: string
+    query: string,
+    searchMode: 'precise' | 'broad' | 'overview' = 'precise'
   ): Promise<RAGResult> {
     const startTime = Date.now()
 
@@ -217,6 +219,25 @@ export class RAGService {
       }
     }
 
+    // 根据搜索模式调整参数
+    let relevanceThreshold = this.config.relevanceThreshold
+    let topK = this.config.topK
+
+    switch (searchMode) {
+      case 'precise':
+        relevanceThreshold = Math.max(this.config.relevanceThreshold, 0.5)
+        topK = Math.min(this.config.topK, 5)
+        break
+      case 'broad':
+        relevanceThreshold = Math.min(this.config.relevanceThreshold, 0.3)
+        topK = Math.max(this.config.topK, 10)
+        break
+      case 'overview':
+        relevanceThreshold = 0.2
+        topK = this.config.topK
+        break
+    }
+
     // 生成查询 embedding
     const queryVector = await this.embeddingService.embed(query)
 
@@ -229,11 +250,21 @@ export class RAGService {
       const results = await this.vectorDB.search(
         doc.collectionName,
         queryVector,
-        this.config.topK
+        topK * 2
       )
 
       for (const result of results) {
-        if (result.score < this.config.relevanceThreshold) continue
+        if (result.score < relevanceThreshold) continue
+
+        // 添加页面位置信息
+        const pageNumber = (result.metadata.pageNumber as number) || 0
+        const totalPages = (result.metadata.totalPages as number) || 1
+        let pagePosition: 'top' | 'middle' | 'bottom' = 'middle'
+        if (pageNumber <= Math.ceil(totalPages * 0.2)) {
+          pagePosition = 'top'
+        } else if (pageNumber >= Math.ceil(totalPages * 0.8)) {
+          pagePosition = 'bottom'
+        }
 
         allHits.push({
           documentId: doc.id,
@@ -241,13 +272,27 @@ export class RAGService {
           chunkIndex: (result.metadata.chunkIndex as number) || 0,
           content: result.text,
           score: result.score,
-          metadata: result.metadata,
+          metadata: {
+            ...result.metadata,
+            pagePosition,
+          },
         })
       }
     }
 
     allHits.sort((a, b) => b.score - a.score)
-    const topHits = allHits.slice(0, this.config.topK)
+
+    let topHits: RAGHit[]
+    if (searchMode === 'overview') {
+      // 概览模式：从不同位置采样
+      const topGroup = allHits.filter((h) => h.metadata.pagePosition === 'top').slice(0, 3)
+      const middleGroup = allHits.filter((h) => h.metadata.pagePosition === 'middle').slice(0, 3)
+      const bottomGroup = allHits.filter((h) => h.metadata.pagePosition === 'bottom').slice(0, 2)
+      topHits = [...topGroup, ...middleGroup, ...bottomGroup]
+    } else {
+      topHits = allHits.slice(0, topK)
+    }
+
     const context = this.buildContext(topHits)
 
     return {
