@@ -5,7 +5,7 @@ import { Card, CardTitle, CardDescription } from "@/components/ui/card"
 import { APP_VERSION } from "@/lib/app-meta"
 
 // 关于页面：展示版本信息与更新日志（版本号由 app-meta 统一维护）
-export function AboutPage(){
+export function AboutPage() {
   return (
     <div className="space-y-6">
 
@@ -53,62 +53,62 @@ export function AboutPage(){
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">13667f9</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e206395</span>
               <span className="text-muted-foreground leading-relaxed">
-                向量存储迁移至二进制格式，提升存储效率和查询性能。
+                聊天输入框支持粘贴图片自动添加到附件，支持视觉模型判断。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">627ef6a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">62b1a5c</span>
               <span className="text-muted-foreground leading-relaxed">
-                重构服务容器架构，采用集中式服务注册机制。
+                文档解析期间禁用发送按钮，显示等待提示。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">df3c27c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">adb088a</span>
               <span className="text-muted-foreground leading-relaxed">
-                优化 SQLite 向量搜索，引入 TopK 堆和批处理策略。
+                新增知识库系统，支持 RAG 检索增强生成集成。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a8d0d3a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">949110c</span>
               <span className="text-muted-foreground leading-relaxed">
-                嵌入批处理大小优化，支持并发处理计算。
+                增强文档工具描述，新增智能分块功能。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5c9103d</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0e9b02f</span>
               <span className="text-muted-foreground leading-relaxed">
-                优化文档过多导致服务器资源耗尽问题。
+                知识库工具增强：支持多种搜索模式和智能采样。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7a8d981</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e3bafda</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增稳定的服务端加密密钥，提升 Markdown Worker 容错能力。
+                SQLite 向量存储新增 Vacuum 清理功能。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f28cf73</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">fd5bcf0</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天集成文档工具，支持 RAG 增强对话。
+                文档和知识库支持批量删除操作。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c6f1ef4</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">684c448</span>
               <span className="text-muted-foreground leading-relaxed">
-                文档 Worker 新增 RAG 服务热重载能力。
+                新增文档管理界面和管理员 API 端点。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">8035290</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f1ebd8f</span>
               <span className="text-muted-foreground leading-relaxed">
-                Docker 新增 RAG Worker 服务，优化容器配置。
+                分享查看器支持工具调用事件展示。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-12-15 推送变更摘要
+            以上为 2025-12-17 推送变更摘要
           </p>
         </Card>
       </div>
