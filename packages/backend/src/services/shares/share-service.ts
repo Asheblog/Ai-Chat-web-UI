@@ -24,6 +24,19 @@ const buildSessionOwnershipWhere = (actor: Actor): Prisma.ChatSessionWhereInput 
     ? { userId: actor.id }
     : { anonymousKey: actor.key }
 
+export interface ShareToolEvent {
+  id: string
+  tool: string
+  stage: 'start' | 'result' | 'error'
+  status: 'running' | 'success' | 'error'
+  query?: string
+  summary?: string
+  error?: string
+  createdAt: number
+  hits?: { title: string; url: string; snippet?: string }[]
+  details?: Record<string, unknown>
+}
+
 export interface ShareMessageSnapshot {
   id: number
   role: 'user' | 'assistant'
@@ -31,6 +44,7 @@ export interface ShareMessageSnapshot {
   reasoning?: string | null
   createdAt: string
   images?: string[]
+  toolEvents?: ShareToolEvent[]
 }
 
 export interface ShareDetail {
@@ -85,6 +99,7 @@ const messageSelect = {
   role: true,
   content: true,
   reasoning: true,
+  toolLogsJson: true,
   createdAt: true,
   attachments: {
     select: {
@@ -162,9 +177,9 @@ export class ShareService {
     })
     const baseUrl = options?.request
       ? this.determineChatImageBaseUrl({
-          request: options.request,
-          siteBaseUrl: siteBaseSetting?.value ?? null,
-        })
+        request: options.request,
+        siteBaseUrl: siteBaseSetting?.value ?? null,
+      })
       : ''
 
     const snapshots = this.buildMessageSnapshots(messages, normalizedIds, baseUrl)
@@ -364,6 +379,7 @@ export class ShareService {
         attachments.map((att) => att.relativePath),
         baseUrl,
       )
+      const toolEvents = this.parseToolLogs(msg.toolLogsJson)
       return {
         id: msg.id,
         role: msg.role === 'user' ? 'user' : 'assistant',
@@ -371,8 +387,33 @@ export class ShareService {
         reasoning: msg.reasoning,
         createdAt: msg.createdAt.toISOString(),
         images: images.length > 0 ? images : undefined,
+        toolEvents: toolEvents.length > 0 ? toolEvents : undefined,
       }
     })
+  }
+
+  private parseToolLogs(json: string | null | undefined): ShareToolEvent[] {
+    if (!json) return []
+    try {
+      const parsed = JSON.parse(json)
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .filter((item): item is Record<string, unknown> => item && typeof item === 'object')
+        .map((item) => ({
+          id: String(item.id ?? ''),
+          tool: String(item.tool ?? ''),
+          stage: (item.stage as 'start' | 'result' | 'error') ?? 'start',
+          status: (item.status as 'running' | 'success' | 'error') ?? 'running',
+          query: typeof item.query === 'string' ? item.query : undefined,
+          summary: typeof item.summary === 'string' ? item.summary : undefined,
+          error: typeof item.error === 'string' ? item.error : undefined,
+          createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
+          hits: Array.isArray(item.hits) ? item.hits : undefined,
+          details: item.details as Record<string, unknown> | undefined,
+        }))
+    } catch {
+      return []
+    }
   }
 
   private computeExpiry(expiresInHours?: number | null): Date | null {

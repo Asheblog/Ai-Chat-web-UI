@@ -179,6 +179,7 @@ export interface ShareMessage {
   reasoning?: string | null;
   createdAt: string;
   images?: string[];
+  toolEvents?: ToolEvent[];
 }
 
 export interface ChatShare {
