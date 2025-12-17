@@ -128,12 +128,31 @@ export const useImageAttachments = ({
 
   const handlePaste = useCallback(
     async (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (!isVisionEnabled) {
+      const items = event.clipboardData?.items
+      if (!items) return
+
+      // 检查剪贴板是否包含图片
+      let hasImage = false
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          hasImage = true
+          break
+        }
+      }
+
+      // 如果剪贴板包含图片但模型不支持 Vision，弹出提示
+      if (hasImage && !isVisionEnabled) {
+        toast({
+          title: '当前模型不支持图片',
+          description: visionDisabledMessage,
+          variant: 'destructive',
+        })
         return
       }
 
-      const items = event.clipboardData?.items
-      if (!items) return
+      if (!isVisionEnabled) {
+        return
+      }
 
       const imageFiles: File[] = []
       for (let i = 0; i < items.length; i++) {
@@ -187,7 +206,7 @@ export const useImageAttachments = ({
         }
       }
     },
-    [isVisionEnabled, limits.maxCount, limits.maxTotalMb, selectedImages, toast, validateImage],
+    [isVisionEnabled, limits.maxCount, limits.maxTotalMb, selectedImages, toast, validateImage, visionDisabledMessage],
   )
 
   const exposedLimits = useMemo(() => ({ ...limits }), [limits])
