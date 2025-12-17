@@ -3,9 +3,10 @@ import type { ApiResponse, Message } from '@/types'
 
 const client = apiHttpClient
 
-export const getMessages = async (sessionId: number) => {
+export const getMessages = async (sessionId: number, signal?: AbortSignal) => {
   const response = await client.get<ApiResponse<{ messages: any[] }>>(
     `/chat/sessions/${sessionId}/messages`,
+    { signal },
   )
   const { data } = response.data
   return { data: data?.messages || [] }

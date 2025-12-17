@@ -415,16 +415,85 @@ export function Sidebar() {
   )
 
   const collapsedSidebar = (
-    <div className="flex h-full w-14 flex-col items-center justify-start bg-slate-50 dark:bg-slate-900 dark:text-slate-100 py-3">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-10 w-10"
-        aria-label="展开侧边栏"
-        onClick={() => setSidebarCollapsed(false)}
-      >
-        <SidebarToggleIcon className="h-6 w-6" />
-      </Button>
+    <div className="flex h-full w-14 flex-col items-center justify-between bg-slate-50 dark:bg-slate-900 dark:text-slate-100 py-3">
+      {/* 顶部：展开按钮 + 新建聊天 + 系统设置 */}
+      <div className="flex flex-col items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                aria-label="展开侧边栏"
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                <SidebarToggleIcon className="h-6 w-6" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">展开侧边栏</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                aria-label="新建聊天"
+                onClick={handleNewChat}
+                disabled={isCreating || quotaExhausted}
+              >
+                {isCreating ? (
+                  <span className="h-4 w-4 inline-block animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
+                ) : (
+                  <Plus className="h-5 w-5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">新建聊天</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                aria-label="系统设置"
+                onClick={() => setIsSettingsOpen(true)}
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">系统设置</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* 底部：GitHub链接 */}
+      <div className="flex flex-col items-center">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={PROJECT_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center h-10 w-10 rounded-md text-muted-foreground hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                aria-label="项目地址"
+              >
+                <Github className="h-5 w-5" />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">项目地址</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
     </div>
   )
 

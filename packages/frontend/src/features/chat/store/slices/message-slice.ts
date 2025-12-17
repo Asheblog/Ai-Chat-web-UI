@@ -14,6 +14,9 @@ import {
   shouldEnableWebSearchForSession,
 } from '../utils'
 
+// 用于取消消息加载请求的 AbortController
+let messagesAbortController: AbortController | null = null
+
 export const createMessageSlice: ChatSliceCreator<
   MessageSlice & {
     messageMetas: import('@/types').MessageMeta[]
@@ -38,9 +41,22 @@ export const createMessageSlice: ChatSliceCreator<
   assistantVariantSelections: {},
 
   fetchMessages: async (sessionId: number) => {
+    // 取消之前的消息加载请求
+    if (messagesAbortController) {
+      messagesAbortController.abort()
+    }
+    messagesAbortController = new AbortController()
+    const currentController = messagesAbortController
+
     set({ isMessagesLoading: true, error: null })
     try {
-      const response = await getMessages(sessionId)
+      const response = await getMessages(sessionId, currentController.signal)
+
+      // 如果请求被取消，直接返回
+      if (currentController.signal.aborted) {
+        return
+      }
+
       const cache = get().messageImageCache
       const rawMessages = Array.isArray(response.data) ? response.data : []
       const normalized = rawMessages.map((msg) => mergeImages(msg, cache))
@@ -53,6 +69,11 @@ export const createMessageSlice: ChatSliceCreator<
       })
 
       set((state) => {
+        // 二次验证：如果当前会话已经切换，丢弃过期数据
+        if (state.currentSession?.id !== sessionId) {
+          return { isMessagesLoading: false }
+        }
+
         const existingSessionMetas = state.messageMetas.filter((meta) => meta.sessionId === sessionId)
         const metaByStableKey = new Map(existingSessionMetas.map((meta) => [meta.stableKey, meta]))
         const bodyEntryByStableKey = new Map<string, { key: string; body: import('@/types').MessageBody }>()
@@ -181,6 +202,11 @@ export const createMessageSlice: ChatSliceCreator<
       }
       runtime.applyBufferedSnapshots(sessionId)
     } catch (error: any) {
+      // 如果是请求被取消，静默处理，不显示错误
+      if (error?.name === 'AbortError' || error?.name === 'CanceledError' || currentController.signal.aborted) {
+        set({ isMessagesLoading: false })
+        return
+      }
       set({
         error: error?.response?.data?.error || error?.message || '获取消息列表失败',
         isMessagesLoading: false,
