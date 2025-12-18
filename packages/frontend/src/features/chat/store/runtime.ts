@@ -83,13 +83,13 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
         const metrics =
           metricsRaw && typeof metricsRaw === 'object'
             ? ({
-                firstTokenLatencyMs: normalizeMetricNumber((metricsRaw as any).firstTokenLatencyMs),
-                responseTimeMs: normalizeMetricNumber((metricsRaw as any).responseTimeMs),
-                tokensPerSecond: normalizeMetricNumber((metricsRaw as any).tokensPerSecond),
-                promptTokens: normalizeMetricNumber((metricsRaw as any).promptTokens),
-                completionTokens: normalizeMetricNumber((metricsRaw as any).completionTokens),
-                totalTokens: normalizeMetricNumber((metricsRaw as any).totalTokens),
-              } satisfies MessageStreamMetrics)
+              firstTokenLatencyMs: normalizeMetricNumber((metricsRaw as any).firstTokenLatencyMs),
+              responseTimeMs: normalizeMetricNumber((metricsRaw as any).responseTimeMs),
+              tokensPerSecond: normalizeMetricNumber((metricsRaw as any).tokensPerSecond),
+              promptTokens: normalizeMetricNumber((metricsRaw as any).promptTokens),
+              completionTokens: normalizeMetricNumber((metricsRaw as any).completionTokens),
+              totalTokens: normalizeMetricNumber((metricsRaw as any).totalTokens),
+            } satisfies MessageStreamMetrics)
             : null
         const hasMetricValue = metrics
           ? Object.values(metrics).some((value) => typeof value === 'number')
@@ -538,11 +538,11 @@ export const createChatStoreRuntime = (
         const normalizedToolEvents =
           snapshotToolEvents && snapshotToolEvents.length > 0
             ? snapshotToolEvents.map((evt) => ({
-                ...evt,
-                sessionId: meta.sessionId,
-                messageId: meta.id,
-                status: evt.status ?? inferToolStatus(evt.stage),
-              }))
+              ...evt,
+              sessionId: meta.sessionId,
+              messageId: meta.id,
+              status: evt.status ?? inferToolStatus(evt.stage),
+            }))
             : null
 
         if (
@@ -592,8 +592,11 @@ export const createChatStoreRuntime = (
           nextStreamStatus = baseStreamStatus
         }
         let nextReasoningStatus = snapshot.reasoningStatus ?? baseReasoningStatus
-        if (nextStreamStatus !== 'streaming' && nextReasoningStatus === 'streaming') {
-          nextReasoningStatus = baseReasoningStatus ?? 'done'
+        // 如果整体流状态已是终态（done/cancelled/error），强制将 reasoningStatus 也设为 done
+        // 修复刷新页面后思维链状态不显示结束的问题
+        const isTerminalStreamStatus = nextStreamStatus && nextStreamStatus !== 'streaming'
+        if (isTerminalStreamStatus && (nextReasoningStatus === 'streaming' || nextReasoningStatus === 'idle')) {
+          nextReasoningStatus = 'done'
         }
         const nextStreamError = nextStreamStatus === 'error' ? meta.streamError : null
         const metaNeedsUpdate =
@@ -769,7 +772,14 @@ export const createChatStoreRuntime = (
         const prevMeta = nextMetas[metaIndex]
         const nextStreamStatus = message.streamStatus ?? prevMeta.streamStatus
         const nextStreamError = message.streamError ?? prevMeta.streamError
-        const nextReasoningStatus = serverMeta.reasoningStatus ?? prevMeta.reasoningStatus
+        // 如果流状态是终态，确保 reasoningStatus 也是 done
+        // 修复刷新页面后服务端返回的消息状态不一致问题
+        const candidateReasoningStatus = serverMeta.reasoningStatus ?? prevMeta.reasoningStatus
+        const isTerminalStatus = nextStreamStatus && nextStreamStatus !== 'streaming'
+        const nextReasoningStatus =
+          isTerminalStatus && (candidateReasoningStatus === 'streaming' || candidateReasoningStatus === 'idle')
+            ? 'done'
+            : candidateReasoningStatus
         const nextReasoningDuration =
           serverMeta.reasoningDurationSeconds ?? prevMeta.reasoningDurationSeconds
         const nextReasoningIdle = serverMeta.reasoningIdleMs ?? prevMeta.reasoningIdleMs
@@ -907,8 +917,8 @@ export const createChatStoreRuntime = (
           if (payload.streamStatus && payload.streamStatus !== 'streaming') {
             stopMessagePoller(messageId)
             activeWatchers.delete(messageId)
-            get().fetchUsage(sessionId).catch(() => {})
-            get().fetchSessionsUsage().catch(() => {})
+            get().fetchUsage(sessionId).catch(() => { })
+            get().fetchSessionsUsage().catch(() => { })
             return
           }
         }

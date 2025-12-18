@@ -170,7 +170,20 @@ function ReasoningPanelComponent({
         ? '正在思考中…'
         : '暂无推理内容'
 
-  const statusLabel = status ? statusTextMap[status] : '思维过程'
+  // 检测打字机动画是否仍在播放
+  // 当 reasoningStatus 已是 done 但打字机尚未播放完所有内容时，状态栏应显示"输出中"
+  const typewriterStillPlaying = useMemo(() => {
+    if (status !== 'done') return false
+    if (!hasReasoning) return false
+    const totalLength = reasoningRaw.length
+    const playedLength = typeof reasoningPlayedLength === 'number' ? reasoningPlayedLength : totalLength
+    // 如果还有未播放的内容，说明打字机动画仍在进行
+    return playedLength < totalLength
+  }, [status, hasReasoning, reasoningRaw.length, reasoningPlayedLength])
+
+  // 显示状态：如果打字机动画还在播放，显示 "输出中" 而非 "推理完成"
+  const displayStatus = typewriterStillPlaying ? 'streaming' : status
+  const statusLabel = displayStatus ? statusTextMap[displayStatus] : '思维过程'
   const durationLabel =
     typeof durationSeconds === 'number' && durationSeconds > 0
       ? `用时 ${durationSeconds}s`
@@ -181,12 +194,15 @@ function ReasoningPanelComponent({
       : null
 
   const headerSubtitle = useMemo(() => {
+    // 如果打字机动画还在播放，显示动态提示
+    if (typewriterStillPlaying) return '正在整理答案'
     if (durationLabel) return durationLabel
     if (idleLabel) return idleLabel
     if (status === 'streaming') return '正在整理答案'
     if (status === 'idle') return '准备推理中'
     return '查看模型推理轨迹'
-  }, [durationLabel, idleLabel, status])
+  }, [typewriterStillPlaying, durationLabel, idleLabel, status])
+
 
   return (
     <div className={`reasoning-panel${expanded ? ' reasoning-panel--expanded' : ''}`}>
@@ -198,8 +214,8 @@ function ReasoningPanelComponent({
         title="思维链（可折叠）"
       >
         <span className="reasoning-header__left">
-          <span className={`reasoning-status-icon ${status ?? 'none'}`}>
-            {status === 'streaming' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
+          <span className={`reasoning-status-icon ${displayStatus ?? 'none'}`}>
+            {displayStatus === 'streaming' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
           </span>
           <span>
             <span className="reasoning-header__title">{statusLabel}</span>
