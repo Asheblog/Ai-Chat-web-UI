@@ -12,6 +12,7 @@ import { UserMenu } from '@/components/user-menu'
 import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
 import { persistPreferredModel } from '@/store/model-preference-store'
+import { SetupWizard } from '@/components/setup-wizard/setup-wizard'
 
 export default function MainLayout({
   children,
@@ -61,6 +62,7 @@ export default function MainLayout({
     <div className="flex h-screen min-h-0 w-full min-w-0 bg-background overflow-x-hidden">
       <Sidebar />
       <MainContent className="relative">
+        <SetupWizard />
         {!isActorReady ? (
           <div className="flex h-full w-full items-center justify-center">
             <div className="text-center text-muted-foreground space-y-3">

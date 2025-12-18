@@ -160,6 +160,8 @@ app.get('/api', (c) => {
         'PUT /api/settings/system': '更新系统设置（管理员）',
         'GET /api/settings/personal': '获取个人设置',
         'PUT /api/settings/personal': '更新个人设置',
+        'GET /api/settings/setup-status': '获取初始化向导状态',
+        'POST /api/settings/setup-state': '更新初始化向导状态（管理员）',
         'GET /api/settings/app-info': '获取应用信息',
         'GET /api/settings/health': '健康检查',
       },

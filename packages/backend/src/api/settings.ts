@@ -5,6 +5,7 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import type { ApiResponse, Actor } from '../types';
 import { settingsFacade, SettingsServiceError, HealthServiceError } from '../services/settings/settings-facade'
 import type { SettingsFacade } from '../services/settings/settings-facade'
+import type { SetupState } from '../services/settings/settings-service'
 import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
 import { reloadRAGServices } from '../services/rag-initializer'
 
@@ -37,6 +38,61 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
       return handleServiceError(c, error, 'Failed to fetch branding info', 'Get branding error:');
     }
   });
+
+  const setupStateSchema = z.object({
+    state: z.enum(['skipped', 'completed']),
+  })
+
+  settings.get('/setup-status', actorMiddleware, async (c) => {
+    try {
+      const actor = c.get('actor') as Actor | undefined
+      const status = await facade.getSetupStatus(actor)
+
+      if (!status.isAdmin) {
+        return c.json<ApiResponse>({
+          success: true,
+          data: {
+            setup_state: status.setupState,
+            requires_admin: true,
+          },
+        })
+      }
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          setup_state: status.setupState,
+          stored_state: status.storedState,
+          forced_by_env: status.forcedByEnv,
+          can_complete: status.canComplete,
+          diagnostics: status.diagnostics,
+        },
+      })
+    } catch (error) {
+      return handleServiceError(c, error, 'Failed to fetch setup status', 'Get setup status error:')
+    }
+  })
+
+  settings.post(
+    '/setup-state',
+    actorMiddleware,
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', setupStateSchema),
+    async (c) => {
+      try {
+        const payload = c.req.valid('json')
+        await facade.setSetupState(payload.state as SetupState)
+        return c.json<ApiResponse>({
+          success: true,
+          message: `Setup state updated to ${payload.state}`,
+          data: { setup_state: payload.state },
+        })
+      } catch (error) {
+        return handleServiceError(c, error, 'Failed to update setup state', 'Update setup state error:')
+      }
+    },
+  )
 
   // 系统设置schema（允许部分字段更新）
   const imagePayloadSchema = z.object({

@@ -16,6 +16,21 @@ import type { Actor } from '../../types'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../config/storage'
 import { invalidateModelAccessDefaultsCache as defaultInvalidateModelAccessDefaultsCache } from '../../utils/model-access-policy'
 
+export type SetupState = 'required' | 'skipped' | 'completed'
+
+export interface SetupStatusDiagnostics {
+  hasEnabledSystemConnection: boolean
+  enabledSystemConnections: number
+  totalSystemConnections: number
+  hasChatModels: boolean
+  chatModels: number
+  totalModels: number
+  securityWarnings: {
+    jwtSecretUnsafe: boolean
+    encryptionKeyUnsafe: boolean
+  }
+}
+
 export class SettingsServiceError extends Error {
   statusCode: number
 
@@ -81,6 +96,120 @@ export class SettingsService {
 
   invalidateBrandingCache() {
     this.cachedBrandText = null
+  }
+
+  private parseSetupState(value: unknown): SetupState | null {
+    if (value === 'required' || value === 'skipped' || value === 'completed') {
+      return value
+    }
+    return null
+  }
+
+  private readEnvFlag(value: unknown): boolean {
+    const normalized = String(value ?? '').trim().toLowerCase()
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y'
+  }
+
+  private async computeSetupDiagnostics(): Promise<SetupStatusDiagnostics> {
+    const connections = await this.prisma.connection.findMany({
+      where: { ownerUserId: null },
+      select: { id: true, enable: true },
+    })
+    const enabledConnectionIds = connections.filter((c) => c.enable).map((c) => c.id)
+    const totalSystemConnections = connections.length
+    const enabledSystemConnections = enabledConnectionIds.length
+
+    const totalModels = enabledConnectionIds.length
+      ? await this.prisma.modelCatalog.count({
+          where: { connectionId: { in: enabledConnectionIds } },
+        })
+      : 0
+
+    const chatModels = enabledConnectionIds.length
+      ? await this.prisma.modelCatalog.count({
+          where: {
+            connectionId: { in: enabledConnectionIds },
+            modelType: { in: ['chat', 'both'] },
+          },
+        })
+      : 0
+
+    const jwtSecret = process.env.JWT_SECRET
+    const encryptionKey = process.env.ENCRYPTION_KEY
+    const jwtSecretUnsafe =
+      !jwtSecret ||
+      jwtSecret === 'fallback-secret-key' ||
+      jwtSecret === 'aichat-super-secret-jwt-key-2025-production-change-me'
+    const encryptionKeyUnsafe = !encryptionKey || encryptionKey === 'aichat-encryption-key-2025'
+
+    return {
+      hasEnabledSystemConnection: enabledSystemConnections > 0,
+      enabledSystemConnections,
+      totalSystemConnections,
+      hasChatModels: chatModels > 0,
+      chatModels,
+      totalModels,
+      securityWarnings: {
+        jwtSecretUnsafe,
+        encryptionKeyUnsafe,
+      },
+    }
+  }
+
+  async getSetupStatus(actor?: Actor | null): Promise<{
+    setupState: SetupState
+    storedState: SetupState | null
+    forcedByEnv: boolean
+    canComplete: boolean
+    diagnostics: SetupStatusDiagnostics
+    isAdmin: boolean
+  }> {
+    const isAdmin = Boolean(actor && actor.type === 'user' && actor.role === 'ADMIN')
+    const record = await this.prisma.systemSetting.findUnique({
+      where: { key: 'setup_state' },
+      select: { value: true },
+    })
+    const storedState = this.parseSetupState(record?.value)
+
+    const forcedByEnv = this.readEnvFlag(process.env.DB_INIT_ON_START) || this.readEnvFlag(process.env.FORCE_SETUP_WIZARD)
+
+    const diagnostics = await this.computeSetupDiagnostics()
+    const canComplete = diagnostics.hasEnabledSystemConnection && diagnostics.hasChatModels
+
+    const setupState: SetupState = (() => {
+      if (storedState) return storedState
+      if (forcedByEnv) return 'required'
+      return canComplete ? 'completed' : 'required'
+    })()
+
+    return {
+      setupState,
+      storedState,
+      forcedByEnv,
+      canComplete,
+      diagnostics,
+      isAdmin,
+    }
+  }
+
+  async setSetupState(state: SetupState): Promise<void> {
+    if (state !== 'required' && state !== 'skipped' && state !== 'completed') {
+      throw new SettingsServiceError('Invalid setup state', 400)
+    }
+
+    const nowIso = this.now().toISOString()
+    const upsert = (key: string, value: string) =>
+      this.prisma.systemSetting.upsert({
+        where: { key },
+        update: { value },
+        create: { key, value },
+      })
+
+    const updates: Array<ReturnType<typeof upsert>> = [upsert('setup_state', state)]
+    if (state === 'required') updates.push(upsert('setup_required_at', nowIso))
+    if (state === 'skipped') updates.push(upsert('setup_skipped_at', nowIso))
+    if (state === 'completed') updates.push(upsert('setup_completed_at', nowIso))
+    await Promise.all(updates)
   }
 
   async getSystemSettings(actor: Actor) {

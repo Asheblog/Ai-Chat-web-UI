@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AuthFormLayout } from '@/components/auth-form-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
   const [savePassword, setSavePassword] = useState(false)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { login, user, error, clearError } = useAuthStore()
   const { systemSettings, publicBrandText, bootstrapBrandText } = useSettingsStore((state) => ({
     systemSettings: state.systemSettings,
@@ -32,6 +33,16 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
   const errorMessage = error ? extractErrorMessage(error) : null
   const brandText = (systemSettings?.brandText ?? publicBrandText ?? initialBrandText ?? '').trim() || 'AIChat'
 
+  const nextPath = (() => {
+    const raw = searchParams?.get('next')
+    if (!raw) return '/main'
+    const trimmed = raw.trim()
+    if (!trimmed.startsWith('/')) return '/main'
+    if (trimmed.startsWith('//')) return '/main'
+    if (trimmed.includes('://')) return '/main'
+    return trimmed
+  })()
+
   useEffect(() => {
     if (initialBrandText) {
       bootstrapBrandText(initialBrandText)
@@ -40,9 +51,9 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
 
   useEffect(() => {
     if (user) {
-      router.replace('/main')
+      router.replace(nextPath)
     }
-  }, [user, router])
+  }, [nextPath, user, router])
 
   useEffect(() => {
     clearError()
@@ -84,7 +95,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
       } catch {}
 
       await login(username, password)
-      router.replace('/main')
+      router.replace(nextPath)
     } catch (error) {
       // 错误已经在store中处理
       console.error('Login failed:', error)

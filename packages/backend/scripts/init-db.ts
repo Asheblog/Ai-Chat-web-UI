@@ -12,6 +12,11 @@ import path from 'node:path';
 
 const prisma = new PrismaClient();
 
+const readEnvFlag = (value: unknown): boolean => {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y'
+}
+
 async function initDatabase() {
   try {
     console.log('🔄 开始初始化数据库...');
@@ -20,14 +25,19 @@ async function initDatabase() {
     await prisma.$connect();
     console.log('✅ 数据库连接成功');
 
+    const initialUserCount = await prisma.user.count()
+
     // 2. 初始化系统设置
     await initSystemSettings();
 
     // 3. 检查是否需要创建默认管理员
-    await createDefaultAdmin();
+    await createDefaultAdmin(initialUserCount);
 
     // 4. 创建示例系统连接（可选）
     await createExampleSystemConnection();
+
+    // 5. 初始化首次启动引导状态（可选）
+    await initSetupState({ initialUserCount })
 
     console.log('🎉 数据库初始化完成！');
 
@@ -78,10 +88,8 @@ async function initSystemSettings() {
   console.log('✅ 系统设置初始化完成');
 }
 
-async function createDefaultAdmin() {
-  const userCount = await prisma.user.count();
-
-  if (userCount === 0) {
+async function createDefaultAdmin(initialUserCount: number) {
+  if (initialUserCount === 0) {
     // 从环境变量获取默认管理员信息
     const defaultUsername = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
     const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123456';
@@ -113,6 +121,35 @@ async function createDefaultAdmin() {
   } else {
     console.log('✅ 已存在用户账户，跳过默认管理员创建');
   }
+}
+
+async function initSetupState(params: { initialUserCount: number }) {
+  const existing = await prisma.systemSetting.findUnique({
+    where: { key: 'setup_state' },
+    select: { value: true },
+  })
+  if (existing?.value) {
+    return
+  }
+
+  const shouldRequire =
+    readEnvFlag(process.env.DB_INIT_ON_START) || params.initialUserCount === 0
+  if (!shouldRequire) {
+    return
+  }
+
+  const nowIso = new Date().toISOString()
+  await prisma.systemSetting.upsert({
+    where: { key: 'setup_state' },
+    update: { value: 'required' },
+    create: { key: 'setup_state', value: 'required' },
+  })
+  await prisma.systemSetting.upsert({
+    where: { key: 'setup_required_at' },
+    update: { value: nowIso },
+    create: { key: 'setup_required_at', value: nowIso },
+  })
+  console.log('✅ 已启用首次启动引导（setup_state=required）')
 }
 
 async function createExampleSystemConnection() {

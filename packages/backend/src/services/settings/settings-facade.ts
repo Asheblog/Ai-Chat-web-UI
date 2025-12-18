@@ -3,6 +3,7 @@ import { settingsService, SettingsServiceError } from './index'
 import { personalSettingsService } from './personal-settings-service'
 import { healthService, HealthServiceError } from './health-service'
 import { appInfoService } from './app-info-service'
+import type { SetupState } from './settings-service'
 import {
   syncSharedAnonymousQuota as defaultSyncSharedAnonymousQuota,
 } from '../../utils/quota'
@@ -44,6 +45,14 @@ export class SettingsFacade {
 
   async updateSystemSettings(payload: Record<string, any>) {
     return this.settingsService.updateSystemSettings(payload)
+  }
+
+  async getSetupStatus(actor?: Actor | null) {
+    return this.settingsService.getSetupStatus(actor)
+  }
+
+  async setSetupState(state: SetupState) {
+    return this.settingsService.setSetupState(state)
   }
 
   async resetAnonymousQuota(options: { resetUsed?: boolean }) {
