@@ -52,6 +52,7 @@ services:
       - PORT=8001
       - DATABASE_URL=file:/app/data/app.db
       - JWT_SECRET=请改成强随机密码 #这里要改
+      - ENCRYPTION_KEY=请改成强随机密码 #用于加密存储系统连接的 apiKey（生产必改；修改后需重新填写连接密钥）
       - DEFAULT_REGISTRATION_ENABLED=true
       - DEFAULT_CONTEXT_TOKEN_LIMIT=120000 #这里后面大概率就要废弃的
       - ENABLE_CORS=true #不要cors就关了
@@ -83,6 +84,7 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/app.db
       - JWT_SECRET=请改成强随机密码 #与backend保持一致
+      - ENCRYPTION_KEY=请改成强随机密码 #与backend保持一致（用于解密连接 apiKey）
       - LOG_LEVEL=info
       - NODE_OPTIONS=--max-old-space-size=1024
     volumes:
@@ -147,6 +149,7 @@ networks:
 
 关键配置要点
 - `JWT_SECRET`：务必改为 32 位以上强密码。
+- `ENCRYPTION_KEY`：务必设置为强随机密钥（用于加密存储系统连接的 `apiKey`）；修改后需要重新填写系统连接的密钥。
 - `CORS_ORIGIN`：填写前端实际访问地址（含协议+端口）。
 - 图片存储：`CHAT_IMAGE_DIR` 默认指向 `/app/storage/chat-images`。Compose 中的 `backend_images:/app/storage/chat-images` 会将聊天图片与头像持久化到宿主卷；若需使用其他目录，请同时调整 `CHAT_IMAGE_DIR` 与卷挂载路径。
 - 端口：`"宿主机端口:容器端口"`，容器内固定后端 8001、前端 3000。
@@ -166,7 +169,7 @@ networks:
 ## 二、本地运行（不使用 Docker）
 
 前提
-- Node.js ≥ 18；首次运行建议复制根目录 `.env.example` 为 `.env` 并按需修改（`JWT_SECRET`、`CORS_ORIGIN` 等）。
+- Node.js ≥ 18；首次运行建议复制根目录 `.env.example` 为 `.env` 并按需修改（`JWT_SECRET`、`ENCRYPTION_KEY`、`CORS_ORIGIN` 等）。
 
 命令
 - 开发环境（热更新）：`npm run start:dev`
