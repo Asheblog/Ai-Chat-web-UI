@@ -47,6 +47,12 @@ export const findStreamMetaByClientMessageId = (...args: Parameters<StreamMetaSt
 export const findStreamMetaByAssistantClientMessageId = (...args: Parameters<StreamMetaStore['findStreamMetaByAssistantClientMessageId']>) =>
   streamMetaStore.findStreamMetaByAssistantClientMessageId(...args)
 
+export const findAllStreamMetaBySessionId = (...args: Parameters<StreamMetaStore['findAllStreamMetaBySessionId']>) =>
+  streamMetaStore.findAllStreamMetaBySessionId(...args)
+
+export const cancelAllStreamsForSession = (...args: Parameters<StreamMetaStore['cancelAllStreamsForSession']>) =>
+  streamMetaStore.cancelAllStreamsForSession(...args)
+
 export const getStreamMetaByKey = (...args: Parameters<StreamMetaStore['getStreamMetaByKey']>) =>
   streamMetaStore.getStreamMetaByKey(...args)
 

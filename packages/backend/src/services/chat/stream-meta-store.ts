@@ -33,6 +33,8 @@ export interface StreamMetaStore {
   findStreamMetaByMessageId(sessionId: number, messageId?: number | string | null): AgentStreamMeta | null
   findStreamMetaByClientMessageId(sessionId: number, clientMessageId?: string | null): AgentStreamMeta | null
   findStreamMetaByAssistantClientMessageId(sessionId: number, assistantClientMessageId?: string | null): AgentStreamMeta | null
+  findAllStreamMetaBySessionId(sessionId: number): AgentStreamMeta[]
+  cancelAllStreamsForSession(sessionId: number): number
   getStreamMetaByKey(key: string | null | undefined): AgentStreamMeta | null
   buildPendingCancelKeyByClientId(sessionId: number, clientMessageId?: string | null): string | null
   buildPendingCancelKeyByMessageId(sessionId: number, messageId?: number | string | null): string | null
@@ -177,6 +179,36 @@ export class MemoryStreamMetaStore implements StreamMetaStore {
       }
     }
     return null
+  }
+
+  findAllStreamMetaBySessionId(sessionId: number): AgentStreamMeta[] {
+    const results: AgentStreamMeta[] = []
+    for (const meta of this.agentStreamControllers.values()) {
+      if (meta.sessionId === sessionId) {
+        results.push(meta)
+      }
+    }
+    return results
+  }
+
+  cancelAllStreamsForSession(sessionId: number): number {
+    const streams = this.findAllStreamMetaBySessionId(sessionId)
+    let cancelledCount = 0
+    for (const meta of streams) {
+      if (!meta.cancelled) {
+        meta.cancelled = true
+        if (meta.controller) {
+          try {
+            meta.controller.abort()
+          } catch {
+            // ignore abort errors
+          }
+        }
+        cancelledCount++
+      }
+      this.releaseStreamMeta(meta)
+    }
+    return cancelledCount
   }
 
   getStreamMetaByKey(key: string | null | undefined): AgentStreamMeta | null {

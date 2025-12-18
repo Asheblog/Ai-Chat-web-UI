@@ -4,6 +4,7 @@ import { prisma as defaultPrisma } from '../../db'
 import { ensureAnonymousSession as defaultEnsureAnonymousSession } from '../../utils/actor'
 import type { ModelResolverService } from '../catalog/model-resolver-service'
 import { modelResolverService as defaultModelResolverService } from '../catalog/model-resolver-service'
+import { cancelAllStreamsForSession } from '../../modules/chat/stream-state'
 
 export class SessionServiceError extends Error {
   statusCode: number
@@ -292,6 +293,8 @@ export class SessionService {
     if (!existing) {
       throw new SessionServiceError('Chat session not found', 404)
     }
+    // Cancel any active streams for this session before deleting
+    cancelAllStreamsForSession(sessionId)
     await this.prisma.chatSession.delete({ where: { id: sessionId } })
   }
 

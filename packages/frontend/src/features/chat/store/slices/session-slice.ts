@@ -5,6 +5,7 @@ import {
   updateSession as updateSessionApi,
   updateSessionModel as updateSessionModelApi,
 } from '@/features/chat/api'
+import { cancelStream, cancelAgentStream } from '@/features/chat/api/streaming'
 import type { ChatSession } from '@/types'
 import type { ModelItem } from '@/store/models-store'
 import type { SessionSlice } from '../types'
@@ -124,6 +125,28 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
 
   deleteSession: async (sessionId: number) => {
     try {
+      // Cancel any active streams for this session before deleting
+      const activeSessionStreams = Array.from(runtime.activeStreams.values()).filter(
+        (stream) => stream.sessionId === sessionId,
+      )
+      for (const stream of activeSessionStreams) {
+        stream.stopRequested = true
+        // Cancel backend stream
+        if (stream.clientMessageId || stream.assistantId) {
+          cancelAgentStream(sessionId, {
+            clientMessageId: stream.clientMessageId ?? stream.assistantClientMessageId ?? undefined,
+            messageId: typeof stream.assistantId === 'number' ? stream.assistantId : undefined,
+          }).catch(() => {})
+        }
+        // Cancel local fetch
+        try {
+          cancelStream(stream.streamKey)
+        } catch {
+          // ignore
+        }
+        runtime.clearActiveStream(stream)
+      }
+
       await deleteSessionApi(sessionId)
       set((state) => {
         const newSessions = state.sessions.filter((s) => s.id !== sessionId)
