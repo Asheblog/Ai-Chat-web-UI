@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { AuthFormLayout } from '@/components/auth-form-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -73,7 +74,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
           setPassword(saved.password)
         }
       }
-    } catch {}
+    } catch { }
   }, [clearError])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,7 +93,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         } else {
           localStorage.removeItem('auth_saved')
         }
-      } catch {}
+      } catch { }
 
       await login(username, password)
       router.replace(nextPath)
@@ -159,7 +160,14 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
           className="w-full"
           disabled={isLoading || !username || !password}
         >
-          {isLoading ? '登录中...' : '登录'}
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              正在登录...
+            </>
+          ) : (
+            '登录'
+          )}
         </Button>
       </form>
     </AuthFormLayout>
