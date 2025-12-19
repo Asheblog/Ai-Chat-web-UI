@@ -158,7 +158,7 @@ export interface BattleSharePayload {
 }
 
 export interface BattleExecutionEvent {
-  type: 'run_start' | 'attempt_start' | 'attempt_complete' | 'run_complete' | 'error'
+  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'error'
   payload: Record<string, unknown>
 }
 
@@ -827,7 +827,27 @@ export class BattleService {
     let error: string | null = null
 
     try {
-      const runResult = await this.executeModel(prompt, model.config, model.resolved, systemSettings)
+      const runResult = await this.executeModel(
+        prompt,
+        model.config,
+        model.resolved,
+        systemSettings,
+        (delta) => {
+          if (!delta) return
+          emitEvent?.({
+            type: 'attempt_delta',
+            payload: {
+              battleRunId,
+              modelId,
+              connectionId: model.resolved.connection.id,
+              rawId: model.resolved.rawModelId,
+              modelKey: `${model.resolved.connection.id}:${model.resolved.rawModelId}`,
+              attemptIndex,
+              delta,
+            },
+          })
+        },
+      )
       output = runResult.content
       usage = runResult.usage
     } catch (err) {
@@ -900,6 +920,7 @@ export class BattleService {
     modelConfig: BattleModelInput,
     resolved: { connection: Connection; rawModelId: string },
     systemSettings: Record<string, string>,
+    emitDelta?: (delta: string) => void,
   ) {
     const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
     const providerSupportsTools = resolved.connection.provider === 'openai' || resolved.connection.provider === 'azure_openai'
@@ -944,14 +965,17 @@ export class BattleService {
       payload,
       content: prompt,
       images: [],
-      mode: 'completion',
+      mode: emitDelta ? 'stream' : 'completion',
       personalPrompt: null,
     })
 
     if (effectiveFeatures.web_search || effectiveFeatures.python_tool) {
-      return this.executeWithTools(prepared, { webSearchActive, pythonActive, features: effectiveFeatures })
+      return this.executeWithTools(prepared, { webSearchActive, pythonActive, features: effectiveFeatures }, emitDelta)
     }
 
+    if (emitDelta) {
+      return this.executeStreaming(prepared, emitDelta)
+    }
     return this.executeSimple(prepared)
   }
 
@@ -990,9 +1014,149 @@ export class BattleService {
     return { content: text, usage }
   }
 
+  private async executeStreaming(prepared: PreparedChatRequest, emitDelta: (delta: string) => void) {
+    const response = await this.requester.requestWithBackoff({
+      request: {
+        url: prepared.providerRequest.url,
+        headers: prepared.providerRequest.headers,
+        body: prepared.providerRequest.body,
+      },
+      context: {
+        sessionId: 0,
+        provider: prepared.providerRequest.providerLabel,
+        route: '/api/battle/execute',
+        timeoutMs: prepared.providerRequest.timeoutMs,
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`AI API request failed: ${response.status} ${response.statusText} ${errorText}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('Response body is not readable')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let content = ''
+    let doneSeen = false
+    let sawSse = false
+    let sawJson = false
+    let usage: Record<string, any> = {}
+
+    const pushDelta = (delta: string) => {
+      if (!delta) return
+      content += delta
+      emitDelta(delta)
+    }
+
+    const recordUsage = (payload: any) => {
+      if (!payload) return
+      usage = buildUsage(
+        { usage: payload.usage ?? payload },
+        {
+          promptTokens: prepared.promptTokens,
+          contextLimit: prepared.contextLimit,
+          contextRemaining: prepared.contextRemaining,
+        },
+      )
+    }
+
+    const handleJsonPayload = (payload: any) => {
+      if (!payload) return
+      const delta =
+        payload?.choices?.[0]?.delta?.content ||
+        payload?.message?.content ||
+        payload?.response ||
+        payload?.choices?.[0]?.message?.content ||
+        ''
+      if (typeof delta === 'string' && delta) {
+        pushDelta(delta)
+      }
+      if (payload?.done === true) {
+        doneSeen = true
+      }
+      if (payload?.usage || payload?.prompt_eval_count != null || payload?.eval_count != null) {
+        recordUsage(payload)
+      }
+    }
+
+    const handleLine = (line: string) => {
+      const trimmed = line.replace(/\r$/, '')
+      if (!trimmed) return
+      if (trimmed.startsWith('data:')) {
+        sawSse = true
+        const data = trimmed.slice(5).trimStart()
+        if (!data) return
+        if (data === '[DONE]') {
+          doneSeen = true
+          return
+        }
+        try {
+          const parsed = JSON.parse(data)
+          handleJsonPayload(parsed)
+        } catch {
+          return
+        }
+        return
+      }
+
+      if (sawSse) return
+
+      try {
+        const parsed = JSON.parse(trimmed)
+        sawJson = true
+        handleJsonPayload(parsed)
+      } catch {
+        return
+      }
+    }
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (value) {
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            handleLine(line)
+            if (doneSeen) break
+          }
+        }
+        if (doneSeen || done) break
+      }
+
+      if (!doneSeen && buffer.trim()) {
+        handleLine(buffer.trim())
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    if (!content.trim() && !sawJson && buffer.trim()) {
+      try {
+        const parsed = JSON.parse(buffer.trim())
+        handleJsonPayload(parsed)
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!content.trim()) {
+      throw new Error('模型未返回有效文本')
+    }
+
+    return { content, usage }
+  }
+
   private async executeWithTools(
     prepared: PreparedChatRequest,
     toolFlags: { webSearchActive: boolean; pythonActive: boolean; features: BattleModelFeatures },
+    emitDelta?: (delta: string) => void,
   ) {
     const provider = prepared.providerRequest.providerLabel
     if (provider !== 'openai' && provider !== 'azure_openai') {
@@ -1038,6 +1202,67 @@ export class BattleService {
     let lastUsage = null as any
 
     for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+      if (emitDelta) {
+        const streamed = await this.streamToolIteration({
+          prepared,
+          provider,
+          messages: workingMessages,
+          toolDefinitions,
+          emitDelta,
+        })
+        if (streamed.usage) {
+          lastUsage = streamed.usage
+        }
+        if (streamed.toolCalls.length === 0) {
+          const text = streamed.content || ''
+          if (!text.trim()) {
+            throw new Error('模型未返回有效文本')
+          }
+          const usage = streamed.usage
+            ? buildUsage({ usage: streamed.usage }, {
+              promptTokens: prepared.promptTokens,
+              contextLimit: prepared.contextLimit,
+              contextRemaining: prepared.contextRemaining,
+            })
+            : {}
+          return { content: text, usage }
+        }
+
+        workingMessages = workingMessages.concat({
+          role: 'assistant',
+          content: streamed.content || '',
+          tool_calls: streamed.toolCalls,
+        })
+
+        for (const toolCall of streamed.toolCalls) {
+          const toolName = toolCall?.function?.name || ''
+          const handler = handlerMap.get(toolName)
+          const args = this.safeParseToolArgs(toolCall)
+          let result: ToolHandlerResult | null = null
+          if (handler) {
+            result = await handler.handle(toolCall as ToolCall, args, {
+              sessionId: 0,
+              emitReasoning: () => {},
+              sendToolEvent: () => {},
+            })
+          } else {
+            result = {
+              toolCallId: toolCall.id || crypto.randomUUID(),
+              toolName: toolName || 'unknown',
+              message: {
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: toolName || 'unknown',
+                content: JSON.stringify({ error: 'Unsupported tool requested by the model' }),
+              },
+            }
+          }
+
+          workingMessages = workingMessages.concat(result.message)
+        }
+        continue
+      }
+
       const body = convertOpenAIReasoningPayload({
         ...prepared.baseRequestBody,
         stream: false,
@@ -1130,6 +1355,151 @@ export class BattleService {
     }
 
     return { content: '工具调用次数已达上限，未生成最终答案。', usage: fallbackUsage }
+  }
+
+  private async streamToolIteration(params: {
+    prepared: PreparedChatRequest
+    provider: string
+    messages: any[]
+    toolDefinitions: any[]
+    emitDelta: (delta: string) => void
+  }) {
+    const body = convertOpenAIReasoningPayload({
+      ...params.prepared.baseRequestBody,
+      stream: true,
+      messages: params.messages,
+      tools: params.toolDefinitions,
+      tool_choice: 'auto',
+    })
+
+    const response = await this.requester.requestWithBackoff({
+      request: {
+        url: params.prepared.providerRequest.url,
+        headers: params.prepared.providerRequest.headers,
+        body,
+      },
+      context: {
+        sessionId: 0,
+        provider: params.provider,
+        route: '/api/battle/execute',
+        timeoutMs: params.prepared.providerRequest.timeoutMs,
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`AI API request failed: ${response.status} ${response.statusText} ${errorText}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('Response body is not readable')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let content = ''
+    let usageSnapshot: Record<string, any> | null = null
+    let sawSse = false
+    let doneSeen = false
+    const toolCallBuffers = new Map<
+      number,
+      { id?: string; type?: string; function: { name?: string; arguments: string } }
+    >()
+    let fallbackToolCalls: ToolCall[] = []
+
+    const handleToolDelta = (toolDelta: any) => {
+      const idx = typeof toolDelta?.index === 'number' ? toolDelta.index : 0
+      const existing = toolCallBuffers.get(idx) || { function: { name: undefined, arguments: '' } }
+      if (toolDelta?.id) existing.id = toolDelta.id
+      if (toolDelta?.type) existing.type = toolDelta.type
+      if (toolDelta?.function?.name) existing.function.name = toolDelta.function.name
+      if (toolDelta?.function?.arguments) {
+        existing.function.arguments = `${existing.function.arguments || ''}${toolDelta.function.arguments}`
+      }
+      toolCallBuffers.set(idx, existing)
+    }
+
+    const aggregateToolCalls = () =>
+      Array.from(toolCallBuffers.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([_, entry]) => ({
+          id: entry.id || crypto.randomUUID(),
+          type: entry.type || 'function',
+          function: {
+            name: entry.function.name || 'unknown',
+            arguments: entry.function.arguments || '{}',
+          },
+        }))
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (value) {
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            const normalized = line.replace(/\r$/, '')
+            if (!normalized.startsWith('data:')) continue
+            sawSse = true
+            const data = normalized.slice(5).trimStart()
+            if (!data) continue
+            if (data === '[DONE]') {
+              doneSeen = true
+              break
+            }
+            let parsed: any
+            try {
+              parsed = JSON.parse(data)
+            } catch {
+              continue
+            }
+            const choice = parsed?.choices?.[0]
+            const delta = choice?.delta || {}
+            if (typeof delta.content === 'string' && delta.content) {
+              content += delta.content
+              params.emitDelta(delta.content)
+            }
+            if (Array.isArray(delta.tool_calls)) {
+              for (const toolDelta of delta.tool_calls) {
+                handleToolDelta(toolDelta)
+              }
+            }
+            if (parsed?.usage) {
+              usageSnapshot = parsed.usage
+            }
+          }
+        }
+        if (doneSeen || done) break
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    if (!sawSse) {
+      const raw = buffer.trim()
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw)
+          const message = parsed?.choices?.[0]?.message || {}
+          content = typeof message.content === 'string' ? message.content : ''
+          const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
+          fallbackToolCalls = toolCalls as ToolCall[]
+          if (parsed?.usage) usageSnapshot = parsed.usage
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const toolCalls = toolCallBuffers.size > 0 ? aggregateToolCalls() : fallbackToolCalls
+
+    return {
+      content,
+      toolCalls,
+      usage: usageSnapshot,
+    }
   }
 
   private safeParseToolArgs(toolCall: any): Record<string, unknown> {

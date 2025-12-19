@@ -332,6 +332,37 @@ export function useBattleFlow() {
     []
   )
 
+  const appendNodeOutput = useCallback((modelKey: string, attemptIndex: number, delta: string) => {
+    if (!delta) return
+    setNodeStates((prev) => {
+      const next = new Map(prev)
+      const attempts = next.get(modelKey) || []
+      let updated = false
+      const newAttempts = attempts.map((attempt) => {
+        if (attempt.attemptIndex !== attemptIndex) return attempt
+        updated = true
+        return {
+          ...attempt,
+          status: attempt.status === 'pending' ? 'running' : attempt.status,
+          output: `${attempt.output || ''}${delta}`,
+        }
+      })
+      if (!updated) {
+        const modelLabel = attempts[0]?.modelLabel || modelKey
+        newAttempts.push({
+          modelKey,
+          modelLabel,
+          status: 'running',
+          attemptIndex,
+          output: delta,
+        })
+      }
+      newAttempts.sort((a, b) => a.attemptIndex - b.attemptIndex)
+      next.set(modelKey, newAttempts)
+      return next
+    })
+  }, [])
+
   // Validate and build payload
   const validateAndBuildPayload = useCallback((): {
     valid: boolean;
@@ -474,6 +505,30 @@ export function useBattleFlow() {
           }
         }
 
+        if (event.type === 'attempt_delta') {
+          const payload = event.payload as {
+            modelKey?: string
+            modelId?: string
+            connectionId?: number | null
+            rawId?: string | null
+            attemptIndex?: number
+            delta?: string
+          } | undefined
+          const attemptIndex = payload?.attemptIndex
+          const delta = typeof payload?.delta === 'string' ? payload.delta : ''
+          const modelKey = payload?.modelKey
+            || (payload?.modelId
+              ? buildModelKey({
+                modelId: payload.modelId,
+                connectionId: payload.connectionId ?? null,
+                rawId: payload.rawId ?? null,
+              })
+              : null)
+          if (modelKey && attemptIndex && delta) {
+            appendNodeOutput(modelKey, attemptIndex, delta)
+          }
+        }
+
         if (event.type === 'attempt_complete') {
           const result = event.payload?.result as BattleResult | undefined
           if (result) {
@@ -531,7 +586,7 @@ export function useBattleFlow() {
     } finally {
       setIsStreaming(false)
     }
-  }, [validateAndBuildPayload, initializeNodeStates, updateNodeState])
+  }, [validateAndBuildPayload, initializeNodeStates, updateNodeState, appendNodeOutput])
 
   // Cancel execution
   const cancelBattle = useCallback(() => {

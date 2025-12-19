@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Sheet,
@@ -13,7 +13,7 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { formatDate } from '@/lib/utils'
 import { useModelsStore } from '@/store/models-store'
-import { History, Trash2, Share2, Eye, Trophy } from 'lucide-react'
+import { History, Trash2, Eye, Trophy } from 'lucide-react'
 import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
 import { createBattleShare, deleteBattleRun, getBattleRun, listBattleRuns } from './api'
 import { FlowStepper } from './components/FlowStepper'
@@ -21,7 +21,7 @@ import { ConfigStep } from './components/ConfigStep'
 import { PromptStep } from './components/PromptStep'
 import { ExecutionStep } from './components/ExecutionStep'
 import { ResultStep } from './components/ResultStep'
-import { DetailDrawer } from './components/DetailDrawer'
+import { DetailDrawer, type BattleAttemptDetail } from './components/DetailDrawer'
 import { useBattleFlow, type BattleStep } from './hooks/useBattleFlow'
 import './battle.css'
 
@@ -39,8 +39,7 @@ export function BattlePageClient() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [shareLink, setShareLink] = useState<string | null>(null)
-  const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null)
-  const [selectedResult, setSelectedResult] = useState<BattleResult | null>(null)
+  const [selectedNode, setSelectedNode] = useState<{ modelKey: string; attemptIndex: number } | null>(null)
   const restoredRef = useRef(false)
 
   // Fetch history
@@ -90,30 +89,48 @@ export function BattlePageClient() {
     return { type: 'connection' as const, connectionId, rawId }
   }, [])
 
+  const buildResultKey = useCallback((result: BattleResult) => {
+    if (result.connectionId != null && result.rawId) {
+      return `${result.connectionId}:${result.rawId}`
+    }
+    return `global:${result.modelId}`
+  }, [])
+
   const handleNodeClick = useCallback((modelKey: string, attemptIndex: number) => {
-    setSelectedNodeKey(`${modelKey}-${attemptIndex}`)
-    const parsed = parseModelKey(modelKey)
-    if (!parsed) {
-      toast({ title: '无法解析模型信息', variant: 'destructive' })
-      return
-    }
-    const result = flow.results.find((item) => {
-      if (item.attemptIndex !== attemptIndex) return false
-      if (parsed.type === 'global') {
-        return item.connectionId == null && item.modelId === parsed.modelId
-      }
-      return item.connectionId === parsed.connectionId && item.rawId === parsed.rawId
-    })
-    if (!result) {
-      toast({ title: '该尝试仍在执行中，暂无详情可查看' })
-      return
-    }
-    setSelectedResult(result)
-  }, [flow.results, parseModelKey, toast])
+    setSelectedNode({ modelKey, attemptIndex })
+  }, [])
 
   const handleSelectResult = useCallback((result: BattleResult) => {
-    setSelectedResult(result)
-  }, [])
+    setSelectedNode({ modelKey: buildResultKey(result), attemptIndex: result.attemptIndex })
+  }, [buildResultKey])
+
+  const selectedNodeKey = selectedNode ? `${selectedNode.modelKey}-${selectedNode.attemptIndex}` : null
+
+  const selectedDetail = useMemo<BattleAttemptDetail | null>(() => {
+    if (!selectedNode) return null
+    const { modelKey, attemptIndex } = selectedNode
+    const parsed = parseModelKey(modelKey)
+    const matched = flow.results.find((item) => {
+      if (item.attemptIndex !== attemptIndex) return false
+      return buildResultKey(item) === modelKey
+    })
+    if (matched) return matched
+
+    const attempts = flow.nodeStates.get(modelKey) || []
+    const attempt = attempts.find((item) => item.attemptIndex === attemptIndex)
+    if (!attempt) return null
+    const modelId = parsed?.type === 'global' ? parsed.modelId : parsed?.rawId || modelKey
+    return {
+      isLive: true,
+      modelId,
+      modelLabel: attempt.modelLabel,
+      attemptIndex,
+      output: attempt.output || '',
+      durationMs: attempt.durationMs ?? null,
+      error: attempt.error ?? null,
+      status: attempt.status,
+    }
+  }, [selectedNode, flow.results, flow.nodeStates, parseModelKey, buildResultKey])
 
   const fetchRunDetail = useCallback(async (runId: number, options?: { silent?: boolean }) => {
     try {
@@ -183,8 +200,7 @@ export function BattlePageClient() {
     const detail = await fetchRunDetail(runId)
     if (!detail) return
     setShareLink(null)
-    setSelectedResult(null)
-    setSelectedNodeKey(null)
+    setSelectedNode(null)
     setHistoryOpen(false)
   }
 
@@ -225,8 +241,7 @@ export function BattlePageClient() {
   // Start battle
   const handleStartBattle = async () => {
     setShareLink(null)
-    setSelectedResult(null)
-    setSelectedNodeKey(null)
+    setSelectedNode(null)
     const result = await flow.startBattle(models)
     if (!result.success && result.error) {
       toast({ title: result.error, variant: 'destructive' })
@@ -234,6 +249,11 @@ export function BattlePageClient() {
       refreshHistory()
     }
   }
+
+  const handleNewBattle = useCallback(() => {
+    setSelectedNode(null)
+    flow.resetBattle()
+  }, [flow.resetBattle])
 
   // Handle step navigation
   const handleStepClick = (step: BattleStep) => {
@@ -407,7 +427,7 @@ export function BattlePageClient() {
               currentRunId={flow.currentRunId}
               status={flow.runStatus}
               onShare={handleShare}
-              onNewBattle={flow.resetBattle}
+              onNewBattle={handleNewBattle}
               onViewHistory={() => setHistoryOpen(true)}
               onSelectResult={handleSelectResult}
               shareLink={shareLink}
@@ -417,9 +437,9 @@ export function BattlePageClient() {
       </div>
 
       <DetailDrawer
-        open={selectedResult !== null}
-        onOpenChange={(open) => !open && setSelectedResult(null)}
-        result={selectedResult}
+        open={selectedDetail !== null}
+        onOpenChange={(open) => !open && setSelectedNode(null)}
+        detail={selectedDetail}
       />
     </div>
   )

@@ -664,7 +664,7 @@ export interface BattleShare {
 }
 
 export interface BattleStreamEvent {
-  type: 'run_start' | 'attempt_start' | 'attempt_complete' | 'run_complete' | 'error' | 'complete';
+  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'error' | 'complete';
   payload?: Record<string, any>;
   error?: string;
 }
