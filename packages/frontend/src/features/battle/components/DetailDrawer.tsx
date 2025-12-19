@@ -1,6 +1,4 @@
 'use client'
-
-import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
     Sheet,
@@ -24,7 +22,7 @@ export function DetailDrawer({ open, onOpenChange, result }: DetailDrawerProps) 
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-lg p-6">
+            <SheetContent className="w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl p-6">
                 <div className="mb-4">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
                         {result.modelLabel || result.modelId}
@@ -82,7 +80,7 @@ export function DetailDrawer({ open, onOpenChange, result }: DetailDrawerProps) 
                         {/* Model Output */}
                         <div className="space-y-2">
                             <h4 className="text-sm font-medium">模型输出</h4>
-                            <div className="rounded-lg border bg-muted/30 p-3">
+                            <div className="rounded-lg border bg-muted/30 p-3 overflow-x-auto">
                                 {result.output ? (
                                     <div className="prose prose-sm max-w-none dark:prose-invert">
                                         <MarkdownRenderer html={null} fallback={result.output} />

@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,8 +13,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
-import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { formatDate } from '@/lib/utils'
 import {
     Trophy,
     Medal,
@@ -26,7 +23,6 @@ import {
     Eye,
     Check,
     X,
-    Clock,
     ChevronDown,
     ChevronUp,
 } from 'lucide-react'
@@ -40,12 +36,20 @@ interface ResultStepProps {
     summary: BattleRunSummary['summary'] | null
     groupedResults: Array<{ key: string; label: string; attempts: BattleResult[] }>
     statsMap: Map<string, BattleRunSummary['summary']['modelStats'][number]>
+    fallbackConfig?: {
+        passK: number
+        runsPerModel: number
+        judgeThreshold: number
+    }
     currentRunId: number | null
     onShare: () => void
     onNewBattle: () => void
     onViewHistory: () => void
     shareLink?: string | null
 }
+
+const isFiniteNumber = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value)
 
 const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -66,6 +70,7 @@ export function ResultStep({
     summary,
     groupedResults,
     statsMap,
+    fallbackConfig,
     currentRunId,
     onShare,
     onNewBattle,
@@ -75,21 +80,107 @@ export function ResultStep({
     const [selectedResult, setSelectedResult] = useState<BattleResult | null>(null)
     const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
 
-    // Sort models by pass rate and score
+    const resolvedPassK = useMemo(() => {
+        if (isFiniteNumber(summary?.passK)) return summary.passK
+        if (isFiniteNumber(fallbackConfig?.passK)) return fallbackConfig.passK
+        return 1
+    }, [summary?.passK, fallbackConfig?.passK])
+
+    const resolvedRunsPerModel = useMemo(() => {
+        if (isFiniteNumber(summary?.runsPerModel)) return summary.runsPerModel
+        if (isFiniteNumber(fallbackConfig?.runsPerModel)) return fallbackConfig.runsPerModel
+        const maxAttempts = groupedResults.reduce((max, group) => Math.max(max, group.attempts.length), 0)
+        return Math.max(1, maxAttempts)
+    }, [summary?.runsPerModel, fallbackConfig?.runsPerModel, groupedResults])
+
+    const resolvedJudgeThreshold = useMemo(() => {
+        if (isFiniteNumber(summary?.judgeThreshold)) return summary.judgeThreshold
+        if (isFiniteNumber(fallbackConfig?.judgeThreshold)) return fallbackConfig.judgeThreshold
+        return 0.8
+    }, [summary?.judgeThreshold, fallbackConfig?.judgeThreshold])
+
+    const computedStatsMap = useMemo(() => {
+        const map = new Map<string, { passAtK: boolean; passCount: number; accuracy: number }>()
+        groupedResults.forEach((group) => {
+            const attempts = group.attempts.length
+            const passCount = group.attempts.filter((attempt) => attempt.judgePass === true).length
+            const accuracy = attempts > 0 ? passCount / attempts : 0
+            map.set(group.key, {
+                passAtK: passCount >= resolvedPassK,
+                passCount,
+                accuracy,
+            })
+        })
+        return map
+    }, [groupedResults, resolvedPassK])
+
+    const mergedStatsMap = useMemo(() => {
+        const map = new Map<string, { passAtK: boolean; passCount: number; accuracy: number }>()
+        for (const [key, computed] of computedStatsMap) {
+            map.set(key, computed)
+        }
+        for (const [key, stat] of statsMap) {
+            if (map.has(key)) continue
+            const passAtK = typeof stat.passAtK === 'boolean' ? stat.passAtK : false
+            const passCount = isFiniteNumber(stat.passCount) ? stat.passCount : 0
+            const accuracy = isFiniteNumber(stat.accuracy) ? stat.accuracy : 0
+            map.set(key, { passAtK, passCount, accuracy })
+        }
+        return map
+    }, [computedStatsMap, statsMap])
+
+    const displaySummary = useMemo(() => {
+        if (!summary && groupedResults.length === 0) return null
+        const hasResults = groupedResults.length > 0
+        const totalModels = hasResults
+            ? groupedResults.length
+            : isFiniteNumber(summary?.totalModels)
+                ? summary.totalModels
+                : mergedStatsMap.size
+        const computedPassModelCount = Array.from(mergedStatsMap.values()).filter((stat) => stat.passAtK).length
+        const passModelCount = hasResults
+            ? computedPassModelCount
+            : isFiniteNumber(summary?.passModelCount)
+                ? summary.passModelCount
+                : computedPassModelCount
+        const accuracy = hasResults
+            ? totalModels > 0
+                ? passModelCount / totalModels
+                : 0
+            : isFiniteNumber(summary?.accuracy)
+                ? summary.accuracy
+                : totalModels > 0
+                    ? passModelCount / totalModels
+                    : 0
+        return {
+            totalModels,
+            runsPerModel: resolvedRunsPerModel,
+            passK: resolvedPassK,
+            judgeThreshold: resolvedJudgeThreshold,
+            passModelCount,
+            accuracy,
+        }
+    }, [
+        summary,
+        groupedResults.length,
+        mergedStatsMap,
+        resolvedRunsPerModel,
+        resolvedPassK,
+        resolvedJudgeThreshold,
+    ])
+
     const rankedModels = useMemo(() => {
         return [...groupedResults].sort((a, b) => {
-            const statA = statsMap.get(a.key)
-            const statB = statsMap.get(b.key)
+            const statA = mergedStatsMap.get(a.key)
+            const statB = mergedStatsMap.get(b.key)
 
-            // Sort by passAtK first
             if (statA?.passAtK !== statB?.passAtK) {
                 return statA?.passAtK ? -1 : 1
             }
 
-            // Then by accuracy
             return (statB?.accuracy ?? 0) - (statA?.accuracy ?? 0)
         })
-    }, [groupedResults, statsMap])
+    }, [groupedResults, mergedStatsMap])
 
     // Calculate average response time
     const avgResponseTime = useMemo(() => {
@@ -117,6 +208,8 @@ export function ResultStep({
             return next
         })
     }
+
+    const passRate = displaySummary ? Math.min(1, Math.max(0, displaySummary.accuracy)) : 0
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
@@ -160,20 +253,20 @@ export function ResultStep({
             )}
 
             {/* Statistics Cards */}
-            {summary && (
+            {displaySummary && (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <StatisticsCard
                         label="Pass@k 通过率"
-                        value={`${(summary.accuracy * 100).toFixed(0)}%`}
-                        subValue={`${summary.passModelCount}/${summary.totalModels} 模型通过`}
+                        value={`${(passRate * 100).toFixed(0)}%`}
+                        subValue={`${displaySummary.passModelCount}/${displaySummary.totalModels} 模型通过`}
                         icon="rate"
-                        variant={summary.accuracy >= 0.8 ? 'success' : summary.accuracy >= 0.5 ? 'warning' : 'error'}
-                        progress={summary.accuracy * 100}
+                        variant={passRate >= 0.8 ? 'success' : passRate >= 0.5 ? 'warning' : 'error'}
+                        progress={passRate * 100}
                     />
                     <StatisticsCard
                         label="通过模型数"
-                        value={`${summary.passModelCount}`}
-                        subValue={`共 ${summary.totalModels} 个参赛`}
+                        value={`${displaySummary.passModelCount}`}
+                        subValue={`共 ${displaySummary.totalModels} 个参赛`}
                         icon="models"
                         variant="default"
                     />
@@ -185,8 +278,8 @@ export function ResultStep({
                     />
                     <StatisticsCard
                         label="裁判阈值"
-                        value={(summary.judgeThreshold ?? 0.8).toFixed(2)}
-                        subValue={`pass@${summary.passK ?? 1} / ${summary.runsPerModel ?? 1} 次运行`}
+                        value={displaySummary.judgeThreshold.toFixed(2)}
+                        subValue={`pass@${displaySummary.passK} / ${displaySummary.runsPerModel} 次运行`}
                         icon="target"
                         variant="default"
                     />
@@ -230,7 +323,7 @@ export function ResultStep({
                             </TableHeader>
                             <TableBody>
                                 {rankedModels.map((group, index) => {
-                                    const stat = statsMap.get(group.key)
+                                    const stat = mergedStatsMap.get(group.key)
                                     const isExpanded = expandedModels.has(group.key)
 
                                     return (

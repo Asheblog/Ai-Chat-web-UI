@@ -287,6 +287,11 @@ export function BattlePageClient() {
               summary={flow.summary}
               groupedResults={flow.groupedResults}
               statsMap={flow.statsMap}
+              fallbackConfig={{
+                passK: flow.judgeConfig.passK,
+                runsPerModel: flow.judgeConfig.runsPerModel,
+                judgeThreshold: flow.judgeConfig.threshold,
+              }}
               currentRunId={flow.currentRunId}
               onShare={handleShare}
               onNewBattle={flow.resetBattle}

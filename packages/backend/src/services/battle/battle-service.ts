@@ -169,6 +169,9 @@ const toISOStringSafe = (value: Date | string | null | undefined) => {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value)
+
 const sanitizeHeaders = (headers?: Array<{ name: string; value: string }>) => {
   if (!Array.isArray(headers)) return []
   return headers
@@ -198,6 +201,55 @@ const safeParseJson = <T>(raw: string | null | undefined, fallback: T): T => {
     return JSON.parse(raw) as T
   } catch {
     return fallback
+  }
+}
+
+const normalizeSummary = (
+  raw: unknown,
+  defaults: { runsPerModel: number; passK: number; judgeThreshold: number },
+): BattleRunSummary => {
+  const data = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {}
+  const rawStats = Array.isArray(data.modelStats) ? data.modelStats : []
+  const modelStats = rawStats
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const modelId = typeof item.modelId === 'string' ? item.modelId : ''
+      if (!modelId) return null
+      const accuracy = isFiniteNumber(item.accuracy) ? clamp(item.accuracy, 0, 1) : 0
+      return {
+        modelId,
+        connectionId: isFiniteNumber(item.connectionId) ? item.connectionId : null,
+        rawId: typeof item.rawId === 'string' && item.rawId.trim().length > 0 ? item.rawId : null,
+        passAtK: Boolean(item.passAtK),
+        passCount: isFiniteNumber(item.passCount) ? item.passCount : 0,
+        accuracy,
+      }
+    })
+    .filter((item): item is BattleRunSummary['modelStats'][number] => Boolean(item))
+
+  const runsPerModel = isFiniteNumber(data.runsPerModel) ? data.runsPerModel : defaults.runsPerModel
+  const passK = isFiniteNumber(data.passK) ? data.passK : defaults.passK
+  const judgeThreshold = isFiniteNumber(data.judgeThreshold)
+    ? clamp(data.judgeThreshold, 0, 1)
+    : defaults.judgeThreshold
+  const totalModels = isFiniteNumber(data.totalModels) ? data.totalModels : modelStats.length
+  const passModelCount = isFiniteNumber(data.passModelCount)
+    ? data.passModelCount
+    : modelStats.filter((item) => item.passAtK).length
+  const accuracy = isFiniteNumber(data.accuracy)
+    ? data.accuracy
+    : totalModels > 0
+      ? passModelCount / totalModels
+      : 0
+
+  return {
+    totalModels,
+    runsPerModel,
+    passK,
+    judgeThreshold,
+    passModelCount,
+    accuracy: clamp(accuracy, 0, 1),
+    modelStats,
   }
 }
 
@@ -334,15 +386,23 @@ export class BattleService {
       })
       : null
 
-    const summary = safeParseJson<BattleRunSummary>(run.summaryJson, {
-      totalModels: 0,
+    const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
+    let summary = normalizeSummary(rawSummary, {
       runsPerModel: run.runsPerModel,
       passK: run.passK,
       judgeThreshold: run.judgeThreshold,
-      passModelCount: 0,
-      accuracy: 0,
-      modelStats: [],
     })
+    const shouldRebuildSummary =
+      results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
+    if (shouldRebuildSummary) {
+      summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+      if (run.status === 'completed') {
+        await this.prisma.battleRun.update({
+          where: { id: run.id },
+          data: { summaryJson: safeJsonStringify(summary, '{}') },
+        })
+      }
+    }
 
     return {
       ...this.serializeRunSummary(run),
@@ -413,15 +473,23 @@ export class BattleService {
       })
       : null
 
-    const summary = safeParseJson<BattleRunSummary>(run.summaryJson, {
-      totalModels: 0,
+    const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
+    let summary = normalizeSummary(rawSummary, {
       runsPerModel: run.runsPerModel,
       passK: run.passK,
       judgeThreshold: run.judgeThreshold,
-      passModelCount: 0,
-      accuracy: 0,
-      modelStats: [],
     })
+    const shouldRebuildSummary =
+      results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
+    if (shouldRebuildSummary) {
+      summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+      if (run.status === 'completed') {
+        await this.prisma.battleRun.update({
+          where: { id: run.id },
+          data: { summaryJson: safeJsonStringify(summary, '{}') },
+        })
+      }
+    }
 
     const payload: BattleSharePayload = {
       title: run.title,
@@ -1261,14 +1329,11 @@ export class BattleService {
   }
 
   private serializeRunSummary(run: BattleRunRecord) {
-    const summary = safeParseJson<BattleRunSummary>(run.summaryJson, {
-      totalModels: 0,
+    const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
+    const summary = normalizeSummary(rawSummary, {
       runsPerModel: run.runsPerModel,
       passK: run.passK,
       judgeThreshold: run.judgeThreshold,
-      passModelCount: 0,
-      accuracy: 0,
-      modelStats: [],
     })
 
     return {

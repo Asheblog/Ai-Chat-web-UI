@@ -476,7 +476,11 @@ export function useBattleFlow() {
       existing.attempts.push(result)
       map.set(key, existing)
     }
-    return Array.from(map.values())
+    const groups = Array.from(map.values())
+    for (const group of groups) {
+      group.attempts.sort((a, b) => a.attemptIndex - b.attemptIndex)
+    }
+    return groups
   }, [results])
 
   // Stats map for results
