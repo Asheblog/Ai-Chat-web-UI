@@ -31,11 +31,13 @@ model User {
   avatarPath             String? @map("avatar_path")
   personalPrompt         String?
 
-  chatSessions  ChatSession[]
-  connections   Connection[]
-  usageQuotas   UsageQuota[]
-  chatShares    ChatShare[] @relation("UserChatShares")
-  documents     Document[]
+  chatSessions   ChatSession[]
+  connections    Connection[]
+  usageQuotas    UsageQuota[]
+  chatShares     ChatShare[] @relation("UserChatShares")
+  battleRuns     BattleRun[] @relation("UserBattleRuns")
+  battleShares   BattleShare[] @relation("UserBattleShares")
+  documents      Document[]
   knowledgeBases KnowledgeBase[]
 
   @@index([status])
@@ -445,4 +447,88 @@ model KnowledgeBaseDocument {
   @@index([knowledgeBaseId])
   @@index([documentId])
   @@map("knowledge_base_documents")
+}
+
+// ============================================
+// 模型大乱斗 (Battle) 相关模型
+// ============================================
+
+model BattleRun {
+  id              Int       @id @default(autoincrement())
+  userId          Int?
+  anonymousKey    String?
+  title           String
+  prompt          String
+  expectedAnswer  String
+  judgeModelId    String
+  judgeConnectionId Int?
+  judgeRawId      String?
+  judgeThreshold  Float     @default(0.8)
+  runsPerModel    Int       @default(1)
+  passK           Int       @default(1)
+  status          String    @default("pending") // pending | running | completed | error
+  configJson      String    @default("{}") // JSON: 模型配置与运行参数
+  summaryJson     String    @default("{}") // JSON: 汇总统计
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user    User?         @relation("UserBattleRuns", fields: [userId], references: [id], onDelete: Cascade)
+  results BattleResult[]
+  shares  BattleShare[]
+
+  @@index([userId])
+  @@index([anonymousKey])
+  @@index([status])
+  @@index([createdAt])
+  @@map("battle_runs")
+}
+
+model BattleResult {
+  id              Int       @id @default(autoincrement())
+  battleRunId     Int
+  modelId         String
+  connectionId    Int?
+  rawId           String?
+  attemptIndex    Int
+  featuresJson    String    @default("{}") // JSON: 工具开关等
+  customBodyJson  String    @default("{}") // JSON: 自定义请求体摘要
+  customHeadersJson String  @default("[]") // JSON: 自定义请求头摘要
+  output          String    @default("")
+  usageJson       String    @default("{}")
+  durationMs      Int?
+  error           String?
+  judgePass       Boolean?
+  judgeScore      Float?
+  judgeReason     String?
+  judgeFallbackUsed Boolean @default(false)
+  judgeRawJson    String    @default("{}")
+  createdAt       DateTime  @default(now())
+
+  battleRun BattleRun @relation(fields: [battleRunId], references: [id], onDelete: Cascade)
+
+  @@index([battleRunId])
+  @@index([modelId])
+  @@index([connectionId])
+  @@map("battle_results")
+}
+
+model BattleShare {
+  id                     Int      @id @default(autoincrement())
+  battleRunId            Int
+  token                  String   @unique
+  title                  String
+  payloadJson            String
+  createdByUserId        Int?
+  createdByAnonymousKey  String?
+  createdAt              DateTime @default(now())
+  expiresAt              DateTime?
+  revokedAt              DateTime?
+
+  battleRun BattleRun @relation(fields: [battleRunId], references: [id], onDelete: Cascade)
+  user      User?     @relation("UserBattleShares", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([battleRunId])
+  @@index([createdByUserId])
+  @@index([createdByAnonymousKey])
+  @@map("battle_shares")
 }

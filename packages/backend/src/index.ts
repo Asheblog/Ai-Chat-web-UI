@@ -19,6 +19,7 @@ import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './ut
 import { createTaskTraceApi } from './api/task-trace';
 import { setChatConfig } from './modules/chat/chat-common';
 import { createSharesApi } from './api/shares';
+import { createBattleApi } from './api/battle';
 import { createDocumentsApi } from './api/documents';
 import { createKnowledgeBasesApi } from './api/knowledge-bases';
 import { getDocumentServices } from './services/document-services-factory';
@@ -86,6 +87,7 @@ app.route('/api/task-trace', createTaskTraceApi({
   taskTraceFileService: container.taskTraceFileService,
 }));
 app.route('/api/shares', createSharesApi({ shareService: container.shareService }));
+app.route('/api/battle', createBattleApi());
 
 // 文档路由（RAG 服务状态在请求时动态检查）
 app.route('/api/documents', createDocumentsApi());
@@ -181,6 +183,14 @@ app.get('/api', (c) => {
         'DELETE /api/documents/:id/detach/:sessionId': '从会话移除文档（需开启RAG）',
         'GET /api/documents/session/:sessionId': '获取会话文档列表（需开启RAG）',
         'POST /api/documents/search': 'RAG 文档搜索（需开启RAG）',
+      },
+      battle: {
+        'POST /api/battle/stream': '执行模型大乱斗（SSE）',
+        'GET /api/battle/runs': '获取乱斗历史列表',
+        'GET /api/battle/runs/:id': '获取乱斗详情',
+        'DELETE /api/battle/runs/:id': '删除乱斗记录',
+        'POST /api/battle/runs/:id/share': '创建乱斗分享',
+        'GET /api/battle/shares/:token': '查看乱斗分享',
       },
     },
   });

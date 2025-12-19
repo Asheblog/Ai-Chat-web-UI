@@ -551,3 +551,113 @@ export interface ModelSelectorProps {
   onModelChange: (modelId: string) => void;
   disabled?: boolean;
 }
+
+export interface BattleRunSummary {
+  id: number;
+  title: string;
+  prompt: string;
+  expectedAnswer: string;
+  judgeModelId: string;
+  judgeConnectionId?: number | null;
+  judgeRawId?: string | null;
+  judgeThreshold: number;
+  runsPerModel: number;
+  passK: number;
+  status: 'pending' | 'running' | 'completed' | 'error';
+  createdAt: string;
+  updatedAt: string;
+  summary: {
+    totalModels: number;
+    runsPerModel: number;
+    passK: number;
+    judgeThreshold: number;
+    passModelCount: number;
+    accuracy: number;
+    modelStats: Array<{
+      modelId: string;
+      connectionId: number | null;
+      rawId: string | null;
+      passAtK: boolean;
+      passCount: number;
+      accuracy: number;
+    }>;
+  };
+}
+
+export interface BattleResult {
+  id: number;
+  battleRunId: number;
+  modelId: string;
+  modelLabel?: string | null;
+  connectionId?: number | null;
+  rawId?: string | null;
+  attemptIndex: number;
+  output: string;
+  usage: Record<string, any>;
+  durationMs?: number | null;
+  error?: string | null;
+  judgePass?: boolean | null;
+  judgeScore?: number | null;
+  judgeReason?: string | null;
+  judgeFallbackUsed?: boolean;
+}
+
+export interface BattleRunDetail extends BattleRunSummary {
+  judgeModelLabel?: string | null;
+  results: BattleResult[];
+}
+
+export interface BattleRunListResponse {
+  runs: BattleRunSummary[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface BattleSharePayload {
+  title: string;
+  prompt: string;
+  expectedAnswer: string;
+  judge: {
+    modelId: string;
+    modelLabel: string | null;
+    threshold: number;
+  };
+  summary: BattleRunSummary['summary'];
+  results: Array<{
+    modelId: string;
+    modelLabel: string | null;
+    connectionId: number | null;
+    rawId: string | null;
+    attemptIndex: number;
+    output: string;
+    durationMs: number | null;
+    error: string | null;
+    usage: Record<string, any>;
+    judgePass: boolean | null;
+    judgeScore: number | null;
+    judgeReason: string | null;
+    judgeFallbackUsed: boolean;
+  }>;
+  createdAt: string;
+}
+
+export interface BattleShare {
+  id: number;
+  battleRunId: number;
+  token: string;
+  title: string;
+  payload: BattleSharePayload;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface BattleStreamEvent {
+  type: 'run_start' | 'attempt_start' | 'attempt_complete' | 'run_complete' | 'error' | 'complete';
+  payload?: Record<string, any>;
+  error?: string;
+}

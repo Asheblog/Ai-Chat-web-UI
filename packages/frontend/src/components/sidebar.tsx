@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Github, Pin, PinOff, Plus, Settings, Trash2 } from 'lucide-react'
+import { Github, Pin, PinOff, Plus, Settings, Trash2, Trophy } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -252,6 +252,17 @@ export function Sidebar() {
           新建聊天
         </Button>
         <Button
+          onClick={() => {
+            router.push('/main/battle')
+            setIsMobileMenuOpen(false)
+          }}
+          className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
+          variant="ghost"
+        >
+          <Trophy className="mr-2 h-4 w-4" />
+          模型大乱斗
+        </Button>
+        <Button
           onClick={() => setIsSettingsOpen(true)}
           className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
           variant="ghost"
@@ -454,6 +465,23 @@ export function Sidebar() {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">新建聊天</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                aria-label="模型大乱斗"
+                onClick={() => router.push('/main/battle')}
+              >
+                <Trophy className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">模型大乱斗</TooltipContent>
           </Tooltip>
         </TooltipProvider>
 

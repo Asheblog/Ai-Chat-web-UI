@@ -110,7 +110,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           rehypePlugins={rehypeKatexPlugin ? [rehypeKatexPlugin] : undefined}
           components={{
             pre({ children }: any) {
-              return <pre style={{ display: 'contents' }}>{children}</pre>
+              return <>{children}</>
             },
             code({ inline, className, children, ...props }: any) {
               const responsiveContainerStyle = {
@@ -124,23 +124,26 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
               const language = ['bash', 'sh', 'shell', 'zsh', 'console'].includes(lang0) ? 'bash' : lang0
               const isPlain = !language || ['plaintext', 'text', 'txt', 'nohighlight'].includes(language)
               const codeContent = String(children).replace(/\n$/, '')
+              const isBlock = inline === false
 
-              if (!inline && codeContent) {
+              if (isBlock && codeContent) {
                 const tooLargeForHL =
                   isStreaming || codeContent.length > 20000 || codeContent.split('\n').length > 400
                 const isSingleLine = !codeContent.includes('\n')
                 const isShortPlain = isPlain && isSingleLine && codeContent.trim().length <= 80
                 if (isShortPlain) {
                   return (
-                    <code
-                      className={cn(
-                        'px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30',
-                        isStreaming && 'typing-cursor'
-                      )}
-                      {...props}
-                    >
-                      {codeContent}
-                    </code>
+                    <div className="my-2">
+                      <code
+                        className={cn(
+                          'px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30',
+                          isStreaming && 'typing-cursor'
+                        )}
+                        {...props}
+                      >
+                        {codeContent}
+                      </code>
+                    </div>
                   )
                 }
                 if (tooLargeForHL) {
