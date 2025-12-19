@@ -56,6 +56,8 @@ export interface BattleFlowState {
   summary: BattleRunSummary['summary'] | null
   currentRunId: number | null
   isRunning: boolean
+  isStreaming: boolean
+  runStatus: BattleRunSummary['status'] | null
   error: string | null
 }
 
@@ -134,6 +136,99 @@ export const modelKeyFor = (model: ModelItem): string => {
   return `global:${model.id}`
 }
 
+type BattleNodeModel = {
+  modelId: string
+  connectionId?: number | null
+  rawId?: string | null
+  label?: string | null
+}
+
+const buildModelKey = (model: { modelId: string; connectionId?: number | null; rawId?: string | null }): string => {
+  if (model.connectionId != null && model.rawId) {
+    return `${model.connectionId}:${model.rawId}`
+  }
+  return `global:${model.modelId}`
+}
+
+const resolveNodeLabel = (model: BattleNodeModel, catalog?: ModelItem[]) => {
+  const explicit = (model.label || '').trim()
+  if (explicit) return explicit
+  const matched = catalog?.find((item) => {
+    if (model.connectionId != null && model.rawId) {
+      return item.connectionId === model.connectionId && item.rawId === model.rawId
+    }
+    return item.id === model.modelId
+  })
+  return matched?.name || model.rawId || model.modelId
+}
+
+const buildNodeStatesFromRun = (
+  models: BattleNodeModel[],
+  runsPerModel: number,
+  results: BattleResult[],
+  catalog?: ModelItem[],
+) => {
+  const normalizedRuns = Number.isFinite(runsPerModel) && runsPerModel > 0 ? Math.floor(runsPerModel) : 1
+  const map = new Map<string, NodeState[]>()
+
+  for (const model of models) {
+    const key = buildModelKey(model)
+    const label = resolveNodeLabel(model, catalog)
+    const attempts: NodeState[] = []
+    for (let i = 1; i <= normalizedRuns; i += 1) {
+      attempts.push({
+        modelKey: key,
+        modelLabel: label,
+        status: 'pending',
+        attemptIndex: i,
+      })
+    }
+    map.set(key, attempts)
+  }
+
+  for (const result of results) {
+    const key = buildModelKey({
+      modelId: result.modelId,
+      connectionId: result.connectionId,
+      rawId: result.rawId,
+    })
+    const label = result.modelLabel || resolveNodeLabel({
+      modelId: result.modelId,
+      connectionId: result.connectionId,
+      rawId: result.rawId,
+    }, catalog)
+    let attempts = map.get(key)
+    const requiredAttempts = Math.max(normalizedRuns, result.attemptIndex)
+    if (!attempts) {
+      attempts = []
+    }
+    for (let i = attempts.length + 1; i <= requiredAttempts; i += 1) {
+      attempts.push({
+        modelKey: key,
+        modelLabel: label,
+        status: 'pending',
+        attemptIndex: i,
+      })
+    }
+    const index = result.attemptIndex - 1
+    if (index >= 0 && index < attempts.length) {
+      attempts[index] = {
+        ...attempts[index],
+        status: result.error ? 'error' : result.judgePass ? 'success' : 'error',
+        durationMs: result.durationMs,
+        output: result.output,
+        error: result.error,
+        judgePass: result.judgePass,
+        judgeScore: result.judgeScore,
+        judgeReason: result.judgeReason,
+      }
+    }
+    map.set(key, attempts)
+  }
+
+  return map
+}
+
 // ==================== Hook ====================
 
 export function useBattleFlow() {
@@ -153,6 +248,8 @@ export function useBattleFlow() {
   const [summary, setSummary] = useState<BattleRunSummary['summary'] | null>(null)
   const [currentRunId, setCurrentRunId] = useState<number | null>(null)
   const [isRunning, setIsRunning] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [runStatus, setRunStatus] = useState<BattleRunSummary['status'] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -208,20 +305,13 @@ export function useBattleFlow() {
 
   // Initialize node states for execution visualization
   const initializeNodeStates = useCallback(() => {
-    const newNodeStates = new Map<string, NodeState[]>()
-    for (const modelConfig of selectedModels) {
-      const attempts: NodeState[] = []
-      for (let i = 1; i <= judgeConfig.runsPerModel; i++) {
-        attempts.push({
-          modelKey: modelConfig.key,
-          modelLabel: modelConfig.model.name,
-          status: 'pending',
-          attemptIndex: i,
-        })
-      }
-      newNodeStates.set(modelConfig.key, attempts)
-    }
-    setNodeStates(newNodeStates)
+    const models = selectedModels.map((modelConfig) => ({
+      modelId: modelConfig.model.id,
+      connectionId: modelConfig.model.connectionId,
+      rawId: modelConfig.model.rawId,
+      label: modelConfig.model.name,
+    }))
+    setNodeStates(buildNodeStatesFromRun(models, judgeConfig.runsPerModel, []))
   }, [selectedModels, judgeConfig.runsPerModel])
 
   // Update node state based on SSE events
@@ -344,6 +434,8 @@ export function useBattleFlow() {
     }
 
     setIsRunning(true)
+    setIsStreaming(true)
+    setRunStatus('running')
     setResults([])
     setSummary(null)
     setCurrentRunId(null)
@@ -361,9 +453,24 @@ export function useBattleFlow() {
         }
 
         if (event.type === 'attempt_start') {
-          const payload = event.payload as { modelKey?: string; attemptIndex?: number } | undefined
-          if (payload?.modelKey && payload?.attemptIndex) {
-            updateNodeState(payload.modelKey, payload.attemptIndex, { status: 'running' })
+          const payload = event.payload as {
+            modelKey?: string
+            modelId?: string
+            connectionId?: number | null
+            rawId?: string | null
+            attemptIndex?: number
+          } | undefined
+          const attemptIndex = payload?.attemptIndex
+          const modelKey = payload?.modelKey
+            || (payload?.modelId
+              ? buildModelKey({
+                modelId: payload.modelId,
+                connectionId: payload.connectionId ?? null,
+                rawId: payload.rawId ?? null,
+              })
+              : null)
+          if (modelKey && attemptIndex) {
+            updateNodeState(modelKey, attemptIndex, { status: 'running' })
           }
         }
 
@@ -397,17 +504,20 @@ export function useBattleFlow() {
           if (nextSummary) {
             setSummary(nextSummary)
           }
+          setRunStatus('completed')
         }
 
         if (event.type === 'error') {
           setError(event.error || '乱斗执行失败')
           setIsRunning(false)
+          setRunStatus('error')
           return { success: false, error: event.error }
         }
 
         if (event.type === 'complete') {
           setIsRunning(false)
           setStep('result')
+          setRunStatus((prev) => (prev === 'error' ? prev : 'completed'))
         }
       }
 
@@ -416,7 +526,10 @@ export function useBattleFlow() {
       const message = err?.message || '乱斗执行失败'
       setError(message)
       setIsRunning(false)
+      setRunStatus('error')
       return { success: false, error: message }
+    } finally {
+      setIsStreaming(false)
     }
   }, [validateAndBuildPayload, initializeNodeStates, updateNodeState])
 
@@ -437,6 +550,8 @@ export function useBattleFlow() {
     setSummary(null)
     setCurrentRunId(null)
     setIsRunning(false)
+    setIsStreaming(false)
+    setRunStatus(null)
     setError(null)
     setNodeStates(new Map())
   }, [])
@@ -451,7 +566,24 @@ export function useBattleFlow() {
     summary: BattleRunSummary['summary'] | null
     results: BattleResult[]
     id: number
-  }) => {
+    status: BattleRunSummary['status']
+    config?: {
+      models: Array<{ modelId: string; connectionId: number | null; rawId: string | null }>
+    }
+  }, catalog?: ModelItem[]) => {
+    const configModels = Array.isArray(detail.config?.models)
+      ? detail.config!.models.map((item) => ({
+        modelId: item.modelId,
+        connectionId: item.connectionId ?? null,
+        rawId: item.rawId ?? null,
+      }))
+      : []
+    const fallbackModels = detail.results.map((item) => ({
+      modelId: item.modelId,
+      connectionId: item.connectionId ?? null,
+      rawId: item.rawId ?? null,
+      label: item.modelLabel || null,
+    }))
     setPrompt(detail.prompt)
     setExpectedAnswer(detail.expectedAnswer)
     setJudgeConfig((prev) => ({
@@ -463,7 +595,17 @@ export function useBattleFlow() {
     setSummary(detail.summary)
     setResults(detail.results)
     setCurrentRunId(detail.id)
-    setStep('result')
+    setRunStatus(detail.status)
+    setIsRunning(detail.status === 'running' || detail.status === 'pending')
+    setIsStreaming(false)
+    setError(null)
+    setNodeStates(buildNodeStatesFromRun(
+      configModels.length > 0 ? configModels : fallbackModels,
+      detail.runsPerModel,
+      detail.results,
+      catalog,
+    ))
+    setStep(detail.status === 'running' || detail.status === 'pending' ? 'execution' : 'result')
   }, [])
 
   // Grouped results for display
@@ -507,6 +649,8 @@ export function useBattleFlow() {
     summary,
     currentRunId,
     isRunning,
+    isStreaming,
+    runStatus,
     error,
     groupedResults,
     statsMap,

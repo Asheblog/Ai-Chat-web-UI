@@ -13,6 +13,7 @@ interface ExecutionStepProps {
     expectedAnswer: string
     judgeConfig: JudgeConfig
     nodeStates: Map<string, NodeState[]>
+    selectedNodeKey?: string
     isRunning: boolean
     error: string | null
     onCancel: () => void
@@ -24,6 +25,7 @@ export function ExecutionStep({
     expectedAnswer,
     judgeConfig,
     nodeStates,
+    selectedNodeKey,
     isRunning,
     error,
     onCancel,
@@ -142,6 +144,7 @@ export function ExecutionStep({
                     <FlowGraph
                         judgeLabel={judgeConfig.model?.name || '裁判模型'}
                         nodeStates={nodeStates}
+                        selectedNodeKey={selectedNodeKey}
                         onNodeClick={onNodeClick}
                         isRunning={isRunning}
                     />

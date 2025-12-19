@@ -73,6 +73,16 @@ export interface BattleRunSummary {
   }>
 }
 
+export interface BattleRunConfigModel {
+  modelId: string
+  connectionId: number | null
+  rawId: string | null
+}
+
+export interface BattleRunConfig {
+  models: BattleRunConfigModel[]
+}
+
 export interface BattleResultRecord {
   id: number
   battleRunId: number
@@ -253,6 +263,23 @@ const normalizeSummary = (
   }
 }
 
+const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
+  const data = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {}
+  const rawModels = Array.isArray(data.models) ? data.models : []
+  return rawModels
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const modelId = typeof item.modelId === 'string' ? item.modelId.trim() : ''
+      if (!modelId) return null
+      return {
+        modelId,
+        connectionId: isFiniteNumber(item.connectionId) ? item.connectionId : null,
+        rawId: typeof item.rawId === 'string' && item.rawId.trim().length > 0 ? item.rawId.trim() : null,
+      }
+    })
+    .filter((item): item is BattleRunConfigModel => Boolean(item))
+}
+
 const buildRunTitle = (prompt: string, explicit?: string) => {
   const trimmed = (explicit || '').trim()
   if (trimmed) return trimmed
@@ -365,6 +392,21 @@ export class BattleService {
       where: { battleRunId: run.id },
       orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
+    const rawConfig = safeParseJson<Record<string, any>>(run.configJson, {})
+    const configModels = normalizeConfigModels(rawConfig)
+    const fallbackModels = new Map<string, BattleRunConfigModel>()
+    for (const item of results) {
+      const key = `${item.modelId}:${item.connectionId ?? 'null'}:${item.rawId ?? 'null'}`
+      if (fallbackModels.has(key)) continue
+      fallbackModels.set(key, {
+        modelId: item.modelId,
+        connectionId: item.connectionId ?? null,
+        rawId: item.rawId ?? null,
+      })
+    }
+    const config: BattleRunConfig = {
+      models: configModels.length > 0 ? configModels : Array.from(fallbackModels.values()),
+    }
     const connectionIds = Array.from(
       new Set(
         results
@@ -407,6 +449,7 @@ export class BattleService {
     return {
       ...this.serializeRunSummary(run),
       judgeModelLabel: composeModelLabel(judgeConnection, run.judgeRawId, run.judgeModelId),
+      config,
       summary,
       results: results.map((item) => ({
         id: item.id,
@@ -739,7 +782,14 @@ export class BattleService {
 
     emitEvent?.({
       type: 'attempt_start',
-      payload: { battleRunId, modelId, attemptIndex },
+      payload: {
+        battleRunId,
+        modelId,
+        connectionId: model.resolved.connection.id,
+        rawId: model.resolved.rawModelId,
+        modelKey: `${model.resolved.connection.id}:${model.resolved.rawModelId}`,
+        attemptIndex,
+      },
     })
 
     const consumeResult = await consumeActorQuota(actor)

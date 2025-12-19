@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,15 +14,18 @@ import { useToast } from '@/components/ui/use-toast'
 import { formatDate } from '@/lib/utils'
 import { useModelsStore } from '@/store/models-store'
 import { History, Trash2, Share2, Eye, Trophy } from 'lucide-react'
-import type { BattleRunDetail, BattleRunSummary } from '@/types'
+import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
 import { createBattleShare, deleteBattleRun, getBattleRun, listBattleRuns } from './api'
 import { FlowStepper } from './components/FlowStepper'
 import { ConfigStep } from './components/ConfigStep'
 import { PromptStep } from './components/PromptStep'
 import { ExecutionStep } from './components/ExecutionStep'
 import { ResultStep } from './components/ResultStep'
+import { DetailDrawer } from './components/DetailDrawer'
 import { useBattleFlow, type BattleStep } from './hooks/useBattleFlow'
 import './battle.css'
+
+const RUN_STORAGE_KEY = 'battle:active-run-id'
 
 export function BattlePageClient() {
   const { toast } = useToast()
@@ -36,6 +39,9 @@ export function BattlePageClient() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [shareLink, setShareLink] = useState<string | null>(null)
+  const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null)
+  const [selectedResult, setSelectedResult] = useState<BattleResult | null>(null)
+  const restoredRef = useRef(false)
 
   // Fetch history
   const refreshHistory = useCallback(async () => {
@@ -56,29 +62,130 @@ export function BattlePageClient() {
     refreshHistory()
   }, [])
 
-  // Load existing run
-  const handleLoadRun = async (runId: number) => {
+  const applyRunDetail = useCallback((detail: BattleRunDetail) => {
+    flow.loadRun({
+      id: detail.id,
+      prompt: detail.prompt,
+      expectedAnswer: detail.expectedAnswer,
+      judgeThreshold: detail.judgeThreshold ?? 0.8,
+      runsPerModel: detail.runsPerModel ?? 1,
+      passK: detail.passK ?? 1,
+      summary: detail.summary,
+      results: detail.results || [],
+      status: detail.status,
+      config: detail.config,
+    }, models)
+  }, [flow.loadRun, models])
+
+  const parseModelKey = useCallback((modelKey: string) => {
+    if (modelKey.startsWith('global:')) {
+      return { type: 'global' as const, modelId: modelKey.slice('global:'.length) }
+    }
+    const [connIdRaw, ...rawParts] = modelKey.split(':')
+    const connectionId = Number.parseInt(connIdRaw, 10)
+    const rawId = rawParts.join(':')
+    if (!Number.isFinite(connectionId) || !rawId) {
+      return null
+    }
+    return { type: 'connection' as const, connectionId, rawId }
+  }, [])
+
+  const handleNodeClick = useCallback((modelKey: string, attemptIndex: number) => {
+    setSelectedNodeKey(`${modelKey}-${attemptIndex}`)
+    const parsed = parseModelKey(modelKey)
+    if (!parsed) {
+      toast({ title: '无法解析模型信息', variant: 'destructive' })
+      return
+    }
+    const result = flow.results.find((item) => {
+      if (item.attemptIndex !== attemptIndex) return false
+      if (parsed.type === 'global') {
+        return item.connectionId == null && item.modelId === parsed.modelId
+      }
+      return item.connectionId === parsed.connectionId && item.rawId === parsed.rawId
+    })
+    if (!result) {
+      toast({ title: '该尝试仍在执行中，暂无详情可查看' })
+      return
+    }
+    setSelectedResult(result)
+  }, [flow.results, parseModelKey, toast])
+
+  const handleSelectResult = useCallback((result: BattleResult) => {
+    setSelectedResult(result)
+  }, [])
+
+  const fetchRunDetail = useCallback(async (runId: number, options?: { silent?: boolean }) => {
     try {
       const res = await getBattleRun(runId)
       if (!res?.success || !res.data) {
-        toast({ title: '加载乱斗详情失败', variant: 'destructive' })
-        return
+        if (!options?.silent) {
+          toast({ title: res?.error || '加载乱斗详情失败', variant: 'destructive' })
+        }
+        return null
       }
       const detail = res.data as BattleRunDetail
-      flow.loadRun({
-        id: detail.id,
-        prompt: detail.prompt,
-        expectedAnswer: detail.expectedAnswer,
-        judgeThreshold: detail.judgeThreshold ?? 0.8,
-        runsPerModel: detail.runsPerModel ?? 1,
-        passK: detail.passK ?? 1,
-        summary: detail.summary,
-        results: detail.results || [],
-      })
-      setHistoryOpen(false)
+      applyRunDetail(detail)
+      return detail
     } catch (error: any) {
-      toast({ title: error?.message || '加载乱斗详情失败', variant: 'destructive' })
+      if (!options?.silent) {
+        toast({ title: error?.message || '加载乱斗详情失败', variant: 'destructive' })
+      }
+      return null
     }
+  }, [applyRunDetail, toast])
+
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    if (typeof window === 'undefined') return
+    const stored = window.sessionStorage.getItem(RUN_STORAGE_KEY)
+    if (!stored) return
+    const runId = Number.parseInt(stored, 10)
+    if (!Number.isFinite(runId)) {
+      window.sessionStorage.removeItem(RUN_STORAGE_KEY)
+      return
+    }
+    void fetchRunDetail(runId, { silent: true })
+  }, [fetchRunDetail])
+
+  useEffect(() => {
+    if (!restoredRef.current || typeof window === 'undefined') return
+    if (flow.currentRunId && flow.isRunning) {
+      window.sessionStorage.setItem(RUN_STORAGE_KEY, String(flow.currentRunId))
+    } else {
+      window.sessionStorage.removeItem(RUN_STORAGE_KEY)
+    }
+  }, [flow.currentRunId, flow.isRunning])
+
+  useEffect(() => {
+    if (!flow.currentRunId || !flow.isRunning || flow.isStreaming) return
+    let stopped = false
+    const runId = flow.currentRunId
+    const poll = async () => {
+      if (stopped) return
+      const detail = await fetchRunDetail(runId, { silent: true })
+      if (!detail || stopped) return
+      if (detail.status === 'completed' || detail.status === 'error') {
+        refreshHistory()
+      }
+    }
+    void poll()
+    const timer = window.setInterval(poll, 2000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [flow.currentRunId, flow.isRunning, flow.isStreaming, fetchRunDetail, refreshHistory])
+
+  // Load existing run
+  const handleLoadRun = async (runId: number) => {
+    const detail = await fetchRunDetail(runId)
+    if (!detail) return
+    setShareLink(null)
+    setSelectedResult(null)
+    setSelectedNodeKey(null)
+    setHistoryOpen(false)
   }
 
   // Share result
@@ -117,6 +224,9 @@ export function BattlePageClient() {
 
   // Start battle
   const handleStartBattle = async () => {
+    setShareLink(null)
+    setSelectedResult(null)
+    setSelectedNodeKey(null)
     const result = await flow.startBattle(models)
     if (!result.success && result.error) {
       toast({ title: result.error, variant: 'destructive' })
@@ -274,9 +384,11 @@ export function BattlePageClient() {
               expectedAnswer={flow.expectedAnswer}
               judgeConfig={flow.judgeConfig}
               nodeStates={flow.nodeStates}
+              selectedNodeKey={selectedNodeKey || undefined}
               isRunning={flow.isRunning}
               error={flow.error}
               onCancel={flow.cancelBattle}
+              onNodeClick={handleNodeClick}
             />
           )}
 
@@ -293,14 +405,22 @@ export function BattlePageClient() {
                 judgeThreshold: flow.judgeConfig.threshold,
               }}
               currentRunId={flow.currentRunId}
+              status={flow.runStatus}
               onShare={handleShare}
               onNewBattle={flow.resetBattle}
               onViewHistory={() => setHistoryOpen(true)}
+              onSelectResult={handleSelectResult}
               shareLink={shareLink}
             />
           )}
         </div>
       </div>
+
+      <DetailDrawer
+        open={selectedResult !== null}
+        onOpenChange={(open) => !open && setSelectedResult(null)}
+        result={selectedResult}
+      />
     </div>
   )
 }

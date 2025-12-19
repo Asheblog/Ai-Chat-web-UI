@@ -604,6 +604,13 @@ export interface BattleResult {
 
 export interface BattleRunDetail extends BattleRunSummary {
   judgeModelLabel?: string | null;
+  config?: {
+    models: Array<{
+      modelId: string;
+      connectionId: number | null;
+      rawId: string | null;
+    }>;
+  };
   results: BattleResult[];
 }
 

@@ -23,11 +23,11 @@ import {
     Eye,
     Check,
     X,
+    AlertTriangle,
     ChevronDown,
     ChevronUp,
 } from 'lucide-react'
 import { StatisticsCard } from './StatisticsCard'
-import { DetailDrawer } from './DetailDrawer'
 import type { BattleResult, BattleRunSummary } from '@/types'
 
 interface ResultStepProps {
@@ -42,9 +42,11 @@ interface ResultStepProps {
         judgeThreshold: number
     }
     currentRunId: number | null
+    status?: BattleRunSummary['status'] | null
     onShare: () => void
     onNewBattle: () => void
     onViewHistory: () => void
+    onSelectResult: (result: BattleResult) => void
     shareLink?: string | null
 }
 
@@ -72,12 +74,13 @@ export function ResultStep({
     statsMap,
     fallbackConfig,
     currentRunId,
+    status,
     onShare,
     onNewBattle,
     onViewHistory,
+    onSelectResult,
     shareLink,
 }: ResultStepProps) {
-    const [selectedResult, setSelectedResult] = useState<BattleResult | null>(null)
     const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
 
     const resolvedPassK = useMemo(() => {
@@ -211,17 +214,25 @@ export function ResultStep({
 
     const passRate = displaySummary ? Math.min(1, Math.max(0, displaySummary.accuracy)) : 0
 
+    const isError = status === 'error'
+    const headerTitle = isError ? '对战失败' : '对战完成!'
+    const headerDesc = isError ? '请检查模型配置或配额状态' : '查看各模型表现和裁判评分'
+
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
             {/* Header with Actions */}
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <Trophy className="h-5 w-5 text-yellow-500" />
-                        对战完成!
+                        {isError ? (
+                            <AlertTriangle className="h-5 w-5 text-destructive" />
+                        ) : (
+                            <Trophy className="h-5 w-5 text-yellow-500" />
+                        )}
+                        {headerTitle}
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                        查看各模型表现和裁判评分
+                        {headerDesc}
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -401,7 +412,7 @@ export function ResultStep({
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={() => setSelectedResult(attempt)}
+                                                            onClick={() => onSelectResult(attempt)}
                                                         >
                                                             <Eye className="h-4 w-4" />
                                                         </Button>
@@ -417,12 +428,6 @@ export function ResultStep({
                 </CardContent>
             </Card>
 
-            {/* Detail Drawer */}
-            <DetailDrawer
-                open={selectedResult !== null}
-                onOpenChange={(open) => !open && setSelectedResult(null)}
-                result={selectedResult}
-            />
         </div>
     )
 }
