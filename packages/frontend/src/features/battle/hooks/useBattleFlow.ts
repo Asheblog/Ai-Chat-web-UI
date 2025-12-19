@@ -136,12 +136,53 @@ export const modelKeyFor = (model: ModelItem): string => {
   return `global:${model.id}`
 }
 
+const isPlaceholderModel = (model: ModelItem) =>
+  model.provider === 'unknown' || model.channelName === 'unknown' || model.connectionId === 0
+
 type BattleNodeModel = {
   modelId: string
   connectionId?: number | null
   rawId?: string | null
   label?: string | null
 }
+
+const resolveModelFromCatalog = (
+  catalog: ModelItem[] | undefined,
+  ref: { modelId: string; connectionId?: number | null; rawId?: string | null },
+) => {
+  if (!catalog || catalog.length === 0) return null
+  if (ref.connectionId != null && ref.rawId) {
+    return catalog.find((item) => item.connectionId === ref.connectionId && item.rawId === ref.rawId) || null
+  }
+  return catalog.find((item) => item.id === ref.modelId) || null
+}
+
+const buildPlaceholderModel = (ref: { modelId: string; connectionId?: number | null; rawId?: string | null }): ModelItem => {
+  const rawId = ref.rawId || ref.modelId
+  return {
+    id: ref.modelId,
+    rawId,
+    name: rawId,
+    provider: 'unknown',
+    channelName: 'unknown',
+    connectionBaseUrl: '',
+    connectionId: ref.connectionId ?? 0,
+  }
+}
+
+const buildConfigState = (model: ModelItem): ModelConfigState => ({
+  key: modelKeyFor(model),
+  model,
+  webSearchEnabled: false,
+  pythonEnabled: false,
+  reasoningEnabled: false,
+  reasoningEffort: 'medium',
+  ollamaThink: false,
+  customBody: '',
+  customHeaders: [],
+  customBodyError: null,
+  advancedOpen: false,
+})
 
 const buildModelKey = (model: { modelId: string; connectionId?: number | null; rawId?: string | null }): string => {
   if (model.connectionId != null && model.rawId) {
@@ -615,6 +656,9 @@ export function useBattleFlow() {
   const loadRun = useCallback((detail: {
     prompt: string
     expectedAnswer: string
+    judgeModelId: string
+    judgeConnectionId?: number | null
+    judgeRawId?: string | null
     judgeThreshold: number
     runsPerModel: number
     passK: number
@@ -633,20 +677,45 @@ export function useBattleFlow() {
         rawId: item.rawId ?? null,
       }))
       : []
-    const fallbackModels = detail.results.map((item) => ({
-      modelId: item.modelId,
-      connectionId: item.connectionId ?? null,
-      rawId: item.rawId ?? null,
-      label: item.modelLabel || null,
-    }))
+    const fallbackMap = new Map<string, BattleNodeModel>()
+    for (const item of detail.results) {
+      const key = `${item.modelId}:${item.connectionId ?? 'null'}:${item.rawId ?? 'null'}`
+      if (fallbackMap.has(key)) continue
+      fallbackMap.set(key, {
+        modelId: item.modelId,
+        connectionId: item.connectionId ?? null,
+        rawId: item.rawId ?? null,
+        label: item.modelLabel || null,
+      })
+    }
+    const fallbackModels = Array.from(fallbackMap.values())
     setPrompt(detail.prompt)
     setExpectedAnswer(detail.expectedAnswer)
+    const judgeRef = {
+      modelId: detail.judgeModelId,
+      connectionId: detail.judgeConnectionId ?? null,
+      rawId: detail.judgeRawId ?? null,
+    }
+    const resolvedJudge = resolveModelFromCatalog(catalog, judgeRef) || buildPlaceholderModel(judgeRef)
     setJudgeConfig((prev) => ({
       ...prev,
+      model: resolvedJudge || prev.model,
       threshold: detail.judgeThreshold,
       runsPerModel: detail.runsPerModel,
       passK: detail.passK,
     }))
+    const selectionSources = configModels.length > 0 ? configModels : fallbackModels
+    if (selectionSources.length > 0) {
+      const deduped = new Map<string, ModelConfigState>()
+      for (const item of selectionSources) {
+        const model = resolveModelFromCatalog(catalog, item) || buildPlaceholderModel(item)
+        const state = buildConfigState(model)
+        if (!deduped.has(state.key)) {
+          deduped.set(state.key, state)
+        }
+      }
+      setSelectedModels(Array.from(deduped.values()))
+    }
     setSummary(detail.summary)
     setResults(detail.results)
     setCurrentRunId(detail.id)
@@ -661,6 +730,29 @@ export function useBattleFlow() {
       catalog,
     ))
     setStep(detail.status === 'running' || detail.status === 'pending' ? 'execution' : 'result')
+  }, [])
+
+  const reconcileSelectedModels = useCallback((catalog: ModelItem[]) => {
+    setSelectedModels((prev) => {
+      if (!prev.length || !catalog.length) return prev
+      let changed = false
+      const next = prev.map((item) => {
+        if (!isPlaceholderModel(item.model)) return item
+        const resolved = resolveModelFromCatalog(catalog, {
+          modelId: item.model.id,
+          connectionId: item.model.connectionId || undefined,
+          rawId: item.model.rawId || undefined,
+        })
+        if (!resolved) return item
+        changed = true
+        return {
+          ...item,
+          key: modelKeyFor(resolved),
+          model: resolved,
+        }
+      })
+      return changed ? next : prev
+    })
   }, [])
 
   // Grouped results for display
@@ -726,6 +818,7 @@ export function useBattleFlow() {
     cancelBattle,
     resetBattle,
     loadRun,
+    reconcileSelectedModels,
   }
 }
 

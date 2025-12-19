@@ -61,11 +61,19 @@ export function BattlePageClient() {
     refreshHistory()
   }, [])
 
+  useEffect(() => {
+    if (models.length === 0) return
+    flow.reconcileSelectedModels(models)
+  }, [models, flow.reconcileSelectedModels])
+
   const applyRunDetail = useCallback((detail: BattleRunDetail) => {
     flow.loadRun({
       id: detail.id,
       prompt: detail.prompt,
       expectedAnswer: detail.expectedAnswer,
+      judgeModelId: detail.judgeModelId,
+      judgeConnectionId: detail.judgeConnectionId ?? null,
+      judgeRawId: detail.judgeRawId ?? null,
       judgeThreshold: detail.judgeThreshold ?? 0.8,
       runsPerModel: detail.runsPerModel ?? 1,
       passK: detail.passK ?? 1,
