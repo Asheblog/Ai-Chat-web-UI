@@ -124,7 +124,7 @@ export function ConfigStep({
                             <p className="text-sm text-muted-foreground">点击上方选择器添加参赛模型</p>
                         </div>
                     ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             {selectedModels.map((item) => {
                                 const availability = toolAvailability(item.model)
                                 return (

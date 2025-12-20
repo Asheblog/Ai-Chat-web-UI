@@ -119,9 +119,7 @@ export class QuotaService {
       const result = await this.processQuota(actor, options.tx, { cost: 0, mutate: false, now })
       return result.snapshot
     }
-    const result = await this.prisma.$transaction((tx) =>
-      this.processQuota(actor, tx, { cost: 0, mutate: false, now }),
-    )
+    const result = await this.processQuota(actor, this.prisma, { cost: 0, mutate: false, now })
     return result.snapshot
   }
 

@@ -78,6 +78,12 @@ export interface BattleRunConfigModel {
   modelId: string
   connectionId: number | null
   rawId: string | null
+  features?: BattleModelFeatures
+  customHeaders?: Array<{ name: string; value: string }>
+  customBody?: Record<string, any> | null
+  reasoningEnabled?: boolean | null
+  reasoningEffort?: 'low' | 'medium' | 'high' | null
+  ollamaThink?: boolean | null
 }
 
 export interface BattleRunConfig {
@@ -257,6 +263,57 @@ const summarizeCustomBody = (body?: Record<string, any>) => {
   return { keys }
 }
 
+const normalizeCustomHeadersForConfig = (headers?: Array<{ name: string; value: string }>) => {
+  if (!Array.isArray(headers)) return []
+  return headers
+    .map((item) => ({
+      name: (item?.name || '').trim(),
+      value: (item?.value || '').trim(),
+    }))
+    .filter((item) => item.name.length > 0)
+    .slice(0, 10)
+}
+
+const normalizeCustomBodyForConfig = (body?: Record<string, any> | null) => {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return null
+  }
+  const keys = Object.keys(body)
+  if (keys.length === 1 && keys[0] === 'keys' && Array.isArray((body as any).keys)) {
+    return null
+  }
+  return body
+}
+
+const normalizeConfigFeatures = (raw: unknown): BattleModelFeatures | undefined => {
+  if (!raw || typeof raw !== 'object') return undefined
+  const data = raw as Record<string, any>
+  const features: BattleModelFeatures = {}
+  if (typeof data.web_search === 'boolean') features.web_search = data.web_search
+  if (typeof data.web_search_scope === 'string') {
+    const scope = data.web_search_scope as BattleModelFeatures['web_search_scope']
+    if (scope) features.web_search_scope = scope
+  }
+  if (typeof data.web_search_include_summary === 'boolean') {
+    features.web_search_include_summary = data.web_search_include_summary
+  }
+  if (typeof data.web_search_include_raw === 'boolean') {
+    features.web_search_include_raw = data.web_search_include_raw
+  }
+  if (typeof data.web_search_size === 'number' && Number.isFinite(data.web_search_size)) {
+    features.web_search_size = Math.min(10, Math.max(1, Math.floor(data.web_search_size)))
+  }
+  if (typeof data.python_tool === 'boolean') features.python_tool = data.python_tool
+  return Object.keys(features).length > 0 ? features : undefined
+}
+
+const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | null => {
+  if (value === 'low' || value === 'medium' || value === 'high') {
+    return value
+  }
+  return null
+}
+
 const safeJsonStringify = (value: unknown, fallback: string) => {
   try {
     return JSON.stringify(value)
@@ -331,10 +388,37 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
     .map((item) => {
       const modelId = typeof item.modelId === 'string' ? item.modelId.trim() : ''
       if (!modelId) return null
+      const features = normalizeConfigFeatures((item as Record<string, any>).features)
+      const customHeaders = normalizeCustomHeadersForConfig(
+        Array.isArray((item as Record<string, any>).customHeaders)
+          ? (item as Record<string, any>).customHeaders
+          : (item as Record<string, any>).custom_headers,
+      )
+      const customBody = normalizeCustomBodyForConfig(
+        ((item as Record<string, any>).customBody ?? (item as Record<string, any>).custom_body) as
+          | Record<string, any>
+          | null
+          | undefined,
+      )
+      const reasoningEnabled =
+        typeof (item as Record<string, any>).reasoningEnabled === 'boolean'
+          ? (item as Record<string, any>).reasoningEnabled
+          : null
+      const reasoningEffort = normalizeReasoningEffort((item as Record<string, any>).reasoningEffort)
+      const ollamaThink =
+        typeof (item as Record<string, any>).ollamaThink === 'boolean'
+          ? (item as Record<string, any>).ollamaThink
+          : null
       return {
         modelId,
         connectionId: isFiniteNumber(item.connectionId) ? item.connectionId : null,
         rawId: typeof item.rawId === 'string' && item.rawId.trim().length > 0 ? item.rawId.trim() : null,
+        ...(features ? { features } : {}),
+        ...(customHeaders.length > 0 ? { customHeaders } : {}),
+        ...(customBody ? { customBody } : {}),
+        reasoningEnabled,
+        reasoningEffort,
+        ollamaThink,
       }
     })
     .filter((item): item is BattleRunConfigModel => Boolean(item))
@@ -938,8 +1022,11 @@ export class BattleService {
         connectionId: model.connectionId ?? null,
         rawId: model.rawId ?? null,
         features: model.features ?? {},
-        customHeaders: sanitizeHeaders(model.custom_headers),
-        customBody: summarizeCustomBody(model.custom_body),
+        customHeaders: normalizeCustomHeadersForConfig(model.custom_headers),
+        customBody: normalizeCustomBodyForConfig(model.custom_body),
+        reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : null,
+        reasoningEffort: normalizeReasoningEffort(model.reasoningEffort),
+        ollamaThink: typeof model.ollamaThink === 'boolean' ? model.ollamaThink : null,
       })),
     }
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ModelItem } from '@/store/models-store'
+import { useSettingsStore } from '@/store/settings-store'
 import type { BattleResult, BattleRunSummary } from '@/types'
 import {
   cancelBattleAttempt,
@@ -166,6 +167,27 @@ type BattleNodeModel = {
   label?: string | null
 }
 
+type ReasoningDefaults = {
+  reasoningEnabled: boolean
+  reasoningEffort: 'low' | 'medium' | 'high'
+  ollamaThink: boolean
+}
+
+type BattleRunConfigModel = {
+  modelId: string
+  connectionId?: number | null
+  rawId?: string | null
+  features?: {
+    web_search?: boolean
+    python_tool?: boolean
+  }
+  customHeaders?: Array<{ name: string; value: string }>
+  customBody?: Record<string, any> | null
+  reasoningEnabled?: boolean | null
+  reasoningEffort?: 'low' | 'medium' | 'high' | null
+  ollamaThink?: boolean | null
+}
+
 const resolveModelFromCatalog = (
   catalog: ModelItem[] | undefined,
   ref: { modelId: string; connectionId?: number | null; rawId?: string | null },
@@ -190,19 +212,45 @@ const buildPlaceholderModel = (ref: { modelId: string; connectionId?: number | n
   }
 }
 
-const buildConfigState = (model: ModelItem): ModelConfigState => ({
+const buildConfigState = (model: ModelItem, defaults?: ReasoningDefaults): ModelConfigState => ({
   key: modelKeyFor(model),
   model,
   webSearchEnabled: false,
   pythonEnabled: false,
-  reasoningEnabled: false,
-  reasoningEffort: 'medium',
-  ollamaThink: false,
+  reasoningEnabled: defaults?.reasoningEnabled ?? false,
+  reasoningEffort: defaults?.reasoningEffort ?? 'medium',
+  ollamaThink: defaults?.ollamaThink ?? false,
   customBody: '',
   customHeaders: [],
   customBodyError: null,
   advancedOpen: false,
 })
+
+const buildConfigStateFromConfig = (
+  model: ModelItem,
+  defaults: ReasoningDefaults,
+  config?: BattleRunConfigModel,
+): ModelConfigState => {
+  const base = buildConfigState(model, defaults)
+  const customHeaders = normalizeCustomHeaders(config?.customHeaders)
+  const customBody = normalizeCustomBodyDraft(config?.customBody)
+  const reasoningEnabled =
+    typeof config?.reasoningEnabled === 'boolean' ? config.reasoningEnabled : base.reasoningEnabled
+  const reasoningEffort = normalizeReasoningEffort(config?.reasoningEffort) || base.reasoningEffort
+  const ollamaThink = typeof config?.ollamaThink === 'boolean' ? config.ollamaThink : base.ollamaThink
+  const advancedOpen = customHeaders.length > 0 || customBody.trim().length > 0
+  return {
+    ...base,
+    webSearchEnabled: Boolean(config?.features?.web_search),
+    pythonEnabled: Boolean(config?.features?.python_tool),
+    reasoningEnabled,
+    reasoningEffort,
+    ollamaThink,
+    customBody,
+    customHeaders,
+    advancedOpen,
+  }
+}
 
 const buildModelKey = (model: { modelId: string; connectionId?: number | null; rawId?: string | null }): string => {
   if (model.connectionId != null && model.rawId) {
@@ -222,6 +270,35 @@ const parseModelKey = (modelKey: string): { modelId?: string; connectionId?: num
   const rawId = rawParts.join(':')
   if (!Number.isFinite(connectionId) || !rawId) return null
   return { connectionId, rawId }
+}
+
+const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | null => {
+  if (value === 'low' || value === 'medium' || value === 'high') {
+    return value
+  }
+  return null
+}
+
+const normalizeCustomHeaders = (headers?: Array<{ name?: string | null; value?: string | null }>) => {
+  if (!Array.isArray(headers)) return []
+  return headers
+    .map((item) => ({
+      name: String(item?.name || '').trim(),
+      value: String(item?.value || '').trim(),
+    }))
+    .filter((item) => item.name.length > 0)
+}
+
+const normalizeCustomBodyDraft = (value: unknown) => {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch {
+      return ''
+    }
+  }
+  return ''
 }
 
 const resolveNodeLabel = (model: BattleNodeModel, catalog?: ModelItem[]) => {
@@ -367,9 +444,23 @@ export function useBattleFlow() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [runStatus, setRunStatus] = useState<BattleRunSummary['status'] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { systemSettings } = useSettingsStore((state) => ({
+    systemSettings: state.systemSettings,
+  }))
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const cancelRequestedRef = useRef(false)
+
+  const reasoningDefaults = useMemo<ReasoningDefaults>(() => {
+    const enabled = Boolean(systemSettings?.reasoningEnabled ?? true)
+    const effort = normalizeReasoningEffort(systemSettings?.openaiReasoningEffort) || 'medium'
+    const ollamaThink = Boolean(systemSettings?.ollamaThink ?? false)
+    return {
+      reasoningEnabled: enabled,
+      reasoningEffort: effort,
+      ollamaThink,
+    }
+  }, [systemSettings?.reasoningEnabled, systemSettings?.openaiReasoningEffort, systemSettings?.ollamaThink])
 
   // Model selection handlers
   const addModel = useCallback((model: ModelItem) => {
@@ -377,24 +468,9 @@ export function useBattleFlow() {
     setSelectedModels((prev) => {
       if (prev.length >= 8) return prev
       if (prev.some((item) => item.key === key)) return prev
-      return [
-        ...prev,
-        {
-          key,
-          model,
-          webSearchEnabled: false,
-          pythonEnabled: false,
-          reasoningEnabled: false,
-          reasoningEffort: 'medium',
-          ollamaThink: false,
-          customBody: '',
-          customHeaders: [],
-          customBodyError: null,
-          advancedOpen: false,
-        },
-      ]
+      return [...prev, buildConfigState(model, reasoningDefaults)]
     })
-  }, [])
+  }, [reasoningDefaults])
 
   const removeModel = useCallback((key: string) => {
     setSelectedModels((prev) => prev.filter((item) => item.key !== key))
@@ -876,19 +952,51 @@ export function useBattleFlow() {
     id: number
     status: BattleRunSummary['status']
     config?: {
-      models: Array<{ modelId: string; connectionId: number | null; rawId: string | null }>
+      models: Array<{
+        modelId: string
+        connectionId: number | null
+        rawId: string | null
+        features?: {
+          web_search?: boolean
+          web_search_scope?: 'webpage' | 'document' | 'paper' | 'image' | 'video' | 'podcast'
+          web_search_include_summary?: boolean
+          web_search_include_raw?: boolean
+          web_search_size?: number
+          python_tool?: boolean
+        }
+        customHeaders?: Array<{ name: string; value: string }>
+        customBody?: Record<string, any> | null
+        reasoningEnabled?: boolean | null
+        reasoningEffort?: 'low' | 'medium' | 'high' | null
+        ollamaThink?: boolean | null
+      }>
     }
     live?: {
       attempts: LiveAttempt[]
     }
   }, catalog?: ModelItem[]) => {
-    const configModels = Array.isArray(detail.config?.models)
+    const configModels: BattleRunConfigModel[] = Array.isArray(detail.config?.models)
       ? detail.config!.models.map((item) => ({
         modelId: item.modelId,
         connectionId: item.connectionId ?? null,
         rawId: item.rawId ?? null,
+        features: item.features,
+        customHeaders: item.customHeaders,
+        customBody: item.customBody ?? null,
+        reasoningEnabled: item.reasoningEnabled ?? null,
+        reasoningEffort: item.reasoningEffort ?? null,
+        ollamaThink: item.ollamaThink ?? null,
       }))
       : []
+    const configMap = new Map<string, BattleRunConfigModel>()
+    for (const item of configModels) {
+      const key = buildModelKey({
+        modelId: item.modelId,
+        connectionId: item.connectionId ?? null,
+        rawId: item.rawId ?? null,
+      })
+      configMap.set(key, item)
+    }
     const fallbackMap = new Map<string, BattleNodeModel>()
     for (const item of detail.results) {
       const key = `${item.modelId}:${item.connectionId ?? 'null'}:${item.rawId ?? 'null'}`
@@ -921,7 +1029,13 @@ export function useBattleFlow() {
       const deduped = new Map<string, ModelConfigState>()
       for (const item of selectionSources) {
         const model = resolveModelFromCatalog(catalog, item) || buildPlaceholderModel(item)
-        const state = buildConfigState(model)
+        const key = buildModelKey({
+          modelId: item.modelId,
+          connectionId: item.connectionId ?? null,
+          rawId: item.rawId ?? null,
+        })
+        const config = configMap.get(key)
+        const state = buildConfigStateFromConfig(model, reasoningDefaults, config)
         if (!deduped.has(state.key)) {
           deduped.set(state.key, state)
         }
@@ -936,14 +1050,20 @@ export function useBattleFlow() {
     setIsStreaming(false)
     setError(null)
     setNodeStates(buildNodeStatesFromRun(
-      configModels.length > 0 ? configModels : fallbackModels,
+      configModels.length > 0
+        ? configModels.map((item) => ({
+          modelId: item.modelId,
+          connectionId: item.connectionId ?? null,
+          rawId: item.rawId ?? null,
+        }))
+        : fallbackModels,
       detail.runsPerModel,
       detail.results,
       catalog,
       detail.live?.attempts,
     ))
     setStep(detail.status === 'running' || detail.status === 'pending' ? 'execution' : 'result')
-  }, [])
+  }, [reasoningDefaults])
 
   const reconcileSelectedModels = useCallback((catalog: ModelItem[]) => {
     setSelectedModels((prev) => {

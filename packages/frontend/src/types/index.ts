@@ -614,6 +614,19 @@ export interface BattleRunDetail extends BattleRunSummary {
       modelId: string;
       connectionId: number | null;
       rawId: string | null;
+      features?: {
+        web_search?: boolean;
+        web_search_scope?: 'webpage' | 'document' | 'paper' | 'image' | 'video' | 'podcast';
+        web_search_include_summary?: boolean;
+        web_search_include_raw?: boolean;
+        web_search_size?: number;
+        python_tool?: boolean;
+      };
+      customHeaders?: Array<{ name: string; value: string }>;
+      customBody?: Record<string, any> | null;
+      reasoningEnabled?: boolean | null;
+      reasoningEffort?: 'low' | 'medium' | 'high' | null;
+      ollamaThink?: boolean | null;
     }>;
   };
   live?: {
