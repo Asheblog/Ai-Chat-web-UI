@@ -815,11 +815,21 @@ export class BattleService {
 
       const systemSettings = await this.loadSystemSettings()
       const maxConcurrency = this.normalizeConcurrency(input.maxConcurrency)
-      const tasks: Array<() => Promise<void>> = []
+      const taskGroups = new Map<string, { queue: Array<() => Promise<void>>; running: boolean }>()
 
       for (const model of resolved) {
+        const modelKey = buildModelKey(
+          model.config.modelId,
+          model.resolved.connection.id,
+          model.resolved.rawModelId,
+        )
+        let group = taskGroups.get(modelKey)
+        if (!group) {
+          group = { queue: [], running: false }
+          taskGroups.set(modelKey, group)
+        }
         for (let attempt = 1; attempt <= input.runsPerModel; attempt += 1) {
-          tasks.push(async () => {
+          group.queue.push(async () => {
             const result = await this.runAttempt({
               battleRunId: run.id,
               prompt: input.prompt,
@@ -836,7 +846,7 @@ export class BattleService {
         }
       }
 
-      await this.runWithConcurrency(tasks, maxConcurrency, runControl)
+      await this.runWithModelConcurrency(Array.from(taskGroups.values()), maxConcurrency, runControl)
 
       if (this.isRunCancelled(runControl)) {
         const summary = await this.finalizeCancelledRun(run.id, results, {
@@ -2236,18 +2246,83 @@ export class BattleService {
     })
   }
 
-  private async runWithConcurrency(tasks: Array<() => Promise<void>>, limit: number, runControl?: BattleRunControl) {
+  private async runWithModelConcurrency(
+    groups: Array<{ queue: Array<() => Promise<void>>; running: boolean }>,
+    limit: number,
+    runControl?: BattleRunControl,
+  ) {
+    const totalTasks = groups.reduce((acc, group) => acc + group.queue.length, 0)
+    if (totalTasks === 0) return
+
+    const maxConcurrency = Math.max(1, Math.min(limit, totalTasks))
+    let active = 0
+    let completed = 0
     let cursor = 0
-    const runWorker = async () => {
-      while (cursor < tasks.length) {
-        if (this.isRunCancelled(runControl)) return
-        const index = cursor
-        cursor += 1
-        await tasks[index]()
+    let settled = false
+
+    const findNextGroupIndex = () => {
+      const count = groups.length
+      if (count === 0) return -1
+      for (let offset = 0; offset < count; offset += 1) {
+        const index = (cursor + offset) % count
+        const group = groups[index]
+        if (!group.running && group.queue.length > 0) {
+          cursor = (index + 1) % count
+          return index
+        }
       }
+      return -1
     }
-    const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => runWorker())
-    await Promise.all(workers)
+
+    await new Promise<void>((resolve, reject) => {
+      const finishResolve = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      const finishReject = (error: unknown) => {
+        if (settled) return
+        settled = true
+        reject(error)
+      }
+      const schedule = () => {
+        if (settled) return
+        if (completed >= totalTasks) {
+          finishResolve()
+          return
+        }
+        if (this.isRunCancelled(runControl)) {
+          if (active === 0) {
+            finishResolve()
+          }
+          return
+        }
+
+        while (active < maxConcurrency) {
+          if (this.isRunCancelled(runControl)) break
+          const index = findNextGroupIndex()
+          if (index < 0) break
+          const group = groups[index]
+          const task = group.queue.shift()
+          if (!task) continue
+          group.running = true
+          active += 1
+          Promise.resolve()
+            .then(task)
+            .then(() => {
+              active -= 1
+              group.running = false
+              completed += 1
+              schedule()
+            })
+            .catch((error) => {
+              finishReject(error)
+            })
+        }
+      }
+
+      schedule()
+    })
   }
 
   private serializeRunSummary(run: BattleRunRecord) {
