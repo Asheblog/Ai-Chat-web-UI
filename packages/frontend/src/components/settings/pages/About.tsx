@@ -53,62 +53,68 @@ export function AboutPage() {
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e206395</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5ae7754</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天输入框支持粘贴图片自动添加到附件，支持视觉模型判断。
+                对战结果新增 reasoning 字段，并优化结果展示。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">62b1a5c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4abc359</span>
               <span className="text-muted-foreground leading-relaxed">
-                文档解析期间禁用发送按钮，显示等待提示。
+                分享查看器组件响应式布局优化。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">adb088a</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f703242</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增知识库系统，支持 RAG 检索增强生成集成。
+                对战组件布局宽度约束调整，改善展示。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">949110c</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4235cf6</span>
               <span className="text-muted-foreground leading-relaxed">
-                增强文档工具描述，新增智能分块功能。
+                对战运行支持取消。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0e9b02f</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c638bb3</span>
               <span className="text-muted-foreground leading-relaxed">
-                知识库工具增强：支持多种搜索模式和智能采样。
+                新增模型对账与裁判模型支持。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e3bafda</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">dca9bef</span>
               <span className="text-muted-foreground leading-relaxed">
-                SQLite 向量存储新增 Vacuum 清理功能。
+                对战模型输出支持实时流式展示。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">fd5bcf0</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4abf882</span>
               <span className="text-muted-foreground leading-relaxed">
-                文档和知识库支持批量删除操作。
+                对战运行持久化与实时状态轮询。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">684c448</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">48421e2</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增文档管理界面和管理员 API 端点。
+                对战结果步骤与详情抽屉体验优化。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f1ebd8f</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7c68411</span>
               <span className="text-muted-foreground leading-relaxed">
-                分享查看器支持工具调用事件展示。
+                对战页面重构为多步流程并抽离组件。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">09a344e</span>
+              <span className="text-muted-foreground leading-relaxed">
+                新增模型对战功能（数据库结构与 API）。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-12-17 推送变更摘要
+            以上为 2025-12-20 推送变更摘要
           </p>
         </Card>
       </div>
