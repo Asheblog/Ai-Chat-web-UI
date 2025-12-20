@@ -3,7 +3,13 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ModelItem } from '@/store/models-store'
 import type { BattleResult, BattleRunSummary } from '@/types'
-import { cancelBattleRun, streamBattle, type BattleStreamPayload } from '../api'
+import {
+  cancelBattleAttempt,
+  cancelBattleRun,
+  retryBattleAttempt,
+  streamBattle,
+  type BattleStreamPayload,
+} from '../api'
 
 // ==================== Types ====================
 
@@ -203,6 +209,19 @@ const buildModelKey = (model: { modelId: string; connectionId?: number | null; r
     return `${model.connectionId}:${model.rawId}`
   }
   return `global:${model.modelId}`
+}
+
+const parseModelKey = (modelKey: string): { modelId?: string; connectionId?: number; rawId?: string } | null => {
+  if (!modelKey) return null
+  if (modelKey.startsWith('global:')) {
+    const modelId = modelKey.slice('global:'.length)
+    return modelId ? { modelId } : null
+  }
+  const [connIdRaw, ...rawParts] = modelKey.split(':')
+  const connectionId = Number.parseInt(connIdRaw, 10)
+  const rawId = rawParts.join(':')
+  if (!Number.isFinite(connectionId) || !rawId) return null
+  return { connectionId, rawId }
 }
 
 const resolveNodeLabel = (model: BattleNodeModel, catalog?: ModelItem[]) => {
@@ -649,7 +668,11 @@ export function useBattleFlow() {
         if (event.type === 'attempt_complete') {
           const result = event.payload?.result as BattleResult | undefined
           if (result) {
-            const modelKey = `${result.connectionId ?? 'global'}:${result.rawId ?? result.modelId}`
+            const modelKey = buildModelKey({
+              modelId: result.modelId,
+              connectionId: result.connectionId,
+              rawId: result.rawId,
+            })
             const matched = models.find((m) => {
               if (result.connectionId != null && result.rawId) {
                 return m.connectionId === result.connectionId && m.rawId === result.rawId
@@ -657,7 +680,18 @@ export function useBattleFlow() {
               return m.id === result.modelId
             })
             const enriched = { ...result, modelLabel: result.modelLabel || matched?.name || result.modelId }
-            setResults((prev) => [...prev, enriched])
+            setResults((prev) => {
+              const next = prev.filter((item) => {
+                const key = buildModelKey({
+                  modelId: item.modelId,
+                  connectionId: item.connectionId,
+                  rawId: item.rawId,
+                })
+                return !(key === modelKey && item.attemptIndex === result.attemptIndex)
+              })
+              next.push(enriched)
+              return next
+            })
 
             updateNodeState(modelKey, result.attemptIndex, {
               status: result.error ? 'error' : result.judgePass ? 'success' : 'error',
@@ -744,6 +778,70 @@ export function useBattleFlow() {
     setStep('result')
     setRunStatus('cancelled')
   }, [currentRunId, cancelBattleRun])
+
+  const buildAttemptPayload = useCallback((modelKey: string, attemptIndex: number) => {
+    const parsed = parseModelKey(modelKey)
+    if (!parsed) return null
+    return {
+      attemptIndex,
+      modelId: parsed.modelId,
+      connectionId: parsed.connectionId,
+      rawId: parsed.rawId,
+    }
+  }, [])
+
+  const cancelAttempt = useCallback(async (params: { modelKey: string; attemptIndex: number }) => {
+    if (!currentRunId) {
+      return { success: false, error: '未找到进行中的乱斗' }
+    }
+    const payload = buildAttemptPayload(params.modelKey, params.attemptIndex)
+    if (!payload) {
+      return { success: false, error: '模型标识无效' }
+    }
+    const response = await cancelBattleAttempt(currentRunId, payload)
+    if (!response?.success) {
+      return { success: false, error: response?.error || '取消失败' }
+    }
+    updateNodeState(params.modelKey, params.attemptIndex, {
+      status: 'error',
+      error: '已取消',
+      durationMs: null,
+    })
+    return { success: true }
+  }, [buildAttemptPayload, cancelBattleAttempt, currentRunId, updateNodeState])
+
+  const retryAttempt = useCallback(async (params: { modelKey: string; attemptIndex: number }) => {
+    if (!currentRunId) {
+      return { success: false, error: '未找到进行中的乱斗' }
+    }
+    const payload = buildAttemptPayload(params.modelKey, params.attemptIndex)
+    if (!payload) {
+      return { success: false, error: '模型标识无效' }
+    }
+    const response = await retryBattleAttempt(currentRunId, payload)
+    if (!response?.success) {
+      return { success: false, error: response?.error || '重试失败' }
+    }
+    setResults((prev) => prev.filter((item) => {
+      const key = buildModelKey({
+        modelId: item.modelId,
+        connectionId: item.connectionId,
+        rawId: item.rawId,
+      })
+      return !(key === params.modelKey && item.attemptIndex === params.attemptIndex)
+    }))
+    updateNodeState(params.modelKey, params.attemptIndex, {
+      status: 'pending',
+      output: '',
+      reasoning: '',
+      durationMs: null,
+      error: null,
+      judgePass: null,
+      judgeScore: null,
+      judgeReason: null,
+    })
+    return { success: true }
+  }, [buildAttemptPayload, currentRunId, retryBattleAttempt, updateNodeState])
 
   // Reset for new battle
   const resetBattle = useCallback(() => {
@@ -874,7 +972,11 @@ export function useBattleFlow() {
   const groupedResults = useMemo(() => {
     const map = new Map<string, { key: string; label: string; attempts: BattleResult[] }>()
     for (const result of results) {
-      const key = `${result.connectionId ?? 'global'}:${result.rawId ?? result.modelId}`
+      const key = buildModelKey({
+        modelId: result.modelId,
+        connectionId: result.connectionId,
+        rawId: result.rawId,
+      })
       const label = result.modelLabel || result.modelId
       const existing = map.get(key) || { key, label, attempts: [] }
       existing.attempts.push(result)
@@ -893,7 +995,11 @@ export function useBattleFlow() {
     if (!summary) return map
     const items = Array.isArray(summary.modelStats) ? summary.modelStats : []
     for (const item of items) {
-      const key = `${item.connectionId ?? 'global'}:${item.rawId ?? item.modelId}`
+      const key = buildModelKey({
+        modelId: item.modelId,
+        connectionId: item.connectionId,
+        rawId: item.rawId,
+      })
       map.set(key, item)
     }
     return map
@@ -931,6 +1037,8 @@ export function useBattleFlow() {
     goToStep,
     startBattle,
     cancelBattle,
+    cancelAttempt,
+    retryAttempt,
     resetBattle,
     loadRun,
     reconcileSelectedModels,

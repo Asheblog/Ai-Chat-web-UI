@@ -18,12 +18,18 @@ interface DetailDrawerProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     detail: BattleAttemptDetail | null
+    isRunning: boolean
+    canCancelAttempt?: boolean
+    canRetryAttempt?: boolean
+    onCancelAttempt?: (detail: BattleAttemptDetail) => void
+    onRetryAttempt?: (detail: BattleAttemptDetail) => void
 }
 
 export type BattleAttemptDetail =
-  | (BattleResult & { isLive?: false; status?: NodeStatus })
+  | (BattleResult & { isLive?: false; status?: NodeStatus; modelKey: string })
   | {
       isLive: true
+      modelKey: string
       modelId: string
       modelLabel?: string | null
       attemptIndex: number
@@ -56,7 +62,16 @@ const statusBadgeLabel = (status: NodeStatus) => {
     }
 }
 
-export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) {
+export function DetailDrawer({
+    open,
+    onOpenChange,
+    detail,
+    isRunning,
+    canCancelAttempt,
+    canRetryAttempt,
+    onCancelAttempt,
+    onRetryAttempt,
+}: DetailDrawerProps) {
     const isLive = detail?.isLive === true
     const title = detail?.modelLabel || detail?.modelId || ''
     const usage = detail?.usage || {}
@@ -96,6 +111,27 @@ export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) 
                     <p className="text-sm text-muted-foreground">
                         {isLive ? '实时输出更新中' : '查看模型输出详情和裁判评分'}
                     </p>
+                    {(canCancelAttempt || canRetryAttempt) && isRunning && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {canCancelAttempt && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => onCancelAttempt?.(detail)}
+                                >
+                                    取消此尝试
+                                </Button>
+                            )}
+                            {canRetryAttempt && (
+                                <Button
+                                    size="sm"
+                                    onClick={() => onRetryAttempt?.(detail)}
+                                >
+                                    重试此尝试
+                                </Button>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <ScrollArea className="h-[calc(100vh-120px)]">

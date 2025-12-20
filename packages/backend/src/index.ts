@@ -190,6 +190,8 @@ app.get('/api', (c) => {
         'GET /api/battle/runs/:id': '获取乱斗详情',
         'DELETE /api/battle/runs/:id': '删除乱斗记录',
         'POST /api/battle/runs/:id/cancel': '取消乱斗执行',
+        'POST /api/battle/runs/:id/attempts/cancel': '取消单次模型尝试',
+        'POST /api/battle/runs/:id/attempts/retry': '重试单次模型尝试',
         'POST /api/battle/runs/:id/share': '创建乱斗分享',
         'GET /api/battle/shares/:token': '查看乱斗分享',
       },

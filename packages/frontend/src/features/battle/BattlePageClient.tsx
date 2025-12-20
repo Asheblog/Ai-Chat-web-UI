@@ -123,7 +123,7 @@ export function BattlePageClient() {
       if (item.attemptIndex !== attemptIndex) return false
       return buildResultKey(item) === modelKey
     })
-    if (matched) return matched
+    if (matched) return { ...matched, modelKey }
 
     const attempts = flow.nodeStates.get(modelKey) || []
     const attempt = attempts.find((item) => item.attemptIndex === attemptIndex)
@@ -131,6 +131,7 @@ export function BattlePageClient() {
     const modelId = parsed?.type === 'global' ? parsed.modelId : parsed?.rawId || modelKey
     return {
       isLive: true,
+      modelKey,
       modelId,
       modelLabel: attempt.modelLabel,
       attemptIndex,
@@ -264,6 +265,35 @@ export function BattlePageClient() {
     setSelectedNode(null)
     flow.resetBattle()
   }, [flow.resetBattle])
+
+  const canCancelAttempt = Boolean(
+    flow.isRunning &&
+      selectedDetail &&
+      selectedDetail.isLive &&
+      (selectedDetail.status === 'pending' || selectedDetail.status === 'running' || selectedDetail.status === 'judging'),
+  )
+
+  const canRetryAttempt = Boolean(flow.isRunning && selectedDetail && selectedDetail.error)
+
+  const handleCancelAttempt = useCallback(async (detail: BattleAttemptDetail) => {
+    const result = await flow.cancelAttempt({
+      modelKey: detail.modelKey,
+      attemptIndex: detail.attemptIndex,
+    })
+    if (!result.success) {
+      toast({ title: result.error || '取消失败', variant: 'destructive' })
+    }
+  }, [flow.cancelAttempt, toast])
+
+  const handleRetryAttempt = useCallback(async (detail: BattleAttemptDetail) => {
+    const result = await flow.retryAttempt({
+      modelKey: detail.modelKey,
+      attemptIndex: detail.attemptIndex,
+    })
+    if (!result.success) {
+      toast({ title: result.error || '重试失败', variant: 'destructive' })
+    }
+  }, [flow.retryAttempt, toast])
 
   // Handle step navigation
   const handleStepClick = (step: BattleStep) => {
@@ -456,6 +486,11 @@ export function BattlePageClient() {
         open={selectedDetail !== null}
         onOpenChange={(open) => !open && setSelectedNode(null)}
         detail={selectedDetail}
+        isRunning={flow.isRunning}
+        canCancelAttempt={canCancelAttempt}
+        canRetryAttempt={canRetryAttempt}
+        onCancelAttempt={handleCancelAttempt}
+        onRetryAttempt={handleRetryAttempt}
       />
     </div>
   )

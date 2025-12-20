@@ -165,6 +165,23 @@ export const cancelBattleRun = async (runId: number) => {
   return response.data
 }
 
+export interface BattleAttemptActionPayload {
+  modelId?: string
+  connectionId?: number
+  rawId?: string
+  attemptIndex: number
+}
+
+export const cancelBattleAttempt = async (runId: number, payload: BattleAttemptActionPayload) => {
+  const response = await client.post<ApiResponse>(`/battle/runs/${runId}/attempts/cancel`, payload)
+  return response.data
+}
+
+export const retryBattleAttempt = async (runId: number, payload: BattleAttemptActionPayload) => {
+  const response = await client.post<ApiResponse>(`/battle/runs/${runId}/attempts/retry`, payload)
+  return response.data
+}
+
 export const createBattleShare = async (runId: number, payload?: { title?: string; expiresInHours?: number | null }) => {
   const response = await client.post<ApiResponse<BattleShare>>(`/battle/runs/${runId}/share`, payload || {})
   return response.data

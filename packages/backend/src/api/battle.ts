@@ -53,6 +53,15 @@ const battleStreamSchema = z.object({
   message: 'passK must be <= runsPerModel',
 })
 
+const attemptActionSchema = z.object({
+  modelId: z.string().min(1).optional(),
+  connectionId: z.number().int().positive().optional(),
+  rawId: z.string().min(1).optional(),
+  attemptIndex: z.number().int().min(1),
+}).refine((value) => Boolean(value.modelId || (value.connectionId && value.rawId)), {
+  message: 'modelId or connectionId+rawId is required',
+})
+
 const shareSchema = z.object({
   title: z.string().max(200).optional(),
   expiresInHours: z.number().int().min(1).max(24 * 365).optional(),
@@ -172,6 +181,36 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
       return c.json<ApiResponse<typeof result>>({ success: true, data: result })
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: 'Failed to cancel battle run' }, 500)
+    }
+  })
+
+  router.post('/runs/:id/attempts/cancel', actorMiddleware, zValidator('json', attemptActionSchema), async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const runId = Number.parseInt(c.req.param('id'), 10)
+      if (!Number.isFinite(runId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
+      }
+      const payload = c.req.valid('json')
+      const result = await svc.cancelAttempt(actor, { runId, ...payload })
+      return c.json<ApiResponse>({ success: true, data: result })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: (error as Error)?.message || 'Failed to cancel attempt' }, 400)
+    }
+  })
+
+  router.post('/runs/:id/attempts/retry', actorMiddleware, zValidator('json', attemptActionSchema), async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const runId = Number.parseInt(c.req.param('id'), 10)
+      if (!Number.isFinite(runId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
+      }
+      const payload = c.req.valid('json')
+      const result = await svc.retryAttempt(actor, { runId, ...payload })
+      return c.json<ApiResponse>({ success: true, data: result })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: (error as Error)?.message || 'Failed to retry attempt' }, 400)
     }
   })
 
