@@ -220,7 +220,7 @@ export function ResultStep({
     const headerDesc = isCancelled ? '执行已停止，结果为部分输出' : isError ? '请检查模型配置或配额状态' : '查看各模型表现和裁判评分'
 
     return (
-        <div className="space-y-6 max-w-5xl mx-auto">
+        <div className="space-y-6 w-full">
             {/* Header with Actions */}
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>

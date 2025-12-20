@@ -187,7 +187,7 @@ export function FlowGraph({
             </div>
 
             {/* Model Nodes Grid */}
-            <div className="flex flex-wrap justify-center gap-4 max-w-4xl">
+            <div className="flex flex-wrap justify-center gap-4 w-full">
                 {modelKeys.map((modelKey) => {
                     const attempts = nodeStates.get(modelKey) || []
                     return (
@@ -209,7 +209,7 @@ export function FlowGraph({
             </div>
 
             {/* Progress Bar */}
-            <div className="w-full max-w-md space-y-2">
+            <div className="w-full space-y-2">
                 <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">执行进度</span>
                     <span className="font-medium">{progress.completed}/{progress.total}</span>
