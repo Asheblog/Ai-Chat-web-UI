@@ -102,7 +102,7 @@ export function ConfigStep({
     }
 
     return (
-        <div className="space-y-6 max-w-4xl mx-auto">
+        <div className="space-y-6 w-full">
             {/* Model Selection */}
             <Card>
                 <CardHeader>
