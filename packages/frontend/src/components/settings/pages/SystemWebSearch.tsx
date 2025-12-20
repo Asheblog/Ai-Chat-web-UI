@@ -106,6 +106,12 @@ export function SystemWebSearchPage() {
       .split(/\r?\n/)
       .map((item) => item.trim())
       .filter(Boolean)
+  const parseNumericInput = (value: string, fallback: number) => {
+    const trimmed = value.trim()
+    if (trimmed === '') return 0
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : fallback
+  }
 
   const limitRange = { min: 1, max: 10 }
   const limitValid = resultLimit >= limitRange.min && resultLimit <= limitRange.max
@@ -245,9 +251,9 @@ export function SystemWebSearchPage() {
           </label>
           <Input
             id="web-search-limit"
-            type="number"
+            type="text"
             value={resultLimit}
-            onChange={(e)=>setResultLimit(Number(e.target.value || 0))}
+            onChange={(e)=>setResultLimit((prev)=>parseNumericInput(e.target.value, prev))}
             className={!limitValid ? "border-destructive" : undefined}
           />
         </div>
@@ -460,9 +466,9 @@ export function SystemWebSearchPage() {
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium">超时时间（毫秒）</label>
         <Input
-          type="number"
+          type="text"
           value={pythonTimeout}
-          onChange={(e)=>setPythonTimeout(Number(e.target.value || 0))}
+          onChange={(e)=>setPythonTimeout((prev)=>parseNumericInput(e.target.value, prev))}
           className={!pythonTimeoutValid ? "border-destructive" : undefined}
         />
         <p className="text-xs text-muted-foreground">
@@ -472,9 +478,9 @@ export function SystemWebSearchPage() {
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium">stdout 截断字符数</label>
         <Input
-          type="number"
+          type="text"
           value={pythonMaxOutput}
-          onChange={(e)=>setPythonMaxOutput(Number(e.target.value || 0))}
+          onChange={(e)=>setPythonMaxOutput((prev)=>parseNumericInput(e.target.value, prev))}
           className={!pythonMaxOutputValid ? "border-destructive" : undefined}
         />
         <p className="text-xs text-muted-foreground">
@@ -484,9 +490,9 @@ export function SystemWebSearchPage() {
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium">代码长度限制</label>
         <Input
-          type="number"
+          type="text"
           value={pythonMaxSource}
-          onChange={(e)=>setPythonMaxSource(Number(e.target.value || 0))}
+          onChange={(e)=>setPythonMaxSource((prev)=>parseNumericInput(e.target.value, prev))}
           className={!pythonMaxSourceValid ? "border-destructive" : undefined}
         />
         <p className="text-xs text-muted-foreground">
@@ -497,9 +503,9 @@ export function SystemWebSearchPage() {
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium">工具调用上限（0 表示无限制）</label>
       <Input
-        type="number"
+        type="text"
         value={maxToolIterations}
-        onChange={(e)=>setMaxToolIterations(Number(e.target.value || 0))}
+        onChange={(e)=>setMaxToolIterations((prev)=>parseNumericInput(e.target.value, prev))}
         className={!agentIterationValid ? "border-destructive" : undefined}
       />
       <p className="text-xs text-muted-foreground">

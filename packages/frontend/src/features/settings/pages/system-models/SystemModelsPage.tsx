@@ -548,9 +548,7 @@ export function SystemModelsPage() {
           </DialogHeader>
           <div className="space-y-3">
             <Input
-              type="number"
-              min={1}
-              max={256000}
+              type="text"
               placeholder="32000"
               value={tokenDialogValue}
               onChange={(e)=>setTokenDialogValue(e.target.value)}
@@ -592,8 +590,7 @@ export function SystemModelsPage() {
           </DialogHeader>
           <div className="space-y-3">
             <Input
-              type="number"
-              min={1}
+              type="text"
               placeholder="128000"
               value={contextDialogValue}
               onChange={(e)=>setContextDialogValue(e.target.value)}

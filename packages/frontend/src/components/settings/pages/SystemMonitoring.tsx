@@ -122,9 +122,7 @@ export function SystemMonitoringPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="maxConcurrentStreams"
-              type="number"
-              min={1}
-              max={8}
+              type="text"
               className="w-full sm:w-32 text-right"
               value={concurrencyDraft}
               disabled={isLoading}
@@ -231,9 +229,7 @@ export function SystemMonitoringPage() {
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Input
                 id="retentionDays"
-                type="number"
-                min={1}
-                max={365}
+                type="text"
                 className="w-full sm:w-32 text-right"
                 value={retentionDraft}
                 disabled={!taskTraceEnabled || isLoading}
@@ -262,9 +258,7 @@ export function SystemMonitoringPage() {
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Input
                 id="maxEvents"
-                type="number"
-                min={100}
-                max={200000}
+                type="text"
                 className="w-full sm:w-32 text-right"
                 value={maxEventsDraft}
                 disabled={!taskTraceEnabled || isLoading}
@@ -295,9 +289,7 @@ export function SystemMonitoringPage() {
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Input
                 id="idleTimeout"
-                type="number"
-                min={1000}
-                max={600000}
+                type="text"
                 className="w-full sm:w-32 text-right"
                 value={idleTimeoutDraft}
                 disabled={!taskTraceEnabled || isLoading}

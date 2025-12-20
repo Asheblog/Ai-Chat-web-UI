@@ -69,8 +69,7 @@ export function UserQuotaDialog({
               <Input
                 value={form.dailyLimit}
                 onChange={(e) => setForm((prev) => ({ ...prev, dailyLimit: e.target.value }))}
-                type="number"
-                min={0}
+                type="text"
                 disabled={submitting}
               />
               <p className="text-xs text-muted-foreground">设置为 0 表示禁用该用户的调用权。</p>

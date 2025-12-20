@@ -112,6 +112,12 @@ export function SystemRAGPage() {
     embeddingBatchSize: { min: 1, max: 128 },
     embeddingConcurrency: { min: 1, max: 16 },
   }
+  const parseNumericInput = (value: string, fallback: number) => {
+    const trimmed = value.trim()
+    if (trimmed === '') return 0
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : fallback
+  }
 
   // 获取文档列表
   const fetchDocuments = useCallback(async () => {
@@ -518,11 +524,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">批量大小</label>
                   <Input
-                    type="number"
-                    min={1}
-                    max={128}
+                    type="text"
                     value={embeddingBatchSize}
-                    onChange={(e) => setEmbeddingBatchSize(Number(e.target.value))}
+                    onChange={(e) => setEmbeddingBatchSize((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">单次 embedding 请求包含的 chunk 数（{ranges.embeddingBatchSize.min}-{ranges.embeddingBatchSize.max}），越大越快但更易触发限流</p>
                 </div>
@@ -530,11 +534,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">并发数</label>
                   <Input
-                    type="number"
-                    min={1}
-                    max={16}
+                    type="text"
                     value={embeddingConcurrency}
-                    onChange={(e) => setEmbeddingConcurrency(Number(e.target.value))}
+                    onChange={(e) => setEmbeddingConcurrency((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">批量请求的并发执行数（{ranges.embeddingConcurrency.min}-{ranges.embeddingConcurrency.max}），建议逐步调大观察稳定性</p>
                 </div>
@@ -548,11 +550,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Top K</label>
                   <Input
-                    type="number"
-                    min={1}
-                    max={20}
+                    type="text"
                     value={topK}
-                    onChange={(e) => setTopK(Number(e.target.value))}
+                    onChange={(e) => setTopK((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">返回最相关的文档片段数（{ranges.topK.min}-{ranges.topK.max}）</p>
                 </div>
@@ -560,12 +560,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">相关性阈值</label>
                   <Input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
+                    type="text"
                     value={relevanceThreshold}
-                    onChange={(e) => setRelevanceThreshold(Number(e.target.value))}
+                    onChange={(e) => setRelevanceThreshold((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">低于此分数的结果将被过滤（范围 {ranges.relevanceThreshold.min}-{ranges.relevanceThreshold.max}）</p>
                 </div>
@@ -573,11 +570,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">上下文 Token 限制</label>
                   <Input
-                    type="number"
-                    min={500}
-                    max={32000}
+                    type="text"
                     value={maxContextTokens}
-                    onChange={(e) => setMaxContextTokens(Number(e.target.value))}
+                    onChange={(e) => setMaxContextTokens((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">注入到提示词的最大 token 数（{ranges.maxContextTokens.min}-{ranges.maxContextTokens.max}）</p>
                 </div>
@@ -591,11 +586,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">分块大小</label>
                   <Input
-                    type="number"
-                    min={100}
-                    max={8000}
+                    type="text"
                     value={chunkSize}
-                    onChange={(e) => setChunkSize(Number(e.target.value))}
+                    onChange={(e) => setChunkSize((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">每个文档片段的字符数（{ranges.chunkSize.min}-{ranges.chunkSize.max}）</p>
                 </div>
@@ -603,11 +596,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">分块重叠</label>
                   <Input
-                    type="number"
-                    min={0}
-                    max={1000}
+                    type="text"
                     value={chunkOverlap}
-                    onChange={(e) => setChunkOverlap(Number(e.target.value))}
+                    onChange={(e) => setChunkOverlap((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">相邻片段的重叠字符数（{ranges.chunkOverlap.min}-{ranges.chunkOverlap.max}）</p>
                 </div>
@@ -615,11 +606,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">最大文件大小 (MB)</label>
                   <Input
-                    type="number"
-                    min={1}
-                    max={200}
+                    type="text"
                     value={maxFileSizeMb}
-                    onChange={(e) => setMaxFileSizeMb(Number(e.target.value))}
+                    onChange={(e) => setMaxFileSizeMb((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">允许上传的单文件最大大小（{ranges.maxFileSizeMb.min}-{ranges.maxFileSizeMb.max} MB）</p>
                 </div>
@@ -627,11 +616,9 @@ export function SystemRAGPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">最大页数限制</label>
                   <Input
-                    type="number"
-                    min={10}
-                    max={1000}
+                    type="text"
                     value={maxPages}
-                    onChange={(e) => setMaxPages(Number(e.target.value))}
+                    onChange={(e) => setMaxPages((prev) => parseNumericInput(e.target.value, prev))}
                   />
                   <p className="text-xs text-muted-foreground">PDF 文档最大处理页数，超出将被截断（{ranges.maxPages.min}-{ranges.maxPages.max} 页）。轻量服务器建议 50-100 页。</p>
                 </div>
@@ -644,11 +631,9 @@ export function SystemRAGPage() {
               <div className="space-y-2 max-w-xs">
                 <label className="text-sm font-medium">文档保留天数</label>
                 <Input
-                  type="number"
-                  min={1}
-                  max={365}
+                  type="text"
                   value={retentionDays}
-                  onChange={(e) => setRetentionDays(Number(e.target.value))}
+                  onChange={(e) => setRetentionDays((prev) => parseNumericInput(e.target.value, prev))}
                 />
                 <p className="text-xs text-muted-foreground">超过此天数的未使用文档将被自动清理（{ranges.retentionDays.min}-{ranges.retentionDays.max} 天）</p>
               </div>

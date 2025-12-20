@@ -265,9 +265,7 @@ export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open,
                 </Select>
                 {expiryPreset === 'custom' && (
                   <Input
-                    type="number"
-                    min={1}
-                    max={720}
+                    type="text"
                     value={customExpiryHours}
                     onChange={(e) => setCustomExpiryHours(e.target.value)}
                     placeholder="输入小时数（1-720）"

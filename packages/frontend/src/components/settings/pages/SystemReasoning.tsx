@@ -33,6 +33,13 @@ export function SystemReasoningPage() {
   const [ollamaThink, setOllamaThink] = useState(false)
   const [reasoningMaxTokens, setReasoningMaxTokens] = useState('')
 
+  const parseDeltaChunkSize = (value: string, fallback: number) => {
+    const trimmed = value.trim()
+    if (trimmed === '') return 1
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : fallback
+  }
+
   useEffect(()=>{ fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(()=>{
     if (!systemSettings) return
@@ -174,9 +181,7 @@ export function SystemReasoningPage() {
         >
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             <Input
-              type="number"
-              min={1}
-              max={256000}
+              type="text"
               placeholder="32000"
               value={reasoningMaxTokens}
               onChange={(e)=>setReasoningMaxTokens(e.target.value)}
@@ -217,7 +222,13 @@ export function SystemReasoningPage() {
           title="流式增量聚合（分片大小）"
           description="越大则刷新更平滑但延迟稍增（范围 1-100）"
         >
-          <Input id="deltaSize" type="number" min={1} max={100} value={streamDeltaChunkSize} onChange={(e)=>setStreamDeltaChunkSize(Number(e.target.value||1))} className="w-full sm:w-32 text-right" />
+          <Input
+            id="deltaSize"
+            type="text"
+            value={streamDeltaChunkSize}
+            onChange={(e)=>setStreamDeltaChunkSize((prev)=>parseDeltaChunkSize(e.target.value, prev))}
+            className="w-full sm:w-32 text-right"
+          />
         </SettingRow>
 
         <SettingRow
@@ -225,8 +236,7 @@ export function SystemReasoningPage() {
           description="推荐 800ms；0 表示仅按分片大小触发（范围 0-3600000 ms）"
         >
           <Input
-            type="number"
-            min={0}
+            type="text"
             placeholder="800"
             value={streamDeltaFlushIntervalMs}
             onChange={(e)=>setStreamDeltaFlushIntervalMs(e.target.value)}
@@ -239,8 +249,7 @@ export function SystemReasoningPage() {
           description="推荐 1000ms；0 表示仅当标签闭合时推送（范围 0-3600000 ms）"
         >
           <Input
-            type="number"
-            min={0}
+            type="text"
             placeholder="1000"
             value={streamReasoningFlushIntervalMs}
             onChange={(e)=>setStreamReasoningFlushIntervalMs(e.target.value)}
@@ -253,8 +262,7 @@ export function SystemReasoningPage() {
           description="推荐 5000ms；0 表示仅在推理 keepalive 触发（范围 0-3600000 ms）"
         >
           <Input
-            type="number"
-            min={0}
+            type="text"
             placeholder="5000"
             value={streamKeepaliveIntervalMs}
             onChange={(e)=>setStreamKeepaliveIntervalMs(e.target.value)}

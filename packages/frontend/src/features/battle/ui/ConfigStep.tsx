@@ -318,10 +318,7 @@ export function ConfigStep({
                         <div className="space-y-2">
                             <Label>评判阈值</Label>
                             <Input
-                                type="number"
-                                min="0"
-                                max="1"
-                                step="0.05"
+                                type="text"
                                 value={judgeConfig.threshold}
                                 onChange={(e) =>
                                     onJudgeConfigChange({
@@ -373,9 +370,7 @@ export function ConfigStep({
                         <div className="space-y-2">
                             <Label>并发数</Label>
                             <Input
-                                type="number"
-                                min="1"
-                                max="6"
+                                type="text"
                                 value={judgeConfig.maxConcurrency}
                                 onChange={(e) =>
                                     onJudgeConfigChange({

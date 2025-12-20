@@ -361,8 +361,7 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="anonymousDailyQuota"
-              type="number"
-              min={0}
+              type="text"
               value={anonymousQuotaDraft}
               onChange={(e) => setAnonymousQuotaDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
@@ -403,8 +402,7 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="defaultUserDailyQuota"
-              type="number"
-              min={0}
+              type="text"
               value={defaultUserQuotaDraft}
               onChange={(e) => setDefaultUserQuotaDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
@@ -446,8 +444,7 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="battleAnonymousDailyQuota"
-              type="number"
-              min={0}
+              type="text"
               value={battleAnonymousQuotaDraft}
               onChange={(e) => setBattleAnonymousQuotaDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
@@ -477,8 +474,7 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="battleUserDailyQuota"
-              type="number"
-              min={0}
+              type="text"
               value={battleUserQuotaDraft}
               onChange={(e) => setBattleUserQuotaDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
@@ -598,10 +594,8 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="chatImageRetentionDays"
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={0}
-              max={3650}
               value={retentionDraft}
               onChange={(e) => setRetentionDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
@@ -619,10 +613,8 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="assistantReplyHistoryLimit"
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={1}
-              max={20}
               value={replyHistoryLimitDraft}
               onChange={(e) => setReplyHistoryLimitDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
@@ -640,9 +632,7 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="anonymousRetentionDays"
-              type="number"
-              min={0}
-              max={15}
+              type="text"
               value={anonymousRetentionDraft}
               onChange={(e) => setAnonymousRetentionDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
@@ -688,10 +678,8 @@ export function SystemGeneralPage() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
             <Input
               id="titleSummaryMaxLength"
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={5}
-              max={50}
               value={titleSummaryMaxLengthDraft}
               onChange={(e) => {
                 const val = Number.parseInt(e.target.value, 10)
