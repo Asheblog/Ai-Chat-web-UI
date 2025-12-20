@@ -79,7 +79,7 @@ export function ExecutionStep({
     const progressPercentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0
 
     return (
-        <div className="space-y-6 max-w-5xl mx-auto">
+        <div className="space-y-6 w-full">
             {/* Header with Cancel */}
             <div className="flex items-center justify-between">
                 <div>

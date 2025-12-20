@@ -466,7 +466,7 @@ model BattleRun {
   judgeThreshold  Float     @default(0.8)
   runsPerModel    Int       @default(1)
   passK           Int       @default(1)
-  status          String    @default("pending") // pending | running | completed | error
+  status          String    @default("pending") // pending | running | completed | error | cancelled
   configJson      String    @default("{}") // JSON: 模型配置与运行参数
   summaryJson     String    @default("{}") // JSON: 汇总统计
   createdAt       DateTime  @default(now())

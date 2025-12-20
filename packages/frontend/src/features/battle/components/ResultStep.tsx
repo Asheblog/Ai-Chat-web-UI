@@ -215,8 +215,9 @@ export function ResultStep({
     const passRate = displaySummary ? Math.min(1, Math.max(0, displaySummary.accuracy)) : 0
 
     const isError = status === 'error'
-    const headerTitle = isError ? '对战失败' : '对战完成!'
-    const headerDesc = isError ? '请检查模型配置或配额状态' : '查看各模型表现和裁判评分'
+    const isCancelled = status === 'cancelled'
+    const headerTitle = isCancelled ? '对战已取消' : isError ? '对战失败' : '对战完成!'
+    const headerDesc = isCancelled ? '执行已停止，结果为部分输出' : isError ? '请检查模型配置或配额状态' : '查看各模型表现和裁判评分'
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
@@ -224,7 +225,9 @@ export function ResultStep({
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl font-semibold flex items-center gap-2">
-                        {isError ? (
+                        {isCancelled ? (
+                            <X className="h-5 w-5 text-muted-foreground" />
+                        ) : isError ? (
                             <AlertTriangle className="h-5 w-5 text-destructive" />
                         ) : (
                             <Trophy className="h-5 w-5 text-yellow-500" />

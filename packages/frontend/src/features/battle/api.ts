@@ -1,6 +1,6 @@
 import { apiHttpClient, handleUnauthorizedRedirect } from '@/lib/api'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
-import type { ApiResponse, BattleRunDetail, BattleRunListResponse, BattleShare, BattleStreamEvent } from '@/types'
+import type { ApiResponse, BattleRunDetail, BattleRunListResponse, BattleRunSummary, BattleShare, BattleStreamEvent } from '@/types'
 
 const client = apiHttpClient
 
@@ -37,16 +37,26 @@ export interface BattleStreamPayload {
   maxConcurrency?: number
 }
 
-export async function* streamBattle(payload: BattleStreamPayload): AsyncGenerator<BattleStreamEvent, void, unknown> {
-  const response = await fetch(`${DEFAULT_API_BASE_URL}/battle/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify(payload),
-    credentials: 'include',
-  })
+export async function* streamBattle(
+  payload: BattleStreamPayload,
+  options?: { signal?: AbortSignal },
+): AsyncGenerator<BattleStreamEvent, void, unknown> {
+  let response: Response
+  try {
+    response = await fetch(`${DEFAULT_API_BASE_URL}/battle/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+      signal: options?.signal,
+    })
+  } catch (error: any) {
+    if (options?.signal?.aborted) return
+    throw error
+  }
 
   if (response.status === 401) {
     handleUnauthorizedRedirect()
@@ -74,6 +84,11 @@ export async function* streamBattle(payload: BattleStreamPayload): AsyncGenerato
 
   let buffer = ''
   let completed = false
+  let aborted = false
+  const onAbort = () => {
+    aborted = true
+  }
+  options?.signal?.addEventListener('abort', onAbort)
 
   try {
     while (true) {
@@ -109,11 +124,18 @@ export async function* streamBattle(payload: BattleStreamPayload): AsyncGenerato
       }
       if (done) break
     }
+  } catch (error: any) {
+    if (options?.signal?.aborted || aborted || error?.name === 'AbortError') {
+      return
+    }
+    throw error
   } finally {
+    options?.signal?.removeEventListener('abort', onAbort)
     reader.releaseLock()
   }
 
   if (!completed) {
+    if (options?.signal?.aborted || aborted) return
     const error: any = new Error('Stream closed before completion')
     error.code = 'STREAM_INCOMPLETE'
     throw error
@@ -132,6 +154,14 @@ export const getBattleRun = async (runId: number) => {
 
 export const deleteBattleRun = async (runId: number) => {
   const response = await client.delete<ApiResponse>(`/battle/runs/${runId}`)
+  return response.data
+}
+
+export const cancelBattleRun = async (runId: number) => {
+  const response = await client.post<ApiResponse<{
+    status: BattleRunSummary['status']
+    summary: BattleRunSummary['summary']
+  }>>(`/battle/runs/${runId}/cancel`)
   return response.data
 }
 

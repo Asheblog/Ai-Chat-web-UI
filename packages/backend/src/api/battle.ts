@@ -158,6 +158,23 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
     }
   })
 
+  router.post('/runs/:id/cancel', actorMiddleware, async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const runId = Number.parseInt(c.req.param('id'), 10)
+      if (!Number.isFinite(runId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
+      }
+      const result = await svc.cancelRun(actor, runId)
+      if (!result) {
+        return c.json<ApiResponse>({ success: false, error: 'Battle run not found' }, 404)
+      }
+      return c.json<ApiResponse<typeof result>>({ success: true, data: result })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: 'Failed to cancel battle run' }, 500)
+    }
+  })
+
   router.post('/runs/:id/share', actorMiddleware, zValidator('json', shareSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor

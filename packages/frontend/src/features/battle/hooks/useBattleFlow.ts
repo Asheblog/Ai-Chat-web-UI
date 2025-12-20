@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ModelItem } from '@/store/models-store'
 import type { BattleResult, BattleRunSummary } from '@/types'
-import { streamBattle, type BattleStreamPayload } from '../api'
+import { cancelBattleRun, streamBattle, type BattleStreamPayload } from '../api'
 
 // ==================== Types ====================
 
@@ -31,10 +31,24 @@ export interface NodeState {
   attemptIndex: number
   durationMs?: number | null
   output?: string
+  reasoning?: string
   error?: string | null
   judgePass?: boolean | null
   judgeScore?: number | null
   judgeReason?: string | null
+}
+
+type LiveAttempt = {
+  modelId: string
+  modelLabel?: string | null
+  connectionId?: number | null
+  rawId?: string | null
+  attemptIndex: number
+  status: NodeStatus
+  output?: string | null
+  reasoning?: string | null
+  durationMs?: number | null
+  error?: string | null
 }
 
 export interface JudgeConfig {
@@ -208,6 +222,7 @@ const buildNodeStatesFromRun = (
   runsPerModel: number,
   results: BattleResult[],
   catalog?: ModelItem[],
+  liveAttempts?: LiveAttempt[],
 ) => {
   const normalizedRuns = Number.isFinite(runsPerModel) && runsPerModel > 0 ? Math.floor(runsPerModel) : 1
   const map = new Map<string, NodeState[]>()
@@ -225,6 +240,46 @@ const buildNodeStatesFromRun = (
       })
     }
     map.set(key, attempts)
+  }
+
+  if (Array.isArray(liveAttempts)) {
+    for (const live of liveAttempts) {
+      const key = buildModelKey({
+        modelId: live.modelId,
+        connectionId: live.connectionId,
+        rawId: live.rawId,
+      })
+      const label = live.modelLabel || resolveNodeLabel({
+        modelId: live.modelId,
+        connectionId: live.connectionId ?? null,
+        rawId: live.rawId ?? null,
+      }, catalog)
+      let attempts = map.get(key)
+      const requiredAttempts = Math.max(normalizedRuns, live.attemptIndex)
+      if (!attempts) {
+        attempts = []
+      }
+      for (let i = attempts.length + 1; i <= requiredAttempts; i += 1) {
+        attempts.push({
+          modelKey: key,
+          modelLabel: label,
+          status: 'pending',
+          attemptIndex: i,
+        })
+      }
+      const index = live.attemptIndex - 1
+      if (index >= 0 && index < attempts.length) {
+        attempts[index] = {
+          ...attempts[index],
+          status: live.status,
+          durationMs: live.durationMs ?? null,
+          output: live.output ?? attempts[index].output,
+          reasoning: live.reasoning ?? attempts[index].reasoning,
+          error: live.error ?? null,
+        }
+      }
+      map.set(key, attempts)
+    }
   }
 
   for (const result of results) {
@@ -258,6 +313,7 @@ const buildNodeStatesFromRun = (
         status: result.error ? 'error' : result.judgePass ? 'success' : 'error',
         durationMs: result.durationMs,
         output: result.output,
+        reasoning: attempts[index].reasoning,
         error: result.error,
         judgePass: result.judgePass,
         judgeScore: result.judgeScore,
@@ -294,6 +350,7 @@ export function useBattleFlow() {
   const [error, setError] = useState<string | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
+  const cancelRequestedRef = useRef(false)
 
   // Model selection handlers
   const addModel = useCallback((model: ModelItem) => {
@@ -373,8 +430,13 @@ export function useBattleFlow() {
     []
   )
 
-  const appendNodeOutput = useCallback((modelKey: string, attemptIndex: number, delta: string) => {
-    if (!delta) return
+  const appendNodeOutput = useCallback((
+    modelKey: string,
+    attemptIndex: number,
+    delta?: string,
+    reasoning?: string,
+  ) => {
+    if (!delta && !reasoning) return
     setNodeStates((prev) => {
       const next = new Map(prev)
       const attempts = next.get(modelKey) || []
@@ -385,7 +447,8 @@ export function useBattleFlow() {
         return {
           ...attempt,
           status: attempt.status === 'pending' ? 'running' : attempt.status,
-          output: `${attempt.output || ''}${delta}`,
+          output: `${attempt.output || ''}${delta || ''}`,
+          reasoning: `${attempt.reasoning || ''}${reasoning || ''}`,
         }
       })
       if (!updated) {
@@ -395,7 +458,8 @@ export function useBattleFlow() {
           modelLabel,
           status: 'running',
           attemptIndex,
-          output: delta,
+          output: delta || '',
+          reasoning: reasoning || '',
         })
       }
       newAttempts.sort((a, b) => a.attemptIndex - b.attemptIndex)
@@ -505,6 +569,13 @@ export function useBattleFlow() {
       return { success: false, error: validation.error }
     }
 
+    cancelRequestedRef.current = false
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setIsRunning(true)
     setIsStreaming(true)
     setRunStatus('running')
@@ -516,11 +587,14 @@ export function useBattleFlow() {
     setStep('execution')
 
     try {
-      for await (const event of streamBattle(validation.payload)) {
+      for await (const event of streamBattle(validation.payload, { signal: controller.signal })) {
         if (event.type === 'run_start') {
           const id = Number(event.payload?.id)
           if (Number.isFinite(id)) {
             setCurrentRunId(id)
+            if (cancelRequestedRef.current) {
+              void cancelBattleRun(id)
+            }
           }
         }
 
@@ -554,9 +628,11 @@ export function useBattleFlow() {
             rawId?: string | null
             attemptIndex?: number
             delta?: string
+            reasoning?: string
           } | undefined
           const attemptIndex = payload?.attemptIndex
           const delta = typeof payload?.delta === 'string' ? payload.delta : ''
+          const reasoning = typeof payload?.reasoning === 'string' ? payload.reasoning : ''
           const modelKey = payload?.modelKey
             || (payload?.modelId
               ? buildModelKey({
@@ -565,8 +641,8 @@ export function useBattleFlow() {
                 rawId: payload.rawId ?? null,
               })
               : null)
-          if (modelKey && attemptIndex && delta) {
-            appendNodeOutput(modelKey, attemptIndex, delta)
+          if (modelKey && attemptIndex && (delta || reasoning)) {
+            appendNodeOutput(modelKey, attemptIndex, delta, reasoning)
           }
         }
 
@@ -603,6 +679,16 @@ export function useBattleFlow() {
           setRunStatus('completed')
         }
 
+        if (event.type === 'run_cancelled') {
+          const nextSummary = event.payload?.summary as BattleRunSummary['summary'] | undefined
+          if (nextSummary) {
+            setSummary(nextSummary)
+          }
+          setIsRunning(false)
+          setStep('result')
+          setRunStatus('cancelled')
+        }
+
         if (event.type === 'error') {
           setError(event.error || '乱斗执行失败')
           setIsRunning(false)
@@ -613,12 +699,18 @@ export function useBattleFlow() {
         if (event.type === 'complete') {
           setIsRunning(false)
           setStep('result')
-          setRunStatus((prev) => (prev === 'error' ? prev : 'completed'))
+          setRunStatus((prev) => (prev === 'error' || prev === 'cancelled' ? prev : 'completed'))
         }
       }
 
       return { success: true }
     } catch (err: any) {
+      if (controller.signal.aborted) {
+        setIsRunning(false)
+        setStep('result')
+        setRunStatus('cancelled')
+        return { success: false }
+      }
       const message = err?.message || '乱斗执行失败'
       setError(message)
       setIsRunning(false)
@@ -626,21 +718,40 @@ export function useBattleFlow() {
       return { success: false, error: message }
     } finally {
       setIsStreaming(false)
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+      }
     }
-  }, [validateAndBuildPayload, initializeNodeStates, updateNodeState, appendNodeOutput])
+  }, [validateAndBuildPayload, initializeNodeStates, updateNodeState, appendNodeOutput, cancelBattleRun])
 
   // Cancel execution
-  const cancelBattle = useCallback(() => {
+  const cancelBattle = useCallback(async () => {
+    cancelRequestedRef.current = true
+    const runId = currentRunId
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+    if (runId) {
+      try {
+        await cancelBattleRun(runId)
+      } catch {
+        // ignore cancel errors to avoid blocking UI
+      }
+    }
     setIsRunning(false)
+    setIsStreaming(false)
     setStep('result')
-  }, [])
+    setRunStatus('cancelled')
+  }, [currentRunId, cancelBattleRun])
 
   // Reset for new battle
   const resetBattle = useCallback(() => {
+    cancelRequestedRef.current = false
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
     setStep('config')
     setResults([])
     setSummary(null)
@@ -668,6 +779,9 @@ export function useBattleFlow() {
     status: BattleRunSummary['status']
     config?: {
       models: Array<{ modelId: string; connectionId: number | null; rawId: string | null }>
+    }
+    live?: {
+      attempts: LiveAttempt[]
     }
   }, catalog?: ModelItem[]) => {
     const configModels = Array.isArray(detail.config?.models)
@@ -728,6 +842,7 @@ export function useBattleFlow() {
       detail.runsPerModel,
       detail.results,
       catalog,
+      detail.live?.attempts,
     ))
     setStep(detail.status === 'running' || detail.status === 'pending' ? 'execution' : 'result')
   }, [])

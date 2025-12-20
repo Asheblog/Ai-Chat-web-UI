@@ -563,7 +563,7 @@ export interface BattleRunSummary {
   judgeThreshold: number;
   runsPerModel: number;
   passK: number;
-  status: 'pending' | 'running' | 'completed' | 'error';
+  status: 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
   createdAt: string;
   updatedAt: string;
   summary: {
@@ -609,6 +609,20 @@ export interface BattleRunDetail extends BattleRunSummary {
       modelId: string;
       connectionId: number | null;
       rawId: string | null;
+    }>;
+  };
+  live?: {
+    attempts: Array<{
+      modelId: string;
+      modelLabel?: string | null;
+      connectionId: number | null;
+      rawId: string | null;
+      attemptIndex: number;
+      status: 'pending' | 'running' | 'success' | 'error' | 'judging';
+      output?: string | null;
+      reasoning?: string | null;
+      durationMs?: number | null;
+      error?: string | null;
     }>;
   };
   results: BattleResult[];
@@ -664,7 +678,7 @@ export interface BattleShare {
 }
 
 export interface BattleStreamEvent {
-  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'error' | 'complete';
+  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'run_cancelled' | 'error' | 'complete';
   payload?: Record<string, any>;
   error?: string;
 }

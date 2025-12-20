@@ -26,6 +26,7 @@ export type BattleAttemptDetail =
       modelLabel?: string | null
       attemptIndex: number
       output?: string
+      reasoning?: string
       durationMs?: number | null
       error?: string | null
       status: NodeStatus
@@ -59,6 +60,7 @@ export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) 
     const isLive = detail.isLive === true
     const title = detail.modelLabel || detail.modelId
     const usage = detail.usage || {}
+    const reasoning = detail.isLive ? detail.reasoning?.trim() || '' : ''
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -123,6 +125,18 @@ export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) 
                                     执行错误
                                 </div>
                                 <p className="text-sm text-destructive/80">{detail.error}</p>
+                            </div>
+                        )}
+
+                        {/* Reasoning Output */}
+                        {reasoning && (
+                            <div className="space-y-2">
+                                <h4 className="text-sm font-medium">推理过程</h4>
+                                <div className="rounded-lg border bg-muted/30 p-3 overflow-x-auto">
+                                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                                        <MarkdownRenderer html={null} fallback={reasoning} />
+                                    </div>
+                                </div>
                             </div>
                         )}
 

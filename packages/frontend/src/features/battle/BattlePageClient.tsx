@@ -81,6 +81,7 @@ export function BattlePageClient() {
       results: detail.results || [],
       status: detail.status,
       config: detail.config,
+      live: detail.live,
     }, models)
   }, [flow.loadRun, models])
 
@@ -134,6 +135,7 @@ export function BattlePageClient() {
       modelLabel: attempt.modelLabel,
       attemptIndex,
       output: attempt.output || '',
+      reasoning: attempt.reasoning || '',
       durationMs: attempt.durationMs ?? null,
       error: attempt.error ?? null,
       status: attempt.status,
@@ -191,7 +193,7 @@ export function BattlePageClient() {
       if (stopped) return
       const detail = await fetchRunDetail(runId, { silent: true })
       if (!detail || stopped) return
-      if (detail.status === 'completed' || detail.status === 'error') {
+      if (detail.status === 'completed' || detail.status === 'error' || detail.status === 'cancelled') {
         refreshHistory()
       }
     }
@@ -333,7 +335,13 @@ export function BattlePageClient() {
                                       : 'secondary'
                                 }
                               >
-                                {run.status === 'completed' ? '完成' : run.status === 'error' ? '错误' : run.status}
+                                {run.status === 'completed'
+                                  ? '完成'
+                                  : run.status === 'error'
+                                    ? '错误'
+                                    : run.status === 'cancelled'
+                                      ? '已取消'
+                                      : run.status}
                               </Badge>
                             </div>
                             <div className="flex flex-wrap gap-2">

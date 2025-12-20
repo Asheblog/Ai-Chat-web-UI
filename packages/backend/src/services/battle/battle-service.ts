@@ -15,7 +15,7 @@ import { PythonToolHandler } from '../../modules/chat/tool-handlers/python-handl
 import type { ToolCall, ToolHandlerResult } from '../../modules/chat/tool-handlers/types'
 import { consumeActorQuota } from '../../utils/quota'
 
-export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error'
+export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 
 export type BattleModelFeatures = {
   web_search?: boolean
@@ -157,8 +157,35 @@ export interface BattleSharePayload {
   createdAt: string
 }
 
+type BattleRunControl = {
+  runId: number
+  abortController: AbortController
+  requestControllers: Set<AbortController>
+  liveAttempts: Map<string, Map<number, LiveAttemptState>>
+  cancelled: boolean
+}
+
+type LiveAttemptState = {
+  modelId: string
+  connectionId: number | null
+  rawId: string | null
+  attemptIndex: number
+  status: 'pending' | 'running' | 'success' | 'error' | 'judging'
+  output: string
+  reasoning: string
+  durationMs: number | null
+  error: string | null
+}
+
+class BattleRunCancelledError extends Error {
+  constructor(message = 'Battle cancelled') {
+    super(message)
+    this.name = 'BattleRunCancelledError'
+  }
+}
+
 export interface BattleExecutionEvent {
-  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'error'
+  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'run_cancelled' | 'error'
   payload: Record<string, unknown>
 }
 
@@ -296,6 +323,13 @@ const composeModelLabel = (connection: Connection | null, rawId?: string | null,
   return fallback || null
 }
 
+const buildModelKey = (modelId: string, connectionId?: number | null, rawId?: string | null) => {
+  if (typeof connectionId === 'number' && rawId) {
+    return `${connectionId}:${rawId}`
+  }
+  return `global:${modelId}`
+}
+
 const extractJsonObject = (raw: string) => {
   const fenced = raw.match(/```(?:json)?([\s\S]*?)```/i)
   const source = (fenced?.[1] || raw || '').trim()
@@ -348,6 +382,7 @@ export class BattleService {
   private requestBuilder: ChatRequestBuilder
   private requester: ProviderRequester
   private logger: Pick<typeof console, 'warn' | 'error'>
+  private activeRuns = new Map<number, BattleRunControl>()
 
   constructor(deps: BattleServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
@@ -409,9 +444,10 @@ export class BattleService {
     }
     const connectionIds = Array.from(
       new Set(
-        results
-          .map((item) => item.connectionId)
-          .filter((value): value is number => typeof value === 'number'),
+        [
+          ...results.map((item) => item.connectionId),
+          ...configModels.map((item) => item.connectionId),
+        ].filter((value): value is number => typeof value === 'number'),
       ),
     )
     const connections = connectionIds.length > 0
@@ -438,7 +474,7 @@ export class BattleService {
       results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
     if (shouldRebuildSummary) {
       summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
-      if (run.status === 'completed') {
+      if (run.status === 'completed' || run.status === 'cancelled') {
         await this.prisma.battleRun.update({
           where: { id: run.id },
           data: { summaryJson: safeJsonStringify(summary, '{}') },
@@ -446,11 +482,14 @@ export class BattleService {
       }
     }
 
+    const liveAttempts = this.collectLiveAttempts(run.id, connectionMap)
+
     return {
       ...this.serializeRunSummary(run),
       judgeModelLabel: composeModelLabel(judgeConnection, run.judgeRawId, run.judgeModelId),
       config,
       summary,
+      ...(liveAttempts && liveAttempts.length > 0 ? { live: { attempts: liveAttempts } } : {}),
       results: results.map((item) => ({
         id: item.id,
         battleRunId: item.battleRunId,
@@ -479,6 +518,34 @@ export class BattleService {
     if (!existing) return false
     await this.prisma.battleRun.delete({ where: { id: runId } })
     return true
+  }
+
+  async cancelRun(actor: Actor, runId: number) {
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: runId, ...this.buildOwnershipWhere(actor) },
+    })
+    if (!run) return null
+
+    const results = await this.prisma.battleResult.findMany({
+      where: { battleRunId: run.id },
+      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+    })
+    const summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+
+    if (run.status === 'completed' || run.status === 'error' || run.status === 'cancelled') {
+      return { status: run.status, summary }
+    }
+
+    this.cancelRunControl(run.id, 'cancelled')
+    await this.prisma.battleRun.updateMany({
+      where: { id: run.id, status: { in: ['pending', 'running'] } },
+      data: {
+        status: 'cancelled',
+        summaryJson: safeJsonStringify(summary, '{}'),
+      },
+    })
+
+    return { status: 'cancelled', summary }
   }
 
   async createShare(
@@ -526,7 +593,7 @@ export class BattleService {
       results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
     if (shouldRebuildSummary) {
       summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
-      if (run.status === 'completed') {
+      if (run.status === 'completed' || run.status === 'cancelled') {
         await this.prisma.battleRun.update({
           where: { id: run.id },
           data: { summaryJson: safeJsonStringify(summary, '{}') },
@@ -655,6 +722,7 @@ export class BattleService {
         configJson: safeJsonStringify(configPayload, '{}'),
       },
     })
+    const runControl = this.createRunControl(run.id)
 
     options?.emitEvent?.({
       type: 'run_start',
@@ -669,75 +737,136 @@ export class BattleService {
       },
     })
 
-    await this.prisma.battleRun.update({
-      where: { id: run.id },
+    const startUpdate = await this.prisma.battleRun.updateMany({
+      where: { id: run.id, status: 'pending' },
       data: { status: 'running' },
     })
-
-    const judgeResolution = await this.resolveModel(actor, input.judge)
-    if (!judgeResolution) {
-      await this.prisma.battleRun.update({
-        where: { id: run.id },
-        data: { status: 'error', summaryJson: safeJsonStringify({ error: 'Judge model not found' }, '{}') },
+    if (startUpdate.count === 0) {
+      const summary = await this.finalizeCancelledRun(run.id, [], {
+        runsPerModel: input.runsPerModel,
+        passK: input.passK,
+        judgeThreshold,
       })
-      throw new Error('Judge model not found')
-    }
-
-    const resolvedModels = await Promise.all(
-      input.models.map(async (model) => ({
-        config: model,
-        resolved: await this.resolveModel(actor, model),
-      })),
-    )
-    const invalid = resolvedModels.find((item) => !item.resolved)
-    if (invalid) {
-      await this.prisma.battleRun.update({
-        where: { id: run.id },
-        data: { status: 'error', summaryJson: safeJsonStringify({ error: 'Model not found' }, '{}') },
+      options?.emitEvent?.({
+        type: 'run_cancelled',
+        payload: {
+          id: run.id,
+          summary,
+        },
       })
-      throw new Error('Model not found')
-    }
-
-    const resolved = resolvedModels.map((item) => ({
-      config: item.config,
-      resolved: item.resolved!,
-    }))
-
-    const systemSettings = await this.loadSystemSettings()
-    const maxConcurrency = this.normalizeConcurrency(input.maxConcurrency)
-    const tasks: Array<() => Promise<void>> = []
-
-    const results: BattleResultRecord[] = []
-
-    for (const model of resolved) {
-      for (let attempt = 1; attempt <= input.runsPerModel; attempt += 1) {
-        tasks.push(async () => {
-          const result = await this.runAttempt({
-            actor,
-            battleRunId: run.id,
-            prompt: input.prompt,
-            expectedAnswer: input.expectedAnswer,
-            judgeThreshold,
-            judgeModel: judgeResolution,
-            model,
-            attemptIndex: attempt,
-            systemSettings,
-          }, options?.emitEvent)
-          results.push(result)
-        })
+      this.releaseRunControl(run.id)
+      return {
+        runId: run.id,
+        summary,
       }
     }
 
+    const results: BattleResultRecord[] = []
+
     try {
-      await this.runWithConcurrency(tasks, maxConcurrency)
+      this.throwIfRunCancelled(runControl)
+
+      const judgeResolution = await this.resolveModel(actor, input.judge)
+      this.throwIfRunCancelled(runControl)
+      if (!judgeResolution) {
+        await this.prisma.battleRun.updateMany({
+          where: { id: run.id, status: { not: 'cancelled' } },
+          data: { status: 'error', summaryJson: safeJsonStringify({ error: 'Judge model not found' }, '{}') },
+        })
+        throw new Error('Judge model not found')
+      }
+
+      const resolvedModels = await Promise.all(
+        input.models.map(async (model) => ({
+          config: model,
+          resolved: await this.resolveModel(actor, model),
+        })),
+      )
+      this.throwIfRunCancelled(runControl)
+      const invalid = resolvedModels.find((item) => !item.resolved)
+      if (invalid) {
+        await this.prisma.battleRun.updateMany({
+          where: { id: run.id, status: { not: 'cancelled' } },
+          data: { status: 'error', summaryJson: safeJsonStringify({ error: 'Model not found' }, '{}') },
+        })
+        throw new Error('Model not found')
+      }
+
+      const resolved = resolvedModels.map((item) => ({
+        config: item.config,
+        resolved: item.resolved!,
+      }))
+
+      const systemSettings = await this.loadSystemSettings()
+      const maxConcurrency = this.normalizeConcurrency(input.maxConcurrency)
+      const tasks: Array<() => Promise<void>> = []
+
+      for (const model of resolved) {
+        for (let attempt = 1; attempt <= input.runsPerModel; attempt += 1) {
+          tasks.push(async () => {
+            const result = await this.runAttempt({
+              actor,
+              battleRunId: run.id,
+              prompt: input.prompt,
+              expectedAnswer: input.expectedAnswer,
+              judgeThreshold,
+              judgeModel: judgeResolution,
+              model,
+              attemptIndex: attempt,
+              systemSettings,
+              runControl,
+            }, options?.emitEvent)
+            results.push(result)
+          })
+        }
+      }
+
+      await this.runWithConcurrency(tasks, maxConcurrency, runControl)
+
+      if (this.isRunCancelled(runControl)) {
+        const summary = await this.finalizeCancelledRun(run.id, results, {
+          runsPerModel: input.runsPerModel,
+          passK: input.passK,
+          judgeThreshold,
+        })
+        options?.emitEvent?.({
+          type: 'run_cancelled',
+          payload: {
+            id: run.id,
+            summary,
+          },
+        })
+        return {
+          runId: run.id,
+          summary,
+        }
+      }
+
       const summary = this.buildSummary(results, input.runsPerModel, input.passK, judgeThreshold)
-      await this.prisma.battleRun.update({
-        where: { id: run.id },
+      const updated = await this.prisma.battleRun.updateMany({
+        where: { id: run.id, status: { not: 'cancelled' } },
         data: {
           status: 'completed',
           summaryJson: safeJsonStringify(summary, '{}'),
         },
       })
+
+      if (updated.count === 0) {
+        const currentStatus = await this.getRunStatus(run.id)
+        if (currentStatus === 'cancelled') {
+          options?.emitEvent?.({
+            type: 'run_cancelled',
+            payload: {
+              id: run.id,
+              summary,
+            },
+          })
+          return {
+            runId: run.id,
+            summary,
+          }
+        }
+      }
 
       options?.emitEvent?.({
         type: 'run_complete',
@@ -752,14 +881,35 @@ export class BattleService {
         summary,
       }
     } catch (error) {
-      await this.prisma.battleRun.update({
-        where: { id: run.id },
+      if (this.isRunCancelled(runControl) || (await this.isRunCancelledInDb(run.id))) {
+        const summary = await this.finalizeCancelledRun(run.id, results, {
+          runsPerModel: input.runsPerModel,
+          passK: input.passK,
+          judgeThreshold,
+        })
+        options?.emitEvent?.({
+          type: 'run_cancelled',
+          payload: {
+            id: run.id,
+            summary,
+          },
+        })
+        return {
+          runId: run.id,
+          summary,
+        }
+      }
+
+      await this.prisma.battleRun.updateMany({
+        where: { id: run.id, status: { not: 'cancelled' } },
         data: {
           status: 'error',
           summaryJson: safeJsonStringify({ error: (error as Error)?.message || 'Battle failed' }, '{}'),
         },
       })
       throw error
+    } finally {
+      this.releaseRunControl(run.id)
     }
   }
 
@@ -774,11 +924,36 @@ export class BattleService {
       model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }
       attemptIndex: number
       systemSettings: Record<string, string>
+      runControl?: BattleRunControl
     },
     emitEvent?: (event: BattleExecutionEvent) => void,
   ): Promise<BattleResultRecord> {
-    const { actor, battleRunId, prompt, expectedAnswer, judgeThreshold, judgeModel, model, attemptIndex, systemSettings } = params
+    const {
+      actor,
+      battleRunId,
+      prompt,
+      expectedAnswer,
+      judgeThreshold,
+      judgeModel,
+      model,
+      attemptIndex,
+      systemSettings,
+      runControl,
+    } = params
     const modelId = model.config.modelId
+
+    this.throwIfRunCancelled(runControl)
+
+    const modelKey = buildModelKey(modelId, model.resolved.connection.id, model.resolved.rawModelId)
+    if (runControl) {
+      this.ensureLiveAttempt(runControl, {
+        modelId,
+        connectionId: model.resolved.connection.id,
+        rawId: model.resolved.rawModelId,
+        attemptIndex,
+        status: 'running',
+      })
+    }
 
     emitEvent?.({
       type: 'attempt_start',
@@ -787,12 +962,13 @@ export class BattleService {
         modelId,
         connectionId: model.resolved.connection.id,
         rawId: model.resolved.rawModelId,
-        modelKey: `${model.resolved.connection.id}:${model.resolved.rawModelId}`,
+        modelKey,
         attemptIndex,
       },
     })
 
     const consumeResult = await consumeActorQuota(actor)
+    this.throwIfRunCancelled(runControl)
     if (!consumeResult.success) {
       const result = await this.persistResult({
         battleRunId,
@@ -832,8 +1008,19 @@ export class BattleService {
         model.config,
         model.resolved,
         systemSettings,
+        runControl,
         (delta) => {
-          if (!delta) return
+          if (!delta?.content && !delta?.reasoning) return
+          if (runControl) {
+            this.appendLiveAttemptDelta(runControl, {
+              modelId,
+              connectionId: model.resolved.connection.id,
+              rawId: model.resolved.rawModelId,
+              attemptIndex,
+              content: delta.content,
+              reasoning: delta.reasoning,
+            })
+          }
           emitEvent?.({
             type: 'attempt_delta',
             payload: {
@@ -841,9 +1028,10 @@ export class BattleService {
               modelId,
               connectionId: model.resolved.connection.id,
               rawId: model.resolved.rawModelId,
-              modelKey: `${model.resolved.connection.id}:${model.resolved.rawModelId}`,
+              modelKey,
               attemptIndex,
-              delta,
+              delta: delta.content,
+              reasoning: delta.reasoning,
             },
           })
         },
@@ -851,14 +1039,31 @@ export class BattleService {
       output = runResult.content
       usage = runResult.usage
     } catch (err) {
+      if (this.isRunCancelled(runControl)) {
+        throw new BattleRunCancelledError()
+      }
       error = err instanceof Error ? err.message : '模型请求失败'
     }
 
+    this.throwIfRunCancelled(runControl)
     const durationMs = Math.max(0, Date.now() - startedAt)
 
     let judgeResult: { pass: boolean; score: number | null; reason: string | null; fallbackUsed: boolean } | null = null
     if (!error) {
+      if (runControl) {
+        this.ensureLiveAttempt(runControl, {
+          modelId,
+          connectionId: model.resolved.connection.id,
+          rawId: model.resolved.rawModelId,
+          attemptIndex,
+          status: 'judging',
+          output,
+          durationMs,
+          error: null,
+        })
+      }
       const judgeConsume = await consumeActorQuota(actor)
+      this.throwIfRunCancelled(runControl)
       if (!judgeConsume.success) {
         judgeResult = {
           pass: false,
@@ -874,8 +1079,12 @@ export class BattleService {
             answer: output,
             threshold: judgeThreshold,
             judgeModel,
+            runControl,
           })
         } catch (judgeError) {
+          if (this.isRunCancelled(runControl)) {
+            throw new BattleRunCancelledError()
+          }
           judgeResult = {
             pass: false,
             score: null,
@@ -902,6 +1111,19 @@ export class BattleService {
       judge: judgeResult,
     })
 
+    if (runControl) {
+      this.ensureLiveAttempt(runControl, {
+        modelId,
+        connectionId: model.resolved.connection.id,
+        rawId: model.resolved.rawModelId,
+        attemptIndex,
+        status: error ? 'error' : 'success',
+        output,
+        durationMs,
+        error,
+      })
+    }
+
     emitEvent?.({
       type: 'attempt_complete',
       payload: {
@@ -920,8 +1142,10 @@ export class BattleService {
     modelConfig: BattleModelInput,
     resolved: { connection: Connection; rawModelId: string },
     systemSettings: Record<string, string>,
-    emitDelta?: (delta: string) => void,
+    runControl?: BattleRunControl,
+    emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
+    this.throwIfRunCancelled(runControl)
     const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
     const providerSupportsTools = resolved.connection.provider === 'openai' || resolved.connection.provider === 'azure_openai'
     const requestedFeatures = modelConfig.features || {}
@@ -970,16 +1194,22 @@ export class BattleService {
     })
 
     if (effectiveFeatures.web_search || effectiveFeatures.python_tool) {
-      return this.executeWithTools(prepared, { webSearchActive, pythonActive, features: effectiveFeatures }, emitDelta)
+      return this.executeWithTools(
+        prepared,
+        { webSearchActive, pythonActive, features: effectiveFeatures },
+        runControl,
+        emitDelta,
+      )
     }
 
     if (emitDelta) {
-      return this.executeStreaming(prepared, emitDelta)
+      return this.executeStreaming(prepared, runControl, emitDelta)
     }
-    return this.executeSimple(prepared)
+    return this.executeSimple(prepared, runControl)
   }
 
-  private async executeSimple(prepared: PreparedChatRequest) {
+  private async executeSimple(prepared: PreparedChatRequest, runControl?: BattleRunControl) {
+    this.throwIfRunCancelled(runControl)
     const response = await this.requester.requestWithBackoff({
       request: {
         url: prepared.providerRequest.url,
@@ -992,6 +1222,7 @@ export class BattleService {
         route: '/api/battle/execute',
         timeoutMs: prepared.providerRequest.timeoutMs,
       },
+      ...this.buildRunAbortHandlers(runControl),
     })
 
     if (!response.ok) {
@@ -1014,7 +1245,12 @@ export class BattleService {
     return { content: text, usage }
   }
 
-  private async executeStreaming(prepared: PreparedChatRequest, emitDelta: (delta: string) => void) {
+  private async executeStreaming(
+    prepared: PreparedChatRequest,
+    runControl: BattleRunControl | undefined,
+    emitDelta: (delta: { content?: string; reasoning?: string }) => void,
+  ) {
+    this.throwIfRunCancelled(runControl)
     const response = await this.requester.requestWithBackoff({
       request: {
         url: prepared.providerRequest.url,
@@ -1027,6 +1263,7 @@ export class BattleService {
         route: '/api/battle/execute',
         timeoutMs: prepared.providerRequest.timeoutMs,
       },
+      ...this.buildRunAbortHandlers(runControl),
     })
 
     if (!response.ok) {
@@ -1047,10 +1284,15 @@ export class BattleService {
     let sawJson = false
     let usage: Record<string, any> = {}
 
-    const pushDelta = (delta: string) => {
+    const pushContent = (delta: string) => {
       if (!delta) return
       content += delta
-      emitDelta(delta)
+      emitDelta({ content: delta })
+    }
+
+    const pushReasoning = (delta: string) => {
+      if (!delta) return
+      emitDelta({ reasoning: delta })
     }
 
     const recordUsage = (payload: any) => {
@@ -1065,16 +1307,40 @@ export class BattleService {
       )
     }
 
+    const extractDeltaPayload = (payload: any) => {
+      const contentDelta =
+        payload?.choices?.[0]?.delta?.content ??
+        payload?.choices?.[0]?.delta?.text ??
+        payload?.delta?.content ??
+        payload?.delta?.text ??
+        payload?.message?.content ??
+        payload?.response ??
+        payload?.choices?.[0]?.message?.content ??
+        payload?.text ??
+        ''
+      const reasoningDelta =
+        payload?.choices?.[0]?.delta?.reasoning_content ??
+        payload?.choices?.[0]?.delta?.reasoning ??
+        payload?.choices?.[0]?.delta?.thinking ??
+        payload?.choices?.[0]?.delta?.analysis ??
+        payload?.delta?.reasoning_content ??
+        payload?.delta?.reasoning ??
+        payload?.message?.reasoning_content ??
+        payload?.message?.reasoning ??
+        payload?.reasoning ??
+        payload?.analysis ??
+        ''
+      return { contentDelta, reasoningDelta }
+    }
+
     const handleJsonPayload = (payload: any) => {
       if (!payload) return
-      const delta =
-        payload?.choices?.[0]?.delta?.content ||
-        payload?.message?.content ||
-        payload?.response ||
-        payload?.choices?.[0]?.message?.content ||
-        ''
-      if (typeof delta === 'string' && delta) {
-        pushDelta(delta)
+      const { contentDelta, reasoningDelta } = extractDeltaPayload(payload)
+      if (typeof contentDelta === 'string' && contentDelta) {
+        pushContent(contentDelta)
+      }
+      if (typeof reasoningDelta === 'string' && reasoningDelta) {
+        pushReasoning(reasoningDelta)
       }
       if (payload?.done === true) {
         doneSeen = true
@@ -1117,6 +1383,7 @@ export class BattleService {
 
     try {
       while (true) {
+        this.throwIfRunCancelled(runControl)
         const { done, value } = await reader.read()
         if (value) {
           buffer += decoder.decode(value, { stream: true })
@@ -1156,11 +1423,12 @@ export class BattleService {
   private async executeWithTools(
     prepared: PreparedChatRequest,
     toolFlags: { webSearchActive: boolean; pythonActive: boolean; features: BattleModelFeatures },
-    emitDelta?: (delta: string) => void,
+    runControl?: BattleRunControl,
+    emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
     const provider = prepared.providerRequest.providerLabel
     if (provider !== 'openai' && provider !== 'azure_openai') {
-      return this.executeSimple(prepared)
+      return this.executeSimple(prepared, runControl)
     }
 
     const sysMap = prepared.systemSettings
@@ -1202,14 +1470,16 @@ export class BattleService {
     let lastUsage = null as any
 
     for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+      this.throwIfRunCancelled(runControl)
       if (emitDelta) {
-        const streamed = await this.streamToolIteration({
-          prepared,
-          provider,
-          messages: workingMessages,
-          toolDefinitions,
-          emitDelta,
-        })
+          const streamed = await this.streamToolIteration({
+            prepared,
+            provider,
+            messages: workingMessages,
+            toolDefinitions,
+            runControl,
+            emitDelta,
+          })
         if (streamed.usage) {
           lastUsage = streamed.usage
         }
@@ -1283,6 +1553,7 @@ export class BattleService {
           route: '/api/battle/execute',
           timeoutMs: prepared.providerRequest.timeoutMs,
         },
+        ...this.buildRunAbortHandlers(runControl),
       })
 
       if (!response.ok) {
@@ -1362,7 +1633,8 @@ export class BattleService {
     provider: string
     messages: any[]
     toolDefinitions: any[]
-    emitDelta: (delta: string) => void
+    runControl?: BattleRunControl
+    emitDelta: (delta: { content?: string; reasoning?: string }) => void
   }) {
     const body = convertOpenAIReasoningPayload({
       ...params.prepared.baseRequestBody,
@@ -1384,6 +1656,7 @@ export class BattleService {
         route: '/api/battle/execute',
         timeoutMs: params.prepared.providerRequest.timeoutMs,
       },
+      ...this.buildRunAbortHandlers(params.runControl),
     })
 
     if (!response.ok) {
@@ -1432,8 +1705,35 @@ export class BattleService {
           },
         }))
 
+    const extractDeltaPayload = (payload: any) => {
+      const contentDelta =
+        payload?.choices?.[0]?.delta?.content ??
+        payload?.choices?.[0]?.delta?.text ??
+        payload?.delta?.content ??
+        payload?.delta?.text ??
+        payload?.message?.content ??
+        payload?.response ??
+        payload?.choices?.[0]?.message?.content ??
+        payload?.text ??
+        ''
+      const reasoningDelta =
+        payload?.choices?.[0]?.delta?.reasoning_content ??
+        payload?.choices?.[0]?.delta?.reasoning ??
+        payload?.choices?.[0]?.delta?.thinking ??
+        payload?.choices?.[0]?.delta?.analysis ??
+        payload?.delta?.reasoning_content ??
+        payload?.delta?.reasoning ??
+        payload?.message?.reasoning_content ??
+        payload?.message?.reasoning ??
+        payload?.reasoning ??
+        payload?.analysis ??
+        ''
+      return { contentDelta, reasoningDelta }
+    }
+
     try {
       while (true) {
+        this.throwIfRunCancelled(params.runControl)
         const { done, value } = await reader.read()
         if (value) {
           buffer += decoder.decode(value, { stream: true })
@@ -1455,12 +1755,16 @@ export class BattleService {
             } catch {
               continue
             }
+            const { contentDelta, reasoningDelta } = extractDeltaPayload(parsed)
+            if (typeof contentDelta === 'string' && contentDelta) {
+              content += contentDelta
+              params.emitDelta({ content: contentDelta })
+            }
+            if (typeof reasoningDelta === 'string' && reasoningDelta) {
+              params.emitDelta({ reasoning: reasoningDelta })
+            }
             const choice = parsed?.choices?.[0]
             const delta = choice?.delta || {}
-            if (typeof delta.content === 'string' && delta.content) {
-              content += delta.content
-              params.emitDelta(delta.content)
-            }
             if (Array.isArray(delta.tool_calls)) {
               for (const toolDelta of delta.tool_calls) {
                 handleToolDelta(toolDelta)
@@ -1518,8 +1822,10 @@ export class BattleService {
     answer: string
     threshold: number
     judgeModel: { connection: Connection; rawModelId: string }
+    runControl?: BattleRunControl
   }) {
-    const { prompt, expectedAnswer, answer, threshold, judgeModel } = params
+    const { prompt, expectedAnswer, answer, threshold, judgeModel, runControl } = params
+    this.throwIfRunCancelled(runControl)
 
     const judgePrompt = this.buildJudgePrompt(prompt, expectedAnswer, answer)
     const session = this.buildVirtualSession(judgeModel.connection, judgeModel.rawModelId)
@@ -1551,6 +1857,7 @@ export class BattleService {
         route: '/api/battle/judge',
         timeoutMs: prepared.providerRequest.timeoutMs,
       },
+      ...this.buildRunAbortHandlers(runControl),
     })
 
     if (!response.ok) {
@@ -1715,6 +2022,209 @@ export class BattleService {
     }
   }
 
+  private createRunControl(runId: number): BattleRunControl {
+    const existing = this.activeRuns.get(runId)
+    if (existing) return existing
+    const control: BattleRunControl = {
+      runId,
+      abortController: new AbortController(),
+      requestControllers: new Set(),
+      liveAttempts: new Map(),
+      cancelled: false,
+    }
+    this.activeRuns.set(runId, control)
+    return control
+  }
+
+  private releaseRunControl(runId: number) {
+    this.activeRuns.delete(runId)
+  }
+
+  private cancelRunControl(runId: number, reason?: string) {
+    const control = this.activeRuns.get(runId)
+    if (!control || control.cancelled) return
+    control.cancelled = true
+    for (const attemptsByModel of control.liveAttempts.values()) {
+      for (const attempt of attemptsByModel.values()) {
+        if (attempt.status === 'running' || attempt.status === 'pending' || attempt.status === 'judging') {
+          attempt.status = 'error'
+          if (!attempt.error) {
+            attempt.error = '已取消'
+          }
+        }
+      }
+    }
+    try {
+      control.abortController.abort(reason ?? 'cancelled')
+    } catch {}
+    for (const controller of control.requestControllers) {
+      try {
+        controller.abort(reason ?? 'cancelled')
+      } catch {}
+    }
+  }
+
+  private isRunCancelled(runControl?: BattleRunControl) {
+    return Boolean(runControl?.cancelled || runControl?.abortController.signal.aborted)
+  }
+
+  private throwIfRunCancelled(runControl?: BattleRunControl) {
+    if (this.isRunCancelled(runControl)) {
+      throw new BattleRunCancelledError()
+    }
+  }
+
+  private buildRunAbortHandlers(runControl?: BattleRunControl) {
+    if (!runControl) return {}
+    let activeController: AbortController | null = null
+    return {
+      onControllerReady: (controller: AbortController | null) => {
+        if (!controller) return
+        activeController = controller
+        runControl.requestControllers.add(controller)
+        if (runControl.abortController.signal.aborted) {
+          try {
+            controller.abort(runControl.abortController.signal.reason ?? 'cancelled')
+          } catch {}
+        }
+      },
+      onControllerClear: () => {
+        if (activeController) {
+          runControl.requestControllers.delete(activeController)
+          activeController = null
+        }
+      },
+    }
+  }
+
+  private ensureLiveAttempt(
+    runControl: BattleRunControl,
+    params: {
+      modelId: string
+      connectionId: number | null
+      rawId: string | null
+      attemptIndex: number
+      status: LiveAttemptState['status']
+      output?: string
+      reasoning?: string
+      durationMs?: number | null
+      error?: string | null
+    },
+  ) {
+    const modelKey = buildModelKey(params.modelId, params.connectionId, params.rawId)
+    let attempts = runControl.liveAttempts.get(modelKey)
+    if (!attempts) {
+      attempts = new Map()
+      runControl.liveAttempts.set(modelKey, attempts)
+    }
+    const existing = attempts.get(params.attemptIndex)
+    if (existing) {
+      const next: LiveAttemptState = {
+        ...existing,
+        status: params.status ?? existing.status,
+        output: params.output ?? existing.output,
+        reasoning: params.reasoning ?? existing.reasoning,
+        durationMs: params.durationMs ?? existing.durationMs,
+        error: params.error ?? existing.error,
+      }
+      attempts.set(params.attemptIndex, next)
+      return next
+    }
+    const record: LiveAttemptState = {
+      modelId: params.modelId,
+      connectionId: params.connectionId,
+      rawId: params.rawId,
+      attemptIndex: params.attemptIndex,
+      status: params.status,
+      output: params.output ?? '',
+      reasoning: params.reasoning ?? '',
+      durationMs: params.durationMs ?? null,
+      error: params.error ?? null,
+    }
+    attempts.set(params.attemptIndex, record)
+    return record
+  }
+
+  private appendLiveAttemptDelta(
+    runControl: BattleRunControl,
+    params: {
+      modelId: string
+      connectionId: number | null
+      rawId: string | null
+      attemptIndex: number
+      content?: string
+      reasoning?: string
+    },
+  ) {
+    const record = this.ensureLiveAttempt(runControl, {
+      modelId: params.modelId,
+      connectionId: params.connectionId,
+      rawId: params.rawId,
+      attemptIndex: params.attemptIndex,
+      status: 'running',
+    })
+    if (params.content) {
+      record.output = `${record.output}${params.content}`
+    }
+    if (params.reasoning) {
+      record.reasoning = `${record.reasoning}${params.reasoning}`
+    }
+  }
+
+  private collectLiveAttempts(runId: number, connectionMap: Map<number, { id: number; prefixId: string }>) {
+    const control = this.activeRuns.get(runId)
+    if (!control) return null
+    const attempts: Array<LiveAttemptState & { modelLabel: string | null }> = []
+    for (const attemptsByModel of control.liveAttempts.values()) {
+      for (const attempt of attemptsByModel.values()) {
+        attempts.push({
+          ...attempt,
+          modelLabel: composeModelLabel(
+            attempt.connectionId != null ? connectionMap.get(attempt.connectionId) || null : null,
+            attempt.rawId,
+            attempt.modelId,
+          ),
+        })
+      }
+    }
+    attempts.sort((a, b) => {
+      const keyA = buildModelKey(a.modelId, a.connectionId, a.rawId)
+      const keyB = buildModelKey(b.modelId, b.connectionId, b.rawId)
+      if (keyA === keyB) return a.attemptIndex - b.attemptIndex
+      return keyA.localeCompare(keyB)
+    })
+    return attempts
+  }
+
+  private async getRunStatus(runId: number) {
+    const record = await this.prisma.battleRun.findFirst({
+      where: { id: runId },
+      select: { status: true },
+    })
+    return record?.status ?? null
+  }
+
+  private async isRunCancelledInDb(runId: number) {
+    const status = await this.getRunStatus(runId)
+    return status === 'cancelled'
+  }
+
+  private async finalizeCancelledRun(
+    runId: number,
+    results: BattleResultRecord[],
+    config: { runsPerModel: number; passK: number; judgeThreshold: number },
+  ) {
+    const summary = this.buildSummary(results, config.runsPerModel, config.passK, config.judgeThreshold)
+    await this.prisma.battleRun.updateMany({
+      where: { id: runId, status: { in: ['pending', 'running'] } },
+      data: {
+        status: 'cancelled',
+        summaryJson: safeJsonStringify(summary, '{}'),
+      },
+    })
+    return summary
+  }
+
   private normalizeJudgeThreshold(value?: number) {
     if (typeof value !== 'number' || Number.isNaN(value)) return DEFAULT_JUDGE_THRESHOLD
     return clamp(value, 0, 1)
@@ -1735,10 +2245,11 @@ export class BattleService {
     })
   }
 
-  private async runWithConcurrency(tasks: Array<() => Promise<void>>, limit: number) {
+  private async runWithConcurrency(tasks: Array<() => Promise<void>>, limit: number, runControl?: BattleRunControl) {
     let cursor = 0
     const runWorker = async () => {
       while (cursor < tasks.length) {
+        if (this.isRunCancelled(runControl)) return
         const index = cursor
         cursor += 1
         await tasks[index]()
