@@ -367,12 +367,17 @@ git pull
 
 - 系统默认仅保留**匿名访客的会话、消息与附件 15 天**。保留天数可在“系统设置 → 通用 → 匿名访客数据保留天数”中调整，最大值 15，设置为 0 表示仅保留当前会话内容。
 - 匿名访客与新注册用户的每日额度同样可在该页面调整：分别为“匿名访客每日额度”和“注册用户默认每日额度”。
+- 模型大乱斗提供独立开关与额度：可分别控制注册用户/匿名用户是否可用，以及各自的每日次数上限。
 - 当匿名额度耗尽时，前端会提示用户登录；管理员可通过“系统设置 → 系统设置”或“系统设置 → 用户管理”对单个用户额度进行调整。
 - 修改完成后无需重启服务，配额策略会即时生效。若希望通过环境变量预设默认值，可设置：
   ```bash
   export ANONYMOUS_RETENTION_DAYS=7
   export ANONYMOUS_DAILY_QUOTA=10
   export DEFAULT_USER_DAILY_QUOTA=200
+  export BATTLE_ALLOW_ANONYMOUS=true
+  export BATTLE_ALLOW_USERS=true
+  export BATTLE_ANONYMOUS_DAILY_QUOTA=20
+  export BATTLE_USER_DAILY_QUOTA=200
   ```
   环境变量仅作为初始值，实际以系统设置面板中的最新配置为准。
 

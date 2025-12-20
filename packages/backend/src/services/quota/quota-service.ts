@@ -9,6 +9,8 @@ export interface QuotaServiceDeps {
   prisma?: PrismaClient
   getQuotaPolicy?: typeof defaultGetQuotaPolicy
   now?: () => Date
+  identifierPrefix?: string
+  sharedAnonymousIdentifier?: string
 }
 
 type PrismaClientOrTx = Prisma.TransactionClient
@@ -40,21 +42,6 @@ export interface ConsumeQuotaOptions {
 export interface InspectQuotaOptions {
   tx?: Prisma.TransactionClient
   now?: Date
-}
-
-const resolveScope = (actor: Actor): ResolveScopeResult => {
-  if (actor.type === 'user') {
-    return {
-      scope: 'USER',
-      identifier: actor.identifier,
-      userId: actor.id,
-    }
-  }
-  return {
-    scope: 'ANON',
-    identifier: SHARED_ANONYMOUS_IDENTIFIER,
-    userId: null,
-  }
 }
 
 const startOfUtcDay = (date: Date): Date => {
@@ -101,11 +88,18 @@ export class QuotaService {
   private prisma: PrismaClient
   private getQuotaPolicy: typeof defaultGetQuotaPolicy
   private now: () => Date
+  private identifierPrefix: string | null
+  private sharedAnonymousIdentifier: string
 
   constructor(deps: QuotaServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.getQuotaPolicy = deps.getQuotaPolicy ?? defaultGetQuotaPolicy
     this.now = deps.now ?? (() => new Date())
+    const prefix = typeof deps.identifierPrefix === 'string' ? deps.identifierPrefix.trim() : ''
+    this.identifierPrefix = prefix ? prefix : null
+    this.sharedAnonymousIdentifier =
+      deps.sharedAnonymousIdentifier ??
+      (this.identifierPrefix ? `${this.identifierPrefix}:${SHARED_ANONYMOUS_IDENTIFIER}` : SHARED_ANONYMOUS_IDENTIFIER)
   }
 
   async consumeActorQuota(actor: Actor, options: ConsumeQuotaOptions = {}): Promise<ProcessResult> {
@@ -163,14 +157,14 @@ export class QuotaService {
   ) {
     const { resetUsed, now } = options
     await client.usageQuota.upsert({
-      where: { scope_identifier: { scope: 'ANON', identifier: SHARED_ANONYMOUS_IDENTIFIER } },
+      where: { scope_identifier: { scope: 'ANON', identifier: this.sharedAnonymousIdentifier } },
       update: {
         customDailyLimit: null,
         ...(resetUsed ? { usedCount: 0, lastResetAt: now } : {}),
       },
       create: {
         scope: 'ANON',
-        identifier: SHARED_ANONYMOUS_IDENTIFIER,
+        identifier: this.sharedAnonymousIdentifier,
         customDailyLimit: null,
         usedCount: 0,
         lastResetAt: now,
@@ -178,12 +172,28 @@ export class QuotaService {
     })
   }
 
+  private resolveScope(actor: Actor): ResolveScopeResult {
+    if (actor.type === 'user') {
+      const identifier = this.identifierPrefix ? `${this.identifierPrefix}:${actor.identifier}` : actor.identifier
+      return {
+        scope: 'USER',
+        identifier,
+        userId: actor.id,
+      }
+    }
+    return {
+      scope: 'ANON',
+      identifier: this.sharedAnonymousIdentifier,
+      userId: null,
+    }
+  }
+
   private async processQuota(
     actor: Actor,
     client: PrismaClientOrTx,
     options: ProcessOptions,
   ): Promise<ProcessResult> {
-    const { scope, identifier, userId } = resolveScope(actor)
+    const { scope, identifier, userId } = this.resolveScope(actor)
     const { anonymousDailyQuota, defaultUserDailyQuota } = await this.getQuotaPolicy(client)
     const defaultLimit = scope === 'USER' ? defaultUserDailyQuota : anonymousDailyQuota
 

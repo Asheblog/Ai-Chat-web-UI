@@ -101,6 +101,26 @@ export const getSystemSettings = async () => {
     }
     return 200
   })()
+  const battleAllowAnonymous = Boolean(raw.battle_allow_anonymous ?? true)
+  const battleAllowUsers = Boolean(raw.battle_allow_users ?? true)
+  const battleAnonymousDailyQuota = (() => {
+    const v = raw.battle_anonymous_daily_quota
+    if (typeof v === 'number') return Math.max(0, v)
+    if (typeof v === 'string' && v.trim() !== '') {
+      const parsed = Number.parseInt(v, 10)
+      if (Number.isFinite(parsed)) return Math.max(0, parsed)
+    }
+    return 20
+  })()
+  const battleUserDailyQuota = (() => {
+    const v = raw.battle_user_daily_quota
+    if (typeof v === 'number') return Math.max(0, v)
+    if (typeof v === 'string' && v.trim() !== '') {
+      const parsed = Number.parseInt(v, 10)
+      if (Number.isFinite(parsed)) return Math.max(0, parsed)
+    }
+    return 200
+  })()
   const modelAccessDefaultAnonymous: 'allow' | 'deny' =
     raw.model_access_default_anonymous === 'allow' ? 'allow' : 'deny'
   const modelAccessDefaultUser: 'allow' | 'deny' =
@@ -264,6 +284,10 @@ export const getSystemSettings = async () => {
       anonymousRetentionDays,
       anonymousDailyQuota,
       defaultUserDailyQuota,
+      battleAllowAnonymous,
+      battleAllowUsers,
+      battleAnonymousDailyQuota,
+      battleUserDailyQuota,
       modelAccessDefaultAnonymous,
       modelAccessDefaultUser,
       webSearchAgentEnable,
@@ -417,6 +441,10 @@ export const updateSystemSettings = async (
   if (typeof rest.anonymousRetentionDays === 'number') payload.anonymous_retention_days = rest.anonymousRetentionDays
   if (typeof rest.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = rest.anonymousDailyQuota
   if (typeof rest.defaultUserDailyQuota === 'number') payload.default_user_daily_quota = rest.defaultUserDailyQuota
+  if (typeof rest.battleAllowAnonymous === 'boolean') payload.battle_allow_anonymous = rest.battleAllowAnonymous
+  if (typeof rest.battleAllowUsers === 'boolean') payload.battle_allow_users = rest.battleAllowUsers
+  if (typeof rest.battleAnonymousDailyQuota === 'number') payload.battle_anonymous_daily_quota = rest.battleAnonymousDailyQuota
+  if (typeof rest.battleUserDailyQuota === 'number') payload.battle_user_daily_quota = rest.battleUserDailyQuota
   if (typeof rest.modelAccessDefaultAnonymous === 'string')
     payload.model_access_default_anonymous = rest.modelAccessDefaultAnonymous
   if (typeof rest.modelAccessDefaultUser === 'string') payload.model_access_default_user = rest.modelAccessDefaultUser

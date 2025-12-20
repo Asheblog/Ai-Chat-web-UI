@@ -2,7 +2,9 @@ import type { PrismaClient, Prisma } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import {
   getQuotaPolicy as defaultGetQuotaPolicy,
+  getBattlePolicy as defaultGetBattlePolicy,
   invalidateQuotaPolicyCache as defaultInvalidateQuotaPolicyCache,
+  invalidateBattlePolicyCache as defaultInvalidateBattlePolicyCache,
   invalidateReasoningMaxOutputTokensDefaultCache as defaultInvalidateReasoningMaxOutputTokensDefaultCache,
 } from '../../utils/system-settings'
 import { invalidateTaskTraceConfig as defaultInvalidateTaskTraceConfig } from '../../utils/task-trace'
@@ -44,7 +46,9 @@ export class SettingsServiceError extends Error {
 export interface SettingsServiceDeps {
   prisma?: PrismaClient
   getQuotaPolicy?: typeof defaultGetQuotaPolicy
+  getBattlePolicy?: typeof defaultGetBattlePolicy
   invalidateQuotaPolicyCache?: typeof defaultInvalidateQuotaPolicyCache
+  invalidateBattlePolicyCache?: typeof defaultInvalidateBattlePolicyCache
   invalidateReasoningMaxOutputTokensDefaultCache?: typeof defaultInvalidateReasoningMaxOutputTokensDefaultCache
   invalidateTaskTraceConfig?: typeof defaultInvalidateTaskTraceConfig
   syncSharedAnonymousQuota?: typeof defaultSyncSharedAnonymousQuota
@@ -58,7 +62,9 @@ const BRAND_TEXT_CACHE_TTL_MS = 30_000
 export class SettingsService {
   private prisma: PrismaClient
   private getQuotaPolicy: typeof defaultGetQuotaPolicy
+  private getBattlePolicy: typeof defaultGetBattlePolicy
   private invalidateQuotaPolicyCache: typeof defaultInvalidateQuotaPolicyCache
+  private invalidateBattlePolicyCache: typeof defaultInvalidateBattlePolicyCache
   private invalidateReasoningMaxOutputTokensDefaultCache: typeof defaultInvalidateReasoningMaxOutputTokensDefaultCache
   private invalidateTaskTraceConfig: typeof defaultInvalidateTaskTraceConfig
   private syncSharedAnonymousQuota: typeof defaultSyncSharedAnonymousQuota
@@ -70,7 +76,9 @@ export class SettingsService {
   constructor(deps: SettingsServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.getQuotaPolicy = deps.getQuotaPolicy ?? defaultGetQuotaPolicy
+    this.getBattlePolicy = deps.getBattlePolicy ?? defaultGetBattlePolicy
     this.invalidateQuotaPolicyCache = deps.invalidateQuotaPolicyCache ?? defaultInvalidateQuotaPolicyCache
+    this.invalidateBattlePolicyCache = deps.invalidateBattlePolicyCache ?? defaultInvalidateBattlePolicyCache
     this.invalidateReasoningMaxOutputTokensDefaultCache =
       deps.invalidateReasoningMaxOutputTokensDefaultCache ?? defaultInvalidateReasoningMaxOutputTokensDefaultCache
     this.invalidateTaskTraceConfig = deps.invalidateTaskTraceConfig ?? defaultInvalidateTaskTraceConfig
@@ -218,6 +226,7 @@ export class SettingsService {
     const map = new Map(rows.map((row) => [row.key, row.value]))
     const read = (key: string, fallback = '') => map.get(key) ?? fallback
     const quotaPolicy = await this.getQuotaPolicy()
+    const battlePolicy = await this.getBattlePolicy()
     const parseAccessDefault = (value: unknown, fallback: 'allow' | 'deny'): 'allow' | 'deny' => {
       if (value === 'allow') return 'allow'
       if (value === 'deny') return 'deny'
@@ -257,6 +266,10 @@ export class SettingsService {
       anonymous_retention_days: quotaPolicy.anonymousRetentionDays,
       anonymous_daily_quota: quotaPolicy.anonymousDailyQuota,
       default_user_daily_quota: quotaPolicy.defaultUserDailyQuota,
+      battle_allow_anonymous: battlePolicy.allowAnonymous,
+      battle_allow_users: battlePolicy.allowUsers,
+      battle_anonymous_daily_quota: battlePolicy.anonymousDailyQuota,
+      battle_user_daily_quota: battlePolicy.userDailyQuota,
       web_search_agent_enable: this.parseBoolean(settingsObj.web_search_agent_enable, process.env.WEB_SEARCH_AGENT_ENABLE || 'false'),
       web_search_default_engine: settingsObj.web_search_default_engine || process.env.WEB_SEARCH_DEFAULT_ENGINE || 'tavily',
       web_search_result_limit: this.parseIntInRange(settingsObj.web_search_result_limit, process.env.WEB_SEARCH_RESULT_LIMIT, 1, 10, 4),
@@ -372,6 +385,10 @@ export class SettingsService {
         anonymous_retention_days: formatted.anonymous_retention_days,
         anonymous_daily_quota: formatted.anonymous_daily_quota,
         default_user_daily_quota: formatted.default_user_daily_quota,
+        battle_allow_anonymous: formatted.battle_allow_anonymous,
+        battle_allow_users: formatted.battle_allow_users,
+        battle_anonymous_daily_quota: formatted.battle_anonymous_daily_quota,
+        battle_user_daily_quota: formatted.battle_user_daily_quota,
         model_access_default_anonymous: formatted.model_access_default_anonymous,
         model_access_default_user: formatted.model_access_default_user,
         web_search_agent_enable: formatted.web_search_agent_enable,
@@ -466,6 +483,8 @@ export class SettingsService {
       'reasoning_default_expand',
       'reasoning_save_to_db',
       'ollama_think',
+      'battle_allow_anonymous',
+      'battle_allow_users',
       'web_search_agent_enable',
       'web_search_include_summary',
       'web_search_include_raw',
@@ -542,6 +561,14 @@ export class SettingsService {
       updates.push(upsert('default_user_daily_quota', String(payload.default_user_daily_quota)))
       this.invalidateQuotaPolicyCache()
     }
+    if (typeof payload.battle_anonymous_daily_quota === 'number') {
+      updates.push(upsert('battle_anonymous_daily_quota', String(payload.battle_anonymous_daily_quota)))
+      this.invalidateBattlePolicyCache()
+    }
+    if (typeof payload.battle_user_daily_quota === 'number') {
+      updates.push(upsert('battle_user_daily_quota', String(payload.battle_user_daily_quota)))
+      this.invalidateBattlePolicyCache()
+    }
 
     if (payload.assistant_avatar) {
       let storedPath: string | null
@@ -573,6 +600,9 @@ export class SettingsService {
     if (payload.reset_quota_cache) {
       this.invalidateQuotaPolicyCache()
       await this.syncSharedAnonymousQuota()
+    }
+    if (payload.battle_allow_anonymous !== undefined || payload.battle_allow_users !== undefined) {
+      this.invalidateBattlePolicyCache()
     }
     if (payload.reset_reasoning_tokens_cache) {
       this.invalidateReasoningMaxOutputTokensDefaultCache()

@@ -13,7 +13,8 @@ import { buildAgentPythonToolConfig, buildAgentWebSearchConfig } from '../../mod
 import { WebSearchToolHandler } from '../../modules/chat/tool-handlers/web-search-handler'
 import { PythonToolHandler } from '../../modules/chat/tool-handlers/python-handler'
 import type { ToolCall, ToolHandlerResult } from '../../modules/chat/tool-handlers/types'
-import { consumeActorQuota } from '../../utils/quota'
+import { consumeBattleQuota } from '../../utils/battle-quota'
+import { getBattlePolicy } from '../../utils/system-settings'
 
 export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 
@@ -694,6 +695,17 @@ export class BattleService {
   ) {
     const title = buildRunTitle(input.prompt, input.title)
     const judgeThreshold = this.normalizeJudgeThreshold(input.judgeThreshold)
+    const battlePolicy = await getBattlePolicy()
+    if (actor.type === 'user' && !battlePolicy.allowUsers) {
+      throw new Error('当前系统未开放模型大乱斗给注册用户')
+    }
+    if (actor.type === 'anonymous' && !battlePolicy.allowAnonymous) {
+      throw new Error('当前系统未开放模型大乱斗给匿名用户')
+    }
+    const quotaResult = await consumeBattleQuota(actor)
+    if (!quotaResult.success) {
+      throw new Error('今日模型大乱斗额度已耗尽')
+    }
 
     const configPayload = {
       runsPerModel: input.runsPerModel,
@@ -809,7 +821,6 @@ export class BattleService {
         for (let attempt = 1; attempt <= input.runsPerModel; attempt += 1) {
           tasks.push(async () => {
             const result = await this.runAttempt({
-              actor,
               battleRunId: run.id,
               prompt: input.prompt,
               expectedAnswer: input.expectedAnswer,
@@ -919,7 +930,6 @@ export class BattleService {
 
   private async runAttempt(
     params: {
-      actor: Actor
       battleRunId: number
       prompt: string
       expectedAnswer: string
@@ -933,7 +943,6 @@ export class BattleService {
     emitEvent?: (event: BattleExecutionEvent) => void,
   ): Promise<BattleResultRecord> {
     const {
-      actor,
       battleRunId,
       prompt,
       expectedAnswer,
@@ -970,37 +979,6 @@ export class BattleService {
         attemptIndex,
       },
     })
-
-    const consumeResult = await consumeActorQuota(actor)
-    this.throwIfRunCancelled(runControl)
-    if (!consumeResult.success) {
-      const result = await this.persistResult({
-        battleRunId,
-        modelId,
-        connectionId: model.resolved.connection.id,
-        rawId: model.resolved.rawModelId,
-        attemptIndex,
-        features: model.config.features,
-        customBody: model.config.custom_body,
-        customHeaders: model.config.custom_headers,
-        output: '',
-        reasoning: '',
-        usage: {},
-        durationMs: null,
-        error: '配额已耗尽',
-        judge: null,
-      })
-      emitEvent?.({
-        type: 'attempt_complete',
-        payload: {
-          battleRunId,
-          modelId,
-          attemptIndex,
-          result: this.serializeResult(result),
-        },
-      })
-      return result
-    }
 
     const startedAt = Date.now()
     let output = ''
@@ -1071,35 +1049,24 @@ export class BattleService {
           error: null,
         })
       }
-      const judgeConsume = await consumeActorQuota(actor)
-      this.throwIfRunCancelled(runControl)
-      if (!judgeConsume.success) {
+      try {
+        judgeResult = await this.judgeAnswer({
+          prompt,
+          expectedAnswer,
+          answer: output,
+          threshold: judgeThreshold,
+          judgeModel,
+          runControl,
+        })
+      } catch (judgeError) {
+        if (this.isRunCancelled(runControl)) {
+          throw new BattleRunCancelledError()
+        }
         judgeResult = {
           pass: false,
           score: null,
-          reason: '裁判配额已耗尽',
+          reason: judgeError instanceof Error ? judgeError.message : '裁判模型评测失败',
           fallbackUsed: true,
-        }
-      } else {
-        try {
-          judgeResult = await this.judgeAnswer({
-            prompt,
-            expectedAnswer,
-            answer: output,
-            threshold: judgeThreshold,
-            judgeModel,
-            runControl,
-          })
-        } catch (judgeError) {
-          if (this.isRunCancelled(runControl)) {
-            throw new BattleRunCancelledError()
-          }
-          judgeResult = {
-            pass: false,
-            score: null,
-            reason: judgeError instanceof Error ? judgeError.message : '裁判模型评测失败',
-            fallbackUsed: true,
-          }
         }
       }
     }

@@ -44,6 +44,34 @@ async function initSystemSettings() {
             key: 'app_version',
             value: '1.0.0',
         },
+        {
+            key: 'anonymous_retention_days',
+            value: process.env.ANONYMOUS_RETENTION_DAYS || '15',
+        },
+        {
+            key: 'anonymous_daily_quota',
+            value: process.env.ANONYMOUS_DAILY_QUOTA || '20',
+        },
+        {
+            key: 'default_user_daily_quota',
+            value: process.env.DEFAULT_USER_DAILY_QUOTA || '200',
+        },
+        {
+            key: 'battle_allow_anonymous',
+            value: process.env.BATTLE_ALLOW_ANONYMOUS === 'false' ? 'false' : 'true',
+        },
+        {
+            key: 'battle_allow_users',
+            value: process.env.BATTLE_ALLOW_USERS === 'false' ? 'false' : 'true',
+        },
+        {
+            key: 'battle_anonymous_daily_quota',
+            value: process.env.BATTLE_ANONYMOUS_DAILY_QUOTA || '20',
+        },
+        {
+            key: 'battle_user_daily_quota',
+            value: process.env.BATTLE_USER_DAILY_QUOTA || '200',
+        },
     ];
     for (const setting of defaultSettings) {
         await prisma.systemSetting.upsert({

@@ -75,6 +75,22 @@ async function initSystemSettings() {
       key: 'default_user_daily_quota',
       value: process.env.DEFAULT_USER_DAILY_QUOTA || '200',
     },
+    {
+      key: 'battle_allow_anonymous',
+      value: process.env.BATTLE_ALLOW_ANONYMOUS === 'false' ? 'false' : 'true',
+    },
+    {
+      key: 'battle_allow_users',
+      value: process.env.BATTLE_ALLOW_USERS === 'false' ? 'false' : 'true',
+    },
+    {
+      key: 'battle_anonymous_daily_quota',
+      value: process.env.BATTLE_ANONYMOUS_DAILY_QUOTA || '20',
+    },
+    {
+      key: 'battle_user_daily_quota',
+      value: process.env.BATTLE_USER_DAILY_QUOTA || '200',
+    },
   ];
 
   for (const setting of defaultSettings) {

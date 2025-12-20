@@ -1,7 +1,9 @@
 import { prisma } from '../../db'
 import {
   getQuotaPolicy,
+  getBattlePolicy,
   invalidateQuotaPolicyCache,
+  invalidateBattlePolicyCache,
   invalidateReasoningMaxOutputTokensDefaultCache,
 } from '../../utils/system-settings'
 import { invalidateTaskTraceConfig } from '../../utils/task-trace'
@@ -12,7 +14,9 @@ import { SettingsService } from './settings-service'
 let settingsService = new SettingsService({
   prisma,
   getQuotaPolicy,
+  getBattlePolicy,
   invalidateQuotaPolicyCache,
+  invalidateBattlePolicyCache,
   invalidateReasoningMaxOutputTokensDefaultCache,
   invalidateTaskTraceConfig,
   syncSharedAnonymousQuota,

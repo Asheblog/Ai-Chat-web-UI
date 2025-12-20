@@ -29,7 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { refreshImageAttachments, syncAnonymousQuota } from '@/features/settings/api'
 import { useAuthStore } from "@/store/auth-store"
-import { UserPlus, Palette, Clock, Type } from "lucide-react"
+import { UserPlus, Palette, Clock, Type, Swords } from "lucide-react"
 import { SettingRow } from "@/components/settings/components/setting-row"
 import { AvatarUploadField, type AvatarUploadResult } from "@/components/settings/components/avatar-upload-field"
 
@@ -61,6 +61,10 @@ export function SystemGeneralPage() {
   const [anonymousQuotaDraft, setAnonymousQuotaDraft] = useState('20')
   const [defaultUserQuotaDraft, setDefaultUserQuotaDraft] = useState('200')
   const [anonymousRetentionDraft, setAnonymousRetentionDraft] = useState('15')
+  const [battleAllowAnonymousDraft, setBattleAllowAnonymousDraft] = useState(true)
+  const [battleAllowUsersDraft, setBattleAllowUsersDraft] = useState(true)
+  const [battleAnonymousQuotaDraft, setBattleAnonymousQuotaDraft] = useState('20')
+  const [battleUserQuotaDraft, setBattleUserQuotaDraft] = useState('200')
   const [syncingAnonymousQuota, setSyncingAnonymousQuota] = useState(false)
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -83,6 +87,10 @@ export function SystemGeneralPage() {
     setAnonymousQuotaDraft(String(systemSettings.anonymousDailyQuota ?? 20))
     setDefaultUserQuotaDraft(String(systemSettings.defaultUserDailyQuota ?? 200))
     setAnonymousRetentionDraft(String(systemSettings.anonymousRetentionDays ?? 15))
+    setBattleAllowAnonymousDraft(Boolean(systemSettings.battleAllowAnonymous ?? true))
+    setBattleAllowUsersDraft(Boolean(systemSettings.battleAllowUsers ?? true))
+    setBattleAnonymousQuotaDraft(String(systemSettings.battleAnonymousDailyQuota ?? 20))
+    setBattleUserQuotaDraft(String(systemSettings.battleUserDailyQuota ?? 200))
     setAssistantAvatarPreview(systemSettings.assistantAvatarUrl || null)
     // 标题总结
     setTitleSummaryEnabledDraft(Boolean(systemSettings.titleSummaryEnabled))
@@ -188,6 +196,10 @@ export function SystemGeneralPage() {
         allowRegistration: Boolean(systemSettings.allowRegistration),
         anonymousQuota: String(systemSettings.anonymousDailyQuota ?? 20),
         defaultUserQuota: String(systemSettings.defaultUserDailyQuota ?? 200),
+        battleAllowAnonymous: Boolean(systemSettings.battleAllowAnonymous ?? true),
+        battleAllowUsers: Boolean(systemSettings.battleAllowUsers ?? true),
+        battleAnonymousQuota: String(systemSettings.battleAnonymousDailyQuota ?? 20),
+        battleUserQuota: String(systemSettings.battleUserDailyQuota ?? 200),
         brandText: systemSettings.brandText || '',
         chatSystemPrompt: systemSettings.chatSystemPrompt || '',
         siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
@@ -206,6 +218,10 @@ export function SystemGeneralPage() {
       allowRegistrationDraft !== normalizedInitials.allowRegistration ||
       anonymousQuotaDraft !== normalizedInitials.anonymousQuota ||
       defaultUserQuotaDraft !== normalizedInitials.defaultUserQuota ||
+      battleAllowAnonymousDraft !== normalizedInitials.battleAllowAnonymous ||
+      battleAllowUsersDraft !== normalizedInitials.battleAllowUsers ||
+      battleAnonymousQuotaDraft !== normalizedInitials.battleAnonymousQuota ||
+      battleUserQuotaDraft !== normalizedInitials.battleUserQuota ||
       brandTextDraft !== normalizedInitials.brandText ||
       chatSystemPromptDraft !== normalizedInitials.chatSystemPrompt ||
       siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
@@ -227,6 +243,16 @@ export function SystemGeneralPage() {
     const parsedDefaultQuota = Number.parseInt(defaultUserQuotaDraft, 10)
     if (Number.isNaN(parsedDefaultQuota) || parsedDefaultQuota < 0) {
       toast({ title: '输入无效', description: '注册用户额度需为不小于 0 的整数', variant: 'destructive' })
+      return
+    }
+    const parsedBattleAnonymousQuota = Number.parseInt(battleAnonymousQuotaDraft, 10)
+    if (Number.isNaN(parsedBattleAnonymousQuota) || parsedBattleAnonymousQuota < 0) {
+      toast({ title: '输入无效', description: '匿名乱斗额度需为不小于 0 的整数', variant: 'destructive' })
+      return
+    }
+    const parsedBattleUserQuota = Number.parseInt(battleUserQuotaDraft, 10)
+    if (Number.isNaN(parsedBattleUserQuota) || parsedBattleUserQuota < 0) {
+      toast({ title: '输入无效', description: '注册用户乱斗额度需为不小于 0 的整数', variant: 'destructive' })
       return
     }
     const parsedRetention = Number.parseInt(retentionDraft, 10)
@@ -251,6 +277,10 @@ export function SystemGeneralPage() {
         allowRegistration: allowRegistrationDraft,
         anonymousDailyQuota: parsedAnonymousQuota,
         defaultUserDailyQuota: parsedDefaultQuota,
+        battleAllowAnonymous: battleAllowAnonymousDraft,
+        battleAllowUsers: battleAllowUsersDraft,
+        battleAnonymousDailyQuota: parsedBattleAnonymousQuota,
+        battleUserDailyQuota: parsedBattleUserQuota,
         brandText: brandTextDraft,
         chatSystemPrompt: chatSystemPromptDraft,
         siteBaseUrl: siteBaseDraft.trim(),
@@ -384,6 +414,79 @@ export function SystemGeneralPage() {
           </div>
         </SettingRow>
 
+      </div>
+
+      {/* 模型大乱斗区块 */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 pb-3 border-b">
+          <Swords className="w-5 h-5 text-primary" />
+          <div>
+            <CardTitle className="text-lg">模型大乱斗</CardTitle>
+            <CardDescription>控制乱斗功能的访问与每日次数</CardDescription>
+          </div>
+        </div>
+
+        <SettingRow
+          title="允许匿名用户使用模型大乱斗"
+          description="开启后匿名访客可参与模型乱斗"
+        >
+          <Switch
+            id="battleAllowAnonymous"
+            checked={battleAllowAnonymousDraft}
+            disabled={!isAdmin}
+            onCheckedChange={(checked) => setBattleAllowAnonymousDraft(Boolean(checked))}
+          />
+        </SettingRow>
+
+        <SettingRow
+          title="匿名用户每日次数"
+          description="匿名用户共享每日次数（0 表示当天不可使用）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="battleAnonymousDailyQuota"
+              type="number"
+              min={0}
+              value={battleAnonymousQuotaDraft}
+              onChange={(e) => setBattleAnonymousQuotaDraft(e.target.value)}
+              className="w-full sm:w-28 text-right"
+              disabled={!isAdmin}
+            />
+            <span className="text-sm text-muted-foreground whitespace-nowrap">次/天</span>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="允许注册用户使用模型大乱斗"
+          description="开启后注册用户可参与模型乱斗"
+        >
+          <Switch
+            id="battleAllowUsers"
+            checked={battleAllowUsersDraft}
+            disabled={!isAdmin}
+            onCheckedChange={(checked) => setBattleAllowUsersDraft(Boolean(checked))}
+          />
+        </SettingRow>
+
+        <SettingRow
+          title="注册用户每日次数"
+          description="每个注册用户的每日次数（0 表示当天不可使用）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="battleUserDailyQuota"
+              type="number"
+              min={0}
+              value={battleUserQuotaDraft}
+              onChange={(e) => setBattleUserQuotaDraft(e.target.value)}
+              className="w-full sm:w-28 text-right"
+              disabled={!isAdmin}
+            />
+            <span className="text-sm text-muted-foreground whitespace-nowrap">次/天</span>
+          </div>
+        </SettingRow>
       </div>
 
       {/* 品牌定制区块 */}

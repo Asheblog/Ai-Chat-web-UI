@@ -12,6 +12,13 @@ export interface SystemQuotaPolicy {
   anonymousRetentionDays: number
 }
 
+export interface BattleUsagePolicy {
+  allowAnonymous: boolean
+  allowUsers: boolean
+  anonymousDailyQuota: number
+  userDailyQuota: number
+}
+
 export interface ModelAccessDefaults {
   anonymous: 'allow' | 'deny'
   user: 'allow' | 'deny'
@@ -35,6 +42,18 @@ const parseIntSafe = (input: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+const parseBooleanFlag = (input: string | undefined, fallback: boolean) => {
+  if (typeof input === 'undefined') return fallback
+  const normalized = String(input).trim().toLowerCase()
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y') {
+    return true
+  }
+  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'n') {
+    return false
+  }
+  return fallback
+}
+
 const clampReasoningMaxTokens = (value: number): number => {
   if (!Number.isFinite(value) || value <= 0) {
     return 0
@@ -50,6 +69,7 @@ export class SystemSettingsService {
   private cachedContextLimit: { value: number; expiresAt: number } | null = null
   private cachedReasoningMaxTokens: { value: number; expiresAt: number } | null = null
   private cachedModelAccessDefaults: { value: ModelAccessDefaults; expiresAt: number } | null = null
+  private cachedBattlePolicy: { value: BattleUsagePolicy; expiresAt: number } | null = null
 
   constructor(private deps: SystemSettingsServiceDeps) {}
 
@@ -167,6 +187,45 @@ export class SystemSettingsService {
     this.cachedPolicy = null
   }
 
+  async getBattlePolicy(
+    client?: PrismaClient | Prisma.TransactionClient
+  ): Promise<BattleUsagePolicy> {
+    const prismaClient = client ?? this.deps.prisma
+    const now = Date.now()
+
+    if (!client && this.cachedBattlePolicy && this.cachedBattlePolicy.expiresAt > now) {
+      return this.cachedBattlePolicy.value
+    }
+
+    const keys = [
+      'battle_allow_anonymous',
+      'battle_allow_users',
+      'battle_anonymous_daily_quota',
+      'battle_user_daily_quota',
+    ] as const
+
+    const settings = await prismaClient.systemSetting.findMany({
+      where: { key: { in: keys as unknown as string[] } },
+      select: { key: true, value: true },
+    })
+
+    const map = new Map(settings.map((item) => [item.key, item.value]))
+    const value = this.parseBattlePolicy(map)
+
+    if (!client) {
+      this.cachedBattlePolicy = {
+        value,
+        expiresAt: now + CACHE_TTL_MS,
+      }
+    }
+
+    return value
+  }
+
+  invalidateBattlePolicyCache(): void {
+    this.cachedBattlePolicy = null
+  }
+
   async getModelAccessDefaults(): Promise<ModelAccessDefaults> {
     const now = Date.now()
     if (this.cachedModelAccessDefaults && this.cachedModelAccessDefaults.expiresAt > now) {
@@ -192,6 +251,27 @@ export class SystemSettingsService {
     this.cachedModelAccessDefaults = null
   }
 
+  private parseBattlePolicy(map: Map<string, string>): BattleUsagePolicy {
+    const envAllowAnonymous = parseBooleanFlag(process.env.BATTLE_ALLOW_ANONYMOUS ?? 'true', true)
+    const envAllowUsers = parseBooleanFlag(process.env.BATTLE_ALLOW_USERS ?? 'true', true)
+    const allowAnonymous = parseBooleanFlag(map.get('battle_allow_anonymous'), envAllowAnonymous)
+    const allowUsers = parseBooleanFlag(map.get('battle_allow_users'), envAllowUsers)
+    const anonymousDailyQuota = Math.max(
+      0,
+      parseIntSafe(map.get('battle_anonymous_daily_quota') ?? process.env.BATTLE_ANONYMOUS_DAILY_QUOTA, 20),
+    )
+    const userDailyQuota = Math.max(
+      0,
+      parseIntSafe(map.get('battle_user_daily_quota') ?? process.env.BATTLE_USER_DAILY_QUOTA, 200),
+    )
+    return {
+      allowAnonymous,
+      allowUsers,
+      anonymousDailyQuota,
+      userDailyQuota,
+    }
+  }
+
   /**
    * 清除所有缓存
    */
@@ -200,5 +280,6 @@ export class SystemSettingsService {
     this.cachedModelAccessDefaults = null
     this.cachedContextLimit = null
     this.cachedReasoningMaxTokens = null
+    this.cachedBattlePolicy = null
   }
 }

@@ -257,6 +257,10 @@ export interface SystemSettings {
   anonymousRetentionDays?: number;
   anonymousDailyQuota?: number;
   defaultUserDailyQuota?: number;
+  battleAllowAnonymous?: boolean;
+  battleAllowUsers?: boolean;
+  battleAnonymousDailyQuota?: number;
+  battleUserDailyQuota?: number;
   modelAccessDefaultAnonymous?: 'allow' | 'deny';
   modelAccessDefaultUser?: 'allow' | 'deny';
   webSearchAgentEnable?: boolean;

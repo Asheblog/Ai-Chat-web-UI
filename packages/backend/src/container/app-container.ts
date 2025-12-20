@@ -46,7 +46,9 @@ import { verifyConnection, computeCapabilities, deriveChannelName } from '../uti
 import { parseCapabilityEnvelope, normalizeCapabilityFlags, serializeCapabilityEnvelope } from '../utils/capabilities'
 import {
   getQuotaPolicy,
+  getBattlePolicy,
   invalidateQuotaPolicyCache,
+  invalidateBattlePolicyCache,
   invalidateReasoningMaxOutputTokensDefaultCache,
 } from '../utils/system-settings'
 import { invalidateCompletionLimitCache, invalidateContextWindowCache } from '../utils/context-window'
@@ -251,7 +253,9 @@ export class AppContainer {
       new SettingsService({
         prisma: this.context.prisma,
         getQuotaPolicy,
+        getBattlePolicy,
         invalidateQuotaPolicyCache,
+        invalidateBattlePolicyCache,
         invalidateReasoningMaxOutputTokensDefaultCache,
         invalidateTaskTraceConfig,
         syncSharedAnonymousQuota,
