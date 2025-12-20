@@ -593,6 +593,7 @@ export interface BattleResult {
   rawId?: string | null;
   attemptIndex: number;
   output: string;
+  reasoning?: string | null;
   usage: Record<string, any>;
   durationMs?: number | null;
   error?: string | null;
@@ -655,6 +656,7 @@ export interface BattleSharePayload {
     rawId: string | null;
     attemptIndex: number;
     output: string;
+    reasoning?: string;
     durationMs: number | null;
     error: string | null;
     usage: Record<string, any>;

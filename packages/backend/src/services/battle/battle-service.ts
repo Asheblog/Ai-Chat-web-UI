@@ -91,6 +91,7 @@ export interface BattleResultRecord {
   rawId: string | null
   attemptIndex: number
   output: string
+  reasoning: string
   usageJson: string
   durationMs: number | null
   error: string | null
@@ -146,6 +147,7 @@ export interface BattleSharePayload {
     rawId: string | null
     attemptIndex: number
     output: string
+    reasoning: string
     durationMs: number | null
     error: string | null
     usage: Record<string, any>
@@ -499,6 +501,7 @@ export class BattleService {
         modelLabel: composeModelLabel(connectionMap.get(item.connectionId || -1) || null, item.rawId, item.modelId),
         attemptIndex: item.attemptIndex,
         output: item.output,
+        reasoning: item.reasoning || '',
         usage: safeParseJson(item.usageJson, {} as Record<string, any>),
         durationMs: item.durationMs,
         error: item.error,
@@ -618,6 +621,7 @@ export class BattleService {
         rawId: item.rawId,
         attemptIndex: item.attemptIndex,
         output: item.output,
+        reasoning: item.reasoning || '',
         durationMs: item.durationMs,
         error: item.error,
         usage: safeParseJson(item.usageJson, {} as Record<string, any>),
@@ -980,6 +984,7 @@ export class BattleService {
         customBody: model.config.custom_body,
         customHeaders: model.config.custom_headers,
         output: '',
+        reasoning: '',
         usage: {},
         durationMs: null,
         error: '配额已耗尽',
@@ -999,6 +1004,7 @@ export class BattleService {
 
     const startedAt = Date.now()
     let output = ''
+    let reasoning = ''
     let usage: Record<string, any> = {}
     let error: string | null = null
 
@@ -1011,6 +1017,9 @@ export class BattleService {
         runControl,
         (delta) => {
           if (!delta?.content && !delta?.reasoning) return
+          if (typeof delta.reasoning === 'string' && delta.reasoning) {
+            reasoning += delta.reasoning
+          }
           if (runControl) {
             this.appendLiveAttemptDelta(runControl, {
               modelId,
@@ -1105,6 +1114,7 @@ export class BattleService {
       customBody: model.config.custom_body,
       customHeaders: model.config.custom_headers,
       output,
+      reasoning,
       usage,
       durationMs,
       error,
@@ -1119,6 +1129,7 @@ export class BattleService {
         attemptIndex,
         status: error ? 'error' : 'success',
         output,
+        reasoning,
         durationMs,
         error,
       })
@@ -1788,6 +1799,16 @@ export class BattleService {
           const parsed = JSON.parse(raw)
           const message = parsed?.choices?.[0]?.message || {}
           content = typeof message.content === 'string' ? message.content : ''
+          const reasoningText =
+            (typeof message.reasoning_content === 'string' && message.reasoning_content) ||
+            (typeof message.reasoning === 'string' && message.reasoning) ||
+            (typeof message.analysis === 'string' && message.analysis) ||
+            (typeof parsed?.reasoning === 'string' && parsed.reasoning) ||
+            (typeof parsed?.analysis === 'string' && parsed.analysis) ||
+            ''
+          if (reasoningText) {
+            params.emitDelta({ reasoning: reasoningText })
+          }
           const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
           fallbackToolCalls = toolCalls as ToolCall[]
           if (parsed?.usage) usageSnapshot = parsed.usage
@@ -1930,6 +1951,7 @@ export class BattleService {
     customBody?: Record<string, any>
     customHeaders?: Array<{ name: string; value: string }>
     output: string
+    reasoning: string
     usage: Record<string, any>
     durationMs: number | null
     error: string | null
@@ -1946,6 +1968,7 @@ export class BattleService {
         customBodyJson: safeJsonStringify(summarizeCustomBody(params.customBody), '{}'),
         customHeadersJson: safeJsonStringify(sanitizeHeaders(params.customHeaders), '[]'),
         output: params.output || '',
+        reasoning: params.reasoning || '',
         usageJson: safeJsonStringify(params.usage || {}, '{}'),
         durationMs: params.durationMs,
         error: params.error,
@@ -1968,6 +1991,7 @@ export class BattleService {
       rawId: record.rawId,
       attemptIndex: record.attemptIndex,
       output: record.output,
+      reasoning: record.reasoning || '',
       usage: safeParseJson(record.usageJson, {} as Record<string, any>),
       durationMs: record.durationMs,
       error: record.error,

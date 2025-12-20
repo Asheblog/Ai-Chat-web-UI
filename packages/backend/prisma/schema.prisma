@@ -494,6 +494,7 @@ model BattleResult {
   customBodyJson  String    @default("{}") // JSON: 自定义请求体摘要
   customHeadersJson String  @default("[]") // JSON: 自定义请求头摘要
   output          String    @default("")
+  reasoning       String    @default("")
   usageJson       String    @default("{}")
   durationMs      Int?
   error           String?

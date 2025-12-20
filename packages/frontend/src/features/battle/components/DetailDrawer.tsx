@@ -1,10 +1,12 @@
 'use client'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
     Sheet,
     SheetContent,
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
@@ -60,7 +62,26 @@ export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) 
     const isLive = detail.isLive === true
     const title = detail.modelLabel || detail.modelId
     const usage = detail.usage || {}
-    const reasoning = detail.isLive ? detail.reasoning?.trim() || '' : ''
+    const reasoning = (detail.reasoning || '').trim()
+    const reasoningHeavy = reasoning.length >= 4000
+    const [renderReasoning, setRenderReasoning] = useState(!reasoningHeavy)
+    const [manualOverride, setManualOverride] = useState(false)
+
+    useEffect(() => {
+        setManualOverride(false)
+        setRenderReasoning(!reasoningHeavy)
+    }, [detail.modelId, detail.attemptIndex, detail.isLive])
+
+    useEffect(() => {
+        if (!manualOverride && reasoningHeavy && renderReasoning) {
+            setRenderReasoning(false)
+        }
+    }, [manualOverride, reasoningHeavy, renderReasoning])
+
+    const toggleReasoningRender = () => {
+        setManualOverride(true)
+        setRenderReasoning((prev) => !prev)
+    }
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -131,11 +152,27 @@ export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) 
                         {/* Reasoning Output */}
                         {reasoning && (
                             <div className="space-y-2">
-                                <h4 className="text-sm font-medium">推理过程</h4>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h4 className="text-sm font-medium">推理过程</h4>
+                                    {reasoningHeavy && (
+                                        <div className="flex items-center gap-2">
+                                            {!renderReasoning && (
+                                                <span className="text-xs text-muted-foreground">长文本已启用性能模式</span>
+                                            )}
+                                            <Button variant="ghost" size="sm" onClick={toggleReasoningRender}>
+                                                {renderReasoning ? '性能模式' : '渲染公式'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="rounded-lg border bg-muted/30 p-3 overflow-x-auto">
-                                    <div className="prose prose-sm max-w-none dark:prose-invert">
-                                        <MarkdownRenderer html={null} fallback={reasoning} />
-                                    </div>
+                                    {renderReasoning ? (
+                                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                                            <MarkdownRenderer html={null} fallback={reasoning} />
+                                        </div>
+                                    ) : (
+                                        <pre className="text-sm whitespace-pre-wrap break-words font-mono text-foreground/90">{reasoning}</pre>
+                                    )}
                                 </div>
                             </div>
                         )}
