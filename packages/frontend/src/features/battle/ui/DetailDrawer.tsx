@@ -57,20 +57,20 @@ const statusBadgeLabel = (status: NodeStatus) => {
 }
 
 export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) {
-    if (!detail) return null
-
-    const isLive = detail.isLive === true
-    const title = detail.modelLabel || detail.modelId
-    const usage = detail.usage || {}
-    const reasoning = (detail.reasoning || '').trim()
+    const isLive = detail?.isLive === true
+    const title = detail?.modelLabel || detail?.modelId || ''
+    const usage = detail?.usage || {}
+    const reasoning = (detail?.reasoning || '').trim()
     const reasoningHeavy = reasoning.length >= 4000
+    const detailSignature = detail ? `${detail.modelId}:${detail.attemptIndex}:${detail.isLive ? 'live' : 'static'}` : ''
     const [renderReasoning, setRenderReasoning] = useState(!reasoningHeavy)
     const [manualOverride, setManualOverride] = useState(false)
 
     useEffect(() => {
+        if (!detailSignature) return
         setManualOverride(false)
         setRenderReasoning(!reasoningHeavy)
-    }, [detail.modelId, detail.attemptIndex, detail.isLive])
+    }, [detailSignature, reasoningHeavy])
 
     useEffect(() => {
         if (!manualOverride && reasoningHeavy && renderReasoning) {
@@ -82,6 +82,8 @@ export function DetailDrawer({ open, onOpenChange, detail }: DetailDrawerProps) 
         setManualOverride(true)
         setRenderReasoning((prev) => !prev)
     }
+
+    if (!detail) return null
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
