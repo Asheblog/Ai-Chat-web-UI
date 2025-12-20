@@ -153,7 +153,7 @@ export function ShareViewer({ share, brandText = 'AIChat' }: ShareViewerProps) {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* 主内容区 */}
-      <div className="flex-1 mx-auto w-full max-w-3xl px-4 py-8">
+      <div className="flex-1 w-full px-4 md:px-6 lg:px-8 py-8">
         {/* 简化的页头 */}
         <header className="mb-8">
           <h1 className="text-2xl font-semibold text-foreground mb-2">
@@ -184,7 +184,7 @@ export function ShareViewer({ share, brandText = 'AIChat' }: ShareViewerProps) {
 
       {/* 页脚 */}
       <footer className="border-t bg-muted/30 py-4">
-        <div className="mx-auto max-w-3xl px-4 text-center text-xs text-muted-foreground">
+        <div className="w-full px-4 md:px-6 lg:px-8 text-center text-xs text-muted-foreground">
           本页面分享由 <span className="font-medium text-foreground">{brandText}</span> 系统生成
         </div>
       </footer>
