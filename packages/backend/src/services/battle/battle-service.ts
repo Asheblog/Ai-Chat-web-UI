@@ -15,6 +15,7 @@ import { PythonToolHandler } from '../../modules/chat/tool-handlers/python-handl
 import type { ToolCall, ToolHandlerResult } from '../../modules/chat/tool-handlers/types'
 import { consumeBattleQuota } from '../../utils/battle-quota'
 import { getBattlePolicy } from '../../utils/system-settings'
+import { TaskTraceRecorder, shouldEnableTaskTrace, truncateString, type TaskTraceStatus } from '../../utils/task-trace'
 
 export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 
@@ -175,6 +176,7 @@ type BattleRunControl = {
   attemptEpochs: Map<string, number>
   liveAttempts: Map<string, Map<number, LiveAttemptState>>
   taskGroups: Map<string, { queue: AttemptTask[]; running: boolean }>
+  traceRecorder?: TaskTraceRecorder | null
   scheduler?: {
     enqueue: (modelKey: string, task: AttemptTask) => boolean
     isClosed: () => boolean
@@ -751,6 +753,16 @@ export class BattleService {
         error: '已取消',
         judge: null,
       })
+      runControl.traceRecorder?.log('battle:attempt_complete', {
+        ...this.buildAttemptTraceContext(runControl, attemptKey, {
+          modelId: target.modelId,
+          connectionId: target.connectionId,
+          rawId: target.rawId,
+        }),
+        status: 'cancelled',
+        durationMs: 0,
+        error: '已取消',
+      })
       runControl.emitEvent?.({
         type: 'attempt_complete',
         payload: {
@@ -860,6 +872,15 @@ export class BattleService {
       reasoning: '',
       durationMs: null,
       error: null,
+    })
+    runControl.traceRecorder?.log('battle:attempt_retry', {
+      ...this.buildAttemptTraceContext(runControl, attemptKey, {
+        modelId: target.modelId,
+        connectionId: target.connectionId,
+        rawId: target.rawId,
+      }),
+      status: 'pending',
+      reason: 'manual_retry',
     })
 
     const group = runControl.taskGroups.get(target.modelKey)
@@ -1078,6 +1099,8 @@ export class BattleService {
       },
     })
     const runControl = this.createRunControl(run.id)
+    let traceFinalStatus: TaskTraceStatus | null = null
+    let traceFinalError: string | null = null
 
     options?.emitEvent?.({
       type: 'run_start',
@@ -1102,6 +1125,11 @@ export class BattleService {
         passK: input.passK,
         judgeThreshold,
       })
+      runControl.traceRecorder?.log('battle:run_cancelled', {
+        runId: run.id,
+        reason: 'start_cancelled',
+      })
+      traceFinalStatus = 'cancelled'
       options?.emitEvent?.({
         type: 'run_cancelled',
         payload: {
@@ -1118,6 +1146,49 @@ export class BattleService {
 
     try {
       this.throwIfRunCancelled(runControl)
+
+      const systemSettings = await this.loadSystemSettings()
+      const maxConcurrency = this.normalizeConcurrency(input.maxConcurrency)
+      const traceDecision = await shouldEnableTaskTrace({ actor, sysMap: systemSettings })
+      runControl.traceRecorder = await TaskTraceRecorder.create({
+        enabled: traceDecision.enabled,
+        actorIdentifier: actor.identifier,
+        traceLevel: traceDecision.traceLevel,
+        metadata: {
+          feature: 'battle',
+          runId: run.id,
+          title: run.title,
+          promptPreview: truncateString(input.prompt || '', 200),
+          expectedAnswerPreview: truncateString(input.expectedAnswer || '', 200),
+          runsPerModel: input.runsPerModel,
+          passK: input.passK,
+          judgeThreshold,
+          maxConcurrency,
+          modelCount: input.models.length,
+          judge: {
+            modelId: input.judge.modelId,
+            connectionId: input.judge.connectionId ?? null,
+            rawId: input.judge.rawId ?? null,
+          },
+          models: input.models.map((model) => ({
+            modelId: model.modelId,
+            connectionId: model.connectionId ?? null,
+            rawId: model.rawId ?? null,
+            features: model.features ? {
+              web_search: model.features.web_search === true,
+              python_tool: model.features.python_tool === true,
+            } : undefined,
+            reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : undefined,
+            reasoningEffort: model.reasoningEffort || undefined,
+            ollamaThink: typeof model.ollamaThink === 'boolean' ? model.ollamaThink : undefined,
+          })),
+        },
+        maxEvents: traceDecision.config.maxEvents,
+      })
+      runControl.traceRecorder?.log('battle:run_start', {
+        runId: run.id,
+        title: run.title,
+      })
 
       const judgeResolution = await this.resolveModel(actor, input.judge)
       this.throwIfRunCancelled(runControl)
@@ -1150,8 +1221,6 @@ export class BattleService {
         resolved: item.resolved!,
       }))
 
-      const systemSettings = await this.loadSystemSettings()
-      const maxConcurrency = this.normalizeConcurrency(input.maxConcurrency)
       const taskGroups = new Map<string, { queue: AttemptTask[]; running: boolean }>()
       const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>()
 
@@ -1197,6 +1266,11 @@ export class BattleService {
           passK: input.passK,
           judgeThreshold,
         })
+        runControl.traceRecorder?.log('battle:run_cancelled', {
+          runId: run.id,
+          reason: 'run_cancelled',
+        })
+        traceFinalStatus = 'cancelled'
         options?.emitEvent?.({
           type: 'run_cancelled',
           payload: {
@@ -1226,6 +1300,11 @@ export class BattleService {
       if (updated.count === 0) {
         const currentStatus = await this.getRunStatus(run.id)
         if (currentStatus === 'cancelled') {
+          runControl.traceRecorder?.log('battle:run_cancelled', {
+            runId: run.id,
+            reason: 'status_cancelled',
+          })
+          traceFinalStatus = 'cancelled'
           options?.emitEvent?.({
             type: 'run_cancelled',
             payload: {
@@ -1247,6 +1326,13 @@ export class BattleService {
           summary,
         },
       })
+      runControl.traceRecorder?.log('battle:run_complete', {
+        runId: run.id,
+        passModelCount: summary.passModelCount,
+        totalModels: summary.totalModels,
+        accuracy: summary.accuracy,
+      })
+      traceFinalStatus = 'completed'
 
       return {
         runId: run.id,
@@ -1259,6 +1345,11 @@ export class BattleService {
           passK: input.passK,
           judgeThreshold,
         })
+        runControl.traceRecorder?.log('battle:run_cancelled', {
+          runId: run.id,
+          reason: 'cancelled_in_error',
+        })
+        traceFinalStatus = 'cancelled'
         options?.emitEvent?.({
           type: 'run_cancelled',
           payload: {
@@ -1279,8 +1370,19 @@ export class BattleService {
           summaryJson: safeJsonStringify({ error: (error as Error)?.message || 'Battle failed' }, '{}'),
         },
       })
+      traceFinalStatus = 'error'
+      traceFinalError = (error as Error)?.message || 'Battle failed'
+      runControl.traceRecorder?.log('battle:run_error', {
+        runId: run.id,
+        error: traceFinalError,
+      })
       throw error
     } finally {
+      if (runControl.traceRecorder && traceFinalStatus) {
+        await runControl.traceRecorder.finalize(traceFinalStatus, {
+          error: traceFinalError,
+        })
+      }
       this.releaseRunControl(run.id)
     }
   }
@@ -1361,6 +1463,12 @@ export class BattleService {
     if (!isCurrentAttempt()) {
       return
     }
+    const traceRecorder = runControl?.traceRecorder
+    const attemptTraceContext = this.buildAttemptTraceContext(runControl, attemptKey, {
+      modelId,
+      connectionId: model.resolved.connection.id,
+      rawId: model.resolved.rawModelId,
+    })
     if (runControl) {
       this.ensureLiveAttempt(runControl, {
         modelId,
@@ -1391,6 +1499,12 @@ export class BattleService {
         error: '已取消',
         judge: null,
       })
+      traceRecorder?.log('battle:attempt_complete', {
+        ...attemptTraceContext,
+        status: 'cancelled',
+        durationMs: 0,
+        error: '已取消',
+      })
       emitEvent?.({
         type: 'attempt_complete',
         payload: {
@@ -1402,6 +1516,18 @@ export class BattleService {
       })
       return
     }
+
+    traceRecorder?.log('battle:attempt_start', {
+      ...attemptTraceContext,
+      attemptIndex,
+      features: model.config.features ? {
+        web_search: model.config.features.web_search === true,
+        python_tool: model.config.features.python_tool === true,
+      } : undefined,
+      reasoningEnabled: typeof model.config.reasoningEnabled === 'boolean' ? model.config.reasoningEnabled : undefined,
+      reasoningEffort: model.config.reasoningEffort || undefined,
+      ollamaThink: typeof model.config.ollamaThink === 'boolean' ? model.config.ollamaThink : undefined,
+    })
 
     emitEvent?.({
       type: 'attempt_start',
@@ -1559,6 +1685,16 @@ export class BattleService {
       })
     }
 
+    traceRecorder?.log('battle:attempt_complete', {
+      ...attemptTraceContext,
+      status: error ? 'error' : 'success',
+      durationMs,
+      error,
+      judgePass: judgeResult?.pass ?? null,
+      judgeScore: judgeResult?.score ?? null,
+      judgeFallbackUsed: judgeResult?.fallbackUsed ?? null,
+    })
+
     emitEvent?.({
       type: 'attempt_complete',
       payload: {
@@ -1656,6 +1792,11 @@ export class BattleService {
     if (attemptKey) {
       this.throwIfAttemptCancelled(runControl, attemptKey)
     }
+    const traceRecorder = runControl?.traceRecorder
+    const traceContext = this.buildAttemptTraceContext(runControl, attemptKey, {
+      phase: 'execute',
+      mode: 'completion',
+    })
     const response = await this.requester.requestWithBackoff({
       request: {
         url: prepared.providerRequest.url,
@@ -1668,6 +1809,8 @@ export class BattleService {
         route: '/api/battle/execute',
         timeoutMs: prepared.providerRequest.timeoutMs,
       },
+      traceRecorder,
+      traceContext,
       ...this.buildAbortHandlers(runControl, attemptKey),
     })
 
@@ -1701,6 +1844,11 @@ export class BattleService {
     if (attemptKey) {
       this.throwIfAttemptCancelled(runControl, attemptKey)
     }
+    const traceRecorder = runControl?.traceRecorder
+    const traceContext = this.buildAttemptTraceContext(runControl, attemptKey, {
+      phase: 'execute',
+      mode: 'stream',
+    })
     const response = await this.requester.requestWithBackoff({
       request: {
         url: prepared.providerRequest.url,
@@ -1713,6 +1861,8 @@ export class BattleService {
         route: '/api/battle/execute',
         timeoutMs: prepared.providerRequest.timeoutMs,
       },
+      traceRecorder,
+      traceContext,
       ...this.buildAbortHandlers(runControl, attemptKey),
     })
 
@@ -2011,6 +2161,11 @@ export class BattleService {
           route: '/api/battle/execute',
           timeoutMs: prepared.providerRequest.timeoutMs,
         },
+        traceRecorder: runControl?.traceRecorder,
+        traceContext: this.buildAttemptTraceContext(runControl, attemptKey, {
+          phase: 'tool',
+          iteration,
+        }),
         ...this.buildAbortHandlers(runControl, attemptKey),
       })
 
@@ -2115,6 +2270,11 @@ export class BattleService {
         route: '/api/battle/execute',
         timeoutMs: params.prepared.providerRequest.timeoutMs,
       },
+      traceRecorder: params.runControl?.traceRecorder,
+      traceContext: this.buildAttemptTraceContext(params.runControl, params.attemptKey, {
+        phase: 'tool',
+        mode: 'stream',
+      }),
       ...this.buildAbortHandlers(params.runControl, params.attemptKey),
     })
 
@@ -2333,6 +2493,11 @@ export class BattleService {
         route: '/api/battle/judge',
         timeoutMs: prepared.providerRequest.timeoutMs,
       },
+      traceRecorder: runControl?.traceRecorder,
+      traceContext: this.buildAttemptTraceContext(runControl, attemptKey, {
+        phase: 'judge',
+        mode: 'completion',
+      }),
       ...this.buildAbortHandlers(runControl, attemptKey),
     })
 
@@ -2514,6 +2679,7 @@ export class BattleService {
       liveAttempts: new Map(),
       taskGroups: new Map(),
       cancelled: false,
+      traceRecorder: null,
     }
     this.activeRuns.set(runId, control)
     return control
@@ -2708,6 +2874,34 @@ export class BattleService {
   ) {
     if (!runControl || typeof attemptEpoch !== 'number') return true
     return this.getAttemptEpoch(runControl, attemptKey) === attemptEpoch
+  }
+
+  private buildAttemptTraceContext(
+    runControl?: BattleRunControl,
+    attemptKey?: string,
+    extra?: Record<string, unknown>,
+  ) {
+    const context: Record<string, unknown> = {}
+    if (runControl?.runId != null) {
+      context.runId = runControl.runId
+    }
+    if (attemptKey) {
+      const splitIndex = attemptKey.lastIndexOf('#')
+      if (splitIndex > 0) {
+        const modelKey = attemptKey.slice(0, splitIndex)
+        const attemptIndexRaw = attemptKey.slice(splitIndex + 1)
+        const attemptIndex = Number.parseInt(attemptIndexRaw, 10)
+        context.modelKey = modelKey
+        if (Number.isFinite(attemptIndex)) {
+          context.attemptIndex = attemptIndex
+        }
+      }
+      context.attemptKey = attemptKey
+    }
+    if (extra) {
+      return { ...context, ...extra }
+    }
+    return context
   }
 
   private getLiveAttempt(
