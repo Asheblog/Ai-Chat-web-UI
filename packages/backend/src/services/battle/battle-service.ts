@@ -236,6 +236,8 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
           | null
           | undefined,
       )
+      const extraPromptRaw = (item as Record<string, any>).extraPrompt
+      const extraPrompt = typeof extraPromptRaw === 'string' ? extraPromptRaw.trim() : ''
       const reasoningEnabled =
         typeof (item as Record<string, any>).reasoningEnabled === 'boolean'
           ? (item as Record<string, any>).reasoningEnabled
@@ -250,6 +252,7 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
         connectionId: isFiniteNumber(item.connectionId) ? item.connectionId : null,
         rawId: typeof item.rawId === 'string' && item.rawId.trim().length > 0 ? item.rawId.trim() : null,
         ...(features ? { features } : {}),
+        ...(extraPrompt ? { extraPrompt } : {}),
         ...(customHeaders.length > 0 ? { customHeaders } : {}),
         ...(customBody ? { customBody } : {}),
         reasoningEnabled,
@@ -850,17 +853,21 @@ export class BattleService {
       runsPerModel: input.runsPerModel,
       passK: input.passK,
       judgeThreshold,
-      models: input.models.map((model) => ({
-        modelId: model.modelId,
-        connectionId: model.connectionId ?? null,
-        rawId: model.rawId ?? null,
-        features: model.features ?? {},
-        customHeaders: normalizeCustomHeadersForConfig(model.custom_headers),
-        customBody: normalizeCustomBodyForConfig(model.custom_body),
-        reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : null,
-        reasoningEffort: normalizeReasoningEffort(model.reasoningEffort),
-        ollamaThink: typeof model.ollamaThink === 'boolean' ? model.ollamaThink : null,
-      })),
+      models: input.models.map((model) => {
+        const extraPrompt = typeof model.extraPrompt === 'string' ? model.extraPrompt.trim() : ''
+        return {
+          modelId: model.modelId,
+          connectionId: model.connectionId ?? null,
+          rawId: model.rawId ?? null,
+          features: model.features ?? {},
+          ...(extraPrompt ? { extraPrompt } : {}),
+          customHeaders: normalizeCustomHeadersForConfig(model.custom_headers),
+          customBody: normalizeCustomBodyForConfig(model.custom_body),
+          reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : null,
+          reasoningEffort: normalizeReasoningEffort(model.reasoningEffort),
+          ollamaThink: typeof model.ollamaThink === 'boolean' ? model.ollamaThink : null,
+        }
+      }),
     }
 
     const run = await this.prisma.battleRun.create({

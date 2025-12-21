@@ -54,6 +54,7 @@ export interface PrepareChatRequestParams {
   historyUpperBound?: Date | null
   mode: 'stream' | 'completion'
   personalPrompt?: string | null
+  extraSystemPrompts?: string[]
   /** RAG 增强上下文（从文档检索获取） */
   ragContext?: string | null
 }
@@ -119,6 +120,15 @@ export class ChatRequestBuilder {
       this.applyPromptTemplate(this.defaultSessionPromptTemplate, templateVariables)
     if (primaryPrompt) {
       systemPrompts.push({ role: 'system', content: primaryPrompt })
+    }
+    const extraPrompts = Array.isArray(params.extraSystemPrompts) ? params.extraSystemPrompts : []
+    for (const item of extraPrompts) {
+      const normalized = typeof item === 'string' ? item.trim() : ''
+      if (!normalized) continue
+      const templated = this.applyPromptTemplate(normalized, templateVariables)
+      if (templated) {
+        systemPrompts.push({ role: 'system', content: templated })
+      }
     }
 
     const requestedFeatures = params.payload?.features || {}

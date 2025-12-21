@@ -26,6 +26,7 @@ export interface ModelConfigState {
   reasoningEnabled: boolean
   reasoningEffort: 'low' | 'medium' | 'high'
   ollamaThink: boolean
+  extraPrompt: string
   customBody: string
   customHeaders: Array<{ name: string; value: string }>
   customBodyError?: string | null
@@ -175,6 +176,7 @@ type BattleRunConfigModel = {
     web_search?: boolean
     python_tool?: boolean
   }
+  extraPrompt?: string | null
   customHeaders?: Array<{ name: string; value: string }>
   customBody?: Record<string, any> | null
   reasoningEnabled?: boolean | null
@@ -214,6 +216,7 @@ const buildConfigState = (model: ModelItem, defaults?: ReasoningDefaults): Model
   reasoningEnabled: defaults?.reasoningEnabled ?? false,
   reasoningEffort: defaults?.reasoningEffort ?? 'medium',
   ollamaThink: defaults?.ollamaThink ?? false,
+  extraPrompt: '',
   customBody: '',
   customHeaders: [],
   customBodyError: null,
@@ -228,11 +231,12 @@ const buildConfigStateFromConfig = (
   const base = buildConfigState(model, defaults)
   const customHeaders = normalizeCustomHeaders(config?.customHeaders)
   const customBody = normalizeCustomBodyDraft(config?.customBody)
+  const extraPrompt = typeof config?.extraPrompt === 'string' ? config.extraPrompt : ''
   const reasoningEnabled =
     typeof config?.reasoningEnabled === 'boolean' ? config.reasoningEnabled : base.reasoningEnabled
   const reasoningEffort = normalizeReasoningEffort(config?.reasoningEffort) || base.reasoningEffort
   const ollamaThink = typeof config?.ollamaThink === 'boolean' ? config.ollamaThink : base.ollamaThink
-  const advancedOpen = customHeaders.length > 0 || customBody.trim().length > 0
+  const advancedOpen = customHeaders.length > 0 || customBody.trim().length > 0 || extraPrompt.trim().length > 0
   return {
     ...base,
     webSearchEnabled: Boolean(config?.features?.web_search),
@@ -240,6 +244,7 @@ const buildConfigStateFromConfig = (
     reasoningEnabled,
     reasoningEffort,
     ollamaThink,
+    extraPrompt,
     customBody,
     customHeaders,
     advancedOpen,
@@ -567,6 +572,7 @@ export function useBattleFlow() {
     for (const item of selectedModels) {
       const bodyResult = parseCustomBody(item.customBody)
       const headerResult = sanitizeHeaders(item.customHeaders)
+      const extraPrompt = item.extraPrompt.trim()
 
       const config: ModelConfigState = {
         ...item,
@@ -591,6 +597,7 @@ export function useBattleFlow() {
           web_search: item.webSearchEnabled,
           python_tool: item.pythonEnabled,
         },
+        ...(extraPrompt ? { extraPrompt } : {}),
         custom_body: bodyResult.value,
         custom_headers: headerResult.headers,
         reasoningEnabled: item.reasoningEnabled,
@@ -940,6 +947,7 @@ export function useBattleFlow() {
         }
         customHeaders?: Array<{ name: string; value: string }>
         customBody?: Record<string, any> | null
+        extraPrompt?: string | null
         reasoningEnabled?: boolean | null
         reasoningEffort?: 'low' | 'medium' | 'high' | null
         ollamaThink?: boolean | null
@@ -955,6 +963,7 @@ export function useBattleFlow() {
         connectionId: item.connectionId ?? null,
         rawId: item.rawId ?? null,
         features: item.features,
+        extraPrompt: item.extraPrompt ?? null,
         customHeaders: item.customHeaders,
         customBody: item.customBody ?? null,
         reasoningEnabled: item.reasoningEnabled ?? null,

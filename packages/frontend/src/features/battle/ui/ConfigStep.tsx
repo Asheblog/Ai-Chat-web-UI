@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { ModelSelector } from '@/components/model-selector'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
@@ -254,39 +255,59 @@ export function ConfigStep({
                                         </Button>
 
                                         {item.advancedOpen && (
-                                            <CustomRequestEditor
-                                                customHeaders={item.customHeaders}
-                                                onAddHeader={() =>
-                                                    onUpdateModelConfig(item.key, (prev) => ({
-                                                        ...prev,
-                                                        customHeaders: [...prev.customHeaders, { name: '', value: '' }],
-                                                    }))
-                                                }
-                                                onHeaderChange={(index, field, value) =>
-                                                    onUpdateModelConfig(item.key, (prev) => ({
-                                                        ...prev,
-                                                        customHeaders: prev.customHeaders.map((h, i) =>
-                                                            i === index ? { ...h, [field]: value } : h
-                                                        ),
-                                                    }))
-                                                }
-                                                onRemoveHeader={(index) =>
-                                                    onUpdateModelConfig(item.key, (prev) => ({
-                                                        ...prev,
-                                                        customHeaders: prev.customHeaders.filter((_, i) => i !== index),
-                                                    }))
-                                                }
-                                                canAddHeader={item.customHeaders.length < 10}
-                                                customBody={item.customBody}
-                                                onCustomBodyChange={(value) =>
-                                                    onUpdateModelConfig(item.key, (prev) => ({
-                                                        ...prev,
-                                                        customBody: value,
-                                                        customBodyError: null,
-                                                    }))
-                                                }
-                                                customBodyError={item.customBodyError}
-                                            />
+                                            <div className="space-y-3">
+                                                <div className="rounded-2xl border border-border/60 bg-muted/40 p-3 space-y-2">
+                                                    <div>
+                                                        <p className="text-sm font-medium">额外提示词</p>
+                                                        <p className="text-xs text-muted-foreground">仅当前模型生效，会追加为系统提示。</p>
+                                                    </div>
+                                                    <Textarea
+                                                        value={item.extraPrompt}
+                                                        onChange={(e) =>
+                                                            onUpdateModelConfig(item.key, (prev) => ({
+                                                                ...prev,
+                                                                extraPrompt: e.target.value,
+                                                            }))
+                                                        }
+                                                        placeholder="例如：请用简明中文回答，避免列举过多步骤。"
+                                                        className="min-h-[120px] resize-y"
+                                                        data-advanced-input="true"
+                                                    />
+                                                </div>
+                                                <CustomRequestEditor
+                                                    customHeaders={item.customHeaders}
+                                                    onAddHeader={() =>
+                                                        onUpdateModelConfig(item.key, (prev) => ({
+                                                            ...prev,
+                                                            customHeaders: [...prev.customHeaders, { name: '', value: '' }],
+                                                        }))
+                                                    }
+                                                    onHeaderChange={(index, field, value) =>
+                                                        onUpdateModelConfig(item.key, (prev) => ({
+                                                            ...prev,
+                                                            customHeaders: prev.customHeaders.map((h, i) =>
+                                                                i === index ? { ...h, [field]: value } : h
+                                                            ),
+                                                        }))
+                                                    }
+                                                    onRemoveHeader={(index) =>
+                                                        onUpdateModelConfig(item.key, (prev) => ({
+                                                            ...prev,
+                                                            customHeaders: prev.customHeaders.filter((_, i) => i !== index),
+                                                        }))
+                                                    }
+                                                    canAddHeader={item.customHeaders.length < 10}
+                                                    customBody={item.customBody}
+                                                    onCustomBodyChange={(value) =>
+                                                        onUpdateModelConfig(item.key, (prev) => ({
+                                                            ...prev,
+                                                            customBody: value,
+                                                            customBodyError: null,
+                                                        }))
+                                                    }
+                                                    customBodyError={item.customBodyError}
+                                                />
+                                            </div>
                                         )}
                                     </div>
                                 )

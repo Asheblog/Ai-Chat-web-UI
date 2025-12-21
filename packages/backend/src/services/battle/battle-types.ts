@@ -14,6 +14,7 @@ export type BattleModelInput = {
   connectionId?: number
   rawId?: string
   features?: BattleModelFeatures
+  extraPrompt?: string
   custom_body?: Record<string, any>
   custom_headers?: Array<{ name: string; value: string }>
   reasoningEnabled?: boolean
@@ -61,6 +62,7 @@ export interface BattleRunConfigModel {
   connectionId: number | null
   rawId: string | null
   features?: BattleModelFeatures
+  extraPrompt?: string | null
   customHeaders?: Array<{ name: string; value: string }>
   customBody?: Record<string, any> | null
   reasoningEnabled?: boolean | null

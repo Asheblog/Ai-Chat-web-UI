@@ -28,6 +28,7 @@ const battleModelSchema = z.object({
   connectionId: z.number().int().positive().optional(),
   rawId: z.string().min(1).optional(),
   features: featureSchema,
+  extraPrompt: z.string().max(4000).optional(),
   custom_body: z.record(z.any()).optional(),
   custom_headers: z.array(headerSchema).max(10).optional(),
   reasoningEnabled: z.boolean().optional(),

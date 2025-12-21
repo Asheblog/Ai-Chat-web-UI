@@ -68,6 +68,7 @@ export interface BattleRunDetail extends BattleRunSummary {
         web_search_size?: number
         python_tool?: boolean
       }
+      extraPrompt?: string | null
       customHeaders?: Array<{ name: string; value: string }>
       customBody?: Record<string, any> | null
       reasoningEnabled?: boolean | null

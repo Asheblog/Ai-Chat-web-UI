@@ -132,6 +132,8 @@ export class BattleExecutor {
       custom_headers: modelConfig.custom_headers,
     }
 
+    const extraPrompt = typeof modelConfig.extraPrompt === 'string' ? modelConfig.extraPrompt.trim() : ''
+
     const prepared = await this.requestBuilder.prepare({
       session,
       payload,
@@ -139,6 +141,7 @@ export class BattleExecutor {
       images: [],
       mode: emitDelta ? 'stream' : 'completion',
       personalPrompt: null,
+      extraSystemPrompts: extraPrompt ? [extraPrompt] : [],
     })
 
     if (effectiveFeatures.web_search || effectiveFeatures.python_tool) {

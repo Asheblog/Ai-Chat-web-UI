@@ -28,6 +28,7 @@ export interface BattleStreamPayload {
       web_search_size?: number
       python_tool?: boolean
     }
+    extraPrompt?: string
     custom_body?: Record<string, any>
     custom_headers?: Array<{ name: string; value: string }>
     reasoningEnabled?: boolean
