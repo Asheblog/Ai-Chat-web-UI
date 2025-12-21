@@ -172,6 +172,7 @@ type BattleRunControl = {
   requestControllers: Set<AbortController>
   attemptControllers: Map<string, Set<AbortController>>
   cancelledAttempts: Set<string>
+  attemptEpochs: Map<string, number>
   liveAttempts: Map<string, Map<number, LiveAttemptState>>
   taskGroups: Map<string, { queue: AttemptTask[]; running: boolean }>
   scheduler?: {
@@ -206,6 +207,7 @@ type AttemptTask = {
   modelKey: string
   attemptKey: string
   attemptIndex: number
+  attemptEpoch: number
   run: () => Promise<void>
 }
 
@@ -806,7 +808,17 @@ export class BattleService {
     }
 
     const attemptKey = buildAttemptKey(target.modelKey, params.attemptIndex)
+    const nextEpoch = this.bumpAttemptEpoch(runControl, attemptKey)
     runControl.cancelledAttempts.delete(attemptKey)
+    const controllers = runControl.attemptControllers.get(attemptKey)
+    if (controllers) {
+      for (const controller of controllers) {
+        try {
+          controller.abort('retry')
+        } catch {}
+      }
+      runControl.attemptControllers.delete(attemptKey)
+    }
 
     await this.prisma.battleResult.deleteMany({
       where: {
@@ -816,6 +828,21 @@ export class BattleService {
         rawId: target.rawId,
         attemptIndex: params.attemptIndex,
       },
+    })
+
+    const remainingResults = await this.prisma.battleResult.findMany({
+      where: { battleRunId: run.id },
+      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+    })
+    const refreshedSummary = this.buildSummary(
+      remainingResults as BattleResultRecord[],
+      run.runsPerModel,
+      run.passK,
+      run.judgeThreshold,
+    )
+    await this.prisma.battleRun.update({
+      where: { id: run.id },
+      data: { summaryJson: safeJsonStringify(refreshedSummary, '{}') },
     })
 
     const modelEntry = runControl.resolvedModels?.get(target.modelKey)
@@ -851,6 +878,9 @@ export class BattleService {
       attemptIndex: params.attemptIndex,
       runControl,
     })
+    if (task.attemptEpoch !== nextEpoch) {
+      task.attemptEpoch = nextEpoch
+    }
     if (!scheduler.enqueue(target.modelKey, task)) {
       throw new Error('Failed to enqueue attempt')
     }
@@ -1267,6 +1297,7 @@ export class BattleService {
       params.model.resolved.rawModelId,
     )
     const attemptKey = buildAttemptKey(modelKey, params.attemptIndex)
+    const attemptEpoch = this.getAttemptEpoch(params.runControl, attemptKey)
     const context = params.runControl.runContext
     if (!context) {
       throw new Error('Battle run context missing')
@@ -1275,6 +1306,7 @@ export class BattleService {
       modelKey,
       attemptKey,
       attemptIndex: params.attemptIndex,
+      attemptEpoch,
       run: async () => {
         await this.runAttempt({
           battleRunId: params.battleRunId,
@@ -1286,6 +1318,7 @@ export class BattleService {
           attemptIndex: params.attemptIndex,
           systemSettings: context.systemSettings,
           runControl: params.runControl,
+          attemptEpoch,
         }, params.runControl.emitEvent)
       },
     }
@@ -1302,9 +1335,10 @@ export class BattleService {
       attemptIndex: number
       systemSettings: Record<string, string>
       runControl?: BattleRunControl
+      attemptEpoch?: number
     },
     emitEvent?: (event: BattleExecutionEvent) => void,
-  ): Promise<BattleResultRecord> {
+  ): Promise<void> {
     const {
       battleRunId,
       prompt,
@@ -1315,6 +1349,7 @@ export class BattleService {
       attemptIndex,
       systemSettings,
       runControl,
+      attemptEpoch,
     } = params
     const modelId = model.config.modelId
 
@@ -1322,6 +1357,10 @@ export class BattleService {
 
     const modelKey = buildModelKey(modelId, model.resolved.connection.id, model.resolved.rawModelId)
     const attemptKey = buildAttemptKey(modelKey, attemptIndex)
+    const isCurrentAttempt = () => this.isAttemptEpochCurrent(runControl, attemptKey, attemptEpoch)
+    if (!isCurrentAttempt()) {
+      return
+    }
     if (runControl) {
       this.ensureLiveAttempt(runControl, {
         modelId,
@@ -1333,6 +1372,9 @@ export class BattleService {
     }
 
     if (this.isAttemptCancelled(runControl, attemptKey)) {
+      if (!isCurrentAttempt()) {
+        return
+      }
       const record = await this.persistResult({
         battleRunId,
         modelId,
@@ -1358,7 +1400,7 @@ export class BattleService {
           result: this.serializeResult(record),
         },
       })
-      return record
+      return
     }
 
     emitEvent?.({
@@ -1388,6 +1430,7 @@ export class BattleService {
         runControl,
         attemptKey,
         (delta) => {
+          if (!isCurrentAttempt()) return
           if (!delta?.content && !delta?.reasoning) return
           if (typeof delta.reasoning === 'string' && delta.reasoning) {
             reasoning += delta.reasoning
@@ -1432,6 +1475,9 @@ export class BattleService {
 
     this.throwIfRunCancelled(runControl)
     const durationMs = Math.max(0, Date.now() - startedAt)
+    if (!isCurrentAttempt()) {
+      return
+    }
 
     let judgeResult: { pass: boolean; score: number | null; reason: string | null; fallbackUsed: boolean } | null = null
     if (!error) {
@@ -1479,6 +1525,9 @@ export class BattleService {
       }
     }
 
+    if (!isCurrentAttempt()) {
+      return
+    }
     const record = await this.persistResult({
       battleRunId,
       modelId,
@@ -1519,8 +1568,7 @@ export class BattleService {
         result: this.serializeResult(record),
       },
     })
-
-    return record
+    return
   }
 
   private async executeModel(
@@ -2462,6 +2510,7 @@ export class BattleService {
       requestControllers: new Set(),
       attemptControllers: new Map(),
       cancelledAttempts: new Set(),
+      attemptEpochs: new Map(),
       liveAttempts: new Map(),
       taskGroups: new Map(),
       cancelled: false,
@@ -2621,8 +2670,8 @@ export class BattleService {
         status: params.status ?? existing.status,
         output: params.output ?? existing.output,
         reasoning: params.reasoning ?? existing.reasoning,
-        durationMs: params.durationMs ?? existing.durationMs,
-        error: params.error ?? existing.error,
+        durationMs: params.durationMs !== undefined ? params.durationMs : existing.durationMs,
+        error: params.error !== undefined ? params.error : existing.error,
       }
       attempts.set(params.attemptIndex, next)
       return next
@@ -2640,6 +2689,25 @@ export class BattleService {
     }
     attempts.set(params.attemptIndex, record)
     return record
+  }
+
+  private getAttemptEpoch(runControl: BattleRunControl, attemptKey: string) {
+    return runControl.attemptEpochs.get(attemptKey) ?? 0
+  }
+
+  private bumpAttemptEpoch(runControl: BattleRunControl, attemptKey: string) {
+    const next = this.getAttemptEpoch(runControl, attemptKey) + 1
+    runControl.attemptEpochs.set(attemptKey, next)
+    return next
+  }
+
+  private isAttemptEpochCurrent(
+    runControl: BattleRunControl | undefined,
+    attemptKey: string,
+    attemptEpoch?: number,
+  ) {
+    if (!runControl || typeof attemptEpoch !== 'number') return true
+    return this.getAttemptEpoch(runControl, attemptKey) === attemptEpoch
   }
 
   private getLiveAttempt(
