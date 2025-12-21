@@ -1,11 +1,39 @@
-import fetch from 'node-fetch'
-import type { Response } from 'node-fetch'
 import { BackendLogger as log } from './logger'
 import type { CapabilityFlags, CapabilitySource } from './capabilities'
 import { hasDefinedCapability } from './capabilities'
 
 export type ProviderType = 'openai' | 'azure_openai' | 'ollama' | 'google_genai'
 export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
+
+type FetchResponse = {
+  ok: boolean
+  status: number
+  json: () => Promise<any>
+  text: () => Promise<string>
+  headers: { get: (name: string) => string | null }
+}
+
+type FetchInit = {
+  headers?: Record<string, string>
+  signal?: AbortSignal
+  method?: string
+  body?: any
+}
+
+type FetchLike = (input: string, init?: FetchInit) => Promise<FetchResponse>
+
+let cachedFetch: FetchLike | null = null
+
+const resolveFetch = async (): Promise<FetchLike> => {
+  if (cachedFetch) return cachedFetch
+  if (typeof fetch === 'function') {
+    cachedFetch = fetch as unknown as FetchLike
+    return cachedFetch
+  }
+  const mod = await import('node-fetch')
+  cachedFetch = (mod.default ?? mod) as unknown as FetchLike
+  return cachedFetch
+}
 
 export interface ConnectionConfig {
   provider: ProviderType
@@ -170,7 +198,7 @@ export async function buildHeaders(provider: ProviderType, authType: AuthType, a
 
 const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
 
-const ensureJsonContentType = (res: Response, context: string) => {
+const ensureJsonContentType = (res: { headers: { get: (name: string) => string | null } }, context: string) => {
   const contentType = res.headers.get('content-type') || ''
   if (!contentType.toLowerCase().includes('application/json')) {
     throw new Error(`${context}: expected JSON response, received '${contentType || 'unknown'}'`)
@@ -196,28 +224,29 @@ const normalizeOpenAIBaseUrl = (baseUrl: string): string => {
 
 export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
   const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
+  const fetchImpl = await resolveFetch()
   const timeoutMs = 15000
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     if (cfg.provider === 'openai') {
       const normalizedBase = normalizeOpenAIBaseUrl(cfg.baseUrl)
-      const res = await fetch(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`OpenAI verify failed: ${res.status}`)
       ensureJsonContentType(res, 'OpenAI verify')
     } else if (cfg.provider === 'azure_openai') {
       const v = cfg.azureApiVersion || '2024-02-15-preview'
       const base = trimTrailingSlashes(cfg.baseUrl)
-      const res = await fetch(`${base}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${base}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Azure OpenAI verify failed: ${res.status}`)
       ensureJsonContentType(res, 'Azure OpenAI verify')
     } else if (cfg.provider === 'ollama') {
       const base = trimTrailingSlashes(cfg.baseUrl)
-      const res = await fetch(`${base}/api/version`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${base}/api/version`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Ollama verify failed: ${res.status}`)
     } else if (cfg.provider === 'google_genai') {
       const base = trimTrailingSlashes(cfg.baseUrl)
-      const res = await fetch(`${base}/models`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${base}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Google Generative verify failed: ${res.status}`)
       ensureJsonContentType(res, 'Google Generative AI verify')
     } else {
@@ -266,13 +295,14 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
     return cfg.modelIds.map((m) => apply(m))
   }
 
+  const fetchImpl = await resolveFetch()
   const timeoutMs = 15000
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     if (cfg.provider === 'openai') {
       const normalizedBase = normalizeOpenAIBaseUrl(cfg.baseUrl)
-      const res = await fetch(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`OpenAI models failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.data) ? json.data : []
@@ -280,21 +310,21 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
     }
     if (cfg.provider === 'azure_openai') {
       const v = cfg.azureApiVersion || '2024-02-15-preview'
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${cfg.baseUrl.replace(/\/$/, '')}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Azure models failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.data) ? json.data : []
       return list.map((m) => apply(m.id, m.name || m.id))
     }
     if (cfg.provider === 'ollama') {
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/api/tags`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${cfg.baseUrl.replace(/\/$/, '')}/api/tags`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Ollama tags failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.models) ? json.models : []
       return list.map((m) => apply(m.model, m.name || m.model))
     }
     if (cfg.provider === 'google_genai') {
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Google models failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.models) ? json.models : []

@@ -4,168 +4,24 @@ import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import type { ModelResolverService } from '../catalog/model-resolver-service'
 import { modelResolverService as defaultModelResolverService } from '../catalog/model-resolver-service'
-import type { ChatRequestBuilder, PreparedChatRequest } from '../../modules/chat/services/chat-request-builder'
-import { chatRequestBuilder as defaultChatRequestBuilder } from '../../modules/chat/services/chat-request-builder'
-import type { ProviderRequester } from '../../modules/chat/services/provider-requester'
-import { providerRequester as defaultProviderRequester } from '../../modules/chat/services/provider-requester'
-import { convertOpenAIReasoningPayload } from '../../utils/providers'
-import { buildAgentPythonToolConfig, buildAgentWebSearchConfig } from '../../modules/chat/agent-tool-config'
-import { WebSearchToolHandler } from '../../modules/chat/tool-handlers/web-search-handler'
-import { PythonToolHandler } from '../../modules/chat/tool-handlers/python-handler'
-import type { ToolCall, ToolHandlerResult } from '../../modules/chat/tool-handlers/types'
 import { consumeBattleQuota } from '../../utils/battle-quota'
 import { getBattlePolicy } from '../../utils/system-settings'
 import { TaskTraceRecorder, shouldEnableTaskTrace, truncateString, type TaskTraceStatus } from '../../utils/task-trace'
-
-export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
-
-export type BattleModelFeatures = {
-  web_search?: boolean
-  web_search_scope?: 'webpage' | 'document' | 'paper' | 'image' | 'video' | 'podcast'
-  web_search_include_summary?: boolean
-  web_search_include_raw?: boolean
-  web_search_size?: number
-  python_tool?: boolean
-}
-
-export type BattleModelInput = {
-  modelId: string
-  connectionId?: number
-  rawId?: string
-  features?: BattleModelFeatures
-  custom_body?: Record<string, any>
-  custom_headers?: Array<{ name: string; value: string }>
-  reasoningEnabled?: boolean
-  reasoningEffort?: 'low' | 'medium' | 'high'
-  ollamaThink?: boolean
-}
-
-export type BattleJudgeInput = {
-  modelId: string
-  connectionId?: number
-  rawId?: string
-}
-
-export interface BattleRunCreateInput {
-  title?: string
-  prompt: string
-  expectedAnswer: string
-  judge: BattleJudgeInput
-  judgeThreshold?: number
-  runsPerModel: number
-  passK: number
-  models: BattleModelInput[]
-  maxConcurrency?: number
-}
-
-export interface BattleRunSummary {
-  totalModels: number
-  runsPerModel: number
-  passK: number
-  judgeThreshold: number
-  passModelCount: number
-  accuracy: number
-  modelStats: Array<{
-    modelId: string
-    connectionId: number | null
-    rawId: string | null
-    passAtK: boolean
-    passCount: number
-    accuracy: number
-  }>
-}
-
-export interface BattleRunConfigModel {
-  modelId: string
-  connectionId: number | null
-  rawId: string | null
-  features?: BattleModelFeatures
-  customHeaders?: Array<{ name: string; value: string }>
-  customBody?: Record<string, any> | null
-  reasoningEnabled?: boolean | null
-  reasoningEffort?: 'low' | 'medium' | 'high' | null
-  ollamaThink?: boolean | null
-}
-
-export interface BattleRunConfig {
-  models: BattleRunConfigModel[]
-}
-
-export interface BattleResultRecord {
-  id: number
-  battleRunId: number
-  modelId: string
-  connectionId: number | null
-  rawId: string | null
-  attemptIndex: number
-  output: string
-  reasoning: string
-  usageJson: string
-  durationMs: number | null
-  error: string | null
-  judgePass: boolean | null
-  judgeScore: number | null
-  judgeReason: string | null
-  judgeFallbackUsed: boolean
-}
-
-export interface BattleRunRecord {
-  id: number
-  title: string
-  prompt: string
-  expectedAnswer: string
-  judgeModelId: string
-  judgeConnectionId: number | null
-  judgeRawId: string | null
-  judgeThreshold: number
-  runsPerModel: number
-  passK: number
-  status: BattleRunStatus
-  configJson: string
-  summaryJson: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface BattleShareDetail {
-  id: number
-  battleRunId: number
-  token: string
-  title: string
-  payload: BattleSharePayload
-  createdAt: string
-  expiresAt: string | null
-  revokedAt: string | null
-}
-
-export interface BattleSharePayload {
-  title: string
-  prompt: string
-  expectedAnswer: string
-  judge: {
-    modelId: string
-    modelLabel: string | null
-    threshold: number
-  }
-  summary: BattleRunSummary
-  results: Array<{
-    modelId: string
-    modelLabel: string | null
-    connectionId: number | null
-    rawId: string | null
-    attemptIndex: number
-    output: string
-    reasoning: string
-    durationMs: number | null
-    error: string | null
-    usage: Record<string, any>
-    judgePass: boolean | null
-    judgeScore: number | null
-    judgeReason: string | null
-    judgeFallbackUsed: boolean
-  }>
-  createdAt: string
-}
+import type { BattleStreamEvent } from '@aichat/shared/battle-contract'
+import { BattleExecutor, type BattleExecutionContext } from './battle-executor'
+import { safeJsonStringify, safeParseJson } from './battle-serialization'
+import type {
+  BattleModelFeatures,
+  BattleModelInput,
+  BattleRunConfig,
+  BattleRunConfigModel,
+  BattleRunCreateInput,
+  BattleRunRecord,
+  BattleRunSummary,
+  BattleShareDetail,
+  BattleSharePayload,
+  BattleResultRecord,
+} from './battle-types'
 
 type BattleRunControl = {
   runId: number
@@ -181,7 +37,7 @@ type BattleRunControl = {
     enqueue: (modelKey: string, task: AttemptTask) => boolean
     isClosed: () => boolean
   }
-  emitEvent?: (event: BattleExecutionEvent) => void
+  emitEvent?: (event: BattleStreamEvent) => void
   runContext?: {
     prompt: string
     expectedAnswer: string
@@ -227,17 +83,10 @@ class BattleAttemptCancelledError extends Error {
   }
 }
 
-export interface BattleExecutionEvent {
-  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'run_cancelled' | 'error'
-  payload: Record<string, unknown>
-}
-
 export interface BattleServiceDeps {
   prisma?: PrismaClient
   modelResolver?: ModelResolverService
-  requestBuilder?: ChatRequestBuilder
-  requester?: ProviderRequester
-  logger?: Pick<typeof console, 'warn' | 'error'>
+  executor?: BattleExecutor
 }
 
 const DEFAULT_JUDGE_THRESHOLD = 0.8
@@ -316,23 +165,6 @@ const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | n
     return value
   }
   return null
-}
-
-const safeJsonStringify = (value: unknown, fallback: string) => {
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return fallback
-  }
-}
-
-const safeParseJson = <T>(raw: string | null | undefined, fallback: T): T => {
-  if (!raw) return fallback
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
 }
 
 const normalizeSummary = (
@@ -453,66 +285,16 @@ const buildModelKey = (modelId: string, connectionId?: number | null, rawId?: st
 
 const buildAttemptKey = (modelKey: string, attemptIndex: number) => `${modelKey}#${attemptIndex}`
 
-const extractJsonObject = (raw: string) => {
-  const fenced = raw.match(/```(?:json)?([\s\S]*?)```/i)
-  const source = (fenced?.[1] || raw || '').trim()
-  const match = source.match(/\{[\s\S]*\}/)
-  if (!match) {
-    throw new Error('Judge JSON not found')
-  }
-  return match[0]
-}
-
-const normalizeJudgeScore = (value: unknown) => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  let score = value
-  if (score > 1 && score <= 100) {
-    score = score / 100
-  }
-  return clamp(score, 0, 1)
-}
-
-const resolveMaxToolIterations = (sysMap: Record<string, string>) => {
-  const raw = sysMap.agent_max_tool_iterations || process.env.AGENT_MAX_TOOL_ITERATIONS || '4'
-  const parsed = Number.parseInt(String(raw), 10)
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return Math.min(20, parsed)
-  }
-  return 4
-}
-
-const buildUsage = (json: any, context: { promptTokens: number; contextLimit: number; contextRemaining: number }) => {
-  const u = json?.usage || {}
-  const promptTokens =
-    Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? context.promptTokens) ||
-    context.promptTokens
-  const completionTokens =
-    Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0
-  const totalTokens =
-    Number(u?.total_tokens ?? 0) || promptTokens + (Number(u?.completion_tokens ?? 0) || 0)
-  return {
-    prompt_tokens: promptTokens,
-    completion_tokens: completionTokens,
-    total_tokens: totalTokens,
-    context_limit: context.contextLimit,
-    context_remaining: context.contextRemaining,
-  }
-}
-
 export class BattleService {
   private prisma: PrismaClient
   private modelResolver: ModelResolverService
-  private requestBuilder: ChatRequestBuilder
-  private requester: ProviderRequester
-  private logger: Pick<typeof console, 'warn' | 'error'>
+  private executor: BattleExecutor
   private activeRuns = new Map<number, BattleRunControl>()
 
   constructor(deps: BattleServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.modelResolver = deps.modelResolver ?? defaultModelResolverService
-    this.requestBuilder = deps.requestBuilder ?? defaultChatRequestBuilder
-    this.requester = deps.requester ?? defaultProviderRequester
-    this.logger = deps.logger ?? console
+    this.executor = deps.executor ?? new BattleExecutor()
   }
 
   async listRuns(actor: Actor, params?: { page?: number; limit?: number }) {
@@ -1048,7 +830,7 @@ export class BattleService {
   async executeRun(
     actor: Actor,
     input: BattleRunCreateInput,
-    options?: { emitEvent?: (event: BattleExecutionEvent) => void },
+    options?: { emitEvent?: (event: BattleStreamEvent) => void },
   ) {
     const title = buildRunTitle(input.prompt, input.title)
     const judgeThreshold = this.normalizeJudgeThreshold(input.judgeThreshold)
@@ -1439,7 +1221,7 @@ export class BattleService {
       runControl?: BattleRunControl
       attemptEpoch?: number
     },
-    emitEvent?: (event: BattleExecutionEvent) => void,
+    emitEvent?: (event: BattleStreamEvent) => void,
   ): Promise<void> {
     const {
       battleRunId,
@@ -1546,16 +1328,16 @@ export class BattleService {
     let reasoning = ''
     let usage: Record<string, any> = {}
     let error: string | null = null
+    const executionContext = this.buildExecutionContext(runControl, attemptKey)
 
     try {
-      const runResult = await this.executeModel(
+      const runResult = await this.executor.executeModel({
         prompt,
-        model.config,
-        model.resolved,
+        modelConfig: model.config,
+        resolved: model.resolved,
         systemSettings,
-        runControl,
-        attemptKey,
-        (delta) => {
+        context: executionContext,
+        emitDelta: (delta) => {
           if (!isCurrentAttempt()) return
           if (!delta?.content && !delta?.reasoning) return
           if (typeof delta.reasoning === 'string' && delta.reasoning) {
@@ -1585,7 +1367,7 @@ export class BattleService {
             },
           })
         },
-      )
+      })
       output = runResult.content
       usage = runResult.usage
     } catch (err) {
@@ -1620,14 +1402,13 @@ export class BattleService {
         })
       }
       try {
-        judgeResult = await this.judgeAnswer({
+        judgeResult = await this.executor.judgeAnswer({
           prompt,
           expectedAnswer,
           answer: output,
           threshold: judgeThreshold,
           judgeModel,
-          runControl,
-          attemptKey,
+          context: executionContext,
         })
       } catch (judgeError) {
         if (this.isRunCancelled(runControl)) {
@@ -1705,860 +1486,6 @@ export class BattleService {
       },
     })
     return
-  }
-
-  private async executeModel(
-    prompt: string,
-    modelConfig: BattleModelInput,
-    resolved: { connection: Connection; rawModelId: string },
-    systemSettings: Record<string, string>,
-    runControl?: BattleRunControl,
-    attemptKey?: string,
-    emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
-  ) {
-    this.throwIfRunCancelled(runControl)
-    if (attemptKey) {
-      this.throwIfAttemptCancelled(runControl, attemptKey)
-    }
-    const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
-    const providerSupportsTools = resolved.connection.provider === 'openai' || resolved.connection.provider === 'azure_openai'
-    const requestedFeatures = modelConfig.features || {}
-    const webSearchConfig = buildAgentWebSearchConfig(systemSettings)
-    const pythonConfig = buildAgentPythonToolConfig(systemSettings)
-    const webSearchActive =
-      providerSupportsTools &&
-      requestedFeatures.web_search === true &&
-      webSearchConfig.enabled &&
-      Boolean(webSearchConfig.apiKey)
-    const pythonActive =
-      providerSupportsTools &&
-      requestedFeatures.python_tool === true &&
-      pythonConfig.enabled
-    const effectiveFeatures: BattleModelFeatures = {
-      ...requestedFeatures,
-      web_search: webSearchActive,
-      python_tool: pythonActive,
-    }
-    if (!webSearchActive) {
-      delete effectiveFeatures.web_search_scope
-      delete effectiveFeatures.web_search_include_summary
-      delete effectiveFeatures.web_search_include_raw
-      delete effectiveFeatures.web_search_size
-    }
-
-    const payload: any = {
-      sessionId: 0,
-      content: prompt,
-      reasoningEnabled: modelConfig.reasoningEnabled,
-      reasoningEffort: modelConfig.reasoningEffort,
-      ollamaThink: modelConfig.ollamaThink,
-      contextEnabled: false,
-      features: effectiveFeatures,
-      custom_body: modelConfig.custom_body,
-      custom_headers: modelConfig.custom_headers,
-    }
-
-    const prepared = await this.requestBuilder.prepare({
-      session,
-      payload,
-      content: prompt,
-      images: [],
-      mode: emitDelta ? 'stream' : 'completion',
-      personalPrompt: null,
-    })
-
-    if (effectiveFeatures.web_search || effectiveFeatures.python_tool) {
-      return this.executeWithTools(
-        prepared,
-        { webSearchActive, pythonActive, features: effectiveFeatures },
-        runControl,
-        attemptKey,
-        emitDelta,
-      )
-    }
-
-    if (emitDelta) {
-      return this.executeStreaming(prepared, runControl, attemptKey, emitDelta)
-    }
-    return this.executeSimple(prepared, runControl, attemptKey)
-  }
-
-  private async executeSimple(
-    prepared: PreparedChatRequest,
-    runControl?: BattleRunControl,
-    attemptKey?: string,
-  ) {
-    this.throwIfRunCancelled(runControl)
-    if (attemptKey) {
-      this.throwIfAttemptCancelled(runControl, attemptKey)
-    }
-    const traceRecorder = runControl?.traceRecorder
-    const traceContext = this.buildAttemptTraceContext(runControl, attemptKey, {
-      phase: 'execute',
-      mode: 'completion',
-    })
-    const response = await this.requester.requestWithBackoff({
-      request: {
-        url: prepared.providerRequest.url,
-        headers: prepared.providerRequest.headers,
-        body: prepared.providerRequest.body,
-      },
-      context: {
-        sessionId: 0,
-        provider: prepared.providerRequest.providerLabel,
-        route: '/api/battle/execute',
-        timeoutMs: prepared.providerRequest.timeoutMs,
-      },
-      traceRecorder,
-      traceContext,
-      ...this.buildAbortHandlers(runControl, attemptKey),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      throw new Error(`AI API request failed: ${response.status} ${response.statusText} ${errorText}`)
-    }
-
-    const json = (await response.json()) as any
-    const text = json?.choices?.[0]?.message?.content || ''
-    if (!text.trim()) {
-      throw new Error('模型未返回有效文本')
-    }
-
-    const usage = buildUsage(json, {
-      promptTokens: prepared.promptTokens,
-      contextLimit: prepared.contextLimit,
-      contextRemaining: prepared.contextRemaining,
-    })
-
-    return { content: text, usage }
-  }
-
-  private async executeStreaming(
-    prepared: PreparedChatRequest,
-    runControl: BattleRunControl | undefined,
-    attemptKey: string | undefined,
-    emitDelta: (delta: { content?: string; reasoning?: string }) => void,
-  ) {
-    this.throwIfRunCancelled(runControl)
-    if (attemptKey) {
-      this.throwIfAttemptCancelled(runControl, attemptKey)
-    }
-    const traceRecorder = runControl?.traceRecorder
-    const traceContext = this.buildAttemptTraceContext(runControl, attemptKey, {
-      phase: 'execute',
-      mode: 'stream',
-    })
-    const response = await this.requester.requestWithBackoff({
-      request: {
-        url: prepared.providerRequest.url,
-        headers: prepared.providerRequest.headers,
-        body: prepared.providerRequest.body,
-      },
-      context: {
-        sessionId: 0,
-        provider: prepared.providerRequest.providerLabel,
-        route: '/api/battle/execute',
-        timeoutMs: prepared.providerRequest.timeoutMs,
-      },
-      traceRecorder,
-      traceContext,
-      ...this.buildAbortHandlers(runControl, attemptKey),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      throw new Error(`AI API request failed: ${response.status} ${response.statusText} ${errorText}`)
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error('Response body is not readable')
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let content = ''
-    let doneSeen = false
-    let sawSse = false
-    let sawJson = false
-    let usage: Record<string, any> = {}
-
-    const pushContent = (delta: string) => {
-      if (!delta) return
-      content += delta
-      emitDelta({ content: delta })
-    }
-
-    const pushReasoning = (delta: string) => {
-      if (!delta) return
-      emitDelta({ reasoning: delta })
-    }
-
-    const recordUsage = (payload: any) => {
-      if (!payload) return
-      usage = buildUsage(
-        { usage: payload.usage ?? payload },
-        {
-          promptTokens: prepared.promptTokens,
-          contextLimit: prepared.contextLimit,
-          contextRemaining: prepared.contextRemaining,
-        },
-      )
-    }
-
-    const extractDeltaPayload = (payload: any) => {
-      const contentDelta =
-        payload?.choices?.[0]?.delta?.content ??
-        payload?.choices?.[0]?.delta?.text ??
-        payload?.delta?.content ??
-        payload?.delta?.text ??
-        payload?.message?.content ??
-        payload?.response ??
-        payload?.choices?.[0]?.message?.content ??
-        payload?.text ??
-        ''
-      const reasoningDelta =
-        payload?.choices?.[0]?.delta?.reasoning_content ??
-        payload?.choices?.[0]?.delta?.reasoning ??
-        payload?.choices?.[0]?.delta?.thinking ??
-        payload?.choices?.[0]?.delta?.analysis ??
-        payload?.delta?.reasoning_content ??
-        payload?.delta?.reasoning ??
-        payload?.message?.reasoning_content ??
-        payload?.message?.reasoning ??
-        payload?.reasoning ??
-        payload?.analysis ??
-        ''
-      return { contentDelta, reasoningDelta }
-    }
-
-    const handleJsonPayload = (payload: any) => {
-      if (!payload) return
-      const { contentDelta, reasoningDelta } = extractDeltaPayload(payload)
-      if (typeof contentDelta === 'string' && contentDelta) {
-        pushContent(contentDelta)
-      }
-      if (typeof reasoningDelta === 'string' && reasoningDelta) {
-        pushReasoning(reasoningDelta)
-      }
-      if (payload?.done === true) {
-        doneSeen = true
-      }
-      if (payload?.usage || payload?.prompt_eval_count != null || payload?.eval_count != null) {
-        recordUsage(payload)
-      }
-    }
-
-    const handleLine = (line: string) => {
-      const trimmed = line.replace(/\r$/, '')
-      if (!trimmed) return
-      if (trimmed.startsWith('data:')) {
-        sawSse = true
-        const data = trimmed.slice(5).trimStart()
-        if (!data) return
-        if (data === '[DONE]') {
-          doneSeen = true
-          return
-        }
-        try {
-          const parsed = JSON.parse(data)
-          handleJsonPayload(parsed)
-        } catch {
-          return
-        }
-        return
-      }
-
-      if (sawSse) return
-
-      try {
-        const parsed = JSON.parse(trimmed)
-        sawJson = true
-        handleJsonPayload(parsed)
-      } catch {
-        return
-      }
-    }
-
-    try {
-      while (true) {
-        this.throwIfRunCancelled(runControl)
-        if (attemptKey) {
-          this.throwIfAttemptCancelled(runControl, attemptKey)
-        }
-        const { done, value } = await reader.read()
-        if (value) {
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
-          for (const line of lines) {
-            handleLine(line)
-            if (doneSeen) break
-          }
-        }
-        if (doneSeen || done) break
-      }
-
-      if (!doneSeen && buffer.trim()) {
-        handleLine(buffer.trim())
-      }
-    } finally {
-      reader.releaseLock()
-    }
-
-    if (!content.trim() && !sawJson && buffer.trim()) {
-      try {
-        const parsed = JSON.parse(buffer.trim())
-        handleJsonPayload(parsed)
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!content.trim()) {
-      throw new Error('模型未返回有效文本')
-    }
-
-    return { content, usage }
-  }
-
-  private async executeWithTools(
-    prepared: PreparedChatRequest,
-    toolFlags: { webSearchActive: boolean; pythonActive: boolean; features: BattleModelFeatures },
-    runControl?: BattleRunControl,
-    attemptKey?: string,
-    emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
-  ) {
-    const provider = prepared.providerRequest.providerLabel
-    if (provider !== 'openai' && provider !== 'azure_openai') {
-      return this.executeSimple(prepared, runControl, attemptKey)
-    }
-
-    const sysMap = prepared.systemSettings
-    const webSearchConfig = buildAgentWebSearchConfig(sysMap)
-    const pythonConfig = buildAgentPythonToolConfig(sysMap)
-    const requestedFeatures = toolFlags.features || {}
-    if (typeof requestedFeatures.web_search_scope === 'string') {
-      webSearchConfig.scope = requestedFeatures.web_search_scope
-    }
-    if (typeof requestedFeatures.web_search_include_summary === 'boolean') {
-      webSearchConfig.includeSummary = requestedFeatures.web_search_include_summary
-    }
-    if (typeof requestedFeatures.web_search_include_raw === 'boolean') {
-      webSearchConfig.includeRawContent = requestedFeatures.web_search_include_raw
-    }
-    if (typeof requestedFeatures.web_search_size === 'number' && Number.isFinite(requestedFeatures.web_search_size)) {
-      const next = Math.max(1, Math.min(10, requestedFeatures.web_search_size))
-      webSearchConfig.resultLimit = next
-    }
-
-    const toolHandlers: Array<{ name: string; handler: WebSearchToolHandler | PythonToolHandler }> = []
-    const toolDefinitions: any[] = []
-
-    if (toolFlags.webSearchActive) {
-      const handler = new WebSearchToolHandler(webSearchConfig)
-      toolHandlers.push({ name: handler.toolName, handler })
-      toolDefinitions.push(handler.toolDefinition)
-    }
-    if (toolFlags.pythonActive) {
-      const handler = new PythonToolHandler(pythonConfig)
-      toolHandlers.push({ name: handler.toolName, handler })
-      toolDefinitions.push(handler.toolDefinition)
-    }
-
-    const handlerMap = new Map(toolHandlers.map((item) => [item.name, item.handler]))
-    const maxIterations = resolveMaxToolIterations(sysMap)
-
-    let workingMessages = prepared.messagesPayload.map((msg) => ({ ...msg }))
-    let lastUsage = null as any
-
-    for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-      this.throwIfRunCancelled(runControl)
-      if (attemptKey) {
-        this.throwIfAttemptCancelled(runControl, attemptKey)
-      }
-      if (emitDelta) {
-          const streamed = await this.streamToolIteration({
-            prepared,
-            provider,
-            messages: workingMessages,
-            toolDefinitions,
-            runControl,
-            attemptKey,
-            emitDelta,
-          })
-        if (streamed.usage) {
-          lastUsage = streamed.usage
-        }
-        if (streamed.toolCalls.length === 0) {
-          const text = streamed.content || ''
-          if (!text.trim()) {
-            throw new Error('模型未返回有效文本')
-          }
-          const usage = streamed.usage
-            ? buildUsage({ usage: streamed.usage }, {
-              promptTokens: prepared.promptTokens,
-              contextLimit: prepared.contextLimit,
-              contextRemaining: prepared.contextRemaining,
-            })
-            : {}
-          return { content: text, usage }
-        }
-
-        workingMessages = workingMessages.concat({
-          role: 'assistant',
-          content: streamed.content || '',
-          tool_calls: streamed.toolCalls,
-        })
-
-        for (const toolCall of streamed.toolCalls) {
-          const toolName = toolCall?.function?.name || ''
-          const handler = handlerMap.get(toolName)
-          const args = this.safeParseToolArgs(toolCall)
-          let result: ToolHandlerResult | null = null
-          if (handler) {
-            result = await handler.handle(toolCall as ToolCall, args, {
-              sessionId: 0,
-              emitReasoning: () => {},
-              sendToolEvent: () => {},
-            })
-          } else {
-            result = {
-              toolCallId: toolCall.id || crypto.randomUUID(),
-              toolName: toolName || 'unknown',
-              message: {
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                name: toolName || 'unknown',
-                content: JSON.stringify({ error: 'Unsupported tool requested by the model' }),
-              },
-            }
-          }
-
-          workingMessages = workingMessages.concat(result.message)
-        }
-        continue
-      }
-
-      const body = convertOpenAIReasoningPayload({
-        ...prepared.baseRequestBody,
-        stream: false,
-        messages: workingMessages,
-        tools: toolDefinitions,
-        tool_choice: 'auto',
-      })
-
-      const response = await this.requester.requestWithBackoff({
-        request: {
-          url: prepared.providerRequest.url,
-          headers: prepared.providerRequest.headers,
-          body,
-        },
-        context: {
-          sessionId: 0,
-          provider,
-          route: '/api/battle/execute',
-          timeoutMs: prepared.providerRequest.timeoutMs,
-        },
-        traceRecorder: runControl?.traceRecorder,
-        traceContext: this.buildAttemptTraceContext(runControl, attemptKey, {
-          phase: 'tool',
-          iteration,
-        }),
-        ...this.buildAbortHandlers(runControl, attemptKey),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '')
-        throw new Error(`AI API request failed: ${response.status} ${response.statusText} ${errorText}`)
-      }
-
-      const json = (await response.json()) as any
-      const message = json?.choices?.[0]?.message || {}
-      lastUsage = json?.usage ?? null
-
-      const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
-      if (toolCalls.length === 0) {
-        const text = message.content || ''
-        if (!text.trim()) {
-          throw new Error('模型未返回有效文本')
-        }
-        const usage = buildUsage(json, {
-          promptTokens: prepared.promptTokens,
-          contextLimit: prepared.contextLimit,
-          contextRemaining: prepared.contextRemaining,
-        })
-        return { content: text, usage }
-      }
-
-      workingMessages = workingMessages.concat({
-        role: 'assistant',
-        content: message.content || '',
-        tool_calls: toolCalls,
-      })
-
-      for (const toolCall of toolCalls) {
-        const toolName = toolCall?.function?.name || ''
-        const handler = handlerMap.get(toolName)
-        const args = this.safeParseToolArgs(toolCall)
-        let result: ToolHandlerResult | null = null
-        if (handler) {
-          result = await handler.handle(toolCall as ToolCall, args, {
-            sessionId: 0,
-            emitReasoning: () => {},
-            sendToolEvent: () => {},
-          })
-        } else {
-          result = {
-            toolCallId: toolCall.id || crypto.randomUUID(),
-            toolName: toolName || 'unknown',
-            message: {
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              name: toolName || 'unknown',
-              content: JSON.stringify({ error: 'Unsupported tool requested by the model' }),
-            },
-          }
-        }
-
-        workingMessages = workingMessages.concat(result.message)
-      }
-    }
-
-    const fallbackUsage = lastUsage ? buildUsage({ usage: lastUsage }, {
-      promptTokens: prepared.promptTokens,
-      contextLimit: prepared.contextLimit,
-      contextRemaining: prepared.contextRemaining,
-    }) : {
-      prompt_tokens: prepared.promptTokens,
-      completion_tokens: 0,
-      total_tokens: prepared.promptTokens,
-      context_limit: prepared.contextLimit,
-      context_remaining: prepared.contextRemaining,
-    }
-
-    return { content: '工具调用次数已达上限，未生成最终答案。', usage: fallbackUsage }
-  }
-
-  private async streamToolIteration(params: {
-    prepared: PreparedChatRequest
-    provider: string
-    messages: any[]
-    toolDefinitions: any[]
-    runControl?: BattleRunControl
-    attemptKey?: string
-    emitDelta: (delta: { content?: string; reasoning?: string }) => void
-  }) {
-    const body = convertOpenAIReasoningPayload({
-      ...params.prepared.baseRequestBody,
-      stream: true,
-      messages: params.messages,
-      tools: params.toolDefinitions,
-      tool_choice: 'auto',
-    })
-
-    const response = await this.requester.requestWithBackoff({
-      request: {
-        url: params.prepared.providerRequest.url,
-        headers: params.prepared.providerRequest.headers,
-        body,
-      },
-      context: {
-        sessionId: 0,
-        provider: params.provider,
-        route: '/api/battle/execute',
-        timeoutMs: params.prepared.providerRequest.timeoutMs,
-      },
-      traceRecorder: params.runControl?.traceRecorder,
-      traceContext: this.buildAttemptTraceContext(params.runControl, params.attemptKey, {
-        phase: 'tool',
-        mode: 'stream',
-      }),
-      ...this.buildAbortHandlers(params.runControl, params.attemptKey),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      throw new Error(`AI API request failed: ${response.status} ${response.statusText} ${errorText}`)
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error('Response body is not readable')
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let content = ''
-    let usageSnapshot: Record<string, any> | null = null
-    let sawSse = false
-    let doneSeen = false
-    const toolCallBuffers = new Map<
-      number,
-      { id?: string; type?: string; function: { name?: string; arguments: string } }
-    >()
-    let fallbackToolCalls: ToolCall[] = []
-
-    const handleToolDelta = (toolDelta: any) => {
-      const idx = typeof toolDelta?.index === 'number' ? toolDelta.index : 0
-      const existing = toolCallBuffers.get(idx) || { function: { name: undefined, arguments: '' } }
-      if (toolDelta?.id) existing.id = toolDelta.id
-      if (toolDelta?.type) existing.type = toolDelta.type
-      if (toolDelta?.function?.name) existing.function.name = toolDelta.function.name
-      if (toolDelta?.function?.arguments) {
-        existing.function.arguments = `${existing.function.arguments || ''}${toolDelta.function.arguments}`
-      }
-      toolCallBuffers.set(idx, existing)
-    }
-
-    const aggregateToolCalls = () =>
-      Array.from(toolCallBuffers.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([_, entry]) => ({
-          id: entry.id || crypto.randomUUID(),
-          type: entry.type || 'function',
-          function: {
-            name: entry.function.name || 'unknown',
-            arguments: entry.function.arguments || '{}',
-          },
-        }))
-
-    const extractDeltaPayload = (payload: any) => {
-      const contentDelta =
-        payload?.choices?.[0]?.delta?.content ??
-        payload?.choices?.[0]?.delta?.text ??
-        payload?.delta?.content ??
-        payload?.delta?.text ??
-        payload?.message?.content ??
-        payload?.response ??
-        payload?.choices?.[0]?.message?.content ??
-        payload?.text ??
-        ''
-      const reasoningDelta =
-        payload?.choices?.[0]?.delta?.reasoning_content ??
-        payload?.choices?.[0]?.delta?.reasoning ??
-        payload?.choices?.[0]?.delta?.thinking ??
-        payload?.choices?.[0]?.delta?.analysis ??
-        payload?.delta?.reasoning_content ??
-        payload?.delta?.reasoning ??
-        payload?.message?.reasoning_content ??
-        payload?.message?.reasoning ??
-        payload?.reasoning ??
-        payload?.analysis ??
-        ''
-      return { contentDelta, reasoningDelta }
-    }
-
-    try {
-      while (true) {
-        this.throwIfRunCancelled(params.runControl)
-        if (params.attemptKey) {
-          this.throwIfAttemptCancelled(params.runControl, params.attemptKey)
-        }
-        const { done, value } = await reader.read()
-        if (value) {
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
-          for (const line of lines) {
-            const normalized = line.replace(/\r$/, '')
-            if (!normalized.startsWith('data:')) continue
-            sawSse = true
-            const data = normalized.slice(5).trimStart()
-            if (!data) continue
-            if (data === '[DONE]') {
-              doneSeen = true
-              break
-            }
-            let parsed: any
-            try {
-              parsed = JSON.parse(data)
-            } catch {
-              continue
-            }
-            const { contentDelta, reasoningDelta } = extractDeltaPayload(parsed)
-            if (typeof contentDelta === 'string' && contentDelta) {
-              content += contentDelta
-              params.emitDelta({ content: contentDelta })
-            }
-            if (typeof reasoningDelta === 'string' && reasoningDelta) {
-              params.emitDelta({ reasoning: reasoningDelta })
-            }
-            const choice = parsed?.choices?.[0]
-            const delta = choice?.delta || {}
-            if (Array.isArray(delta.tool_calls)) {
-              for (const toolDelta of delta.tool_calls) {
-                handleToolDelta(toolDelta)
-              }
-            }
-            if (parsed?.usage) {
-              usageSnapshot = parsed.usage
-            }
-          }
-        }
-        if (doneSeen || done) break
-      }
-    } finally {
-      reader.releaseLock()
-    }
-
-    if (!sawSse) {
-      const raw = buffer.trim()
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw)
-          const message = parsed?.choices?.[0]?.message || {}
-          content = typeof message.content === 'string' ? message.content : ''
-          const reasoningText =
-            (typeof message.reasoning_content === 'string' && message.reasoning_content) ||
-            (typeof message.reasoning === 'string' && message.reasoning) ||
-            (typeof message.analysis === 'string' && message.analysis) ||
-            (typeof parsed?.reasoning === 'string' && parsed.reasoning) ||
-            (typeof parsed?.analysis === 'string' && parsed.analysis) ||
-            ''
-          if (reasoningText) {
-            params.emitDelta({ reasoning: reasoningText })
-          }
-          const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
-          fallbackToolCalls = toolCalls as ToolCall[]
-          if (parsed?.usage) usageSnapshot = parsed.usage
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    const toolCalls = toolCallBuffers.size > 0 ? aggregateToolCalls() : fallbackToolCalls
-
-    return {
-      content,
-      toolCalls,
-      usage: usageSnapshot,
-    }
-  }
-
-  private safeParseToolArgs(toolCall: any): Record<string, unknown> {
-    try {
-      const raw = toolCall?.function?.arguments
-      if (!raw) return {}
-      return JSON.parse(raw)
-    } catch {
-      return {}
-    }
-  }
-
-  private async judgeAnswer(params: {
-    prompt: string
-    expectedAnswer: string
-    answer: string
-    threshold: number
-    judgeModel: { connection: Connection; rawModelId: string }
-    runControl?: BattleRunControl
-    attemptKey?: string
-  }) {
-    const { prompt, expectedAnswer, answer, threshold, judgeModel, runControl, attemptKey } = params
-    this.throwIfRunCancelled(runControl)
-    if (attemptKey) {
-      this.throwIfAttemptCancelled(runControl, attemptKey)
-    }
-
-    const judgePrompt = this.buildJudgePrompt(prompt, expectedAnswer, answer)
-    const session = this.buildVirtualSession(judgeModel.connection, judgeModel.rawModelId)
-    const payload: any = {
-      sessionId: 0,
-      content: judgePrompt,
-      contextEnabled: false,
-      custom_body: { temperature: 0 },
-    }
-
-    const prepared = await this.requestBuilder.prepare({
-      session,
-      payload,
-      content: judgePrompt,
-      images: [],
-      mode: 'completion',
-      personalPrompt: null,
-    })
-
-    const response = await this.requester.requestWithBackoff({
-      request: {
-        url: prepared.providerRequest.url,
-        headers: prepared.providerRequest.headers,
-        body: prepared.providerRequest.body,
-      },
-      context: {
-        sessionId: 0,
-        provider: prepared.providerRequest.providerLabel,
-        route: '/api/battle/judge',
-        timeoutMs: prepared.providerRequest.timeoutMs,
-      },
-      traceRecorder: runControl?.traceRecorder,
-      traceContext: this.buildAttemptTraceContext(runControl, attemptKey, {
-        phase: 'judge',
-        mode: 'completion',
-      }),
-      ...this.buildAbortHandlers(runControl, attemptKey),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      throw new Error(`Judge API request failed: ${response.status} ${response.statusText} ${errorText}`)
-    }
-
-    const json = (await response.json()) as any
-    const text = json?.choices?.[0]?.message?.content || ''
-    if (!text.trim()) {
-      throw new Error('裁判模型未返回有效内容')
-    }
-
-    const parsedRaw = extractJsonObject(text)
-    const parsed = safeParseJson<Record<string, any>>(parsedRaw, {})
-    const passField = typeof parsed.pass === 'boolean' ? parsed.pass : null
-    const score = normalizeJudgeScore(parsed.score)
-    const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : null
-
-    const fallbackUsed = passField === null
-    const pass = passField !== null ? passField : (score != null ? score >= threshold : false)
-
-    return {
-      pass,
-      score,
-      reason,
-      fallbackUsed,
-      raw: parsed,
-    }
-  }
-
-  private buildJudgePrompt(question: string, expectedAnswer: string, answer: string) {
-    return [
-      '你是严格的答案裁判，只输出 JSON，不要包含多余解释。',
-      '请根据“问题”和“期望答案”判断“模型答案”是否准确。',
-      '输出格式：{"pass": true/false, "score": 0~1, "reason": "简短原因"}',
-      '',
-      `问题：${question}`,
-      `期望答案：${expectedAnswer}`,
-      `模型答案：${answer}`,
-    ].join('\n')
-  }
-
-  private buildVirtualSession(connection: Connection, rawModelId: string) {
-    return {
-      id: -1,
-      userId: null,
-      anonymousKey: null,
-      expiresAt: null,
-      connectionId: connection.id,
-      modelRawId: rawModelId,
-      title: 'Battle',
-      createdAt: new Date(),
-      pinnedAt: null,
-      reasoningEnabled: null,
-      reasoningEffort: null,
-      ollamaThink: null,
-      systemPrompt: null,
-      connection,
-    } as any
   }
 
   private async persistResult(params: {
@@ -2806,6 +1733,20 @@ export class BattleService {
           activeController = null
         }
       },
+    }
+  }
+
+  private buildExecutionContext(runControl?: BattleRunControl, attemptKey?: string): BattleExecutionContext {
+    return {
+      checkRunCancelled: () => this.throwIfRunCancelled(runControl),
+      checkAttemptCancelled: () => {
+        if (attemptKey) {
+          this.throwIfAttemptCancelled(runControl, attemptKey)
+        }
+      },
+      buildAbortHandlers: () => this.buildAbortHandlers(runControl, attemptKey),
+      traceRecorder: runControl?.traceRecorder ?? null,
+      buildTraceContext: (extra) => this.buildAttemptTraceContext(runControl, attemptKey, extra),
     }
   }
 

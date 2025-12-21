@@ -1,0 +1,149 @@
+export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
+
+export interface BattleSummaryStats {
+  totalModels: number
+  runsPerModel: number
+  passK: number
+  judgeThreshold: number
+  passModelCount: number
+  accuracy: number
+  modelStats: Array<{
+    modelId: string
+    connectionId: number | null
+    rawId: string | null
+    passAtK: boolean
+    passCount: number
+    accuracy: number
+  }>
+}
+
+export interface BattleRunSummary {
+  id: number
+  title: string
+  prompt: string
+  expectedAnswer: string
+  judgeModelId: string
+  judgeConnectionId?: number | null
+  judgeRawId?: string | null
+  judgeThreshold: number
+  runsPerModel: number
+  passK: number
+  status: BattleRunStatus
+  createdAt: string
+  updatedAt: string
+  summary: BattleSummaryStats
+}
+
+export interface BattleResult {
+  id: number
+  battleRunId: number
+  modelId: string
+  modelLabel?: string | null
+  connectionId?: number | null
+  rawId?: string | null
+  attemptIndex: number
+  output: string
+  reasoning?: string | null
+  usage: Record<string, any>
+  durationMs?: number | null
+  error?: string | null
+  judgePass?: boolean | null
+  judgeScore?: number | null
+  judgeReason?: string | null
+  judgeFallbackUsed?: boolean
+}
+
+export interface BattleRunDetail extends BattleRunSummary {
+  judgeModelLabel?: string | null
+  config?: {
+    models: Array<{
+      modelId: string
+      connectionId: number | null
+      rawId: string | null
+      features?: {
+        web_search?: boolean
+        web_search_scope?: 'webpage' | 'document' | 'paper' | 'image' | 'video' | 'podcast'
+        web_search_include_summary?: boolean
+        web_search_include_raw?: boolean
+        web_search_size?: number
+        python_tool?: boolean
+      }
+      customHeaders?: Array<{ name: string; value: string }>
+      customBody?: Record<string, any> | null
+      reasoningEnabled?: boolean | null
+      reasoningEffort?: 'low' | 'medium' | 'high' | null
+      ollamaThink?: boolean | null
+    }>
+  }
+  live?: {
+    attempts: Array<{
+      modelId: string
+      modelLabel?: string | null
+      connectionId: number | null
+      rawId: string | null
+      attemptIndex: number
+      status: 'pending' | 'running' | 'success' | 'error' | 'judging'
+      output?: string | null
+      reasoning?: string | null
+      durationMs?: number | null
+      error?: string | null
+    }>
+  }
+  results: BattleResult[]
+}
+
+export interface BattleRunListResponse {
+  runs: BattleRunSummary[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
+export interface BattleSharePayload {
+  title: string
+  prompt: string
+  expectedAnswer: string
+  judge: {
+    modelId: string
+    modelLabel: string | null
+    threshold: number
+  }
+  summary: BattleRunSummary['summary']
+  results: Array<{
+    modelId: string
+    modelLabel: string | null
+    connectionId: number | null
+    rawId: string | null
+    attemptIndex: number
+    output: string
+    reasoning?: string
+    durationMs: number | null
+    error: string | null
+    usage: Record<string, any>
+    judgePass: boolean | null
+    judgeScore: number | null
+    judgeReason: string | null
+    judgeFallbackUsed: boolean
+  }>
+  createdAt: string
+}
+
+export interface BattleShare {
+  id: number
+  battleRunId: number
+  token: string
+  title: string
+  payload: BattleSharePayload
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+}
+
+export interface BattleStreamEvent {
+  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'run_cancelled' | 'error' | 'complete'
+  payload?: Record<string, any>
+  error?: string
+}

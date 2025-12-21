@@ -24,11 +24,25 @@ export type { TaskTraceConfig }
 // 公共 API（代理到 TaskTraceConfigService）
 // ============================================================================
 
-export const getTaskTraceConfig = (map?: Record<string, string>): Promise<TaskTraceConfig> =>
-  getTaskTraceConfigService().getConfig(map)
+const resolveTaskTraceConfig = async (map?: Record<string, string>): Promise<TaskTraceConfig> => {
+  if (map) return resolveConfigFromMap(map)
+  try {
+    return await getTaskTraceConfigService().getConfig()
+  } catch {
+    return resolveConfigFromMap()
+  }
+}
 
-export const invalidateTaskTraceConfig = (): void =>
-  getTaskTraceConfigService().invalidateCache()
+export const getTaskTraceConfig = (map?: Record<string, string>): Promise<TaskTraceConfig> =>
+  resolveTaskTraceConfig(map)
+
+export const invalidateTaskTraceConfig = (): void => {
+  try {
+    getTaskTraceConfigService().invalidateCache()
+  } catch {
+    // ignore missing registry in test/runtime bootstrap
+  }
+}
 
 // ============================================================================
 // shouldEnableTaskTrace
@@ -49,7 +63,7 @@ interface ShouldEnableParams {
 }
 
 export const shouldEnableTaskTrace = async (params: ShouldEnableParams): Promise<ShouldEnableTaskTraceResult> => {
-  const config = params.sysMap ? resolveConfigFromMap(params.sysMap) : await getTaskTraceConfig()
+  const config = await resolveTaskTraceConfig(params.sysMap)
   if (!config.enabled) {
     return { enabled: false, traceLevel: 'standard', reason: 'disabled', config }
   }
@@ -184,7 +198,14 @@ export class TaskTraceRecorder {
   }
 
   static async create(options: TaskTraceRecorderOptions, deps?: TaskTraceRecorderDeps): Promise<TaskTraceRecorder> {
-    const effectiveDeps = deps ?? { prisma: getAppContext().prisma }
+    let effectiveDeps = deps
+    if (!effectiveDeps) {
+      try {
+        effectiveDeps = { prisma: getAppContext().prisma }
+      } catch {
+        effectiveDeps = { prisma }
+      }
+    }
     const recorder = new TaskTraceRecorder(options, effectiveDeps)
     if (!recorder.enabled) {
       return recorder

@@ -187,6 +187,9 @@ describe("系统设置页面", () => {
         chatImageRetentionDays: 30,
         assistantReplyHistoryLimit: 5,
         anonymousRetentionDays: 10,
+        titleSummaryEnabled: false,
+        titleSummaryMaxLength: 20,
+        titleSummaryModelSource: "current",
       })
     })
   })

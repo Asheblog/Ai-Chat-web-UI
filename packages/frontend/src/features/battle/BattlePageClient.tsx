@@ -24,6 +24,7 @@ import { ResultStep } from './ui/ResultStep'
 import { DetailDrawer, type BattleAttemptDetail } from './ui/DetailDrawer'
 import { useBattleFlow, type BattleStep } from './hooks/useBattleFlow'
 import './battle.css'
+import { buildModelKey, parseModelKey } from './utils/model-key'
 
 const RUN_STORAGE_KEY = 'battle:active-run-id'
 
@@ -85,33 +86,20 @@ export function BattlePageClient() {
     }, models)
   }, [flow.loadRun, models])
 
-  const parseModelKey = useCallback((modelKey: string) => {
-    if (modelKey.startsWith('global:')) {
-      return { type: 'global' as const, modelId: modelKey.slice('global:'.length) }
-    }
-    const [connIdRaw, ...rawParts] = modelKey.split(':')
-    const connectionId = Number.parseInt(connIdRaw, 10)
-    const rawId = rawParts.join(':')
-    if (!Number.isFinite(connectionId) || !rawId) {
-      return null
-    }
-    return { type: 'connection' as const, connectionId, rawId }
-  }, [])
-
-  const buildResultKey = useCallback((result: BattleResult) => {
-    if (result.connectionId != null && result.rawId) {
-      return `${result.connectionId}:${result.rawId}`
-    }
-    return `global:${result.modelId}`
-  }, [])
-
   const handleNodeClick = useCallback((modelKey: string, attemptIndex: number) => {
     setSelectedNode({ modelKey, attemptIndex })
   }, [])
 
   const handleSelectResult = useCallback((result: BattleResult) => {
-    setSelectedNode({ modelKey: buildResultKey(result), attemptIndex: result.attemptIndex })
-  }, [buildResultKey])
+    setSelectedNode({
+      modelKey: buildModelKey({
+        modelId: result.modelId,
+        connectionId: result.connectionId,
+        rawId: result.rawId,
+      }),
+      attemptIndex: result.attemptIndex,
+    })
+  }, [])
 
   const selectedNodeKey = selectedNode ? `${selectedNode.modelKey}-${selectedNode.attemptIndex}` : null
 
@@ -121,7 +109,11 @@ export function BattlePageClient() {
     const parsed = parseModelKey(modelKey)
     const matched = flow.results.find((item) => {
       if (item.attemptIndex !== attemptIndex) return false
-      return buildResultKey(item) === modelKey
+      return buildModelKey({
+        modelId: item.modelId,
+        connectionId: item.connectionId,
+        rawId: item.rawId,
+      }) === modelKey
     })
     if (matched) return { ...matched, modelKey }
 
@@ -141,7 +133,7 @@ export function BattlePageClient() {
       error: attempt.error ?? null,
       status: attempt.status,
     }
-  }, [selectedNode, flow.results, flow.nodeStates, parseModelKey, buildResultKey])
+  }, [selectedNode, flow.results, flow.nodeStates, parseModelKey])
 
   const fetchRunDetail = useCallback(async (runId: number, options?: { silent?: boolean }) => {
     try {

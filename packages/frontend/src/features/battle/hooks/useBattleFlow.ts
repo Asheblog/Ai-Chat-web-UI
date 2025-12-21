@@ -11,6 +11,7 @@ import {
   streamBattle,
   type BattleStreamPayload,
 } from '../api'
+import { buildModelKey, modelKeyFor, parseModelKey } from '../utils/model-key'
 
 // ==================== Types ====================
 
@@ -150,13 +151,6 @@ export const sanitizeHeaders = (
   return { ok: true, headers: sanitized }
 }
 
-export const modelKeyFor = (model: ModelItem): string => {
-  if (model.connectionId && model.rawId) {
-    return `${model.connectionId}:${model.rawId}`
-  }
-  return `global:${model.id}`
-}
-
 const isPlaceholderModel = (model: ModelItem) =>
   model.provider === 'unknown' || model.channelName === 'unknown' || model.connectionId === 0
 
@@ -250,26 +244,6 @@ const buildConfigStateFromConfig = (
     customHeaders,
     advancedOpen,
   }
-}
-
-const buildModelKey = (model: { modelId: string; connectionId?: number | null; rawId?: string | null }): string => {
-  if (model.connectionId != null && model.rawId) {
-    return `${model.connectionId}:${model.rawId}`
-  }
-  return `global:${model.modelId}`
-}
-
-const parseModelKey = (modelKey: string): { modelId?: string; connectionId?: number; rawId?: string } | null => {
-  if (!modelKey) return null
-  if (modelKey.startsWith('global:')) {
-    const modelId = modelKey.slice('global:'.length)
-    return modelId ? { modelId } : null
-  }
-  const [connIdRaw, ...rawParts] = modelKey.split(':')
-  const connectionId = Number.parseInt(connIdRaw, 10)
-  const rawId = rawParts.join(':')
-  if (!Number.isFinite(connectionId) || !rawId) return null
-  return { connectionId, rawId }
 }
 
 const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | null => {
@@ -860,9 +834,9 @@ export function useBattleFlow() {
     if (!parsed) return null
     return {
       attemptIndex,
-      modelId: parsed.modelId,
-      connectionId: parsed.connectionId,
-      rawId: parsed.rawId,
+      modelId: parsed.type === 'global' ? parsed.modelId : undefined,
+      connectionId: parsed.type === 'connection' ? parsed.connectionId : undefined,
+      rawId: parsed.type === 'connection' ? parsed.rawId : undefined,
     }
   }, [])
 

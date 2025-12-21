@@ -9,7 +9,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./latex-normalizer": "./dist/latex-normalizer.js",
-    "./image-limits": "./dist/image-limits.js"
+    "./image-limits": "./dist/image-limits.js",
+    "./battle-contract": "./dist/battle-contract.js"
   },
   "files": [
     "dist"

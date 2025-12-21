@@ -1,8 +1,9 @@
 import { render, screen } from "@testing-library/react"
+import { vi } from "vitest"
 import { ShareViewer } from "./share-viewer"
 
 // Mock ReasoningPanel to avoid complex dependency chain
-jest.mock('@/components/reasoning-panel', () => ({
+vi.mock('@/components/reasoning-panel', () => ({
   ReasoningPanel: ({ expanded, onToggle, toolSummary }: any) => (
     <div data-testid="reasoning-panel" data-expanded={expanded} onClick={onToggle}>
       {toolSummary && <span data-testid="tool-summary">{toolSummary.label}</span>}
