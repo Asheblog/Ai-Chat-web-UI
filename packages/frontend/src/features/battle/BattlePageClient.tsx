@@ -324,7 +324,7 @@ export function BattlePageClient() {
                 历史记录
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-full sm:max-w-md p-6">
+            <SheetContent dialogTitle="历史记录" className="w-full sm:max-w-md p-6">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold">历史记录</h2>
                 <p className="text-sm text-muted-foreground">最近 20 条乱斗记录</p>

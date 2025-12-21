@@ -102,7 +102,10 @@ export function DetailDrawer({
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl p-6">
+            <SheetContent
+                dialogTitle={`${title || '模型输出详情'} #${detail.attemptIndex}`}
+                className="w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl p-6"
+            >
                 <div className="mb-4">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
                         {title}

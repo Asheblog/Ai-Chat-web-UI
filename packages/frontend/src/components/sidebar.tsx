@@ -568,6 +568,7 @@ export function Sidebar() {
         <SheetContent
           side="left"
           showCloseButton={false}
+          dialogTitle="侧边栏导航"
           className="w-72 border-r border-slate-200/70 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-900 p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
         >
           {sidebarContent}

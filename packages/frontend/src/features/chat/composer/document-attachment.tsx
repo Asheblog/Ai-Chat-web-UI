@@ -306,7 +306,12 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
       }
       onOpenChange(isOpen)
     }}>
-      <SheetContent side="bottom" showCloseButton className="max-h-[70vh] flex flex-col">
+      <SheetContent
+        side="bottom"
+        showCloseButton
+        dialogTitle={title}
+        className="max-h-[70vh] flex flex-col"
+      >
         <div className="p-4 space-y-3 flex flex-col min-h-0">
           <div className="flex items-center justify-between flex-shrink-0">
             <div className="text-sm font-medium">{title}</div>
@@ -374,4 +379,3 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
     </Sheet>
   )
 }
-
