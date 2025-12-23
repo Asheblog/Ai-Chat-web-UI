@@ -1,34 +1,26 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table'
-import {
-    Trophy,
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {Trophy,
     Medal,
     Award,
     Share2,
     RefreshCw,
     History,
-    Eye,
     Check,
     X,
     AlertTriangle,
     ChevronDown,
-    ChevronUp,
+    ChevronRight,
+    Clock,
+    FileText,
 } from 'lucide-react'
-import { StatisticsCard } from './StatisticsCard'
 import type { BattleResult, BattleRunSummary } from '@/types'
+import { ModelStatsTable } from './ModelStatsTable'
 
 interface ResultStepProps {
     prompt: string
@@ -54,17 +46,25 @@ interface ResultStepProps {
 const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value)
 
-const getRankIcon = (rank: number) => {
+const getRankDisplay = (rank: number) => {
     switch (rank) {
         case 1:
-            return <Trophy className="h-5 w-5 text-yellow-500" />
+            return { icon: <Trophy className="h-6 w-6 text-yellow-500" />, bg: 'bg-yellow-500/10 border-yellow-500/20' }
         case 2:
-            return <Medal className="h-5 w-5 text-gray-400" />
+            return { icon: <Medal className="h-6 w-6 text-gray-400" />, bg: 'bg-gray-400/10 border-gray-400/20' }
         case 3:
-            return <Award className="h-5 w-5 text-amber-600" />
+            return { icon: <Award className="h-6 w-6 text-amber-600" />, bg: 'bg-amber-600/10 border-amber-600/20' }
         default:
-            return <span className="text-sm text-muted-foreground">#{rank}</span>
+            return { icon: <span className="text-base font-semibold text-muted-foreground">#{rank}</span>, bg: 'bg-muted/30 border-border/50' }
     }
+}
+
+//截取推理内容摘要
+const getReasoningSummary = (reasoning: string | null | undefined, maxLen = 100): string => {
+    if (!reasoning) return ''
+    const cleaned = reasoning.replace(/\n+/g, ' ').trim()
+    if (cleaned.length <= maxLen) return cleaned
+    return cleaned.slice(0, maxLen) + '...'
 }
 
 export function ResultStep({
@@ -84,6 +84,7 @@ export function ResultStep({
     shareLink,
 }: ResultStepProps) {
     const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
+    const [showQuestion, setShowQuestion] = useState(false)
 
     const resolvedPassK = useMemo(() => {
         if (isFiniteNumber(summary?.passK)) return summary.passK
@@ -163,14 +164,11 @@ export function ResultStep({
         const hasResults = groupedResults.length > 0
         const totalModels = hasResults
             ? groupedResults.length
-            : isFiniteNumber(summary?.totalModels)
-                ? summary.totalModels
-                : mergedStatsMap.size
+            : isFiniteNumber(summary?.totalModels) ? summary.totalModels: mergedStatsMap.size
         const computedPassModelCount = Array.from(mergedStatsMap.values()).filter((stat) => stat.passAtK).length
         const passModelCount = hasResults
             ? computedPassModelCount
-            : isFiniteNumber(summary?.passModelCount)
-                ? summary.passModelCount
+            : isFiniteNumber(summary?.passModelCount)? summary.passModelCount
                 : computedPassModelCount
         const accuracy = hasResults
             ? totalModels > 0
@@ -178,8 +176,7 @@ export function ResultStep({
                 : 0
             : isFiniteNumber(summary?.accuracy)
                 ? summary.accuracy
-                : totalModels > 0
-                    ? passModelCount / totalModels
+                : totalModels > 0? passModelCount / totalModels
                     : 0
         return {
             totalModels,
@@ -238,237 +235,210 @@ export function ResultStep({
         })
     }
 
-    const passRate = displaySummary ? Math.min(1, Math.max(0, displaySummary.accuracy)) : 0
-
     const isError = status === 'error'
     const isCancelled = status === 'cancelled'
-    const headerTitle = isCancelled ? '对战已取消' : isError ? '对战失败' : '对战完成!'
-    const headerDesc = isCancelled ? '执行已停止，结果为部分输出' : isError ? '请检查模型配置或配额状态' : '查看各模型表现和裁判评分'
 
     return (
         <div className="space-y-6 w-full">
-            {/* Header with Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h2 className="text-xl font-semibold flex items-center gap-2">
+            {/* Header */}
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
                         {isCancelled ? (
-                            <X className="h-5 w-5 text-muted-foreground" />
+                            <X className="h-7 w-7 text-muted-foreground" />
                         ) : isError ? (
-                            <AlertTriangle className="h-5 w-5 text-destructive" />
+                            <AlertTriangle className="h-7 w-7 text-destructive" />
                         ) : (
-                            <Trophy className="h-5 w-5 text-yellow-500" />
+                            <Trophy className="h-7 w-7 text-yellow-500" />
                         )}
-                        {headerTitle}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                        {headerDesc}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={onViewHistory} className="gap-2">
-                        <History className="h-4 w-4" />
-                        历史
-                    </Button>
-                    {currentRunId && retryableJudgeCount > 0 && onRetryFailedJudges && (
-                        <Button variant="outline" size="sm" onClick={onRetryFailedJudges} className="gap-2">
-                            <RefreshCw className="h-4 w-4" />
-                            重试裁判（{retryableJudgeCount}）
+                        <h2 className="text-2xl font-bold">
+                            {isCancelled ? '对战已取消' : isError ? '对战失败' : '对战完成'}
+                        </h2>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="default" onClick={onViewHistory}>
+                            <History className="h-4 w-4 mr-2" />
+                            历史
                         </Button>
-                    )}
-                    {currentRunId && (
-                        <Button variant="outline" size="sm" onClick={onShare} className="gap-2">
-                            <Share2 className="h-4 w-4" />
-                            分享
+                        {currentRunId && (
+                            <Button variant="outline" size="default" onClick={onShare}>
+                                <Share2 className="h-4 w-4 mr-2" />
+                                分享
+                            </Button>
+                        )}
+                        <Button size="default" onClick={onNewBattle}>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            新对战
                         </Button>
-                    )}
-                    <Button onClick={onNewBattle} className="gap-2">
-                        <RefreshCw className="h-4 w-4" />
-                        新对战
-                    </Button>
+                    </div>
                 </div>
+
+                {/* 核心统计 - 单行摘要 */}
+                {displaySummary && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-base text-muted-foreground">
+                        <span className="font-semibold text-foreground text-lg">
+                            {displaySummary.passModelCount}/{displaySummary.totalModels}模型通过
+                        </span>
+                        <span className="text-muted-foreground/40">·</span>
+                        <span>准确率 {(displaySummary.accuracy * 100).toFixed(0)}%</span>{avgResponseTime > 0 && (
+                            <>
+                                <span className="text-muted-foreground/40">·</span>
+                                <span className="flex items-center gap-1.5">
+                                    <Clock className="h-4 w-4" />
+                                    平均 {(avgResponseTime / 1000).toFixed(1)}s
+                                </span>
+                            </>
+                        )}<span className="text-muted-foreground/40">·</span>
+                        <span>阈值 {displaySummary.judgeThreshold.toFixed(2)}</span>
+                    </div>
+                )}
+
+                {/* 重试按钮 */}
+                {currentRunId && retryableJudgeCount > 0 && onRetryFailedJudges && (
+                    <Button variant="outline" size="default" onClick={onRetryFailedJudges} className="w-fit">
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        重试裁判（{retryableJudgeCount}）
+                    </Button>
+                )}
             </div>
 
             {/* Share Link */}
             {shareLink && (
-                <div className="rounded-xl border border-dashed border-border/70 bg-muted/30 px-4 py-3 text-sm">
-                    分享链接：
-                    <a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
-                        {shareLink}
-                    </a>
+                <div className="rounded-lg bg-muted/50 px-4 py-3 text-base">
+                    分享链接：<a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
+                        {shareLink}</a>
                 </div>
             )}
 
-            {/* Statistics Cards */}
-            {displaySummary && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <StatisticsCard
-                        label="Pass@k 通过率"
-                        value={`${(passRate * 100).toFixed(0)}%`}
-                        subValue={`${displaySummary.passModelCount}/${displaySummary.totalModels} 模型通过`}
-                        icon="rate"
-                        variant={passRate >= 0.8 ? 'success' : passRate >= 0.5 ? 'warning' : 'error'}
-                        progress={passRate * 100}
-                    />
-                    <StatisticsCard
-                        label="通过模型数"
-                        value={`${displaySummary.passModelCount}`}
-                        subValue={`共 ${displaySummary.totalModels} 个参赛`}
-                        icon="models"
-                        variant="default"
-                    />
-                    <StatisticsCard
-                        label="平均响应时间"
-                        value={avgResponseTime > 0 ? `${(avgResponseTime / 1000).toFixed(1)}s` : '--'}
-                        icon="time"
-                        variant="default"
-                    />
-                    <StatisticsCard
-                        label="裁判阈值"
-                        value={displaySummary.judgeThreshold.toFixed(2)}
-                        subValue={`pass@${displaySummary.passK} / ${displaySummary.runsPerModel} 次运行`}
-                        icon="target"
-                        variant="default"
-                    />
+            {/* 题目预览 - 可折叠 */}
+            <Collapsible open={showQuestion} onOpenChange={setShowQuestion}>
+                <CollapsibleTrigger asChild>
+                    <button className="flex items-center gap-2 text-base text-muted-foreground hover:text-foreground transition-colors py-1">
+                        {showQuestion ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}<FileText className="h-5 w-5" />
+                        查看题目与期望答案
+                    </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                    <div className="rounded-lg bg-muted/30 p-5 space-y-4">
+                        <div>
+                            <div className="text-sm font-medium text-muted-foreground mb-2">题目</div>
+                            <div className="text-base text-foreground leading-relaxed">{prompt}</div>
+                        </div>
+                        <div>
+                            <div className="text-sm font-medium text-muted-foreground mb-2">期望答案</div>
+                            <div className="text-base text-foreground leading-relaxed">{expectedAnswer}</div>
+                        </div>
                 </div>
-            )}
+                </CollapsibleContent>
+            </Collapsible>
 
-            {/* Question Preview */}
-            <Card className="bg-muted/30">
-                <CardContent className="pt-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                            <div className="text-xs text-muted-foreground mb-1">题目</div>
-                            <div className="text-sm line-clamp-3">{prompt}</div>
-                        </div>
-                        <div>
-                            <div className="text-xs text-muted-foreground mb-1">期望答案</div>
-                            <div className="text-sm line-clamp-3">{expectedAnswer}</div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+            {/* 模型统计总表 */}
+            <ModelStatsTable
+                groupedResults={rankedModels}
+                statsMap={mergedStatsMap}
+                className="mb-4"
+            />
 
-            {/* Model Leaderboard */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">模型排行榜</CardTitle>
-                    <CardDescription>按照 pass@k 和准确率排序</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ScrollArea className="w-full">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[60px]">排名</TableHead>
-                                    <TableHead>模型</TableHead>
-                                    <TableHead className="text-center">Pass@k</TableHead>
-                                    <TableHead className="text-center">准确率</TableHead>
-                                    <TableHead className="text-center">通过次数</TableHead>
-                                    <TableHead className="w-[80px]">操作</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {rankedModels.map((group, index) => {
-                                    const stat = mergedStatsMap.get(group.key)
-                                    const isExpanded = expandedModels.has(group.key)
+            {/* 模型卡片列表 */}
+            <div className="space-y-3">
+                {rankedModels.map((group, index) => {
+                    const stat = mergedStatsMap.get(group.key)
+                    const isExpanded = expandedModels.has(group.key)
+                    const rank = getRankDisplay(index + 1)
+                    const bestAttempt = group.attempts.find(a => a.judgePass) || group.attempts[0]
+                    const reasoningSummary = getReasoningSummary(bestAttempt?.reasoning)
 
-                                    return (
-                                        <>
-                                            <TableRow key={group.key} className="hover:bg-muted/50">
-                                                <TableCell>
-                                                    <div className="flex items-center justify-center">
-                                                        {getRankIcon(index + 1)}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="font-medium">{group.label}</TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant={stat?.passAtK ? 'default' : 'secondary'}>
-                                                        {stat?.passAtK ? (
-                                                            <>
-                                                                <Check className="h-3 w-3 mr-1" />
-                                                                通过
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <X className="h-3 w-3 mr-1" />
-                                                                未通过
-                                                            </>
-                                                        )}
+                    return (
+                        <div
+                            key={group.key}
+                            className={cn(
+                                "rounded-xl border transition-all",
+                                rank.bg,
+                                isExpanded && "shadow-sm"
+                            )}
+                        >
+                            {/* 模型主行*/}
+                            <button
+                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-black/5 dark:hover:bg-white/5 rounded-xl transition-colors"
+                                onClick={() => toggleExpand(group.key)}
+                            >
+                                {/* 排名 */}
+                                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full bg-background/80 border border-border/50">
+                                    {rank.icon}
+                                </div>
+
+                                {/* 模型信息 */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <span className="font-semibold text-lg truncate">{group.label}</span>
+                <Badge
+                                            variant={stat?.passAtK ? 'default' : 'secondary'}
+                                            className="flex-shrink-0"
+                                        >
+                                            {stat?.passAtK ? (
+                                                <><Check className="h-3.5 w-3.5 mr-1" />通过</>
+                                            ) : (
+                                                <><X className="h-3.5 w-3.5 mr-1" />未通过</>
+                                            )}</Badge>
+                                    </div>
+                                    {reasoningSummary && (<p className="text-sm text-muted-foreground line-clamp-1">
+                                            {reasoningSummary}</p>
+                                    )}
+                                </div>
+
+                                {/* 准确率 */}<div className="flex-shrink-0 text-right px-2"><div className="text-xl font-bold">
+                                        {stat ? `${(stat.accuracy * 100).toFixed(0)}%` : '--'}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">
+                                        {stat?.passCount ?? 0}/{stat?.judgedCount ?? group.attempts.length} 通过
+                                    </div>
+                                </div>
+
+                                {/* 展开指示 */}
+                                <div className="flex-shrink-0">
+                                    {isExpanded ? (
+                                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                                    ) : (
+                                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                                    )}
+                                </div>
+                            </button>
+
+                            {/* 展开内容 - 各次尝试 */}
+                            {isExpanded && (
+                                <div className="px-4 pb-4 space-y-2"><div className="border-t border-border/50 mb-3" />
+                                    {group.attempts.map((attempt) => (
+                                        <div
+                                            key={`${group.key}-${attempt.attemptIndex}`}
+                                            className="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-background/60 cursor-pointer hover:bg-background transition-colors"
+                                            onClick={() => onSelectResult(attempt)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-base text-muted-foreground min-w-[5rem]">
+                                                    第 {attempt.attemptIndex} 次
+                                                </span>
+                                                {attempt.error ? (
+                                                    <Badge variant="destructive">错误</Badge>
+                                                ) : attempt.judgeStatus === 'running' ? (
+                                                    <Badge variant="secondary">评测中</Badge>
+                                                ) : attempt.judgeStatus === 'error' ? (
+                                                    <Badge variant="secondary">裁判失败</Badge>
+                                                ) : attempt.judgePass != null ? (<Badge variant={attempt.judgePass ? 'outline' : 'secondary'}>
+                                                        {attempt.judgePass ? '✓' : '✗'} {attempt.judgeScore?.toFixed(2) ?? '--'}
                                                     </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    {stat ? `${(stat.accuracy * 100).toFixed(0)}%` : '--'}
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    {stat?.passCount ?? 0}/{stat?.judgedCount ?? group.attempts.length}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => toggleExpand(group.key)}
-                                                    >
-                                                        {isExpanded ? (
-                                                            <ChevronUp className="h-4 w-4" />
-                                                        ) : (
-                                                            <ChevronDown className="h-4 w-4" />
-                                                        )}
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-
-                                            {/* Expanded attempts */}
-                                            {isExpanded && group.attempts.map((attempt) => (
-                                                <TableRow
-                                                    key={`${group.key}-${attempt.attemptIndex}`}
-                                                    className="bg-muted/30"
-                                                >
-                                                    <TableCell />
-                                                    <TableCell className="pl-8">
-                                                        <span className="text-sm text-muted-foreground">
-                                                            第 {attempt.attemptIndex} 次尝试
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell className="text-center">
-                                                        <Badge
-                                                            variant={attempt.judgeStatus === 'error' || attempt.judgeStatus === 'unknown' ? 'secondary' : (attempt.judgePass ? 'outline' : 'secondary')}
-                                                            className="text-xs"
-                                                        >
-                                                            {attempt.error ? '错误' : (
-                                                                attempt.judgeStatus === 'running' ? '评测中' : (
-                                                                    attempt.judgeStatus === 'error' ? '裁判失败' : (
-                                                                        attempt.judgePass == null ? '--' : (attempt.judgePass ? '✓' : '✗')
-                                                                    )
-                                                                )
-                                                            )}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-center text-sm">
-                                                        {attempt.judgeStatus === 'success' && attempt.judgeScore != null ? attempt.judgeScore.toFixed(2) : '--'}
-                                                    </TableCell>
-                                                    <TableCell className="text-center text-sm text-muted-foreground">
-                                                        {attempt.durationMs != null ? `${(attempt.durationMs / 1000).toFixed(1)}s` : '--'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => onSelectResult(attempt)}
-                                                        >
-                                                            <Eye className="h-4 w-4" />
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </>
-                                    )
-                                })}
-                            </TableBody>
-                        </Table>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
-
+                                                ) : (
+                                                    <Badge variant="secondary">--</Badge>
+                                                )}
+                                            </div><div className="text-base text-muted-foreground">
+                                                {attempt.durationMs != null ? `${(attempt.durationMs / 1000).toFixed(1)}s` : '--'}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )
+                })}
+            </div>
         </div>
     )
 }
