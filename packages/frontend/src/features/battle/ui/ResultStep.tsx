@@ -47,6 +47,7 @@ interface ResultStepProps {
     onNewBattle: () => void
     onViewHistory: () => void
     onSelectResult: (result: BattleResult) => void
+    onRetryFailedJudges?: () => void
     shareLink?: string | null
 }
 
@@ -79,6 +80,7 @@ export function ResultStep({
     onNewBattle,
     onViewHistory,
     onSelectResult,
+    onRetryFailedJudges,
     shareLink,
 }: ResultStepProps) {
     const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
@@ -103,34 +105,58 @@ export function ResultStep({
     }, [summary?.judgeThreshold, fallbackConfig?.judgeThreshold])
 
     const computedStatsMap = useMemo(() => {
-        const map = new Map<string, { passAtK: boolean; passCount: number; accuracy: number }>()
+        const map = new Map<string, { passAtK: boolean; passCount: number; accuracy: number; judgedCount: number; totalAttempts: number }>()
         groupedResults.forEach((group) => {
-            const attempts = group.attempts.length
-            const passCount = group.attempts.filter((attempt) => attempt.judgePass === true).length
-            const accuracy = attempts > 0 ? passCount / attempts : 0
+            const totalAttempts = group.attempts.length
+            const judgedAttempts = group.attempts.filter((attempt) => {
+                if (attempt.error) return false
+                const status = attempt.judgeStatus
+                if (status === 'error') return false
+                return attempt.judgePass != null
+            })
+            const judgedCount = judgedAttempts.length
+            const passCount = judgedAttempts.filter((attempt) => attempt.judgePass === true).length
+            const accuracy = judgedCount > 0 ? passCount / judgedCount : 0
             map.set(group.key, {
                 passAtK: passCount >= resolvedPassK,
                 passCount,
                 accuracy,
+                judgedCount,
+                totalAttempts,
             })
         })
         return map
     }, [groupedResults, resolvedPassK])
 
     const mergedStatsMap = useMemo(() => {
-        const map = new Map<string, { passAtK: boolean; passCount: number; accuracy: number }>()
-        for (const [key, computed] of computedStatsMap) {
+        const map = new Map<string, { passAtK: boolean; passCount: number; accuracy: number; judgedCount: number; totalAttempts: number }>()
+        computedStatsMap.forEach((computed, key) => {
             map.set(key, computed)
-        }
-        for (const [key, stat] of statsMap) {
-            if (map.has(key)) continue
+        })
+        statsMap.forEach((stat, key) => {
+            if (map.has(key)) return
             const passAtK = typeof stat.passAtK === 'boolean' ? stat.passAtK : false
             const passCount = isFiniteNumber(stat.passCount) ? stat.passCount : 0
             const accuracy = isFiniteNumber(stat.accuracy) ? stat.accuracy : 0
-            map.set(key, { passAtK, passCount, accuracy })
-        }
+            const judgedCount = isFiniteNumber((stat as any).judgedCount) ? Math.max(0, Math.floor((stat as any).judgedCount)) : 0
+            const totalAttempts = isFiniteNumber((stat as any).totalAttempts) ? Math.max(0, Math.floor((stat as any).totalAttempts)) : 0
+            map.set(key, { passAtK, passCount, accuracy, judgedCount, totalAttempts })
+        })
         return map
     }, [computedStatsMap, statsMap])
+
+    const retryableJudgeCount = useMemo(() => {
+        let count = 0
+        for (const group of groupedResults) {
+            for (const attempt of group.attempts) {
+                if (attempt.error) continue
+                const status = attempt.judgeStatus
+                if (status === 'success' && attempt.judgePass != null) continue
+                count += 1
+            }
+        }
+        return count
+    }, [groupedResults])
 
     const displaySummary = useMemo(() => {
         if (!summary && groupedResults.length === 0) return null
@@ -243,6 +269,12 @@ export function ResultStep({
                         <History className="h-4 w-4" />
                         历史
                     </Button>
+                    {currentRunId && retryableJudgeCount > 0 && onRetryFailedJudges && (
+                        <Button variant="outline" size="sm" onClick={onRetryFailedJudges} className="gap-2">
+                            <RefreshCw className="h-4 w-4" />
+                            重试裁判（{retryableJudgeCount}）
+                        </Button>
+                    )}
                     {currentRunId && (
                         <Button variant="outline" size="sm" onClick={onShare} className="gap-2">
                             <Share2 className="h-4 w-4" />
@@ -368,7 +400,7 @@ export function ResultStep({
                                                     {stat ? `${(stat.accuracy * 100).toFixed(0)}%` : '--'}
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    {stat?.passCount ?? 0}/{group.attempts.length}
+                                                    {stat?.passCount ?? 0}/{stat?.judgedCount ?? group.attempts.length}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Button
@@ -399,14 +431,20 @@ export function ResultStep({
                                                     </TableCell>
                                                     <TableCell className="text-center">
                                                         <Badge
-                                                            variant={attempt.judgePass ? 'outline' : 'secondary'}
+                                                            variant={attempt.judgeStatus === 'error' || attempt.judgeStatus === 'unknown' ? 'secondary' : (attempt.judgePass ? 'outline' : 'secondary')}
                                                             className="text-xs"
                                                         >
-                                                            {attempt.judgePass ? '✓' : '✗'}
+                                                            {attempt.error ? '错误' : (
+                                                                attempt.judgeStatus === 'running' ? '评测中' : (
+                                                                    attempt.judgeStatus === 'error' ? '裁判失败' : (
+                                                                        attempt.judgePass == null ? '--' : (attempt.judgePass ? '✓' : '✗')
+                                                                    )
+                                                                )
+                                                            )}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-center text-sm">
-                                                        {attempt.judgeScore != null ? attempt.judgeScore.toFixed(2) : '--'}
+                                                        {attempt.judgeStatus === 'success' && attempt.judgeScore != null ? attempt.judgeScore.toFixed(2) : '--'}
                                                     </TableCell>
                                                     <TableCell className="text-center text-sm text-muted-foreground">
                                                         {attempt.durationMs != null ? `${(attempt.durationMs / 1000).toFixed(1)}s` : '--'}

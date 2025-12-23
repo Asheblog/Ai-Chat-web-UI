@@ -15,7 +15,7 @@ import { formatDate } from '@/lib/utils'
 import { useModelsStore } from '@/store/models-store'
 import { History, Trash2, Eye, Trophy } from 'lucide-react'
 import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
-import { createBattleShare, deleteBattleRun, getBattleRun, listBattleRuns } from './api'
+import { createBattleShare, deleteBattleRun, getBattleRun, listBattleRuns, retryBattleJudgeResult, retryBattleJudgeRun } from './api'
 import { FlowStepper } from './ui/FlowStepper'
 import { ConfigStep } from './ui/ConfigStep'
 import { PromptStep } from './ui/PromptStep'
@@ -267,6 +267,13 @@ export function BattlePageClient() {
 
   const canRetryAttempt = Boolean(flow.isRunning && selectedDetail && selectedDetail.error)
 
+  const canRetryJudge = Boolean(
+    selectedDetail &&
+      !selectedDetail.isLive &&
+      !selectedDetail.error &&
+      (((selectedDetail as any).judgeStatus && (selectedDetail as any).judgeStatus !== 'success') || selectedDetail.judgePass == null),
+  )
+
   const handleCancelAttempt = useCallback(async (detail: BattleAttemptDetail) => {
     const result = await flow.cancelAttempt({
       modelKey: detail.modelKey,
@@ -286,6 +293,41 @@ export function BattlePageClient() {
       toast({ title: result.error || '重试失败', variant: 'destructive' })
     }
   }, [flow.retryAttempt, toast])
+
+  const handleRetryJudge = useCallback(async (detail: BattleAttemptDetail) => {
+    if ((detail as any).isLive) return
+    const resultId = (detail as any).id as number | undefined
+    const runId = (detail as any).battleRunId as number | undefined
+    if (!resultId) {
+      toast({ title: '缺少结果 ID，无法重试裁判', variant: 'destructive' })
+      return
+    }
+    const res = await retryBattleJudgeResult(resultId)
+    if (!res?.success) {
+      toast({ title: res?.error || '重试裁判失败', variant: 'destructive' })
+      return
+    }
+    toast({ title: '已触发重试裁判' })
+    const nextRunId = runId || flow.currentRunId
+    if (nextRunId) {
+      await fetchRunDetail(nextRunId, { silent: true })
+    }
+  }, [fetchRunDetail, flow.currentRunId, toast])
+
+  const handleRetryFailedJudges = useCallback(async () => {
+    const runId = flow.currentRunId
+    if (!runId) {
+      toast({ title: '缺少 runId，无法重试裁判', variant: 'destructive' })
+      return
+    }
+    const res = await retryBattleJudgeRun(runId)
+    if (!res?.success) {
+      toast({ title: res?.error || '批量重试裁判失败', variant: 'destructive' })
+      return
+    }
+    toast({ title: '已触发批量重试裁判' })
+    await fetchRunDetail(runId, { silent: true })
+  }, [fetchRunDetail, flow.currentRunId, toast])
 
   // Handle step navigation
   const handleStepClick = (step: BattleStep) => {
@@ -468,6 +510,7 @@ export function BattlePageClient() {
               onNewBattle={handleNewBattle}
               onViewHistory={() => setHistoryOpen(true)}
               onSelectResult={handleSelectResult}
+              onRetryFailedJudges={handleRetryFailedJudges}
               shareLink={shareLink}
             />
           )}
@@ -481,8 +524,10 @@ export function BattlePageClient() {
         isRunning={flow.isRunning}
         canCancelAttempt={canCancelAttempt}
         canRetryAttempt={canRetryAttempt}
+        canRetryJudge={canRetryJudge}
         onCancelAttempt={handleCancelAttempt}
         onRetryAttempt={handleRetryAttempt}
+        onRetryJudge={handleRetryJudge}
       />
     </div>
   )

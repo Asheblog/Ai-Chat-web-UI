@@ -21,8 +21,10 @@ interface DetailDrawerProps {
     isRunning: boolean
     canCancelAttempt?: boolean
     canRetryAttempt?: boolean
+    canRetryJudge?: boolean
     onCancelAttempt?: (detail: BattleAttemptDetail) => void
     onRetryAttempt?: (detail: BattleAttemptDetail) => void
+    onRetryJudge?: (detail: BattleAttemptDetail) => void
 }
 
 export type BattleAttemptDetail =
@@ -39,6 +41,8 @@ export type BattleAttemptDetail =
       error?: string | null
       status: NodeStatus
       usage?: Record<string, any>
+      judgeStatus?: BattleResult['judgeStatus']
+      judgeError?: string | null
       judgePass?: boolean | null
       judgeScore?: number | null
       judgeReason?: string | null
@@ -69,8 +73,10 @@ export function DetailDrawer({
     isRunning,
     canCancelAttempt,
     canRetryAttempt,
+    canRetryJudge,
     onCancelAttempt,
     onRetryAttempt,
+    onRetryJudge,
 }: DetailDrawerProps) {
     const isLive = detail?.isLive === true
     const title = detail?.modelLabel || detail?.modelId || ''
@@ -100,6 +106,13 @@ export function DetailDrawer({
 
     if (!detail) return null
 
+    const judgeStatus = (detail as any).judgeStatus as BattleResult['judgeStatus'] | undefined
+    const judgeError = (detail as any).judgeError as string | null | undefined
+    const judgeReady = judgeStatus === 'success'
+    const judgeRunning = judgeStatus === 'running'
+    const judgeFailed = judgeStatus === 'error'
+    const judgeUnknown = !judgeStatus || judgeStatus === 'unknown' || judgeStatus === 'skipped'
+
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
@@ -114,27 +127,38 @@ export function DetailDrawer({
                     <p className="text-sm text-muted-foreground">
                         {isLive ? '实时输出更新中' : '查看模型输出详情和裁判评分'}
                     </p>
-                    {(canCancelAttempt || canRetryAttempt) && isRunning && (
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                            {canCancelAttempt && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => onCancelAttempt?.(detail)}
-                                >
-                                    取消此尝试
-                                </Button>
-                            )}
-                            {canRetryAttempt && (
-                                <Button
-                                    size="sm"
-                                    onClick={() => onRetryAttempt?.(detail)}
-                                >
-                                    重试此尝试
-                                </Button>
-                            )}
-                        </div>
-                    )}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {(canCancelAttempt || canRetryAttempt) && isRunning && (
+                            <>
+                                {canCancelAttempt && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onCancelAttempt?.(detail)}
+                                    >
+                                        取消此尝试
+                                    </Button>
+                                )}
+                                {canRetryAttempt && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => onRetryAttempt?.(detail)}
+                                    >
+                                        重试此尝试
+                                    </Button>
+                                )}
+                            </>
+                        )}
+                        {!isLive && canRetryJudge && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onRetryJudge?.(detail)}
+                            >
+                                重试裁判
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 <ScrollArea className="h-[calc(100vh-120px)]">
@@ -149,22 +173,41 @@ export function DetailDrawer({
                                     {statusBadgeLabel(detail.status)}
                                 </Badge>
                             ) : (
-                                <Badge
-                                    variant={detail.judgePass ? 'default' : 'destructive'}
-                                    className="gap-1"
-                                >
-                                    {detail.judgePass ? (
-                                        <>
-                                            <Check className="h-3 w-3" />
-                                            通过
-                                        </>
+                                <>
+                                    {judgeRunning ? (
+                                        <Badge variant="secondary" className="gap-1">
+                                            <Clock className="h-3 w-3" />
+                                            评测中
+                                        </Badge>
+                                    ) : judgeFailed ? (
+                                        <Badge variant="destructive" className="gap-1">
+                                            <AlertCircle className="h-3 w-3" />
+                                            裁判失败
+                                        </Badge>
+                                    ) : judgeUnknown ? (
+                                        <Badge variant="secondary" className="gap-1">
+                                            <AlertCircle className="h-3 w-3" />
+                                            未评测
+                                        </Badge>
                                     ) : (
-                                        <>
-                                            <X className="h-3 w-3" />
-                                            未通过
-                                        </>
+                                        <Badge
+                                            variant={detail.judgePass ? 'default' : 'destructive'}
+                                            className="gap-1"
+                                        >
+                                            {detail.judgePass ? (
+                                                <>
+                                                    <Check className="h-3 w-3" />
+                                                    通过
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <X className="h-3 w-3" />
+                                                    未通过
+                                                </>
+                                            )}
+                                        </Badge>
                                     )}
-                                </Badge>
+                                </>
                             )}
                             {detail.durationMs != null && (
                                 <Badge variant="outline" className="gap-1">
@@ -251,7 +294,7 @@ export function DetailDrawer({
                                                 'text-2xl font-bold',
                                                 detail.judgePass ? 'text-green-500' : 'text-destructive'
                                             )}>
-                                                {detail.judgeScore != null ? detail.judgeScore.toFixed(2) : '--'}
+                                                {judgeReady && detail.judgeScore != null ? detail.judgeScore.toFixed(2) : '--'}
                                             </div>
                                         </div>
                                         <div className="flex-1">
@@ -261,7 +304,7 @@ export function DetailDrawer({
                                                         'h-full rounded-full transition-all',
                                                         detail.judgePass ? 'bg-green-500' : 'bg-destructive'
                                                     )}
-                                                    style={{ width: `${(detail.judgeScore ?? 0) * 100}%` }}
+                                                    style={{ width: `${judgeReady ? (detail.judgeScore ?? 0) * 100 : 0}%` }}
                                                 />
                                             </div>
                                         </div>
@@ -272,6 +315,13 @@ export function DetailDrawer({
                                         <div className="rounded-lg border bg-muted/30 p-3">
                                             <div className="text-xs text-muted-foreground mb-1">评判理由</div>
                                             <p className="text-sm">{detail.judgeReason}</p>
+                                        </div>
+                                    )}
+
+                                    {!detail.judgeReason && judgeError && (
+                                        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+                                            <div className="text-xs text-destructive mb-1">裁判错误</div>
+                                            <p className="text-sm text-destructive/80">{judgeError}</p>
                                         </div>
                                     )}
                                 </div>

@@ -42,6 +42,8 @@ export interface NodeState {
   output?: string
   reasoning?: string
   error?: string | null
+  judgeStatus?: BattleResult['judgeStatus']
+  judgeError?: string | null
   judgePass?: boolean | null
   judgeScore?: number | null
   judgeReason?: string | null
@@ -385,11 +387,19 @@ const buildNodeStatesFromRun = (
     if (index >= 0 && index < attempts.length) {
       attempts[index] = {
         ...attempts[index],
-        status: result.error ? 'error' : result.judgePass ? 'success' : 'error',
+        status: result.error
+          ? 'error'
+          : (result.judgeStatus === 'running'
+            ? 'judging'
+            : (result.judgeStatus === 'success' && result.judgePass === true)
+              ? 'success'
+              : 'error'),
         durationMs: result.durationMs,
         output: result.output,
         reasoning: attempts[index].reasoning,
         error: result.error,
+        judgeStatus: result.judgeStatus,
+        judgeError: result.judgeError,
         judgePass: result.judgePass,
         judgeScore: result.judgeScore,
         judgeReason: result.judgeReason,
@@ -751,10 +761,18 @@ export function useBattleFlow() {
             })
 
             updateNodeState(modelKey, result.attemptIndex, {
-              status: result.error ? 'error' : result.judgePass ? 'success' : 'error',
+              status: result.error
+                ? 'error'
+                : (result.judgeStatus === 'running'
+                  ? 'judging'
+                  : (result.judgeStatus === 'success' && result.judgePass === true)
+                    ? 'success'
+                    : 'error'),
               durationMs: result.durationMs,
               output: result.output,
               error: result.error,
+              judgeStatus: result.judgeStatus,
+              judgeError: result.judgeError,
               judgePass: result.judgePass,
               judgeScore: result.judgeScore,
               judgeReason: result.judgeReason,
@@ -893,6 +911,8 @@ export function useBattleFlow() {
       reasoning: '',
       durationMs: null,
       error: null,
+      judgeStatus: 'unknown',
+      judgeError: null,
       judgePass: null,
       judgeScore: null,
       judgeReason: null,

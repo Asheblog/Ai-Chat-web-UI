@@ -498,6 +498,8 @@ model BattleResult {
   usageJson       String    @default("{}")
   durationMs      Int?
   error           String?
+  judgeStatus     String    @default("unknown") // unknown | running | success | error | skipped
+  judgeError      String?
   judgePass       Boolean?
   judgeScore      Float?
   judgeReason     String?
@@ -510,6 +512,7 @@ model BattleResult {
   @@index([battleRunId])
   @@index([modelId])
   @@index([connectionId])
+  @@index([judgeStatus])
   @@map("battle_results")
 }
 

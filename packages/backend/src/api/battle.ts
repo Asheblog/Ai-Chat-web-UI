@@ -68,6 +68,10 @@ const shareSchema = z.object({
   expiresInHours: z.number().int().min(1).max(24 * 365).optional(),
 })
 
+const judgeRetrySchema = z.object({
+  resultIds: z.array(z.number().int().positive()).max(200).optional(),
+})
+
 const parsePagination = (value: string | null, fallback: number) => {
   const parsed = parseInt(value || '', 10)
   if (Number.isFinite(parsed) && parsed > 0) {
@@ -212,6 +216,35 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
       return c.json<ApiResponse>({ success: true, data: result })
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: (error as Error)?.message || 'Failed to retry attempt' }, 400)
+    }
+  })
+
+  router.post('/results/:id/judge/retry', actorMiddleware, async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const resultId = Number.parseInt(c.req.param('id'), 10)
+      if (!Number.isFinite(resultId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid result id' }, 400)
+      }
+      const result = await svc.retryJudgeForResult(actor, { resultId })
+      return c.json<ApiResponse<typeof result>>({ success: true, data: result })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: (error as Error)?.message || 'Failed to retry judge' }, 400)
+    }
+  })
+
+  router.post('/runs/:id/judge/retry', actorMiddleware, zValidator('json', judgeRetrySchema), async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const runId = Number.parseInt(c.req.param('id'), 10)
+      if (!Number.isFinite(runId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
+      }
+      const payload = c.req.valid('json')
+      const result = await svc.retryJudgeForRun(actor, { runId, resultIds: payload.resultIds ?? null })
+      return c.json<ApiResponse<typeof result>>({ success: true, data: result })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: (error as Error)?.message || 'Failed to retry judge' }, 400)
     }
   })
 

@@ -183,6 +183,16 @@ export const retryBattleAttempt = async (runId: number, payload: BattleAttemptAc
   return response.data
 }
 
+export const retryBattleJudgeResult = async (resultId: number) => {
+  const response = await client.post<ApiResponse>(`/battle/results/${resultId}/judge/retry`)
+  return response.data
+}
+
+export const retryBattleJudgeRun = async (runId: number, payload?: { resultIds?: number[] }) => {
+  const response = await client.post<ApiResponse>(`/battle/runs/${runId}/judge/retry`, payload || {})
+  return response.data
+}
+
 export const createBattleShare = async (runId: number, payload?: { title?: string; expiresInHours?: number | null }) => {
   const response = await client.post<ApiResponse<BattleShare>>(`/battle/runs/${runId}/share`, payload || {})
   return response.data

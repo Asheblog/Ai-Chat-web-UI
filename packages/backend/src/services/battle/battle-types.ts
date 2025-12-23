@@ -54,6 +54,9 @@ export interface BattleRunSummary {
     passAtK: boolean
     passCount: number
     accuracy: number
+    judgedCount?: number
+    totalAttempts?: number
+    judgeErrorCount?: number
   }>
 }
 
@@ -86,6 +89,8 @@ export interface BattleResultRecord {
   usageJson: string
   durationMs: number | null
   error: string | null
+  judgeStatus: string
+  judgeError: string | null
   judgePass: boolean | null
   judgeScore: number | null
   judgeReason: string | null

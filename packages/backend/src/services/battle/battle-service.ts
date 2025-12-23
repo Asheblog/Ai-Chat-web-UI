@@ -186,6 +186,9 @@ const normalizeSummary = (
         passAtK: Boolean(item.passAtK),
         passCount: isFiniteNumber(item.passCount) ? item.passCount : 0,
         accuracy,
+        judgedCount: isFiniteNumber(item.judgedCount) ? Math.max(0, Math.floor(item.judgedCount)) : undefined,
+        totalAttempts: isFiniteNumber(item.totalAttempts) ? Math.max(0, Math.floor(item.totalAttempts)) : undefined,
+        judgeErrorCount: isFiniteNumber(item.judgeErrorCount) ? Math.max(0, Math.floor(item.judgeErrorCount)) : undefined,
       }
     })
     .filter((item): item is BattleRunSummary['modelStats'][number] => Boolean(item))
@@ -411,6 +414,8 @@ export class BattleService {
         usage: safeParseJson(item.usageJson, {} as Record<string, any>),
         durationMs: item.durationMs,
         error: item.error,
+        judgeStatus: (item as any).judgeStatus ?? 'unknown',
+        judgeError: (item as any).judgeError ?? null,
         judgePass: item.judgePass,
         judgeScore: item.judgeScore,
         judgeReason: item.judgeReason,
@@ -536,6 +541,8 @@ export class BattleService {
         usage: {},
         durationMs: 0,
         error: '已取消',
+        judgeStatus: 'skipped',
+        judgeError: null,
         judge: null,
       })
       runControl.traceRecorder?.log('battle:attempt_complete', {
@@ -694,6 +701,190 @@ export class BattleService {
     return { status: 'retrying' as const }
   }
 
+  async retryJudgeForResult(actor: Actor, params: { resultId: number }) {
+    const record = await this.prisma.battleResult.findFirst({
+      where: {
+        id: params.resultId,
+      },
+    })
+    if (!record) {
+      throw new Error('Battle result not found')
+    }
+
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: record.battleRunId, ...this.buildOwnershipWhere(actor) },
+    })
+    if (!run) {
+      throw new Error('Battle run not found')
+    }
+
+    if (record.error) {
+      throw new Error('Attempt failed; cannot judge')
+    }
+
+    const judgeResolution = await this.resolveModel(actor, {
+      modelId: run.judgeModelId,
+      connectionId: run.judgeConnectionId ?? undefined,
+      rawId: run.judgeRawId ?? undefined,
+    })
+    if (!judgeResolution) {
+      throw new Error('Judge model not found')
+    }
+
+    await this.prisma.battleResult.update({
+      where: { id: record.id },
+      data: { judgeStatus: 'running', judgeError: null },
+    })
+
+    const executionContext = this.buildExecutionContext(undefined, undefined)
+    try {
+      const judged = await this.executor.judgeAnswer({
+        prompt: run.prompt,
+        expectedAnswer: run.expectedAnswer,
+        answer: record.output || '',
+        threshold: run.judgeThreshold,
+        judgeModel: judgeResolution,
+        context: executionContext,
+      })
+
+      const updated = await this.prisma.battleResult.update({
+        where: { id: record.id },
+        data: {
+          judgeStatus: 'success',
+          judgeError: null,
+          judgePass: judged.pass,
+          judgeScore: judged.score,
+          judgeReason: judged.reason,
+          judgeFallbackUsed: judged.fallbackUsed,
+          judgeRawJson: safeJsonStringify(judged.raw || {}, '{}'),
+        },
+      })
+
+      await this.refreshRunSummary(run.id)
+      return this.serializeResult(updated)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '裁判模型评测失败'
+      const updated = await this.prisma.battleResult.update({
+        where: { id: record.id },
+        data: {
+          judgeStatus: 'error',
+          judgeError: message,
+          judgePass: null,
+          judgeScore: null,
+          judgeReason: null,
+          judgeFallbackUsed: false,
+          judgeRawJson: '{}',
+        },
+      })
+      await this.refreshRunSummary(run.id)
+      return this.serializeResult(updated)
+    }
+  }
+
+  async retryJudgeForRun(actor: Actor, params: { runId: number; resultIds?: number[] | null }) {
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: params.runId, ...this.buildOwnershipWhere(actor) },
+    })
+    if (!run) {
+      throw new Error('Battle run not found')
+    }
+
+    const judgeResolution = await this.resolveModel(actor, {
+      modelId: run.judgeModelId,
+      connectionId: run.judgeConnectionId ?? undefined,
+      rawId: run.judgeRawId ?? undefined,
+    })
+    if (!judgeResolution) {
+      throw new Error('Judge model not found')
+    }
+
+    const resultIds = Array.isArray(params.resultIds) ? params.resultIds.filter((id) => Number.isFinite(id)) : []
+    const scopedIds = resultIds.length > 0 ? Array.from(new Set(resultIds)).slice(0, 200) : null
+
+    const candidates = await this.prisma.battleResult.findMany({
+      where: {
+        battleRunId: run.id,
+        ...(scopedIds ? { id: { in: scopedIds } } : {}),
+      },
+      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      take: scopedIds ? undefined : 200,
+    })
+
+    const targets = scopedIds
+      ? candidates
+      : candidates.filter((item) => {
+        if (item.error) return false
+        const status = (item as any).judgeStatus as string | undefined
+        if (!status) return item.judgePass == null
+        return status !== 'success'
+      })
+
+    if (targets.length === 0) {
+      return { total: 0, updated: 0, skipped: 0, errors: 0, resultIds: [] as number[] }
+    }
+
+    await this.prisma.battleResult.updateMany({
+      where: { id: { in: targets.map((t) => t.id) } },
+      data: { judgeStatus: 'running', judgeError: null },
+    })
+
+    const executionContext = this.buildExecutionContext(undefined, undefined)
+    let updatedCount = 0
+    let skippedCount = 0
+    let errorCount = 0
+    const updatedIds: number[] = []
+
+    for (const item of targets) {
+      if (item.error) {
+        skippedCount += 1
+        continue
+      }
+      try {
+        const judged = await this.executor.judgeAnswer({
+          prompt: run.prompt,
+          expectedAnswer: run.expectedAnswer,
+          answer: item.output || '',
+          threshold: run.judgeThreshold,
+          judgeModel: judgeResolution,
+          context: executionContext,
+        })
+        await this.prisma.battleResult.update({
+          where: { id: item.id },
+          data: {
+            judgeStatus: 'success',
+            judgeError: null,
+            judgePass: judged.pass,
+            judgeScore: judged.score,
+            judgeReason: judged.reason,
+            judgeFallbackUsed: judged.fallbackUsed,
+            judgeRawJson: safeJsonStringify(judged.raw || {}, '{}'),
+          },
+        })
+        updatedCount += 1
+        updatedIds.push(item.id)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '裁判模型评测失败'
+        await this.prisma.battleResult.update({
+          where: { id: item.id },
+          data: {
+            judgeStatus: 'error',
+            judgeError: message,
+            judgePass: null,
+            judgeScore: null,
+            judgeReason: null,
+            judgeFallbackUsed: false,
+            judgeRawJson: '{}',
+          },
+        })
+        errorCount += 1
+        updatedIds.push(item.id)
+      }
+    }
+
+    await this.refreshRunSummary(run.id)
+    return { total: targets.length, updated: updatedCount, skipped: skippedCount, errors: errorCount, resultIds: updatedIds }
+  }
+
   async createShare(
     actor: Actor,
     params: { runId: number; title?: string | null; expiresInHours?: number | null },
@@ -802,6 +993,23 @@ export class BattleService {
       expiresAt: toISOStringSafe(record.expiresAt),
       revokedAt: toISOStringSafe(record.revokedAt),
     }
+  }
+
+  private async refreshRunSummary(runId: number) {
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: runId },
+      select: { id: true, runsPerModel: true, passK: true, judgeThreshold: true },
+    })
+    if (!run) return
+    const results = await this.prisma.battleResult.findMany({
+      where: { battleRunId: run.id },
+      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+    })
+    const summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+    await this.prisma.battleRun.update({
+      where: { id: run.id },
+      data: { summaryJson: safeJsonStringify(summary, '{}') },
+    })
   }
 
   async getShareByToken(token: string): Promise<BattleShareDetail | null> {
@@ -1286,6 +1494,8 @@ export class BattleService {
         usage: {},
         durationMs: 0,
         error: '已取消',
+        judgeStatus: 'skipped',
+        judgeError: null,
         judge: null,
       })
       traceRecorder?.log('battle:attempt_complete', {
@@ -1394,7 +1604,9 @@ export class BattleService {
       return
     }
 
-    let judgeResult: { pass: boolean; score: number | null; reason: string | null; fallbackUsed: boolean } | null = null
+    let judgeStatus: 'unknown' | 'running' | 'success' | 'error' | 'skipped' = 'skipped'
+    let judgeError: string | null = null
+    let judgeResult: { pass: boolean; score: number | null; reason: string | null; fallbackUsed: boolean; raw?: Record<string, any> } | null = null
     if (!error) {
       if (runControl) {
         this.ensureLiveAttempt(runControl, {
@@ -1409,6 +1621,7 @@ export class BattleService {
         })
       }
       try {
+        judgeStatus = 'running'
         judgeResult = await this.executor.judgeAnswer({
           prompt,
           expectedAnswer,
@@ -1417,24 +1630,17 @@ export class BattleService {
           judgeModel,
           context: executionContext,
         })
+        judgeStatus = 'success'
       } catch (judgeError) {
         if (this.isRunCancelled(runControl)) {
           throw new BattleRunCancelledError()
         }
         if (this.isAttemptCancelled(runControl, attemptKey)) {
-          judgeResult = {
-            pass: false,
-            score: null,
-            reason: '已取消',
-            fallbackUsed: true,
-          }
+          judgeStatus = 'skipped'
+          judgeError = '已取消'
         } else {
-        judgeResult = {
-          pass: false,
-          score: null,
-          reason: judgeError instanceof Error ? judgeError.message : '裁判模型评测失败',
-          fallbackUsed: true,
-        }
+          judgeStatus = 'error'
+          judgeError = judgeError instanceof Error ? judgeError.message : '裁判模型评测失败'
         }
       }
     }
@@ -1456,6 +1662,8 @@ export class BattleService {
       usage,
       durationMs,
       error,
+      judgeStatus: error ? 'skipped' : judgeStatus,
+      judgeError: error ? null : judgeError,
       judge: judgeResult,
     })
 
@@ -1465,7 +1673,7 @@ export class BattleService {
         connectionId: model.resolved.connection.id,
         rawId: model.resolved.rawModelId,
         attemptIndex,
-        status: error ? 'error' : 'success',
+        status: error ? 'error' : (judgeStatus === 'error' ? 'error' : 'success'),
         output,
         reasoning,
         durationMs,
@@ -1481,6 +1689,7 @@ export class BattleService {
       judgePass: judgeResult?.pass ?? null,
       judgeScore: judgeResult?.score ?? null,
       judgeFallbackUsed: judgeResult?.fallbackUsed ?? null,
+      judgeStatus: error ? 'skipped' : judgeStatus,
     })
 
     emitEvent?.({
@@ -1509,6 +1718,8 @@ export class BattleService {
     usage: Record<string, any>
     durationMs: number | null
     error: string | null
+    judgeStatus: 'unknown' | 'running' | 'success' | 'error' | 'skipped'
+    judgeError: string | null
     judge: { pass: boolean; score: number | null; reason: string | null; fallbackUsed: boolean; raw?: Record<string, any> } | null
   }) {
     const record = await this.prisma.battleResult.create({
@@ -1526,6 +1737,8 @@ export class BattleService {
         usageJson: safeJsonStringify(params.usage || {}, '{}'),
         durationMs: params.durationMs,
         error: params.error,
+        judgeStatus: params.judgeStatus,
+        judgeError: params.judgeError,
         judgePass: params.judge?.pass ?? null,
         judgeScore: params.judge?.score ?? null,
         judgeReason: params.judge?.reason ?? null,
@@ -1549,6 +1762,8 @@ export class BattleService {
       usage: safeParseJson(record.usageJson, {} as Record<string, any>),
       durationMs: record.durationMs,
       error: record.error,
+      judgeStatus: record.judgeStatus ?? 'unknown',
+      judgeError: record.judgeError ?? null,
       judgePass: record.judgePass,
       judgeScore: record.judgeScore,
       judgeReason: record.judgeReason,
@@ -1557,7 +1772,15 @@ export class BattleService {
   }
 
   private buildSummary(results: BattleResultRecord[], runsPerModel: number, passK: number, judgeThreshold: number): BattleRunSummary {
-    const groups = new Map<string, { modelId: string; connectionId: number | null; rawId: string | null; passCount: number; attempts: number }>()
+    const groups = new Map<string, {
+      modelId: string
+      connectionId: number | null
+      rawId: string | null
+      passCount: number
+      judgedCount: number
+      totalAttempts: number
+      judgeErrorCount: number
+    }>()
 
     for (const result of results) {
       const key = `${result.modelId}:${result.connectionId ?? 'null'}:${result.rawId ?? 'null'}`
@@ -1566,15 +1789,27 @@ export class BattleService {
         connectionId: result.connectionId ?? null,
         rawId: result.rawId ?? null,
         passCount: 0,
-        attempts: 0,
+        judgedCount: 0,
+        totalAttempts: 0,
+        judgeErrorCount: 0,
       }
-      group.attempts += 1
-      if (result.judgePass) group.passCount += 1
+      group.totalAttempts += 1
+      const status = (result as any).judgeStatus as string | undefined
+      if (status === 'error') {
+        group.judgeErrorCount += 1
+      }
+      const judged = result.judgePass != null && status !== 'error'
+      if (judged) {
+        group.judgedCount += 1
+        if (result.judgePass === true) {
+          group.passCount += 1
+        }
+      }
       groups.set(key, group)
     }
 
     const modelStats = Array.from(groups.values()).map((group) => {
-      const accuracy = group.attempts > 0 ? group.passCount / group.attempts : 0
+      const accuracy = group.judgedCount > 0 ? group.passCount / group.judgedCount : 0
       return {
         modelId: group.modelId,
         connectionId: group.connectionId,
@@ -1582,6 +1817,9 @@ export class BattleService {
         passAtK: group.passCount >= passK,
         passCount: group.passCount,
         accuracy,
+        judgedCount: group.judgedCount,
+        totalAttempts: group.totalAttempts,
+        judgeErrorCount: group.judgeErrorCount,
       }
     })
 

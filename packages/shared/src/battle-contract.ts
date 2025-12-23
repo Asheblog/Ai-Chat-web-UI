@@ -14,6 +14,9 @@ export interface BattleSummaryStats {
     passAtK: boolean
     passCount: number
     accuracy: number
+    judgedCount?: number
+    totalAttempts?: number
+    judgeErrorCount?: number
   }>
 }
 
@@ -47,6 +50,8 @@ export interface BattleResult {
   usage: Record<string, any>
   durationMs?: number | null
   error?: string | null
+  judgeStatus?: 'unknown' | 'running' | 'success' | 'error' | 'skipped'
+  judgeError?: string | null
   judgePass?: boolean | null
   judgeScore?: number | null
   judgeReason?: string | null
@@ -124,6 +129,8 @@ export interface BattleSharePayload {
     durationMs: number | null
     error: string | null
     usage: Record<string, any>
+    judgeStatus?: 'unknown' | 'running' | 'success' | 'error' | 'skipped'
+    judgeError?: string | null
     judgePass: boolean | null
     judgeScore: number | null
     judgeReason: string | null
