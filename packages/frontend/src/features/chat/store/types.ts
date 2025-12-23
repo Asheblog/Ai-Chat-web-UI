@@ -136,6 +136,7 @@ export interface MessageSlice {
     },
   ) => void
   invalidateRenderedContent: (messageId?: MessageId) => void
+  editLastUserMessage: (sessionId: number, messageId: MessageId, content: string) => Promise<boolean>
   regenerateAssistantMessage: (messageId: MessageId) => Promise<void>
   cycleAssistantVariant: (parentKey: string, direction: 'prev' | 'next') => void
 }

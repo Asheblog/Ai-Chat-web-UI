@@ -32,3 +32,15 @@ export const getMessageByClientId = async (
   )
   return response.data
 }
+
+export const updateUserMessage = async (
+  sessionId: number,
+  messageId: number,
+  content: string,
+) => {
+  const response = await client.put<ApiResponse<{
+    messageId: number
+    deletedAssistantMessageIds: number[]
+  }>>(`/chat/sessions/${sessionId}/messages/${messageId}`, { content })
+  return response.data
+}

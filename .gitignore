@@ -28,6 +28,7 @@ dist/
 build/
 .cache/
 coverage/
+*.tsbuildinfo
 
 # --- Logs ---
 logs/

@@ -30,7 +30,7 @@ const buildSelector =
 export const useChatSessions = <TSelected,>(selector: (slice: Pick<ChatStore, 'sessions' | 'currentSession' | 'isSessionsLoading' | 'error' | 'fetchSessions' | 'createSession' | 'selectSession' | 'deleteSession' | 'updateSessionTitle' | 'switchSessionModel' | 'updateSessionPrefs' | 'toggleSessionPin'>) => TSelected) =>
   useChatStore(buildSelector(selector))
 
-export const useChatMessages = <TSelected,>(selector: (slice: Pick<ChatStore, 'messageMetas' | 'messageBodies' | 'messageRenderCache' | 'messageImageCache' | 'messagesHydrated' | 'isMessagesLoading' | 'toolEvents' | 'assistantVariantSelections' | 'fetchMessages' | 'addMessage' | 'applyRenderedContent' | 'invalidateRenderedContent' | 'regenerateAssistantMessage' | 'cycleAssistantVariant'>) => TSelected) =>
+export const useChatMessages = <TSelected,>(selector: (slice: Pick<ChatStore, 'messageMetas' | 'messageBodies' | 'messageRenderCache' | 'messageImageCache' | 'messagesHydrated' | 'isMessagesLoading' | 'toolEvents' | 'assistantVariantSelections' | 'fetchMessages' | 'addMessage' | 'applyRenderedContent' | 'invalidateRenderedContent' | 'editLastUserMessage' | 'regenerateAssistantMessage' | 'cycleAssistantVariant'>) => TSelected) =>
   useChatStore(buildSelector(selector))
 
 export const useChatStreaming = <TSelected,>(selector: (slice: Pick<ChatStore, 'isStreaming' | 'activeStreamSessionId' | 'activeStreamCount' | 'streamingSessions' | 'sendMessage' | 'streamMessage' | 'stopStreaming'>) => TSelected) =>

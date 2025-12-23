@@ -10,6 +10,7 @@ import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMe
 import { useSettingsStore } from '@/store/settings-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
+import { ExpandEditorDialog } from '@/components/chat/expand-editor-dialog'
 import { ReasoningSection } from './reasoning-section'
 import { MessageBodyContent } from './message-body-content'
 import { MessageHeader } from './message-header'
@@ -31,6 +32,7 @@ interface MessageBubbleProps {
   renderCache?: MessageRenderCacheEntry
   isStreaming?: boolean
   metrics?: MessageStreamMetrics | null
+  canEditUserMessage?: boolean
   variantInfo?: {
     total: number
     index: number
@@ -53,11 +55,13 @@ function MessageBubbleComponent({
   renderCache,
   isStreaming,
   metrics,
+  canEditUserMessage,
   variantInfo,
   shareSelection,
 }: MessageBubbleProps) {
   const { toast } = useToast()
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
+  const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
   const currentUser = useAuthStore((state) => state.user)
   const { reasoningDefaultExpand, assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
     reasoningDefaultExpand: Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
@@ -66,6 +70,9 @@ function MessageBubbleComponent({
   }))
   const [isCopied, setIsCopied] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editDraft, setEditDraft] = useState('')
+  const [editApplying, setEditApplying] = useState(false)
   const reasoningRaw = body.reasoning || ''
   const reasoningPlayedLength =
     typeof body.reasoningPlayedLength === 'number'
@@ -251,6 +258,7 @@ function MessageBubbleComponent({
     speedValue != null ? (speedValue >= 10 ? speedValue.toFixed(0) : speedValue.toFixed(1)) : null
 
   const shareBadgePosition = isUser ? 'right-3' : 'left-3'
+  const canEdit = Boolean(isUser && canEditUserMessage && !shareModeActive && !isStreaming)
 
   return (
     <div className={`relative ${selectionWrapperClass}`}>
@@ -296,34 +304,66 @@ function MessageBubbleComponent({
             timestamp={formatDate(meta.createdAt)}
             isCopied={isCopied}
             onCopy={handleCopy}
+            onEdit={
+              canEdit
+                ? () => {
+                    setEditDraft(content)
+                    setEditOpen(true)
+                  }
+                : undefined
+            }
             shareEntryAvailable={shareEntryAvailable}
             onShareStart={shareEntryHandler}
-          showVariantControls={showVariantControls}
-          showVariantNavigation={showVariantNavigation}
-          variantInfo={variantInfo}
-          isStreaming={Boolean(isStreaming)}
-          metrics={
-            !isUser
-              ? {
-                  latencyText,
-                  speedText,
-                }
-              : undefined
-          }
-        />
-        {!isUser && meta.pendingSync && (
-          <div className="text-xs text-amber-600 mt-1">等待后端同步</div>
-        )}
+            showVariantControls={showVariantControls}
+            showVariantNavigation={showVariantNavigation}
+            variantInfo={variantInfo}
+            isStreaming={Boolean(isStreaming)}
+            metrics={
+              !isUser
+                ? {
+                    latencyText,
+                    speedText,
+                  }
+                : undefined
+            }
+          />
+          {!isUser && meta.pendingSync && (
+            <div className="text-xs text-amber-600 mt-1">等待后端同步</div>
+          )}
+        </div>
       </div>
-    </div>
 
-    <ShareBadge
-      positionClass={shareBadgePosition}
+      <ShareBadge
+        positionClass={shareBadgePosition}
         shareModeActive={shareModeActive}
         shareSelectable={shareSelectable}
         shareSelected={shareSelected}
         onToggle={shareToggle}
       />
+
+      {canEdit && (
+        <ExpandEditorDialog
+          open={editOpen}
+          draft={editDraft}
+          onDraftChange={setEditDraft}
+          onClose={() => {
+            if (editApplying) return
+            setEditOpen(false)
+          }}
+          onApply={async () => {
+            if (editApplying) return
+            setEditApplying(true)
+            try {
+              const ok = await editLastUserMessage(meta.sessionId, meta.id, editDraft)
+              if (ok) {
+                setEditOpen(false)
+              }
+            } finally {
+              setEditApplying(false)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

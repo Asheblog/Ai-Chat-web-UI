@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Copy, RefreshCw, Share2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, Pencil, RefreshCw, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface MessageHeaderProps {
@@ -8,6 +8,7 @@ interface MessageHeaderProps {
   timestamp: string
   isCopied: boolean
   onCopy: () => void
+  onEdit?: () => void
   shareEntryAvailable: boolean
   onShareStart?: () => void
   showVariantControls: boolean
@@ -31,6 +32,7 @@ export function MessageHeader({
   timestamp,
   isCopied,
   onCopy,
+  onEdit,
   shareEntryAvailable,
   onShareStart,
   showVariantControls,
@@ -42,6 +44,17 @@ export function MessageHeader({
   if (isUser) {
     return (
       <div className="flex items-center justify-end gap-1 mt-2 text-xs text-muted-foreground">
+        {onEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={onEdit}
+            title="编辑并重新发送"
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        )}
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCopy} title="复制消息">
           {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
         </Button>

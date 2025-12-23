@@ -154,6 +154,13 @@ function MessageListComponent({
   }
 
   const lastMeta = displayMetas[displayMetas.length - 1]
+  const lastUserMeta = (() => {
+    for (let i = displayMetas.length - 1; i >= 0; i -= 1) {
+      const candidate = displayMetas[i]
+      if (candidate?.role === 'user') return candidate
+    }
+    return null
+  })()
   const virtualItems = virtualizer.getVirtualItems()
   const virtualSize = virtualizer.getTotalSize()
   const indicatorVisible = isStreaming && (!lastMeta || lastMeta.role !== 'assistant')
@@ -196,6 +203,13 @@ function MessageListComponent({
         const shareSelectable = typeof meta.id === 'number' && !meta.pendingSync
         const shareSelected =
           shareModeActive && shareSelectable && shareSelectedKeys.has(messageKey(meta.id))
+        const canEditUserMessage =
+          meta.role === 'user' &&
+          shareSelectable &&
+          !shareModeActive &&
+          !isStreaming &&
+          lastUserMeta != null &&
+          messageKey(lastUserMeta.id) === storageKey
         return (
           <div
             key={reactKey}
@@ -216,6 +230,7 @@ function MessageListComponent({
               renderCache={cache}
               isStreaming={streamingForMessage}
               metrics={metricEntry}
+              canEditUserMessage={canEditUserMessage}
               variantInfo={variantInfo}
               shareSelection={
                 shareSelectable || shareModeActive

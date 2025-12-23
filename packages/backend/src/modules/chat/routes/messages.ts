@@ -1,6 +1,9 @@
 import type { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { Actor, ApiResponse } from '../../../types';
+import { prisma } from '../../../db';
 import { extendAnonymousSession } from '../chat-common';
 import { chatService, ChatServiceError } from '../../../services/chat';
 import { chatMessageQueryService } from '../services/message-query-service';
@@ -64,6 +67,112 @@ export const registerChatMessageRoutes = (router: Hono) => {
       }, 500);
     }
   });
+
+  router.put(
+    '/sessions/:sessionId/messages/:messageId',
+    actorMiddleware,
+    zValidator(
+      'json',
+      z.object({
+        content: z.string().max(10000),
+      }),
+    ),
+    async (c) => {
+      try {
+        const actor = c.get('actor') as Actor;
+        const sessionId = parseInt(c.req.param('sessionId'));
+        const messageId = parseInt(c.req.param('messageId'));
+
+        if (Number.isNaN(sessionId) || Number.isNaN(messageId)) {
+          return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400);
+        }
+
+        try {
+          await chatService.ensureSessionAccess(actor, sessionId)
+        } catch (error) {
+          if (error instanceof ChatServiceError) {
+            return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+          }
+          throw error
+        }
+
+        const body = c.req.valid('json') as { content: string }
+        const content = typeof body?.content === 'string' ? body.content.trim() : ''
+        if (!content) {
+          return c.json<ApiResponse>({ success: false, error: 'Content is required' }, 400);
+        }
+
+        const target = await prisma.message.findUnique({
+          where: { id: messageId },
+        });
+        if (!target || target.sessionId !== sessionId) {
+          return c.json<ApiResponse>({ success: false, error: 'Message not found' }, 404);
+        }
+        if (target.role !== 'user') {
+          return c.json<ApiResponse>({ success: false, error: 'Only user messages can be edited' }, 400);
+        }
+
+        const activeStream = await prisma.message.findFirst({
+          where: { sessionId, streamStatus: 'streaming' },
+          select: { id: true },
+        })
+        if (activeStream) {
+          return c.json<ApiResponse>({ success: false, error: 'Session is streaming' }, 409);
+        }
+
+        const newerUserMessage = await prisma.message.findFirst({
+          where: {
+            sessionId,
+            role: 'user',
+            createdAt: { gt: target.createdAt },
+          },
+          select: { id: true },
+        })
+        if (newerUserMessage) {
+          return c.json<ApiResponse>(
+            { success: false, error: 'Only the last user message can be edited' },
+            400,
+          );
+        }
+
+        const assistantVariants = await prisma.message.findMany({
+          where: {
+            sessionId,
+            role: 'assistant',
+            parentMessageId: messageId,
+          },
+          select: { id: true },
+        })
+        const assistantIds = assistantVariants.map((item) => item.id)
+
+        await prisma.$transaction(async (tx) => {
+          await tx.message.update({
+            where: { id: messageId },
+            data: { content },
+          })
+
+          if (assistantIds.length > 0) {
+            await tx.usageMetric.deleteMany({ where: { messageId: { in: assistantIds } } })
+            await tx.taskTrace.deleteMany({ where: { messageId: { in: assistantIds } } })
+            await tx.message.deleteMany({ where: { id: { in: assistantIds } } })
+          }
+        })
+
+        await extendAnonymousSession(actor, sessionId);
+
+        return c.json<ApiResponse>({
+          success: true,
+          data: {
+            messageId,
+            deletedAssistantMessageIds: assistantIds,
+          },
+        });
+      } catch (error) {
+        console.error('Update message error:', error);
+        return c.json<ApiResponse>({ success: false, error: 'Failed to update message' }, 500);
+      }
+    },
+  )
 
   router.get('/sessions/:sessionId/messages/:messageId/progress', actorMiddleware, async (c) => {
     try {

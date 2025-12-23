@@ -1,4 +1,4 @@
-import { getMessages } from '@/features/chat/api'
+import { getMessages, updateUserMessage } from '@/features/chat/api'
 import type { Message } from '@/types'
 import type { MessageSlice } from '../types'
 import type { ChatSliceCreator, MessageId } from '../types'
@@ -280,6 +280,132 @@ export const createMessageSlice: ChatSliceCreator<
       delete next[key]
       return { messageRenderCache: next }
     })
+  },
+
+  editLastUserMessage: async (sessionId, messageId, content) => {
+    const snapshot = get()
+    if (snapshot.isStreaming) {
+      set({ error: '正在生成新的回答，请稍后再编辑' })
+      return false
+    }
+    if (typeof sessionId !== 'number' || !Number.isFinite(sessionId)) {
+      set({ error: '会话ID无效' })
+      return false
+    }
+    if (typeof messageId !== 'number') {
+      set({ error: '仅支持编辑已落库的用户消息' })
+      return false
+    }
+
+    const nextContent = typeof content === 'string' ? content.trim() : ''
+    if (!nextContent) {
+      set({ error: '内容不能为空' })
+      return false
+    }
+
+    const meta =
+      snapshot.messageMetas.find(
+        (item) =>
+          item.sessionId === sessionId &&
+          item.role === 'user' &&
+          messageKey(item.id) === messageKey(messageId),
+      ) ?? null
+    if (!meta) {
+      set({ error: '未找到要编辑的用户消息' })
+      return false
+    }
+
+    const lastUserMeta =
+      snapshot.messageMetas
+        .filter((item) => item.sessionId === sessionId && item.role === 'user')
+        .sort((a, b) => {
+          const aTime = new Date(a.createdAt).getTime()
+          const bTime = new Date(b.createdAt).getTime()
+          if (aTime !== bTime) return aTime - bTime
+          return messageKey(a.id).localeCompare(messageKey(b.id))
+        })
+        .at(-1) ?? null
+    if (!lastUserMeta || messageKey(lastUserMeta.id) !== messageKey(meta.id)) {
+      set({ error: '仅支持编辑当前会话的上一条提问（不跨消息）' })
+      return false
+    }
+
+    try {
+      const result = await updateUserMessage(sessionId, messageId, nextContent)
+      if (!result?.success) {
+        set({ error: (result as any)?.error || '编辑消息失败' })
+        return false
+      }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.error || error?.message || '编辑消息失败' })
+      return false
+    }
+
+    set((state) => {
+      const targetKey = messageKey(messageId)
+      const prevBody = state.messageBodies[targetKey]
+      const nextBodies = { ...state.messageBodies }
+      nextBodies[targetKey] = {
+        ...(prevBody ?? { id: messageId, stableKey: meta.stableKey, content: '', reasoning: '', version: 0, reasoningVersion: 0 }),
+        content: nextContent,
+        version: (prevBody?.version ?? 0) + 1,
+      }
+
+      const deleteKeys: string[] = []
+      const nextMetas = state.messageMetas.filter((item) => {
+        if (item.sessionId !== sessionId) return true
+        if (item.role !== 'assistant') return true
+        if (item.parentMessageId == null) return true
+        const match = messageKey(item.parentMessageId) === targetKey
+        if (match) {
+          deleteKeys.push(messageKey(item.id))
+        }
+        return !match
+      })
+
+      const nextRenderCache = { ...state.messageRenderCache }
+      delete nextRenderCache[targetKey]
+      deleteKeys.forEach((key) => {
+        delete nextBodies[key]
+        delete nextRenderCache[key]
+      })
+
+      const nextMetrics = { ...(state.messageMetrics || {}) }
+      deleteKeys.forEach((key) => {
+        delete nextMetrics[key]
+      })
+
+      return {
+        messageMetas: nextMetas,
+        assistantVariantSelections: buildVariantSelections(nextMetas),
+        messageBodies: nextBodies,
+        messageRenderCache: nextRenderCache,
+        messageMetrics: nextMetrics,
+        toolEvents: state.toolEvents.filter(
+          (event) => event.sessionId !== sessionId || !deleteKeys.includes(messageKey(event.messageId)),
+        ),
+        error: null,
+      }
+    })
+
+    const targetSession = findSessionById(snapshot.sessions, snapshot.currentSession, sessionId)
+    const shouldRequestWebSearch = shouldEnableWebSearchForSession(targetSession)
+    const shouldRequestPythonTool = shouldEnablePythonToolForSession(targetSession)
+    const featureFlags: Record<string, any> = {}
+    if (shouldRequestWebSearch) {
+      featureFlags.web_search = true
+    }
+    if (shouldRequestPythonTool) {
+      featureFlags.python_tool = true
+    }
+
+    await get().streamMessage(sessionId, '', undefined, {
+      replyToMessageId: messageId,
+      replyToClientMessageId: meta.clientMessageId ?? undefined,
+      features: Object.keys(featureFlags).length > 0 ? featureFlags : undefined,
+    })
+
+    return true
   },
 
   regenerateAssistantMessage: async (messageId: MessageId) => {
