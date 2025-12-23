@@ -158,7 +158,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     let contextWindow: number | null = null
 
     if (cfg.provider === 'ollama' && item.rawId) {
-      const ollamaKey = `${cfg.baseUrl.replace(/\/$/, '')}:${item.rawId}`
+      const ollamaKey = `${cfg.baseUrl.replace(/\/+$/, '')}:${item.rawId}`
       const now = Date.now()
       const cached = ollamaShowCache.get(ollamaKey)
       if (cached && cached.expiresAt > now) {
@@ -168,7 +168,7 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
         const timer = setTimeout(() => controller.abort(), 15000)
         try {
           const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
-          const response = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/api/show`, {
+          const response = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/api/show`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ model: item.rawId, name: item.rawId }),

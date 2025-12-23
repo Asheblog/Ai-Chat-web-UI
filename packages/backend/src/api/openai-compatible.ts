@@ -162,7 +162,7 @@ interface ProviderRequestOptions {
 }
 
 async function buildProviderRequest(opts: ProviderRequestOptions) {
-  const baseUrl = opts.connection.baseUrl.replace(/\/$/, '');
+  const baseUrl = opts.connection.baseUrl.replace(/\/+$/, '');
   const extraHeaders = opts.connection.headersJson ? JSON.parse(opts.connection.headersJson) : undefined;
   const decryptedKey =
     opts.connection.authType === 'bearer' && opts.connection.apiKey
@@ -241,7 +241,7 @@ interface EmbeddingsRequestOptions {
 }
 
 async function buildEmbeddingsRequest(opts: EmbeddingsRequestOptions) {
-  const baseUrl = opts.connection.baseUrl.replace(/\/$/, '');
+  const baseUrl = opts.connection.baseUrl.replace(/\/+$/, '');
   const extraHeaders = opts.connection.headersJson ? JSON.parse(opts.connection.headersJson) : undefined;
   const decryptedKey =
     opts.connection.authType === 'bearer' && opts.connection.apiKey

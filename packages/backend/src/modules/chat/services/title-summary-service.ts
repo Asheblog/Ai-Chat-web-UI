@@ -152,8 +152,7 @@ export class TitleSummaryService {
         modelId,
       )}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
     } else {
-      const baseWithVersion = /\/v\d+$/i.test(endpoint) ? endpoint : `${endpoint}/v1`
-      url = `${baseWithVersion}/chat/completions`
+      url = `${endpoint}/chat/completions`
     }
 
     // 构建请求头 (async)

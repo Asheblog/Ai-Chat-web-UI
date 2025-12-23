@@ -205,19 +205,16 @@ const ensureJsonContentType = (res: { headers: { get: (name: string) => string |
   }
 }
 
-const normalizeOpenAIBaseUrl = (baseUrl: string): string => {
-  const trimmed = trimTrailingSlashes(baseUrl || '')
+const normalizeHttpBaseUrl = (baseUrl: string, label: string): string => {
+  const trimmed = trimTrailingSlashes((baseUrl || '').trim())
   let parsed: URL
   try {
     parsed = new URL(trimmed)
   } catch {
-    throw new Error('OpenAI baseUrl 无效，请提供合法的 https://api.openai.com/v1 格式 URL')
+    throw new Error(`${label} baseUrl 无效，请提供合法的 URL（例如 https://api.openai.com/v1）`)
   }
-  const pathname = trimTrailingSlashes(parsed.pathname || '')
-  if (!/\/v\d+$/i.test(pathname)) {
-    throw new Error(
-      `OpenAI baseUrl 必须包含 API 版本路径（例如 https://api.openai.com/v1），当前为: ${trimmed}`
-    )
+  if (!/^https?:$/i.test(parsed.protocol)) {
+    throw new Error(`${label} baseUrl 仅支持 http/https，当前为: ${trimmed}`)
   }
   return trimmed
 }
@@ -230,9 +227,19 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     if (cfg.provider === 'openai') {
-      const normalizedBase = normalizeOpenAIBaseUrl(cfg.baseUrl)
+      const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'OpenAI')
       const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
-      if (!res.ok) throw new Error(`OpenAI verify failed: ${res.status}`)
+      if (!res.ok) {
+        const hint = (() => {
+          try {
+            const u = new URL(normalizedBase)
+            return u.pathname === '/' ? '（提示：OpenAI 官方需填写 https://api.openai.com/v1）' : ''
+          } catch {
+            return ''
+          }
+        })()
+        throw new Error(`OpenAI verify failed: ${res.status}${hint}`)
+      }
       ensureJsonContentType(res, 'OpenAI verify')
     } else if (cfg.provider === 'azure_openai') {
       const v = cfg.azureApiVersion || '2024-02-15-preview'
@@ -301,7 +308,7 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     if (cfg.provider === 'openai') {
-      const normalizedBase = normalizeOpenAIBaseUrl(cfg.baseUrl)
+      const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'OpenAI')
       const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`OpenAI models failed: ${res.status}`)
       const json: any = await res.json()
@@ -310,21 +317,21 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
     }
     if (cfg.provider === 'azure_openai') {
       const v = cfg.azureApiVersion || '2024-02-15-preview'
-      const res = await fetchImpl(`${cfg.baseUrl.replace(/\/$/, '')}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${trimTrailingSlashes(cfg.baseUrl)}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Azure models failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.data) ? json.data : []
       return list.map((m) => apply(m.id, m.name || m.id))
     }
     if (cfg.provider === 'ollama') {
-      const res = await fetchImpl(`${cfg.baseUrl.replace(/\/$/, '')}/api/tags`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${trimTrailingSlashes(cfg.baseUrl)}/api/tags`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Ollama tags failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.models) ? json.models : []
       return list.map((m) => apply(m.model, m.name || m.model))
     }
     if (cfg.provider === 'google_genai') {
-      const res = await fetchImpl(`${cfg.baseUrl.replace(/\/$/, '')}/models`, { headers, signal: ctrl.signal })
+      const res = await fetchImpl(`${trimTrailingSlashes(cfg.baseUrl)}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Google models failed: ${res.status}`)
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.models) ? json.models : []

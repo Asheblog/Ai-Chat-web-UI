@@ -325,7 +325,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const requestData: any = JSON.parse(JSON.stringify(preparedRequest.baseRequestBody));
       const providerRequest = preparedRequest.providerRequest;
       const provider = providerRequest.providerLabel as 'openai' | 'azure_openai' | 'ollama';
-      const baseUrl = session.connection.baseUrl.replace(/\/$/, '');
+      const baseUrl = session.connection.baseUrl.replace(/\/+$/, '');
       const authHeader = providerRequest.authHeader;
       const extraHeaders = providerRequest.extraHeaders;
       const providerHost = providerRequest.providerHost;

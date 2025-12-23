@@ -413,7 +413,7 @@ export class ChatRequestBuilder {
     customHeaders?: Array<{ name: string; value: string }>
   }) {
     const provider = params.session.connection.provider as ProviderType
-    const baseUrl = params.session.connection.baseUrl.replace(/\/$/, '')
+    const baseUrl = params.session.connection.baseUrl.replace(/\/+$/, '')
     const extraHeaders = this.parseHeadersJson(params.session.connection.headersJson)
     const decryptedKey =
       params.session.connection.authType === 'bearer' && params.session.connection.apiKey

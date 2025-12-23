@@ -60,7 +60,7 @@ export interface ConnectionPayload {
   defaultCapabilities?: Record<string, unknown> | undefined
 }
 
-const sanitizeBaseUrl = (value: string) => value.replace(/\/$/, '')
+const sanitizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, '')
 
 const serializeRecord = (value?: Record<string, unknown>) =>
   value ? JSON.stringify(value) : ''

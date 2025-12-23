@@ -121,7 +121,7 @@ export const registerChatControlRoutes = (router: Hono) => {
         return c.json<ApiResponse>({ success: false, error: 'connectionId or modelId required' }, 400);
       }
 
-      const baseUrl = conn.baseUrl.replace(/\/$/, '');
+      const baseUrl = conn.baseUrl.replace(/\/+$/, '');
       const provider = conn.provider as 'openai' | 'azure_openai' | 'ollama';
       const decryptedApiKey = conn.authType === 'bearer' && conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : '';
       const extraHeaders = conn.headersJson ? JSON.parse(conn.headersJson) : {};

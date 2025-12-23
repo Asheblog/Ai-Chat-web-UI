@@ -113,6 +113,11 @@ export function SystemConnectionsPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
                 placeholder={baseUrlPlaceholder}
               />
+              {form.provider === 'openai' && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  填写完整 Base URL（可包含任意路径/版本号）。示例：OpenAI https://api.openai.com/v1；智谱 BigModel https://open.bigmodel.cn/api/coding/paas/v4
+                </p>
+              )}
               {form.provider === 'google_genai' && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   需要在 Google AI Studio 控制台启用 API 并配置 API Key，默认基地址为
