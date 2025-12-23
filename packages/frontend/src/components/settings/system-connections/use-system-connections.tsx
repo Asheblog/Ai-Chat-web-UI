@@ -32,6 +32,24 @@ export interface ConnectionFormState {
   connectionType: string
 }
 
+export interface VerifyConnectionModel {
+  id: string
+  rawId: string
+  name: string
+  provider: string
+  channelName?: string
+  connectionBaseUrl?: string
+  connectionType?: string
+  tags?: Array<{ name: string }>
+  capabilities?: Record<string, boolean>
+  capabilitySource?: string
+}
+
+export interface VerifyConnectionResult {
+  models: VerifyConnectionModel[]
+  warning?: string | null
+}
+
 const DEFAULT_FORM: ConnectionFormState = {
   provider: 'openai',
   baseUrl: '',
@@ -111,6 +129,8 @@ export function useSystemConnections() {
   const [editing, setEditing] = useState<SystemConnection | null>(null)
   const [form, setForm] = useState<ConnectionFormState>(DEFAULT_FORM)
   const [capabilities, setCapabilities] = useState<Record<ConnectionCapKey, boolean>>(createEmptyConnectionCaps())
+  const [verifyDialogOpen, setVerifyDialogOpen] = useState(false)
+  const [verifyResult, setVerifyResult] = useState<VerifyConnectionResult | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -184,8 +204,14 @@ export function useSystemConnections() {
   const verifyConnection = async () => {
     const payload = buildPayload(form, capabilities)
     try {
-      await verifySystemConnection(payload)
-      toast({ title: '验证成功', description: '连接可用，配置已通过测试。' })
+      const res = await verifySystemConnection(payload)
+      const result = (res?.data ?? null) as VerifyConnectionResult | null
+      setVerifyResult(result)
+      setVerifyDialogOpen(true)
+      toast({
+        title: '验证成功',
+        description: '连接可用，已拉取模型列表。',
+      })
     } catch (err: any) {
       toast({
         title: '验证失败',
@@ -224,6 +250,9 @@ export function useSystemConnections() {
     setForm,
     capabilities,
     editing,
+    verifyDialogOpen,
+    setVerifyDialogOpen,
+    verifyResult,
     refresh: load,
     startEdit,
     cancelEdit,

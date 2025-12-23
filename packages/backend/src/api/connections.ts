@@ -112,15 +112,19 @@ export const createConnectionsApi = (deps: { connectionService?: ConnectionServi
     }
   })
 
-  router.post('/verify', requireUserActor, zValidator('json', connectionSchema), async (c) => {
-    try {
-      const payload = c.req.valid('json')
-      await service.verifyConnectionConfig(payload)
-      return c.json<ApiResponse>({ success: true, message: 'Connection verified' })
-    } catch (error) {
-      return handleServiceError(c, error, 'Verify failed', 'Verify connection error:')
-    }
-  })
+	  router.post('/verify', requireUserActor, zValidator('json', connectionSchema), async (c) => {
+	    try {
+	      const payload = c.req.valid('json')
+	      const result = await service.verifyConnectionConfig(payload)
+	      return c.json<ApiResponse>({
+	        success: true,
+	        message: 'Connection verified',
+	        data: result,
+	      })
+	    } catch (error) {
+	      return handleServiceError(c, error, 'Verify failed', 'Verify connection error:')
+	    }
+	  })
 
   return router
 }

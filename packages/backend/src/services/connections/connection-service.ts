@@ -6,7 +6,7 @@ import {
   type ConnectionWriteData,
 } from '../../repositories/connection-repository'
 import { normalizeCapabilityFlags } from '../../utils/capabilities'
-import type { AuthType, ProviderType } from '../../utils/providers'
+import { fetchModelsForConnection as defaultFetchModelsForConnection, type CatalogItem, type ConnectionConfig, type AuthType, type ProviderType } from '../../utils/providers'
 
 export class ConnectionServiceError extends Error {
   statusCode: number
@@ -25,6 +25,7 @@ export interface ConnectionServiceDeps {
   repository?: ConnectionRepository
   encryptApiKey?: (value: string) => string
   refreshModelCatalog?: (connection: Connection) => Promise<unknown>
+  fetchModelsForConnection?: (config: ConnectionConfig) => Promise<CatalogItem[]>
   verifyConnection?: (config: {
     provider: ProviderType
     vendor?: VendorType
@@ -70,6 +71,7 @@ export class ConnectionService {
   private repository: ConnectionRepository
   private encryptApiKey: (value: string) => string
   private refreshModelCatalog: (connection: Connection) => Promise<unknown>
+  private fetchModelsForConnection: (config: ConnectionConfig) => Promise<CatalogItem[]>
   private verifyConnection?: ConnectionServiceDeps['verifyConnection']
   private logger: Pick<typeof console, 'warn' | 'error'>
 
@@ -78,6 +80,7 @@ export class ConnectionService {
     this.repository = deps.repository ?? new PrismaConnectionRepository(prisma)
     this.encryptApiKey = deps.encryptApiKey ?? ((value) => value)
     this.refreshModelCatalog = deps.refreshModelCatalog ?? (async () => {})
+    this.fetchModelsForConnection = deps.fetchModelsForConnection ?? defaultFetchModelsForConnection
     this.verifyConnection = deps.verifyConnection
     this.logger = deps.logger ?? console
   }
@@ -114,7 +117,7 @@ export class ConnectionService {
     await this.repository.deleteModelCatalogByConnectionId(id)
   }
 
-  async verifyConnectionConfig(payload: ConnectionPayload) {
+  async verifyConnectionConfig(payload: ConnectionPayload): Promise<{ models: CatalogItem[]; warning?: string | null }> {
     if (!this.verifyConnection) {
       throw new ConnectionServiceError('verifyConnection dependency not provided', 500)
     }
@@ -133,6 +136,42 @@ export class ConnectionService {
       connectionType: payload.connectionType,
       defaultCapabilities: normalizeCapabilityFlags(payload.defaultCapabilities),
     })
+
+    let models: CatalogItem[] = []
+    let warning: string | null = null
+
+    try {
+      models = await this.fetchModelsForConnection({
+        provider: payload.provider,
+        baseUrl: payload.baseUrl,
+        enable: payload.enable ?? true,
+        authType: payload.authType ?? 'bearer',
+        apiKey: payload.apiKey,
+        headers: payload.headers,
+        azureApiVersion: payload.azureApiVersion,
+        prefixId: payload.prefixId,
+        tags: payload.tags,
+        modelIds: payload.modelIds,
+        connectionType: payload.connectionType,
+        defaultCapabilities: normalizeCapabilityFlags(payload.defaultCapabilities),
+      })
+    } catch (error) {
+      warning = error instanceof Error ? error.message : String(error)
+      models = Array.isArray(payload.modelIds)
+        ? payload.modelIds.filter(Boolean).map((id) => ({
+            id: payload.prefixId ? `${payload.prefixId}.${id}` : id,
+            rawId: id,
+            name: id,
+            provider: payload.provider,
+            channelName: payload.provider,
+            connectionBaseUrl: payload.baseUrl,
+            connectionType: (payload.connectionType || 'external') as any,
+            tags: payload.tags || [],
+          }))
+        : []
+    }
+
+    return { models, warning }
   }
 
   private buildConnectionData(

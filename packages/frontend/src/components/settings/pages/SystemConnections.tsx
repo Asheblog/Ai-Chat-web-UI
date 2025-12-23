@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardTitle, CardDescription } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useSystemConnections, SPECIAL_PROVIDER_DEEPSEEK, SPECIAL_VENDOR_DEEPSEEK } from '@/components/settings/system-connections/use-system-connections'
 import { CONNECTION_CAP_KEYS, CONNECTION_CAP_LABELS } from '@/components/settings/system-connections/constants'
 
@@ -26,6 +29,9 @@ export function SystemConnectionsPage() {
     verifyConnection,
     removeConnection,
     toggleCapability,
+    verifyDialogOpen,
+    setVerifyDialogOpen,
+    verifyResult,
   } = useSystemConnections()
 
   const handleProviderChange = (value: string) => {
@@ -58,6 +64,58 @@ export function SystemConnectionsPage() {
 
   return (
     <div className="space-y-6 min-w-0">
+      <Dialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>模型列表</DialogTitle>
+            <DialogDescription>
+              {verifyResult?.warning
+                ? `验证成功，但拉取模型信息时发生警告：${verifyResult.warning}`
+                : `共 ${verifyResult?.models?.length ?? 0} 个模型`}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[220px]">Model ID</TableHead>
+                  <TableHead className="min-w-[160px]">Provider</TableHead>
+                  <TableHead className="min-w-[120px]">Channel</TableHead>
+                  <TableHead className="min-w-[220px]">Tags</TableHead>
+                  <TableHead className="min-w-[260px]">Capabilities</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(verifyResult?.models ?? []).map((m) => {
+                  const tags = (m.tags ?? []).map((t) => t?.name).filter(Boolean).join(', ')
+                  const caps = m.capabilities
+                    ? Object.entries(m.capabilities)
+                        .filter(([, v]) => v === true)
+                        .map(([k]) => k)
+                        .join(', ')
+                    : ''
+                  return (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-mono text-xs">{m.id}</TableCell>
+                      <TableCell className="text-xs">{m.provider}</TableCell>
+                      <TableCell className="text-xs">{m.channelName || '-'}</TableCell>
+                      <TableCell className="text-xs">{tags || '-'}</TableCell>
+                      <TableCell className="text-xs">{caps || '-'}</TableCell>
+                    </TableRow>
+                  )
+                })}
+                {(verifyResult?.models?.length ?? 0) === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-sm text-muted-foreground">
+                      未返回模型列表。若上游不支持 /models，请手动填写 Model IDs 后再验证。
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
 
       {/* 连接表单区块 */}
       <div className="space-y-4">
