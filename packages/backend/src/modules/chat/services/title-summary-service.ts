@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
 import { AuthUtils as defaultAuthUtils } from '../../../utils/auth'
 import { buildHeaders, type ProviderType, type AuthType } from '../../../utils/providers'
+import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { BackendLogger as log } from '../../../utils/logger'
 
 export interface TitleSummaryConfig {
@@ -151,6 +152,8 @@ export class TitleSummaryService {
       url = `${endpoint}/openai/deployments/${encodeURIComponent(
         modelId,
       )}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
+    } else if (provider === 'openai_responses') {
+      url = `${endpoint}/responses`
     } else {
       url = `${endpoint}/chat/completions`
     }
@@ -159,12 +162,13 @@ export class TitleSummaryService {
     const headers = await buildHeaders(provider, authType, apiKey, extraHeaders)
 
     // 构建请求体
-    const body: Record<string, unknown> = {
+    const chatBody: Record<string, unknown> = {
       model: modelId,
       messages,
       temperature: 0.3,
       stream: false,
     }
+    const body = provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
 
     try {
       const response = await this.fetchFn(url, {
@@ -190,10 +194,7 @@ export class TitleSummaryService {
       }
 
       const rawText = await response.text()
-      let json: {
-        choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>
-        message?: { content?: string; reasoning_content?: string }
-      } = {}
+      let json: any = {}
       try {
         json = JSON.parse(rawText)
       } catch {
@@ -201,12 +202,17 @@ export class TitleSummaryService {
       }
 
       // 提取响应内容
-      let title =
-        json?.choices?.[0]?.message?.content ||
-        json?.choices?.[0]?.message?.reasoning_content ||
-        json?.message?.content ||
-        json?.message?.reasoning_content ||
-        ''
+      let title = ''
+      if (provider === 'openai_responses') {
+        title = extractTextFromResponsesResponse(json) || ''
+      } else {
+        title =
+          json?.choices?.[0]?.message?.content ||
+          json?.choices?.[0]?.message?.reasoning_content ||
+          json?.message?.content ||
+          json?.message?.reasoning_content ||
+          ''
+      }
       title = title.trim()
 
       // 确保标题长度不超过限制

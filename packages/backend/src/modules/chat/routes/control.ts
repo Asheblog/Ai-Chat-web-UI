@@ -6,6 +6,8 @@ import { prisma } from '../../../db';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse } from '../../../types';
 import { AuthUtils } from '../../../utils/auth';
+import type { ProviderType } from '../../../utils/providers';
+import { convertChatCompletionsRequestToResponses } from '../../../utils/openai-responses';
 
 const toContentfulStatus = (status: number): ContentfulStatusCode => {
   if (status === 101 || status === 204 || status === 205 || status === 304) {
@@ -122,7 +124,7 @@ export const registerChatControlRoutes = (router: Hono) => {
       }
 
       const baseUrl = conn.baseUrl.replace(/\/+$/, '');
-      const provider = conn.provider as 'openai' | 'azure_openai' | 'ollama';
+      const provider = conn.provider as ProviderType;
       const decryptedApiKey = conn.authType === 'bearer' && conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : '';
       const extraHeaders = conn.headersJson ? JSON.parse(conn.headersJson) : {};
       const headers: Record<string, string> = {
@@ -139,10 +141,11 @@ export const registerChatControlRoutes = (router: Hono) => {
         });
         const text = await res.text();
         return c.text(text, toContentfulStatus(res.status));
-      } else if (provider === 'openai' || provider === 'azure_openai') {
+      } else if (provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai') {
         const messages = [{ role: 'user', content: body.prompt }];
         let url = '';
         if (provider === 'openai') url = `${baseUrl}/chat/completions`;
+        else if (provider === 'openai_responses') url = `${baseUrl}/responses`;
         else {
           const v = conn.azureApiVersion || '2024-02-15-preview';
           url = `${baseUrl}/openai/deployments/${encodeURIComponent(rawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`;
@@ -150,7 +153,11 @@ export const registerChatControlRoutes = (router: Hono) => {
         const res = await fetch(url, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ model: rawId, messages, stream: !!body.stream }),
+          body: JSON.stringify(
+            provider === 'openai_responses'
+              ? convertChatCompletionsRequestToResponses({ model: rawId, messages, stream: !!body.stream })
+              : { model: rawId, messages, stream: !!body.stream }
+          ),
         });
         const json = await res.json();
         return c.json(json, toContentfulStatus(res.status));

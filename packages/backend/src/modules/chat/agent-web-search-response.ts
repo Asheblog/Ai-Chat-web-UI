@@ -3,6 +3,7 @@ import { Prisma, type ChatSession, type Connection } from '@prisma/client';
 import { prisma } from '../../db';
 import { BackendLogger as log } from '../../utils/logger';
 import { convertOpenAIReasoningPayload } from '../../utils/providers';
+import { convertChatCompletionsRequestToResponses } from '../../utils/openai-responses';
 import { Tokenizer } from '../../utils/tokenizer';
 import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../../utils/web-search';
 import { runPythonSnippet } from '../../utils/python-runner';
@@ -759,17 +760,22 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let currentProviderController: AbortController | null = null;
 
       const callProvider = async (messages: any[]) => {
-        const body = convertOpenAIReasoningPayload({
+        const chatBody = convertOpenAIReasoningPayload({
           ...requestData,
           stream: true,
           messages,
           tools: toolDefinitions,
           tool_choice: 'auto',
         });
+        const body = provider === 'openai_responses'
+          ? convertChatCompletionsRequestToResponses(chatBody)
+          : chatBody
 
         let url = '';
         if (provider === 'openai') {
           url = `${baseUrl}/chat/completions`;
+        } else if (provider === 'openai_responses') {
+          url = `${baseUrl}/responses`;
         } else if (provider === 'azure_openai') {
           const v = session.connection?.azureApiVersion || '2024-02-15-preview';
           url = `${baseUrl}/openai/deployments/${encodeURIComponent(
@@ -860,18 +866,33 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             number,
             { id?: string; type?: string; function: { name?: string; arguments: string } }
           >();
+          const responsesToolCallBuffers = new Map<
+            string,
+            { callId: string; name?: string; arguments: string; order: number }
+          >();
 
           const aggregateToolCalls = () =>
-            Array.from(toolCallBuffers.entries())
-              .sort((a, b) => a[0] - b[0])
-              .map(([_, entry]) => ({
-                id: entry.id || randomUUID(),
-                type: entry.type || 'function',
-                function: {
-                  name: entry.function.name || 'web_search',
-                  arguments: entry.function.arguments || '{}',
-                },
-              }));
+            (responsesToolCallBuffers.size > 0
+              ? Array.from(responsesToolCallBuffers.values())
+                  .sort((a, b) => a.order - b.order)
+                  .map((entry) => ({
+                    id: entry.callId,
+                    type: 'function',
+                    function: {
+                      name: entry.name || 'web_search',
+                      arguments: entry.arguments || '{}',
+                    },
+                  }))
+              : Array.from(toolCallBuffers.entries())
+                  .sort((a, b) => a[0] - b[0])
+                  .map(([_, entry]) => ({
+                    id: entry.id || randomUUID(),
+                    type: entry.type || 'function',
+                    function: {
+                      name: entry.function.name || 'web_search',
+                      arguments: entry.function.arguments || '{}',
+                    },
+                  })));
 
           let streamFinished = false;
           while (true) {
@@ -897,6 +918,69 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               } catch {
                 continue;
               }
+
+              if (typeof parsed?.type === 'string' && parsed.type.startsWith('response.')) {
+                if (firstChunkAt == null) firstChunkAt = Date.now();
+
+                if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
+                  iterationContent += parsed.delta;
+                  aiResponseContent += parsed.delta;
+                  safeEnqueue({ type: 'content', content: parsed.delta });
+                  await persistAssistantProgress();
+                } else if (
+                  (parsed.type === 'response.reasoning_text.delta' || parsed.type === 'response.reasoning_summary_text.delta') &&
+                  typeof parsed.delta === 'string'
+                ) {
+                  if (!reasoningStartedAt) reasoningStartedAt = Date.now();
+                  if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
+                  iterationReasoning += parsed.delta;
+                  emitReasoning(parsed.delta, { kind: 'model', stage: 'stream' });
+                  await persistAssistantProgress();
+                } else if (parsed.type === 'response.output_item.added' || parsed.type === 'response.output_item.done') {
+                  const item = parsed.item;
+                  if (item?.type === 'function_call') {
+                    const callId = typeof item.call_id === 'string' ? item.call_id : null;
+                    if (callId) {
+                      const existing = responsesToolCallBuffers.get(callId) || {
+                        callId,
+                        name: undefined,
+                        arguments: '',
+                        order: typeof parsed.output_index === 'number' ? parsed.output_index : responsesToolCallBuffers.size,
+                      };
+                      if (typeof item.name === 'string' && item.name) existing.name = item.name;
+                      if (typeof item.arguments === 'string') existing.arguments = item.arguments || existing.arguments;
+                      responsesToolCallBuffers.set(callId, existing);
+                    }
+                  }
+                } else if (parsed.type === 'response.function_call_arguments.delta') {
+                  const callId = typeof parsed.call_id === 'string' ? parsed.call_id : null;
+                  const delta = typeof parsed.delta === 'string' ? parsed.delta : '';
+                  if (callId && delta) {
+                    const existing = responsesToolCallBuffers.get(callId) || {
+                      callId,
+                      name: undefined,
+                      arguments: '',
+                      order: responsesToolCallBuffers.size,
+                    };
+                    existing.arguments = `${existing.arguments || ''}${delta}`;
+                    responsesToolCallBuffers.set(callId, existing);
+                  }
+                } else if (
+                  parsed.type === 'response.completed' ||
+                  parsed.type === 'response.failed' ||
+                  parsed.type === 'response.incomplete'
+                ) {
+                  providerUsage = parsed.response?.usage ?? providerUsage;
+                  if (providerUsage) {
+                    providerUsageSeen = true;
+                    safeEnqueue({ type: 'usage', usage: providerUsage });
+                  }
+                  streamFinished = true;
+                  break;
+                }
+                continue;
+              }
+
               const choice = parsed.choices?.[0];
               if (!choice) continue;
               if (firstChunkAt == null) {

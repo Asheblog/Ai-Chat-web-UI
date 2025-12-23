@@ -200,7 +200,7 @@ model UsageQuota {
 model Connection {
   id             Int       @id @default(autoincrement())
   ownerUserId    Int?      // null=系统级；非空=用户级直连
-  provider       String    // 'openai' | 'azure_openai' | 'ollama'
+  provider       String    // 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'
   vendor         String?
   baseUrl        String
   enable         Boolean   @default(true)

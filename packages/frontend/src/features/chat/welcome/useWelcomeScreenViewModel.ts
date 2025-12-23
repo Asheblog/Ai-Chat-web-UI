@@ -200,7 +200,7 @@ export const useWelcomeScreenViewModel = () => {
   const providerSupportsTools = useMemo(() => {
     const provider = selectedModel?.provider?.toLowerCase()
     if (!provider) return true
-    return provider === 'openai' || provider === 'azure_openai'
+    return provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
   }, [selectedModel])
 
   const canUseWebSearch = Boolean(

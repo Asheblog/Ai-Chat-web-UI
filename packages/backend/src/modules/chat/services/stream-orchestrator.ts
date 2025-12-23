@@ -32,6 +32,7 @@ import {
 } from '../stream-state'
 import { BackendLogger as log } from '../../../utils/logger'
 import { truncateString } from '../../../utils/task-trace'
+import { extractOpenAIResponsesStreamEvent } from '../../../utils/openai-responses'
 
 // 会话类型（包含连接信息）
 export type ChatSessionWithConnection = ChatSession & {
@@ -65,7 +66,7 @@ export interface StreamOrchestratorParams {
   requestData: Record<string, unknown>
 
   // Provider 信息
-  provider: 'openai' | 'azure_openai' | 'ollama'
+  provider: 'openai' | 'openai_responses' | 'azure_openai' | 'ollama'
   baseUrl: string
   providerHost: string | null
 
@@ -459,6 +460,92 @@ export class StreamOrchestrator {
               try {
                 parsed = JSON.parse(data)
               } catch {
+                continue
+              }
+
+              const responsesEvent = extractOpenAIResponsesStreamEvent(parsed)
+              if (responsesEvent) {
+                if (responsesEvent.kind === 'delta') {
+                  const deltaReasoning = responsesEvent.reasoningDelta
+                  const deltaContent = responsesEvent.contentDelta
+
+                  if (reasoning.enabled && deltaReasoning) {
+                    if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
+                    pendingReasoningDelta += deltaReasoning
+                    if (pendingReasoningDelta.length >= config.streamDeltaChunkSize) {
+                      reasoningBuffer += pendingReasoningDelta
+                      const evt = `data: ${JSON.stringify({ type: 'reasoning', content: pendingReasoningDelta })}\n\n`
+                      safeEnqueue(evt)
+                      pendingReasoningDelta = ''
+                      await persistAssistantProgress({ includeReasoning: true })
+                    }
+                  }
+
+                  if (deltaContent) {
+                    let visible = deltaContent
+                    if (reasoning.enabled && config.reasoningTagsMode !== 'off') {
+                      const tags =
+                        config.reasoningTagsMode === 'custom' && config.reasoningCustomTags
+                          ? config.reasoningCustomTags
+                          : DEFAULT_REASONING_TAGS
+                      const { visibleDelta, reasoningDelta } = extractByTags(deltaContent, tags, reasoningState)
+                      visible = visibleDelta
+                      if (reasoningDelta) {
+                        if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
+                        pendingReasoningDelta += reasoningDelta
+                      }
+                    }
+
+                    if (visible) {
+                      pendingVisibleDelta += visible
+                      if (pendingVisibleDelta.length >= config.streamDeltaChunkSize) {
+                        aiResponseContent += pendingVisibleDelta
+                        const evt = `data: ${JSON.stringify({ type: 'content', content: pendingVisibleDelta })}\n\n`
+                        safeEnqueue(evt)
+                        pendingVisibleDelta = ''
+                        await persistAssistantProgress()
+                      }
+                    }
+                  }
+
+                  continue
+                }
+
+                if (responsesEvent.kind === 'done') {
+                  const usage = responsesEvent.usage
+                  if (config.usageEmit && usage) {
+                    const nn = extractUsageNumbers(usage)
+                    const valid = nn.prompt > 0 || nn.completion > 0 || nn.total > 0
+                    if (valid) {
+                      providerUsageSeen = true
+                      providerUsageSnapshot = usage
+                      traceMetadataExtras.finalUsage = usage
+                      traceMetadataExtras.providerUsageSource = 'provider'
+                    }
+                    const usageEvt = `data: ${JSON.stringify({ type: 'usage', usage })}\n\n`
+                    safeEnqueue(usageEvt)
+                  }
+
+                  // 刷新剩余内容并结束
+                  if (pendingReasoningDelta) {
+                    reasoningBuffer += pendingReasoningDelta
+                    const evt = `data: ${JSON.stringify({ type: 'reasoning', content: pendingReasoningDelta })}\n\n`
+                    safeEnqueue(evt)
+                    pendingReasoningDelta = ''
+                  }
+                  if (pendingVisibleDelta) {
+                    aiResponseContent += pendingVisibleDelta
+                    const evt = `data: ${JSON.stringify({ type: 'content', content: pendingVisibleDelta })}\n\n`
+                    safeEnqueue(evt)
+                    pendingVisibleDelta = ''
+                  }
+
+                  await persistAssistantProgress({ includeReasoning: true })
+                  safeEnqueue(`data: ${JSON.stringify({ type: 'end' })}\n\n`)
+                  providerDone = true
+                  break
+                }
+
                 continue
               }
 

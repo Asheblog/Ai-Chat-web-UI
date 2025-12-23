@@ -2,7 +2,7 @@ import { BackendLogger as log } from './logger'
 import type { CapabilityFlags, CapabilitySource } from './capabilities'
 import { hasDefinedCapability } from './capabilities'
 
-export type ProviderType = 'openai' | 'azure_openai' | 'ollama' | 'google_genai'
+export type ProviderType = 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'
 export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
 
 type FetchResponse = {
@@ -226,10 +226,33 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    if (cfg.provider === 'openai') {
+    if (cfg.provider === 'openai' || cfg.provider === 'openai_responses') {
       const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'OpenAI')
       const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) {
+        // 一些 responses-only 网关可能不提供 /models，尝试用 /responses 探测（需提供至少一个 modelId）
+        if (
+          cfg.provider === 'openai_responses' &&
+          (res.status === 404 || res.status === 405)
+        ) {
+          const probeModel = Array.isArray(cfg.modelIds) ? cfg.modelIds.find(Boolean) : undefined
+          if (!probeModel) {
+            throw new Error('OpenAI（Responses）verify failed: /models unsupported, please set Model IDs and retry')
+          }
+          const probe = await fetchImpl(`${normalizedBase}/responses`, {
+            method: 'POST',
+            headers,
+            signal: ctrl.signal,
+            body: JSON.stringify({
+              model: probeModel,
+              input: 'ping',
+              max_output_tokens: 1,
+            }),
+          })
+          if (!probe.ok) throw new Error(`OpenAI（Responses）verify failed: ${probe.status}`)
+          ensureJsonContentType(probe, 'OpenAI（Responses）verify')
+          return
+        }
         const hint = (() => {
           try {
             const u = new URL(normalizedBase)
@@ -307,7 +330,7 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    if (cfg.provider === 'openai') {
+    if (cfg.provider === 'openai' || cfg.provider === 'openai_responses') {
       const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'OpenAI')
       const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`OpenAI models failed: ${res.status}`)

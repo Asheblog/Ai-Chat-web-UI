@@ -8,6 +8,7 @@ import { redactHeadersForTrace, summarizeBodyForTrace } from '../../../utils/tra
 import { truncateString } from '../../../utils/task-trace'
 import type { ProviderChatCompletionResponse } from '../chat-common'
 import { sendMessageSchema } from '../chat-common'
+import { extractReasoningFromResponsesResponse, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import {
   chatRequestBuilder,
   type ChatRequestBuilder,
@@ -105,7 +106,7 @@ export class NonStreamChatService {
       )
     }
 
-    const json = (await response.json()) as ProviderChatCompletionResponse
+    const json = (await response.json()) as any
 
     traceRecorder?.log('http:provider_response_parsed', {
       route: '/api/chat/completion',
@@ -116,9 +117,15 @@ export class NonStreamChatService {
       body: summarizeBodyForTrace(json),
     })
 
-    const text = json?.choices?.[0]?.message?.content || ''
+    const providerLabel = prepared.providerRequest.providerLabel
+    const text =
+      providerLabel === 'openai_responses'
+        ? extractTextFromResponsesResponse(json)
+        : (json?.choices?.[0]?.message?.content || '')
     const fallbackReasoning =
-      json?.choices?.[0]?.message?.reasoning_content || json?.message?.thinking || undefined
+      providerLabel === 'openai_responses'
+        ? (extractReasoningFromResponsesResponse(json) ?? undefined)
+        : (json?.choices?.[0]?.message?.reasoning_content || json?.message?.thinking || undefined)
 
     const usage = this.buildUsage(json, {
       promptTokens: prepared.promptTokens,
@@ -188,7 +195,7 @@ export class NonStreamChatService {
   }
 
   private buildUsage(
-    json: ProviderChatCompletionResponse,
+    json: any,
     context: { promptTokens: number; contextLimit: number; contextRemaining: number },
   ) {
     const u = json?.usage || {}

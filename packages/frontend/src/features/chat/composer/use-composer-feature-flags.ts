@@ -39,7 +39,7 @@ export const useComposerFeatureFlags = ({
   const providerSupportsTools = useMemo(() => {
     const provider = activeModel?.provider?.toLowerCase()
     if (!provider) return true
-    return provider === 'openai' || provider === 'azure_openai'
+    return provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
   }, [activeModel])
 
   const isVisionEnabled = useMemo(() => {

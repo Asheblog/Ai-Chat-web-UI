@@ -15,6 +15,7 @@ import {
   type AuthType,
   type ProviderType,
 } from '../../../utils/providers'
+import { convertChatCompletionsRequestToResponses } from '../../../utils/openai-responses'
 import { sendMessageSchema } from '../chat-common'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
@@ -445,6 +446,9 @@ export class ChatRequestBuilder {
     if (provider === 'openai') {
       url = `${baseUrl}/chat/completions`
       body = convertOpenAIReasoningPayload({ ...params.baseRequestBody })
+    } else if (provider === 'openai_responses') {
+      url = `${baseUrl}/responses`
+      body = convertChatCompletionsRequestToResponses(convertOpenAIReasoningPayload({ ...params.baseRequestBody }))
     } else if (provider === 'azure_openai') {
       const apiVersion = params.session.connection.azureApiVersion || '2024-02-15-preview'
       url = `${baseUrl}/openai/deployments/${encodeURIComponent(

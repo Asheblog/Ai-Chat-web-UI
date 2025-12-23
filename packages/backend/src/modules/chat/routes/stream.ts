@@ -5,7 +5,7 @@ import { prisma } from '../../../db';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../types';
 import { AuthUtils } from '../../../utils/auth';
-import { convertOpenAIReasoningPayload } from '../../../utils/providers';
+import { convertOpenAIReasoningPayload, type ProviderType } from '../../../utils/providers';
 import { Tokenizer } from '../../../utils/tokenizer';
 import { cleanupExpiredChatImages, loadPersistedChatImages } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
@@ -58,6 +58,7 @@ import { chatService, ChatServiceError } from '../../../services/chat';
 import { providerRequester } from '../services/provider-requester';
 import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
 import { assistantProgressService } from '../services/assistant-progress-service';
+import { extractOpenAIResponsesStreamEvent } from '../../../utils/openai-responses';
 import { streamUsageService, computeStreamMetrics } from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
@@ -324,7 +325,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const messagesPayload = preparedRequest.messagesPayload;
       const requestData: any = JSON.parse(JSON.stringify(preparedRequest.baseRequestBody));
       const providerRequest = preparedRequest.providerRequest;
-      const provider = providerRequest.providerLabel as 'openai' | 'azure_openai' | 'ollama';
+      const provider = providerRequest.providerLabel as ProviderType;
       const baseUrl = session.connection.baseUrl.replace(/\/+$/, '');
       const authHeader = providerRequest.authHeader;
       const extraHeaders = providerRequest.extraHeaders;
@@ -412,7 +413,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       const webSearchFeatureRequested = requestedFeatures?.web_search === true;
       const pythonToolFeatureRequested = requestedFeatures?.python_tool === true;
-      const providerSupportsTools = provider === 'openai' || provider === 'azure_openai';
+      const providerSupportsTools = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai';
       const agentWebSearchActive =
         webSearchFeatureRequested &&
         agentWebSearchConfig.enabled &&
@@ -1154,12 +1155,12 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   break;
                 }
 
-                let parsed: any;
-                let parsedKind: string = 'raw';
-                try {
-                  parsed = JSON.parse(data);
-                  parsedKind = 'json';
-                } catch (parseError) {
+	                let parsed: any;
+	                let parsedKind: string = 'raw';
+	                try {
+	                  parsed = JSON.parse(data);
+	                  parsedKind = 'json';
+	                } catch (parseError) {
                   console.warn('Failed to parse SSE data:', data, parseError);
                   if (providerSseSamples < providerSseSampleLimit) {
                     providerSseSamples += 1;
@@ -1172,12 +1173,88 @@ export const registerChatStreamRoutes = (router: Hono) => {
                       rawPreview: truncateString(data, 200),
                     })
                   }
-                  continue;
-                }
+	                  continue;
+	                }
 
-                // 提取AI响应内容
-                const deltaContent: string | undefined = parsed.choices?.[0]?.delta?.content;
-                const deltaReasoning: string | undefined = parsed.choices?.[0]?.delta?.reasoning_content;
+	                const responsesEvent = extractOpenAIResponsesStreamEvent(parsed)
+	                if (responsesEvent) {
+	                  if (responsesEvent.kind === 'delta') {
+	                    const deltaReasoning = responsesEvent.reasoningDelta
+	                    const deltaContent = responsesEvent.contentDelta
+
+	                    if (REASONING_ENABLED && deltaReasoning) {
+	                      if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
+	                      pendingReasoningDelta += deltaReasoning
+	                      reasoningDeltaCount += 1
+	                      providerReasoningChunks += 1
+	                      if (!providerFirstDeltaAt) providerFirstDeltaAt = now
+	                      await flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE)
+	                    }
+
+	                    if (deltaContent) {
+	                      if (!providerFirstDeltaAt) providerFirstDeltaAt = now
+	                      let visible = deltaContent
+	                      if (REASONING_ENABLED && REASONING_TAGS_MODE !== 'off') {
+	                        const tags =
+	                          REASONING_TAGS_MODE === 'custom' && REASONING_CUSTOM_TAGS
+	                            ? REASONING_CUSTOM_TAGS
+	                            : DEFAULT_REASONING_TAGS
+	                        const { visibleDelta, reasoningDelta } = extractByTags(deltaContent, tags, reasoningState)
+	                        visible = visibleDelta
+	                        if (reasoningDelta) {
+	                          if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
+	                          pendingReasoningDelta += reasoningDelta
+	                          reasoningDeltaCount += 1
+	                          providerReasoningChunks += 1
+	                          await flushReasoningDelta(reasoningDeltaCount >= STREAM_DELTA_CHUNK_SIZE)
+	                        }
+	                      }
+
+	                      if (visible) {
+	                        pendingVisibleDelta += visible
+	                        visibleDeltaCount += 1
+	                        providerContentChunks += 1
+	                        await flushVisibleDelta(visibleDeltaCount >= STREAM_DELTA_CHUNK_SIZE)
+	                      }
+	                    }
+
+	                    continue
+	                  }
+
+	                  if (responsesEvent.kind === 'done') {
+	                    if (USAGE_EMIT && responsesEvent.usage) {
+	                      const usagePayload = responsesEvent.usage
+	                      const n = (u: any) => ({
+	                        prompt: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0,
+	                        completion: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
+	                        total: Number(u?.total_tokens ?? 0) || 0,
+	                      })
+	                      const nn = n(usagePayload)
+	                      const valid = nn.prompt > 0 || nn.completion > 0 || nn.total > 0
+	                      if (valid) {
+	                        providerUsageSeen = true
+	                        providerUsageSnapshot = usagePayload
+	                        traceMetadataExtras.finalUsage = usagePayload
+	                        traceMetadataExtras.providerUsageSource = 'provider'
+	                      }
+	                      if (!providerFirstUsageAt) providerFirstUsageAt = now
+	                      providerUsageEvents += 1
+	                      safeEnqueue(`data: ${JSON.stringify({ type: 'usage', usage: usagePayload })}\n\n`)
+	                    }
+
+	                    await flushReasoningDelta(true)
+	                    await flushVisibleDelta(true)
+	                    safeEnqueue(`data: ${JSON.stringify({ type: 'end' })}\n\n`)
+	                    providerDone = true
+	                    break
+	                  }
+
+	                  continue
+	                }
+
+	                // 提取AI响应内容
+	                const deltaContent: string | undefined = parsed.choices?.[0]?.delta?.content;
+	                const deltaReasoning: string | undefined = parsed.choices?.[0]?.delta?.reasoning_content;
 
                 // 供应商原生 reasoning_content（OpenAI 等）
                 if (REASONING_ENABLED && deltaReasoning) {

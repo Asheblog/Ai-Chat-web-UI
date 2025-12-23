@@ -20,7 +20,7 @@ const capabilitySchema = z.object({
 const vendorEnum = z.enum(['deepseek'])
 
 const connectionSchema = z.object({
-  provider: z.enum(['openai', 'azure_openai', 'ollama', 'google_genai']),
+  provider: z.enum(['openai', 'openai_responses', 'azure_openai', 'ollama', 'google_genai']),
   vendor: vendorEnum.optional(),
   baseUrl: z.string().url(),
   enable: z.boolean().optional().default(true),

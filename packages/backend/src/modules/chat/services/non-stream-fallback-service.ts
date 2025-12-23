@@ -1,9 +1,14 @@
 import { convertOpenAIReasoningPayload } from '../../../utils/providers'
+import {
+  convertChatCompletionsRequestToResponses,
+  extractReasoningFromResponsesResponse,
+  extractTextFromResponsesResponse,
+} from '../../../utils/openai-responses'
 import type { TaskTraceRecorder } from '../../../utils/task-trace'
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers'
 import { truncateString } from '../../../utils/task-trace'
 
-type Provider = 'openai' | 'azure_openai' | 'ollama'
+type Provider = 'openai' | 'openai_responses' | 'azure_openai' | 'ollama'
 
 export interface NonStreamFallbackParams {
   provider: Provider
@@ -58,6 +63,9 @@ export class NonStreamFallbackService {
       if (params.provider === 'openai') {
         body = convertOpenAIReasoningPayload(body)
         url = `${params.baseUrl}/chat/completions`
+      } else if (params.provider === 'openai_responses') {
+        body = convertChatCompletionsRequestToResponses(convertOpenAIReasoningPayload(body))
+        url = `${params.baseUrl}/responses`
       } else if (params.provider === 'azure_openai') {
         const v = params.azureApiVersion || '2024-02-15-preview'
         body = convertOpenAIReasoningPayload(body)
@@ -120,10 +128,16 @@ export class NonStreamFallbackService {
         return null
       }
       const json = (await resp.json()) as any
-      const text = (json?.choices?.[0]?.message?.content || '').trim()
+      const text = (
+        params.provider === 'openai_responses'
+          ? extractTextFromResponsesResponse(json)
+          : (json?.choices?.[0]?.message?.content || '').trim()
+      ).trim()
       if (!text) return null
       const reasoningText =
-        json?.choices?.[0]?.message?.reasoning_content || (json as any)?.message?.thinking || null
+        params.provider === 'openai_responses'
+          ? extractReasoningFromResponsesResponse(json)
+          : (json?.choices?.[0]?.message?.reasoning_content || (json as any)?.message?.thinking || null)
       return {
         text,
         reasoning: reasoningText,

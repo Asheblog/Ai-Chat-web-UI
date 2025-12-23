@@ -62,7 +62,7 @@ export function ConfigStep({
 
     const toolAvailability = (model: ModelItem) => {
         const provider = (model.provider || '').toLowerCase()
-        const providerSupportsTools = provider === 'openai' || provider === 'azure_openai'
+        const providerSupportsTools = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
         const isWebSearchCapable = typeof model.capabilities?.web_search === 'boolean' ? model.capabilities.web_search : true
         const isPythonCapable = typeof model.capabilities?.code_interpreter === 'boolean' ? model.capabilities.code_interpreter : true
 

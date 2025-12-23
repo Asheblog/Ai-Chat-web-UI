@@ -82,6 +82,7 @@ export function SystemConnectionsPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="openai_responses">OpenAI（Responses）</SelectItem>
                   <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
                   <SelectItem value="ollama">Ollama</SelectItem>
                   <SelectItem value="google_genai">Google Generative AI</SelectItem>
@@ -113,7 +114,7 @@ export function SystemConnectionsPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
                 placeholder={baseUrlPlaceholder}
               />
-              {form.provider === 'openai' && (
+              {(form.provider === 'openai' || form.provider === 'openai_responses') && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   填写完整 Base URL（可包含任意路径/版本号）。示例：OpenAI https://api.openai.com/v1；智谱 BigModel https://open.bigmodel.cn/api/coding/paas/v4
                 </p>

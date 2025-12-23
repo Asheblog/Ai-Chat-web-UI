@@ -6,6 +6,7 @@ import {
   type ConnectionWriteData,
 } from '../../repositories/connection-repository'
 import { normalizeCapabilityFlags } from '../../utils/capabilities'
+import type { AuthType, ProviderType } from '../../utils/providers'
 
 export class ConnectionServiceError extends Error {
   statusCode: number
@@ -17,8 +18,6 @@ export class ConnectionServiceError extends Error {
   }
 }
 
-type ProviderType = 'openai' | 'azure_openai' | 'ollama' | 'google_genai'
-type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
 type VendorType = 'deepseek'
 
 export interface ConnectionServiceDeps {

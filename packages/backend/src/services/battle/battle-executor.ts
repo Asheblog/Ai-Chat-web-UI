@@ -5,6 +5,7 @@ import { chatRequestBuilder as defaultChatRequestBuilder } from '../../modules/c
 import type { ProviderRequester } from '../../modules/chat/services/provider-requester'
 import { providerRequester as defaultProviderRequester } from '../../modules/chat/services/provider-requester'
 import { convertOpenAIReasoningPayload } from '../../utils/providers'
+import { convertChatCompletionsRequestToResponses, extractReasoningFromResponsesResponse, extractTextFromResponsesResponse } from '../../utils/openai-responses'
 import { buildAgentPythonToolConfig, buildAgentWebSearchConfig } from '../../modules/chat/agent-tool-config'
 import { WebSearchToolHandler } from '../../modules/chat/tool-handlers/web-search-handler'
 import { PythonToolHandler } from '../../modules/chat/tool-handlers/python-handler'
@@ -95,7 +96,9 @@ export class BattleExecutor {
 
     const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
     const providerSupportsTools =
-      resolved.connection.provider === 'openai' || resolved.connection.provider === 'azure_openai'
+      resolved.connection.provider === 'openai' ||
+      resolved.connection.provider === 'openai_responses' ||
+      resolved.connection.provider === 'azure_openai'
     const requestedFeatures = modelConfig.features || {}
     const webSearchConfig = buildAgentWebSearchConfig(systemSettings)
     const pythonConfig = buildAgentPythonToolConfig(systemSettings)
@@ -473,7 +476,7 @@ export class BattleExecutor {
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
     const provider = prepared.providerRequest.providerLabel
-    if (provider !== 'openai' && provider !== 'azure_openai') {
+    if (provider !== 'openai' && provider !== 'openai_responses' && provider !== 'azure_openai') {
       return this.executeSimple(prepared, context)
     }
 
@@ -688,13 +691,15 @@ export class BattleExecutor {
     context: BattleExecutionContext
     emitDelta: (delta: { content?: string; reasoning?: string }) => void
   }) {
-    const body = convertOpenAIReasoningPayload({
+    const chatBody = convertOpenAIReasoningPayload({
       ...params.prepared.baseRequestBody,
       stream: true,
       messages: params.messages,
       tools: params.toolDefinitions,
       tool_choice: 'auto',
     })
+    const body =
+      params.provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
 
     const response = await this.requester.requestWithBackoff({
       request: {
@@ -736,6 +741,10 @@ export class BattleExecutor {
       number,
       { id?: string; type?: string; function: { name?: string; arguments: string } }
     >()
+    const responsesToolCallBuffers = new Map<
+      string,
+      { callId: string; name?: string; arguments: string; order: number }
+    >()
     let fallbackToolCalls: ToolCall[] = []
 
     const handleToolDelta = (toolDelta: any) => {
@@ -751,16 +760,27 @@ export class BattleExecutor {
     }
 
     const aggregateToolCalls = () =>
-      Array.from(toolCallBuffers.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([_, entry]) => ({
-          id: entry.id || crypto.randomUUID(),
-          type: entry.type || 'function',
-          function: {
-            name: entry.function.name || 'unknown',
-            arguments: entry.function.arguments || '{}',
-          },
-        }))
+      (responsesToolCallBuffers.size > 0
+        ? Array.from(responsesToolCallBuffers.values())
+            .sort((a, b) => a.order - b.order)
+            .map((entry) => ({
+              id: entry.callId,
+              type: 'function',
+              function: {
+                name: entry.name || 'unknown',
+                arguments: entry.arguments || '{}',
+              },
+            }))
+        : Array.from(toolCallBuffers.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([_, entry]) => ({
+              id: entry.id || crypto.randomUUID(),
+              type: entry.type || 'function',
+              function: {
+                name: entry.function.name || 'unknown',
+                arguments: entry.function.arguments || '{}',
+              },
+            })))
 
     const extractDeltaPayload = (payload: any) => {
       const contentDelta =
@@ -813,6 +833,57 @@ export class BattleExecutor {
             } catch {
               continue
             }
+            if (typeof parsed?.type === 'string' && parsed.type.startsWith('response.')) {
+              if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string' && parsed.delta) {
+                content += parsed.delta
+                params.emitDelta({ content: parsed.delta })
+              } else if (
+                (parsed.type === 'response.reasoning_text.delta' || parsed.type === 'response.reasoning_summary_text.delta') &&
+                typeof parsed.delta === 'string' &&
+                parsed.delta
+              ) {
+                params.emitDelta({ reasoning: parsed.delta })
+              } else if (parsed.type === 'response.output_item.added' || parsed.type === 'response.output_item.done') {
+                const item = parsed.item
+                if (item?.type === 'function_call') {
+                  const callId = typeof item.call_id === 'string' ? item.call_id : null
+                  if (callId) {
+                    const existing = responsesToolCallBuffers.get(callId) || {
+                      callId,
+                      name: undefined,
+                      arguments: '',
+                      order: typeof parsed.output_index === 'number' ? parsed.output_index : responsesToolCallBuffers.size,
+                    }
+                    if (typeof item.name === 'string' && item.name) existing.name = item.name
+                    if (typeof item.arguments === 'string') existing.arguments = item.arguments || existing.arguments
+                    responsesToolCallBuffers.set(callId, existing)
+                  }
+                }
+              } else if (parsed.type === 'response.function_call_arguments.delta') {
+                const callId = typeof parsed.call_id === 'string' ? parsed.call_id : null
+                const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
+                if (callId && delta) {
+                  const existing = responsesToolCallBuffers.get(callId) || {
+                    callId,
+                    name: undefined,
+                    arguments: '',
+                    order: responsesToolCallBuffers.size,
+                  }
+                  existing.arguments = `${existing.arguments || ''}${delta}`
+                  responsesToolCallBuffers.set(callId, existing)
+                }
+              } else if (
+                parsed.type === 'response.completed' ||
+                parsed.type === 'response.failed' ||
+                parsed.type === 'response.incomplete'
+              ) {
+                doneSeen = true
+                if (parsed.response?.usage) {
+                  usageSnapshot = parsed.response.usage
+                }
+              }
+              continue
+            }
             const { contentDelta, reasoningDelta } = extractDeltaPayload(parsed)
             if (typeof contentDelta === 'string' && contentDelta) {
               content += contentDelta
@@ -844,21 +915,28 @@ export class BattleExecutor {
       if (raw) {
         try {
           const parsed = JSON.parse(raw)
-          const message = parsed?.choices?.[0]?.message || {}
-          content = typeof message.content === 'string' ? message.content : ''
-          const reasoningText =
-            (typeof message.reasoning_content === 'string' && message.reasoning_content) ||
-            (typeof message.reasoning === 'string' && message.reasoning) ||
-            (typeof message.analysis === 'string' && message.analysis) ||
-            (typeof parsed?.reasoning === 'string' && parsed.reasoning) ||
-            (typeof parsed?.analysis === 'string' && parsed.analysis) ||
-            ''
-          if (reasoningText) {
-            params.emitDelta({ reasoning: reasoningText })
+          if (Array.isArray(parsed?.output)) {
+            content = extractTextFromResponsesResponse(parsed) || ''
+            const reasoningText = extractReasoningFromResponsesResponse(parsed) || ''
+            if (reasoningText) params.emitDelta({ reasoning: reasoningText })
+            if (parsed?.usage) usageSnapshot = parsed.usage
+          } else {
+            const message = parsed?.choices?.[0]?.message || {}
+            content = typeof message.content === 'string' ? message.content : ''
+            const reasoningText =
+              (typeof message.reasoning_content === 'string' && message.reasoning_content) ||
+              (typeof message.reasoning === 'string' && message.reasoning) ||
+              (typeof message.analysis === 'string' && message.analysis) ||
+              (typeof parsed?.reasoning === 'string' && parsed.reasoning) ||
+              (typeof parsed?.analysis === 'string' && parsed.analysis) ||
+              ''
+            if (reasoningText) {
+              params.emitDelta({ reasoning: reasoningText })
+            }
+            const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
+            fallbackToolCalls = toolCalls as ToolCall[]
+            if (parsed?.usage) usageSnapshot = parsed.usage
           }
-          const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
-          fallbackToolCalls = toolCalls as ToolCall[]
-          if (parsed?.usage) usageSnapshot = parsed.usage
         } catch {
           // ignore
         }
