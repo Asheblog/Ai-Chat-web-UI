@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardTitle, CardDescription } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useSystemConnections, SPECIAL_PROVIDER_DEEPSEEK, SPECIAL_VENDOR_DEEPSEEK } from '@/components/settings/system-connections/use-system-connections'
 import { CONNECTION_CAP_KEYS, CONNECTION_CAP_LABELS } from '@/components/settings/system-connections/constants'
@@ -74,15 +73,15 @@ export function SystemConnectionsPage() {
                 : `共 ${verifyResult?.models?.length ?? 0} 个模型`}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="h-[60vh]">
-            <Table>
+          <div className="max-h-[60vh] overflow-auto">
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[220px]">Model ID</TableHead>
-                  <TableHead className="min-w-[160px]">Provider</TableHead>
-                  <TableHead className="min-w-[120px]">Channel</TableHead>
-                  <TableHead className="min-w-[220px]">Tags</TableHead>
-                  <TableHead className="min-w-[260px]">Capabilities</TableHead>
+                  <TableHead className="w-[40%]">Model ID</TableHead>
+                  <TableHead className="w-[12%]">Provider</TableHead>
+                  <TableHead className="w-[12%]">Channel</TableHead>
+                  <TableHead className="w-[18%]">Tags</TableHead>
+                  <TableHead className="w-[18%]">Capabilities</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -96,11 +95,11 @@ export function SystemConnectionsPage() {
                     : ''
                   return (
                     <TableRow key={m.id}>
-                      <TableCell className="font-mono text-xs">{m.id}</TableCell>
-                      <TableCell className="text-xs">{m.provider}</TableCell>
-                      <TableCell className="text-xs">{m.channelName || '-'}</TableCell>
-                      <TableCell className="text-xs">{tags || '-'}</TableCell>
-                      <TableCell className="text-xs">{caps || '-'}</TableCell>
+                      <TableCell className="align-top font-mono text-xs whitespace-normal break-all">{m.id}</TableCell>
+                      <TableCell className="align-top text-xs">{m.provider}</TableCell>
+                      <TableCell className="align-top text-xs whitespace-normal break-words">{m.channelName || '-'}</TableCell>
+                      <TableCell className="align-top text-xs whitespace-normal break-words">{tags || '-'}</TableCell>
+                      <TableCell className="align-top text-xs whitespace-normal break-words">{caps || '-'}</TableCell>
                     </TableRow>
                   )
                 })}
@@ -113,7 +112,7 @@ export function SystemConnectionsPage() {
                 )}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
 
