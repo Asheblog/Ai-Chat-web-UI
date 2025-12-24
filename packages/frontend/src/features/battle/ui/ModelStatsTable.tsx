@@ -86,7 +86,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
           outputTokenCount++
         }
 
-        if (attempt.durationMs && !attempt.error) {
+        if (attempt.durationMs) {
           totalDuration += attempt.durationMs
           durationCount++
         }
@@ -152,7 +152,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                 <th className="text-center py-3 px-3 font-medium min-w-[90px]">
                   <span className="flex items-center justify-center gap-1">
                     <Zap className="h-3.5 w-3.5" />
-                    输出 Token
+                    平均输出 Token
                   </span>
                 </th>
                 {/* 各次尝试的列*/}

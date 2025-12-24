@@ -57,10 +57,10 @@ const getRankDisplay = (rank: number) => {
     }
 }
 
-//截取推理内容摘要
-const getReasoningSummary = (reasoning: string | null | undefined, maxLen = 100): string => {
-    if (!reasoning) return ''
-    const cleaned = reasoning.replace(/\n+/g, ' ').trim()
+// 截取输出内容摘要
+const getOutputSummary = (output: string | null | undefined, maxLen = 100): string => {
+    if (!output) return ''
+    const cleaned = output.replace(/\n+/g, ' ').trim()
     if (cleaned.length <= maxLen) return cleaned
     return cleaned.slice(0, maxLen) + '...'
 }
@@ -343,7 +343,7 @@ export function ResultStep({
                     const isExpanded = expandedModels.has(group.key)
                     const rank = getRankDisplay(index + 1)
                     const bestAttempt = group.attempts.find(a => a.judgePass) || group.attempts[0]
-                    const reasoningSummary = getReasoningSummary(bestAttempt?.reasoning)
+                    const outputSummary = getOutputSummary(bestAttempt?.output)
 
                     return (
                         <div
@@ -378,8 +378,8 @@ export function ResultStep({
                                                 <><X className="h-3 w-3 mr-0.5" />未通过</>
                                             )}</Badge>
                                     </div>
-                                    {reasoningSummary && (<p className="text-xs text-muted-foreground line-clamp-1">
-                                            {reasoningSummary}</p>
+                                    {outputSummary && (<p className="text-xs text-muted-foreground line-clamp-1">
+                                            {outputSummary}</p>
                                     )}
                                 </div>
 
