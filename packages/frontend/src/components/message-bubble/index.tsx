@@ -101,8 +101,8 @@ function MessageBubbleComponent({
 
   // 缓存匹配逻辑：
   // 1. 严格匹配：版本完全相同
-  // 2. 宽松匹配：缓存版本与当前版本差距不超过3，且有有效HTML内容
-  // 宽松匹配用于处理流式传输结束时的竞态条件
+  // 2. 宽松匹配：缓存版本与当前版本差距不超过3，且有有效HTML内容（仅用于“先展示”，避免白屏/闪烁）
+  // 注意：宽松匹配不应阻止后续重新渲染，否则可能长期卡在不完整的 HTML（例如代码块围栏跨 chunk 时）
   const strictCacheMatches =
     renderCache &&
     renderCache.contentVersion === body.version &&
@@ -113,9 +113,10 @@ function MessageBubbleComponent({
     renderCache.contentHtml.length > 0 &&
     body.version - renderCache.contentVersion <= 3 &&
     body.reasoningVersion - renderCache.reasoningVersion <= 3
-  const cacheMatches = strictCacheMatches || (!isStreaming && looseCacheMatches)
-  const contentHtml = cacheMatches ? renderCache.contentHtml ?? '' : ''
-  const reasoningHtml = cacheMatches && renderCache?.reasoningHtml ? renderCache.reasoningHtml : ''
+  const cacheUsableForDisplay = strictCacheMatches || (!isStreaming && looseCacheMatches)
+  const contentHtml = cacheUsableForDisplay ? renderCache.contentHtml ?? '' : ''
+  const reasoningHtml =
+    cacheUsableForDisplay && renderCache?.reasoningHtml ? renderCache.reasoningHtml : ''
 
   const handleCopy = useCallback(async () => {
     try {
@@ -141,7 +142,8 @@ function MessageBubbleComponent({
     const hasReasoning = Boolean(body.reasoning && body.reasoning.trim().length > 0)
     if (!hasContent && !hasReasoning) return
     if (!hasContent && body.reasoningVersion === 0) return
-    if (cacheMatches) return
+    // 严格命中才跳过；宽松命中仅用于先展示，仍应触发一次 Worker 重新渲染以保证结构完整
+    if (strictCacheMatches) return
     // 流式传输期间跳过 Worker 渲染，因为内容在不断变化
     // 使用 ReactMarkdown fallback 进行实时渲染，流式结束后再用 Worker 渲染
     if (isStreaming) return
@@ -185,7 +187,7 @@ function MessageBubbleComponent({
     body.reasoning,
     body.reasoningVersion,
     body.version,
-    cacheMatches,
+    strictCacheMatches,
     hasContent,
     isStreaming,
     isUser,
