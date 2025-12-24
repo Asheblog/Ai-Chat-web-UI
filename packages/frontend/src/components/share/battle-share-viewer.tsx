@@ -6,7 +6,7 @@ import type { BattleShare } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { formatDate } from '@/lib/utils'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Scale, AlertCircle } from 'lucide-react'
 import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
@@ -297,15 +297,22 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
         </div>
       </footer>
 
-      {/* Detail Drawer */}
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent
-          dialogTitle={`${selectedAttempt?.modelLabel || selectedAttempt?.modelId || '模型输出详情'} #${selectedAttempt?.attemptIndex}`}
-          className="w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl p-0"
+      {/* Detail Dialog */}
+      <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <DialogContent
+          className={cn(
+            "w-[95vw] max-w-3xl p-0",
+            "h-[90vh] sm:h-[85vh]",
+            "flex flex-col overflow-hidden",
+            "rounded-lg sm:rounded-xl"
+          )}
         >
+          <DialogTitle className="sr-only">
+            {selectedAttempt?.modelLabel || selectedAttempt?.modelId || '模型输出详情'} #{selectedAttempt?.attemptIndex}
+          </DialogTitle>
           {selectedAttempt && (
-            <ScrollArea className="h-full">
-              <div className="p-6 space-y-5">
+            <ScrollArea className="h-full w-full">
+              <div className="p-4 sm:p-6 space-y-5">
                 {/* Header */}
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -419,8 +426,8 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
               </div>
             </ScrollArea>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
-import {Sheet,
-    SheetContent,
-} from '@/components/ui/sheet'
+import {
+    Dialog,
+    DialogContent,
+    DialogTitle,
+} from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -110,13 +112,20 @@ export function DetailDrawer({
     const judgeUnknown = !judgeStatus || judgeStatus === 'unknown' || judgeStatus === 'skipped'
 
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent
-                dialogTitle={`${title || '模型输出详情'} #${detail.attemptIndex}`}
-                className="w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl p-0"
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent
+                className={cn(
+                    "w-[95vw] max-w-3xl p-0",
+                    "h-[90vh] sm:h-[85vh]",
+                    "flex flex-col overflow-hidden",
+                    "rounded-lg sm:rounded-xl"
+                )}
             >
-                <ScrollArea className="h-full">
-                    <div className="p-6 space-y-5">
+                <DialogTitle className="sr-only">
+                    {title || '模型输出详情'} #{detail.attemptIndex}
+                </DialogTitle>
+                <ScrollArea className="h-full w-full">
+                    <div className="p-4 sm:p-6 space-y-5">
                         {/* Header */}
                         <div>
                             <div className="flex items-center gap-2 mb-2">
@@ -303,7 +312,7 @@ export function DetailDrawer({
                         )}
                     </div>
                 </ScrollArea>
-            </SheetContent>
-        </Sheet>
+            </DialogContent>
+        </Dialog>
     )
 }
