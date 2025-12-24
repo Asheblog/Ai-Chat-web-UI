@@ -75,13 +75,17 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
       return c.json<ApiResponse>({ success: false, error: 'Trace not found' }, 404)
     }
     const { events, truncated } = await traceFileService.readTraceEventsFromFile(trace.logFilePath, 2000)
+    // 只有当实际有事件时才考虑 eventCount 比较，避免文件不存在时错误显示 truncated 警告
+    const isTruncated = events.length > 0
+      ? (truncated || (trace.eventCount ?? 0) > events.length)
+      : false
     return c.json<ApiResponse>({
       success: true,
       data: {
         trace,
         latexTrace: traceDetail?.latexTrace ?? null,
         events,
-        truncated: truncated || (trace.eventCount ?? 0) > events.length,
+        truncated: isTruncated,
       },
     })
   } catch (error) {
