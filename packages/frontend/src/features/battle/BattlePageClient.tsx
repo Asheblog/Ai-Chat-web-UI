@@ -508,7 +508,6 @@ export function BattlePageClient() {
               status={flow.runStatus}
               onShare={handleShare}
               onNewBattle={handleNewBattle}
-              onViewHistory={() => setHistoryOpen(true)}
               onSelectResult={handleSelectResult}
               onRetryFailedJudges={handleRetryFailedJudges}
               shareLink={shareLink}

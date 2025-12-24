@@ -10,7 +10,6 @@ import {Trophy,
     Award,
     Share2,
     RefreshCw,
-    History,
     Check,
     X,
     AlertTriangle,
@@ -37,7 +36,6 @@ interface ResultStepProps {
     status?: BattleRunSummary['status'] | null
     onShare: () => void
     onNewBattle: () => void
-    onViewHistory: () => void
     onSelectResult: (result: BattleResult) => void
     onRetryFailedJudges?: () => void
     shareLink?: string | null
@@ -78,7 +76,6 @@ export function ResultStep({
     status,
     onShare,
     onNewBattle,
-    onViewHistory,
     onSelectResult,
     onRetryFailedJudges,
     shareLink,
@@ -245,23 +242,49 @@ export function ResultStep({
             {/* Header */}
             <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
-                    <div className="flex items-center gap-3">
-                        {isCancelled ? (
-                            <X className="h-7 w-7 text-muted-foreground" />
-                        ) : isError ? (
-                            <AlertTriangle className="h-7 w-7 text-destructive" />
-                        ) : (
-                            <Trophy className="h-7 w-7 text-yellow-500" />
+                    {/* 核心统计 - 单行摘要 */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                            {isCancelled ? (
+                                <X className="h-5 w-5 text-muted-foreground" />
+                            ) : isError ? (
+                                <AlertTriangle className="h-5 w-5 text-destructive" />
+                            ) : (
+                                <Trophy className="h-5 w-5 text-yellow-500" />
+                            )}
+                            <span className="font-semibold text-foreground">
+                                {isCancelled ? '对战已取消' : isError ? '对战失败' : '对战完成'}
+                            </span>
+                        </div>
+                        {displaySummary && (
+                            <>
+                                <span className="text-muted-foreground/40">·</span>
+                                <span className="font-semibold text-foreground">
+                                    {displaySummary.passModelCount}/{displaySummary.totalModels}模型通过
+                                </span>
+                                <span className="text-muted-foreground/40">·</span>
+                                <span>准确率 {(displaySummary.accuracy * 100).toFixed(0)}%</span>
+                                {avgResponseTime > 0 && (
+                                    <>
+                                        <span className="text-muted-foreground/40">·</span>
+                                        <span className="flex items-center gap-1.5">
+                                            <Clock className="h-4 w-4" />
+                                            平均 {(avgResponseTime / 1000).toFixed(1)}s
+                                        </span>
+                                    </>
+                                )}
+                                <span className="text-muted-foreground/40">·</span>
+                                <span>阈值 {displaySummary.judgeThreshold.toFixed(2)}</span>
+                            </>
                         )}
-                        <h2 className="text-2xl font-bold">
-                            {isCancelled ? '对战已取消' : isError ? '对战失败' : '对战完成'}
-                        </h2>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" size="default" onClick={onViewHistory}>
-                            <History className="h-4 w-4 mr-2" />
-                            历史
-                        </Button>
+                        {currentRunId && retryableJudgeCount > 0 && onRetryFailedJudges && (
+                            <Button variant="outline" size="default" onClick={onRetryFailedJudges}>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                重试裁判（{retryableJudgeCount}）
+                            </Button>
+                        )}
                         {currentRunId && (
                             <Button variant="outline" size="default" onClick={onShare}>
                                 <Share2 className="h-4 w-4 mr-2" />
@@ -274,39 +297,11 @@ export function ResultStep({
                         </Button>
                     </div>
                 </div>
-
-                {/* 核心统计 - 单行摘要 */}
-                {displaySummary && (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-base text-muted-foreground">
-                        <span className="font-semibold text-foreground text-lg">
-                            {displaySummary.passModelCount}/{displaySummary.totalModels}模型通过
-                        </span>
-                        <span className="text-muted-foreground/40">·</span>
-                        <span>准确率 {(displaySummary.accuracy * 100).toFixed(0)}%</span>{avgResponseTime > 0 && (
-                            <>
-                                <span className="text-muted-foreground/40">·</span>
-                                <span className="flex items-center gap-1.5">
-                                    <Clock className="h-4 w-4" />
-                                    平均 {(avgResponseTime / 1000).toFixed(1)}s
-                                </span>
-                            </>
-                        )}<span className="text-muted-foreground/40">·</span>
-                        <span>阈值 {displaySummary.judgeThreshold.toFixed(2)}</span>
-                    </div>
-                )}
-
-                {/* 重试按钮 */}
-                {currentRunId && retryableJudgeCount > 0 && onRetryFailedJudges && (
-                    <Button variant="outline" size="default" onClick={onRetryFailedJudges} className="w-fit">
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        重试裁判（{retryableJudgeCount}）
-                    </Button>
-                )}
             </div>
 
             {/* Share Link */}
             {shareLink && (
-                <div className="rounded-lg bg-muted/50 px-4 py-3 text-base">
+                <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm">
                     分享链接：<a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
                         {shareLink}</a>
                 </div>
@@ -315,22 +310,22 @@ export function ResultStep({
             {/* 题目预览 - 可折叠 */}
             <Collapsible open={showQuestion} onOpenChange={setShowQuestion}>
                 <CollapsibleTrigger asChild>
-                    <button className="flex items-center gap-2 text-base text-muted-foreground hover:text-foreground transition-colors py-1">
-                        {showQuestion ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}<FileText className="h-5 w-5" />
+                    <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1">
+                        {showQuestion ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}<FileText className="h-4 w-4" />
                         查看题目与期望答案
                     </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-3">
-                    <div className="rounded-lg bg-muted/30 p-5 space-y-4">
+                    <div className="rounded-lg bg-muted/30 p-4 space-y-3">
                         <div>
-                            <div className="text-sm font-medium text-muted-foreground mb-2">题目</div>
-                            <div className="text-base text-foreground leading-relaxed">{prompt}</div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">题目</div>
+                            <div className="text-sm text-foreground leading-relaxed">{prompt}</div>
                         </div>
                         <div>
-                            <div className="text-sm font-medium text-muted-foreground mb-2">期望答案</div>
-                            <div className="text-base text-foreground leading-relaxed">{expectedAnswer}</div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">期望答案</div>
+                            <div className="text-sm text-foreground leading-relaxed">{expectedAnswer}</div>
                         </div>
-                </div>
+                    </div>
                 </CollapsibleContent>
             </Collapsible>
 
@@ -365,33 +360,33 @@ export function ResultStep({
                                 onClick={() => toggleExpand(group.key)}
                             >
                                 {/* 排名 */}
-                                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full bg-background/80 border border-border/50">
+                                <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-background/80 border border-border/50">
                                     {rank.icon}
                                 </div>
 
                                 {/* 模型信息 */}
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <span className="font-semibold text-lg truncate">{group.label}</span>
-                <Badge
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-semibold text-sm truncate">{group.label}</span>
+                                        <Badge
                                             variant={stat?.passAtK ? 'default' : 'secondary'}
-                                            className="flex-shrink-0"
+                                            className="flex-shrink-0 text-xs"
                                         >
                                             {stat?.passAtK ? (
-                                                <><Check className="h-3.5 w-3.5 mr-1" />通过</>
+                                                <><Check className="h-3 w-3 mr-0.5" />通过</>
                                             ) : (
-                                                <><X className="h-3.5 w-3.5 mr-1" />未通过</>
+                                                <><X className="h-3 w-3 mr-0.5" />未通过</>
                                             )}</Badge>
                                     </div>
-                                    {reasoningSummary && (<p className="text-sm text-muted-foreground line-clamp-1">
+                                    {reasoningSummary && (<p className="text-xs text-muted-foreground line-clamp-1">
                                             {reasoningSummary}</p>
                                     )}
                                 </div>
 
-                                {/* 准确率 */}<div className="flex-shrink-0 text-right px-2"><div className="text-xl font-bold">
+                                {/* 准确率 */}<div className="flex-shrink-0 text-right px-2"><div className="text-base font-bold">
                                         {stat ? `${(stat.accuracy * 100).toFixed(0)}%` : '--'}
                                     </div>
-                                    <div className="text-sm text-muted-foreground">
+                                    <div className="text-xs text-muted-foreground">
                                         {stat?.passCount ?? 0}/{stat?.totalAttempts ?? group.attempts.length} 通过
                                     </div>
                                 </div>
@@ -412,11 +407,11 @@ export function ResultStep({
                                     {group.attempts.map((attempt) => (
                                         <div
                                             key={`${group.key}-${attempt.attemptIndex}`}
-                                            className="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-background/60 cursor-pointer hover:bg-background transition-colors"
+                                            className="flex items-center justify-between gap-4 py-2 px-4 rounded-lg bg-background/60 cursor-pointer hover:bg-background transition-colors"
                                             onClick={() => onSelectResult(attempt)}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <span className="text-base text-muted-foreground min-w-[5rem]">
+                                                <span className="text-sm text-muted-foreground min-w-[4.5rem]">
                                                     第 {attempt.attemptIndex} 次
                                                 </span>
                                                 {attempt.error ? (
@@ -431,7 +426,7 @@ export function ResultStep({
                                                 ) : (
                                                     <Badge variant="secondary">--</Badge>
                                                 )}
-                                            </div><div className="text-base text-muted-foreground">
+                                            </div><div className="text-sm text-muted-foreground">
                                                 {attempt.durationMs != null ? `${(attempt.durationMs / 1000).toFixed(1)}s` : '--'}</div>
                                         </div>
                                     ))}

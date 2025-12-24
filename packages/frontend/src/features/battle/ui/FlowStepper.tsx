@@ -50,23 +50,24 @@ export function FlowStepper({ currentStep, onStepClick, isRunning = false }: Flo
     }
 
     return (
-        <div className="w-full">
-            <nav aria-label="Progress" className="flex items-center justify-center">
-                <ol className="flex items-center space-x-2 md:space-x-4">
+        <div className="w-full px-4 md:px-8 lg:px-12">
+            <nav aria-label="Progress" className="w-full">
+                <ol className="flex items-center justify-between w-full">
                     {steps.map((step, index) => {
                         const status = getStepStatus(step.key)
                         const Icon = step.icon
                         const isClickable = !isRunning && stepOrder[step.key] <= currentIndex
+                        const isLast = index === steps.length - 1
 
                         return (
-                            <li key={step.key} className="flex items-center">
+                            <li key={step.key} className={cn("flex items-center", !isLast && "flex-1")}>
                                 {/* Step Circle */}
                                 <button
                                     type="button"
                                     onClick={() => handleStepClick(step.key)}
                                     disabled={!isClickable}
                                     className={cn(
-                                        'group relative flex items-center justify-center',
+                                        'group relative flex items-center justify-center flex-shrink-0',
                                         isClickable && 'cursor-pointer',
                                         !isClickable && 'cursor-default'
                                     )}
@@ -103,7 +104,7 @@ export function FlowStepper({ currentStep, onStepClick, isRunning = false }: Flo
                                 {index < steps.length - 1 && (
                                     <div
                                         className={cn(
-                                            'mx-2 h-0.5 w-8 md:w-16 transition-colors duration-500',
+                                            'mx-3 h-0.5 flex-1 min-w-[2rem] transition-colors duration-500',
                                             stepOrder[steps[index + 1].key] <= currentIndex
                                                 ? 'bg-primary'
                                                 : 'bg-muted-foreground/30'

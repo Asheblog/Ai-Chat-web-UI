@@ -133,7 +133,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30">
-                <th className="text-left py-3 px-4 font-medium sticky left-0 bg-muted/30z-10 min-w-[180px]">
+                <th className="text-left py-3 px-4 font-medium sticky left-0 bg-muted/30 z-10 min-w-[140px]">
                   模型
                 </th>
                 <th className="text-center py-3 px-3 font-medium min-w-[80px]">Pass@k</th>
@@ -164,7 +164,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                   <td className="py-3 px-4 sticky left-0 bg-background z-10">
                     <div className="flex items-center gap-2">
                       {getRankIcon(index + 1)}
-                      <span className="font-medium truncate max-w-[140px]">{model.label}</span>
+                      <span className="font-medium break-words">{model.label}</span>
                     </div>
                   </td>
                   {/* Pass@k */}
