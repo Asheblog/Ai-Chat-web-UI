@@ -53,68 +53,74 @@ export function AboutPage() {
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">5ae7754</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">24f57d8</span>
               <span className="text-muted-foreground leading-relaxed">
-                对战结果新增 reasoning 字段，并优化结果展示。
+                修复无事件时错误显示截断警告的问题。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4abc359</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b8cc0e6</span>
               <span className="text-muted-foreground leading-relaxed">
-                分享查看器组件响应式布局优化。
+                模型统计表格改为显示平均输出 tokens。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">f703242</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">3355033</span>
               <span className="text-muted-foreground leading-relaxed">
-                对战组件布局宽度约束调整，改善展示。
+                修复对战准确率计算分母问题。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4235cf6</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1c92e99</span>
               <span className="text-muted-foreground leading-relaxed">
-                对战运行支持取消。
+                重构结果步骤组件，新增可折叠问题预览。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c638bb3</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c63d8ed</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增模型对账与裁判模型支持。
+                新增 OpenAI Responses API 支持。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">dca9bef</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d2e698a</span>
               <span className="text-muted-foreground leading-relaxed">
-                对战模型输出支持实时流式展示。
+                新增用户消息编辑和重发功能。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">4abf882</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c823688</span>
               <span className="text-muted-foreground leading-relaxed">
-                对战运行持久化与实时状态轮询。
+                新增裁判重试功能和状态追踪。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">48421e2</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a1dd075</span>
               <span className="text-muted-foreground leading-relaxed">
-                对战结果步骤与详情抽屉体验优化。
+                支持模型独立额外提示词配置。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">7c68411</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">617c3b3</span>
               <span className="text-muted-foreground leading-relaxed">
-                对战页面重构为多步流程并抽离组件。
+                新增对战执行任务追踪功能。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">09a344e</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2269ac0</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增模型对战功能（数据库结构与 API）。
+                对战支持按尝试取消和重试功能。
+              </span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">799023d</span>
+              <span className="text-muted-foreground leading-relaxed">
+                对战功能新增独立配额与访问控制。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-12-20 推送变更摘要
+            以上为 2025-12-24 推送变更摘要
           </p>
         </Card>
       </div>
