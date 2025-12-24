@@ -4,7 +4,6 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
 import rehypeStringify from 'rehype-stringify'
-import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import { visit } from 'unist-util-visit'
 import 'katex/contrib/mhchem'
@@ -34,11 +33,61 @@ interface WorkerResponse {
   errorMessage?: string
 }
 
+const CODE_BLOCK_MARKER_PREFIX = 'AICHAT_CODE_BLOCK:'
+
 const escapeHtml = (input: string) =>
   input
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+
+const encodeBase64Url = (value: string) => {
+  try {
+    // browser / worker
+    const bytes = new TextEncoder().encode(value)
+    let binary = ''
+    bytes.forEach((b) => {
+      binary += String.fromCharCode(b)
+    })
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  } catch {
+    // node fallback (vitest/ssr)
+    const buf = (globalThis as any).Buffer
+    if (!buf) {
+      throw new Error('Base64 encoding not supported')
+    }
+    return buf.from(value, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  }
+}
+
+const extractText = (node: any): string => {
+  if (!node) return ''
+  if (node.type === 'text' && typeof node.value === 'string') {
+    return node.value
+  }
+  if (Array.isArray(node.children)) {
+    return node.children.map(extractText).join('')
+  }
+  return ''
+}
+
+const extractCodeBlocks = () => (tree: any) => {
+  visit(tree, 'element', (node: any, index: number | null, parent: any) => {
+    if (!parent || typeof index !== 'number') return
+    if (node?.tagName !== 'pre' || !Array.isArray(node.children)) return
+    const codeNode = node.children.find((child: any) => child?.type === 'element' && child?.tagName === 'code') ?? null
+    if (!codeNode) return
+
+    const classNameRaw = codeNode.properties?.className
+    const cls = Array.isArray(classNameRaw) ? classNameRaw.join(' ') : String(classNameRaw || '')
+    const match = /language-([\w+-]+)/i.exec(cls)
+    const language = match ? match[1] : ''
+    const code = extractText(codeNode).replace(/\n$/, '')
+
+    const encoded = encodeBase64Url(JSON.stringify({ language, code }))
+    parent.children[index] = { type: 'comment', value: `${CODE_BLOCK_MARKER_PREFIX}${encoded}` }
+  })
+}
 
 const enhanceNodes = () => (tree: any) => {
   visit(tree, 'element', (node: any) => {
@@ -65,7 +114,7 @@ const enhanceNodes = () => (tree: any) => {
   })
 }
 
-const createProcessor = (skipHighlight: boolean) => {
+const createProcessor = () => {
   const processor = unified()
     .use(remarkParse)
     .use(remarkKatexTokenizer)
@@ -73,29 +122,26 @@ const createProcessor = (skipHighlight: boolean) => {
     .use(remarkGfm)
     .use(remarkRehype)
     .use(rehypeKatex, { strict: false })
-  if (!skipHighlight) {
-    processor.use(rehypeHighlight as any, { ignoreMissing: true })
-  }
-  processor.use(enhanceNodes).use(rehypeStringify)
+    .use(extractCodeBlocks)
+    .use(enhanceNodes)
+    .use(rehypeStringify)
   return processor
 }
 
-const renderMarkdown = async (markdown: string): Promise<{ html: string; skipHighlight: boolean }> => {
+const renderMarkdown = async (markdown: string): Promise<{ html: string }> => {
   const trimmed = markdown.trim()
   if (trimmed.length === 0) {
-    return { html: '', skipHighlight: false }
+    return { html: '' }
   }
-  const lineCount = trimmed.split(/\r?\n/).length
-  const skipHighlight = trimmed.length > 20000 || lineCount > 400
   try {
-    const processor = createProcessor(skipHighlight)
+    const processor = createProcessor()
     const prepared = encodeLatexPlaceholders(trimmed)
     const file = await processor.process(prepared)
-    return { html: String(file), skipHighlight }
+    return { html: String(file) }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[markdown-worker] render failed', error)
-    return { html: `<pre>${escapeHtml(trimmed)}</pre>`, skipHighlight }
+    return { html: `<pre>${escapeHtml(trimmed)}</pre>` }
   }
 }
 

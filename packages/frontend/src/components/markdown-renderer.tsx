@@ -6,8 +6,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Button } from '@/components/ui/button'
 import { Copy } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ensureKatexResources } from '@/lib/load-katex'
 import {
@@ -24,6 +24,61 @@ interface MarkdownRendererProps {
   isRendering?: boolean
 }
 
+type CodeMarkerPart =
+  | { type: 'html'; html: string }
+  | { type: 'code'; language: string; code: string }
+
+const CODE_BLOCK_MARKER_RE = /<!--AICHAT_CODE_BLOCK:([A-Za-z0-9_-]+)-->/
+
+const decodeBase64Url = (value: string) => {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padLen = (4 - (padded.length % 4)) % 4
+  const normalized = `${padded}${'='.repeat(padLen)}`
+  try {
+    const binary = atob(normalized)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return new TextDecoder().decode(bytes)
+  } catch {
+    const buf = (globalThis as any).Buffer
+    if (!buf) throw new Error('Base64 decoding not supported')
+    return buf.from(normalized, 'base64').toString('utf8')
+  }
+}
+
+const splitHtmlByCodeMarkers = (html: string): CodeMarkerPart[] | null => {
+  if (!html) return null
+  if (!CODE_BLOCK_MARKER_RE.test(html)) return null
+
+  const parts: CodeMarkerPart[] = []
+  let rest = html
+  while (true) {
+    const match = rest.match(CODE_BLOCK_MARKER_RE)
+    if (!match || match.index == null) break
+    const before = rest.slice(0, match.index)
+    if (before) parts.push({ type: 'html', html: before })
+
+    const encoded = match[1]
+    try {
+      const decoded = decodeBase64Url(encoded)
+      const payload = JSON.parse(decoded) as { language?: string; code?: string }
+      parts.push({
+        type: 'code',
+        language: typeof payload.language === 'string' ? payload.language : '',
+        code: typeof payload.code === 'string' ? payload.code : '',
+      })
+    } catch {
+      parts.push({ type: 'html', html: match[0] })
+    }
+
+    rest = rest.slice(match.index + match[0].length)
+  }
+  if (rest) parts.push({ type: 'html', html: rest })
+  return parts
+}
+
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   html,
   fallback,
@@ -33,6 +88,8 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [rehypeKatexPlugin, setRehypeKatexPlugin] = useState<any>(null)
   const trimmedHtml = html?.trim() ?? ''
+  const codeMarkerParts = useMemo(() => splitHtmlByCodeMarkers(trimmedHtml), [trimmedHtml])
+
   const needsMathSupport = useMemo(() => {
     if (trimmedHtml && /katex/i.test(trimmedHtml)) {
       return true
@@ -42,7 +99,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     }
     if (containsLatexTokens(fallback)) return true
     return /(\$\$?|\\\[|\\\(|\\begin\{|\\end\{|\\ce\{|\\pu\{|\\frac|\\sum|\\int|\\sqrt|\\alpha|\\beta|\\gamma)/i.test(
-      fallback
+      fallback,
     )
   }, [trimmedHtml, fallback])
 
@@ -67,6 +124,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   }, [needsMathSupport, rehypeKatexPlugin])
 
   const preparedFallback = useMemo(() => encodeLatexPlaceholders(fallback || ''), [fallback])
+
+  const fallbackHasCodeBlocks = useMemo(() => {
+    if (!fallback) return false
+    if (/(^|\n)\s*(```|~~~)/.test(fallback)) return true
+    if (/(^|\n)(?:\t| {4,})\S/.test(fallback)) return true
+    return false
+  }, [fallback])
 
   const handleCopyCode = async (code: string) => {
     try {
@@ -94,6 +158,144 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     }
   }
 
+  const TerminalCodeBlock = ({ code, language }: { code: string; language: string }) => {
+    const lang0 = (language || '').toLowerCase()
+    const normalized = ['bash', 'sh', 'shell', 'zsh', 'console'].includes(lang0) ? 'bash' : lang0
+    const isPlain = !normalized || ['plaintext', 'text', 'txt', 'nohighlight'].includes(normalized)
+    const codeContent = String(code || '').replace(/\n$/, '')
+    if (!codeContent) return null
+
+    const tooLargeForHL = Boolean(
+      isStreaming || codeContent.length > 20000 || codeContent.split('\n').length > 400,
+    )
+    const isSingleLine = !codeContent.includes('\n')
+    const isShortPlain = isPlain && isSingleLine && codeContent.trim().length <= 80
+
+    if (isShortPlain) {
+      return (
+        <div className="my-2">
+          <code
+            className={cn(
+              'px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30 break-words whitespace-pre-wrap',
+              isStreaming && 'typing-cursor',
+            )}
+          >
+            {codeContent}
+          </code>
+        </div>
+      )
+    }
+
+    if (tooLargeForHL) {
+      return (
+        <div
+          className={cn(
+            'relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0',
+          )}
+        >
+          <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
+            <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
+            <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
+            <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
+            {!isPlain && <span className="ml-2 text-[11px] text-slate-400">{normalized}</span>}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
+              onClick={() => handleCopyCode(codeContent)}
+              title="复制代码"
+              aria-label="复制代码"
+            >
+              {copiedCode === codeContent ? (
+                <div className="h-3 w-3 bg-green-500 rounded" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+            </Button>
+          </div>
+          <pre
+            className={cn('m-0 text-sm px-3 py-3', isStreaming && 'typing-cursor')}
+            style={{
+              background: 'transparent',
+              color: '#e6edf3',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowX: 'hidden' as const,
+            }}
+          >
+            <code
+              style={{
+                background: 'transparent',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {codeContent}
+            </code>
+          </pre>
+        </div>
+      )
+    }
+
+    return (
+      <div
+        className={cn(
+          'relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0',
+        )}
+        style={{
+          maxWidth: '100%',
+          overflowX: 'hidden' as const,
+          wordBreak: 'break-word' as const,
+        }}
+      >
+        <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
+          <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
+          <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
+          <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
+          {!isPlain && <span className="ml-2 text-[11px] text-slate-400">{normalized}</span>}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
+            onClick={() => handleCopyCode(codeContent)}
+            title="复制代码"
+            aria-label="复制代码"
+          >
+            {copiedCode === codeContent ? (
+              <div className="h-3 w-3 bg-green-500 rounded" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button>
+        </div>
+
+        <SyntaxHighlighter
+          style={oneDark}
+          language={isPlain ? (undefined as any) : normalized}
+          PreTag="pre"
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            background: 'transparent',
+            padding: '12px 14px 14px 14px',
+            overflowX: 'hidden' as const,
+            width: '100%',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+          codeTagProps={{
+            style: { background: 'transparent', whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
+          }}
+          showLineNumbers={false}
+          wrapLongLines
+          className={cn('text-sm', isStreaming && 'typing-cursor')}
+        >
+          {codeContent}
+        </SyntaxHighlighter>
+      </div>
+    )
+  }
+
   const renderFallback = () => {
     if (!fallback) return null
 
@@ -102,7 +304,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         className={cn(
           'markdown-body prose prose-zinc dark:prose-invert max-w-none break-words',
           '[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:whitespace-pre-wrap',
-          (isStreaming || isRendering) && 'typing-cursor'
+          (isStreaming || isRendering) && 'typing-cursor',
         )}
       >
         <ReactMarkdown
@@ -113,151 +315,20 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
               return <>{children}</>
             },
             code({ inline, className, children, ...props }: any) {
-              const responsiveContainerStyle = {
-                maxWidth: '100%',
-                overflowX: 'hidden' as const,
-                wordBreak: 'break-word' as const,
-              }
               const match = /language-([\w+-]+)/.exec(className || '')
               const rawLang = match ? match[1] : ''
-              const lang0 = (rawLang || '').toLowerCase()
-              const language = ['bash', 'sh', 'shell', 'zsh', 'console'].includes(lang0) ? 'bash' : lang0
-              const isPlain = !language || ['plaintext', 'text', 'txt', 'nohighlight'].includes(language)
               const codeContent = String(children).replace(/\n$/, '')
-              const isBlock = inline === false
+              const isBlock = inline === false || Boolean(match) || codeContent.includes('\n')
 
               if (isBlock && codeContent) {
-                const tooLargeForHL =
-                  isStreaming || codeContent.length > 20000 || codeContent.split('\n').length > 400
-                const isSingleLine = !codeContent.includes('\n')
-                const isShortPlain = isPlain && isSingleLine && codeContent.trim().length <= 80
-                if (isShortPlain) {
-                  return (
-                    <div className="my-2">
-                      <code
-                        className={cn(
-                          'px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30',
-                          isStreaming && 'typing-cursor'
-                        )}
-                        {...props}
-                      >
-                        {codeContent}
-                      </code>
-                    </div>
-                  )
-                }
-                if (tooLargeForHL) {
-                  return (
-                    <div
-                      className={cn(
-                        'relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0'
-                      )}
-                      style={responsiveContainerStyle}
-                    >
-                      <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
-                        <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
-                        <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
-                        <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
-                        {!isPlain && <span className="ml-2 text-[11px] text-slate-400">{language}</span>}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
-                          onClick={() => handleCopyCode(codeContent)}
-                          title="复制代码"
-                          aria-label="复制代码"
-                        >
-                          {copiedCode === codeContent ? (
-                            <div className="h-3 w-3 bg-green-500 rounded" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                        </Button>
-                      </div>
-                      <pre
-                        className={cn('m-0 text-sm px-3 py-3', isStreaming && 'typing-cursor')}
-                        style={{
-                          background: 'transparent',
-                          color: '#e6edf3',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          overflowX: 'hidden' as const,
-                        }}
-                      >
-                        <code
-                          style={{
-                            background: 'transparent',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
-                          {codeContent}
-                        </code>
-                      </pre>
-                    </div>
-                  )
-                }
-                return (
-                  <div
-                    className={cn(
-                      'relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0'
-                    )}
-                    style={responsiveContainerStyle}
-                  >
-                    <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
-                      <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
-                      <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
-                      <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
-                      {!isPlain && <span className="ml-2 text-[11px] text-slate-400">{language}</span>}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
-                        onClick={() => handleCopyCode(codeContent)}
-                        title="复制代码"
-                        aria-label="复制代码"
-                      >
-                        {copiedCode === codeContent ? (
-                          <div className="h-3 w-3 bg-green-500 rounded" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-
-                    <SyntaxHighlighter
-                      style={oneDark}
-                      language={isPlain ? (undefined as any) : language}
-                      PreTag="pre"
-                      customStyle={{
-                        margin: 0,
-                        borderRadius: 0,
-                        background: 'transparent',
-                        padding: '12px 14px 14px 14px',
-                        overflowX: 'hidden' as const,
-                        width: '100%',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                      }}
-                      codeTagProps={{
-                        style: { background: 'transparent', whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
-                      }}
-                      showLineNumbers={false}
-                      wrapLongLines
-                      className={cn('text-sm', isStreaming && 'typing-cursor')}
-                      {...props}
-                    >
-                      {codeContent}
-                    </SyntaxHighlighter>
-                  </div>
-                )
+                return <TerminalCodeBlock code={codeContent} language={rawLang} />
               }
 
               return (
                 <code
                   className={cn(
                     'px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30 break-words whitespace-pre-wrap',
-                    isStreaming && 'typing-cursor'
+                    isStreaming && 'typing-cursor',
                   )}
                   {...props}
                 >
@@ -277,13 +348,38 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     return renderFallback()
   }
 
+  if (codeMarkerParts) {
+    return (
+      <div
+        className={cn(
+          'markdown-body prose prose-zinc dark:prose-invert max-w-none break-words',
+          isStreaming || isRendering ? 'markdown-body--pending' : null,
+        )}
+      >
+        {codeMarkerParts.map((part, idx) => {
+          if (part.type === 'html') {
+            const htmlPart = part.html.trim()
+            if (!htmlPart) return null
+            return <div key={`html-${idx}`} dangerouslySetInnerHTML={{ __html: htmlPart }} />
+          }
+          return <TerminalCodeBlock key={`code-${idx}`} code={part.code} language={part.language} />
+        })}
+      </div>
+    )
+  }
+
+  if (fallbackHasCodeBlocks) {
+    return renderFallback()
+  }
+
   return (
     <div
       className={cn(
         'markdown-body prose prose-zinc dark:prose-invert max-w-none break-words',
-        isStreaming || isRendering ? 'markdown-body--pending' : null
+        isStreaming || isRendering ? 'markdown-body--pending' : null,
       )}
       dangerouslySetInnerHTML={{ __html: trimmedHtml }}
     />
   )
 })
+
