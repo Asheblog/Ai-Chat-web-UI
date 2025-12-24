@@ -241,7 +241,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                       {stat ? `${(stat.accuracy * 100).toFixed(0)}%` : '--'}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {stat?.passCount ?? 0}/{group.attempts.length} 通过
+                      {stat?.passCount ?? 0}/{(stat as any)?.totalAttempts ?? group.attempts.length} 通过
                     </div>
                   </div>
 

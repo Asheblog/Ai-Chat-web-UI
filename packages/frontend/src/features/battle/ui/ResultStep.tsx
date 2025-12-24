@@ -117,7 +117,9 @@ export function ResultStep({
             })
             const judgedCount = judgedAttempts.length
             const passCount = judgedAttempts.filter((attempt) => attempt.judgePass === true).length
-            const accuracy = judgedCount > 0 ? passCount / judgedCount : 0
+            // 使用 totalAttempts 作为分母计算准确率，这样错误的尝试也会被计入
+            // 确保统计的公平性：无论是模型报错还是裁判失败，都应该算作未通过
+            const accuracy = totalAttempts > 0 ? passCount / totalAttempts : 0
             map.set(group.key, {
                 passAtK: passCount >= resolvedPassK,
                 passCount,
@@ -390,7 +392,7 @@ export function ResultStep({
                                         {stat ? `${(stat.accuracy * 100).toFixed(0)}%` : '--'}
                                     </div>
                                     <div className="text-sm text-muted-foreground">
-                                        {stat?.passCount ?? 0}/{stat?.judgedCount ?? group.attempts.length} 通过
+                                        {stat?.passCount ?? 0}/{stat?.totalAttempts ?? group.attempts.length} 通过
                                     </div>
                                 </div>
 

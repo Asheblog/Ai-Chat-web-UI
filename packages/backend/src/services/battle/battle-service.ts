@@ -1809,7 +1809,9 @@ export class BattleService {
     }
 
     const modelStats = Array.from(groups.values()).map((group) => {
-      const accuracy = group.judgedCount > 0 ? group.passCount / group.judgedCount : 0
+      // 使用 totalAttempts 作为分母计算准确率，这样错误的尝试也会被计入
+      // 确保统计的公平性：无论是模型报错还是裁判失败，都应该算作未通过
+      const accuracy = group.totalAttempts > 0 ? group.passCount / group.totalAttempts : 0
       return {
         modelId: group.modelId,
         connectionId: group.connectionId,
