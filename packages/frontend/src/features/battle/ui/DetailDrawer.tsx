@@ -210,7 +210,7 @@ export function DetailDrawer({
                                         </span>
                                     )}
                                 </button>
-                                {showReasoning && (<div className="rounded-lg bg-muted/30 p-3">
+                                {showReasoning && (<div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
                                         {reasoningHeavy && (
                                             <div className="flex justify-end mb-2">
                                                 <Button variant="ghost" size="sm" className="text-xs h-7" onClick={toggleReasoningRender}>
@@ -219,7 +219,7 @@ export function DetailDrawer({
                                             </div>
                                         )}
                                         {renderReasoning ? (
-                                            <div className="prose prose-sm max-w-none dark:prose-invert">
+                                            <div className="prose prose-sm max-w-none dark:prose-invert overflow-x-auto">
                                                 <MarkdownRenderer html={null} fallback={reasoning} />
                                             </div>
                                         ) : (
