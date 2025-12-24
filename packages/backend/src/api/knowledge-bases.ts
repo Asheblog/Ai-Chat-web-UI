@@ -292,6 +292,99 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
   })
 
   /**
+   * 批量上传多个文档到知识库
+   */
+  router.post('/:id/documents/batch-upload', actorMiddleware, adminOnlyMiddleware, async (c) => {
+    try {
+      const kbId = parseInt(c.req.param('id'), 10)
+      if (isNaN(kbId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid knowledge base ID' }, 400)
+      }
+
+      const services = getDocumentServices()
+      if (!services) {
+        return c.json<ApiResponse>({ success: false, error: 'RAG services not enabled' }, 503)
+      }
+
+      const actor = c.get('actor') as Actor
+      const formData = await c.req.formData()
+      const files = formData.getAll('files') as File[]
+
+      if (!files || files.length === 0) {
+        return c.json<ApiResponse>({ success: false, error: 'No files provided' }, 400)
+      }
+
+      // 限制单次最多上传文件数量
+      const MAX_FILES_PER_BATCH = 20
+      if (files.length > MAX_FILES_PER_BATCH) {
+        return c.json<ApiResponse>({
+          success: false,
+          error: `Maximum ${MAX_FILES_PER_BATCH} files allowed per batch upload`
+        }, 400)
+      }
+
+      const results: Array<{
+        fileName: string
+        documentId?: number
+        status?: string
+        error?: string
+      }> = []
+
+      // 依次处理每个文件
+      for (const file of files) {
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer())
+
+          // 上传文档（属于系统，不关联用户）
+          const result = await services.documentService.uploadDocument(
+            {
+              buffer,
+              originalName: file.name,
+              mimeType: file.type,
+            },
+            actor.type === 'user' ? actor.id : undefined,
+            undefined
+          )
+
+          // 添加到知识库
+          await kbService.addDocument(kbId, result.documentId)
+
+          results.push({
+            fileName: file.name,
+            documentId: result.documentId,
+            status: result.status,
+          })
+        } catch (fileError) {
+          console.error(`[KnowledgeBase] Upload document error for ${file.name}:`, fileError)
+          results.push({
+            fileName: file.name,
+            error: fileError instanceof Error ? fileError.message : 'Upload failed',
+          })
+        }
+      }
+
+      const successCount = results.filter(r => r.documentId).length
+      const failCount = results.filter(r => r.error).length
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          results,
+          summary: {
+            total: files.length,
+            success: successCount,
+            failed: failCount,
+          },
+        },
+      })
+    } catch (error) {
+      console.error('[KnowledgeBase] Batch upload documents error:', error)
+      const message = error instanceof Error ? error.message : 'Batch upload failed'
+      return c.json<ApiResponse>({ success: false, error: message }, 400)
+    }
+  })
+
+  /**
    * 添加已有文档到知识库
    */
   router.post('/:id/documents', actorMiddleware, adminOnlyMiddleware, zValidator('json', addDocumentSchema), async (c) => {

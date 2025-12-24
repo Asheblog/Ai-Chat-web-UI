@@ -121,7 +121,12 @@ export function SystemKnowledgeBasePage() {
 
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadFileName, setUploadFileName] = useState("")
+  const [uploadingFiles, setUploadingFiles] = useState<Array<{
+    name: string
+    progress: number
+    status: 'pending' | 'uploading' | 'success' | 'error'
+    error?: string
+  }>>([])
 
   // 批量删除相关状态
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
@@ -268,13 +273,31 @@ export function SystemKnowledgeBasePage() {
   const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedKb || !e.target.files?.length) return
 
-    const file = e.target.files[0]
+    const files = Array.from(e.target.files)
     
     // 文件大小预检查
-    if (file.size > MAX_FILE_SIZE_BYTES) {
+    const oversizedFiles = files.filter(f => f.size > MAX_FILE_SIZE_BYTES)
+    if (oversizedFiles.length > 0) {
       toast({
-        title: "文件过大",
-        description: `文件大小 ${formatFileSize(file.size)} 超过限制 ${MAX_FILE_SIZE_MB}MB，请选择更小的文件或联系管理员调整限制。`,
+        title: "部分文件过大",
+        description: `${oversizedFiles.map(f => f.name).join(', ')} 超过限制 ${MAX_FILE_SIZE_MB}MB，已跳过这些文件。`,
+        variant: "destructive",
+      })
+    }
+    
+    // 过滤掉超大文件
+    const validFiles = files.filter(f => f.size <= MAX_FILE_SIZE_BYTES)
+    if (validFiles.length === 0) {
+      e.target.value = ''
+      return
+    }
+
+    // 检查最大批量上传数量
+    const MAX_FILES_PER_BATCH = 20
+    if (validFiles.length > MAX_FILES_PER_BATCH) {
+      toast({
+        title: "文件数量超限",
+        description: `单次最多上传 ${MAX_FILES_PER_BATCH} 个文件，请分批上传。`,
         variant: "destructive",
       })
       e.target.value = ''
@@ -283,17 +306,36 @@ export function SystemKnowledgeBasePage() {
     
     setUploading(true)
     setUploadProgress(0)
-    setUploadFileName(file.name)
+    setUploadingFiles(validFiles.map(f => ({
+      name: f.name,
+      progress: 0,
+      status: 'pending' as const
+    })))
 
     try {
       const formData = new FormData()
-      formData.append('file', file)
+      validFiles.forEach(file => {
+        formData.append('files', file)
+      })
 
-      // 根据文件大小计算超时时间
-      const timeout = calculateTimeout(file.size)
+      // 根据所有文件总大小计算超时时间
+      const totalSize = validFiles.reduce((sum, f) => sum + f.size, 0)
+      const timeout = calculateTimeout(totalSize)
 
-      const res = await apiHttpClient.post<ApiResponse<any>>(
-        `/knowledge-bases/${selectedKb.id}/documents/upload`,
+      const res = await apiHttpClient.post<ApiResponse<{
+        results: Array<{
+          fileName: string
+          documentId?: number
+          status?: string
+          error?: string
+        }>
+        summary: {
+          total: number
+          success: number
+          failed: number
+        }
+      }>>(
+        `/knowledge-bases/${selectedKb.id}/documents/batch-upload`,
         formData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -302,15 +344,53 @@ export function SystemKnowledgeBasePage() {
             if (progressEvent.total) {
               const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
               setUploadProgress(percent)
+              // 更新所有文件为上传中状态
+              setUploadingFiles(prev => prev.map(f => ({
+                ...f,
+                progress: percent,
+                status: 'uploading' as const
+              })))
             }
           }
         }
       )
 
-      if (res.data.success) {
-        toast({ title: "文档上传成功", description: "正在解析中，请稍候..." })
+      if (res.data.success && res.data.data) {
+        const { results, summary } = res.data.data
+        
+        // 更新每个文件的最终状态
+        setUploadingFiles(prev => prev.map(f => {
+          const result = results.find(r => r.fileName === f.name)
+          if (result?.documentId) {
+            return { ...f, progress: 100, status: 'success' as const }
+          } else if (result?.error) {
+            return { ...f, progress: 100, status: 'error' as const, error: result.error }
+          }
+          return f
+        }))
+        
+        if (summary.failed > 0) {
+          toast({
+            title: `上传完成：${summary.success} 成功，${summary.failed} 失败`,
+            description: "部分文档上传失败，请检查文件格式或稍后重试",
+            variant: summary.success > 0 ? "default" : "destructive"
+          })
+        } else {
+          toast({
+            title: `${summary.success} 个文档上传成功`,
+            description: "正在解析中，请稍候..."
+          })
+        }
+        
         fetchKbDetail(selectedKb.id)
         fetchKnowledgeBases()
+        
+        // 延迟清除上传状态，让用户看到结果
+        setTimeout(() => {
+          setUploading(false)
+          setUploadProgress(0)
+          setUploadingFiles([])
+        }, 2000)
       } else {
         throw new Error(res.data.error || 'Upload failed')
       }
@@ -325,10 +405,10 @@ export function SystemKnowledgeBasePage() {
         description: errorMessage,
         variant: "destructive",
       })
-    } finally {
       setUploading(false)
       setUploadProgress(0)
-      setUploadFileName("")
+      setUploadingFiles([])
+    } finally {
       e.target.value = ''
     }
   }
@@ -690,6 +770,7 @@ export function SystemKnowledgeBasePage() {
                     accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls"
                     onChange={handleUploadDocument}
                     disabled={uploading}
+                    multiple
                   />
                   <Button
                     size="sm"
@@ -703,12 +784,14 @@ export function SystemKnowledgeBasePage() {
               </div>
               
               {/* 上传进度条 */}
-              {uploading && (
-                <div className="p-3 border rounded-lg bg-muted/50 space-y-2">
+              {uploading && uploadingFiles.length > 0 && (
+                <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate max-w-[200px] font-medium">{uploadFileName}</span>
+                    <span className="font-medium">
+                      正在上传 {uploadingFiles.length} 个文件
+                    </span>
                     <span className="text-muted-foreground">
-                      {uploadProgress < 100 ? `上传中 ${uploadProgress}%` : '处理中...'}
+                      {uploadProgress < 100 ? `${uploadProgress}%` : '处理中...'}
                     </span>
                   </div>
                   <div className="h-2 w-full rounded bg-muted">
@@ -717,7 +800,24 @@ export function SystemKnowledgeBasePage() {
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
-                  {uploadProgress === 100 && (
+                  <div className="max-h-[150px] overflow-y-auto space-y-1">
+                    {uploadingFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between text-xs">
+                        <span className="truncate max-w-[200px]">{file.name}</span>
+                        <span className={
+                          file.status === 'success' ? 'text-green-600' :
+                          file.status === 'error' ? 'text-red-600' :
+                          'text-muted-foreground'
+                        }>
+                          {file.status === 'pending' && '等待中'}
+                          {file.status === 'uploading' && '上传中'}
+                          {file.status === 'success' && '✓ 成功'}
+                          {file.status === 'error' && `✗ ${file.error || '失败'}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {uploadProgress === 100 && uploadingFiles.every(f => f.status === 'uploading') && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       文件已上传，正在等待服务器处理...
