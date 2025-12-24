@@ -166,9 +166,12 @@ export function FlowGraph({
                     style={{ maxWidth: `${Math.min(modelKeys.length * 140, 800)}px` }}
                 >
                     {modelKeys.map((_, index) => {
-                        const totalWidth = modelKeys.length * 140
-                        const startX = totalWidth / 2
-                        const endX = index * 140 + 70
+                        // 使用与 maxWidth 一致的宽度计算坐标
+                        const svgWidth = Math.min(modelKeys.length * 140, 800)
+                        const startX = svgWidth / 2
+                        // 根据实际 SVG 宽度重新计算节点间距
+                        const nodeSpacing = svgWidth / modelKeys.length
+                        const endX = index * nodeSpacing + nodeSpacing / 2
 
                         return (
                             <path
