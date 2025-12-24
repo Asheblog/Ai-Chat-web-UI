@@ -34,6 +34,7 @@ interface ModelStats {
   avgDurationMs: number
   totalInputTokens: number
   totalOutputTokens: number
+  avgOutputTokens: number
   attempts: Array<{
     index: number
     durationMs: number | null
@@ -73,6 +74,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
       let durationCount = 0
       let totalInputTokens = 0
       let totalOutputTokens = 0
+      let outputTokenCount = 0
 
       const attempts = group.attempts.map((attempt) => {
         const usage = attempt.usage || {}
@@ -80,6 +82,9 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
         const outputTokens = usage.completion_tokens || 0
         totalInputTokens += inputTokens
         totalOutputTokens += outputTokens
+        if (outputTokens > 0) {
+          outputTokenCount++
+        }
 
         if (attempt.durationMs && !attempt.error) {
           totalDuration += attempt.durationMs
@@ -107,6 +112,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
         avgDurationMs: durationCount > 0 ? totalDuration / durationCount : 0,
         totalInputTokens,
         totalOutputTokens,
+        avgOutputTokens: outputTokenCount > 0 ? Math.round(totalOutputTokens / outputTokenCount) : 0,
         attempts,
       }
     }).sort((a, b) => {
@@ -194,9 +200,9 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                   <td className="text-center py-3 px-3 text-muted-foreground">
                     {model.avgDurationMs > 0 ? `${(model.avgDurationMs / 1000).toFixed(1)}s` : '--'}
                   </td>
-                  {/* 输出 Token */}
+                  {/* 输出 Token (平均) */}
                   <td className="text-center py-3 px-3 text-muted-foreground">
-                    {model.totalOutputTokens > 0 ? model.totalOutputTokens.toLocaleString() : '--'}
+                    {model.avgOutputTokens > 0 ? model.avgOutputTokens.toLocaleString() : '--'}
                   </td>
                   {/* 各次尝试*/}
                   {Array.from({ length: maxAttempts }, (_, i) => {
@@ -220,15 +226,10 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                           ) : (
                             <span className="text-xs text-muted-foreground">--</span>
                           )}
-                          {/* 耗时 */}<span className="text-[10px] text-muted-foreground">
+                          {/* 耗时 */}
+                          <span className="text-[10px] text-muted-foreground">
                             {attempt.durationMs ? `${(attempt.durationMs / 1000).toFixed(1)}s` : '--'}
                           </span>
-                          {/* Token */}
-                          {attempt.outputTokens > 0 && (
-                            <span className="text-[10px] text-muted-foreground/70">
-                              {attempt.outputTokens}tok
-                            </span>
-                          )}
                         </div>
                       </td>
                     )
