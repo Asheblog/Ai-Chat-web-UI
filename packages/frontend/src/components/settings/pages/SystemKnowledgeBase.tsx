@@ -56,6 +56,40 @@ interface KnowledgeBaseDocument {
   status: string
   chunkCount: number
   addedAt: string
+  processingStage?: string
+  processingProgress?: number
+  errorMessage?: string
+}
+
+// 最大文件大小限制（默认100MB，应与后端配置一致）
+const MAX_FILE_SIZE_MB = 100
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+// 根据文件大小计算超时时间（基础30秒 + 每10MB增加30秒）
+const calculateTimeout = (fileSize: number) => {
+  const baseTimeout = 30000
+  const additionalTimeout = Math.ceil(fileSize / (10 * 1024 * 1024)) * 30000
+  return baseTimeout + additionalTimeout
+}
+
+// 获取处理阶段的显示文本
+const getStageText = (stage?: string): string => {
+  switch (stage) {
+    case 'parsing':
+      return '解析文档'
+    case 'chunking':
+      return '分块处理'
+    case 'embedding':
+      return '生成向量'
+    case 'storing':
+      return '存储数据'
+    case 'done':
+      return '完成'
+    case 'error':
+      return '失败'
+    default:
+      return ''
+  }
 }
 
 export function SystemKnowledgeBasePage() {
@@ -86,6 +120,8 @@ export function SystemKnowledgeBasePage() {
   const [docsLoading, setDocsLoading] = useState(false)
 
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadFileName, setUploadFileName] = useState("")
 
   // 批量删除相关状态
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(new Set())
@@ -233,33 +269,66 @@ export function SystemKnowledgeBasePage() {
     if (!selectedKb || !e.target.files?.length) return
 
     const file = e.target.files[0]
+    
+    // 文件大小预检查
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      toast({
+        title: "文件过大",
+        description: `文件大小 ${formatFileSize(file.size)} 超过限制 ${MAX_FILE_SIZE_MB}MB，请选择更小的文件或联系管理员调整限制。`,
+        variant: "destructive",
+      })
+      e.target.value = ''
+      return
+    }
+    
     setUploading(true)
+    setUploadProgress(0)
+    setUploadFileName(file.name)
 
     try {
       const formData = new FormData()
       formData.append('file', file)
 
+      // 根据文件大小计算超时时间
+      const timeout = calculateTimeout(file.size)
+
       const res = await apiHttpClient.post<ApiResponse<any>>(
         `/knowledge-bases/${selectedKb.id}/documents/upload`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout,
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+              setUploadProgress(percent)
+            }
+          }
+        }
       )
 
       if (res.data.success) {
-        toast({ title: "文档上传成功", description: "正在解析中..." })
+        toast({ title: "文档上传成功", description: "正在解析中，请稍候..." })
         fetchKbDetail(selectedKb.id)
         fetchKnowledgeBases()
       } else {
         throw new Error(res.data.error || 'Upload failed')
       }
     } catch (e: any) {
+      // 区分超时错误和其他错误
+      let errorMessage = e?.message || "请稍后重试"
+      if (e?.code === 'ECONNABORTED' || e?.message?.includes('timeout')) {
+        errorMessage = `上传超时，文件较大可能需要更长时间。请检查网络连接后重试。`
+      }
       toast({
         title: "上传失败",
-        description: e?.message || "请稍后重试",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
       setUploading(false)
+      setUploadProgress(0)
+      setUploadFileName("")
       e.target.value = ''
     }
   }
@@ -608,28 +677,54 @@ export function SystemKnowledgeBasePage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                共 {kbDocuments.length} 个文档
-              </span>
-              <div>
-                <input
-                  type="file"
-                  id="kb-upload"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls"
-                  onChange={handleUploadDocument}
-                  disabled={uploading}
-                />
-                <Button
-                  size="sm"
-                  onClick={() => document.getElementById('kb-upload')?.click()}
-                  disabled={uploading}
-                >
-                  <Upload className="h-4 w-4 mr-1" />
-                  {uploading ? "上传中..." : "上传文档"}
-                </Button>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  共 {kbDocuments.length} 个文档
+                </span>
+                <div>
+                  <input
+                    type="file"
+                    id="kb-upload"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls"
+                    onChange={handleUploadDocument}
+                    disabled={uploading}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => document.getElementById('kb-upload')?.click()}
+                    disabled={uploading}
+                  >
+                    <Upload className="h-4 w-4 mr-1" />
+                    {uploading ? "上传中..." : "上传文档"}
+                  </Button>
+                </div>
               </div>
+              
+              {/* 上传进度条 */}
+              {uploading && (
+                <div className="p-3 border rounded-lg bg-muted/50 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="truncate max-w-[200px] font-medium">{uploadFileName}</span>
+                    <span className="text-muted-foreground">
+                      {uploadProgress < 100 ? `上传中 ${uploadProgress}%` : '处理中...'}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded bg-muted">
+                    <div
+                      className="h-2 rounded bg-blue-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  {uploadProgress === 100 && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      文件已上传，正在等待服务器处理...
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {docsLoading ? (
@@ -707,18 +802,51 @@ export function SystemKnowledgeBasePage() {
                           <TableCell>{formatFileSize(doc.fileSize)}</TableCell>
                           <TableCell>{doc.chunkCount}</TableCell>
                           <TableCell>
-                            <span className={`text-xs px-2 py-0.5 rounded ${doc.status === 'ready'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                              : doc.status === 'processing'
-                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-                                : doc.status === 'error'
-                                  ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                              }`}>
-                              {doc.status === 'ready' ? '就绪' :
-                                doc.status === 'processing' ? '处理中' :
-                                  doc.status === 'error' ? '错误' : doc.status}
-                            </span>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs px-2 py-0.5 rounded ${doc.status === 'ready'
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                  : doc.status === 'processing'
+                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                                    : doc.status === 'error'
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                      : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                  }`}>
+                                  {doc.status === 'ready' ? '就绪' :
+                                    doc.status === 'processing' ? '处理中' :
+                                      doc.status === 'error' ? '错误' :
+                                        doc.status === 'pending' ? '等待中' : doc.status}
+                                </span>
+                                {(doc.status === 'processing' || doc.status === 'pending') && (
+                                  <Loader2 className="h-3 w-3 animate-spin text-yellow-600" />
+                                )}
+                              </div>
+                              {/* 显示处理阶段和进度 */}
+                              {(doc.status === 'processing' || doc.status === 'pending') && (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <span>{getStageText(doc.processingStage) || '准备中'}</span>
+                                    {typeof doc.processingProgress === 'number' && (
+                                      <span>({doc.processingProgress}%)</span>
+                                    )}
+                                  </div>
+                                  {typeof doc.processingProgress === 'number' && (
+                                    <div className="h-1.5 w-20 rounded bg-muted">
+                                      <div
+                                        className="h-1.5 rounded bg-yellow-500 transition-all"
+                                        style={{ width: `${Math.min(100, doc.processingProgress)}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {/* 显示错误信息 */}
+                              {doc.status === 'error' && doc.errorMessage && (
+                                <p className="text-xs text-red-500 truncate max-w-[150px]" title={doc.errorMessage}>
+                                  {doc.errorMessage}
+                                </p>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Button

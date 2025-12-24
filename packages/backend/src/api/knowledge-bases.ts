@@ -152,6 +152,10 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
             status: d.document.status,
             chunkCount: d.document.chunkCount,
             addedAt: d.addedAt,
+            // 添加处理进度相关字段
+            processingStage: (d.document as any).processingStage,
+            processingProgress: (d.document as any).processingProgress,
+            errorMessage: d.document.errorMessage,
           })),
         },
       })
