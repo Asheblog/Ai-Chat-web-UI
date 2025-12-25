@@ -33,6 +33,7 @@ import {
 import { BackendLogger as log } from '../../../utils/logger'
 import { truncateString } from '../../../utils/task-trace'
 import { extractOpenAIResponsesStreamEvent } from '../../../utils/openai-responses'
+import { parseApiError } from '../../../utils/api-error-parser'
 
 // 会话类型（包含连接信息）
 export type ChatSessionWithConnection = ChatSession & {
@@ -401,7 +402,16 @@ export class StreamOrchestrator {
 
           if (!response.ok) {
             const errorText = await response.text().catch(() => '')
-            throw new Error(`AI API request failed: ${response.status} ${response.statusText}`)
+            // 解析上游错误并生成友好的错误消息
+            const parsedError = parseApiError({
+              status: response.status,
+              message: errorText,
+              error: errorText
+            });
+            const friendlyMessage = parsedError.suggestion
+              ? `${parsedError.message}。${parsedError.suggestion}`
+              : parsedError.message;
+            throw new Error(friendlyMessage)
           }
 
           const responseBody = response.body

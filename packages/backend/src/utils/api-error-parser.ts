@@ -11,6 +11,8 @@ export type ApiErrorType =
   | 'context_length'        // 上下文长度超限
   | 'rate_limit'            // 请求频率限制
   | 'quota_exceeded'        // 配额耗尽
+  | 'upstream_quota'        // 上游服务配额耗尽
+  | 'model_cooldown'        // 模型凭证冷却
   | 'authentication'        // 认证失败
   | 'invalid_request'       // 无效请求
   | 'server_error'          // 服务器错误
@@ -25,6 +27,10 @@ export interface ParsedApiError {
   message: string;
   originalMessage?: string;
   suggestion?: string;
+  resetInfo?: {
+    resetsAt?: number;      // Unix timestamp
+    resetsInSeconds?: number;
+  };
 }
 
 /**
@@ -68,6 +74,23 @@ const QUOTA_PATTERNS = [
   /insufficient\s*quota/i,
   /billing/i,
   /余额不足|配额/,
+];
+
+/**
+ * 上游配额限制错误模式（第三方API代理服务）
+ */
+const UPSTREAM_QUOTA_PATTERNS = [
+  /usage_limit_reached/i,
+  /usage limit has been reached/i,
+];
+
+/**
+ * 模型冷却错误模式
+ */
+const MODEL_COOLDOWN_PATTERNS = [
+  /model_cooldown/i,
+  /credentials? .* cooling down/i,
+  /all credentials .* cooling/i,
 ];
 
 /**
@@ -119,6 +142,56 @@ function extractErrorTexts(error: unknown): string[] {
   }
 
   return texts.filter(Boolean);
+}
+
+/**
+ * 解析上游配额限制错误的重置时间
+ */
+function parseUpstreamQuotaResetInfo(text: string): { resetsAt?: number; resetsInSeconds?: number } | null {
+  try {
+    // 尝试解析 JSON 格式的错误
+    const jsonMatch = text.match(/\{[^{}]*"(?:resets_at|reset_seconds|resets_in_seconds)"[^{}]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const result: { resetsAt?: number; resetsInSeconds?: number } = {};
+      
+      if (parsed.resets_at && typeof parsed.resets_at === 'number') {
+        result.resetsAt = parsed.resets_at;
+      }
+      if (parsed.resets_in_seconds && typeof parsed.resets_in_seconds === 'number') {
+        result.resetsInSeconds = parsed.resets_in_seconds;
+      }
+      if (parsed.reset_seconds && typeof parsed.reset_seconds === 'number') {
+        result.resetsInSeconds = parsed.reset_seconds;
+      }
+      
+      if (Object.keys(result).length > 0) {
+        return result;
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return null;
+}
+
+/**
+ * 格式化剩余时间为人类可读格式
+ */
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}秒`;
+  }
+  if (seconds < 3600) {
+    const minutes = Math.ceil(seconds / 60);
+    return `${minutes}分钟`;
+  }
+  const hours = Math.floor(seconds / 3600);
+  const remainingMinutes = Math.ceil((seconds % 3600) / 60);
+  if (remainingMinutes > 0) {
+    return `${hours}小时${remainingMinutes}分钟`;
+  }
+  return `${hours}小时`;
 }
 
 /**
@@ -178,6 +251,57 @@ export function parseApiError(error: unknown): ParsedApiError {
         suggestion: '请缩短输入、减少历史消息或降低期望回复长度后重试。',
       };
     }
+  }
+
+  // 检查模型冷却错误（优先检查，因为这是更具体的错误类型）
+  if (matchesAnyPattern(combinedText, MODEL_COOLDOWN_PATTERNS)) {
+    const resetInfo = parseUpstreamQuotaResetInfo(combinedText);
+    let suggestion = '当前模型的所有 API 凭证正在冷却中，请稍候重试或切换其他模型。';
+    if (resetInfo?.resetsInSeconds) {
+      suggestion = `当前模型的所有 API 凭证正在冷却中，预计 ${formatDuration(resetInfo.resetsInSeconds)} 后恢复。建议切换其他模型或稍候重试。`;
+    }
+    
+    // 提取模型名称
+    const modelMatch = combinedText.match(/"model"\s*:\s*"([^"]+)"/);
+    const modelName = modelMatch ? modelMatch[1] : null;
+    const message = modelName
+      ? `模型 ${modelName} 暂时不可用`
+      : '当前模型暂时不可用';
+    
+    return {
+      type: 'model_cooldown',
+      message,
+      originalMessage: texts[0],
+      suggestion,
+      resetInfo: resetInfo || undefined,
+    };
+  }
+
+  // 检查上游配额限制错误
+  if (matchesAnyPattern(combinedText, UPSTREAM_QUOTA_PATTERNS)) {
+    const resetInfo = parseUpstreamQuotaResetInfo(combinedText);
+    let suggestion = '上游 API 服务的配额已用尽，请联系管理员或更换其他 API 连接。';
+    if (resetInfo?.resetsInSeconds) {
+      suggestion = `上游 API 服务的配额已用尽，预计 ${formatDuration(resetInfo.resetsInSeconds)} 后重置。`;
+    } else if (resetInfo?.resetsAt) {
+      const resetDate = new Date(resetInfo.resetsAt * 1000);
+      suggestion = `上游 API 服务的配额已用尽，将于 ${resetDate.toLocaleString('zh-CN')} 重置。`;
+    }
+    
+    // 提取计划类型
+    const planMatch = combinedText.match(/"plan_type"\s*:\s*"([^"]+)"/);
+    const planType = planMatch ? planMatch[1] : null;
+    const message = planType
+      ? `上游服务配额已用尽（${planType} 计划）`
+      : '上游服务配额已用尽';
+    
+    return {
+      type: 'upstream_quota',
+      message,
+      originalMessage: texts[0],
+      suggestion,
+      resetInfo: resetInfo || undefined,
+    };
   }
 
   // 检查频率限制错误

@@ -6,6 +6,7 @@ import { BackendLogger as log } from '../../../utils/logger'
 import type { TaskTraceRecorder } from '../../../utils/task-trace'
 import { redactHeadersForTrace, summarizeBodyForTrace } from '../../../utils/trace-helpers'
 import { truncateString } from '../../../utils/task-trace'
+import { parseApiError } from '../../../utils/api-error-parser'
 import type { ProviderChatCompletionResponse } from '../chat-common'
 import { sendMessageSchema } from '../chat-common'
 import { extractReasoningFromResponsesResponse, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
@@ -100,10 +101,16 @@ export class NonStreamChatService {
         headers: redactHeadersForTrace(response.headers),
         bodyPreview: truncateString(errorText, 500),
       })
-      throw new ChatCompletionServiceError(
-        `AI API request failed: ${response.status} ${response.statusText}`,
-        502,
-      )
+      // 解析上游错误并生成友好的错误消息
+      const parsedError = parseApiError({
+        status: response.status,
+        message: errorText,
+        error: errorText
+      });
+      const friendlyMessage = parsedError.suggestion
+        ? `${parsedError.message}。${parsedError.suggestion}`
+        : parsedError.message;
+      throw new ChatCompletionServiceError(friendlyMessage, 502)
     }
 
     const json = (await response.json()) as any
