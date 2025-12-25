@@ -421,7 +421,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
         Boolean(agentWebSearchConfig.apiKey);
       const pythonToolActive =
         pythonToolFeatureRequested && pythonToolConfig.enabled && providerSupportsTools;
-      const agentToolsActive = agentWebSearchActive || pythonToolActive;
+      // 文档工具和知识库工具也需要进入 agent 模式
+      const documentToolsActive = providerSupportsTools && hasSessionDocuments;
+      const knowledgeBaseToolsActive = providerSupportsTools && hasKnowledgeBases;
+      const agentToolsActive = agentWebSearchActive || pythonToolActive || documentToolsActive || knowledgeBaseToolsActive;
       const resolvedMaxConcurrentStreams = (() => {
         const raw =
           sysMap.chat_max_concurrent_streams ||
