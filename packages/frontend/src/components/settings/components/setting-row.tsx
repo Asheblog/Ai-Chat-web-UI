@@ -46,7 +46,7 @@ export function SettingRow({
       </div>
       <div
         className={cn(
-          "w-full flex sm:flex-1 sm:justify-end sm:text-right",
+          "w-full flex sm:flex-1 sm:justify-end",
           controlWidthClassName,
         )}
       >
