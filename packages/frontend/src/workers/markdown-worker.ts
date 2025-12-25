@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
+import rehypeRaw from 'rehype-raw'
 import rehypeStringify from 'rehype-stringify'
 import rehypeKatex from 'rehype-katex'
 import { visit } from 'unist-util-visit'
@@ -120,7 +121,8 @@ const createProcessor = () => {
     .use(remarkKatexTokenizer)
     .use(remarkMath, defaultRemarkMathOptions)
     .use(remarkGfm)
-    .use(remarkRehype)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeRaw)
     .use(rehypeKatex, { strict: false })
     .use(extractCodeBlocks)
     .use(enhanceNodes)
