@@ -359,6 +359,16 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   font-size: 0.82rem;
   font-weight: 600;
   color: hsl(var(--foreground));
+  min-width: 0;
+  overflow: hidden;
+}
+
+.reasoning-tools__item-head > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reasoning-tools__hits {

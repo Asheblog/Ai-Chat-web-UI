@@ -420,6 +420,8 @@ export class KBToolHandler {
                 totalHits: searchResult.totalHits,
                 queryTimeMs: searchResult.queryTime,
                 hits: searchResult.hits.slice(0, topK).map((hit: any) => ({
+                    // 文档 ID（用于 kb_get_document_content 调用）
+                    documentId: hit.documentId,
                     documentName: hit.documentName,
                     pageNumber: hit.metadata?.pageNumber || null,
                     // 新增：页面位置标识
