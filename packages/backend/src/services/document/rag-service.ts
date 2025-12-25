@@ -247,24 +247,40 @@ export class RAGService {
     const queryVector = await this.embeddingService.embed(query)
     timings.embedding = Date.now() - embeddingStart
 
-    // 搜索
+    // 并行搜索所有文档（性能优化：避免串行等待）
     const allHits: RAGHit[] = []
     const vectorSearchStart = Date.now()
     const docSearchTimings: Array<{ docId: number; collectionName: string; timeMs: number; resultCount: number }> = []
 
-    for (const doc of documents) {
-      if (!doc.collectionName) continue
+    // 过滤有效文档
+    const validDocs = documents.filter((doc) => doc.collectionName)
 
+    // 并行执行所有文档的向量搜索
+    const searchPromises = validDocs.map(async (doc) => {
       const docSearchStart = Date.now()
       const results = await this.vectorDB.search(
-        doc.collectionName,
+        doc.collectionName!,
         queryVector,
         topK * 2
       )
+      const timeMs = Date.now() - docSearchStart
+
+      return {
+        doc,
+        results,
+        timeMs,
+      }
+    })
+
+    // 等待所有搜索完成
+    const searchResults = await Promise.all(searchPromises)
+
+    // 处理搜索结果
+    for (const { doc, results, timeMs } of searchResults) {
       docSearchTimings.push({
         docId: doc.id,
-        collectionName: doc.collectionName,
-        timeMs: Date.now() - docSearchStart,
+        collectionName: doc.collectionName!,
+        timeMs,
         resultCount: results.length,
       })
 

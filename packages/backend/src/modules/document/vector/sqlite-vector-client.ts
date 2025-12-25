@@ -42,19 +42,38 @@ function vectorToBuffer(vector: number[]): Buffer {
 }
 
 /**
- * 将二进制 Buffer 转换回 number[] 向量
+ * 将二进制 Buffer 转换为 Float32Array（零拷贝，高效）
  */
-function bufferToVector(buffer: Buffer): number[] {
-  const float32 = new Float32Array(
+function bufferToFloat32Array(buffer: Buffer): Float32Array {
+  // 直接使用 Buffer 的内存，避免复制
+  return new Float32Array(
     buffer.buffer,
     buffer.byteOffset,
     buffer.length / 4
   )
-  return Array.from(float32)
 }
 
 /**
- * 检测向量数据格式（JSON字符串 或 二进制Buffer）
+ * 将二进制 Buffer 转换回 number[] 向量（兼容旧接口）
+ */
+function bufferToVector(buffer: Buffer): number[] {
+  return Array.from(bufferToFloat32Array(buffer))
+}
+
+/**
+ * 检测向量数据格式并返回 Float32Array（高性能版本）
+ */
+function parseVectorDataTyped(data: string | Buffer): Float32Array {
+  if (Buffer.isBuffer(data)) {
+    return bufferToFloat32Array(data)
+  }
+  // 兼容旧的JSON格式
+  const arr = JSON.parse(data) as number[]
+  return new Float32Array(arr)
+}
+
+/**
+ * 检测向量数据格式（JSON字符串 或 二进制Buffer）- 兼容旧接口
  */
 function parseVectorData(data: string | Buffer): number[] {
   if (Buffer.isBuffer(data)) {
@@ -65,7 +84,36 @@ function parseVectorData(data: string | Buffer): number[] {
 }
 
 /**
- * 计算两个向量的余弦相似度
+ * 计算两个 Float32Array 向量的余弦相似度（高性能版本）
+ * 直接操作 TypedArray，避免创建中间数组
+ */
+function cosineSimilarityTyped(a: Float32Array, b: Float32Array): number {
+  const len = a.length
+  if (len !== b.length) {
+    throw new Error('Vector dimensions must match')
+  }
+
+  let dotProduct = 0
+  let normA = 0
+  let normB = 0
+
+  // 使用局部变量减少属性访问开销
+  for (let i = 0; i < len; i++) {
+    const ai = a[i]
+    const bi = b[i]
+    dotProduct += ai * bi
+    normA += ai * ai
+    normB += bi * bi
+  }
+
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB)
+  if (magnitude === 0) return 0
+
+  return dotProduct / magnitude
+}
+
+/**
+ * 计算两个向量的余弦相似度（兼容旧接口）
  */
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
@@ -372,6 +420,9 @@ export class SQLiteVectorClient implements VectorDBClient {
     // 预编译查询语句
     const stmt = this.db.prepare(`SELECT id, text, vector, metadata FROM "${tableName}" LIMIT ? OFFSET ?`)
 
+    // 将查询向量转换为 Float32Array（只转换一次）
+    const queryVectorTyped = new Float32Array(queryVector)
+
     let offset = 0
     let dbReadTimeMs = 0
     let vectorParseTimeMs = 0
@@ -390,11 +441,13 @@ export class SQLiteVectorClient implements VectorDBClient {
       for (const row of rows) {
         try {
           const parseStart = Date.now()
-          const vector = parseVectorData(row.vector) // 自动检测格式
+          // 使用高性能版本：直接返回 Float32Array，避免 Array.from 开销
+          const vector = parseVectorDataTyped(row.vector)
           vectorParseTimeMs += Date.now() - parseStart
 
           const calcStart = Date.now()
-          const score = cosineSimilarity(queryVector, vector)
+          // 使用高性能版本：直接操作 Float32Array
+          const score = cosineSimilarityTyped(queryVectorTyped, vector)
           similarityCalcTimeMs += Date.now() - calcStart
 
           topK.push({
