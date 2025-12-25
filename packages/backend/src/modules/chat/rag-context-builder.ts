@@ -207,6 +207,7 @@ export class RAGContextBuilder {
     result: RAGResult
   }> {
     const searchId = `kb_search_${Date.now()}`
+    const startTime = Date.now()
 
     // 获取知识库名称 (KnowledgeBase 类型包含 name 字段)
     const kbNames: string[] = []
@@ -214,6 +215,7 @@ export class RAGContextBuilder {
       const kb = await this.kbService.get(kbId)
       if (kb) kbNames.push((kb as any).name)
     }
+    const kbLookupTime = Date.now() - startTime
 
     // 发送开始事件
     if (onEvent) {
@@ -222,7 +224,9 @@ export class RAGContextBuilder {
 
     try {
       // 执行知识库检索
+      const searchStart = Date.now()
       const result = await this.kbService.search(knowledgeBaseIds, query)
+      const searchTime = Date.now() - searchStart
 
       // 发送结果事件
       if (onEvent) {
@@ -231,6 +235,22 @@ export class RAGContextBuilder {
 
       // 构建上下文
       const context = result.context
+      const totalTime = Date.now() - startTime
+
+      // 性能诊断日志
+      console.log('[RAG Context] enhanceFromKnowledgeBases completed', {
+        knowledgeBaseIds,
+        knowledgeBaseNames: kbNames,
+        queryLength: query.length,
+        hitsCount: result.hits.length,
+        totalHits: result.totalHits,
+        timings: {
+          kbLookupMs: kbLookupTime,
+          searchMs: searchTime,
+          queryTimeReported: result.queryTime,
+          totalMs: totalTime,
+        },
+      })
 
       return { context, result }
     } catch (error) {

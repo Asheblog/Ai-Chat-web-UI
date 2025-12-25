@@ -351,6 +351,7 @@ export class SQLiteVectorClient implements VectorDBClient {
     queryVector: number[],
     limit: number
   ): Promise<SearchResult[]> {
+    const searchStart = Date.now()
     const exists = await this.hasCollection(collectionName)
     if (!exists) return []
 
@@ -372,18 +373,30 @@ export class SQLiteVectorClient implements VectorDBClient {
     const stmt = this.db.prepare(`SELECT id, text, vector, metadata FROM "${tableName}" LIMIT ? OFFSET ?`)
 
     let offset = 0
+    let dbReadTimeMs = 0
+    let vectorParseTimeMs = 0
+    let similarityCalcTimeMs = 0
+
     while (offset < totalCount) {
+      const dbReadStart = Date.now()
       const rows = stmt.all(BATCH_SIZE, offset) as Array<{
         id: string
         text: string
         vector: string | Buffer  // 兼容 JSON 和二进制格式
         metadata: string
       }>
+      dbReadTimeMs += Date.now() - dbReadStart
 
       for (const row of rows) {
         try {
+          const parseStart = Date.now()
           const vector = parseVectorData(row.vector) // 自动检测格式
+          vectorParseTimeMs += Date.now() - parseStart
+
+          const calcStart = Date.now()
           const score = cosineSimilarity(queryVector, vector)
+          similarityCalcTimeMs += Date.now() - calcStart
+
           topK.push({
             id: row.id,
             text: row.text,
@@ -397,6 +410,28 @@ export class SQLiteVectorClient implements VectorDBClient {
       }
 
       offset += BATCH_SIZE
+    }
+
+    const totalMs = Date.now() - searchStart
+
+    // 仅当搜索时间超过 500ms 时输出详细日志
+    if (totalMs > 500) {
+      console.log('[VectorDB Perf] Slow search detected', {
+        collection: collectionName,
+        totalRecords: totalCount,
+        vectorDimension: queryVector.length,
+        timings: {
+          dbReadMs: dbReadTimeMs,
+          vectorParseMs: vectorParseTimeMs,
+          similarityCalcMs: similarityCalcTimeMs,
+          totalMs,
+        },
+        breakdown: {
+          dbReadPct: Math.round((dbReadTimeMs / totalMs) * 100),
+          vectorParsePct: Math.round((vectorParseTimeMs / totalMs) * 100),
+          similarityCalcPct: Math.round((similarityCalcTimeMs / totalMs) * 100),
+        },
+      })
     }
 
     return topK.toSortedArray()

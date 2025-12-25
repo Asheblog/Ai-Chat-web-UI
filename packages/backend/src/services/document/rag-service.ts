@@ -201,16 +201,20 @@ export class RAGService {
     searchMode: 'precise' | 'broad' | 'overview' = 'precise'
   ): Promise<RAGResult> {
     const startTime = Date.now()
+    const timings: Record<string, number> = {}
 
     // 获取文档信息
+    const dbQueryStart = Date.now()
     const documents = await this.prisma.document.findMany({
       where: {
         id: { in: documentIds },
         status: 'ready',
       },
     })
+    timings.dbQuery = Date.now() - dbQueryStart
 
     if (documents.length === 0) {
+      console.log('[RAG Perf] searchInDocuments: no documents found', { documentIds, timings })
       return {
         hits: [],
         context: '',
@@ -239,19 +243,30 @@ export class RAGService {
     }
 
     // 生成查询 embedding
+    const embeddingStart = Date.now()
     const queryVector = await this.embeddingService.embed(query)
+    timings.embedding = Date.now() - embeddingStart
 
     // 搜索
     const allHits: RAGHit[] = []
+    const vectorSearchStart = Date.now()
+    const docSearchTimings: Array<{ docId: number; collectionName: string; timeMs: number; resultCount: number }> = []
 
     for (const doc of documents) {
       if (!doc.collectionName) continue
 
+      const docSearchStart = Date.now()
       const results = await this.vectorDB.search(
         doc.collectionName,
         queryVector,
         topK * 2
       )
+      docSearchTimings.push({
+        docId: doc.id,
+        collectionName: doc.collectionName,
+        timeMs: Date.now() - docSearchStart,
+        resultCount: results.length,
+      })
 
       for (const result of results) {
         if (result.score < relevanceThreshold) continue
@@ -280,6 +295,8 @@ export class RAGService {
       }
     }
 
+    timings.vectorSearchTotal = Date.now() - vectorSearchStart
+
     allHits.sort((a, b) => b.score - a.score)
 
     let topHits: RAGHit[]
@@ -294,6 +311,24 @@ export class RAGService {
     }
 
     const context = this.buildContext(topHits)
+    timings.total = Date.now() - startTime
+
+    // 性能诊断日志
+    console.log('[RAG Perf] searchInDocuments completed', {
+      documentCount: documents.length,
+      totalChunksSearched: docSearchTimings.reduce((sum, d) => sum + d.resultCount, 0),
+      searchMode,
+      timings: {
+        dbQueryMs: timings.dbQuery,
+        embeddingMs: timings.embedding,
+        vectorSearchTotalMs: timings.vectorSearchTotal,
+        totalMs: timings.total,
+      },
+      slowestDocs: docSearchTimings
+        .sort((a, b) => b.timeMs - a.timeMs)
+        .slice(0, 5)
+        .map((d) => `${d.collectionName}: ${d.timeMs}ms (${d.resultCount} results)`),
+    })
 
     return {
       hits: topHits,

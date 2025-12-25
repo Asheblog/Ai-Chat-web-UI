@@ -90,7 +90,16 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embed(text: string): Promise<number[]> {
+    const start = Date.now()
     const results = await this.embedBatch([text])
+    const elapsed = Date.now() - start
+    if (elapsed > 200) {
+      console.log('[Embedding Perf] Single embed call', {
+        textLength: text.length,
+        timeMs: elapsed,
+        model: this.model,
+      })
+    }
     return results[0]
   }
 
