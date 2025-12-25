@@ -89,6 +89,9 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
 
   const isEnabled = knowledgeBaseEnabled && hasPermission
 
+  // 判断系统设置是否已加载（用于区分"加载中"和"已确认禁用"）
+  const settingsLoaded = systemSettings !== null
+
   // 从 sessionStorage 恢复选择
   const storageKey = sessionId ? `kb-selected-${sessionId}` : 'kb-selected-draft'
 
@@ -153,6 +156,9 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
 
   // 初始化加载
   useEffect(() => {
+    // 如果系统设置还未加载完成，不做任何操作，避免误清空选择
+    if (!settingsLoaded) return
+
     if (isEnabled) {
       fetchKnowledgeBases()
       // 恢复之前的选择
@@ -161,15 +167,18 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
         setSelectedKbIds(stored)
       }
     } else {
+      // 只有在确认功能禁用时才清空
       setAvailableKbs([])
       setSelectedKbIds([])
     }
-  }, [isEnabled, fetchKnowledgeBases, readStoredSelection])
+  }, [settingsLoaded, isEnabled, fetchKnowledgeBases, readStoredSelection])
 
-  // 同步选择到 storage
+  // 同步选择到 storage - 只有在 settings 加载完成后才写入
   useEffect(() => {
+    // 如果系统设置还未加载完成，不写入 storage，避免覆盖已保存的选择
+    if (!settingsLoaded) return
     writeStoredSelection(selectedKbIds)
-  }, [selectedKbIds, writeStoredSelection])
+  }, [settingsLoaded, selectedKbIds, writeStoredSelection])
 
   // 验证选中的 ID 在可用列表中
   // 当知识库被删除后，自动清理无效的选择
