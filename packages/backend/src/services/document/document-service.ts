@@ -24,6 +24,9 @@ import {
 } from './chunking-service'
 import { EmbeddingService, type EmbeddingConfig } from './embedding-service'
 import { type VectorDBClient, type VectorItem } from '../../modules/document/vector'
+import type { DocumentSectionService } from './section-service'
+import type { ChunkWithMetadata } from '../../modules/document/structure/types'
+import { BackendLogger as log } from '../../utils/logger'
 
 export interface DocumentServiceConfig {
   /**
@@ -79,6 +82,7 @@ export class DocumentService {
   private vectorDB: VectorDBClient
   private embeddingService: EmbeddingService
   private config: DocumentServiceConfig
+  private sectionService: DocumentSectionService | null = null
 
   constructor(
     prisma: PrismaClient,
@@ -90,6 +94,13 @@ export class DocumentService {
     this.vectorDB = vectorDB
     this.embeddingService = embeddingService
     this.config = config
+  }
+
+  /**
+   * 设置章节服务（可选注入，用于文档结构提取）
+   */
+  setSectionService(sectionService: DocumentSectionService): void {
+    this.sectionService = sectionService
   }
 
   /**
@@ -485,6 +496,57 @@ export class DocumentService {
 
       if (totalChunksProcessed === 0) {
         throw new Error('No chunks created from document')
+      }
+
+      // 章节结构提取（可选，如果已注入 sectionService）
+      if (this.sectionService && totalChunksProcessed > 0) {
+        try {
+          await report({ stage: 'storing', progress: 95, message: '正在提取文档结构...' })
+          
+          // 从数据库读取所有 chunks 用于结构分析
+          const allChunks = await this.prisma.documentChunk.findMany({
+            where: { documentId },
+            orderBy: { chunkIndex: 'asc' },
+          })
+          
+          // 转换为 ChunkWithMetadata 格式
+          const chunksForStructure: ChunkWithMetadata[] = allChunks.map((chunk: DocumentChunk) => {
+            let meta: Record<string, unknown> = {}
+            try {
+              meta = typeof chunk.metadata === 'string'
+                ? JSON.parse(chunk.metadata)
+                : (chunk.metadata || {})
+            } catch {
+              meta = {}
+            }
+            
+            return {
+              chunkIndex: chunk.chunkIndex,
+              content: chunk.content || '',
+              pageNumber: typeof meta.pageNumber === 'number' ? meta.pageNumber : undefined,
+              metadata: meta,
+            }
+          })
+          
+          // 提取并保存章节结构
+          const structureResult = await this.sectionService.extractAndSave(
+            documentId,
+            chunksForStructure,
+            null // PDF 书签暂不支持，后续可优化 pdf-loader
+          )
+          
+          log.info('[DocumentService] Section extraction completed', {
+            documentId,
+            sectionsFound: structureResult.totalSections,
+            detectionMethod: structureResult.detectionMethod,
+          })
+        } catch (sectionError) {
+          // 章节提取失败不应影响文档处理的成功状态
+          log.warn('[DocumentService] Section extraction failed', {
+            documentId,
+            error: sectionError instanceof Error ? sectionError.message : String(sectionError),
+          })
+        }
       }
 
       // 更新文档状态

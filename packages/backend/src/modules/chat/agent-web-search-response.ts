@@ -41,6 +41,7 @@ import {
 } from './kb-tools';
 import { KnowledgeBaseService } from '../../services/knowledge-base';
 import type { RAGService } from '../../services/document/rag-service';
+import { getDocumentServices } from '../../services/document-services-factory';
 import { ToolLogManager } from './tool-log-manager';
 import { StreamEventEmitter } from './stream-event-emitter';
 import {
@@ -743,8 +744,17 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       }
       // 添加知识库工具（如果启用知识库且有 ragService）
       const knowledgeBaseIds = params.knowledgeBaseIds || [];
+      // 获取 sectionService 用于章节结构提取
+      const docServices = getDocumentServices();
+      const sectionService = docServices?.sectionService || null;
       const kbToolHandler = ragService && toolFlags.knowledgeBase && knowledgeBaseIds.length > 0
-        ? new KBToolHandler(new KnowledgeBaseService(prisma), ragService, knowledgeBaseIds)
+        ? new KBToolHandler(
+            new KnowledgeBaseService(prisma),
+            ragService,
+            knowledgeBaseIds,
+            null,  // enhancedRagService - 后续可集成
+            sectionService
+          )
         : null;
       if (kbToolHandler) {
         for (const toolDef of kbToolDefinitions) {

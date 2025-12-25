@@ -13,6 +13,7 @@ import { createVectorDBClient, getVectorDBClient } from '../modules/document/vec
 import { EmbeddingService, type EmbeddingConfig } from './document/embedding-service'
 import { DocumentService, type DocumentServiceConfig } from './document/document-service'
 import { RAGService, type RAGConfig } from './document/rag-service'
+import { DocumentSectionService } from './document/section-service'
 import { CleanupScheduler, type CleanupConfig } from './cleanup/cleanup-scheduler'
 
 export interface DocumentServicesConfig {
@@ -46,6 +47,7 @@ export interface DocumentServices {
   embeddingService: EmbeddingService
   documentService: DocumentService
   ragService: RAGService
+  sectionService: DocumentSectionService
   cleanupScheduler: CleanupScheduler
 }
 
@@ -144,6 +146,12 @@ export function createDocumentServices(
     fullConfig.rag
   )
 
+  // 创建章节服务
+  const sectionService = new DocumentSectionService(prisma)
+
+  // 将章节服务注入到文档服务（用于处理完成后自动提取结构）
+  documentService.setSectionService(sectionService)
+
   // 创建清理调度器
   const cleanupScheduler = new CleanupScheduler(
     prisma,
@@ -155,6 +163,7 @@ export function createDocumentServices(
     embeddingService,
     documentService,
     ragService,
+    sectionService,
     cleanupScheduler,
   }
 }

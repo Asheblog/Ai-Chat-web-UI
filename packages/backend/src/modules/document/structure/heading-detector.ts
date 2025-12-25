@@ -24,6 +24,45 @@ const CHINESE_NUMBERS: Record<string, number> = {
 
 // 标题模式定义
 const HEADING_PATTERNS = [
+  // Markdown 风格标题 (由 DOCX/Markdown 转换生成)
+  // 高置信度，因为 # 标记是明确的结构标识
+  {
+    regex: /^#\s+(.+)$/,
+    level: 1,
+    pattern: 'markdown_h1',
+    confidence: 0.98,
+  },
+  {
+    regex: /^##\s+(.+)$/,
+    level: 2,
+    pattern: 'markdown_h2',
+    confidence: 0.98,
+  },
+  {
+    regex: /^###\s+(.+)$/,
+    level: 3,
+    pattern: 'markdown_h3',
+    confidence: 0.98,
+  },
+  {
+    regex: /^####\s+(.+)$/,
+    level: 4,
+    pattern: 'markdown_h4',
+    confidence: 0.95,
+  },
+  {
+    regex: /^#####\s+(.+)$/,
+    level: 5,
+    pattern: 'markdown_h5',
+    confidence: 0.95,
+  },
+  {
+    regex: /^######\s+(.+)$/,
+    level: 6,
+    pattern: 'markdown_h6',
+    confidence: 0.95,
+  },
+  
   // 1级标题: 第X章, Chapter X
   {
     regex: /^第([一二三四五六七八九十百千]+)章[\s\.:：]*(.*)/,
