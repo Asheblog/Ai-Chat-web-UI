@@ -5,6 +5,8 @@
 
 import type { KnowledgeBaseService } from '../../services/knowledge-base/knowledge-base-service'
 import type { RAGService } from '../../services/document/rag-service'
+import type { EnhancedRAGService } from '../../services/document/enhanced-rag-service'
+import type { DocumentSectionService } from '../../services/document/section-service'
 
 /**
  * 知识库工具定义（OpenAI function calling 格式）
@@ -172,6 +174,146 @@ export const kbToolDefinitions = [
             },
         },
     },
+    // ==================== 新增工具 ====================
+    {
+        type: 'function',
+        function: {
+            name: 'kb_get_toc',
+            description: `获取文档的目录结构（章节大纲）。
+
+**使用场景**:
+- ✅ 首次查看文档时了解整体结构
+- ✅ 用户问"这个文档有哪些章节"、"目录是什么"
+- ✅ 需要定位特定章节内容时，先查看目录
+- ✅ 比逐页翻阅更高效地了解文档组织
+
+**返回信息**:
+- 层级目录树（章、节、小节）
+- 每个章节的页码范围
+- 章节路径（如 "1.2.3"）
+
+**最佳实践**:
+1. 在查看文档内容前，先调用此工具了解结构
+2. 根据目录定位到感兴趣的章节
+3. 使用 kb_get_section 获取章节完整内容`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    document_id: {
+                        type: 'integer',
+                        description: '文档 ID（可从 kb_get_documents 获取）',
+                    },
+                    max_level: {
+                        type: 'integer',
+                        minimum: 1,
+                        maximum: 5,
+                        description: '最大展示层级，默认3（1=只显示章，2=显示章和节，3=显示到小节）',
+                    },
+                },
+                required: ['document_id'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'kb_get_section',
+            description: `获取指定章节的完整内容。
+
+**使用场景**:
+- ✅ 已知章节路径（如 "1.2"），需要完整内容
+- ✅ 从目录中选定章节后获取详细内容
+- ✅ 比按页码获取更精准，直接获取完整章节
+
+**参数说明**:
+- section_path: 章节路径（如 "1", "1.2", "1.2.3"）或章节标题
+- include_children: 是否包含子章节内容
+
+**最佳实践**:
+1. 先用 kb_get_toc 获取目录
+2. 从目录中找到目标章节的路径
+3. 使用此工具获取章节内容`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    document_id: {
+                        type: 'integer',
+                        description: '文档 ID',
+                    },
+                    section_path: {
+                        type: 'string',
+                        description: '章节路径（如 "1.2.3"）或章节标题关键词',
+                    },
+                    include_children: {
+                        type: 'boolean',
+                        description: '是否包含子章节内容，默认 true',
+                    },
+                },
+                required: ['document_id', 'section_path'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'kb_search_v2',
+            description: `增强版语义搜索：自动聚合相邻内容，按章节分组返回。
+
+**相比 kb_search 的优势**:
+- ✅ 相邻内容自动合并，不再碎片化
+- ✅ 结果按章节分组，更易理解
+- ✅ 返回章节上下文，内容更完整
+- ✅ 支持按章节模式搜索
+
+**搜索模式 (search_mode)**:
+- "precise": 精确匹配，高相关性
+- "broad": 广泛检索，覆盖更多内容
+- "section": 按章节聚合，返回匹配的完整章节
+
+**使用场景**:
+- ✅ 搜索某个主题的完整信息
+- ✅ 需要连贯的上下文而非碎片
+- ✅ 了解某个概念在文档中的分布
+
+**最佳实践**:
+1. 对于复杂查询，优先使用此工具
+2. 使用 section 模式可快速定位相关章节`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    query: {
+                        type: 'string',
+                        description: '搜索查询，使用自然语言描述要查找的内容',
+                    },
+                    search_mode: {
+                        type: 'string',
+                        enum: ['precise', 'broad', 'section'],
+                        description: '搜索模式：precise(精确)、broad(广泛)、section(按章节聚合)',
+                    },
+                    aggregate_adjacent: {
+                        type: 'boolean',
+                        description: '是否合并相邻内容，默认 true',
+                    },
+                    include_context: {
+                        type: 'boolean',
+                        description: '是否包含上下文，默认 true',
+                    },
+                    top_k: {
+                        type: 'integer',
+                        minimum: 1,
+                        maximum: 20,
+                        description: '返回的结果数量，默认根据模式自动决定',
+                    },
+                    kb_ids: {
+                        type: 'array',
+                        items: { type: 'integer' },
+                        description: '可选，指定要搜索的知识库 ID 列表',
+                    },
+                },
+                required: ['query'],
+            },
+        },
+    },
 ]
 
 /**
@@ -182,6 +324,10 @@ export const kbToolNames = new Set([
     'kb_get_documents',
     'kb_search',
     'kb_get_document_content',
+    // 新增工具
+    'kb_get_toc',
+    'kb_get_section',
+    'kb_search_v2',
 ])
 
 /**
@@ -190,16 +336,22 @@ export const kbToolNames = new Set([
 export class KBToolHandler {
     private kbService: KnowledgeBaseService
     private ragService: RAGService
+    private enhancedRagService: EnhancedRAGService | null
+    private sectionService: DocumentSectionService | null
     private knowledgeBaseIds: number[]
 
     constructor(
         kbService: KnowledgeBaseService,
         ragService: RAGService,
-        knowledgeBaseIds: number[]
+        knowledgeBaseIds: number[],
+        enhancedRagService?: EnhancedRAGService | null,
+        sectionService?: DocumentSectionService | null
     ) {
         this.kbService = kbService
         this.ragService = ragService
         this.knowledgeBaseIds = knowledgeBaseIds
+        this.enhancedRagService = enhancedRagService || null
+        this.sectionService = sectionService || null
     }
 
     /**
@@ -253,6 +405,32 @@ export class KBToolHandler {
                         args.start_page as number | undefined,
                         args.end_page as number | undefined,
                         sampleMode as 'full' | 'summary' | 'headings'
+                    )
+                }
+
+                // ========== 新增工具 ==========
+                case 'kb_get_toc':
+                    return await this.handleGetTOC(
+                        args.document_id as number,
+                        args.max_level as number | undefined
+                    )
+
+                case 'kb_get_section':
+                    return await this.handleGetSection(
+                        args.document_id as number,
+                        args.section_path as string,
+                        args.include_children as boolean | undefined
+                    )
+
+                case 'kb_search_v2': {
+                    const kbIds = (args.kb_ids as number[]) || this.knowledgeBaseIds
+                    return await this.handleSearchV2(
+                        args.query as string,
+                        args.search_mode as 'precise' | 'broad' | 'section' | undefined,
+                        args.aggregate_adjacent as boolean | undefined,
+                        args.include_context as boolean | undefined,
+                        args.top_k as number | undefined,
+                        kbIds
                     )
                 }
 
@@ -640,6 +818,327 @@ export class KBToolHandler {
             },
         }
     }
+
+    // ==================== 新增工具处理方法 ====================
+
+    /**
+     * 处理获取文档目录结构
+     */
+    private async handleGetTOC(
+        documentId: number,
+        maxLevel?: number
+    ): Promise<{
+        success: boolean
+        result: unknown
+        error?: string
+    }> {
+        if (!documentId) {
+            return {
+                success: false,
+                result: null,
+                error: '文档 ID 不能为空',
+            }
+        }
+
+        // 验证文档属于当前选择的知识库
+        const isDocumentInKb = await this.kbService.isDocumentInKnowledgeBases(
+            documentId,
+            this.knowledgeBaseIds
+        )
+        if (!isDocumentInKb) {
+            return {
+                success: false,
+                result: null,
+                error: `文档 ${documentId} 不属于当前选择的知识库`,
+            }
+        }
+
+        // 检查 sectionService 是否可用
+        if (!this.sectionService) {
+            return {
+                success: false,
+                result: null,
+                error: '章节服务不可用，请确保已启用文档结构提取功能',
+            }
+        }
+
+        try {
+            const toc = await this.sectionService.getDocumentTOC(
+                documentId,
+                maxLevel ?? 3
+            )
+
+            if (toc.length === 0) {
+                return {
+                    success: true,
+                    result: {
+                        documentId,
+                        hasTOC: false,
+                        message: '该文档没有提取到目录结构。可能是因为文档没有书签或标题格式不标准。',
+                        suggestion: '请使用 kb_get_document_content 按页浏览文档内容。',
+                    },
+                }
+            }
+
+            // 格式化目录树
+            const formatTOC = (sections: any[], indent: number = 0): string => {
+                return sections.map((s: any) => {
+                    const prefix = '  '.repeat(indent)
+                    const pageInfo = s.startPage ? ` (第${s.startPage}页)` : ''
+                    let line = `${prefix}${s.path} ${s.title}${pageInfo}`
+                    if (s.children && s.children.length > 0) {
+                        line += '\n' + formatTOC(s.children, indent + 1)
+                    }
+                    return line
+                }).join('\n')
+            }
+
+            return {
+                success: true,
+                result: {
+                    documentId,
+                    hasTOC: true,
+                    sectionCount: toc.length,
+                    maxLevel: maxLevel ?? 3,
+                    toc: toc,
+                    formatted: formatTOC(toc),
+                    usage: '使用 kb_get_section 可以获取指定章节的完整内容',
+                },
+            }
+        } catch (error) {
+            return {
+                success: false,
+                result: null,
+                error: error instanceof Error ? error.message : '获取目录结构失败',
+            }
+        }
+    }
+
+    /**
+     * 处理获取章节内容
+     */
+    private async handleGetSection(
+        documentId: number,
+        sectionPath: string,
+        includeChildren: boolean = true
+    ): Promise<{
+        success: boolean
+        result: unknown
+        error?: string
+    }> {
+        if (!documentId) {
+            return {
+                success: false,
+                result: null,
+                error: '文档 ID 不能为空',
+            }
+        }
+
+        if (!sectionPath) {
+            return {
+                success: false,
+                result: null,
+                error: '章节路径不能为空',
+            }
+        }
+
+        // 验证文档属于当前选择的知识库
+        const isDocumentInKb = await this.kbService.isDocumentInKnowledgeBases(
+            documentId,
+            this.knowledgeBaseIds
+        )
+        if (!isDocumentInKb) {
+            return {
+                success: false,
+                result: null,
+                error: `文档 ${documentId} 不属于当前选择的知识库`,
+            }
+        }
+
+        if (!this.sectionService) {
+            return {
+                success: false,
+                result: null,
+                error: '章节服务不可用',
+            }
+        }
+
+        try {
+            // 先尝试按路径查找
+            let section = await this.sectionService.getSectionByPath(documentId, sectionPath)
+
+            // 如果按路径找不到，尝试按标题搜索
+            if (!section) {
+                const sections = await this.sectionService.searchSectionsByTitle(documentId, sectionPath)
+                if (sections.length > 0) {
+                    section = sections[0]
+                }
+            }
+
+            if (!section) {
+                return {
+                    success: true,
+                    result: {
+                        found: false,
+                        message: `未找到章节 "${sectionPath}"`,
+                        suggestion: '请使用 kb_get_toc 查看完整目录结构，确认章节路径',
+                    },
+                }
+            }
+
+            // 获取章节内容
+            const sectionContent = await this.sectionService.getSectionContent(
+                section.id,
+                includeChildren
+            )
+
+            if (!sectionContent) {
+                return {
+                    success: true,
+                    result: {
+                        found: true,
+                        section: {
+                            id: section.id,
+                            title: section.title,
+                            path: section.path,
+                            level: section.level,
+                        },
+                        content: '',
+                        message: '章节存在但没有提取到内容',
+                    },
+                }
+            }
+
+            return {
+                success: true,
+                result: {
+                    found: true,
+                    section: {
+                        id: section.id,
+                        title: section.title,
+                        path: section.path,
+                        level: section.level,
+                        startPage: section.startPage,
+                        endPage: section.endPage,
+                    },
+                    includeChildren,
+                    chunkCount: sectionContent.chunks.length,
+                    content: sectionContent.content,
+                },
+            }
+        } catch (error) {
+            return {
+                success: false,
+                result: null,
+                error: error instanceof Error ? error.message : '获取章节内容失败',
+            }
+        }
+    }
+
+    /**
+     * 处理增强版搜索
+     */
+    private async handleSearchV2(
+        query: string,
+        searchMode: 'precise' | 'broad' | 'section' = 'precise',
+        aggregateAdjacent: boolean = true,
+        includeContext: boolean = true,
+        topK?: number,
+        kbIds: number[] = this.knowledgeBaseIds
+    ): Promise<{
+        success: boolean
+        result: unknown
+        error?: string
+    }> {
+        if (!query || !query.trim()) {
+            return {
+                success: false,
+                result: null,
+                error: '搜索查询不能为空',
+            }
+        }
+
+        // 验证 kb_ids 有效性
+        const validKbIds = kbIds.filter((id) => this.knowledgeBaseIds.includes(id))
+        if (validKbIds.length === 0) {
+            return {
+                success: false,
+                result: null,
+                error: '没有有效的知识库可供搜索',
+            }
+        }
+
+        // 如果没有增强服务，回退到普通搜索
+        if (!this.enhancedRagService) {
+            console.log('[KBTools] EnhancedRAGService not available, falling back to regular search')
+            return this.handleSearch(query, topK ?? 5, searchMode === 'section' ? 'broad' : searchMode as any, validKbIds)
+        }
+
+        try {
+            // 获取所有相关文档ID
+            const documentIds = await this.kbService.getDocumentIdsFromMultiple(validKbIds)
+
+            if (documentIds.length === 0) {
+                return {
+                    success: true,
+                    result: {
+                        query,
+                        searchMode,
+                        totalHits: 0,
+                        hits: [],
+                        message: '知识库中没有可搜索的文档',
+                    },
+                }
+            }
+
+            // 使用增强版搜索
+            const result = await this.enhancedRagService.search(documentIds, query, {
+                mode: searchMode,
+                aggregateAdjacent,
+                groupBySection: true,
+                includeContext,
+                contextSize: 1,
+                topK,
+            })
+
+            // 格式化结果
+            const formattedHits = result.hits.map((hit: any) => ({
+                documentId: hit.documentId,
+                documentName: hit.documentName,
+                section: hit.section ? {
+                    title: hit.section.title,
+                    path: hit.section.path,
+                } : null,
+                score: Math.round(hit.score * 100) / 100,
+                content: hit.content,
+                aggregatedChunks: hit.aggregatedFrom?.length ?? 1,
+                hasContext: !!(hit.contextBefore || hit.contextAfter),
+            }))
+
+            return {
+                success: true,
+                result: {
+                    query,
+                    searchMode,
+                    aggregateAdjacent,
+                    totalHits: result.totalHits,
+                    returnedHits: formattedHits.length,
+                    hits: formattedHits,
+                    aggregationStats: result.aggregationStats,
+                    context: result.context,
+                    suggestion: result.hits.length > 0
+                        ? '如需查看完整章节内容，可使用 kb_get_section 工具'
+                        : '未找到相关内容，建议更换关键词或使用 broad 模式',
+                },
+            }
+        } catch (error) {
+            return {
+                success: false,
+                result: null,
+                error: error instanceof Error ? error.message : '搜索失败',
+            }
+        }
+    }
 }
 
 
@@ -674,6 +1173,22 @@ export function formatKBToolReasoning(
             return stage === 'start'
                 ? `获取文档 ${args.document_id} 的${pageInfo}...`
                 : '已获取文档内容'
+
+        // 新增工具
+        case 'kb_get_toc':
+            return stage === 'start'
+                ? `获取文档 ${args.document_id} 的目录结构...`
+                : '已获取文档目录'
+
+        case 'kb_get_section':
+            return stage === 'start'
+                ? `获取章节 "${args.section_path}" 的内容...`
+                : '已获取章节内容'
+
+        case 'kb_search_v2':
+            return stage === 'start'
+                ? `使用增强搜索查询：${args.query}`
+                : '搜索完成，已聚合相关内容'
 
         default:
             return `执行知识库工具：${toolName}`

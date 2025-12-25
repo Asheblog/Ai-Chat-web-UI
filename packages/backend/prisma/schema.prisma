@@ -340,6 +340,7 @@ model Document {
 
   user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   chunks           DocumentChunk[]
+  sections         DocumentSection[]
   sessionDocuments SessionDocument[]
   processingJob    DocumentProcessingJob?
   knowledgeBaseDocuments KnowledgeBaseDocument[]
@@ -382,13 +383,44 @@ model DocumentChunk {
   tokenCount  Int      @default(0)
   metadata    String   @default("{}") // JSON: 页码、标题等
   vectorId    String?  // 向量数据库中的ID
+  sectionId   Int?     // 关联的章节ID
   createdAt   DateTime @default(now())
 
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  section  DocumentSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, chunkIndex])
   @@index([documentId])
+  @@index([sectionId])
   @@map("document_chunks")
+}
+
+// 文档章节表 - 存储文档目录/章节结构
+model DocumentSection {
+  id              Int      @id @default(autoincrement())
+  documentId      Int
+  parentId        Int?     // 父章节ID，支持嵌套结构
+  level           Int      @default(1) // 层级: 1=章, 2=节, 3=小节
+  title           String   // 章节标题
+  path            String   // 路径如 "1", "1.2", "1.2.3"
+  startPage       Int?     // 起始页码
+  endPage         Int?     // 结束页码
+  startChunk      Int?     // 起始chunk索引
+  endChunk        Int?     // 结束chunk索引
+  detectionMethod String   @default("heuristic") // 检测方法: pdf_outline | heuristic
+  confidence      Float    @default(1.0) // 检测置信度 0-1
+  metadata        String   @default("{}") // JSON: 额外元数据
+  createdAt       DateTime @default(now())
+
+  document Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parent   DocumentSection?  @relation("SectionHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children DocumentSection[] @relation("SectionHierarchy")
+  chunks   DocumentChunk[]
+
+  @@index([documentId])
+  @@index([parentId])
+  @@index([path])
+  @@map("document_sections")
 }
 
 // 会话-文档关联表 (临时附加模式)
