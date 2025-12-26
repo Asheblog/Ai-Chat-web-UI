@@ -552,9 +552,27 @@ export class SQLiteVectorClient implements VectorDBClient {
   }
 
   /**
-   * 执行 VACUUM 压缩数据库
+   * 执行 WAL checkpoint 并压缩数据库
+   * 先将 WAL 日志合并到主库，再执行 VACUUM 释放空间
    */
   vacuum(): void {
+    // 先执行 checkpoint 将 WAL 合并到主库并清空 WAL 文件
+    // TRUNCATE 模式会将 WAL 文件截断为 0 字节
+    try {
+      const result = this.db.pragma('wal_checkpoint(TRUNCATE)') as Array<{ busy: number; log: number; checkpointed: number }>
+      if (result && result[0]) {
+        const { busy, log, checkpointed } = result[0]
+        if (busy === 0 && log === checkpointed) {
+          console.log(`[VectorDB] WAL checkpoint completed: ${checkpointed} pages checkpointed`)
+        } else if (busy === 1) {
+          console.warn(`[VectorDB] WAL checkpoint blocked by busy database, will retry on next vacuum`)
+        }
+      }
+    } catch (e) {
+      console.warn('[VectorDB] WAL checkpoint failed:', e instanceof Error ? e.message : e)
+    }
+    
+    // 然后执行 VACUUM 压缩主库文件
     this.db.exec('VACUUM')
   }
 

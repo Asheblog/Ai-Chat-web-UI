@@ -68,13 +68,14 @@ const getRankIcon = (rank: number) => {
 export function ModelStatsTable({ groupedResults, statsMap, className }: ModelStatsTableProps) {
   // 计算每个模型的详细统计数据
   const modelStats = useMemo<ModelStats[]>(() => {
-    return groupedResults.map((group) => {
+    const stats = groupedResults.map((group) => {
       const stat = statsMap.get(group.key)
       let totalDuration = 0
       let durationCount = 0
       let totalInputTokens = 0
       let totalOutputTokens = 0
       let outputTokenCount = 0
+      let totalScore = 0 // 累计分数
 
       const attempts = group.attempts.map((attempt) => {
         const usage = attempt.usage || {}
@@ -89,6 +90,11 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
         if (attempt.durationMs) {
           totalDuration += attempt.durationMs
           durationCount++
+        }
+
+        // 累计有效分数（非错误且有分数的尝试）
+        if (!attempt.error && attempt.judgeScore != null) {
+          totalScore += attempt.judgeScore
         }
 
         return {
@@ -114,12 +120,17 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
         totalOutputTokens,
         avgOutputTokens: outputTokenCount > 0 ? Math.round(totalOutputTokens / outputTokenCount) : 0,
         attempts,
+        totalScore,
       }
-    }).sort((a, b) => {
-      // 先按passAtK 排序
+    })
+
+    return stats.sort((a, b) => {
+      // 先按 passAtK 排序
       if (a.passAtK !== b.passAtK) return a.passAtK ? -1 : 1
       // 再按准确率排序
-      return b.accuracy - a.accuracy
+      if (a.accuracy !== b.accuracy) return b.accuracy - a.accuracy
+      // 准确率相同时，按分数总和排序
+      return b.totalScore - a.totalScore
     })
   }, [groupedResults, statsMap])
 

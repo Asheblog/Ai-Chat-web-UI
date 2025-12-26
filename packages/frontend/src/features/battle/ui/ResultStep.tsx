@@ -200,15 +200,35 @@ export function ResultStep({
     ])
 
     const rankedModels = useMemo(() => {
+        // 计算每个模型的分数总和
+        const scoreMap = new Map<string, number>()
+        groupedResults.forEach((group) => {
+            let totalScore = 0
+            group.attempts.forEach((attempt) => {
+                if (!attempt.error && attempt.judgeScore != null) {
+                    totalScore += attempt.judgeScore
+                }
+            })
+            scoreMap.set(group.key, totalScore)
+        })
+
         return [...groupedResults].sort((a, b) => {
             const statA = mergedStatsMap.get(a.key)
             const statB = mergedStatsMap.get(b.key)
 
+            // 先按 passAtK 排序
             if (statA?.passAtK !== statB?.passAtK) {
                 return statA?.passAtK ? -1 : 1
             }
 
-            return (statB?.accuracy ?? 0) - (statA?.accuracy ?? 0)
+            // 再按准确率排序
+            const accuracyDiff = (statB?.accuracy ?? 0) - (statA?.accuracy ?? 0)
+            if (accuracyDiff !== 0) {
+                return accuracyDiff
+            }
+
+            // 准确率相同时，按分数总和排序
+            return (scoreMap.get(b.key) ?? 0) - (scoreMap.get(a.key) ?? 0)
         })
     }, [groupedResults, mergedStatsMap])
 
