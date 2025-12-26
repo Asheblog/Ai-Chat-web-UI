@@ -706,6 +706,8 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   overflow-x: auto;
   border-radius: 0.6rem;
   background: hsl(var(--muted) / 0.35);
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .dark .markdown-body .katex-display {
