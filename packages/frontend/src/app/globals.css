@@ -769,6 +769,13 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   @apply text-center max-w-2xl mx-auto p-8;
 }
 
+/* 修复 Radix ScrollArea 内部 table div 被内容撑开的问题 */
+/* Radix 会在 Viewport 内生成 display:table; min-width:100% 的 div，导致宽内容撑开容器 */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  min-width: 0 !important;
+}
+
 /* 玻璃态容器（用于 Dock 输入） */
 .glass {
   background: hsl(var(--card) / 0.7);
