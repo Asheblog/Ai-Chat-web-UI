@@ -362,10 +362,10 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
 
                 {/* Reasoning */}
                 {selectedAttempt.reasoning && (
-                  <div>
+                  <div className="min-w-0">
                     <h4 className="text-sm font-medium mb-2">推理过程</h4>
-                    <div className="rounded-lg bg-muted/30 p-3">
-                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
+                      <div className="prose prose-sm max-w-none dark:prose-invert overflow-x-auto min-w-0">
                         <MarkdownRenderer html={null} fallback={selectedAttempt.reasoning} />
                       </div>
                     </div>
@@ -373,11 +373,11 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                 )}
 
                 {/* Model Output */}
-                <div>
+                <div className="min-w-0">
                   <h4 className="text-sm font-medium mb-2">模型输出</h4>
-                  <div className="rounded-lg bg-muted/30 p-3">
+                  <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
                     {selectedAttempt.output ? (
-                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <div className="prose prose-sm max-w-none dark:prose-invert min-w-0">
                         <MarkdownRenderer html={null} fallback={selectedAttempt.output} />
                       </div>
                     ) : (
