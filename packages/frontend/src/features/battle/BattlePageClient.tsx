@@ -267,11 +267,12 @@ export function BattlePageClient() {
 
   const canRetryAttempt = Boolean(flow.isRunning && selectedDetail && selectedDetail.error)
 
+  // 允许所有非 live 且无模型执行错误的结果重新裁决
+  // 即使裁判已成功，也支持用户对不准确的裁决进行重试
   const canRetryJudge = Boolean(
     selectedDetail &&
       !selectedDetail.isLive &&
-      !selectedDetail.error &&
-      (((selectedDetail as any).judgeStatus && (selectedDetail as any).judgeStatus !== 'success') || selectedDetail.judgePass == null),
+      !selectedDetail.error,
   )
 
   const handleCancelAttempt = useCallback(async (detail: BattleAttemptDetail) => {
