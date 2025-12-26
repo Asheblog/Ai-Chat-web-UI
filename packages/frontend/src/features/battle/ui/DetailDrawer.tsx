@@ -126,7 +126,7 @@ export function DetailDrawer({
                 </DialogTitle>
                 {/* DEBUG: 添加 min-h-0 和 flex-1 来约束 ScrollArea 在 flex 容器中的高度 */}
                 <ScrollArea className="flex-1 min-h-0 w-full">
-                    <div className="p-4 sm:p-6 space-y-5">
+                    <div className="p-4 sm:p-6 space-y-5 min-w-0 overflow-hidden">
                         {/* Header */}
                         <div>
                             <div className="flex items-center gap-2 mb-2">

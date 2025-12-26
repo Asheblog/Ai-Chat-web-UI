@@ -312,7 +312,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           </DialogTitle>
           {selectedAttempt && (
             <ScrollArea className="h-full w-full">
-              <div className="p-4 sm:p-6 space-y-5">
+              <div className="p-4 sm:p-6 space-y-5 min-w-0 overflow-hidden">
                 {/* Header */}
                 <div>
                   <div className="flex items-center gap-2 mb-2">
