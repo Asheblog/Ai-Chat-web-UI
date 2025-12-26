@@ -6,6 +6,7 @@ import { ChevronDown } from 'lucide-react'
 import type { MessageMeta } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { cn } from '@/lib/utils'
+import { ImageLightbox, useImageLightbox } from '@/components/ui/image-lightbox'
 
 // 折叠阈值：超过此行数时自动折叠
 const COLLAPSE_LINE_THRESHOLD = 8
@@ -34,6 +35,7 @@ export function MessageBodyContent({
   isRendering,
 }: MessageBodyContentProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const lightbox = useImageLightbox()
 
   // 计算内容行数和是否需要折叠
   const { shouldCollapse, previewContent, lineCount } = useMemo(() => {
@@ -51,25 +53,45 @@ export function MessageBodyContent({
 
   if (isUser) {
     const showCollapsed = shouldCollapse && !isExpanded
+    const userImages = meta.images ?? []
 
     return (
       <div className={bubbleClass}>
         <div className="text-left">
-          {meta.images && meta.images.length > 0 && (
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              {meta.images.map((src, i) => (
-                <Image
+          {userImages.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {userImages.map((src, i) => (
+                <div
                   key={i}
-                  src={src}
-                  alt={`消息图片 ${i + 1}`}
-                  width={160}
-                  height={160}
-                  unoptimized
-                  className="max-h-40 rounded border object-contain"
-                />
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => lightbox.openLightbox(userImages, i)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      lightbox.openLightbox(userImages, i)
+                    }
+                  }}
+                  className="cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
+                >
+                  <Image
+                    src={src}
+                    alt={`消息图片 ${i + 1}`}
+                    width={160}
+                    height={160}
+                    unoptimized
+                    className="max-h-40 rounded border object-contain hover:opacity-90 transition-opacity block"
+                  />
+                </div>
               ))}
             </div>
           )}
+          <ImageLightbox
+            images={userImages}
+            initialIndex={lightbox.initialIndex}
+            open={lightbox.open}
+            onOpenChange={lightbox.setOpen}
+          />
           <div className="relative">
             <p className={cn(
               "whitespace-pre-wrap break-words text-left leading-[1.5] sm:leading-[1.6]",
