@@ -511,6 +511,12 @@ export function BattlePageClient() {
               onNewBattle={handleNewBattle}
               onSelectResult={handleSelectResult}
               onRetryFailedJudges={handleRetryFailedJudges}
+              onRejudgeComplete={() => {
+                if (flow.currentRunId) {
+                  fetchRunDetail(flow.currentRunId, { silent: true })
+                  setShareLink(null)
+                }
+              }}
               shareLink={shareLink}
             />
           )}

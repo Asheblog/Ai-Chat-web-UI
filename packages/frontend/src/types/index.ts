@@ -566,4 +566,5 @@ export type {
   BattleSharePayload,
   BattleShare,
   BattleStreamEvent,
+  RejudgeStreamEvent,
 } from '@aichat/shared/battle-contract';

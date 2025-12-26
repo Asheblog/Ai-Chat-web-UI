@@ -17,9 +17,11 @@ import {Trophy,
     ChevronRight,
     Clock,
     FileText,
+    Edit,
 } from 'lucide-react'
 import type { BattleResult, BattleRunSummary } from '@/types'
 import { ModelStatsTable } from './ModelStatsTable'
+import { RejudgeDialog } from './RejudgeDialog'
 
 interface ResultStepProps {
     prompt: string
@@ -38,6 +40,7 @@ interface ResultStepProps {
     onNewBattle: () => void
     onSelectResult: (result: BattleResult) => void
     onRetryFailedJudges?: () => void
+    onRejudgeComplete?: () => void
     shareLink?: string | null
 }
 
@@ -78,10 +81,12 @@ export function ResultStep({
     onNewBattle,
     onSelectResult,
     onRetryFailedJudges,
+    onRejudgeComplete,
     shareLink,
 }: ResultStepProps) {
     const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
     const [showQuestion, setShowQuestion] = useState(false)
+    const [rejudgeOpen, setRejudgeOpen] = useState(false)
 
     const resolvedPassK = useMemo(() => {
         if (isFiniteNumber(summary?.passK)) return summary.passK
@@ -322,12 +327,36 @@ export function ResultStep({
                             <div className="text-sm text-foreground leading-relaxed">{prompt}</div>
                         </div>
                         <div>
-                            <div className="text-xs font-medium text-muted-foreground mb-1">期望答案</div>
+                            <div className="flex items-center justify-between mb-1">
+                                <div className="text-xs font-medium text-muted-foreground">期望答案</div>
+                                {currentRunId && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setRejudgeOpen(true)}
+                                        className="h-6 text-xs gap-1 px-2"
+                                    >
+                                        <Edit className="h-3 w-3" />
+                                        修正答案
+                                    </Button>
+                                )}
+                            </div>
                             <div className="text-sm text-foreground leading-relaxed">{expectedAnswer}</div>
                         </div>
                     </div>
                 </CollapsibleContent>
             </Collapsible>
+
+            {/* 修正答案对话框 */}
+            {currentRunId && (
+                <RejudgeDialog
+                    open={rejudgeOpen}
+                    onOpenChange={setRejudgeOpen}
+                    currentAnswer={expectedAnswer}
+                    runId={currentRunId}
+                    onComplete={() => onRejudgeComplete?.()}
+                />
+            )}
 
             {/* 模型统计总表 */}
             <ModelStatsTable

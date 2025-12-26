@@ -72,6 +72,11 @@ const judgeRetrySchema = z.object({
   resultIds: z.array(z.number().int().positive()).max(200).optional(),
 })
 
+const rejudgeSchema = z.object({
+  expectedAnswer: z.string().min(1).max(10000),
+  resultIds: z.array(z.number().int().positive()).max(200).optional(),
+})
+
 const parsePagination = (value: string | null, fallback: number) => {
   const parsed = parseInt(value || '', 10)
   if (Number.isFinite(parsed) && parsed > 0) {
@@ -246,6 +251,59 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: (error as Error)?.message || 'Failed to retry judge' }, 400)
     }
+  })
+
+  router.post('/runs/:id/rejudge', actorMiddleware, zValidator('json', rejudgeSchema), async (c) => {
+    const actor = c.get('actor') as Actor
+    const runId = Number.parseInt(c.req.param('id'), 10)
+    if (!Number.isFinite(runId)) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
+    }
+    const payload = c.req.valid('json')
+
+    const sseHeaders: Record<string, string> = {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control',
+    }
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder()
+        const send = (event: unknown) => {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          } catch {}
+        }
+
+        try {
+          await svc.rejudgeWithNewAnswer(
+            actor,
+            {
+              runId,
+              expectedAnswer: payload.expectedAnswer,
+              resultIds: payload.resultIds || null,
+            },
+            {
+              emitEvent: send,
+            },
+          )
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Rejudge failed'
+          send({ type: 'error', error: message })
+        } finally {
+          try {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+          } catch {}
+          controller.close()
+        }
+      },
+    })
+
+    return new Response(stream, { headers: sseHeaders })
   })
 
   router.post('/runs/:id/share', actorMiddleware, zValidator('json', shareSchema), async (c) => {

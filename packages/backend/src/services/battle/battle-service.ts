@@ -7,7 +7,7 @@ import { modelResolverService as defaultModelResolverService } from '../catalog/
 import { consumeBattleQuota } from '../../utils/battle-quota'
 import { getBattlePolicy } from '../../utils/system-settings'
 import { TaskTraceRecorder, shouldEnableTaskTrace, truncateString, type TaskTraceStatus } from '../../utils/task-trace'
-import type { BattleStreamEvent } from '@aichat/shared/battle-contract'
+import type { BattleStreamEvent, RejudgeStreamEvent } from '@aichat/shared/battle-contract'
 import { BattleExecutor, type BattleExecutionContext } from './battle-executor'
 import { safeJsonStringify, safeParseJson } from './battle-serialization'
 import type {
@@ -883,6 +883,235 @@ export class BattleService {
 
     await this.refreshRunSummary(run.id)
     return { total: targets.length, updated: updatedCount, skipped: skippedCount, errors: errorCount, resultIds: updatedIds }
+  }
+
+  async rejudgeWithNewAnswer(
+    actor: Actor,
+    params: {
+      runId: number
+      expectedAnswer: string
+      resultIds?: number[] | null
+    },
+    options?: {
+      emitEvent?: (event: RejudgeStreamEvent) => void
+    },
+  ) {
+    const { runId, expectedAnswer, resultIds } = params
+    const emitEvent = options?.emitEvent
+
+    // 1. 验证权限并获取 Run
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: runId, ...this.buildOwnershipWhere(actor) },
+    })
+    if (!run) {
+      throw new Error('Battle run not found')
+    }
+
+    // 2. 更新期望答案
+    await this.prisma.battleRun.update({
+      where: { id: runId },
+      data: { expectedAnswer },
+    })
+
+    // 3. 获取裁判模型
+    const judgeResolution = await this.resolveModel(actor, {
+      modelId: run.judgeModelId,
+      connectionId: run.judgeConnectionId ?? undefined,
+      rawId: run.judgeRawId ?? undefined,
+    })
+    if (!judgeResolution) {
+      throw new Error('Judge model not found')
+    }
+
+    // 4. 获取需要重新裁决的结果
+    const scopedIds = Array.isArray(resultIds) && resultIds.length > 0
+      ? Array.from(new Set(resultIds.filter((id) => Number.isFinite(id)))).slice(0, 200)
+      : null
+
+    const targets = await this.prisma.battleResult.findMany({
+      where: {
+        battleRunId: runId,
+        error: null, // 跳过执行错误的
+        ...(scopedIds ? { id: { in: scopedIds } } : {}),
+      },
+      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      take: scopedIds ? undefined : 200,
+    })
+
+    if (targets.length === 0) {
+      emitEvent?.({ type: 'rejudge_complete', payload: { completed: 0, total: 0 } })
+      return { total: 0, updated: 0, errors: 0 }
+    }
+
+    const total = targets.length
+
+    // 5. 发送开始事件
+    emitEvent?.({
+      type: 'rejudge_start',
+      payload: { total, expectedAnswer },
+    })
+
+    // 6. 标记所有为 running
+    await this.prisma.battleResult.updateMany({
+      where: { id: { in: targets.map((t) => t.id) } },
+      data: { judgeStatus: 'running', judgeError: null },
+    })
+
+    // 7. 逐个裁决并发送进度
+    let completed = 0
+    let updatedCount = 0
+    let errorCount = 0
+    const executionContext = this.buildExecutionContext(undefined, undefined)
+
+    for (const item of targets) {
+      try {
+        const judged = await this.executor.judgeAnswer({
+          prompt: run.prompt,
+          expectedAnswer, // 使用新的期望答案
+          answer: item.output || '',
+          threshold: run.judgeThreshold,
+          judgeModel: judgeResolution,
+          context: executionContext,
+        })
+
+        await this.prisma.battleResult.update({
+          where: { id: item.id },
+          data: {
+            judgeStatus: 'success',
+            judgeError: null,
+            judgePass: judged.pass,
+            judgeScore: judged.score,
+            judgeReason: judged.reason,
+            judgeFallbackUsed: judged.fallbackUsed,
+            judgeRawJson: safeJsonStringify(judged.raw || {}, '{}'),
+          },
+        })
+        updatedCount += 1
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '裁判模型评测失败'
+        await this.prisma.battleResult.update({
+          where: { id: item.id },
+          data: {
+            judgeStatus: 'error',
+            judgeError: message,
+            judgePass: null,
+            judgeScore: null,
+            judgeReason: null,
+            judgeFallbackUsed: false,
+            judgeRawJson: '{}',
+          },
+        })
+        errorCount += 1
+      }
+
+      completed += 1
+      emitEvent?.({
+        type: 'rejudge_progress',
+        payload: { completed, total, resultId: item.id },
+      })
+    }
+
+    // 8. 刷新统计
+    await this.refreshRunSummary(runId)
+
+    // 9. 更新已有的分享
+    await this.updateActiveShares(runId)
+
+    // 10. 发送完成事件
+    emitEvent?.({
+      type: 'rejudge_complete',
+      payload: { completed, total },
+    })
+
+    return { total, updated: updatedCount, errors: errorCount }
+  }
+
+  private async updateActiveShares(runId: number) {
+    const shares = await this.prisma.battleShare.findMany({
+      where: { battleRunId: runId, revokedAt: null },
+    })
+
+    if (shares.length === 0) return
+
+    // 获取最新的 run 和 results
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: runId },
+    })
+    if (!run) return
+
+    const results = await this.prisma.battleResult.findMany({
+      where: { battleRunId: runId },
+      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+    })
+
+    // 获取连接信息
+    const connectionIds = Array.from(
+      new Set(
+        results
+          .map((item) => item.connectionId)
+          .filter((value): value is number => typeof value === 'number'),
+      ),
+    )
+    const connections = connectionIds.length > 0
+      ? await this.prisma.connection.findMany({
+        where: { id: { in: connectionIds } },
+        select: { id: true, prefixId: true },
+      })
+      : []
+    const connectionMap = new Map(connections.map((c) => [c.id, c]))
+
+    const judgeConnection = run.judgeConnectionId
+      ? await this.prisma.connection.findFirst({
+        where: { id: run.judgeConnectionId },
+        select: { id: true, prefixId: true },
+      })
+      : null
+
+    const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
+    const summary = normalizeSummary(rawSummary, {
+      runsPerModel: run.runsPerModel,
+      passK: run.passK,
+      judgeThreshold: run.judgeThreshold,
+    })
+
+    // 更新每个分享
+    for (const share of shares) {
+      const payload: BattleSharePayload = {
+        title: run.title,
+        prompt: run.prompt,
+        expectedAnswer: run.expectedAnswer,
+        judge: {
+          modelId: run.judgeModelId,
+          modelLabel: composeModelLabel(judgeConnection, run.judgeRawId, run.judgeModelId),
+          threshold: run.judgeThreshold,
+        },
+        summary,
+        results: results.map((item) => ({
+          modelId: item.modelId,
+          modelLabel: composeModelLabel(connectionMap.get(item.connectionId || -1) || null, item.rawId, item.modelId),
+          connectionId: item.connectionId,
+          rawId: item.rawId,
+          attemptIndex: item.attemptIndex,
+          output: item.output,
+          reasoning: item.reasoning || '',
+          durationMs: item.durationMs,
+          error: item.error,
+          usage: safeParseJson(item.usageJson, {} as Record<string, any>),
+          judgeStatus: item.judgeStatus as any,
+          judgeError: item.judgeError,
+          judgePass: item.judgePass,
+          judgeScore: item.judgeScore,
+          judgeReason: item.judgeReason,
+          judgeFallbackUsed: item.judgeFallbackUsed,
+        })),
+        createdAt: run.createdAt.toISOString(),
+      }
+
+      await this.prisma.battleShare.update({
+        where: { id: share.id },
+        data: { payloadJson: safeJsonStringify(payload, '{}') },
+      })
+    }
   }
 
   async createShare(

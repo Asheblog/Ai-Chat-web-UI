@@ -155,3 +155,14 @@ export interface BattleStreamEvent {
   payload?: Record<string, any>
   error?: string
 }
+
+export interface RejudgeStreamEvent {
+  type: 'rejudge_start' | 'rejudge_progress' | 'rejudge_complete' | 'error'
+  payload?: {
+    completed?: number
+    total?: number
+    resultId?: number
+    expectedAnswer?: string
+  }
+  error?: string
+}
