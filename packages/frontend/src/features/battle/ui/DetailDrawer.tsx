@@ -124,7 +124,8 @@ export function DetailDrawer({
                 <DialogTitle className="sr-only">
                     {title || '模型输出详情'} #{detail.attemptIndex}
                 </DialogTitle>
-                <ScrollArea className="h-full w-full">
+                {/* DEBUG: 添加 min-h-0 和 flex-1 来约束 ScrollArea 在 flex 容器中的高度 */}
+                <ScrollArea className="flex-1 min-h-0 w-full">
                     <div className="p-4 sm:p-6 space-y-5">
                         {/* Header */}
                         <div>
