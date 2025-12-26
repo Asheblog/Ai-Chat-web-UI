@@ -60,6 +60,28 @@
   }
 }
 
+/* KaTeX 公式移动端溢出处理 */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.5rem 0;
+}
+
+.katex-display > .katex {
+  white-space: nowrap;
+}
+
+.katex {
+  overflow-wrap: break-word;
+}
+
+/* 确保 prose 容器内的公式可滚动 */
+.prose .katex-display,
+.prose-sm .katex-display {
+  max-width: 100%;
+}
+
 /* 自定义滚动条样式 */
 ::-webkit-scrollbar {
   width: 6px;

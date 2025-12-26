@@ -207,19 +207,21 @@ export function DetailDrawer({
 
                         {/* Reasoning -可折叠 */}
                         {reasoning && (
-                            <div>
+                            <div className="min-w-0">
                                 <button
-                                    className="flex items-center gap-2 text-sm font-medium mb-2hover:text-foreground text-muted-foreground transition-colors"
+                                    className="flex items-center gap-2 text-sm font-medium mb-2 hover:text-foreground text-muted-foreground transition-colors"
                                     onClick={() => setShowReasoning(!showReasoning)}
                                 >
                                     {showReasoning ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                     推理过程
-                                    {reasoningHeavy && (<span className="text-xs text-muted-foreground font-normal">
+                                    {reasoningHeavy && (
+                                        <span className="text-xs text-muted-foreground font-normal">
                                             ({Math.ceil(reasoning.length / 1000)}k 字符)
                                         </span>
                                     )}
                                 </button>
-                                {showReasoning && (<div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
+                                {showReasoning && (
+                                    <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
                                         {reasoningHeavy && (
                                             <div className="flex justify-end mb-2">
                                                 <Button variant="ghost" size="sm" className="text-xs h-7" onClick={toggleReasoningRender}>
@@ -228,22 +230,24 @@ export function DetailDrawer({
                                             </div>
                                         )}
                                         {renderReasoning ? (
-                                            <div className="prose prose-sm max-w-none dark:prose-invert overflow-x-auto">
+                                            <div className="prose prose-sm max-w-none dark:prose-invert overflow-x-auto min-w-0">
                                                 <MarkdownRenderer html={null} fallback={reasoning} />
                                             </div>
                                         ) : (
                                             <pre className="text-sm whitespace-pre-wrap break-words font-mono text-foreground/90">{reasoning}</pre>
-                                        )}</div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         )}
 
                         {/* Model Output */}
-                        <div>
+                        <div className="min-w-0">
                             <h4 className="text-sm font-medium mb-2">模型输出</h4>
-                            <div className="rounded-lg bg-muted/30 p-3">
+                            <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
                                 {detail.output ? (
-                                    <div className="prose prose-sm max-w-none dark:prose-invert"><MarkdownRenderer html={null} fallback={detail.output} />
+                                    <div className="prose prose-sm max-w-none dark:prose-invert min-w-0">
+                                        <MarkdownRenderer html={null} fallback={detail.output} />
                                     </div>
                                 ) : (
                                     <p className="text-sm text-muted-foreground">无输出内容</p>
@@ -253,36 +257,43 @@ export function DetailDrawer({
 
                         {/* Judge Evaluation - 精简*/}
                         {!isLive && (
-                            <div>
+                            <div className="min-w-0">
                                 <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                                     <Scale className="h-4 w-4" />裁判评估
                                 </h4>
-                                <div className="rounded-lg bg-muted/30 p-3">
+                                <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
                                     {/* Score bar */}
-                                    <div className="flex items-center gap-3 mb-2"><div className={cn(
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className={cn(
                                             'text-2xl font-bold',
                                             detail.judgePass ? 'text-green-500' : 'text-destructive'
                                         )}>
                                             {judgeReady && detail.judgeScore != null ? detail.judgeScore.toFixed(2) : '--'}
                                         </div>
-                                        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden min-w-0">
                                             <div
                                                 className={cn(
-                                                    'h-full rounded-full transition-all',detail.judgePass ? 'bg-green-500' : 'bg-destructive'
+                                                    'h-full rounded-full transition-all',
+                                                    detail.judgePass ? 'bg-green-500' : 'bg-destructive'
                                                 )}
                                                 style={{ width: `${judgeReady ? (detail.judgeScore ?? 0) * 100 : 0}%` }}
-                                            /></div>
+                                            />
+                                        </div>
                                     </div>
 
                                     {/* Reason */}
-                                    {detail.judgeReason && (<div className="text-sm text-muted-foreground"><span className="text-xs text-muted-foreground/70">评判理由：</span>
+                                    {detail.judgeReason && (
+                                        <div className="text-sm text-muted-foreground break-words">
+                                            <span className="text-xs text-muted-foreground/70">评判理由：</span>
                                             {detail.judgeReason}
                                         </div>
                                     )}
 
                                     {!detail.judgeReason && judgeError && (
-                                        <div className="text-sm text-destructive"><span className="text-xs">错误：</span>
-                                            {judgeError}</div>
+                                        <div className="text-sm text-destructive break-words">
+                                            <span className="text-xs">错误：</span>
+                                            {judgeError}
+                                        </div>
                                     )}
                                 </div>
                             </div>
