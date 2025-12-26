@@ -63,6 +63,12 @@ export interface VectorDBClient {
   reset(): Promise<void>
 
   /**
+   * 执行 VACUUM 压缩数据库（释放已删除数据的磁盘空间）
+   * 注意：此操作可能较慢，建议在批量删除后统一执行一次
+   */
+  vacuum(): void
+
+  /**
    * 关闭连接
    */
   close(): Promise<void>

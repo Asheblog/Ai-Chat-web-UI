@@ -121,7 +121,7 @@ export class CleanupScheduler {
 
     console.log('[CleanupScheduler] Running cleanup...')
 
-    // 1. 清理过期文档
+    // 1. 清理过期文档（禁用单次 VACUUM，最后统一执行）
     try {
       const result = await this.cleanExpiredDocuments()
       expiredDocumentsDeleted = result.count
@@ -133,7 +133,7 @@ export class CleanupScheduler {
       errors.push(msg)
     }
 
-    // 2. 清理孤立文档
+    // 2. 清理孤立文档（禁用单次 VACUUM，最后统一执行）
     try {
       const result = await this.cleanOrphanedDocuments()
       orphanedDocumentsDeleted = result.count
@@ -145,7 +145,19 @@ export class CleanupScheduler {
       errors.push(msg)
     }
 
-    // 3. 检查数据库大小
+    // 3. 统一执行一次 VACUUM 释放磁盘空间（避免每次删除都 VACUUM 导致 CPU 高占用）
+    if (vectorCollectionsDeleted > 0) {
+      try {
+        this.vectorDB.vacuum()
+        console.log(`[CleanupScheduler] Database vacuumed after deleting ${vectorCollectionsDeleted} collections`)
+      } catch (err) {
+        const msg = `VACUUM failed: ${err instanceof Error ? err.message : err}`
+        console.warn('[CleanupScheduler]', msg)
+        // VACUUM 失败不算严重错误，不加入 errors
+      }
+    }
+
+    // 4. 检查数据库大小
     try {
       await this.checkDatabaseSize()
     } catch (err) {
@@ -198,10 +210,10 @@ export class CleanupScheduler {
     let vectorCollections = 0
 
     for (const doc of expiredDocs) {
-      // 删除向量数据
+      // 删除向量数据（禁用单次 VACUUM，在 runCleanup 最后统一执行）
       if (doc.collectionName) {
         try {
-          await this.vectorDB.deleteCollection(doc.collectionName)
+          await this.vectorDB.deleteCollection(doc.collectionName, false)
           vectorCollections++
         } catch {
           // 忽略
@@ -252,9 +264,10 @@ export class CleanupScheduler {
     let vectorCollections = 0
 
     for (const doc of orphanedDocs) {
+      // 删除向量数据（禁用单次 VACUUM，在 runCleanup 最后统一执行）
       if (doc.collectionName) {
         try {
-          await this.vectorDB.deleteCollection(doc.collectionName)
+          await this.vectorDB.deleteCollection(doc.collectionName, false)
           vectorCollections++
         } catch {
           // 忽略
