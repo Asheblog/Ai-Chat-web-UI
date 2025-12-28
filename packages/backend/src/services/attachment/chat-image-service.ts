@@ -33,9 +33,18 @@ const MIME_EXT: Record<string, string> = {
   'image/heif': 'heif',
 }
 
-const EXT_MIME: Record<string, string> = Object.fromEntries(
-  Object.entries(MIME_EXT).map(([mime, ext]) => [ext, mime]),
-) as Record<string, string>
+// 直接定义扩展名到 MIME 类型的映射，确保使用标准 MIME 类型
+const EXT_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg', // 标准 MIME 类型，而非 image/jpg
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+  heic: 'image/heic',
+  heif: 'image/heif',
+}
 
 function getExtFromMime(mime: string): string {
   const key = mime.toLowerCase()
