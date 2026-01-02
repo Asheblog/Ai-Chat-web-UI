@@ -599,6 +599,41 @@ export const createStreamSlice: ChatSliceCreator<
           throw agentError
         }
 
+        // 处理生图模型返回的图片
+        if (evt?.type === 'image' && evt.generatedImages) {
+          set((state) => {
+            const assistantKey = messageKey(active.assistantId)
+            // 更新 messageMeta
+            const metaIndex = state.messageMetas.findIndex(
+              (meta) => messageKey(meta.id) === assistantKey,
+            )
+            const nextMetas = metaIndex === -1 ? state.messageMetas : state.messageMetas.slice()
+            if (metaIndex !== -1) {
+              nextMetas[metaIndex] = {
+                ...nextMetas[metaIndex],
+                generatedImages: evt.generatedImages,
+              }
+            }
+            // 更新 messageBody
+            const prevBody = state.messageBodies[assistantKey]
+            const nextBodies = prevBody
+              ? {
+                  ...state.messageBodies,
+                  [assistantKey]: {
+                    ...prevBody,
+                    generatedImages: evt.generatedImages,
+                  },
+                }
+              : state.messageBodies
+
+            return {
+              messageMetas: nextMetas,
+              messageBodies: nextBodies,
+            }
+          })
+          continue
+        }
+
         if (evt?.type === 'content' && evt.content) {
           if (!active.firstChunkAt) {
             active.firstChunkAt = Date.now()

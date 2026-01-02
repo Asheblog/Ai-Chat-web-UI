@@ -115,6 +115,14 @@ const normalizeChunk = (payload: any): ChatStreamChunk | null => {
       meta: payload.meta,
     }
   }
+  // 生图模型返回的图片
+  if (payload?.type === 'image') {
+    return {
+      type: 'image',
+      generatedImages: payload.generatedImages,
+      messageId: payload.messageId,
+    }
+  }
   if (payload?.type === 'start') {
     const normalizedMessageId =
       typeof payload.messageId === 'number'

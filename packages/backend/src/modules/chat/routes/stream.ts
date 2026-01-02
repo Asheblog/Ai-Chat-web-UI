@@ -19,6 +19,7 @@ import {
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
 } from '../../chat/agent-web-search-response';
+import { createImageGenerationResponse, isImageGenerationModel } from '../../chat/image-generation-response';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
 import {
   buildAgentStreamKey,
@@ -500,6 +501,33 @@ export const registerChatStreamRoutes = (router: Hono) => {
         features: requestedFeatures,
         traceRequested: traceToggle ?? null,
       })
+
+      // 检测是否为生图模型
+      const isImageGenModel = isImageGenerationModel(session.modelRawId || '');
+      if (isImageGenModel && session.connection) {
+        log.info('[chat stream] Image generation model detected', {
+          sessionId,
+          model: session.modelRawId,
+        });
+        
+        return await createImageGenerationResponse({
+          sessionId,
+          content,
+          connection: {
+            id: session.connection.id,
+            baseUrl: session.connection.baseUrl,
+            apiKey: session.connection.apiKey,
+            provider: session.connection.provider,
+          },
+          modelRawId: session.modelRawId || '',
+          sseHeaders,
+          quotaSnapshot,
+          userMessageRecord,
+          assistantMessageId,
+          assistantClientMessageId,
+          actorIdentifier: actor.identifier,
+        });
+      }
 
       if (agentToolsActive) {
         return await createAgentWebSearchResponse({

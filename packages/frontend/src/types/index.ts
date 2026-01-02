@@ -105,6 +105,16 @@ export interface CreateSessionRequest {
 }
 
 // 消息类型
+// AI 生成的图片类型
+export interface GeneratedImage {
+  url?: string;           // 图片 URL（云端存储）
+  base64?: string;        // Base64 数据
+  mime?: string;          // MIME 类型 (image/png, image/jpeg 等)
+  revisedPrompt?: string; // 模型修正后的提示词 (DALL-E 特有)
+  width?: number;
+  height?: number;
+}
+
 export interface Message {
   id: number | string;
   sessionId: number;
@@ -123,8 +133,10 @@ export interface Message {
   streamCursor?: number;
   streamReasoning?: string | null;
   streamError?: string | null;
-  // 可选图片：可能为 data URL（本地预览）或服务端返回的可访问 URL
+  // 可选图片：可能为 data URL（本地预览）或服务端返回的可访问 URL（用户上传）
   images?: string[];
+  // AI 生成的图片（生图模型输出）
+  generatedImages?: GeneratedImage[];
   toolEvents?: ToolEvent[];
   metrics?: MessageStreamMetrics | null;
 }
@@ -142,6 +154,7 @@ export interface MessageMeta {
   reasoningDurationSeconds?: number | null;
   reasoningIdleMs?: number | null;
   images?: string[];
+  generatedImages?: GeneratedImage[];
   isPlaceholder?: boolean;
   streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
   streamError?: string | null;
@@ -157,6 +170,7 @@ export interface MessageBody {
   version: number;
   reasoningVersion: number;
   toolEvents?: ToolEvent[];
+  generatedImages?: GeneratedImage[];
 }
 
 export interface MessageRenderCacheEntry {
@@ -413,7 +427,7 @@ export interface ApiResponse<T = any> {
 
 // 流式响应类型
 export interface ChatStreamChunk {
-  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning' | 'quota' | 'tool';
+  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning' | 'quota' | 'tool' | 'image';
   content?: string;
   messageId?: number | null;
   assistantMessageId?: number | null;
@@ -444,6 +458,8 @@ export interface ChatStreamChunk {
     responseTimeMs?: number | null;
     tokensPerSecond?: number | null;
   };
+  /** 生成的图片（type='image' 时） */
+  generatedImages?: GeneratedImage[];
 }
 
 /** API 错误类型 */

@@ -103,6 +103,7 @@ model Message {
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   attachments MessageAttachment[]
+  generatedImages GeneratedImage[]
   usageMetrics UsageMetric[]
   taskTraces TaskTrace[]
   parent Message? @relation("MessageVariants", fields: [parentMessageId], references: [id])
@@ -125,6 +126,25 @@ model MessageAttachment {
 
   @@index([messageId])
   @@map("message_attachments")
+}
+
+// AI 生成的图片
+model GeneratedImage {
+  id            Int      @id @default(autoincrement())
+  messageId     Int
+  url           String?  // 云端 URL
+  storagePath   String?  // 本地存储路径
+  base64        String?  // Base64 数据（可选缓存）
+  mime          String?  // MIME 类型 (image/png, image/jpeg)
+  width         Int?
+  height        Int?
+  revisedPrompt String?  // 模型修正后的提示词 (DALL-E 特有)
+  createdAt     DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("generated_images")
 }
 
 model ChatShare {
