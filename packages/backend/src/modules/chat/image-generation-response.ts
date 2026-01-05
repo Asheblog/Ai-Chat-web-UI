@@ -3,14 +3,17 @@
  *
  * 当检测到用户选择的模型是生图模型时，使用此函数处理请求
  * 返回 SSE 流式响应，包含生成的图片
+ *
+ * 优化：将生成的图片保存到本地文件系统，返回 URL 而非 base64
  */
 
 import { BackendLogger as log } from '../../utils/logger'
 import { prisma } from '../../db'
-import { imageGenerationService, ImageGenerationError, type ImageGenerationResult, type GeneratedImage } from '../../services/image-generation'
+import { imageGenerationService, ImageGenerationError, GeneratedImageStorage, type ImageGenerationResult, type GeneratedImage } from '../../services/image-generation'
 import type { UsageQuotaSnapshot, Message } from '../../types'
 import { serializeQuotaSnapshot } from '../../utils/quota'
 import { parseCapabilityEnvelope } from '../../utils/capabilities'
+import { determineChatImageBaseUrl } from '../../utils/chat-images'
 
 export interface ImageGenerationResponseParams {
   sessionId: number
@@ -28,6 +31,7 @@ export interface ImageGenerationResponseParams {
   assistantMessageId: number | null
   assistantClientMessageId: string | null
   actorIdentifier: string
+  request: Request  // 用于确定图片访问 URL
 }
 
 /**
@@ -45,7 +49,7 @@ export async function createImageGenerationResponse(
     quotaSnapshot,
     assistantMessageId,
     assistantClientMessageId,
-    actorIdentifier,
+    request,
   } = params
 
   log.info('[ImageGenerationResponse] Starting image generation', {
@@ -54,9 +58,22 @@ export async function createImageGenerationResponse(
     promptLength: content.length,
   })
 
+  // 创建图片存储服务实例
+  const imageStorage = new GeneratedImageStorage({ prisma })
+
+  // 获取图片访问基础 URL
+  const siteBaseSetting = await prisma.systemSetting.findUnique({
+    where: { key: 'site_base_url' },
+    select: { value: true },
+  })
+  const imageBaseUrl = determineChatImageBaseUrl({
+    request,
+    siteBaseUrl: siteBaseSetting?.value ?? null,
+  })
+
   // 创建 SSE 流
   const encoder = new TextEncoder()
-  
+
   const stream = new ReadableStream({
     async start(controller) {
       const sendSSE = (event: string, data: unknown) => {
@@ -90,12 +107,38 @@ export async function createImageGenerationResponse(
           imageCount: result.images.length,
         })
 
-        // 发送 image 事件
+        // 保存图片到本地文件系统并获取 URL
+        let imagesToSend: GeneratedImage[] = result.images
+
+        if (assistantMessageId && result.images.length > 0) {
+          try {
+            const savedImages = await imageStorage.saveImages(result.images, {
+              messageId: assistantMessageId,
+              sessionId,
+            })
+            // 将保存后的图片转换为带 URL 的格式
+            imagesToSend = imageStorage.resolveImageUrls(savedImages, imageBaseUrl)
+
+            log.info('[ImageGenerationResponse] Images saved to local storage', {
+              sessionId,
+              messageId: assistantMessageId,
+              savedCount: savedImages.filter(img => img.storagePath).length,
+            })
+          } catch (saveError) {
+            log.error('[ImageGenerationResponse] Failed to save images, falling back to base64', {
+              sessionId,
+              error: (saveError as Error).message,
+            })
+            // 保存失败时回退到原始 base64 数据
+          }
+        }
+
+        // 发送 image 事件（现在包含 URL 而非 base64）
         sendSSE('message', {
           type: 'image',
-          generatedImages: result.images.map((img: GeneratedImage) => ({
+          generatedImages: imagesToSend.map((img: GeneratedImage) => ({
             url: img.url,
-            base64: img.base64,
+            base64: img.base64,  // 只有保存失败时才会有 base64
             mime: img.mime,
             revisedPrompt: img.revisedPrompt,
           })),

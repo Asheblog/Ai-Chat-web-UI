@@ -10,11 +10,10 @@
 import { BackendLogger as log } from '../../utils/logger'
 import {
   generateImageOpenAI,
-  type ImageGenerationResult,
-  type ImageGenerationOptions,
   ImageGenerationError,
 } from './providers/openai-compat'
 import { generateImageGemini, GeminiImageGenerationError } from './providers/gemini-generate'
+import type { ImageGenerationResult, ImageGenerationOptions } from './types'
 
 export type ImageGenerationApiType = 'openai-compat' | 'gemini-generate'
 

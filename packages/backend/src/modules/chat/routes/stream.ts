@@ -529,6 +529,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           assistantMessageId,
           assistantClientMessageId,
           actorIdentifier: actor.identifier,
+          request: c.req.raw,
         });
       }
 
