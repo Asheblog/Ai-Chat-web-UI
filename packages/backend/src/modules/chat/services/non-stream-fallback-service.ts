@@ -4,6 +4,7 @@ import {
   extractReasoningFromResponsesResponse,
   extractTextFromResponsesResponse,
 } from '../../../utils/openai-responses'
+import type { GeneratedImage } from '../../../services/image-generation'
 import type { TaskTraceRecorder } from '../../../utils/task-trace'
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers'
 import { truncateString } from '../../../utils/task-trace'
@@ -30,6 +31,7 @@ export interface NonStreamFallbackResult {
   text: string
   reasoning?: string | null
   usage?: any
+  images?: GeneratedImage[]
 }
 
 export class NonStreamFallbackService {
@@ -180,9 +182,60 @@ export class NonStreamFallbackService {
           : undefined,
       })
       
+      const parseDataUrl = (value?: string): { mime?: string; base64?: string } | null => {
+        if (!value || !value.startsWith('data:')) return null
+        const match = /^data:([^;]+);base64,(.*)$/.exec(value)
+        if (!match) return null
+        return { mime: match[1], base64: match[2] }
+      }
+
+      const extractImage = (img: any): GeneratedImage | null => {
+        if (!img) return null
+        let url = img?.url
+        let base64 = img?.b64_json || img?.base64 || img?.data
+        let mime = img?.mime_type || img?.mime
+        const revisedPrompt = img?.revised_prompt || img?.revisedPrompt
+
+        if (!url && img?.image_url?.url) {
+          url = img.image_url.url
+        }
+        if (!base64 && img?.image_url?.data) {
+          base64 = img.image_url.data
+        }
+        if (!mime && img?.image_url?.mime_type) {
+          mime = img.image_url.mime_type
+        }
+        if (url && !base64) {
+          const parsed = parseDataUrl(url)
+          if (parsed?.base64) {
+            base64 = parsed.base64
+            mime = mime || parsed.mime
+          }
+        }
+        if (!url && !base64) return null
+        return { url, base64, mime, revisedPrompt }
+      }
+
+      const extractedImages: GeneratedImage[] = []
+      if (Array.isArray(messageImages)) {
+        for (const img of messageImages) {
+          const extracted = extractImage(img)
+          if (extracted) extractedImages.push(extracted)
+        }
+      }
+
+      const messageContent = json?.choices?.[0]?.message?.content
+      if (Array.isArray(messageContent)) {
+        for (const part of messageContent) {
+          if (part?.type === 'image_url') {
+            const extracted = extractImage(part)
+            if (extracted) extractedImages.push(extracted)
+          }
+        }
+      }
+
       // 处理可能的 multimodal 响应
       let text = ''
-      const messageContent = json?.choices?.[0]?.message?.content
       if (params.provider === 'openai_responses') {
         text = extractTextFromResponsesResponse(json)
       } else if (typeof messageContent === 'string') {
@@ -195,56 +248,7 @@ export class NonStreamFallbackService {
         text = textParts.join('\n').trim()
       }
       
-      // 检查 CLIProxyAPI 特有的 images 字段
-      // 如果没有 content 但有 images，构造包含图片的响应文本
-      if (!text && Array.isArray(messageImages) && messageImages.length > 0) {
-        // 将图片转换为 markdown 格式，并去重
-        const seenUrls = new Set<string>()
-        const imageMarkdowns: string[] = []
-        let uniqueIdx = 0
-        
-        for (const img of messageImages) {
-          // 直接在顶层的字段
-          let url = img?.url
-          let base64 = img?.b64_json || img?.base64 || img?.data
-          let mime = img?.mime_type || img?.mime || 'image/png'
-          
-          // OpenAI 格式: { type: "image_url", image_url: { url: "..." } }
-          if (!url && img?.image_url?.url) {
-            url = img.image_url.url
-          }
-          // 可能的 base64 嵌套格式
-          if (!base64 && img?.image_url?.data) {
-            base64 = img.image_url.data
-          }
-          
-          let finalUrl = ''
-          if (url) {
-            finalUrl = url
-          } else if (base64) {
-            finalUrl = `data:${mime};base64,${base64}`
-          }
-          
-          if (!finalUrl) continue
-          
-          // 去重：对于 data URL，比较前 200 个字符作为指纹
-          // 因为相同图片的 base64 编码开头相同
-          const fingerprint = finalUrl.slice(0, 200)
-          if (seenUrls.has(fingerprint)) {
-            continue
-          }
-          seenUrls.add(fingerprint)
-          
-          uniqueIdx++
-          imageMarkdowns.push(`![Generated Image ${uniqueIdx}](${finalUrl})`)
-        }
-        
-        if (imageMarkdowns.length > 0) {
-          text = imageMarkdowns.join('\n\n')
-        }
-      }
-      
-      if (!text) return null
+      if (!text && extractedImages.length === 0) return null
       const reasoningText =
         params.provider === 'openai_responses'
           ? extractReasoningFromResponsesResponse(json)
@@ -253,6 +257,7 @@ export class NonStreamFallbackService {
         text,
         reasoning: reasoningText,
         usage: json?.usage ?? null,
+        images: extractedImages.length > 0 ? extractedImages : undefined,
       }
     } catch (error) {
       this.logger.warn?.('Non-stream fallback request failed', {

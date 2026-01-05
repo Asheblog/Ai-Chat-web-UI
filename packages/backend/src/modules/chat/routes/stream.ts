@@ -7,7 +7,7 @@ import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../t
 import { AuthUtils } from '../../../utils/auth';
 import { convertOpenAIReasoningPayload, type ProviderType } from '../../../utils/providers';
 import { Tokenizer } from '../../../utils/tokenizer';
-import { cleanupExpiredChatImages, loadPersistedChatImages } from '../../../utils/chat-images';
+import { cleanupExpiredChatImages, loadPersistedChatImages, determineChatImageBaseUrl } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
 import { consumeActorQuota, serializeQuotaSnapshot } from '../../../utils/quota';
 import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
@@ -67,6 +67,7 @@ import { streamSseService } from '../services/stream-sse-service';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
+import { GeneratedImageStorage, type GeneratedImage } from '../../../services/image-generation';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -794,6 +795,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         text: string;
         reasoning?: string | null;
         usage?: ProviderChatCompletionResponse['usage'] | null;
+        images?: GeneratedImage[];
       };
 
       const performNonStreamingFallback = async (): Promise<NonStreamFallbackResult | null> =>
@@ -859,8 +861,9 @@ export const registerChatStreamRoutes = (router: Hono) => {
             origin: 'stream_error' | 'reasoning_only',
           ): Promise<boolean> => {
             const fallbackResult = await performNonStreamingFallback();
-            const trimmedText = fallbackResult?.text?.trim();
-            if (!fallbackResult || !trimmedText) {
+            const trimmedText = fallbackResult?.text?.trim() || '';
+            const fallbackImages = Array.isArray(fallbackResult?.images) ? fallbackResult!.images : [];
+            if (!fallbackResult || (!trimmedText && fallbackImages.length === 0)) {
               return false;
             }
 
@@ -883,8 +886,57 @@ export const registerChatStreamRoutes = (router: Hono) => {
               emitter.enqueue(usageEvent);
             }
 
-            aiResponseContent = trimmedText;
-            const contentEvent = `data: ${JSON.stringify({ type: 'content', content: trimmedText })}\n\n`;
+            let resolvedImages = fallbackImages;
+            if (fallbackImages.length > 0 && assistantMessageId) {
+              try {
+                const imageStorage = new GeneratedImageStorage({ prisma });
+                const siteBaseSetting = await prisma.systemSetting.findUnique({
+                  where: { key: 'site_base_url' },
+                  select: { value: true },
+                });
+                const imageBaseUrl = determineChatImageBaseUrl({
+                  request: c.req.raw,
+                  siteBaseUrl: siteBaseSetting?.value ?? null,
+                });
+                const savedImages = await imageStorage.saveImages(fallbackImages, {
+                  messageId: assistantMessageId,
+                  sessionId,
+                });
+                resolvedImages = imageStorage.resolveImageUrls(savedImages, imageBaseUrl);
+              } catch (error) {
+                log.error('[chat stream] non-stream image save failed', {
+                  sessionId,
+                  messageId: assistantMessageId,
+                  error: (error as Error).message,
+                });
+              }
+            }
+
+            const imageMarkdowns: string[] = [];
+            if (resolvedImages.length > 0) {
+              const seenUrls = new Set<string>();
+              let uniqueIdx = 0;
+              for (const img of resolvedImages) {
+                const finalUrl = img.url || (img.base64 ? `data:${img.mime || 'image/png'};base64,${img.base64}` : '');
+                if (!finalUrl) continue;
+                const fingerprint = finalUrl.slice(0, 200);
+                if (seenUrls.has(fingerprint)) continue;
+                seenUrls.add(fingerprint);
+                uniqueIdx += 1;
+                imageMarkdowns.push(`![Generated Image ${uniqueIdx}](${finalUrl})`);
+              }
+            }
+
+            const finalText = trimmedText && imageMarkdowns.length > 0
+              ? `${trimmedText}\n\n${imageMarkdowns.join('\n\n')}`
+              : trimmedText || imageMarkdowns.join('\n\n');
+
+            if (!finalText) {
+              return false;
+            }
+
+            aiResponseContent = finalText;
+            const contentEvent = `data: ${JSON.stringify({ type: 'content', content: finalText })}\n\n`;
             emitter.enqueue(contentEvent);
             const completeEvent = `data: ${JSON.stringify({ type: 'complete', origin: 'fallback' })}\n\n`;
             emitter.enqueue(completeEvent);
@@ -894,7 +946,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
             await persistAssistantProgress({ force: true, status: 'done' });
             let fallbackCompletionTokens = 0;
             try {
-              fallbackCompletionTokens = await Tokenizer.countTokens(trimmedText);
+              fallbackCompletionTokens = await Tokenizer.countTokens(finalText);
             } catch {
               fallbackCompletionTokens = 0;
             }
@@ -926,7 +978,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
               fallbackClientMessageId: clientMessageId,
               parentMessageId: userMessageRecord?.id ?? null,
               replyHistoryLimit: assistantReplyHistoryLimit,
-              content: trimmedText,
+              content: finalText,
               streamReasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
               reasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
               reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
@@ -948,7 +1000,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
               );
               traceRecorder.log('db:persist_final', {
                 messageId: persistedId,
-                length: trimmedText.length,
+                length: finalText.length,
                 promptTokens: fallbackUsageNumbers.prompt,
                 completionTokens: fallbackUsageNumbers.completion,
                 totalTokens: fallbackUsageNumbers.total,
