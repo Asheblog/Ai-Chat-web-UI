@@ -336,6 +336,20 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
                 </code>
               )
             },
+            // 处理图片，支持 data URL 和普通 URL
+            img({ src, alt, ...props }: any) {
+              if (!src) return null
+              // 对于 data URL 或普通 URL，使用原生 img 标签
+              return (
+                <img
+                  src={src}
+                  alt={alt || 'Generated Image'}
+                  className="max-w-full h-auto rounded-lg my-2"
+                  loading="lazy"
+                  {...props}
+                />
+              )
+            },
           }}
         >
           {preparedFallback}

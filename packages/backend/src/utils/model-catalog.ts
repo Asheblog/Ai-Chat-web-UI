@@ -130,6 +130,19 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
   try {
     items = await fetchModelsForConnection(cfg)
   } catch (error) {
+    // 网络超时或连接失败时，记录警告但不阻塞其他连接的刷新
+    // 返回现有数据，避免清除缓存
+    const isAbortError = error instanceof Error && error.name === 'AbortError'
+    const isNetworkError = error instanceof Error && (
+      error.message.includes('ECONNREFUSED') ||
+      error.message.includes('ETIMEDOUT') ||
+      error.message.includes('ENOTFOUND') ||
+      error.message.includes('fetch failed')
+    )
+    if (isAbortError || isNetworkError) {
+      log.warn('刷新模型目录网络超时，跳过此连接', { connectionId: conn.id, provider: conn.provider })
+      return { connectionId: conn.id, total: 0 }
+    }
     log.warn('刷新模型目录失败', { connectionId: conn.id, provider: conn.provider, error })
     throw error
   }
@@ -233,6 +246,24 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     }
   }
 
+  // 预先准备所有数据，减少事务内的计算时间
+  const toCreate: Array<{
+    connectionId: number
+    modelId: string
+    rawId: string
+    name: string
+    provider: string
+    connectionType: string
+    modelType: string
+    tagsJson: string
+    metaJson: string
+    capabilitiesJson: string
+    manualOverride: boolean
+    lastFetchedAt: Date
+    expiresAt: Date
+  }> = []
+  const toUpdate: Array<{ id: number; data: Record<string, any>; rawId: string }> = []
+
   for (const item of items) {
     const key = item.id
     seen.add(key)
@@ -264,55 +295,74 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
     const metaJson = JSON.stringify(metaInput)
 
     if (!row) {
-      await prisma.modelCatalog.create({
-        data: {
-          connectionId: conn.id,
-          modelId: key,
-          rawId: item.rawId,
-          name: item.name,
-          provider: item.provider,
-          connectionType: item.connectionType,
-          modelType,
-      tagsJson,
-      metaJson,
-      capabilitiesJson,
-      manualOverride: false,
-      lastFetchedAt: now,
-      expiresAt,
-    },
-  })
-      invalidateContextWindowCache(conn.id, item.rawId)
-      invalidateCompletionLimitCache(conn.id, item.rawId)
-      continue
-    }
+      toCreate.push({
+        connectionId: conn.id,
+        modelId: key,
+        rawId: item.rawId,
+        name: item.name,
+        provider: item.provider,
+        connectionType: item.connectionType,
+        modelType,
+        tagsJson,
+        metaJson,
+        capabilitiesJson,
+        manualOverride: false,
+        lastFetchedAt: now,
+        expiresAt,
+      })
+    } else {
+      const updateData: Record<string, any> = {
+        rawId: item.rawId,
+        name: item.name,
+        provider: item.provider,
+        connectionType: item.connectionType,
+        modelType,
+        lastFetchedAt: now,
+        expiresAt,
+        metaJson,
+      }
 
-    const updateData: Record<string, any> = {
-      rawId: item.rawId,
-      name: item.name,
-      provider: item.provider,
-      connectionType: item.connectionType,
-      modelType,
-      lastFetchedAt: now,
-      expiresAt,
-      metaJson,
-    }
+      if (!row.manualOverride) {
+        updateData.tagsJson = tagsJson
+        updateData.capabilitiesJson = capabilitiesJson
+      }
 
-    if (!row.manualOverride) {
-      updateData.tagsJson = tagsJson
-      updateData.capabilitiesJson = capabilitiesJson
+      toUpdate.push({ id: row.id, data: updateData, rawId: item.rawId })
     }
-
-    await prisma.modelCatalog.update({ where: { id: row.id }, data: updateData })
-    invalidateContextWindowCache(conn.id, item.rawId)
-    invalidateCompletionLimitCache(conn.id, item.rawId)
   }
 
   const staleIds = existing
     .filter((row) => !seen.has(row.modelId) && !row.manualOverride)
     .map((row) => row.id)
 
-  if (staleIds.length) {
-    await prisma.modelCatalog.deleteMany({ where: { id: { in: staleIds } } })
+  // 使用事务批量执行所有数据库操作，减少锁持有时间
+  await prisma.$transaction(async (tx) => {
+    // 批量创建新模型
+    if (toCreate.length > 0) {
+      await tx.modelCatalog.createMany({ data: toCreate })
+    }
+
+    // 批量更新现有模型
+    for (const item of toUpdate) {
+      await tx.modelCatalog.update({ where: { id: item.id }, data: item.data })
+    }
+
+    // 批量删除过期模型
+    if (staleIds.length > 0) {
+      await tx.modelCatalog.deleteMany({ where: { id: { in: staleIds } } })
+    }
+  }, {
+    timeout: 10000, // 10秒事务超时，避免长时间阻塞其他操作
+  })
+
+  // 在事务外失效缓存
+  for (const item of toCreate) {
+    invalidateContextWindowCache(conn.id, item.rawId)
+    invalidateCompletionLimitCache(conn.id, item.rawId)
+  }
+  for (const item of toUpdate) {
+    invalidateContextWindowCache(conn.id, item.rawId)
+    invalidateCompletionLimitCache(conn.id, item.rawId)
   }
 
   return { connectionId: conn.id, total: items.length }

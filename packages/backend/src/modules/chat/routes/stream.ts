@@ -502,7 +502,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
         traceRequested: traceToggle ?? null,
       })
 
-      // 检测是否为生图模型
+      // 检测是否为生图模型：使用专门的生图 API（仅适用于支持 /v1/images/generations 端点的服务）
+      // 注意：通过 OpenAI 兼容代理（如 CLIProxyAPI）转发的模型使用 chat/completions 格式，不应走此路径
       const isImageGenModel = isImageGenerationModel(session.modelRawId || '');
       if (isImageGenModel && session.connection) {
         log.info('[chat stream] Image generation model detected', {

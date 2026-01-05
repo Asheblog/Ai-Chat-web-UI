@@ -60,12 +60,19 @@ export function isImageGenerationModel(modelId: string): boolean {
 
 /**
  * 判断模型使用哪种生图 API
+ * 根据 provider 和模型名称综合判断
  */
-export function getImageGenerationApiType(modelId: string): ImageGenerationApiType | null {
+export function getImageGenerationApiType(modelId: string, provider?: string): ImageGenerationApiType | null {
   const lowerId = modelId.toLowerCase();
   
-  // Gemini Flash Image 使用 GenerateContent API
-  if (lowerId.includes('gemini') && lowerId.includes('image')) {
+  // 如果 provider 是 OpenAI 兼容类型，使用 openai-compat API
+  // 这包括通过第三方代理（如 CLIProxyAPI）转发的 Gemini 模型
+  if (provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai') {
+    return 'openai-compat';
+  }
+  
+  // 如果是原生 Google GenAI 连接且模型名包含 gemini 和 image，使用 gemini-generate
+  if (provider === 'google_genai' && lowerId.includes('gemini') && lowerId.includes('image')) {
     return 'gemini-generate';
   }
   

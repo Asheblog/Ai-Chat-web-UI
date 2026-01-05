@@ -326,7 +326,7 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   }
 
   const fetchImpl = await resolveFetch()
-  const timeoutMs = 15000
+  const timeoutMs = 10000 // 减少超时时间，避免长时间阻塞
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {

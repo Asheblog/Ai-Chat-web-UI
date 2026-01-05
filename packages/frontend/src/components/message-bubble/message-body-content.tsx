@@ -13,6 +13,22 @@ const COLLAPSE_LINE_THRESHOLD = 8
 // 折叠后显示的行数
 const COLLAPSED_VISIBLE_LINES = 4
 
+// 检测生成图片的 markdown 模式
+// 格式：![Generated Image N](data:image/...;base64,...)
+const GENERATED_IMAGE_PATTERN = /!\[Generated Image \d+\]\((data:image\/[^;]+;base64,[^)]+)\)/g
+
+/**
+ * 从 markdown 内容中提取生成的图片 URL
+ * 用于高效显示大型 base64 图片，避免通过复杂的 markdown 渲染管道
+ */
+const extractGeneratedImages = (content: string): string[] => {
+  if (!content || !content.includes('![Generated Image')) {
+    return []
+  }
+  const matches = content.matchAll(GENERATED_IMAGE_PATTERN)
+  return Array.from(matches).map((m) => m[1])
+}
+
 interface MessageBodyContentProps {
   isUser: boolean
   meta: MessageMeta
@@ -36,6 +52,10 @@ export function MessageBodyContent({
 }: MessageBodyContentProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lightbox = useImageLightbox()
+
+  // 检测是否包含生成的图片（大型 base64 data URL）
+  const generatedImages = useMemo(() => extractGeneratedImages(content), [content])
+  const hasGeneratedImages = generatedImages.length > 0
 
   // 计算内容行数和是否需要折叠
   const { shouldCollapse, previewContent, lineCount } = useMemo(() => {
@@ -123,6 +143,35 @@ export function MessageBodyContent({
               </span>
             </button>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  // 如果内容只包含生成的图片，直接渲染图片组件，避免通过 markdown 渲染管道
+  // 这样可以高效处理大型 base64 图片（可能超过 2MB）
+  if (hasGeneratedImages && !shouldShowStreamingPlaceholder) {
+    return (
+      <div className={bubbleClass}>
+        <div className="flex flex-col gap-4">
+          {generatedImages.map((url, idx) => (
+            <div key={idx} className="relative">
+              <img
+                src={url}
+                alt={`Generated Image ${idx + 1}`}
+                className="max-w-full h-auto rounded-lg shadow-md cursor-pointer hover:opacity-95 transition-opacity"
+                onClick={() => lightbox.openLightbox(generatedImages, idx)}
+                loading="lazy"
+                style={{ maxHeight: '70vh' }}
+              />
+            </div>
+          ))}
+          <ImageLightbox
+            images={generatedImages}
+            initialIndex={lightbox.initialIndex}
+            open={lightbox.open}
+            onOpenChange={lightbox.setOpen}
+          />
         </div>
       </div>
     )

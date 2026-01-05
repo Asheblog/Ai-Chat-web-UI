@@ -447,6 +447,39 @@ export class StreamOrchestrator {
               if (!l.startsWith('data: ')) continue
 
               const data = l.slice(6)
+              
+              // 调试日志：记录 SSE 数据样本（每 N 条记录一次或遇到特殊格式时）
+              const sseIdx = (traceMetadataExtras.sseEventCount as number ?? 0) + 1
+              traceMetadataExtras.sseEventCount = sseIdx
+              if (sseIdx <= 5 || sseIdx % 20 === 0 || data === '[DONE]') {
+                let parsedPreview: any = null
+                try {
+                  const p = JSON.parse(data)
+                  const delta = p?.choices?.[0]?.delta
+                  parsedPreview = {
+                    kind: 'json',
+                    deltaContentType: typeof delta?.content,
+                    deltaContentPreview: typeof delta?.content === 'string'
+                      ? truncateString(delta.content, 120)
+                      : delta?.content !== undefined ? JSON.stringify(delta.content).slice(0, 120) : undefined,
+                    deltaReasoningPreview: typeof delta?.reasoning_content === 'string'
+                      ? truncateString(delta.reasoning_content, 120)
+                      : undefined,
+                    finishReason: p?.choices?.[0]?.finish_reason ?? null,
+                    hasUsage: !!p?.usage,
+                  }
+                } catch {
+                  parsedPreview = { kind: 'unparsed', preview: truncateString(data, 200) }
+                }
+                traceRecorder.log('stream.provider_sse_sample', {
+                  ...streamLogBase(),
+                  provider,
+                  baseUrl,
+                  idx: sseIdx,
+                  ...parsedPreview,
+                })
+              }
+              
               if (data === '[DONE]') {
                 // 刷新剩余内容
                 if (pendingReasoningDelta) {

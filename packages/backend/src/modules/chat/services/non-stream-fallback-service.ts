@@ -128,11 +128,122 @@ export class NonStreamFallbackService {
         return null
       }
       const json = (await resp.json()) as any
-      const text = (
-        params.provider === 'openai_responses'
-          ? extractTextFromResponsesResponse(json)
-          : (json?.choices?.[0]?.message?.content || '').trim()
-      ).trim()
+      
+      // 调试日志：记录完整响应结构以便分析图片数据位置
+      const message = json?.choices?.[0]?.message
+      const messageImages = (message as any)?.images
+      logTrace('http:provider_response_body', {
+        route: '/api/chat/stream',
+        mode: 'fallback_non_stream',
+        provider: params.provider,
+        hasChoices: !!json?.choices,
+        choiceCount: json?.choices?.length ?? 0,
+        messageKeys: message ? Object.keys(message) : [],
+        messageContentType: typeof message?.content,
+        messageContentIsArray: Array.isArray(message?.content),
+        messageContentPreview: truncateString(
+          typeof message?.content === 'string'
+            ? message.content
+            : JSON.stringify(message?.content),
+          500
+        ),
+        // 检查可能存放图片的其他字段
+        hasInlineData: !!(message as any)?.inline_data,
+        hasParts: Array.isArray((message as any)?.parts),
+        // 检查 CLIProxyAPI 特有的 images 字段
+        hasImages: !!messageImages,
+        imagesCount: Array.isArray(messageImages) ? messageImages.length : 0,
+        // 输出 images 的完整结构（第一个元素）用于调试
+        firstImageRaw: Array.isArray(messageImages) && messageImages.length > 0
+          ? truncateString(JSON.stringify(messageImages[0]), 1000)
+          : undefined,
+        firstImageKeys: Array.isArray(messageImages) && messageImages.length > 0 && messageImages[0]
+          ? Object.keys(messageImages[0])
+          : undefined,
+        imagesPreview: Array.isArray(messageImages)
+          ? messageImages.map((img: any) => ({
+              hasUrl: !!img?.url,
+              hasBase64: !!img?.b64_json || !!img?.base64,
+              hasData: !!img?.data,
+              hasImageUrl: !!(img?.image_url),
+              imageUrlKeys: img?.image_url ? Object.keys(img.image_url) : undefined,
+              type: img?.type,
+              mime: img?.mime_type || img?.mime,
+            })).slice(0, 5)
+          : undefined,
+        partsPreview: Array.isArray((message as any)?.parts)
+          ? (message as any).parts.map((p: any) => ({ type: p?.type, hasData: !!p?.data || !!p?.inline_data })).slice(0, 5)
+          : undefined,
+        // 如果 content 是数组，分析其结构
+        contentPartsTypes: Array.isArray(message?.content)
+          ? (message.content as any[]).map((p: any) => p?.type).slice(0, 10)
+          : undefined,
+      })
+      
+      // 处理可能的 multimodal 响应
+      let text = ''
+      const messageContent = json?.choices?.[0]?.message?.content
+      if (params.provider === 'openai_responses') {
+        text = extractTextFromResponsesResponse(json)
+      } else if (typeof messageContent === 'string') {
+        text = messageContent.trim()
+      } else if (Array.isArray(messageContent)) {
+        // Multimodal 响应：提取文本部分
+        const textParts = messageContent
+          .filter((part: any) => part?.type === 'text' && typeof part?.text === 'string')
+          .map((part: any) => part.text)
+        text = textParts.join('\n').trim()
+      }
+      
+      // 检查 CLIProxyAPI 特有的 images 字段
+      // 如果没有 content 但有 images，构造包含图片的响应文本
+      if (!text && Array.isArray(messageImages) && messageImages.length > 0) {
+        // 将图片转换为 markdown 格式，并去重
+        const seenUrls = new Set<string>()
+        const imageMarkdowns: string[] = []
+        let uniqueIdx = 0
+        
+        for (const img of messageImages) {
+          // 直接在顶层的字段
+          let url = img?.url
+          let base64 = img?.b64_json || img?.base64 || img?.data
+          let mime = img?.mime_type || img?.mime || 'image/png'
+          
+          // OpenAI 格式: { type: "image_url", image_url: { url: "..." } }
+          if (!url && img?.image_url?.url) {
+            url = img.image_url.url
+          }
+          // 可能的 base64 嵌套格式
+          if (!base64 && img?.image_url?.data) {
+            base64 = img.image_url.data
+          }
+          
+          let finalUrl = ''
+          if (url) {
+            finalUrl = url
+          } else if (base64) {
+            finalUrl = `data:${mime};base64,${base64}`
+          }
+          
+          if (!finalUrl) continue
+          
+          // 去重：对于 data URL，比较前 200 个字符作为指纹
+          // 因为相同图片的 base64 编码开头相同
+          const fingerprint = finalUrl.slice(0, 200)
+          if (seenUrls.has(fingerprint)) {
+            continue
+          }
+          seenUrls.add(fingerprint)
+          
+          uniqueIdx++
+          imageMarkdowns.push(`![Generated Image ${uniqueIdx}](${finalUrl})`)
+        }
+        
+        if (imageMarkdowns.length > 0) {
+          text = imageMarkdowns.join('\n\n')
+        }
+      }
+      
       if (!text) return null
       const reasoningText =
         params.provider === 'openai_responses'
