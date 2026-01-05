@@ -6,6 +6,9 @@
 import { PrismaClient, Document } from '@prisma/client'
 import { EmbeddingService } from './embedding-service'
 import { type VectorDBClient, type SearchResult } from '../../modules/document/vector'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('RAG')
 
 export interface RAGConfig {
   /**
@@ -214,7 +217,7 @@ export class RAGService {
     timings.dbQuery = Date.now() - dbQueryStart
 
     if (documents.length === 0) {
-      console.log('[RAG Perf] searchInDocuments: no documents found', { documentIds, timings })
+      log.debug('searchInDocuments: no documents found', { documentIds, timings })
       return {
         hits: [],
         context: '',
@@ -329,8 +332,8 @@ export class RAGService {
     const context = this.buildContext(topHits)
     timings.total = Date.now() - startTime
 
-    // 性能诊断日志
-    console.log('[RAG Perf] searchInDocuments completed', {
+    // 性能诊断日志 (debug 级别，生产环境不输出)
+    log.debug('searchInDocuments completed', {
       documentCount: documents.length,
       totalChunksSearched: docSearchTimings.reduce((sum, d) => sum + d.resultCount, 0),
       searchMode,
@@ -342,8 +345,8 @@ export class RAGService {
       },
       slowestDocs: docSearchTimings
         .sort((a, b) => b.timeMs - a.timeMs)
-        .slice(0, 5)
-        .map((d) => `${d.collectionName}: ${d.timeMs}ms (${d.resultCount} results)`),
+        .slice(0, 3)
+        .map((d) => `${d.collectionName}: ${d.timeMs}ms`),
     })
 
     return {

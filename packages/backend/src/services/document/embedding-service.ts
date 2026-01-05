@@ -3,6 +3,10 @@
  * 支持 OpenAI 和 Ollama 双引擎
  */
 
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('Embedding')
+
 async function runWithConcurrency<T>(
   items: T[],
   concurrency: number,
@@ -93,12 +97,9 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     const start = Date.now()
     const results = await this.embedBatch([text])
     const elapsed = Date.now() - start
-    if (elapsed > 200) {
-      console.log('[Embedding Perf] Single embed call', {
-        textLength: text.length,
-        timeMs: elapsed,
-        model: this.model,
-      })
+    // 仅当耗时超过阈值时输出 debug 日志
+    if (elapsed > 500) {
+      log.debug('Slow embed call', { textLen: text.length, ms: elapsed })
     }
     return results[0]
   }

@@ -10,6 +10,9 @@
 
 import type { PrismaClient } from '@prisma/client'
 import { AuthUtils } from '../utils/auth'
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('RAGInit')
 import {
   createDocumentServices,
   getDocumentServices,
@@ -70,7 +73,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       const existingServices = getDocumentServices()
       if (existingServices) {
         existingServices.cleanupScheduler.stop()
-        console.log('🔄 Stopping existing RAG services...')
+        log.debug('Stopping existing RAG services')
       }
 
       // 从数据库读取 RAG 设置
@@ -106,7 +109,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       if (!ragEnabled) {
         // 清除现有服务
         setDocumentServices(null as any)
-        console.log('ℹ️  Document RAG services disabled')
+        log.info('RAG services disabled')
         return { success: true, message: 'RAG services disabled' }
       }
 
@@ -116,7 +119,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
 
       if (!connectionIdStr || !modelId) {
         setDocumentServices(null as any)
-        console.log('⚠️  Document RAG enabled but no embedding model selected')
+        log.warn('RAG enabled but no embedding model selected')
         return { success: false, message: 'No embedding model selected' }
       }
 
@@ -139,7 +142,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       const encryptedApiKey = connection.apiKey
 
       if (!encryptedApiKey) {
-        return { success: false, message: `Connection has no API key: ${connection.name || connectionId}` }
+        return { success: false, message: `Connection has no API key: ${connectionId}` }
       }
 
       // 解密 API Key
@@ -186,9 +189,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       setDocumentServices(documentServices)
       documentServices.cleanupScheduler.start()
 
-      console.log('✅ Document RAG services reloaded')
-      console.log(`   Connection: ${connection.name || connectionId}, Model: ${modelId}`)
-      console.log(`   BatchSize: ${embeddingBatchSize}, Concurrency: ${embeddingConcurrency}`)
+      log.info(`RAG services reloaded: connection=${connectionId}, model=${modelId}`)
 
       return { success: true, message: `RAG services initialized with model: ${modelId}` }
     } catch (error) {
@@ -196,10 +197,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       const shouldRetry =
         attempt < maxAttempts && isSqliteLockingProtocolError(error)
 
-      console.warn(
-        `⚠️  Failed to reload RAG services (attempt ${attempt}/${maxAttempts}):`,
-        message
-      )
+      log.warn(`Failed to reload RAG (attempt ${attempt}/${maxAttempts}):`, message)
 
       if (!shouldRetry) {
         return { success: false, message }
@@ -207,7 +205,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
 
       // 递增的退避时间，给数据库锁释放更多时间
       const delay = retryDelays[attempt - 1] || 3000
-      console.log(`   Retrying in ${delay}ms...`)
+      log.debug(`Retrying in ${delay}ms...`)
       await sleep(delay)
     }
   }

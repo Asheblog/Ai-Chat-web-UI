@@ -6,6 +6,9 @@
 import { PrismaClient, KnowledgeBase, Document } from '@prisma/client'
 import { getDocumentServices } from '../document-services-factory'
 import type { RAGResult, RAGHit } from '../document/rag-service'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('KB')
 
 export interface KnowledgeBaseCreateInput {
   name: string
@@ -177,9 +180,9 @@ export class KnowledgeBaseService {
         if (otherReferences === 0) {
           try {
             await services.documentService.deleteDocument(documentId)
-            console.log(`[KnowledgeBaseService] Deleted orphaned document ${documentId} (file + vector data)`)
+            log.debug(`Deleted orphaned document ${documentId}`)
           } catch (err) {
-            console.error(`[KnowledgeBaseService] Failed to delete document ${documentId}:`, err)
+            log.error(`Failed to delete document ${documentId}:`, err)
           }
         }
       }
@@ -249,9 +252,9 @@ export class KnowledgeBaseService {
       if (services) {
         try {
           await services.documentService.deleteDocument(documentId)
-          console.log(`[KnowledgeBaseService] Fully deleted document ${documentId} (file + vector data)`)
+          log.debug(`Deleted document ${documentId}`)
         } catch (err) {
-          console.error(`[KnowledgeBaseService] Failed to delete document ${documentId}:`, err)
+          log.error(`Failed to delete document ${documentId}:`, err)
         }
       }
     }
@@ -298,9 +301,9 @@ export class KnowledgeBaseService {
         try {
           const deleteResult = await services.documentService.deleteDocuments(orphanedDocIds)
           deleted = deleteResult.deleted
-          console.log(`[KnowledgeBaseService] Batch removed ${result.count} refs, deleted ${deleted} orphaned documents`)
+          log.debug(`Batch removed ${result.count} refs, deleted ${deleted} orphaned docs`)
         } catch (err) {
-          console.error(`[KnowledgeBaseService] Failed to batch delete documents:`, err)
+          log.error('Failed to batch delete documents:', err)
         }
       }
     }

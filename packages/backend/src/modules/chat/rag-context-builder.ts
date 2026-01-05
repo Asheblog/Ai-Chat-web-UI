@@ -6,6 +6,9 @@
 import type { RAGService, RAGResult, RAGHit } from '../../services/document/rag-service'
 import { KnowledgeBaseService } from '../../services/knowledge-base'
 import { prisma } from '../../db'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('RAGContext')
 
 /**
  * 文档检索 Tool 事件类型
@@ -237,19 +240,11 @@ export class RAGContextBuilder {
       const context = result.context
       const totalTime = Date.now() - startTime
 
-      // 性能诊断日志
-      console.log('[RAG Context] enhanceFromKnowledgeBases completed', {
-        knowledgeBaseIds,
-        knowledgeBaseNames: kbNames,
-        queryLength: query.length,
+      // 性能诊断日志 (debug 级别，生产环境不输出)
+      log.debug('enhanceFromKnowledgeBases completed', {
+        kbCount: knowledgeBaseIds.length,
         hitsCount: result.hits.length,
-        totalHits: result.totalHits,
-        timings: {
-          kbLookupMs: kbLookupTime,
-          searchMs: searchTime,
-          queryTimeReported: result.queryTime,
-          totalMs: totalTime,
-        },
+        totalMs: totalTime,
       })
 
       return { context, result }

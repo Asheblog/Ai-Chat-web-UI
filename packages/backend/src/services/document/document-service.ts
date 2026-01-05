@@ -26,7 +26,9 @@ import { EmbeddingService, type EmbeddingConfig } from './embedding-service'
 import { type VectorDBClient, type VectorItem } from '../../modules/document/vector'
 import type { DocumentSectionService } from './section-service'
 import type { ChunkWithMetadata } from '../../modules/document/structure/types'
-import { BackendLogger as log } from '../../utils/logger'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('Document')
 
 export interface DocumentServiceConfig {
   /**
@@ -297,7 +299,7 @@ export class DocumentService {
 
         for (let i = 0; i < embeddings.length; i++) {
           if (!embeddings[i] || !Array.isArray(embeddings[i]) || embeddings[i].length === 0) {
-            console.error(`[Document] Invalid embedding at index ${i}:`, embeddings[i])
+            log.error(`Invalid embedding at index ${i}:`, embeddings[i])
             throw new Error(`Invalid embedding at chunk ${batchChunks[i].index}: embedding is missing or empty`)
           }
         }
@@ -704,10 +706,10 @@ export class DocumentService {
     // 删除物理文件
     try {
       await fs.unlink(document.filePath)
-      console.log(`[DocumentService] Deleted file: ${document.filePath}`)
+      log.debug(`Deleted file: ${document.filePath}`)
     } catch (err) {
       // 文件可能已被删除或不存在，记录但不抛出错误
-      console.warn(`[DocumentService] Failed to delete file ${document.filePath}:`, err instanceof Error ? err.message : err)
+      log.warn(`Failed to delete file ${document.filePath}:`, err instanceof Error ? err.message : err)
     }
 
     // 删除数据库记录（级联删除 chunks 和 session_documents）
@@ -761,7 +763,7 @@ export class DocumentService {
       })
       deleted = result.count
     } catch (err) {
-      console.error('[DocumentService] Batch delete failed:', err)
+      log.error('Batch delete failed:', err)
       failed = documentIds.length
     }
 
@@ -771,10 +773,10 @@ export class DocumentService {
         // 通过 vectorDB 执行 VACUUM
         if ('vacuum' in this.vectorDB && typeof (this.vectorDB as any).vacuum === 'function') {
           (this.vectorDB as any).vacuum()
-          console.log(`[DocumentService] Batch deleted ${deleted} documents and vacuumed database`)
+          log.debug(`Batch deleted ${deleted} documents and vacuumed`)
         }
       } catch (e) {
-        console.warn('[DocumentService] VACUUM after batch delete failed:', e)
+        log.warn('VACUUM after batch delete failed:', e)
       }
     }
 

@@ -11,6 +11,9 @@ import Database from 'better-sqlite3'
 import path from 'path'
 import fs from 'fs'
 import type { VectorDBClient, VectorItem, SearchResult } from './types'
+import { createLogger } from '../../../utils/logger'
+
+const log = createLogger('VectorDB')
 
 /**
  * 检测是否运行在 WSL 环境
@@ -243,17 +246,17 @@ export class SQLiteVectorClient implements VectorDBClient {
     try {
       this.db.pragma(`journal_mode = ${journalMode}`)
       if (isWSL) {
-        console.log('[VectorDB] WSL detected, using DELETE journal mode for compatibility')
+        log.info('WSL detected, using DELETE journal mode')
       }
     } catch (e) {
-      console.warn('[VectorDB] Failed to set journal mode, continuing:', (e as any)?.message || e)
+      log.warn('Failed to set journal mode, continuing:', (e as any)?.message || e)
     }
 
     // 增强的锁超时: 30秒，避免并发操作时过早失败
     try {
       this.db.pragma('busy_timeout = 30000')
     } catch (e) {
-      console.warn('[VectorDB] Failed to set busy_timeout, continuing:', (e as any)?.message || e)
+      log.warn('Failed to set busy_timeout, continuing:', (e as any)?.message || e)
     }
 
     // 创建元数据表
@@ -283,14 +286,14 @@ export class SQLiteVectorClient implements VectorDBClient {
         const isLockError = /locking protocol|database is locked|SQLITE_BUSY/i.test(message)
 
         if (isLockError && attempt < maxRetries) {
-          console.warn(`[VectorDB] Table init failed (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`)
+          log.warn(`Table init failed (attempt ${attempt}/${maxRetries}), retrying...`)
           // 同步等待 - 构造函数中不能用 async
           const start = Date.now()
           while (Date.now() - start < retryDelay) {
             // busy wait
           }
         } else {
-          console.warn('[VectorDB] Failed to init vector_collections table, continuing:', message)
+          log.warn('Failed to init vector_collections table, continuing:', message)
           return
         }
       }
@@ -351,9 +354,9 @@ export class SQLiteVectorClient implements VectorDBClient {
       if (vacuum) {
         try {
           this.db.exec('VACUUM')
-          console.log(`[VectorDB] Collection "${collectionName}" deleted and database vacuumed`)
+          log.debug(`Collection "${collectionName}" deleted and vacuumed`)
         } catch (e) {
-          console.warn('[VectorDB] VACUUM failed after delete:', (e as any)?.message || e)
+          log.warn('VACUUM failed after delete:', (e as any)?.message || e)
         }
       }
     } catch {
@@ -467,23 +470,14 @@ export class SQLiteVectorClient implements VectorDBClient {
 
     const totalMs = Date.now() - searchStart
 
-    // 仅当搜索时间超过 500ms 时输出详细日志
+    // 仅当搜索时间超过 500ms 时输出警告日志
     if (totalMs > 500) {
-      console.log('[VectorDB Perf] Slow search detected', {
+      log.warn('Slow search detected', {
         collection: collectionName,
-        totalRecords: totalCount,
-        vectorDimension: queryVector.length,
-        timings: {
-          dbReadMs: dbReadTimeMs,
-          vectorParseMs: vectorParseTimeMs,
-          similarityCalcMs: similarityCalcTimeMs,
-          totalMs,
-        },
-        breakdown: {
-          dbReadPct: Math.round((dbReadTimeMs / totalMs) * 100),
-          vectorParsePct: Math.round((vectorParseTimeMs / totalMs) * 100),
-          similarityCalcPct: Math.round((similarityCalcTimeMs / totalMs) * 100),
-        },
+        records: totalCount,
+        totalMs,
+        dbReadMs: dbReadTimeMs,
+        calcMs: similarityCalcTimeMs,
       })
     }
 
@@ -528,9 +522,9 @@ export class SQLiteVectorClient implements VectorDBClient {
     if (collections.length > 0) {
       try {
         this.db.exec('VACUUM')
-        console.log(`[VectorDB] Reset complete, ${collections.length} collections deleted and database vacuumed`)
+        log.info(`Reset complete, ${collections.length} collections deleted`)
       } catch (e) {
-        console.warn('[VectorDB] VACUUM failed after reset:', (e as any)?.message || e)
+        log.warn('VACUUM failed after reset:', (e as any)?.message || e)
       }
     }
   }
@@ -561,15 +555,15 @@ export class SQLiteVectorClient implements VectorDBClient {
     try {
       const result = this.db.pragma('wal_checkpoint(TRUNCATE)') as Array<{ busy: number; log: number; checkpointed: number }>
       if (result && result[0]) {
-        const { busy, log, checkpointed } = result[0]
-        if (busy === 0 && log === checkpointed) {
-          console.log(`[VectorDB] WAL checkpoint completed: ${checkpointed} pages checkpointed`)
+        const { busy, log: pagesLog, checkpointed } = result[0]
+        if (busy === 0 && pagesLog === checkpointed) {
+          log.debug(`WAL checkpoint completed: ${checkpointed} pages`)
         } else if (busy === 1) {
-          console.warn(`[VectorDB] WAL checkpoint blocked by busy database, will retry on next vacuum`)
+          log.warn('WAL checkpoint blocked by busy database')
         }
       }
     } catch (e) {
-      console.warn('[VectorDB] WAL checkpoint failed:', e instanceof Error ? e.message : e)
+      log.warn('WAL checkpoint failed:', e instanceof Error ? e.message : e)
     }
     
     // 然后执行 VACUUM 压缩主库文件

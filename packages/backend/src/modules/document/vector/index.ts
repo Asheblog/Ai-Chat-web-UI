@@ -7,6 +7,9 @@
 import path from 'path'
 import type { VectorDBClient, VectorDBConfig } from './types'
 import { SQLiteVectorClient } from './sqlite-vector-client'
+import { createLogger } from '../../../utils/logger'
+
+const log = createLogger('VectorDB')
 
 /**
  * 全局单例缓存
@@ -46,7 +49,7 @@ export function createVectorDBClient(config: VectorDBConfig): VectorDBClient {
 
       // 异步执行迁移检查（不阻塞启动）
       checkAndMigrateVectorDB(client).catch((e) =>
-        console.warn('[VectorDB] Migration check failed:', e)
+        log.warn('Migration check failed:', e)
       )
 
       return client
@@ -55,7 +58,7 @@ export function createVectorDBClient(config: VectorDBConfig): VectorDBClient {
     case 'chroma':
       // ChromaDB 支持可以后续添加
       // 目前回退到 SQLite 实现
-      console.warn('[VectorDB] ChromaDB not yet implemented, falling back to SQLite')
+      log.warn('ChromaDB not implemented, falling back to SQLite')
       return createVectorDBClient({ ...config, type: 'sqlite' })
 
     default:
@@ -73,21 +76,18 @@ async function checkAndMigrateVectorDB(client: SQLiteVectorClient): Promise<void
       return
     }
 
-    console.log('[VectorDB] Detected JSON format vectors, starting migration to binary format...')
+    log.info('Starting vector format migration (JSON → binary)...')
     const stats = await client.migrateToBufferFormat()
 
-    console.log(
-      `[VectorDB] Migration completed: ` +
-        `${stats.collectionsProcessed} collections, ` +
-        `${stats.recordsMigrated} records migrated, ` +
-        `${stats.recordsSkipped} already binary`
+    log.info(
+      `Migration completed: ${stats.collectionsProcessed} collections, ${stats.recordsMigrated} migrated`
     )
 
     if (stats.errors.length > 0) {
-      console.warn(`[VectorDB] Migration had ${stats.errors.length} errors:`, stats.errors.slice(0, 5))
+      log.warn(`Migration had ${stats.errors.length} errors`)
     }
   } catch (e) {
-    console.error('[VectorDB] Migration failed:', e)
+    log.error('Migration failed:', e)
   }
 }
 
@@ -119,7 +119,7 @@ export async function closeVectorDBClient(dataPath: string): Promise<void> {
  */
 export async function closeAllVectorDBClients(): Promise<void> {
   const closePromises = Array.from(vectorDBInstances.values()).map((client) =>
-    client.close().catch((e) => console.warn('[VectorDB] Error closing client:', e))
+    client.close().catch((e) => log.warn('Error closing client:', e))
   )
   await Promise.all(closePromises)
   vectorDBInstances.clear()

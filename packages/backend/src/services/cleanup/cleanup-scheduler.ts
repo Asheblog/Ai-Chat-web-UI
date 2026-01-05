@@ -6,6 +6,9 @@
 import { PrismaClient } from '@prisma/client'
 import fs from 'fs/promises'
 import type { VectorDBClient } from '../../modules/document/vector'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('Cleanup')
 
 export interface CleanupConfig {
   /**
@@ -71,28 +74,26 @@ export class CleanupScheduler {
    */
   start(): void {
     if (!this.config.enabled) {
-      console.log('[CleanupScheduler] Cleanup is disabled')
+      log.info('Cleanup is disabled')
       return
     }
 
     if (this.intervalId) {
-      console.warn('[CleanupScheduler] Already running')
+      log.warn('Already running')
       return
     }
 
-    console.log(
-      `[CleanupScheduler] Starting with interval ${this.config.intervalMs}ms`
-    )
+    log.info(`Starting with interval ${Math.round(this.config.intervalMs / 1000)}s`)
 
     // 启动时执行一次
     this.runCleanup().catch((err) => {
-      console.error('[CleanupScheduler] Initial cleanup failed:', err)
+      log.error('Initial cleanup failed:', err)
     })
 
     // 定期执行
     this.intervalId = setInterval(() => {
       this.runCleanup().catch((err) => {
-        console.error('[CleanupScheduler] Cleanup failed:', err)
+        log.error('Cleanup failed:', err)
       })
     }, this.config.intervalMs)
   }
@@ -104,7 +105,7 @@ export class CleanupScheduler {
     if (this.intervalId) {
       clearInterval(this.intervalId)
       this.intervalId = null
-      console.log('[CleanupScheduler] Stopped')
+      log.info('Stopped')
     }
   }
 
@@ -119,7 +120,7 @@ export class CleanupScheduler {
     let storageCleaned = 0
     let vectorCollectionsDeleted = 0
 
-    console.log('[CleanupScheduler] Running cleanup...')
+    log.debug('Running cleanup...')
 
     // 1. 清理过期文档（禁用单次 VACUUM，最后统一执行）
     try {
@@ -129,7 +130,7 @@ export class CleanupScheduler {
       vectorCollectionsDeleted += result.vectorCollections
     } catch (err) {
       const msg = `Expired cleanup failed: ${err}`
-      console.error('[CleanupScheduler]', msg)
+      log.error(msg)
       errors.push(msg)
     }
 
@@ -141,7 +142,7 @@ export class CleanupScheduler {
       vectorCollectionsDeleted += result.vectorCollections
     } catch (err) {
       const msg = `Orphaned cleanup failed: ${err}`
-      console.error('[CleanupScheduler]', msg)
+      log.error(msg)
       errors.push(msg)
     }
 
@@ -149,10 +150,10 @@ export class CleanupScheduler {
     if (vectorCollectionsDeleted > 0) {
       try {
         this.vectorDB.vacuum()
-        console.log(`[CleanupScheduler] Database vacuumed after deleting ${vectorCollectionsDeleted} collections`)
+        log.debug(`Vacuumed after deleting ${vectorCollectionsDeleted} collections`)
       } catch (err) {
         const msg = `VACUUM failed: ${err instanceof Error ? err.message : err}`
-        console.warn('[CleanupScheduler]', msg)
+        log.warn(msg)
         // VACUUM 失败不算严重错误，不加入 errors
       }
     }
@@ -162,7 +163,7 @@ export class CleanupScheduler {
       await this.checkDatabaseSize()
     } catch (err) {
       const msg = `Database size check failed: ${err}`
-      console.error('[CleanupScheduler]', msg)
+      log.error(msg)
       errors.push(msg)
     }
 
@@ -178,11 +179,15 @@ export class CleanupScheduler {
 
     this.lastStats = stats
 
-    console.log(
-      `[CleanupScheduler] Cleanup completed in ${stats.durationMs}ms. ` +
-        `Deleted: ${expiredDocumentsDeleted} expired, ${orphanedDocumentsDeleted} orphaned. ` +
-        `Cleaned: ${Math.round(storageCleaned / 1024)}KB storage, ${vectorCollectionsDeleted} vector collections.`
-    )
+    // 仅当有实际清理操作时输出 info 日志，否则 debug
+    const totalDeleted = expiredDocumentsDeleted + orphanedDocumentsDeleted
+    if (totalDeleted > 0 || storageCleaned > 0) {
+      log.info(
+        `Cleanup done in ${stats.durationMs}ms: ${totalDeleted} docs, ${Math.round(storageCleaned / 1024)}KB freed`
+      )
+    } else {
+      log.debug(`Cleanup done in ${stats.durationMs}ms, nothing to clean`)
+    }
 
     return stats
   }
@@ -224,9 +229,8 @@ export class CleanupScheduler {
       try {
         await fs.unlink(doc.filePath)
         storageCleaned += doc.fileSize
-        console.log(`[CleanupScheduler] Deleted expired file: ${doc.filePath}`)
       } catch (err) {
-        console.warn(`[CleanupScheduler] Failed to delete file ${doc.filePath}:`, err instanceof Error ? err.message : err)
+        log.warn(`Failed to delete file ${doc.filePath}:`, err instanceof Error ? err.message : err)
       }
     }
 
@@ -277,9 +281,8 @@ export class CleanupScheduler {
       try {
         await fs.unlink(doc.filePath)
         storageCleaned += doc.fileSize
-        console.log(`[CleanupScheduler] Deleted orphaned file: ${doc.filePath}`)
       } catch (err) {
-        console.warn(`[CleanupScheduler] Failed to delete file ${doc.filePath}:`, err instanceof Error ? err.message : err)
+        log.warn(`Failed to delete file ${doc.filePath}:`, err instanceof Error ? err.message : err)
       }
     }
 
@@ -307,9 +310,8 @@ export class CleanupScheduler {
         const sizeBytes = Number(result[0].size)
 
         if (sizeBytes > this.config.databaseSizeWarningBytes) {
-          console.warn(
-            `[CleanupScheduler] Database size warning: ${Math.round(sizeBytes / 1024 / 1024)}MB ` +
-              `(threshold: ${Math.round(this.config.databaseSizeWarningBytes / 1024 / 1024)}MB)`
+          log.warn(
+            `Database size: ${Math.round(sizeBytes / 1024 / 1024)}MB (threshold: ${Math.round(this.config.databaseSizeWarningBytes / 1024 / 1024)}MB)`
           )
         }
       }

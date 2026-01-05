@@ -1070,7 +1070,6 @@ export class KBToolHandler {
 
         // 如果没有增强服务，回退到普通搜索
         if (!this.enhancedRagService) {
-            console.log('[KBTools] EnhancedRAGService not available, falling back to regular search')
             return this.handleSearch(query, topK ?? 5, searchMode === 'section' ? 'broad' : searchMode as any, validKbIds)
         }
 
