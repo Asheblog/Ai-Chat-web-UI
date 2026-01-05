@@ -1,7 +1,10 @@
 /**
  * 图片生成服务
- * 
+ *
  * 统一管理 OpenAI 兼容和 Gemini GenerateContent 两种图片生成 API
+ *
+ * 注意：模型是否为生图模型由 ModelCatalog 的 capabilities.image_generation 决定，
+ * 本服务只负责根据 provider 选择合适的 API 进行调用。
  */
 
 import { BackendLogger as log } from '../../utils/logger'
@@ -12,23 +15,6 @@ import {
   ImageGenerationError,
 } from './providers/openai-compat'
 import { generateImageGemini, GeminiImageGenerationError } from './providers/gemini-generate'
-
-// 生图模型识别模式
-const IMAGE_GENERATION_MODEL_PATTERNS = [
-  // OpenAI
-  'dall-e',
-  'gpt-image',
-  // Google
-  'imagen',
-  'gemini-2.5-flash-image',
-  // Nano-GPT / 其他
-  'hidream',
-  'flux',
-  'recraft',
-  'sdxl',
-  'midjourney',
-  'stable-diffusion',
-]
 
 export type ImageGenerationApiType = 'openai-compat' | 'gemini-generate'
 
@@ -51,37 +37,19 @@ export class ImageGenerationService {
   }
 
   /**
-   * 判断模型是否为生图模型
+   * 根据 provider 判断使用哪种生图 API
    */
-  isImageGenerationModel(modelId: string): boolean {
-    const lowerId = modelId.toLowerCase()
-    return IMAGE_GENERATION_MODEL_PATTERNS.some(pattern => lowerId.includes(pattern))
-  }
-
-  /**
-   * 判断模型使用哪种生图 API
-   * 根据 provider 和模型名称综合判断
-   */
-  getApiType(modelId: string, provider?: string): ImageGenerationApiType | null {
+  getApiType(modelId: string, provider?: string): ImageGenerationApiType {
     const lowerId = modelId.toLowerCase()
     
-    // 如果 provider 是 OpenAI 兼容类型，使用 openai-compat API
-    // 这包括通过第三方代理（如 CLIProxyAPI）转发的 Gemini 模型
-    if (provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai') {
-      return 'openai-compat'
-    }
-    
-    // 如果是原生 Google GenAI 连接且模型名包含 gemini 和 image，使用 gemini-generate
-    if (provider === 'google_genai' && lowerId.includes('gemini') && lowerId.includes('image')) {
+    // 如果是原生 Google GenAI 连接且模型名包含 gemini，使用 gemini-generate API
+    if (provider === 'google_genai' && lowerId.includes('gemini')) {
       return 'gemini-generate'
     }
     
-    // 其他生图模型使用 OpenAI 兼容 API
-    if (this.isImageGenerationModel(modelId)) {
-      return 'openai-compat'
-    }
-    
-    return null
+    // 其他所有情况使用 OpenAI 兼容 API
+    // 包括：OpenAI、Azure OpenAI、第三方代理（如 CLIProxyAPI）、Nano-GPT 等
+    return 'openai-compat'
   }
 
   /**
@@ -94,10 +62,6 @@ export class ImageGenerationService {
     options?: ImageGenerationOptions
   ): Promise<ImageGenerationResult> {
     const apiType = this.getApiType(modelId, connection.provider)
-    
-    if (!apiType) {
-      throw new ImageGenerationError(`Model ${modelId} is not an image generation model`, 400)
-    }
     
     this.logger.info('[ImageGenerationService] Generating image', {
       connectionId: connection.id,

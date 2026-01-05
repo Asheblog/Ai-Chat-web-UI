@@ -6,9 +6,11 @@
  */
 
 import { BackendLogger as log } from '../../utils/logger'
+import { prisma } from '../../db'
 import { imageGenerationService, ImageGenerationError, type ImageGenerationResult, type GeneratedImage } from '../../services/image-generation'
 import type { UsageQuotaSnapshot, Message } from '../../types'
 import { serializeQuotaSnapshot } from '../../utils/quota'
+import { parseCapabilityEnvelope } from '../../utils/capabilities'
 
 export interface ImageGenerationResponseParams {
   sessionId: number
@@ -139,8 +141,45 @@ export async function createImageGenerationResponse(
 }
 
 /**
- * 检测模型是否为生图模型
+ * 判断模型是否为生图模型
+ * 基于 ModelCatalog 表中的 capabilities.image_generation 配置
+ *
+ * @param connectionId 连接 ID
+ * @param modelRawId 模型原始 ID
+ * @returns 是否为生图模型
  */
-export function isImageGenerationModel(modelId: string): boolean {
-  return imageGenerationService.isImageGenerationModel(modelId)
+export async function checkImageGenerationCapability(
+  connectionId: number,
+  modelRawId: string
+): Promise<boolean> {
+  if (!connectionId || !modelRawId) {
+    return false
+  }
+  
+  try {
+    // 查询 catalog 中的 capabilities
+    const catalog = await prisma.modelCatalog.findFirst({
+      where: {
+        connectionId,
+        rawId: modelRawId,
+      },
+      select: {
+        capabilitiesJson: true,
+      },
+    })
+    
+    if (!catalog?.capabilitiesJson) {
+      return false
+    }
+    
+    const envelope = parseCapabilityEnvelope(catalog.capabilitiesJson)
+    return envelope?.flags?.image_generation === true
+  } catch (error) {
+    log.warn('[checkImageGenerationCapability] Failed to query catalog', {
+      connectionId,
+      modelRawId,
+      error: error instanceof Error ? error.message : error,
+    })
+    return false
+  }
 }

@@ -19,7 +19,7 @@ import {
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
 } from '../../chat/agent-web-search-response';
-import { createImageGenerationResponse, isImageGenerationModel } from '../../chat/image-generation-response';
+import { createImageGenerationResponse, checkImageGenerationCapability } from '../../chat/image-generation-response';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
 import {
   buildAgentStreamKey,
@@ -502,9 +502,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
         traceRequested: traceToggle ?? null,
       })
 
-      // 检测是否为生图模型：使用专门的生图 API（仅适用于支持 /v1/images/generations 端点的服务）
-      // 注意：通过 OpenAI 兼容代理（如 CLIProxyAPI）转发的模型使用 chat/completions 格式，不应走此路径
-      const isImageGenModel = isImageGenerationModel(session.modelRawId || '');
+      // 检测是否为生图模型：查询 ModelCatalog 的 capabilities.image_generation
+      // 只有明确配置了 image_generation: true 的模型才走专用生图 API
+      const isImageGenModel = session.connection
+        ? await checkImageGenerationCapability(session.connection.id, session.modelRawId || '')
+        : false;
       if (isImageGenModel && session.connection) {
         log.info('[chat stream] Image generation model detected', {
           sessionId,
