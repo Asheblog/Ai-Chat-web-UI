@@ -53,74 +53,38 @@ export function AboutPage() {
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">24f57d8</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">ef0336f</span>
               <span className="text-muted-foreground leading-relaxed">
-                修复无事件时错误显示截断警告的问题。
+                重构聊天模块，使用 ModelCatalog 能力检测图片生成功能。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">b8cc0e6</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0655ca6</span>
               <span className="text-muted-foreground leading-relaxed">
-                模型统计表格改为显示平均输出 tokens。
+                新增系统日志管理功能，支持文件持久化和 API 接口。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">3355033</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">be495a1</span>
               <span className="text-muted-foreground leading-relaxed">
-                修复对战准确率计算分母问题。
+                重构后端日志系统，统一使用 createLogger 工具。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1c92e99</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">de4af0f</span>
               <span className="text-muted-foreground leading-relaxed">
-                重构结果步骤组件，新增可折叠问题预览。
+                聊天支持通过 OpenAI 兼容代理 API 进行图片生成。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c63d8ed</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0d31da9</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增 OpenAI Responses API 支持。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">d2e698a</span>
-              <span className="text-muted-foreground leading-relaxed">
-                新增用户消息编辑和重发功能。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c823688</span>
-              <span className="text-muted-foreground leading-relaxed">
-                新增裁判重试功能和状态追踪。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">a1dd075</span>
-              <span className="text-muted-foreground leading-relaxed">
-                支持模型独立额外提示词配置。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">617c3b3</span>
-              <span className="text-muted-foreground leading-relaxed">
-                新增对战执行任务追踪功能。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2269ac0</span>
-              <span className="text-muted-foreground leading-relaxed">
-                对战支持按尝试取消和重试功能。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">799023d</span>
-              <span className="text-muted-foreground leading-relaxed">
-                对战功能新增独立配额与访问控制。
+                新增 AI 图片生成功能，支持 DALL-E 及类似模型。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-12-24 推送变更摘要
+            以上为 2025-01-05 推送变更摘要
           </p>
         </Card>
       </div>
