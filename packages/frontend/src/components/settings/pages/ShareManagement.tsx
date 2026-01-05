@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Copy, Loader2, RefreshCw, ShieldX } from "lucide-react"
+import { Copy, Loader2, RefreshCw, ShieldOff } from "lucide-react"
 import { listChatShares, revokeChatShare, updateChatShare } from '@/features/share/api'
 import type { ChatShareSummary } from '@/types'
 import { copyToClipboard, formatDate } from '@/lib/utils'
@@ -221,7 +221,7 @@ export function ShareManagementPanel() {
                           onClick={() => handleRevoke(share.id)}
                           disabled={Boolean(share.revokedAt) || updatingId === share.id}
                         >
-                          <ShieldX className="mr-1 h-3 w-3" />
+                          <ShieldOff className="mr-1 h-3 w-3" />
                           撤销
                         </Button>
                       </div>

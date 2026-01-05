@@ -280,3 +280,78 @@ export const deleteLatexTrace = async (taskTraceId: number) => {
   )
   return response.data
 }
+
+// ============================================================================
+// 系统运行日志 API
+// ============================================================================
+
+export interface SystemLogEntry {
+  id: number
+  ts: string
+  level: 'debug' | 'info' | 'warn' | 'error'
+  tag: string
+  msg: string
+  ctx?: Record<string, unknown>
+}
+
+export interface SystemLogConfig {
+  level: 'debug' | 'info' | 'warn' | 'error'
+  toFile: boolean
+  logDir: string
+  retentionDays: number
+}
+
+export interface SystemLogStats {
+  totalFiles: number
+  totalSizeBytes: number
+  oldestDate: string | null
+  newestDate: string | null
+  fileList: Array<{ name: string; sizeBytes: number; date: string }>
+}
+
+export const getSystemLogs = async (params?: {
+  page?: number
+  pageSize?: number
+  level?: 'debug' | 'info' | 'warn' | 'error'
+  tag?: string
+  search?: string
+  dateFrom?: string
+  dateTo?: string
+}) => {
+  const response = await client.get<
+    ApiResponse<{
+      items: SystemLogEntry[]
+      total: number
+      hasMore: boolean
+    }>
+  >('/system-logs', { params })
+  return response.data
+}
+
+export const getSystemLogStats = async () => {
+  const response = await client.get<ApiResponse<SystemLogStats>>('/system-logs/stats')
+  return response.data
+}
+
+export const getSystemLogTags = async () => {
+  const response = await client.get<ApiResponse<{ tags: string[] }>>('/system-logs/tags')
+  return response.data
+}
+
+export const getSystemLogConfig = async () => {
+  const response = await client.get<ApiResponse<SystemLogConfig>>('/system-logs/config')
+  return response.data
+}
+
+export const updateSystemLogConfig = async (config: Partial<SystemLogConfig>) => {
+  const response = await client.put<ApiResponse<SystemLogConfig>>('/system-logs/config', config)
+  return response.data
+}
+
+export const cleanupSystemLogs = async (retentionDays?: number) => {
+  const payload = typeof retentionDays === 'number' ? { retentionDays } : {}
+  const response = await client.post<
+    ApiResponse<{ deleted: number; freedBytes: number; retentionDays: number }>
+  >('/system-logs/cleanup', payload)
+  return response.data
+}

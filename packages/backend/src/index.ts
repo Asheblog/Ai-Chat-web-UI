@@ -24,6 +24,7 @@ import { createDocumentsApi } from './api/documents';
 import { createKnowledgeBasesApi } from './api/knowledge-bases';
 import { getDocumentServices } from './services/document-services-factory';
 import { setRAGInitializerDeps, reloadRAGServices } from './services/rag-initializer';
+import { createSystemLogsApi } from './api/system-logs';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -94,6 +95,9 @@ app.route('/api/documents', createDocumentsApi());
 
 // 知识库路由
 app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
+
+// 系统日志路由
+app.route('/api/system-logs', createSystemLogsApi());
 
 app.route(
   '/v1',
