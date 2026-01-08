@@ -497,7 +497,17 @@ export class DocumentService {
       await flushBatch()
 
       if (totalChunksProcessed === 0) {
-        throw new Error('No chunks created from document')
+        // 根据文档类型给出更友好的错误提示
+        if (isPdf) {
+          throw new Error(
+            '无法从PDF中提取文字内容。\n\n' +
+            '可能的原因：\n' +
+            '• 这是扫描件或图片转换的PDF（仅包含图片，无文字层）\n' +
+            '• PDF文件已加密或损坏\n\n' +
+            '解决方案：请使用OCR工具（如Adobe Acrobat、ABBYY FineReader等）将PDF转换为可搜索的文本PDF后重新上传。'
+          )
+        }
+        throw new Error('No content extracted from document. The file may be empty or corrupted.')
       }
 
       // 章节结构提取（可选，如果已注入 sectionService）
