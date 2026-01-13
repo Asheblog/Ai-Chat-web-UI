@@ -3,7 +3,9 @@
  * 用于在聊天流程中集成文档检索功能
  */
 
-import type { RAGService, RAGResult, RAGHit } from '../../services/document/rag-service'
+import type { RAGService, RAGResult } from '../../services/document/rag-service'
+import type { EnhancedRAGService } from '../../services/document/enhanced-rag-service'
+import type { DocumentService } from '../../services/document/document-service'
 import { KnowledgeBaseService } from '../../services/knowledge-base'
 import { prisma } from '../../db'
 import { createLogger } from '../../utils/logger'
@@ -129,16 +131,29 @@ export function createKnowledgeBaseSearchResultEvent(
 export class RAGContextBuilder {
   private ragService: RAGService
   private kbService: KnowledgeBaseService
+  private documentService: DocumentService | null
+  private enhancedRagService: EnhancedRAGService | null
 
-  constructor(ragService: RAGService) {
+  constructor(
+    ragService: RAGService,
+    options: {
+      documentService?: DocumentService | null
+      enhancedRagService?: EnhancedRAGService | null
+    } = {}
+  ) {
     this.ragService = ragService
     this.kbService = new KnowledgeBaseService(prisma)
+    this.documentService = options.documentService || null
+    this.enhancedRagService = options.enhancedRagService || null
   }
 
   /**
    * 检查会话是否需要 RAG 增强
    */
   async shouldEnhance(sessionId: number): Promise<boolean> {
+    if (this.documentService) {
+      return this.documentService.hasSessionDocuments(sessionId)
+    }
     return this.ragService.hasSessionDocuments(sessionId)
   }
 
@@ -162,7 +177,12 @@ export class RAGContextBuilder {
   async enhance(
     sessionId: number,
     query: string,
-    onEvent?: (event: DocumentSearchToolEvent) => void
+    onEvent?: (event: DocumentSearchToolEvent) => void,
+    options?: {
+      searchMode?: 'precise' | 'broad' | 'overview'
+      ensureDocumentCoverage?: boolean
+      perDocumentK?: number
+    }
   ): Promise<{
     context: string
     result: RAGResult
@@ -175,8 +195,26 @@ export class RAGContextBuilder {
     }
 
     try {
-      // 执行检索
-      const result = await this.ragService.searchInSession(sessionId, query)
+      const searchMode = options?.searchMode || 'precise'
+      let result: RAGResult
+
+      if (this.enhancedRagService && this.documentService) {
+        const docIds = await this.documentService.getSessionDocumentIds(sessionId, { onlyReady: true })
+        result = await this.enhancedRagService.search(docIds, query, {
+          mode: searchMode,
+          aggregateAdjacent: true,
+          groupBySection: true,
+          includeContext: true,
+          contextSize: 1,
+          ensureDocumentCoverage: options?.ensureDocumentCoverage,
+          perDocumentK: options?.perDocumentK,
+        })
+      } else {
+        result = await this.ragService.searchInSession(sessionId, query, searchMode, {
+          ensureDocumentCoverage: options?.ensureDocumentCoverage,
+          perDocumentK: options?.perDocumentK,
+        })
+      }
 
       // 发送结果事件
       if (onEvent) {
@@ -204,7 +242,12 @@ export class RAGContextBuilder {
   async enhanceFromKnowledgeBases(
     knowledgeBaseIds: number[],
     query: string,
-    onEvent?: (event: DocumentSearchToolEvent) => void
+    onEvent?: (event: DocumentSearchToolEvent) => void,
+    options?: {
+      searchMode?: 'precise' | 'broad' | 'overview'
+      ensureDocumentCoverage?: boolean
+      perDocumentK?: number
+    }
   ): Promise<{
     context: string
     result: RAGResult
@@ -228,7 +271,11 @@ export class RAGContextBuilder {
     try {
       // 执行知识库检索
       const searchStart = Date.now()
-      const result = await this.kbService.search(knowledgeBaseIds, query)
+      const result = await this.kbService.search(
+        knowledgeBaseIds,
+        query,
+        options?.searchMode || 'precise'
+      )
       const searchTime = Date.now() - searchStart
 
       // 发送结果事件
@@ -277,28 +324,36 @@ export class RAGContextBuilder {
     let sessionResult: RAGResult | undefined
     let kbResult: RAGResult | undefined
 
-    // 检索会话文档
     const hasSessionDocs = await this.shouldEnhance(sessionId)
-    if (hasSessionDocs) {
-      try {
-        const result = await this.enhance(sessionId, query, onEvent)
-        sessionContext = result.context
-        sessionResult = result.result
-      } catch (error) {
-        // 忽略会话文档检索错误，继续知识库检索
-      }
-    }
-
-    // 检索知识库
     const hasKbs = await this.hasKnowledgeBases(knowledgeBaseIds)
-    if (hasKbs) {
-      try {
-        const result = await this.enhanceFromKnowledgeBases(knowledgeBaseIds, query, onEvent)
-        kbContext = result.context
-        kbResult = result.result
-      } catch (error) {
-        // 忽略知识库检索错误
-      }
+
+    const searchOptions = this.resolveSearchOptions(query, {
+      sessionDocCount: hasSessionDocs && this.documentService
+        ? (await this.documentService.getSessionDocumentIds(sessionId, { onlyReady: true })).length
+        : 0,
+      knowledgeBaseCount: knowledgeBaseIds.length,
+    })
+
+    const [sessionResponse, kbResponse] = await Promise.all([
+      hasSessionDocs
+        ? this.enhance(sessionId, query, onEvent, searchOptions)
+            .then((result) => ({ result }))
+            .catch(() => null)
+        : Promise.resolve(null),
+      hasKbs
+        ? this.enhanceFromKnowledgeBases(knowledgeBaseIds, query, onEvent, searchOptions)
+            .then((result) => ({ result }))
+            .catch(() => null)
+        : Promise.resolve(null),
+    ])
+
+    if (sessionResponse?.result) {
+      sessionContext = sessionResponse.result.context
+      sessionResult = sessionResponse.result.result
+    }
+    if (kbResponse?.result) {
+      kbContext = kbResponse.result.context
+      kbResult = kbResponse.result.result
     }
 
     // 组合上下文
@@ -321,6 +376,33 @@ export class RAGContextBuilder {
    */
   buildSystemPrompt(context: string, basePrompt?: string): string {
     return this.ragService.buildRAGSystemPrompt(context, basePrompt || undefined)
+  }
+
+  private resolveSearchOptions(
+    query: string,
+    counts: { sessionDocCount: number; knowledgeBaseCount: number }
+  ): {
+    searchMode: 'precise' | 'broad' | 'overview'
+    ensureDocumentCoverage?: boolean
+    perDocumentK?: number
+  } {
+    const normalized = query.trim().toLowerCase()
+    const isSummaryIntent = /总结|概述|归纳|汇总|对比|比较|差异|共同|异同|总览|overview|summary|compare|contrast|difference|differences|highlights|key points/.test(
+      normalized
+    )
+
+    if (isSummaryIntent) {
+      return {
+        searchMode: counts.sessionDocCount + counts.knowledgeBaseCount > 1 ? 'overview' : 'broad',
+        ensureDocumentCoverage: true,
+        perDocumentK: 2,
+      }
+    }
+
+    return {
+      searchMode: counts.sessionDocCount + counts.knowledgeBaseCount > 1 ? 'broad' : 'precise',
+      ensureDocumentCoverage: false,
+    }
   }
 }
 
@@ -347,4 +429,3 @@ export function ragResultToToolLogs(result: RAGResult): string {
 
   return JSON.stringify([toolLog])
 }
-

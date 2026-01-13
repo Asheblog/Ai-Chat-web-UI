@@ -17,14 +17,13 @@ import {
   estimateTokenCount,
   getSmartChunkingConfig,
   extractAnchor,
-  calculatePagePosition,
   type TextChunk,
   type PageContent,
   type PageAwareTextChunk,
 } from './chunking-service'
 import { EmbeddingService, type EmbeddingConfig } from './embedding-service'
 import { type VectorDBClient, type VectorItem } from '../../modules/document/vector'
-import type { DocumentSectionService } from './section-service'
+import type { DocumentSectionService, SectionTreeNode } from './section-service'
 import type { ChunkWithMetadata } from '../../modules/document/structure/types'
 import { createLogger } from '../../utils/logger'
 
@@ -68,6 +67,40 @@ export interface UploadResult {
   filename: string
   originalName: string
   status: 'pending' | 'processing' | 'ready' | 'error'
+}
+
+export interface DocumentTOCNode {
+  title: string
+  path: string
+  level: number
+  startPage: number | null
+  endPage: number | null
+  children?: DocumentTOCNode[]
+}
+
+export interface DocumentOverview {
+  id: number
+  name: string
+  pageCount: number
+  chunkCount: number
+  hasPageInfo: boolean
+  status: string
+  summary: string | null
+  toc: DocumentTOCNode[] | null
+  documentType: 'code' | 'table' | 'report' | 'contract' | 'general'
+}
+
+export interface DocumentContentResult {
+  documentId: number
+  documentName: string
+  pageCount: number
+  sampleMode: 'full' | 'summary' | 'headings'
+  pages: Array<{
+    pageNumber: number | null
+    content: string
+  }>
+  truncated: boolean
+  note?: string
 }
 
 export interface ProcessingProgress {
@@ -257,6 +290,8 @@ export class DocumentService {
         throw new Error('Document not found')
       }
 
+      const chunkingConfig = this.resolveChunkingConfig(document)
+
       // 获取配置
       const maxPages = this.config.maxPages ?? 200
       const embeddingConfig = this.embeddingService.getConfig()
@@ -273,6 +308,7 @@ export class DocumentService {
       let processedChars = 0
       let totalPages = 0
       let processedPages = 0
+      let hasPageInfo = false
       let wasTruncated = false
 
       // 批处理缓冲区
@@ -317,14 +353,30 @@ export class DocumentService {
 
         await this.vectorDB.insert(document.collectionName!, vectorItems)
 
-        const chunkRecords = batchChunks.map((chunk) => ({
-          documentId,
-          chunkIndex: chunk.index,
-          content: chunk.content,
-          tokenCount: estimateTokenCount(chunk.content),
-          metadata: JSON.stringify(chunk.metadata),
-          vectorId: `${documentId}_${chunk.index}`,
-        }))
+        const chunkRecords = batchChunks.map((chunk) => {
+          const pageNumber =
+            typeof chunk.metadata.pageNumber === 'number' ? chunk.metadata.pageNumber : null
+          const pageStart =
+            typeof chunk.metadata.pageStart === 'number'
+              ? chunk.metadata.pageStart
+              : pageNumber
+          const pageEnd =
+            typeof chunk.metadata.pageEnd === 'number'
+              ? chunk.metadata.pageEnd
+              : pageNumber
+
+          return {
+            documentId,
+            chunkIndex: chunk.index,
+            content: chunk.content,
+            tokenCount: estimateTokenCount(chunk.content),
+            pageNumber,
+            pageStart,
+            pageEnd,
+            metadata: JSON.stringify(chunk.metadata),
+            vectorId: `${documentId}_${chunk.index}`,
+          }
+        })
 
         try {
           await this.prisma.documentChunk.createMany({ data: chunkRecords })
@@ -340,6 +392,9 @@ export class DocumentService {
                 update: {
                   content: record.content,
                   tokenCount: record.tokenCount,
+                  pageNumber: record.pageNumber,
+                  pageStart: record.pageStart,
+                  pageEnd: record.pageEnd,
                   metadata: record.metadata,
                   vectorId: record.vectorId,
                 },
@@ -390,9 +445,11 @@ export class DocumentService {
                 metadata: content.metadata,
               }
 
+              hasPageInfo = true
               for (const chunk of iteratePageAwareChunks([pageContent], {
-                chunkSize: this.config.chunkSize,
-                chunkOverlap: this.config.chunkOverlap,
+                chunkSize: chunkingConfig.chunkSize,
+                chunkOverlap: chunkingConfig.chunkOverlap,
+                separators: chunkingConfig.separators,
               })) {
                 // 重新编排 chunk index
                 const adjustedChunk: PageAwareTextChunk = {
@@ -436,13 +493,14 @@ export class DocumentService {
         }
 
         totalPages = contents.length
-        const hasPageInfo = contents.some((c) => typeof c.metadata.pageNumber === 'number')
+        const hasPageInfoInDoc = contents.some((c) => typeof c.metadata.pageNumber === 'number')
+        hasPageInfo = hasPageInfoInDoc
         const fullText = contents.map((c) => c.pageContent).join('\n\n')
         totalChars = fullText.length
 
         await report({ stage: 'chunking', progress: 25, message: '正在分块并生成 embedding...' })
 
-        if (hasPageInfo) {
+        if (hasPageInfoInDoc) {
           const pages: PageContent[] = contents
             .filter((c) => typeof c.metadata.pageNumber === 'number')
             .map((c) => ({
@@ -452,8 +510,9 @@ export class DocumentService {
             }))
 
           for (const chunk of iteratePageAwareChunks(pages, {
-            chunkSize: this.config.chunkSize,
-            chunkOverlap: this.config.chunkOverlap,
+            chunkSize: chunkingConfig.chunkSize,
+            chunkOverlap: chunkingConfig.chunkOverlap,
+            separators: chunkingConfig.separators,
           })) {
             if (chunk.index < startIndex) {
               processedChars += chunk.content.length
@@ -472,8 +531,9 @@ export class DocumentService {
           }
         } else {
           for (const chunk of iterateTextChunks(fullText, {
-            chunkSize: this.config.chunkSize,
-            chunkOverlap: this.config.chunkOverlap,
+            chunkSize: chunkingConfig.chunkSize,
+            chunkOverlap: chunkingConfig.chunkOverlap,
+            separators: chunkingConfig.separators,
           })) {
             if (chunk.index < startIndex) {
               processedChars = (chunk.metadata.endChar as number) || processedChars
@@ -577,6 +637,7 @@ export class DocumentService {
             wordCount: Math.floor(totalChars / 5), // 估算
             truncated: wasTruncated,
             maxPagesLimit: wasTruncated ? maxPages : undefined,
+            hasPageInfo,
           }),
         },
       })
@@ -645,6 +706,209 @@ export class DocumentService {
     })
 
     return sessionDocs.map((sd) => sd.document)
+  }
+
+  /**
+   * 获取会话文档概览（包含摘要与目录）
+   */
+  async getSessionDocumentOverview(sessionId: number): Promise<{
+    documents: DocumentOverview[]
+  }> {
+    const sessionDocs = await this.prisma.sessionDocument.findMany({
+      where: { sessionId },
+      include: { document: true },
+    })
+
+    const documents: DocumentOverview[] = []
+
+    for (const sd of sessionDocs) {
+      const doc = sd.document
+      const metadata = this.safeParseMetadata(doc.metadata)
+      const pageCount =
+        typeof metadata.pageCount === 'number' && metadata.pageCount > 0
+          ? metadata.pageCount
+          : await this.getMaxPageNumber(doc.id)
+      const hasPageInfo =
+        typeof metadata.hasPageInfo === 'boolean'
+          ? metadata.hasPageInfo
+          : await this.hasPageInfo(doc.id)
+
+      const summary = await this.buildDocumentSummary(doc.id)
+      const toc = await this.buildDocumentTOC(doc.id)
+
+      documents.push({
+        id: doc.id,
+        name: doc.originalName,
+        pageCount: pageCount || 1,
+        chunkCount: doc.chunkCount || 0,
+        hasPageInfo,
+        status: doc.status,
+        summary,
+        toc,
+        documentType: this.inferDocumentType(doc.originalName, doc.mimeType),
+      })
+    }
+
+    return { documents }
+  }
+
+  /**
+   * 获取会话文档ID列表（可选择仅 ready）
+   */
+  async getSessionDocumentIds(
+    sessionId: number,
+    options: { onlyReady?: boolean } = {}
+  ): Promise<number[]> {
+    const sessionDocs = await this.prisma.sessionDocument.findMany({
+      where: {
+        sessionId,
+        ...(options.onlyReady
+          ? {
+              document: { status: 'ready' },
+            }
+          : {}),
+      },
+      select: { documentId: true },
+    })
+    return sessionDocs.map((sd) => sd.documentId)
+  }
+
+  /**
+   * 检查会话是否有可用文档
+   */
+  async hasSessionDocuments(sessionId: number): Promise<boolean> {
+    const count = await this.prisma.sessionDocument.count({
+      where: {
+        sessionId,
+        document: { status: 'ready' },
+      },
+    })
+    return count > 0
+  }
+
+  /**
+   * 获取文档内容（按页/范围/页码列表）
+   */
+  async getDocumentContent(
+    documentId: number,
+    options: {
+      pageNumber?: number
+      startPage?: number
+      endPage?: number
+      pages?: number[]
+      sampleMode?: 'full' | 'summary' | 'headings'
+    } = {}
+  ): Promise<DocumentContentResult | null> {
+    const document = await this.prisma.document.findUnique({
+      where: { id: documentId },
+    })
+
+    if (!document) return null
+
+    const metadata = this.safeParseMetadata(document.metadata)
+    const pageCount =
+      typeof metadata.pageCount === 'number' && metadata.pageCount > 0
+        ? metadata.pageCount
+        : await this.getMaxPageNumber(documentId)
+    const sampleMode = options.sampleMode || 'full'
+
+    const maxRange = 10
+    const requestedPages =
+      Array.isArray(options.pages) && options.pages.length > 0
+        ? options.pages.filter((p) => Number.isFinite(p) && p > 0).slice(0, maxRange)
+        : null
+
+    const resolvedRange =
+      options.startPage && options.endPage && options.startPage > 0 && options.endPage >= options.startPage
+        ? {
+            start: options.startPage,
+            end: Math.min(options.endPage, options.startPage + maxRange - 1),
+          }
+        : null
+
+    const pageNumber = options.pageNumber && options.pageNumber > 0 ? options.pageNumber : null
+
+    let chunks: Array<{ content: string; pageNumber: number | null }> = []
+
+    if (pageNumber) {
+      chunks = await this.fetchChunksByPage(documentId, [pageNumber])
+    } else if (requestedPages) {
+      chunks = await this.fetchChunksByPage(documentId, requestedPages)
+    } else if (resolvedRange) {
+      const rangePages = Array.from(
+        { length: resolvedRange.end - resolvedRange.start + 1 },
+        (_, idx) => resolvedRange.start + idx
+      )
+      chunks = await this.fetchChunksByPage(documentId, rangePages)
+    }
+
+    if (chunks.length === 0) {
+      chunks = await this.fetchChunksByMetadataFallback(documentId, {
+        pageNumber,
+        pages: requestedPages,
+        range: resolvedRange,
+      })
+    }
+
+    if (chunks.length === 0) {
+      const previewChunks = await this.prisma.documentChunk.findMany({
+        where: { documentId },
+        orderBy: { chunkIndex: 'asc' },
+        take: 8,
+      })
+      chunks = previewChunks.map((chunk: any) => ({
+        content: chunk.content || '',
+        pageNumber: null,
+      }))
+    }
+
+    const pageMap = new Map<number | null, string[]>()
+    for (const chunk of chunks) {
+      const pageKey = chunk.pageNumber ?? null
+      if (!pageMap.has(pageKey)) {
+        pageMap.set(pageKey, [])
+      }
+      pageMap.get(pageKey)!.push(chunk.content)
+    }
+
+    const orderedPages = Array.from(pageMap.entries()).sort((a, b) => {
+      if (a[0] == null && b[0] == null) return 0
+      if (a[0] == null) return 1
+      if (b[0] == null) return -1
+      return a[0] - b[0]
+    })
+
+    const MAX_CHARS = 50000
+    let totalChars = 0
+    let truncated = false
+
+    const pages = orderedPages.map(([pageNum, contents]) => {
+      let combined = contents.join('\n')
+      if (totalChars + combined.length > MAX_CHARS) {
+        combined = combined.slice(0, Math.max(0, MAX_CHARS - totalChars))
+        truncated = true
+      }
+      totalChars += combined.length
+      return {
+        pageNumber: pageNum,
+        content: this.applySampleMode(combined, sampleMode),
+      }
+    })
+
+    const note =
+      resolvedRange && options.endPage && options.endPage > resolvedRange.end
+        ? `由于内容限制，仅返回第 ${resolvedRange.start}-${resolvedRange.end} 页`
+        : undefined
+
+    return {
+      documentId: document.id,
+      documentName: document.originalName,
+      pageCount: pageCount || 1,
+      sampleMode,
+      pages,
+      truncated,
+      note,
+    }
   }
 
   /**
@@ -791,6 +1055,185 @@ export class DocumentService {
     }
 
     return { deleted, failed }
+  }
+
+  private resolveChunkingConfig(document: Document): {
+    chunkSize: number
+    chunkOverlap: number
+    separators?: string[]
+  } {
+    const smartConfig = getSmartChunkingConfig(document.mimeType, document.originalName)
+    const useSmartDefaults = this.config.chunkSize === 1500 && this.config.chunkOverlap === 100
+
+    return {
+      chunkSize: useSmartDefaults ? smartConfig.chunkSize : this.config.chunkSize,
+      chunkOverlap: useSmartDefaults ? smartConfig.chunkOverlap : this.config.chunkOverlap,
+      separators: useSmartDefaults ? smartConfig.separators : undefined,
+    }
+  }
+
+  private safeParseMetadata(raw: string | null | undefined): Record<string, unknown> {
+    if (!raw) return {}
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return {}
+    }
+  }
+
+  private async getMaxPageNumber(documentId: number): Promise<number> {
+    const result = await this.prisma.documentChunk.aggregate({
+      where: {
+        documentId,
+        pageNumber: { not: null },
+      },
+      _max: { pageNumber: true },
+    })
+    return result._max?.pageNumber || 1
+  }
+
+  private async hasPageInfo(documentId: number): Promise<boolean> {
+    const count = await this.prisma.documentChunk.count({
+      where: {
+        documentId,
+        pageNumber: { not: null },
+      },
+    })
+    return count > 0
+  }
+
+  private inferDocumentType(
+    filename: string,
+    mimeType: string
+  ): 'code' | 'table' | 'report' | 'contract' | 'general' {
+    const ext = filename.split('.').pop()?.toLowerCase() || ''
+    if (['js', 'ts', 'py', 'java', 'css', 'html', 'json', 'jsx', 'tsx', 'md'].includes(ext)) {
+      return 'code'
+    }
+    if (['csv'].includes(ext) || mimeType.includes('csv')) {
+      return 'table'
+    }
+    if (filename.toLowerCase().includes('合同') || filename.toLowerCase().includes('contract')) {
+      return 'contract'
+    }
+    if (mimeType === 'application/pdf') {
+      return 'report'
+    }
+    return 'general'
+  }
+
+  private async buildDocumentSummary(documentId: number): Promise<string | null> {
+    const chunk = await this.prisma.documentChunk.findFirst({
+      where: { documentId },
+      orderBy: { chunkIndex: 'asc' },
+    })
+
+    if (!chunk?.content) return null
+    const trimmed = chunk.content.trim()
+    if (!trimmed) return null
+    return extractAnchor(trimmed, 200)
+  }
+
+  private async buildDocumentTOC(
+    documentId: number
+  ): Promise<DocumentOverview['toc']> {
+    if (!this.sectionService) return null
+    const tocTree = await this.sectionService.getDocumentTOC(documentId, 3)
+    if (!tocTree || tocTree.length === 0) return null
+    return this.simplifyTOC(tocTree)
+  }
+
+  private simplifyTOC(nodes: SectionTreeNode[]): DocumentTOCNode[] {
+    return nodes.map((node) => ({
+      title: node.title,
+      path: node.path,
+      level: node.level,
+      startPage: node.startPage ?? null,
+      endPage: node.endPage ?? null,
+      children: node.children && node.children.length > 0 ? this.simplifyTOC(node.children) : undefined,
+    }))
+  }
+
+  private applySampleMode(
+    content: string,
+    sampleMode: 'full' | 'summary' | 'headings'
+  ): string {
+    if (sampleMode === 'full') return content
+    if (sampleMode === 'summary') {
+      const firstPara = content.split('\n\n')[0] || content
+      return firstPara.substring(0, 300) + (firstPara.length > 300 ? '...' : '')
+    }
+    if (sampleMode === 'headings') {
+      const lines = content.split('\n')
+      const headings = lines.filter((line) => {
+        const trimmed = line.trim()
+        if (!trimmed) return false
+        if (trimmed.length < 60 && trimmed.length > 2) return true
+        if (/^[0-9一二三四五六七八九十]+[.、)）]/.test(trimmed)) return true
+        return false
+      })
+      return headings.slice(0, 10).join('\n') || content.substring(0, 200)
+    }
+    return content
+  }
+
+  private async fetchChunksByPage(
+    documentId: number,
+    pages: number[]
+  ): Promise<Array<{ content: string; pageNumber: number | null }>> {
+    if (!pages || pages.length === 0) return []
+    const rows = await this.prisma.documentChunk.findMany({
+      where: {
+        documentId,
+        pageNumber: { in: pages },
+      },
+      orderBy: [{ pageNumber: 'asc' }, { chunkIndex: 'asc' }],
+    })
+    return rows.map((row: any) => ({
+      content: row.content || '',
+      pageNumber: typeof row.pageNumber === 'number' ? row.pageNumber : null,
+    }))
+  }
+
+  private async fetchChunksByMetadataFallback(
+    documentId: number,
+    options: {
+      pageNumber?: number | null
+      pages?: number[] | null
+      range?: { start: number; end: number } | null
+    }
+  ): Promise<Array<{ content: string; pageNumber: number | null }>> {
+    const targetPages = new Set<number>()
+    if (options.pageNumber) {
+      targetPages.add(options.pageNumber)
+    }
+    if (options.pages && options.pages.length > 0) {
+      for (const page of options.pages) targetPages.add(page)
+    }
+    if (options.range) {
+      for (let p = options.range.start; p <= options.range.end; p += 1) {
+        targetPages.add(p)
+      }
+    }
+    if (targetPages.size === 0) return []
+
+    const chunks = await this.prisma.documentChunk.findMany({
+      where: { documentId },
+      orderBy: { chunkIndex: 'asc' },
+    })
+
+    const filtered = chunks
+      .map((chunk: any) => {
+        const meta = this.safeParseMetadata(chunk.metadata)
+        const pageNumber = typeof meta.pageNumber === 'number' ? meta.pageNumber : null
+        return {
+          content: chunk.content || '',
+          pageNumber,
+        }
+      })
+      .filter((chunk: any) => chunk.pageNumber != null && targetPages.has(chunk.pageNumber))
+
+    return filtered
   }
 
   /**

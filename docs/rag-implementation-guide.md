@@ -60,6 +60,13 @@
     - 统一初始化入口
     - 文件: `packages/backend/src/services/document-services-factory.ts`
 
+### Phase 3.5: 工具接口升级（破坏性，无迁移、直接替换）
+
+- **会话文档工具**: `document_list`, `document_search`, `document_get_content`, `document_get_toc`, `document_get_section`
+- **知识库工具**: `kb_list`, `kb_get_documents`, `kb_search`, `kb_get_document_content`, `kb_get_toc`, `kb_get_section`
+- **已移除旧工具**: `document_get_outline`, `document_get_page`, `document_get_page_range`, `kb_search_v2`
+- **迁移策略**: 无迁移、直接替换（工具调用按新接口执行）
+
 ### Phase 4: 前端
 
 12. **文档上传 Hook**
@@ -98,9 +105,10 @@ npx prisma migrate dev
 npx prisma migrate deploy
 ```
 
-或者直接执行 SQL:
+或者直接执行 SQL（包含新文档分页字段迁移）:
 ```bash
 sqlite3 prisma/data/app.db < prisma/migrations/20251211090000_add_document_rag_models/migration.sql
+sqlite3 prisma/data/app.db < prisma/migrations/20260202090000_add_document_chunk_page_fields/migration.sql
 ```
 
 ### 3. 配置环境变量

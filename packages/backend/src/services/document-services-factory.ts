@@ -13,6 +13,7 @@ import { createVectorDBClient, getVectorDBClient } from '../modules/document/vec
 import { EmbeddingService, type EmbeddingConfig } from './document/embedding-service'
 import { DocumentService, type DocumentServiceConfig } from './document/document-service'
 import { RAGService, type RAGConfig } from './document/rag-service'
+import { EnhancedRAGService } from './document/enhanced-rag-service'
 import { DocumentSectionService } from './document/section-service'
 import { CleanupScheduler, type CleanupConfig } from './cleanup/cleanup-scheduler'
 
@@ -47,6 +48,7 @@ export interface DocumentServices {
   embeddingService: EmbeddingService
   documentService: DocumentService
   ragService: RAGService
+  enhancedRagService: EnhancedRAGService
   sectionService: DocumentSectionService
   cleanupScheduler: CleanupScheduler
 }
@@ -146,6 +148,13 @@ export function createDocumentServices(
     fullConfig.rag
   )
 
+  const enhancedRagService = new EnhancedRAGService(
+    prisma,
+    vectorDB,
+    embeddingService,
+    fullConfig.rag
+  )
+
   // 创建章节服务
   const sectionService = new DocumentSectionService(prisma)
 
@@ -163,6 +172,7 @@ export function createDocumentServices(
     embeddingService,
     documentService,
     ragService,
+    enhancedRagService,
     sectionService,
     cleanupScheduler,
   }

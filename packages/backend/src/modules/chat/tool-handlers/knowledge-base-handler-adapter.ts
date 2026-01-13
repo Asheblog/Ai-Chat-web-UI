@@ -40,7 +40,10 @@ export class KnowledgeBaseToolHandlerAdapter implements IToolHandler {
         (config.sectionService as DocumentSectionService | null | undefined) ||
         docServices?.sectionService ||
         null
-      const enhancedRagService = (config.enhancedRagService as EnhancedRAGService | null | undefined) || null
+      const enhancedRagService =
+        (config.enhancedRagService as EnhancedRAGService | null | undefined) ||
+        docServices?.enhancedRagService ||
+        null
       this.legacyHandler = new LegacyKBToolHandler(
         new KnowledgeBaseService(prisma),
         config.ragService as RAGService,

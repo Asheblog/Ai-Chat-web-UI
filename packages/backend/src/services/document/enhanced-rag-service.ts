@@ -35,13 +35,15 @@ export interface EnhancedRAGResult extends RAGResult {
 }
 
 export interface EnhancedSearchOptions {
-  mode: 'precise' | 'broad' | 'section'
+  mode: 'precise' | 'broad' | 'section' | 'overview'
   aggregateAdjacent: boolean     // 合并相邻chunk
   groupBySection: boolean        // 按章节分组
   includeContext: boolean        // 包含上下文
   contextSize: number            // 上下文大小（chunk数）
   topK?: number
   relevanceThreshold?: number
+  ensureDocumentCoverage?: boolean
+  perDocumentK?: number
 }
 
 const DEFAULT_OPTIONS: EnhancedSearchOptions = {
@@ -50,6 +52,7 @@ const DEFAULT_OPTIONS: EnhancedSearchOptions = {
   groupBySection: true,
   includeContext: true,
   contextSize: 1,
+  ensureDocumentCoverage: false,
 }
 
 /**
@@ -141,6 +144,77 @@ function groupHitsBySection(
   return groups
 }
 
+/**
+ * 概览采样：按文档位置采样
+ */
+function buildOverviewEnhancedHitsByDocument(
+  hits: EnhancedRAGHit[]
+): EnhancedRAGHit[] {
+  const byDocument = new Map<number, EnhancedRAGHit[]>()
+  for (const hit of hits) {
+    const list = byDocument.get(hit.documentId) || []
+    list.push(hit)
+    byDocument.set(hit.documentId, list)
+  }
+
+  const sampled: EnhancedRAGHit[] = []
+  for (const docHits of byDocument.values()) {
+    const topGroup = docHits.filter((h) => h.metadata.pagePosition === 'top').slice(0, 2)
+    const middleGroup = docHits.filter((h) => h.metadata.pagePosition === 'middle').slice(0, 2)
+    const bottomGroup = docHits.filter((h) => h.metadata.pagePosition === 'bottom').slice(0, 1)
+    sampled.push(...topGroup, ...middleGroup, ...bottomGroup)
+  }
+
+  return sampled.sort((a, b) => b.score - a.score)
+}
+
+/**
+ * 按文档均衡采样
+ */
+function balanceEnhancedHitsByDocument(
+  hits: EnhancedRAGHit[],
+  topK: number,
+  perDocumentK?: number
+): EnhancedRAGHit[] {
+  const byDocument = new Map<number, EnhancedRAGHit[]>()
+  for (const hit of hits) {
+    const list = byDocument.get(hit.documentId) || []
+    list.push(hit)
+    byDocument.set(hit.documentId, list)
+  }
+
+  const docCount = byDocument.size
+  if (docCount === 0) return []
+  const perDoc = Math.max(1, perDocumentK || Math.min(2, Math.ceil(topK / docCount)))
+
+  const selected: EnhancedRAGHit[] = []
+  const selectedKeys = new Set<string>()
+
+  for (const docHits of byDocument.values()) {
+    const sorted = [...docHits].sort((a, b) => b.score - a.score)
+    for (const hit of sorted.slice(0, perDoc)) {
+      const key = `${hit.documentId}:${hit.chunkIndex}`
+      if (!selectedKeys.has(key)) {
+        selected.push(hit)
+        selectedKeys.add(key)
+      }
+    }
+  }
+
+  if (selected.length >= topK) {
+    return selected.slice(0, topK)
+  }
+
+  for (const hit of hits) {
+    const key = `${hit.documentId}:${hit.chunkIndex}`
+    if (selectedKeys.has(key)) continue
+    selected.push(hit)
+    if (selected.length >= topK) break
+  }
+
+  return selected
+}
+
 export class EnhancedRAGService {
   private prisma: any  // 使用 any 以兼容 Prisma 生成前后
   private vectorDB: VectorDBClient
@@ -205,6 +279,10 @@ export class EnhancedRAGService {
         relevanceThreshold = Math.min(relevanceThreshold, 0.4)
         topK = Math.max(topK, 15)
         break
+      case 'overview':
+        relevanceThreshold = Math.min(relevanceThreshold, 0.25)
+        topK = Math.max(topK, 10)
+        break
     }
     
     // 生成查询 embedding
@@ -260,13 +338,25 @@ export class EnhancedRAGService {
           }
         }
         
+        const pageNumber = (result.metadata.pageNumber as number) || 0
+        const totalPages = (result.metadata.totalPages as number) || 1
+        let pagePosition: 'top' | 'middle' | 'bottom' = 'middle'
+        if (pageNumber <= Math.ceil(totalPages * 0.2)) {
+          pagePosition = 'top'
+        } else if (pageNumber >= Math.ceil(totalPages * 0.8)) {
+          pagePosition = 'bottom'
+        }
+
         allHits.push({
           documentId: doc.id,
           documentName: doc.originalName,
           chunkIndex,
           content: result.text,
           score: result.score,
-          metadata: result.metadata,
+          metadata: {
+            ...result.metadata,
+            pagePosition,
+          },
           section: sectionInfo,
         })
       }
@@ -283,33 +373,45 @@ export class EnhancedRAGService {
       processedHits = aggregateAdjacentChunks(allHits)
       mergedGroups = originalHits - processedHits.length
     }
-    
-    // 取 topK
-    processedHits = processedHits.slice(0, topK)
-    
+
+    const ensureCoverage =
+      opts.ensureDocumentCoverage ?? (opts.mode === 'overview' && documentIds.length > 1)
+    let selectedHits = processedHits
+
+    if (opts.mode === 'overview') {
+      const overviewHits = buildOverviewEnhancedHitsByDocument(processedHits)
+      selectedHits = ensureCoverage
+        ? balanceEnhancedHitsByDocument(overviewHits, topK, opts.perDocumentK)
+        : overviewHits.slice(0, topK)
+    } else if (ensureCoverage) {
+      selectedHits = balanceEnhancedHitsByDocument(processedHits, topK, opts.perDocumentK)
+    } else {
+      selectedHits = processedHits.slice(0, topK)
+    }
+
     // 添加上下文
     if (opts.includeContext && opts.contextSize > 0) {
-      processedHits = await this.addContext(processedHits, opts.contextSize)
+      selectedHits = await this.addContext(selectedHits, opts.contextSize)
     }
     
     // 按章节分组
     let groupedBySection: Map<string, EnhancedRAGHit[]> | undefined
     if (opts.groupBySection) {
-      groupedBySection = groupHitsBySection(processedHits)
+      groupedBySection = groupHitsBySection(selectedHits)
     }
     
     // 构建上下文
-    const context = this.buildEnhancedContext(processedHits, groupedBySection)
+    const context = this.buildEnhancedContext(selectedHits, groupedBySection)
     
     return {
-      hits: processedHits,
+      hits: selectedHits,
       context,
       totalHits: originalHits,
       queryTime: Date.now() - startTime,
       groupedBySection,
       aggregationStats: {
         originalHits,
-        afterAggregation: processedHits.length,
+        afterAggregation: selectedHits.length,
         mergedGroups,
       },
     }
@@ -407,8 +509,13 @@ export class EnhancedRAGService {
         const tokens = this.estimateTokens(content)
         if (totalTokens + tokens > this.config.maxContextTokens) break
         
+        const pageNumber =
+          typeof (hit.metadata as any)?.pageNumber === 'number'
+            ? (hit.metadata as any).pageNumber
+            : null
+        const pageLabel = pageNumber ? `, 页码: ${pageNumber}` : ''
         const sectionInfo = hit.section ? ` (${hit.section.title})` : ''
-        parts.push(`[来源: ${hit.documentName}${sectionInfo}]\n${content}`)
+        parts.push(`[来源: ${hit.documentName}${sectionInfo}${pageLabel}]\n${content}`)
         totalTokens += tokens
       }
     }

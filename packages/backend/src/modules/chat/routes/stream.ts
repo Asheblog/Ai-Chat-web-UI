@@ -270,7 +270,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
         const docServices = getDocumentServices();
         if (docServices) {
           sessionRagService = docServices.ragService;
-          const ragContextBuilder = new RAGContextBuilder(docServices.ragService);
+          const ragContextBuilder = new RAGContextBuilder(docServices.ragService, {
+            documentService: docServices.documentService,
+            enhancedRagService: docServices.enhancedRagService,
+          });
 
           // 检查会话文档
           hasSessionDocuments = await ragContextBuilder.shouldEnhance(sessionId);

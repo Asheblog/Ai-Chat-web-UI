@@ -53,8 +53,16 @@ function buildToolSummary(toolEvents?: ToolEvent[]) {
   const describeTool = (tool: string) => {
     if (tool === 'web_search') return '联网搜索'
     if (tool === 'python_runner') return 'Python 工具'
+    if (tool === 'document_list') return '文档列表'
     if (tool === 'document_search') return '文档搜索'
+    if (tool === 'document_get_content') return '文档内容'
+    if (tool === 'document_get_toc') return '文档目录'
+    if (tool === 'document_get_section') return '文档章节'
     if (tool === 'kb_search') return '知识库搜索'
+    if (tool === 'kb_get_documents') return '知识库文档列表'
+    if (tool === 'kb_get_document_content') return '知识库文档内容'
+    if (tool === 'kb_get_toc') return '知识库目录'
+    if (tool === 'kb_get_section') return '知识库章节'
     return tool
   }
 

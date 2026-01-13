@@ -1,15 +1,12 @@
 /**
- * 文档工具模块
- * 提供AI可调用的文档检索和查看工具
- * 
- * 改进说明：
- * 1. 增强工具描述，添加使用场景和最佳实践
- * 2. 支持自适应检索策略 (search_mode)
- * 3. 支持稀疏页码批量获取 (pages 参数)
- * 4. 增强错误反馈，提供替代建议
+ * 会话文档工具模块
+ * 提供 AI 可调用的文档检索与浏览工具（按文档 ID 精确定位）
  */
 
 import type { RAGService } from '../../services/document/rag-service'
+import type { EnhancedRAGService } from '../../services/document/enhanced-rag-service'
+import type { DocumentService } from '../../services/document/document-service'
+import type { DocumentSectionService } from '../../services/document/section-service'
 
 /**
  * 文档工具定义（OpenAI function calling 格式）
@@ -18,22 +15,21 @@ export const documentToolDefinitions = [
   {
     type: 'function',
     function: {
-      name: 'document_get_outline',
-      description: `获取当前会话上传文档的概要信息，包括文档名称、总页数、分块数量、内容摘要和目录结构。
+      name: 'document_list',
+      description: `列出当前会话已附加的文档概览，返回文档 ID、页数、摘要、目录等信息。
 
 **使用场景**:
-- ✅ 首次分析文档时，先调用此工具了解文档结构
-- ✅ 用户问"这个文档讲什么"、"文档有多长"
-- ✅ 需要决定使用 search 还是 get_page_range 时
+- ✅ 多文档总结前先识别文档与结构
+- ✅ 用户问"有哪些文档"、"文档讲什么"
+- ✅ 决定使用 document_search 还是 document_get_content 时
 
 **返回信息**:
-- 文档名称、页数、分块数量
-- 内容摘要（基于首尾内容生成）
-- 目录结构（如果有章节标题）
-- 文档类型（代码/表格/报告等）
+- 文档 ID、名称、页数、分块数量、状态
+- 摘要与目录结构（如有）
+- 文档类型（代码/表格/报告/合同/通用）
 
 **最佳实践**:
-在回答任何文档相关问题前，应先调用此工具了解文档全貌。`,
+在执行任何文档操作前先调用此工具获取文档 ID。`,
       parameters: {
         type: 'object',
         properties: {},
@@ -44,56 +40,24 @@ export const documentToolDefinitions = [
   {
     type: 'function',
     function: {
-      name: 'document_get_page',
-      description: `获取文档指定页码的完整内容。
-
-**使用场景**:
-- ✅ 用户明确问"第X页是什么内容"
-- ✅ search 返回某页有相关内容，需要查看完整上下文
-- ✅ 需要精读特定页面
-
-**不适用场景**:
-- ❌ 模糊问题如"文档中关于XX的内容" → 应使用 document_search
-- ❌ 需要浏览多页 → 应使用 document_get_page_range
-
-**返回信息**:
-- 页面完整文本内容
-- 页面位置标记（便于引用）`,
-      parameters: {
-        type: 'object',
-        properties: {
-          page_number: {
-            type: 'integer',
-            description: '要获取的页码（从1开始）',
-          },
-        },
-        required: ['page_number'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'document_search',
-      description: `在文档中语义搜索与问题相关的内容片段。
+      description: `在指定文档中进行语义搜索并返回相关片段。
 
 **使用场景**:
-- ✅ "文档中关于XX的部分"
-- ✅ "合同里的付款条款是什么"
-- ✅ "总结文档中所有关于YYY的内容"
-
-**不适用场景**:
-- ❌ "第5页写了什么" → 应使用 document_get_page
-- ❌ "文档开头说了什么" → 应使用 document_get_page(1)
+- ✅ 多文档总结/对比（可传多个 document_ids）
+- ✅ 查找某个问题/条款/主题
+- ✅ 从章节级内容定位关键信息
 
 **搜索模式 (search_mode)**:
-- "precise": 精确匹配，返回少量高相关结果（适合找具体条款）
-- "broad": 广泛检索，返回更多结果（适合总结归纳）
-- "overview": 概览采样，从文档不同位置采样（适合快速了解）
+- "precise": 精确匹配，少量高相关结果
+- "broad": 广泛检索，适合归纳
+- "overview": 概览采样，适合多文档总结
+- "section": 章节级检索，返回章节列表
 
 **最佳实践**:
-1. 长文档(>20页)优先用 search 定位，再用 get_page 精读
-2. 短文档(<5页)可直接用 get_page_range 全量阅读`,
+1. 多文档总结优先用 overview + per_document_k
+2. 需要完整上下文可开启 include_context
+3. 章节定位用 section 模式`,
       parameters: {
         type: 'object',
         properties: {
@@ -101,16 +65,35 @@ export const documentToolDefinitions = [
             type: 'string',
             description: '搜索查询，使用自然语言描述要查找的内容',
           },
+          document_ids: {
+            type: 'array',
+            items: { type: 'integer' },
+            description: '可选，指定文档 ID 列表（默认搜索会话全部文档）',
+          },
+          search_mode: {
+            type: 'string',
+            enum: ['precise', 'broad', 'overview', 'section'],
+            description: '搜索模式：precise/broad/overview/section',
+          },
           top_k: {
             type: 'integer',
             minimum: 1,
             maximum: 20,
-            description: '返回的结果数量，默认根据 search_mode 自动决定',
+            description: '返回结果数量，默认按搜索模式自动决定',
           },
-          search_mode: {
-            type: 'string',
-            enum: ['precise', 'broad', 'overview'],
-            description: '搜索模式：precise(精确,默认)、broad(广泛)、overview(概览采样)',
+          per_document_k: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 5,
+            description: '多文档均衡采样时，每个文档保留的结果数',
+          },
+          aggregate_adjacent: {
+            type: 'boolean',
+            description: '是否合并相邻 chunk，默认 true',
+          },
+          include_context: {
+            type: 'boolean',
+            description: '是否携带前后上下文，默认 true',
           },
         },
         required: ['query'],
@@ -120,61 +103,133 @@ export const documentToolDefinitions = [
   {
     type: 'function',
     function: {
-      name: 'document_get_page_range',
-      description: `获取文档指定页码范围或多个指定页码的内容。
+      name: 'document_get_content',
+      description: `获取指定文档的页面内容，支持单页、范围或离散页。
 
 **使用场景**:
-- ✅ "第5-10页的内容"
-- ✅ 需要阅读连续多页
-- ✅ 需要采样查看多个不连续的页面（使用 pages 参数）
+- ✅ 用户问"第X页是什么"或"第X-Y页"
+- ✅ 需要精读某个页面/区间
 
 **参数说明**:
-- 使用 start_page + end_page 获取连续页面
-- 使用 pages 数组获取不连续的特定页面（如 [1, 5, 10, 15]）
-- 使用 sample_mode 控制返回内容详细程度
+- page_number: 获取单页
+- start_page + end_page: 获取连续页面
+- pages: 获取不连续页码列表
+- sample_mode: 控制返回内容详细程度
 
 **采样模式 (sample_mode)**:
-- "full": 返回完整内容（默认）
-- "summary": 只返回每页首段，适合快速浏览
-- "headings": 只返回标题和关键句
+- "full": 完整内容（默认）
+- "summary": 每页首段
+- "headings": 标题与关键句
 
-**限制**: 单次最多返回10页完整内容，超出部分需分批获取`,
+**限制**: 单次最多返回10页完整内容`,
       parameters: {
         type: 'object',
         properties: {
+          document_id: {
+            type: 'integer',
+            description: '文档 ID（来自 document_list）',
+          },
+          page_number: {
+            type: 'integer',
+            description: '可选，指定页码（从1开始）',
+          },
           start_page: {
             type: 'integer',
-            description: '起始页码（从1开始），与 end_page 配合使用',
+            description: '可选，起始页码',
           },
           end_page: {
             type: 'integer',
-            description: '结束页码，与 start_page 配合使用',
+            description: '可选，结束页码',
           },
           pages: {
             type: 'array',
             items: { type: 'integer' },
-            description: '指定页码列表（如 [1, 5, 10]），用于获取不连续的多个页面',
+            description: '指定页码列表（如 [1, 5, 10]）',
           },
           sample_mode: {
             type: 'string',
             enum: ['full', 'summary', 'headings'],
-            description: '采样模式：full(完整内容,默认)、summary(每页首段)、headings(仅标题)',
+            description: '采样模式：full/summary/headings',
           },
         },
-        required: [],
+        required: ['document_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'document_get_toc',
+      description: `获取文档目录结构（章节大纲）。
+
+**使用场景**:
+- ✅ 了解文档结构与章节分布
+- ✅ 章节级阅读与定位
+
+**最佳实践**:
+先用此工具获取目录，再用 document_get_section 获取章节内容。`,
+      parameters: {
+        type: 'object',
+        properties: {
+          document_id: {
+            type: 'integer',
+            description: '文档 ID（来自 document_list）',
+          },
+          max_level: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 5,
+            description: '最大层级，默认 3',
+          },
+        },
+        required: ['document_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'document_get_section',
+      description: `获取指定章节的完整内容。
+
+**使用场景**:
+- ✅ 已知章节路径（如 "1.2"）
+- ✅ 章节标题搜索后精读
+
+**参数说明**:
+- section_path: 章节路径或标题关键词
+- include_children: 是否包含子章节，默认 true`,
+      parameters: {
+        type: 'object',
+        properties: {
+          document_id: {
+            type: 'integer',
+            description: '文档 ID',
+          },
+          section_path: {
+            type: 'string',
+            description: '章节路径或标题关键词',
+          },
+          include_children: {
+            type: 'boolean',
+            description: '是否包含子章节内容，默认 true',
+          },
+        },
+        required: ['document_id', 'section_path'],
       },
     },
   },
 ]
 
 /**
- * 工具名称集合（用于检查是否为文档工具）
+ * 工具名称集合
  */
 export const documentToolNames = new Set([
-  'document_get_outline',
-  'document_get_page',
+  'document_list',
   'document_search',
-  'document_get_page_range',
+  'document_get_content',
+  'document_get_toc',
+  'document_get_section',
 ])
 
 /**
@@ -182,16 +237,25 @@ export const documentToolNames = new Set([
  */
 export class DocumentToolHandler {
   private ragService: RAGService
+  private documentService: DocumentService
+  private enhancedRagService: EnhancedRAGService | null
+  private sectionService: DocumentSectionService | null
   private sessionId: number
 
-  constructor(ragService: RAGService, sessionId: number) {
+  constructor(
+    ragService: RAGService,
+    documentService: DocumentService,
+    sessionId: number,
+    enhancedRagService?: EnhancedRAGService | null,
+    sectionService?: DocumentSectionService | null
+  ) {
     this.ragService = ragService
+    this.documentService = documentService
     this.sessionId = sessionId
+    this.enhancedRagService = enhancedRagService || null
+    this.sectionService = sectionService || null
   }
 
-  /**
-   * 处理文档工具调用
-   */
   async handleToolCall(
     toolName: string,
     args: Record<string, unknown>
@@ -202,41 +266,20 @@ export class DocumentToolHandler {
   }> {
     try {
       switch (toolName) {
-        case 'document_get_outline':
-          return await this.handleGetOutline()
+        case 'document_list':
+          return await this.handleList()
 
-        case 'document_get_page':
-          return await this.handleGetPage(args.page_number as number)
+        case 'document_search':
+          return await this.handleSearch(args)
 
-        case 'document_search': {
-          const searchMode = (args.search_mode as string) || 'precise'
-          // 根据搜索模式决定默认 topK
-          let defaultTopK = 5
-          if (searchMode === 'broad') defaultTopK = 10
-          if (searchMode === 'overview') defaultTopK = 8
-          const topK = (args.top_k as number) || defaultTopK
-          return await this.handleSearch(
-            args.query as string,
-            topK,
-            searchMode as 'precise' | 'broad' | 'overview'
-          )
-        }
+        case 'document_get_content':
+          return await this.handleGetContent(args)
 
-        case 'document_get_page_range': {
-          const pages = args.pages as number[] | undefined
-          const sampleMode = (args.sample_mode as string) || 'full'
-          if (pages && Array.isArray(pages) && pages.length > 0) {
-            return await this.handleGetPages(
-              pages,
-              sampleMode as 'full' | 'summary' | 'headings'
-            )
-          }
-          return await this.handleGetPageRange(
-            args.start_page as number,
-            args.end_page as number,
-            sampleMode as 'full' | 'summary' | 'headings'
-          )
-        }
+        case 'document_get_toc':
+          return await this.handleGetTOC(args)
+
+        case 'document_get_section':
+          return await this.handleGetSection(args)
 
         default:
           return {
@@ -254,161 +297,122 @@ export class DocumentToolHandler {
     }
   }
 
-  /**
-   * 处理获取文档概要（增强版）
-   * 返回摘要、目录结构和文档类型等信息
-   */
-  private async handleGetOutline(): Promise<{
-    success: boolean
-    result: unknown
-  }> {
-    const outline = await this.ragService.getSessionDocumentOutline(
-      this.sessionId
-    )
+  private async handleList(): Promise<{ success: boolean; result: unknown }> {
+    const overview = await this.documentService.getSessionDocumentOverview(this.sessionId)
 
-    if (outline.documents.length === 0) {
+    if (overview.documents.length === 0) {
       return {
         success: true,
         result: {
-          message: '当前会话没有上传的文档',
+          message: '当前会话没有上传或附加的文档',
           documents: [],
-          suggestion: '请先上传文档，支持 PDF、DOCX、TXT、MD、CSV 等格式',
+          suggestion: '请先上传文档并附加到会话',
         },
       }
     }
 
-    // 计算总页数，给出分析建议
-    const totalPages = outline.documents.reduce((sum, doc) => sum + doc.pageCount, 0)
-    let analysisHint = ''
-    if (totalPages <= 5) {
-      analysisHint = '文档较短，可使用 document_get_page_range 直接阅读全部内容'
-    } else if (totalPages <= 20) {
-      analysisHint = '文档长度适中，建议先用 document_search 定位关键内容，再用 document_get_page 精读'
-    } else {
-      analysisHint = '文档较长，强烈建议使用 document_search 语义搜索定位相关内容'
-    }
+    const totalPages = overview.documents.reduce((sum, doc) => sum + doc.pageCount, 0)
+    const analysisHint = totalPages <= 10
+      ? '文档较短，可直接阅读或使用 document_get_content'
+      : '文档较长，建议先用 document_search 定位，再按章节/页码阅读'
 
     return {
       success: true,
       result: {
-        message: `当前会话有 ${outline.documents.length} 个文档，共 ${totalPages} 页`,
+        message: `当前会话有 ${overview.documents.length} 个文档，共 ${totalPages} 页`,
         analysisHint,
-        documents: outline.documents.map((doc) => ({
+        documents: overview.documents.map((doc) => ({
+          documentId: doc.id,
           name: doc.name,
           pageCount: doc.pageCount,
           chunkCount: doc.chunkCount,
           hasPageInfo: doc.hasPageInfo,
           status: doc.status,
-          // 新增：文档摘要（来自 metadata）
-          summary: doc.summary || null,
-          // 新增：目录结构（如果有）
-          toc: doc.toc || null,
-          // 新增：文档类型
-          documentType: doc.documentType || 'general',
+          summary: doc.summary,
+          toc: doc.toc,
+          documentType: doc.documentType,
         })),
       },
     }
   }
 
-  /**
-   * 处理按页获取内容
-   */
-  private async handleGetPage(pageNumber: number): Promise<{
+  private async handleSearch(args: Record<string, unknown>): Promise<{
     success: boolean
     result: unknown
     error?: string
   }> {
-    if (!pageNumber || pageNumber < 1) {
+    const query = (args.query as string) || ''
+    if (!query.trim()) {
+      return { success: false, result: null, error: '搜索查询不能为空' }
+    }
+
+    const sessionDocIds = await this.documentService.getSessionDocumentIds(this.sessionId, { onlyReady: true })
+    const requestedIds = Array.isArray(args.document_ids) ? (args.document_ids as number[]) : []
+    const targetIds = requestedIds.length > 0
+      ? requestedIds.filter((id) => sessionDocIds.includes(id))
+      : sessionDocIds
+
+    if (targetIds.length === 0) {
       return {
         success: false,
         result: null,
-        error: '页码必须是大于0的整数',
+        error: '没有可搜索的文档，请先使用 document_list 获取有效文档 ID',
       }
     }
 
-    const pageContent = await this.ragService.getPageContent(
-      this.sessionId,
-      pageNumber
-    )
+    const searchMode = (args.search_mode as string) || 'precise'
+    let defaultTopK = 5
+    if (searchMode === 'broad') defaultTopK = 10
+    if (searchMode === 'overview') defaultTopK = 8
+    if (searchMode === 'section') defaultTopK = 6
+    const topK = (args.top_k as number) || defaultTopK
+    const perDocumentK = (args.per_document_k as number) || undefined
+    const aggregateAdjacent = typeof args.aggregate_adjacent === 'boolean' ? args.aggregate_adjacent : true
+    const includeContext = typeof args.include_context === 'boolean' ? args.include_context : true
 
-    if (!pageContent) {
-      // 获取文档概要以提供页码范围信息
-      const outline = await this.ragService.getSessionDocumentOutline(
-        this.sessionId
-      )
-      const maxPage = Math.max(
-        ...outline.documents.map((d) => d.pageCount),
-        0
-      )
-
-      return {
-        success: true,
-        result: {
-          found: false,
-          message: `未找到第 ${pageNumber} 页的内容`,
-          hint: maxPage > 0 ? `文档总共有 ${maxPage} 页，请确认页码在 1-${maxPage} 范围内` : '当前会话没有包含页码信息的文档',
-        },
-      }
-    }
-
-    return {
-      success: true,
-      result: {
-        found: true,
-        pageNumber: pageContent.pageNumber,
-        documentName: pageContent.documentName,
-        content: pageContent.content,
-        chunkCount: pageContent.chunks.length,
-      },
-    }
-  }
-
-  /**
-   * 处理语义搜索（增强版）
-   * 支持不同的搜索模式
-   */
-  private async handleSearch(
-    query: string,
-    topK: number,
-    searchMode: 'precise' | 'broad' | 'overview' = 'precise'
-  ): Promise<{
-    success: boolean
-    result: unknown
-    error?: string
-  }> {
-    if (!query || !query.trim()) {
-      return {
-        success: false,
-        result: null,
-        error: '搜索查询不能为空',
-        // 提供替代建议
-      }
-    }
-
-    // 根据搜索模式调整相关性阈值
-    const searchResult = await this.ragService.searchInSession(
-      this.sessionId,
-      query,
-      searchMode
-    )
-
-    // 如果没有结果，提供替代建议
-    if (searchResult.hits.length === 0) {
-      const outline = await this.ragService.getSessionDocumentOutline(this.sessionId)
-      const totalPages = outline.documents.reduce((sum, doc) => sum + doc.pageCount, 0)
-
+    if (searchMode === 'section' && this.enhancedRagService) {
+      const sections = await this.enhancedRagService.searchSections(targetIds, query, topK)
       return {
         success: true,
         result: {
           query,
           searchMode,
-          totalHits: 0,
-          queryTimeMs: searchResult.queryTime,
-          hits: [],
-          suggestion: totalPages > 0
-            ? '未找到相关内容，建议：1) 尝试更换关键词 2) 使用 document_get_page_range 浏览文档内容'
-            : '当前会话没有可搜索的文档',
+          totalHits: sections.length,
+          sections,
+          suggestion: sections.length === 0 ? '未找到相关章节，可尝试 broad 或 overview 模式' : undefined,
         },
+      }
+    }
+
+    let result: { hits: any[]; totalHits: number; queryTime: number }
+
+    const normalizedMode = searchMode === 'section' ? 'broad' : searchMode
+
+    if (this.enhancedRagService) {
+      const enhanced = await this.enhancedRagService.search(targetIds, query, {
+        mode: normalizedMode as 'precise' | 'broad' | 'overview',
+        aggregateAdjacent,
+        groupBySection: true,
+        includeContext,
+        contextSize: 1,
+        topK,
+        ensureDocumentCoverage: targetIds.length > 1,
+        perDocumentK,
+      })
+      result = {
+        hits: enhanced.hits,
+        totalHits: enhanced.totalHits,
+        queryTime: enhanced.queryTime,
+      }
+    } else {
+      const basic = await this.ragService.searchInDocuments(targetIds, query, normalizedMode as 'precise' | 'broad' | 'overview', {
+        ensureDocumentCoverage: targetIds.length > 1,
+        perDocumentK,
+      })
+      result = {
+        hits: basic.hits.slice(0, topK),
+        totalHits: basic.totalHits,
+        queryTime: basic.queryTime,
       }
     }
 
@@ -417,208 +421,202 @@ export class DocumentToolHandler {
       result: {
         query,
         searchMode,
-        totalHits: searchResult.totalHits,
-        queryTimeMs: searchResult.queryTime,
-        hits: searchResult.hits.slice(0, topK).map((hit) => ({
+        totalHits: result.totalHits,
+        queryTimeMs: result.queryTime,
+        hits: result.hits.slice(0, topK).map((hit: any) => ({
+          documentId: hit.documentId,
           documentName: hit.documentName,
-          pageNumber: (hit.metadata.pageNumber as number) || null,
-          // 新增：页面位置标识
-          pagePosition: (hit.metadata.pagePosition as string) || null,
-          // 新增：上下文锚点（内容前20个字符）
+          pageNumber: (hit.metadata?.pageNumber as number) || null,
+          section: hit.section
+            ? {
+                title: hit.section.title,
+                path: hit.section.path,
+                level: hit.section.level,
+              }
+            : null,
+          aggregatedFrom: hit.aggregatedFrom || null,
+          contextBefore: hit.contextBefore || null,
+          contextAfter: hit.contextAfter || null,
           anchor: hit.content.trim().substring(0, 40) + '...',
           content: hit.content,
           score: Math.round(hit.score * 100) / 100,
         })),
-        // 如果是 overview 模式，给出阅读建议
-        suggestion: searchMode === 'overview'
-          ? '以上是文档各部分的代表性内容，如需详细了解某部分，请使用 document_get_page 查看完整页面'
-          : undefined,
+        suggestion:
+          searchMode === 'overview'
+            ? '以上为多文档概览结果，如需精读请使用 document_get_content 或 document_get_section'
+            : undefined,
       },
     }
   }
 
-  /**
-   * 处理按页范围获取内容（增强版）
-   * 支持采样模式
-   */
-  private async handleGetPageRange(
-    startPage: number,
-    endPage: number,
-    sampleMode: 'full' | 'summary' | 'headings' = 'full'
-  ): Promise<{
+  private async handleGetContent(args: Record<string, unknown>): Promise<{
     success: boolean
     result: unknown
     error?: string
   }> {
-    if (!startPage || !endPage || startPage < 1 || endPage < startPage) {
-      // 增强错误提示
-      const outline = await this.ragService.getSessionDocumentOutline(this.sessionId)
-      const maxPage = Math.max(...outline.documents.map((d) => d.pageCount), 0)
+    const documentId = args.document_id as number
+    if (!documentId) {
+      return { success: false, result: null, error: 'document_id 不能为空' }
+    }
 
+    const isInSession = await this.isDocumentInSession(documentId)
+    if (!isInSession) {
       return {
         success: false,
         result: null,
-        error: '页码范围无效，起始页必须大于0且不大于结束页',
-        // @ts-ignore - 添加建议字段
-        suggestion: maxPage > 0
-          ? `文档总共有 ${maxPage} 页，请使用 1-${maxPage} 范围内的页码`
-          : undefined,
+        error: `文档 ${documentId} 不属于当前会话`,
       }
     }
 
-    // 限制范围，防止一次获取太多
-    const maxRange = 10
-    const actualEndPage = Math.min(endPage, startPage + maxRange - 1)
+    const content = await this.documentService.getDocumentContent(documentId, {
+      pageNumber: args.page_number as number | undefined,
+      startPage: args.start_page as number | undefined,
+      endPage: args.end_page as number | undefined,
+      pages: (args.pages as number[]) || undefined,
+      sampleMode: (args.sample_mode as 'full' | 'summary' | 'headings') || 'full',
+    })
 
-    const rangeContent = await this.ragService.getPageRangeContent(
-      this.sessionId,
-      startPage,
-      actualEndPage
-    )
-
-    if (rangeContent.pages.length === 0) {
+    if (!content) {
       return {
         success: true,
         result: {
           found: false,
-          message: `未找到第 ${startPage}-${actualEndPage} 页的内容`,
-          suggestion: '该页面可能为扫描件图片，无法提取文字。建议使用 document_search 搜索其他内容',
+          message: `未找到文档 ${documentId} 内容`,
         },
       }
-    }
-
-    // 根据采样模式处理内容
-    const processContent = (content: string): string => {
-      if (sampleMode === 'full') {
-        return content
-      }
-      if (sampleMode === 'summary') {
-        // 只返回首段（前300字符）
-        const firstPara = content.split('\n\n')[0] || content
-        return firstPara.substring(0, 300) + (firstPara.length > 300 ? '...' : '')
-      }
-      if (sampleMode === 'headings') {
-        // 提取可能的标题行（短行、全大写、数字开头等）
-        const lines = content.split('\n')
-        const headings = lines.filter((line) => {
-          const trimmed = line.trim()
-          if (!trimmed) return false
-          // 短行可能是标题
-          if (trimmed.length < 60 && trimmed.length > 2) return true
-          // 数字开头可能是章节
-          if (/^[0-9一二三四五六七八九十]+[.、)）]/.test(trimmed)) return true
-          return false
-        })
-        return headings.slice(0, 10).join('\n') || content.substring(0, 200)
-      }
-      return content
     }
 
     return {
       success: true,
       result: {
         found: true,
-        sampleMode,
-        requestedRange: { start: startPage, end: endPage },
-        actualRange: { start: startPage, end: actualEndPage },
-        pageCount: rangeContent.pages.length,
-        pages: rangeContent.pages.map((p) => ({
-          pageNumber: p.pageNumber,
-          documentName: p.documentName,
-          content: processContent(p.content),
-        })),
-        note:
-          endPage > actualEndPage
-            ? `由于内容限制，只返回了第 ${startPage}-${actualEndPage} 页，请分批获取剩余页面`
-            : undefined,
+        ...content,
       },
     }
   }
 
-  /**
-   * 处理获取多个不连续页面（新增）
-   * 支持稀疏页码列表
-   */
-  private async handleGetPages(
-    pages: number[],
-    sampleMode: 'full' | 'summary' | 'headings' = 'full'
-  ): Promise<{
+  private async handleGetTOC(args: Record<string, unknown>): Promise<{
     success: boolean
     result: unknown
     error?: string
   }> {
-    // 验证页码
-    const validPages = pages.filter((p) => p > 0).slice(0, 10) // 最多10页
-    if (validPages.length === 0) {
+    const documentId = args.document_id as number
+    const maxLevel = args.max_level as number | undefined
+
+    if (!documentId) {
+      return { success: false, result: null, error: 'document_id 不能为空' }
+    }
+
+    const isInSession = await this.isDocumentInSession(documentId)
+    if (!isInSession) {
       return {
         success: false,
         result: null,
-        error: '请提供至少一个有效的页码（大于0的整数）',
+        error: `文档 ${documentId} 不属于当前会话`,
       }
     }
 
-    const results: Array<{
-      pageNumber: number
-      documentName: string
-      content: string
-      found: boolean
-    }> = []
-
-    for (const pageNum of validPages) {
-      const pageContent = await this.ragService.getPageContent(
-        this.sessionId,
-        pageNum
-      )
-
-      if (pageContent) {
-        let content = pageContent.content
-
-        // 根据采样模式处理
-        if (sampleMode === 'summary') {
-          const firstPara = content.split('\n\n')[0] || content
-          content = firstPara.substring(0, 300) + (firstPara.length > 300 ? '...' : '')
-        } else if (sampleMode === 'headings') {
-          const lines = content.split('\n')
-          const headings = lines.filter((line) => {
-            const trimmed = line.trim()
-            return trimmed && trimmed.length < 60 && trimmed.length > 2
-          })
-          content = headings.slice(0, 5).join('\n') || content.substring(0, 100)
-        }
-
-        results.push({
-          pageNumber: pageNum,
-          documentName: pageContent.documentName,
-          content,
-          found: true,
-        })
-      } else {
-        results.push({
-          pageNumber: pageNum,
-          documentName: '',
-          content: '',
-          found: false,
-        })
+    if (!this.sectionService) {
+      return {
+        success: true,
+        result: {
+          message: '当前文档未生成章节目录',
+          toc: [],
+          suggestion: '可先使用 document_search 或 document_get_content 获取内容',
+        },
       }
     }
 
-    const foundCount = results.filter((r) => r.found).length
+    const toc = await this.sectionService.getDocumentTOC(documentId, maxLevel)
 
     return {
       success: true,
       result: {
-        requestedPages: pages,
-        sampleMode,
-        pageCount: foundCount,
-        pages: results,
-        note: pages.length > 10
-          ? `请求了 ${pages.length} 页，仅返回前10页结果`
-          : undefined,
+        documentId,
+        toc,
+        message: toc.length > 0 ? '已获取目录结构' : '未检测到章节目录',
       },
     }
   }
-}
 
+  private async handleGetSection(args: Record<string, unknown>): Promise<{
+    success: boolean
+    result: unknown
+    error?: string
+  }> {
+    const documentId = args.document_id as number
+    const sectionPath = (args.section_path as string) || ''
+    const includeChildren = args.include_children !== false
+
+    if (!documentId || !sectionPath.trim()) {
+      return { success: false, result: null, error: 'document_id 与 section_path 不能为空' }
+    }
+
+    const isInSession = await this.isDocumentInSession(documentId)
+    if (!isInSession) {
+      return {
+        success: false,
+        result: null,
+        error: `文档 ${documentId} 不属于当前会话`,
+      }
+    }
+
+    if (!this.sectionService) {
+      return {
+        success: false,
+        result: null,
+        error: '章节服务不可用，无法获取章节内容',
+      }
+    }
+
+    let section = await this.sectionService.getSectionByPath(documentId, sectionPath)
+    if (!section) {
+      const matches = await this.sectionService.searchSectionsByTitle(documentId, sectionPath)
+      if (matches.length > 0) {
+        section = matches[0]
+      }
+    }
+
+    if (!section) {
+      return {
+        success: false,
+        result: null,
+        error: `未找到章节 ${sectionPath}`,
+      }
+    }
+
+    const sectionContent = await this.sectionService.getSectionContent(section.id, includeChildren)
+    if (!sectionContent) {
+      return {
+        success: false,
+        result: null,
+        error: `章节 ${sectionPath} 内容为空`,
+      }
+    }
+
+    return {
+      success: true,
+      result: {
+        documentId,
+        section: {
+          id: section.id,
+          title: section.title,
+          path: section.path,
+          level: section.level,
+          startPage: section.startPage,
+          endPage: section.endPage,
+        },
+        chunkCount: sectionContent.chunks.length,
+        content: sectionContent.content,
+      },
+    }
+  }
+
+  private async isDocumentInSession(documentId: number): Promise<boolean> {
+    const docs = await this.documentService.getSessionDocumentIds(this.sessionId)
+    return docs.includes(documentId)
+  }
+}
 
 /**
  * 生成文档工具的 reasoning 提示
@@ -629,23 +627,28 @@ export function formatDocumentToolReasoning(
   stage: 'start' | 'result' | 'error'
 ): string {
   switch (toolName) {
-    case 'document_get_outline':
-      return stage === 'start' ? '获取文档概要信息...' : '已获取文档概要'
-
-    case 'document_get_page':
-      return stage === 'start'
-        ? `查看第 ${args.page_number} 页内容...`
-        : `已获取第 ${args.page_number} 页`
+    case 'document_list':
+      return stage === 'start' ? '获取会话文档列表...' : '已获取会话文档'
 
     case 'document_search':
       return stage === 'start'
         ? `在文档中搜索：${args.query}`
         : '搜索完成，已获取相关内容'
 
-    case 'document_get_page_range':
+    case 'document_get_content':
       return stage === 'start'
-        ? `获取第 ${args.start_page}-${args.end_page} 页内容...`
-        : '已获取页面范围内容'
+        ? `获取文档 ${args.document_id} 内容...`
+        : `已获取文档 ${args.document_id} 内容`
+
+    case 'document_get_toc':
+      return stage === 'start'
+        ? `获取文档 ${args.document_id} 目录结构...`
+        : '已获取目录结构'
+
+    case 'document_get_section':
+      return stage === 'start'
+        ? `获取章节 ${args.section_path} 内容...`
+        : '已获取章节内容'
 
     default:
       return `执行文档工具：${toolName}`

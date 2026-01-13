@@ -5,7 +5,9 @@
 
 import { PrismaClient, KnowledgeBase, Document } from '@prisma/client'
 import { getDocumentServices } from '../document-services-factory'
-import type { RAGResult, RAGHit } from '../document/rag-service'
+import type { RAGResult } from '../document/rag-service'
+import type { EnhancedRAGService } from '../document/enhanced-rag-service'
+import type { DocumentContentResult } from '../document/document-service'
 import { createLogger } from '../../utils/logger'
 
 const log = createLogger('KB')
@@ -394,7 +396,20 @@ export class KnowledgeBaseService {
       }
     }
 
-    // 使用 RAG 服务检索，传递搜索模式
+    // 优先使用增强检索（如果可用）
+    const enhanced = (services as { enhancedRagService?: EnhancedRAGService }).enhancedRagService
+    if (enhanced) {
+      const mode = searchMode === 'overview' ? 'overview' : searchMode
+      return enhanced.search(documentIds, query, {
+        mode,
+        aggregateAdjacent: true,
+        groupBySection: true,
+        includeContext: true,
+        contextSize: 1,
+        ensureDocumentCoverage: documentIds.length > 1,
+      })
+    }
+
     return services.ragService.searchInDocuments(documentIds, query, searchMode)
   }
 
@@ -504,99 +519,16 @@ export class KnowledgeBaseService {
    */
   async getDocumentContent(
     documentId: number,
-    pageNumber?: number,
-    startPage?: number,
-    endPage?: number
-  ): Promise<{
-    documentName: string
-    pageCount: number
-    text: string
-    truncated: boolean
-  } | null> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-      include: {
-        chunks: {
-          orderBy: { chunkIndex: 'asc' },
-        },
-      },
-    })
-
-    if (!document || !document.chunks.length) {
-      return null
-    }
-
-    // 解析每个 chunk 的 metadata 获取 pageNumber
-    interface ChunkWithPage {
-      content: string
-      chunkIndex: number
-      pageNumber: number | null
-      metadata: any
-    }
-
-    const chunksWithPage: ChunkWithPage[] = document.chunks.map((chunk: any) => {
-      let meta: any = {}
-      try {
-        meta = typeof chunk.metadata === 'string' ? JSON.parse(chunk.metadata) : (chunk.metadata || {})
-      } catch {
-        meta = {}
-      }
-      return {
-        content: chunk.content || '',
-        chunkIndex: chunk.chunkIndex,
-        pageNumber: typeof meta.pageNumber === 'number' ? meta.pageNumber : null,
-        metadata: meta,
-      }
-    })
-
-    // 计算页数
-    const pageNumbers = new Set<number>()
-    chunksWithPage.forEach((chunk) => {
-      if (chunk.pageNumber != null) {
-        pageNumbers.add(chunk.pageNumber)
-      }
-    })
-    const pageCount = pageNumbers.size || 1
-
-    // 筛选 chunks
-    let filteredChunks = chunksWithPage
-    if (pageNumber != null) {
-      filteredChunks = chunksWithPage.filter((c) => c.pageNumber === pageNumber)
-    } else if (startPage != null && endPage != null) {
-      // 限制范围，防止一次获取太多
-      const maxRange = 10
-      const actualEndPage = Math.min(endPage, startPage + maxRange - 1)
-      filteredChunks = chunksWithPage.filter(
-        (c) => c.pageNumber != null && c.pageNumber >= startPage && c.pageNumber <= actualEndPage
-      )
-    }
-
-    // 如果没有页码信息，按 chunkIndex 取前 N 个
-    if (filteredChunks.length === 0 && pageNumbers.size === 0) {
-      // 没有页码信息，取前 100 个 chunks 或按字符限制
-      filteredChunks = chunksWithPage.slice(0, 100)
-    }
-
-    // 组合文本
-    const MAX_CHARS = 50000 // 限制最大字符数
-    let text = ''
-    let truncated = false
-
-    for (const chunk of filteredChunks) {
-      const content = chunk.content || ''
-      if (text.length + content.length > MAX_CHARS) {
-        text += content.slice(0, MAX_CHARS - text.length)
-        truncated = true
-        break
-      }
-      text += content + '\n\n'
-    }
-
-    return {
-      documentName: document.originalName,
-      pageCount,
-      text: text.trim(),
-      truncated,
-    }
+    options: {
+      pageNumber?: number
+      startPage?: number
+      endPage?: number
+      pages?: number[]
+      sampleMode?: 'full' | 'summary' | 'headings'
+    } = {}
+  ): Promise<DocumentContentResult | null> {
+    const services = getDocumentServices()
+    if (!services) return null
+    return services.documentService.getDocumentContent(documentId, options)
   }
 }

@@ -3,9 +3,9 @@
  * 提供文档检索和上下文增强功能
  */
 
-import { PrismaClient, Document } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import { EmbeddingService } from './embedding-service'
-import { type VectorDBClient, type SearchResult } from '../../modules/document/vector'
+import { type VectorDBClient } from '../../modules/document/vector'
 import { createLogger } from '../../utils/logger'
 
 const log = createLogger('RAG')
@@ -68,33 +68,24 @@ export class RAGService {
   async searchInSession(
     sessionId: number,
     query: string,
-    searchMode: 'precise' | 'broad' | 'overview' = 'precise'
+    searchMode: 'precise' | 'broad' | 'overview' = 'precise',
+    options: {
+      ensureDocumentCoverage?: boolean
+      perDocumentK?: number
+    } = {}
   ): Promise<RAGResult> {
     const startTime = Date.now()
 
-    // 获取会话关联的文档
     const sessionDocs = await this.prisma.sessionDocument.findMany({
       where: { sessionId },
-      include: {
-        document: true,
-      },
+      include: { document: true },
     })
 
-    if (sessionDocs.length === 0) {
-      return {
-        hits: [],
-        context: '',
-        totalHits: 0,
-        queryTime: Date.now() - startTime,
-      }
-    }
-
-    // 过滤出 ready 状态的文档
-    const readyDocs = sessionDocs
+    const readyDocIds = sessionDocs
       .filter((sd) => sd.document.status === 'ready')
-      .map((sd) => sd.document)
+      .map((sd) => sd.documentId)
 
-    if (readyDocs.length === 0) {
+    if (readyDocIds.length === 0) {
       return {
         hits: [],
         context: '',
@@ -103,95 +94,7 @@ export class RAGService {
       }
     }
 
-    // 根据搜索模式调整参数
-    let relevanceThreshold = this.config.relevanceThreshold
-    let topK = this.config.topK
-
-    switch (searchMode) {
-      case 'precise':
-        // 精确模式：高阈值，少结果
-        relevanceThreshold = Math.max(this.config.relevanceThreshold, 0.5)
-        topK = Math.min(this.config.topK, 5)
-        break
-      case 'broad':
-        // 广泛模式：低阈值，多结果
-        relevanceThreshold = Math.min(this.config.relevanceThreshold, 0.3)
-        topK = Math.max(this.config.topK, 10)
-        break
-      case 'overview':
-        // 概览模式：从不同位置采样
-        relevanceThreshold = 0.2
-        topK = this.config.topK
-        break
-    }
-
-    // 生成查询 embedding
-    const queryVector = await this.embeddingService.embed(query)
-
-    // 在每个文档的 collection 中搜索
-    const allHits: RAGHit[] = []
-
-    for (const doc of readyDocs) {
-      if (!doc.collectionName) continue
-
-      const results = await this.vectorDB.search(
-        doc.collectionName,
-        queryVector,
-        topK * 2 // 多取一些用于后续过滤
-      )
-
-      for (const result of results) {
-        // 根据模式调整过滤
-        if (result.score < relevanceThreshold) continue
-
-        // 增强 metadata 添加页面位置信息
-        const pageNumber = (result.metadata.pageNumber as number) || 0
-        const totalPages = (result.metadata.totalPages as number) || 1
-        let pagePosition: 'top' | 'middle' | 'bottom' = 'middle'
-        if (pageNumber <= Math.ceil(totalPages * 0.2)) {
-          pagePosition = 'top'
-        } else if (pageNumber >= Math.ceil(totalPages * 0.8)) {
-          pagePosition = 'bottom'
-        }
-
-        allHits.push({
-          documentId: doc.id,
-          documentName: doc.originalName,
-          chunkIndex: (result.metadata.chunkIndex as number) || 0,
-          content: result.text,
-          score: result.score,
-          metadata: {
-            ...result.metadata,
-            pagePosition,
-          },
-        })
-      }
-    }
-
-    // 按相关性排序
-    allHits.sort((a, b) => b.score - a.score)
-
-    let topHits: RAGHit[]
-
-    if (searchMode === 'overview') {
-      // 概览模式：从不同页面位置采样
-      const topGroup = allHits.filter((h) => h.metadata.pagePosition === 'top').slice(0, 3)
-      const middleGroup = allHits.filter((h) => h.metadata.pagePosition === 'middle').slice(0, 3)
-      const bottomGroup = allHits.filter((h) => h.metadata.pagePosition === 'bottom').slice(0, 2)
-      topHits = [...topGroup, ...middleGroup, ...bottomGroup]
-    } else {
-      topHits = allHits.slice(0, topK)
-    }
-
-    // 构建上下文
-    const context = this.buildContext(topHits)
-
-    return {
-      hits: topHits,
-      context,
-      totalHits: allHits.length,
-      queryTime: Date.now() - startTime,
-    }
+    return this.searchInDocuments(readyDocIds, query, searchMode, options)
   }
 
   /**
@@ -201,7 +104,11 @@ export class RAGService {
   async searchInDocuments(
     documentIds: number[],
     query: string,
-    searchMode: 'precise' | 'broad' | 'overview' = 'precise'
+    searchMode: 'precise' | 'broad' | 'overview' = 'precise',
+    options: {
+      ensureDocumentCoverage?: boolean
+      perDocumentK?: number
+    } = {}
   ): Promise<RAGResult> {
     const startTime = Date.now()
     const timings: Record<string, number> = {}
@@ -241,7 +148,7 @@ export class RAGService {
         break
       case 'overview':
         relevanceThreshold = 0.2
-        topK = this.config.topK
+        topK = Math.max(this.config.topK, 8)
         break
     }
 
@@ -259,12 +166,15 @@ export class RAGService {
     const validDocs = documents.filter((doc) => doc.collectionName)
 
     // 并行执行所有文档的向量搜索
+    const fetchK =
+      searchMode === 'overview' || options.ensureDocumentCoverage ? topK * 3 : topK * 2
+
     const searchPromises = validDocs.map(async (doc) => {
       const docSearchStart = Date.now()
       const results = await this.vectorDB.search(
         doc.collectionName!,
         queryVector,
-        topK * 2
+        fetchK
       )
       const timeMs = Date.now() - docSearchStart
 
@@ -318,13 +228,17 @@ export class RAGService {
 
     allHits.sort((a, b) => b.score - a.score)
 
-    let topHits: RAGHit[]
+    const ensureCoverage =
+      options.ensureDocumentCoverage ?? (searchMode === 'overview' && documents.length > 1)
+    let topHits: RAGHit[] = []
+
     if (searchMode === 'overview') {
-      // 概览模式：从不同位置采样
-      const topGroup = allHits.filter((h) => h.metadata.pagePosition === 'top').slice(0, 3)
-      const middleGroup = allHits.filter((h) => h.metadata.pagePosition === 'middle').slice(0, 3)
-      const bottomGroup = allHits.filter((h) => h.metadata.pagePosition === 'bottom').slice(0, 2)
-      topHits = [...topGroup, ...middleGroup, ...bottomGroup]
+      const overviewHits = this.buildOverviewHitsByDocument(allHits)
+      topHits = ensureCoverage
+        ? this.balanceHitsByDocument(overviewHits, topK, options.perDocumentK)
+        : overviewHits.slice(0, topK)
+    } else if (ensureCoverage) {
+      topHits = this.balanceHitsByDocument(allHits, topK, options.perDocumentK)
     } else {
       topHits = allHits.slice(0, topK)
     }
@@ -358,6 +272,78 @@ export class RAGService {
   }
 
   /**
+   * 概览模式：按文档位置采样
+   */
+  private buildOverviewHitsByDocument(hits: RAGHit[]): RAGHit[] {
+    const byDocument = new Map<number, RAGHit[]>()
+    for (const hit of hits) {
+      const list = byDocument.get(hit.documentId) || []
+      list.push(hit)
+      byDocument.set(hit.documentId, list)
+    }
+
+    const sampled: RAGHit[] = []
+    for (const docHits of byDocument.values()) {
+      const topGroup = docHits.filter((h) => h.metadata.pagePosition === 'top').slice(0, 2)
+      const middleGroup = docHits.filter((h) => h.metadata.pagePosition === 'middle').slice(0, 2)
+      const bottomGroup = docHits.filter((h) => h.metadata.pagePosition === 'bottom').slice(0, 1)
+      sampled.push(...topGroup, ...middleGroup, ...bottomGroup)
+    }
+
+    return sampled.sort((a, b) => b.score - a.score)
+  }
+
+  /**
+   * 按文档均衡采样，保证覆盖多个文档
+   */
+  private balanceHitsByDocument(
+    hits: RAGHit[],
+    topK: number,
+    perDocumentK?: number
+  ): RAGHit[] {
+    const byDocument = new Map<number, RAGHit[]>()
+    for (const hit of hits) {
+      const list = byDocument.get(hit.documentId) || []
+      list.push(hit)
+      byDocument.set(hit.documentId, list)
+    }
+
+    const docCount = byDocument.size
+    if (docCount === 0) return []
+    const perDoc = Math.max(
+      1,
+      perDocumentK || Math.min(2, Math.ceil(topK / docCount))
+    )
+
+    const selected: RAGHit[] = []
+    const selectedKeys = new Set<string>()
+
+    for (const docHits of byDocument.values()) {
+      const sorted = [...docHits].sort((a, b) => b.score - a.score)
+      for (const hit of sorted.slice(0, perDoc)) {
+        const key = `${hit.documentId}:${hit.chunkIndex}`
+        if (!selectedKeys.has(key)) {
+          selected.push(hit)
+          selectedKeys.add(key)
+        }
+      }
+    }
+
+    if (selected.length >= topK) {
+      return selected.slice(0, topK)
+    }
+
+    for (const hit of hits) {
+      const key = `${hit.documentId}:${hit.chunkIndex}`
+      if (selectedKeys.has(key)) continue
+      selected.push(hit)
+      if (selected.length >= topK) break
+    }
+
+    return selected
+  }
+
+  /**
    * 构建 RAG 上下文
    */
   private buildContext(hits: RAGHit[]): string {
@@ -374,9 +360,12 @@ export class RAGService {
         break
       }
 
-      contextParts.push(
-        `[来源: ${hit.documentName}]\n${hit.content}`
-      )
+      const pageNumber =
+        typeof (hit.metadata as any)?.pageNumber === 'number'
+          ? (hit.metadata as any).pageNumber
+          : null
+      const pageLabel = pageNumber ? `, 页码: ${pageNumber}` : ''
+      contextParts.push(`[来源: ${hit.documentName}${pageLabel}]\n${hit.content}`)
       totalTokens += estimatedTokens
     }
 
@@ -439,233 +428,4 @@ ${context}
     this.config = { ...this.config, ...config }
   }
 
-  /**
-   * 获取会话文档的概要信息（增强版）
-   * 包含摘要、目录结构和文档类型
-   */
-  async getSessionDocumentOutline(sessionId: number): Promise<{
-    documents: Array<{
-      id: number
-      name: string
-      pageCount: number
-      chunkCount: number
-      hasPageInfo: boolean
-      status: string
-      // 新增字段
-      summary: string | null
-      toc: Array<{ title: string; pageStart: number; pageEnd?: number }> | null
-      documentType: 'code' | 'table' | 'report' | 'contract' | 'general'
-    }>
-  }> {
-    const sessionDocs = await this.prisma.sessionDocument.findMany({
-      where: { sessionId },
-      include: { document: true },
-    })
-
-    const documentsWithOutline = await Promise.all(
-      sessionDocs.map(async (sd) => {
-        const doc = sd.document
-        const metadata = doc.metadata ? JSON.parse(doc.metadata) : {}
-
-        // 获取文档类型（基于 mimeType 和文件扩展名）
-        let documentType: 'code' | 'table' | 'report' | 'contract' | 'general' = 'general'
-        const ext = doc.originalName.split('.').pop()?.toLowerCase() || ''
-        if (['js', 'ts', 'py', 'java', 'css', 'html', 'json', 'jsx', 'tsx'].includes(ext)) {
-          documentType = 'code'
-        } else if (['csv'].includes(ext)) {
-          documentType = 'table'
-        } else if (doc.mimeType === 'application/pdf') {
-          // 尝试检测合同关键词
-          documentType = 'report'
-        }
-
-        // 生成摘要：使用首个和最后一个 chunk 的内容
-        let summary: string | null = null
-        if (doc.status === 'ready' && doc.chunkCount && doc.chunkCount > 0) {
-          try {
-            const chunks = await this.prisma.documentChunk.findMany({
-              where: { documentId: doc.id },
-              orderBy: { chunkIndex: 'asc' },
-              take: 2,
-            })
-            if (chunks.length > 0) {
-              const firstContent = chunks[0].content.substring(0, 200)
-              summary = `${firstContent}${chunks[0].content.length > 200 ? '...' : ''}`
-            }
-          } catch {
-            // 忽略获取 chunk 的错误
-          }
-        }
-
-        // 提取目录结构（从 metadata 或分析 chunk 标题）
-        let toc: Array<{ title: string; pageStart: number; pageEnd?: number }> | null = null
-        if (metadata.toc) {
-          toc = metadata.toc
-        }
-
-        return {
-          id: doc.id,
-          name: doc.originalName,
-          pageCount: metadata.pageCount || 1,
-          chunkCount: doc.chunkCount || 0,
-          hasPageInfo: metadata.hasPageInfo || false,
-          status: doc.status,
-          summary,
-          toc,
-          documentType,
-        }
-      })
-    )
-
-    return { documents: documentsWithOutline }
-  }
-
-  /**
-   * 按页码获取文档内容
-   * 返回指定页码的所有chunks
-   */
-  async getPageContent(
-    sessionId: number,
-    pageNumber: number
-  ): Promise<{
-    pageNumber: number
-    content: string
-    documentName: string
-    documentId: number
-    chunks: Array<{
-      chunkIndex: number
-      content: string
-    }>
-  } | null> {
-    // 获取会话关联的文档
-    const sessionDocs = await this.prisma.sessionDocument.findMany({
-      where: { sessionId },
-      include: { document: true },
-    })
-
-    if (sessionDocs.length === 0) {
-      return null
-    }
-
-    // 查找包含该页码的文档chunks
-    for (const sd of sessionDocs) {
-      const doc = sd.document
-      if (doc.status !== 'ready') continue
-
-      // 查询该文档中页码匹配的chunks
-      const chunks = await this.prisma.documentChunk.findMany({
-        where: { documentId: doc.id },
-        orderBy: { chunkIndex: 'asc' },
-      })
-
-      // 过滤出指定页码的chunks
-      const pageChunks = chunks.filter((chunk) => {
-        try {
-          const metadata = JSON.parse(chunk.metadata || '{}')
-          return metadata.pageNumber === pageNumber
-        } catch {
-          return false
-        }
-      })
-
-      if (pageChunks.length > 0) {
-        return {
-          pageNumber,
-          content: pageChunks.map((c) => c.content).join('\n'),
-          documentName: doc.originalName,
-          documentId: doc.id,
-          chunks: pageChunks.map((c) => ({
-            chunkIndex: c.chunkIndex,
-            content: c.content,
-          })),
-        }
-      }
-    }
-
-    return null
-  }
-
-  /**
-   * 按页码范围获取文档内容
-   */
-  async getPageRangeContent(
-    sessionId: number,
-    startPage: number,
-    endPage: number
-  ): Promise<{
-    pages: Array<{
-      pageNumber: number
-      content: string
-      documentName: string
-    }>
-    totalPages: number
-  }> {
-    const pages: Array<{
-      pageNumber: number
-      content: string
-      documentName: string
-    }> = []
-
-    // 获取会话关联的文档
-    const sessionDocs = await this.prisma.sessionDocument.findMany({
-      where: { sessionId },
-      include: { document: true },
-    })
-
-    for (const sd of sessionDocs) {
-      const doc = sd.document
-      if (doc.status !== 'ready') continue
-
-      // 查询该文档的所有chunks
-      const chunks = await this.prisma.documentChunk.findMany({
-        where: { documentId: doc.id },
-        orderBy: { chunkIndex: 'asc' },
-      })
-
-      // 按页码分组
-      const pageMap = new Map<number, string[]>()
-      for (const chunk of chunks) {
-        try {
-          const metadata = JSON.parse(chunk.metadata || '{}')
-          const pageNum = metadata.pageNumber as number
-          if (pageNum >= startPage && pageNum <= endPage) {
-            if (!pageMap.has(pageNum)) {
-              pageMap.set(pageNum, [])
-            }
-            pageMap.get(pageNum)!.push(chunk.content)
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-
-      // 转换为数组
-      for (const [pageNum, contents] of pageMap) {
-        pages.push({
-          pageNumber: pageNum,
-          content: contents.join('\n'),
-          documentName: doc.originalName,
-        })
-      }
-    }
-
-    // 按页码排序
-    pages.sort((a, b) => a.pageNumber - b.pageNumber)
-
-    return {
-      pages,
-      totalPages: pages.length,
-    }
-  }
-
-  /**
-   * 获取会话中所有文档的ID列表
-   */
-  async getSessionDocumentIds(sessionId: number): Promise<number[]> {
-    const sessionDocs = await this.prisma.sessionDocument.findMany({
-      where: { sessionId },
-      select: { documentId: true },
-    })
-    return sessionDocs.map((sd) => sd.documentId)
-  }
 }

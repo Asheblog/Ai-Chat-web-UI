@@ -401,6 +401,9 @@ model DocumentChunk {
   chunkIndex  Int
   content     String
   tokenCount  Int      @default(0)
+  pageNumber  Int?
+  pageStart   Int?
+  pageEnd     Int?
   metadata    String   @default("{}") // JSON: 页码、标题等
   vectorId    String?  // 向量数据库中的ID
   sectionId   Int?     // 关联的章节ID
@@ -411,6 +414,9 @@ model DocumentChunk {
 
   @@unique([documentId, chunkIndex])
   @@index([documentId])
+  @@index([documentId, pageNumber])
+  @@index([documentId, pageStart])
+  @@index([documentId, pageEnd])
   @@index([sectionId])
   @@map("document_chunks")
 }

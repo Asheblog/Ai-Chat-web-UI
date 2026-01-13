@@ -148,6 +148,12 @@ export class ChatRequestBuilder {
       })
     }
 
+    systemPrompts.push({
+      role: 'system',
+      content:
+        '输出请使用 Markdown 语法。若在表格单元格内列出多条内容，请使用 Markdown 列表或换行（例如以 "- " 或 "• " 开头），不要输出 HTML 列表标签（如 <li>/<ul>/<ol>）。',
+    })
+
     // RAG 文档上下文增强
     if (params.ragContext && params.ragContext.trim()) {
       systemPrompts.push({

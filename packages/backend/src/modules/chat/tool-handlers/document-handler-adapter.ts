@@ -10,6 +10,7 @@ import {
   documentToolNames,
   formatDocumentToolReasoning,
 } from '../document-tools'
+import { getDocumentServices } from '../../../services/document-services-factory'
 import type { RAGService } from '../../../services/document/rag-service'
 import type {
   IToolHandler,
@@ -30,10 +31,19 @@ export class DocumentToolHandlerAdapter implements IToolHandler {
     this.config = config
     this.toolNameSet = documentToolNames
     if (config.ragService) {
-      this.legacyHandler = new LegacyDocumentToolHandler(
-        config.ragService as RAGService,
-        config.sessionId
-      )
+      const docServices = getDocumentServices()
+      const documentService = docServices?.documentService
+      const enhancedRagService = docServices?.enhancedRagService || null
+      const sectionService = docServices?.sectionService || null
+      if (documentService) {
+        this.legacyHandler = new LegacyDocumentToolHandler(
+          config.ragService as RAGService,
+          documentService,
+          config.sessionId,
+          enhancedRagService,
+          sectionService
+        )
+      }
     }
   }
 
