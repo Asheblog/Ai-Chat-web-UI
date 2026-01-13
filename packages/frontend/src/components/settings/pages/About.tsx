@@ -53,38 +53,38 @@ export function AboutPage() {
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">ef0336f</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bba7b82</span>
               <span className="text-muted-foreground leading-relaxed">
-                重构聊天模块，使用 ModelCatalog 能力检测图片生成功能。
+                升级文档/知识库工具接口，支持增强搜索模式。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0655ca6</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6bd6577</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增系统日志管理功能，支持文件持久化和 API 接口。
+                重构聊天模块，使用注册表模式统一工具处理器，支持知识库功能。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">be495a1</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c7cd0d9</span>
               <span className="text-muted-foreground leading-relaxed">
-                重构后端日志系统，统一使用 createLogger 工具。
+                改进 PDF 文本提取失败时的错误提示信息。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">de4af0f</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2a800d2</span>
               <span className="text-muted-foreground leading-relaxed">
-                聊天支持通过 OpenAI 兼容代理 API 进行图片生成。
+                支持在非流式回退响应中持久化生成的图片。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">0d31da9</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e704efa</span>
               <span className="text-muted-foreground leading-relaxed">
-                新增 AI 图片生成功能，支持 DALL-E 及类似模型。
+                新增图片生成本地存储功能，支持通过 URL 访问。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2025-01-05 推送变更摘要
+            以上为 2026-01-13 推送变更摘要
           </p>
         </Card>
       </div>
