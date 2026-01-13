@@ -5,10 +5,8 @@ import { BackendLogger as log } from '../../utils/logger';
 import { convertOpenAIReasoningPayload } from '../../utils/providers';
 import { convertChatCompletionsRequestToResponses } from '../../utils/openai-responses';
 import { Tokenizer } from '../../utils/tokenizer';
-import { formatHitsForModel, runWebSearch, type WebSearchHit } from '../../utils/web-search';
-import { runPythonSnippet } from '../../utils/python-runner';
+import type { WebSearchHit } from '../../utils/web-search';
 import { serializeQuotaSnapshot } from '../../utils/quota';
-import { truncateText } from '../../utils/parsers';
 import { getFriendlyErrorMessage, parseApiError } from '../../utils/api-error-parser';
 import type { UsageQuotaSnapshot } from '../../types';
 import { summarizeSsePayload } from '../../utils/task-trace';
@@ -27,23 +25,14 @@ import {
   hasPendingStreamCancelKey,
   deletePendingStreamCancelKey,
 } from './stream-state';
-import {
-  documentToolDefinitions,
-  documentToolNames,
-  DocumentToolHandler,
-  formatDocumentToolReasoning,
-} from './document-tools';
-import {
-  kbToolDefinitions,
-  kbToolNames,
-  KBToolHandler,
-  formatKBToolReasoning,
-} from './kb-tools';
-import { KnowledgeBaseService } from '../../services/knowledge-base';
 import type { RAGService } from '../../services/document/rag-service';
-import { getDocumentServices } from '../../services/document-services-factory';
 import { ToolLogManager } from './tool-log-manager';
 import { StreamEventEmitter } from './stream-event-emitter';
+import {
+  createToolHandlerRegistry,
+  sendUnsupportedToolError,
+  type ToolCall,
+} from './tool-handlers';
 import {
   type AgentWebSearchConfig,
   type AgentPythonToolConfig,
@@ -139,6 +128,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     tools: {
       web_search: toolFlags.webSearch,
       python_runner: toolFlags.python,
+      document_tools: Boolean(toolFlags.document),
+      knowledge_base_tools: Boolean(toolFlags.knowledgeBase),
     },
   });
 
@@ -465,198 +456,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         safeEnqueue(payload);
       };
 
-      const handleWebSearchToolCall = async (
-        toolCall: { id?: string; function?: { arguments?: string } },
-        args: { query?: string; num_results?: number },
-      ) => {
-        const query = (args?.query || '').trim();
-        const callId = toolCall.id || randomUUID();
-        const reasoningMetaBase = { kind: 'tool', tool: 'web_search', query, callId };
-        if (!query) {
-          emitReasoning('模型请求了空的联网搜索参数，已忽略。', {
-            ...reasoningMetaBase,
-            stage: 'error',
-          });
-          sendToolEvent({
-            id: callId,
-            tool: 'web_search',
-            stage: 'error',
-            query: '',
-            error: 'Model requested web_search without a query',
-          });
-          workingMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: 'web_search',
-            content: JSON.stringify({ error: 'Missing query parameter' }),
-          });
-          return;
-        }
-
-        emitReasoning(`联网搜索：${query}`, { ...reasoningMetaBase, stage: 'start' });
-        sendToolEvent({ id: callId, tool: 'web_search', stage: 'start', query });
-        try {
-          const hits = await runWebSearch(query, {
-            engine: agentConfig.engine,
-            apiKey: agentConfig.apiKey,
-            limit: args?.num_results || agentConfig.resultLimit,
-            domains: agentConfig.domains,
-            endpoint: agentConfig.endpoint,
-            scope: agentConfig.scope,
-            includeSummary: agentConfig.includeSummary,
-            includeRawContent: agentConfig.includeRawContent,
-          });
-          emitReasoning(`获得 ${hits.length} 条结果，准备综合。`, {
-            ...reasoningMetaBase,
-            stage: 'result',
-            hits: hits.length,
-          });
-          sendToolEvent({
-            id: callId,
-            tool: 'web_search',
-            stage: 'result',
-            query,
-            hits,
-          });
-          const summary = formatHitsForModel(query, hits);
-          workingMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: 'web_search',
-            content: JSON.stringify({ query, hits, summary }),
-          });
-        } catch (searchError: any) {
-          const message = searchError?.message || 'Web search failed';
-          emitReasoning(`联网搜索失败：${message}`, {
-            ...reasoningMetaBase,
-            stage: 'error',
-          });
-          sendToolEvent({
-            id: callId,
-            tool: 'web_search',
-            stage: 'error',
-            query,
-            error: message,
-          });
-          workingMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: 'web_search',
-            content: JSON.stringify({ query, error: message }),
-          });
-        }
-      };
-
-      const handlePythonToolCall = async (
-        toolCall: { id?: string; function?: { arguments?: string } },
-        args: { code?: string; input?: string },
-      ) => {
-        const source = typeof args?.code === 'string' ? args.code : '';
-        const stdin = typeof args?.input === 'string' ? args.input : undefined;
-        const callId = toolCall.id || randomUUID();
-        const reasoningMetaBase = { kind: 'tool', tool: 'python_runner', callId };
-        if (!source.trim()) {
-          const error = '模型未提供 Python code';
-          emitReasoning(error, { ...reasoningMetaBase, stage: 'error' });
-          sendToolEvent({
-            id: callId,
-            tool: 'python_runner',
-            stage: 'error',
-            error,
-          });
-          workingMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: 'python_runner',
-            content: JSON.stringify({ error }),
-          });
-          return;
-        }
-        const preview = truncateText(source.replace(/\s+/g, ' '), 160);
-        const baseDetails: Record<string, unknown> = {
-          code: source,
-        };
-        if (stdin !== undefined) {
-          baseDetails.input = stdin;
-        }
-        emitReasoning('执行 Python 代码', { ...reasoningMetaBase, stage: 'start', summary: preview });
-        sendToolEvent({
-          id: callId,
-          tool: 'python_runner',
-          stage: 'start',
-          summary: preview,
-          details: baseDetails,
-        });
-        try {
-          const result = await runPythonSnippet({
-            code: source,
-            input: stdin,
-            command: pythonToolConfig.command,
-            args: pythonToolConfig.args,
-            timeoutMs: pythonToolConfig.timeoutMs,
-            maxOutputChars: pythonToolConfig.maxOutputChars,
-            maxSourceChars: pythonToolConfig.maxSourceChars,
-          });
-          const resultPreview = truncateText(
-            result.stdout.trim() || (result.stderr ? `stderr: ${result.stderr.trim()}` : 'Python 运行完成'),
-            200,
-          );
-          emitReasoning('Python 执行完成，准备综合结果。', {
-            ...reasoningMetaBase,
-            stage: 'result',
-            summary: resultPreview,
-          });
-          const resultDetails: Record<string, unknown> = {
-            ...baseDetails,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode,
-            durationMs: result.durationMs,
-          };
-          if (result.truncated) {
-            resultDetails.truncated = true;
-          }
-          sendToolEvent({
-            id: callId,
-            tool: 'python_runner',
-            stage: 'result',
-            summary: resultPreview,
-            details: resultDetails,
-          });
-          workingMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: 'python_runner',
-            content: JSON.stringify({
-              stdout: result.stdout,
-              stderr: result.stderr,
-              exit_code: result.exitCode,
-              duration_ms: result.durationMs,
-              truncated: result.truncated || undefined,
-            }),
-          });
-        } catch (pythonError: any) {
-          const message = pythonError?.message || 'Python 执行失败';
-          emitReasoning(`Python 执行失败：${message}`, {
-            ...reasoningMetaBase,
-            stage: 'error',
-          });
-          sendToolEvent({
-            id: callId,
-            tool: 'python_runner',
-            stage: 'error',
-            error: message,
-            details: baseDetails,
-          });
-          workingMessages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: 'python_runner',
-            content: JSON.stringify({ error: message }),
-          });
-        }
-      };
-
       // 对齐标准流式接口：携带 assistantMessageId / assistantClientMessageId，便于前端替换占位ID
       safeEnqueue({
         type: 'start',
@@ -678,90 +477,19 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       });
 
       const workingMessages = JSON.parse(JSON.stringify(messagesPayload));
-      const toolDefinitions: any[] = [];
-      const allowedToolNames = new Set<string>();
-      if (toolFlags.webSearch) {
-        allowedToolNames.add('web_search');
-        toolDefinitions.push({
-          type: 'function',
-          function: {
-            name: 'web_search',
-            description:
-              'Use this tool to search the live web for up-to-date information before responding. Return queries in the same language as the conversation.',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description: 'Search query describing the missing information',
-                },
-                num_results: {
-                  type: 'integer',
-                  minimum: 1,
-                  maximum: agentConfig.resultLimit,
-                  description: 'Desired number of results',
-                },
-              },
-              required: ['query'],
-            },
-          },
-        });
-      }
-      if (toolFlags.python && pythonToolConfig.enabled) {
-        allowedToolNames.add('python_runner');
-        toolDefinitions.push({
-          type: 'function',
-          function: {
-            name: 'python_runner',
-            description:
-              'Execute short Python 3 code snippets for calculations or data processing. Use print() to output the final answer.',
-            parameters: {
-              type: 'object',
-              properties: {
-                code: {
-                  type: 'string',
-                  description: 'Python code to execute. Keep it concise and deterministic.',
-                },
-                input: {
-                  type: 'string',
-                  description: 'Optional standard input passed to the Python process.',
-                },
-              },
-              required: ['code'],
-            },
-          },
-        });
-      }
-      // 添加文档工具（如果启用且有 ragService）
-      const documentToolHandler = ragService && toolFlags.document
-        ? new DocumentToolHandler(ragService, sessionId)
-        : null;
-      if (documentToolHandler) {
-        for (const toolDef of documentToolDefinitions) {
-          allowedToolNames.add(toolDef.function.name);
-          toolDefinitions.push(toolDef);
-        }
-      }
-      // 添加知识库工具（如果启用知识库且有 ragService）
       const knowledgeBaseIds = params.knowledgeBaseIds || [];
-      // 获取 sectionService 用于章节结构提取
-      const docServices = getDocumentServices();
-      const sectionService = docServices?.sectionService || null;
-      const kbToolHandler = ragService && toolFlags.knowledgeBase && knowledgeBaseIds.length > 0
-        ? new KBToolHandler(
-            new KnowledgeBaseService(prisma),
-            ragService,
-            knowledgeBaseIds,
-            null,  // enhancedRagService - 后续可集成
-            sectionService
-          )
-        : null;
-      if (kbToolHandler) {
-        for (const toolDef of kbToolDefinitions) {
-          allowedToolNames.add(toolDef.function.name);
-          toolDefinitions.push(toolDef);
-        }
-      }
+      const toolRegistry = createToolHandlerRegistry({
+        webSearch: toolFlags.webSearch ? agentConfig : null,
+        python: toolFlags.python ? pythonToolConfig : null,
+        document: ragService && toolFlags.document
+          ? { enabled: true, sessionId, ragService }
+          : null,
+        knowledgeBase: ragService && toolFlags.knowledgeBase
+          ? { enabled: true, knowledgeBaseIds, ragService }
+          : null,
+      });
+      const toolDefinitions = toolRegistry.getToolDefinitions();
+      const allowedToolNames = toolRegistry.getAllowedToolNames();
       if (toolDefinitions.length === 0) {
         throw new Error('Agent 工具未启用');
       }
@@ -1056,14 +784,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             });
 
             for (const toolCall of aggregatedToolCalls) {
-              const toolName = toolCall?.function?.name || 'web_search';
-              if (!allowedToolNames.has(toolName)) {
-                sendToolEvent({
-                  id: toolCall.id || randomUUID(),
-                  tool: toolName,
-                  stage: 'error',
-                  error: 'Unsupported tool requested by the model',
-                });
+              const toolName = toolCall?.function?.name || '';
+              if (!toolName || !allowedToolNames.has(toolName)) {
+                sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
                 continue;
               }
               let args: Record<string, unknown> = {};
@@ -1072,123 +795,18 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               } catch {
                 args = {};
               }
-              if (toolName === 'web_search') {
-                await handleWebSearchToolCall(toolCall, args as { query?: string; num_results?: number });
-              } else if (toolName === 'python_runner') {
-                await handlePythonToolCall(toolCall, args as { code?: string; input?: string });
-              } else if (documentToolNames.has(toolName) && documentToolHandler) {
-                // 处理文档工具调用
-                const callId = toolCall.id || randomUUID();
-                const reasoningMeta = { kind: 'tool', tool: toolName, callId };
-
-                emitReasoning(formatDocumentToolReasoning(toolName, args, 'start'), {
-                  ...reasoningMeta,
-                  stage: 'start',
-                });
-                sendToolEvent({
-                  id: callId,
-                  tool: toolName,
-                  stage: 'start',
-                  query: (args.query as string) || (args.page_number ? `第 ${args.page_number} 页` : undefined),
-                });
-
-                const result = await documentToolHandler.handleToolCall(toolName, args);
-
-                if (result.success) {
-                  emitReasoning(formatDocumentToolReasoning(toolName, args, 'result'), {
-                    ...reasoningMeta,
-                    stage: 'result',
-                  });
-                  sendToolEvent({
-                    id: callId,
-                    tool: toolName,
-                    stage: 'result',
-                    summary: JSON.stringify(result.result).slice(0, 200),
-                  });
-                  workingMessages.push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    name: toolName,
-                    content: JSON.stringify(result.result),
-                  });
-                } else {
-                  emitReasoning(`文档工具失败：${result.error}`, {
-                    ...reasoningMeta,
-                    stage: 'error',
-                  });
-                  sendToolEvent({
-                    id: callId,
-                    tool: toolName,
-                    stage: 'error',
-                    error: result.error,
-                  });
-                  workingMessages.push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    name: toolName,
-                    content: JSON.stringify({ error: result.error }),
-                  });
-                }
-              } else if (kbToolNames.has(toolName) && kbToolHandler) {
-                // 处理知识库工具调用
-                const callId = toolCall.id || randomUUID();
-                const reasoningMeta = { kind: 'tool', tool: toolName, callId };
-
-                emitReasoning(formatKBToolReasoning(toolName, args, 'start'), {
-                  ...reasoningMeta,
-                  stage: 'start',
-                });
-                sendToolEvent({
-                  id: callId,
-                  tool: toolName,
-                  stage: 'start',
-                  query: (args.query as string) || (args.kb_id ? `知识库 ${args.kb_id}` : undefined),
-                });
-
-                const result = await kbToolHandler.handleToolCall(toolName, args);
-
-                if (result.success) {
-                  emitReasoning(formatKBToolReasoning(toolName, args, 'result'), {
-                    ...reasoningMeta,
-                    stage: 'result',
-                  });
-                  sendToolEvent({
-                    id: callId,
-                    tool: toolName,
-                    stage: 'result',
-                    summary: JSON.stringify(result.result).slice(0, 200),
-                  });
-                  workingMessages.push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    name: toolName,
-                    content: JSON.stringify(result.result),
-                  });
-                } else {
-                  emitReasoning(`知识库工具失败：${result.error}`, {
-                    ...reasoningMeta,
-                    stage: 'error',
-                  });
-                  sendToolEvent({
-                    id: callId,
-                    tool: toolName,
-                    stage: 'error',
-                    error: result.error,
-                  });
-                  workingMessages.push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    name: toolName,
-                    content: JSON.stringify({ error: result.error }),
-                  });
-                }
-              } else {
-                sendToolEvent({
-                  id: toolCall.id || randomUUID(),
-                  tool: toolName,
-                  stage: 'error',
-                  error: 'Unsupported tool requested by the model',
-                });
+              const result = await toolRegistry.handleToolCall(
+                toolName,
+                toolCall as ToolCall,
+                args,
+                {
+                  sessionId,
+                  emitReasoning,
+                  sendToolEvent,
+                },
+              );
+              if (result) {
+                workingMessages.push(result.message);
               }
             }
 

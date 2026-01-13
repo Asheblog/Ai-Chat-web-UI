@@ -125,8 +125,10 @@ export class DocumentToolHandlerAdapter implements IToolHandler {
   }
 
   private resolveToolName(toolCall: ToolCall): string {
-    // 尝试从 toolCall 中获取实际工具名称
-    // 这里需要在调用时传入实际工具名
+    const resolved = (toolCall as ToolCall & { resolvedToolName?: string }).resolvedToolName
+    if (resolved && this.toolNameSet.has(resolved)) return resolved
+    const fromFunction = toolCall.function?.name
+    if (fromFunction && this.toolNameSet.has(fromFunction)) return fromFunction
     return 'document_search'
   }
 

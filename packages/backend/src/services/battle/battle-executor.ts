@@ -7,9 +7,11 @@ import { providerRequester as defaultProviderRequester } from '../../modules/cha
 import { convertOpenAIReasoningPayload } from '../../utils/providers'
 import { convertChatCompletionsRequestToResponses, extractReasoningFromResponsesResponse, extractTextFromResponsesResponse } from '../../utils/openai-responses'
 import { buildAgentPythonToolConfig, buildAgentWebSearchConfig } from '../../modules/chat/agent-tool-config'
-import { WebSearchToolHandler } from '../../modules/chat/tool-handlers/web-search-handler'
-import { PythonToolHandler } from '../../modules/chat/tool-handlers/python-handler'
-import type { ToolCall, ToolHandlerResult } from '../../modules/chat/tool-handlers/types'
+import {
+  createToolHandlerRegistry,
+  type ToolCall,
+  type ToolHandlerResult,
+} from '../../modules/chat/tool-handlers'
 import type { TaskTraceRecorder } from '../../utils/task-trace'
 import type { BattleModelFeatures, BattleModelInput } from './battle-types'
 import { safeParseJson } from './battle-serialization'
@@ -498,21 +500,12 @@ export class BattleExecutor {
       webSearchConfig.resultLimit = next
     }
 
-    const toolHandlers: Array<{ name: string; handler: WebSearchToolHandler | PythonToolHandler }> = []
-    const toolDefinitions: any[] = []
-
-    if (toolFlags.webSearchActive) {
-      const handler = new WebSearchToolHandler(webSearchConfig)
-      toolHandlers.push({ name: handler.toolName, handler })
-      toolDefinitions.push(handler.toolDefinition)
-    }
-    if (toolFlags.pythonActive) {
-      const handler = new PythonToolHandler(pythonConfig)
-      toolHandlers.push({ name: handler.toolName, handler })
-      toolDefinitions.push(handler.toolDefinition)
-    }
-
-    const handlerMap = new Map(toolHandlers.map((item) => [item.name, item.handler]))
+    const toolRegistry = createToolHandlerRegistry({
+      webSearch: toolFlags.webSearchActive ? webSearchConfig : null,
+      python: toolFlags.pythonActive ? pythonConfig : null,
+    })
+    const toolDefinitions = toolRegistry.getToolDefinitions()
+    const allowedToolNames = toolRegistry.getAllowedToolNames()
     const maxIterations = resolveMaxToolIterations(sysMap)
 
     let workingMessages = prepared.messagesPayload.map((msg) => ({ ...msg }))
@@ -556,16 +549,16 @@ export class BattleExecutor {
 
         for (const toolCall of streamed.toolCalls) {
           const toolName = toolCall?.function?.name || ''
-          const handler = handlerMap.get(toolName)
           const args = this.safeParseToolArgs(toolCall)
           let result: ToolHandlerResult | null = null
-          if (handler) {
-            result = await handler.handle(toolCall as ToolCall, args, {
+          if (toolName && allowedToolNames.has(toolName)) {
+            result = await toolRegistry.handleToolCall(toolName, toolCall as ToolCall, args, {
               sessionId: 0,
               emitReasoning: () => {},
               sendToolEvent: () => {},
             })
-          } else {
+          }
+          if (!result) {
             result = {
               toolCallId: toolCall.id || crypto.randomUUID(),
               toolName: toolName || 'unknown',
@@ -642,16 +635,16 @@ export class BattleExecutor {
 
       for (const toolCall of toolCalls) {
         const toolName = toolCall?.function?.name || ''
-        const handler = handlerMap.get(toolName)
         const args = this.safeParseToolArgs(toolCall)
         let result: ToolHandlerResult | null = null
-        if (handler) {
-          result = await handler.handle(toolCall as ToolCall, args, {
+        if (toolName && allowedToolNames.has(toolName)) {
+          result = await toolRegistry.handleToolCall(toolName, toolCall as ToolCall, args, {
             sessionId: 0,
             emitReasoning: () => {},
             sendToolEvent: () => {},
           })
-        } else {
+        }
+        if (!result) {
           result = {
             toolCallId: toolCall.id || crypto.randomUUID(),
             toolName: toolName || 'unknown',

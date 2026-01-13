@@ -15,9 +15,12 @@ import { WebSearchToolHandler } from './web-search-handler'
 import { PythonToolHandler } from './python-handler'
 import {
   DocumentToolHandlerAdapter,
-  documentToolDefinitions,
   documentToolNames,
 } from './document-handler-adapter'
+import {
+  KnowledgeBaseToolHandlerAdapter,
+  kbToolNames,
+} from './knowledge-base-handler-adapter'
 
 /**
  * 工具处理器注册表
@@ -33,9 +36,13 @@ export class ToolHandlerRegistry {
   register(handler: IToolHandler): void {
     this.handlers.push(handler)
 
-    // 特殊处理文档工具适配器 - 它管理多个工具
+    // 特殊处理文档/知识库工具适配器 - 它们管理多个工具
     if (handler instanceof DocumentToolHandlerAdapter) {
       for (const name of documentToolNames) {
+        this.toolNameToHandler.set(name, handler)
+      }
+    } else if (handler instanceof KnowledgeBaseToolHandlerAdapter) {
+      for (const name of kbToolNames) {
         this.toolNameToHandler.set(name, handler)
       }
     } else {
@@ -73,11 +80,21 @@ export class ToolHandlerRegistry {
             addedNames.add(def.function.name)
           }
         }
-      } else {
-        if (!addedNames.has(handler.toolName)) {
-          definitions.push(handler.toolDefinition)
-          addedNames.add(handler.toolName)
+        continue
+      }
+      if (handler instanceof KnowledgeBaseToolHandlerAdapter) {
+        // 知识库工具有多个定义
+        for (const def of handler.allToolDefinitions) {
+          if (!addedNames.has(def.function.name)) {
+            definitions.push(def)
+            addedNames.add(def.function.name)
+          }
         }
+        continue
+      }
+      if (!addedNames.has(handler.toolName)) {
+        definitions.push(handler.toolDefinition)
+        addedNames.add(handler.toolName)
       }
     }
 
@@ -137,6 +154,15 @@ export function createToolHandlerRegistry(
   // 注册文档处理器
   if (params.document?.enabled && params.document.ragService) {
     registry.register(new DocumentToolHandlerAdapter(params.document))
+  }
+
+  // 注册知识库处理器
+  if (
+    params.knowledgeBase?.enabled &&
+    params.knowledgeBase.ragService &&
+    params.knowledgeBase.knowledgeBaseIds?.length > 0
+  ) {
+    registry.register(new KnowledgeBaseToolHandlerAdapter(params.knowledgeBase))
   }
 
   return registry

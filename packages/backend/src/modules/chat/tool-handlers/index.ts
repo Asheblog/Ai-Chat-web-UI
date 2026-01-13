@@ -18,6 +18,7 @@ export type {
   WebSearchHandlerConfig,
   PythonHandlerConfig,
   DocumentHandlerConfig,
+  KnowledgeBaseHandlerConfig,
   ToolLogDetails,
 } from './types'
 
@@ -29,6 +30,11 @@ export {
   documentToolNames,
   documentToolDefinitions,
 } from './document-handler-adapter'
+export {
+  KnowledgeBaseToolHandlerAdapter,
+  kbToolNames,
+  kbToolDefinitions,
+} from './knowledge-base-handler-adapter'
 
 // 注册表
 export {

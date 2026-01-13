@@ -9,7 +9,7 @@ import type { WebSearchHit } from '../../../utils/web-search'
  */
 export interface ToolCall {
   id?: string
-  function?: { arguments?: string }
+  function?: { name?: string; arguments?: string }
 }
 
 /**
@@ -86,6 +86,7 @@ export interface ToolHandlerFactoryParams {
   webSearch?: WebSearchHandlerConfig | null
   python?: PythonHandlerConfig | null
   document?: DocumentHandlerConfig | null
+  knowledgeBase?: KnowledgeBaseHandlerConfig | null
 }
 
 /**
@@ -122,6 +123,17 @@ export interface DocumentHandlerConfig {
   enabled: boolean
   sessionId: number
   ragService: unknown // 避免循环依赖，使用时再 cast
+}
+
+/**
+ * 知识库处理器配置
+ */
+export interface KnowledgeBaseHandlerConfig {
+  enabled: boolean
+  knowledgeBaseIds: number[]
+  ragService: unknown // 避免循环依赖，使用时再 cast
+  enhancedRagService?: unknown // 避免循环依赖，使用时再 cast
+  sectionService?: unknown // 避免循环依赖，使用时再 cast
 }
 
 /**
