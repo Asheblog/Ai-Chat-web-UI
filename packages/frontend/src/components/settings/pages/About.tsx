@@ -53,38 +53,26 @@ export function AboutPage() {
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">bba7b82</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1a4f40c</span>
               <span className="text-muted-foreground leading-relaxed">
-                升级文档/知识库工具接口，支持增强搜索模式。
+                文档处理链路增强：新增 DocumentRemovedError，文档删除时安全更新并取消处理任务，进度/状态/错误上报更稳健。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">6bd6577</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1a4f40c</span>
               <span className="text-muted-foreground leading-relaxed">
-                重构聊天模块，使用注册表模式统一工具处理器，支持知识库功能。
+                新增工具协议与适配器工具函数，改进工具调用解析并支持 Gemini 工具定义。
               </span>
             </li>
             <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">c7cd0d9</span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1a4f40c</span>
               <span className="text-muted-foreground leading-relaxed">
-                改进 PDF 文本提取失败时的错误提示信息。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">2a800d2</span>
-              <span className="text-muted-foreground leading-relaxed">
-                支持在非流式回退响应中持久化生成的图片。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">e704efa</span>
-              <span className="text-muted-foreground leading-relaxed">
-                新增图片生成本地存储功能，支持通过 URL 访问。
+                支持多聊天提供商的请求构建逻辑与适配器处理。
               </span>
             </li>
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2026-01-13 推送变更摘要
+            以上为 2026-01-20 推送变更摘要
           </p>
         </Card>
       </div>
