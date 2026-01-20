@@ -11,11 +11,10 @@ import { AuthUtils as defaultAuthUtils } from '../../../utils/auth'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage'
 import {
   buildHeaders,
-  convertOpenAIReasoningPayload,
   type AuthType,
   type ProviderType,
 } from '../../../utils/providers'
-import { convertChatCompletionsRequestToResponses } from '../../../utils/openai-responses'
+import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { sendMessageSchema } from '../chat-common'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
@@ -31,6 +30,9 @@ export interface PreparedChatRequest {
   providerRequest: {
     providerLabel: ProviderType
     providerHost: string | null
+    baseUrl: string
+    rawModelId: string
+    azureApiVersion?: string | null
     url: string
     headers: Record<string, string>
     authHeader: Record<string, string>
@@ -137,14 +139,14 @@ export class ChatRequestBuilder {
       systemPrompts.push({
         role: 'system',
         content:
-          '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。',
+          '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。若结果不足以回答，可以继续调用 web_search 直到信息充分或达到上限。',
       })
     }
     if (requestedFeatures.python_tool === true) {
       systemPrompts.push({
         role: 'system',
         content:
-          '只有在需要精确计算或表格/数组等结构化处理时，才调用 python_runner。请提供简短、确定性的 Python3 代码，并通过 print() 输出最终答案。避免执行危险操作或访问文件系统。',
+          '只有在需要精确计算或表格/数组等结构化处理时，才调用 python_runner。请提供简短、确定性的 Python3 代码，并通过 print() 输出最终答案。避免执行危险操作或访问文件系统。若结果不足，可继续调用 python_runner。',
       })
     }
 
@@ -447,36 +449,23 @@ export class ChatRequestBuilder {
       authHeader[key] = value
     }
 
-    let url = ''
-    let body: any
-    if (provider === 'openai') {
-      url = `${baseUrl}/chat/completions`
-      body = convertOpenAIReasoningPayload({ ...params.baseRequestBody })
-    } else if (provider === 'openai_responses') {
-      url = `${baseUrl}/responses`
-      body = convertChatCompletionsRequestToResponses(convertOpenAIReasoningPayload({ ...params.baseRequestBody }))
-    } else if (provider === 'azure_openai') {
-      const apiVersion = params.session.connection.azureApiVersion || '2024-02-15-preview'
-      url = `${baseUrl}/openai/deployments/${encodeURIComponent(
-        params.session.modelRawId!,
-      )}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
-      body = convertOpenAIReasoningPayload({ ...params.baseRequestBody })
-    } else if (provider === 'ollama') {
-      url = `${baseUrl}/api/chat`
-      body = {
-        model: params.session.modelRawId,
-        messages: this.convertMessagesForOllama(params.messagesPayload),
-        stream: params.mode === 'stream',
-      }
-    } else {
-      throw new Error(`Provider ${provider} is not supported in chat pipeline`)
-    }
+    const { url, body } = buildChatProviderRequest({
+      provider,
+      baseUrl,
+      rawModelId: params.session.modelRawId!,
+      body: params.baseRequestBody,
+      azureApiVersion: params.session.connection.azureApiVersion,
+      stream: params.mode === 'stream',
+    })
 
     const timeoutMs = this.resolveProviderTimeout(params.systemSettings)
 
     return {
       providerLabel: provider,
       providerHost: this.safeResolveHost(baseUrl),
+      baseUrl,
+      rawModelId: params.session.modelRawId!,
+      azureApiVersion: params.session.connection.azureApiVersion ?? null,
       url,
       headers: mergedHeaders,
       authHeader,
@@ -557,30 +546,6 @@ export class ChatRequestBuilder {
       merged[name] = value
     }
     return merged
-  }
-
-  private convertMessagesForOllama(messagesPayload: any[]) {
-    return messagesPayload.map((msg: any) => {
-      if (typeof msg.content === 'string') {
-        return msg
-      }
-      if (Array.isArray(msg.content)) {
-        const text = msg.content
-          .map((part) => {
-            if (part?.type === 'text') {
-              return part.text
-            }
-            if (part?.type === 'image_url') {
-              return `[image:${part.image_url?.url}]`
-            }
-            return ''
-          })
-          .filter(Boolean)
-          .join('\n')
-        return { role: msg.role, content: text }
-      }
-      return { role: msg.role, content: '' }
-    })
   }
 
   private async loadSystemSettings(): Promise<Record<string, string>> {

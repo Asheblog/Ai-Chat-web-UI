@@ -36,12 +36,6 @@ export const useComposerFeatureFlags = ({
   const [traceEnabled, setTraceEnabled] = useState(false)
   const tracePreferenceRef = useRef<Record<number, boolean>>({})
 
-  const providerSupportsTools = useMemo(() => {
-    const provider = activeModel?.provider?.toLowerCase()
-    if (!provider) return true
-    return provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
-  }, [activeModel])
-
   const isVisionEnabled = useMemo(() => {
     const cap = activeModel?.capabilities?.vision
     return typeof cap === 'boolean' ? cap : true
@@ -59,26 +53,23 @@ export const useComposerFeatureFlags = ({
 
   const canUseWebSearch =
     Boolean(systemSettings?.webSearchAgentEnable && systemSettings?.webSearchHasApiKey) &&
-    isWebSearchCapable &&
-    providerSupportsTools
+    isWebSearchCapable
 
   const canUsePythonTool =
-    Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable && providerSupportsTools
+    Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable
 
   const webSearchDisabledNote = useMemo(() => {
     if (!systemSettings?.webSearchAgentEnable) return '管理员未启用联网搜索'
     if (!systemSettings?.webSearchHasApiKey) return '尚未配置搜索 API Key'
-    if (!providerSupportsTools) return '当前连接不支持工具调用'
     if (!isWebSearchCapable) return '当前模型未开放联网搜索'
     return undefined
-  }, [providerSupportsTools, systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey, isWebSearchCapable])
+  }, [systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey, isWebSearchCapable])
 
   const pythonToolDisabledNote = useMemo(() => {
     if (!systemSettings?.pythonToolEnable) return '管理员未开启 Python 工具'
-    if (!providerSupportsTools) return '当前连接不支持工具调用'
     if (!pythonToolCapable) return '当前模型未启用 Python 工具'
     return undefined
-  }, [providerSupportsTools, pythonToolCapable, systemSettings?.pythonToolEnable])
+  }, [pythonToolCapable, systemSettings?.pythonToolEnable])
 
   const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
   const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)

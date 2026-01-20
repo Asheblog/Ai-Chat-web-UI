@@ -29,6 +29,13 @@ import { createLogger } from '../../utils/logger'
 
 const log = createLogger('Document')
 
+class DocumentRemovedError extends Error {
+  constructor() {
+    super('Document removed')
+    this.name = 'DocumentRemovedError'
+  }
+}
+
 export interface DocumentServiceConfig {
   /**
    * 文档存储目录
@@ -241,21 +248,52 @@ export class DocumentService {
     onProgress?: ProgressCallback,
     jobId?: number
   ): Promise<void> {
+    const cancelJobIfNeeded = async () => {
+      if (!jobId) return
+      await this.prisma.documentProcessingJob.updateMany({
+        where: {
+          id: jobId,
+          status: { in: ['pending', 'running', 'retrying'] },
+        },
+        data: {
+          status: 'canceled',
+          lastError: 'Document deleted',
+          lockedAt: null,
+          nextRunAt: null,
+        },
+      })
+    }
+
+    const handleDocumentMissing = async () => {
+      await cancelJobIfNeeded()
+      throw new DocumentRemovedError()
+    }
+
+    const updateDocumentSafely = async (data: Prisma.DocumentUpdateManyMutationInput) => {
+      const result = await this.prisma.document.updateMany({
+        where: { id: documentId },
+        data,
+      })
+      if (result.count === 0) {
+        await handleDocumentMissing()
+      }
+    }
+
     const report = async (progress: ProcessingProgress) => {
       if (onProgress) {
         onProgress(progress)
       }
       // 持久化进度（worker 可据此展示/自愈）
       try {
-        await this.prisma.document.update({
-          where: { id: documentId },
-          data: {
-            processingStage: progress.stage,
-            processingProgress: Math.max(0, Math.min(100, progress.progress)),
-            processingHeartbeatAt: new Date(),
-          },
+        await updateDocumentSafely({
+          processingStage: progress.stage,
+          processingProgress: Math.max(0, Math.min(100, progress.progress)),
+          processingHeartbeatAt: new Date(),
         })
-      } catch {
+      } catch (error) {
+        if (error instanceof DocumentRemovedError) {
+          throw error
+        }
         // 忽略进度更新错误，不影响主流程
       }
     }
@@ -270,16 +308,13 @@ export class DocumentService {
       }
 
       // 更新状态为处理中
-      await this.prisma.document.update({
-        where: { id: documentId },
-        data: {
-          status: 'processing',
-          processingStage: 'parsing',
-          processingProgress: 0,
-          processingStartedAt: new Date(),
-          processingHeartbeatAt: new Date(),
-          processingFinishedAt: null,
-        },
+      await updateDocumentSafely({
+        status: 'processing',
+        processingStage: 'parsing',
+        processingProgress: 0,
+        processingStartedAt: new Date(),
+        processingHeartbeatAt: new Date(),
+        processingFinishedAt: null,
       })
 
       const document = await this.prisma.document.findUnique({
@@ -622,24 +657,21 @@ export class DocumentService {
       }
 
       // 更新文档状态
-      await this.prisma.document.update({
-        where: { id: documentId },
-        data: {
-          status: 'ready',
-          processingStage: 'done',
-          processingProgress: 100,
-          processingFinishedAt: new Date(),
-          chunkCount: totalChunksProcessed,
-          metadata: JSON.stringify({
-            pageCount: totalPages,
-            processedPages,
-            charCount: totalChars,
-            wordCount: Math.floor(totalChars / 5), // 估算
-            truncated: wasTruncated,
-            maxPagesLimit: wasTruncated ? maxPages : undefined,
-            hasPageInfo,
-          }),
-        },
+      await updateDocumentSafely({
+        status: 'ready',
+        processingStage: 'done',
+        processingProgress: 100,
+        processingFinishedAt: new Date(),
+        chunkCount: totalChunksProcessed,
+        metadata: JSON.stringify({
+          pageCount: totalPages,
+          processedPages,
+          charCount: totalChars,
+          wordCount: Math.floor(totalChars / 5), // 估算
+          truncated: wasTruncated,
+          maxPagesLimit: wasTruncated ? maxPages : undefined,
+          hasPageInfo,
+        }),
       })
 
       const truncateMsg = wasTruncated
@@ -647,17 +679,17 @@ export class DocumentService {
         : ''
       await report({ stage: 'done', progress: 100, message: `处理完成${truncateMsg}` })
     } catch (error) {
+      if (error instanceof DocumentRemovedError) {
+        throw error
+      }
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      await this.prisma.document.update({
-        where: { id: documentId },
-        data: {
-          status: 'error',
-          errorMessage,
-          processingStage: 'error',
-          processingProgress: 0,
-          processingFinishedAt: new Date(),
-        },
+      await updateDocumentSafely({
+        status: 'error',
+        errorMessage,
+        processingStage: 'error',
+        processingProgress: 0,
+        processingFinishedAt: new Date(),
       })
 
       await report({ stage: 'error', progress: 0, message: '处理失败', error: errorMessage })
@@ -946,7 +978,7 @@ export class DocumentService {
       },
     })
 
-    await this.prisma.document.update({
+    await this.prisma.document.updateMany({
       where: { id: documentId },
       data: {
         status: 'error',
@@ -967,6 +999,19 @@ export class DocumentService {
     })
 
     if (!document) return
+
+    await this.prisma.documentProcessingJob.updateMany({
+      where: {
+        documentId,
+        status: { in: ['pending', 'running', 'retrying'] },
+      },
+      data: {
+        status: 'canceled',
+        lastError: 'Document deleted',
+        lockedAt: null,
+        nextRunAt: null,
+      },
+    })
 
     // 删除向量数据
     if (document.collectionName) {
@@ -1008,6 +1053,19 @@ export class DocumentService {
     // 获取所有要删除的文档
     const documents = await this.prisma.document.findMany({
       where: { id: { in: documentIds } },
+    })
+
+    await this.prisma.documentProcessingJob.updateMany({
+      where: {
+        documentId: { in: documentIds },
+        status: { in: ['pending', 'running', 'retrying'] },
+      },
+      data: {
+        status: 'canceled',
+        lastError: 'Document deleted',
+        lockedAt: null,
+        nextRunAt: null,
+      },
     })
 
     // 批量删除向量数据（不执行 VACUUM，最后统一执行）

@@ -419,17 +419,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       const webSearchFeatureRequested = requestedFeatures?.web_search === true;
       const pythonToolFeatureRequested = requestedFeatures?.python_tool === true;
-      const providerSupportsTools = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai';
       const agentWebSearchActive =
         webSearchFeatureRequested &&
         agentWebSearchConfig.enabled &&
-        providerSupportsTools &&
         Boolean(agentWebSearchConfig.apiKey);
       const pythonToolActive =
-        pythonToolFeatureRequested && pythonToolConfig.enabled && providerSupportsTools;
+        pythonToolFeatureRequested && pythonToolConfig.enabled;
       // 文档工具和知识库工具也需要进入 agent 模式
-      const documentToolsActive = providerSupportsTools && hasSessionDocuments;
-      const knowledgeBaseToolsActive = providerSupportsTools && hasKnowledgeBases;
+      const documentToolsActive = hasSessionDocuments;
+      const knowledgeBaseToolsActive = hasKnowledgeBases;
       const agentToolsActive = agentWebSearchActive || pythonToolActive || documentToolsActive || knowledgeBaseToolsActive;
       const resolvedMaxConcurrentStreams = (() => {
         const raw =

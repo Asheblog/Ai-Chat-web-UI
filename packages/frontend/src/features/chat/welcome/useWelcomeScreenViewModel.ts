@@ -197,34 +197,25 @@ export const useWelcomeScreenViewModel = () => {
     return typeof cap === 'boolean' ? cap : true
   }, [selectedModel])
 
-  const providerSupportsTools = useMemo(() => {
-    const provider = selectedModel?.provider?.toLowerCase()
-    if (!provider) return true
-    return provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
-  }, [selectedModel])
-
   const canUseWebSearch = Boolean(
     systemSettings?.webSearchAgentEnable &&
     systemSettings?.webSearchHasApiKey &&
-    isWebSearchCapable &&
-    providerSupportsTools,
+    isWebSearchCapable,
   )
-  const canUsePythonTool = Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable && providerSupportsTools
+  const canUsePythonTool = Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable
 
   const webSearchDisabledNote = useMemo(() => {
     if (!systemSettings?.webSearchAgentEnable) return '管理员未启用联网搜索'
     if (!systemSettings?.webSearchHasApiKey) return '尚未配置搜索 API Key'
-    if (!providerSupportsTools) return '当前连接不支持工具调用'
     if (!isWebSearchCapable) return '该模型未启用联网搜索'
     return undefined
-  }, [isWebSearchCapable, providerSupportsTools, systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey])
+  }, [isWebSearchCapable, systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey])
 
   const pythonToolDisabledNote = useMemo(() => {
     if (!systemSettings?.pythonToolEnable) return '管理员未开启 Python 工具'
-    if (!providerSupportsTools) return '当前连接不支持工具调用'
     if (!pythonToolCapable) return '该模型未启用 Python 工具'
     return undefined
-  }, [providerSupportsTools, pythonToolCapable, systemSettings?.pythonToolEnable])
+  }, [pythonToolCapable, systemSettings?.pythonToolEnable])
 
   const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
   const showWebSearchScope = canUseWebSearch && isMetasoEngine

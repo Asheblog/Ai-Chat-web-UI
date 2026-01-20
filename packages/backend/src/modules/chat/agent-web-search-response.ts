@@ -1,9 +1,11 @@
-import { randomUUID } from 'node:crypto';
 import { Prisma, type ChatSession, type Connection } from '@prisma/client';
 import { prisma } from '../../db';
 import { BackendLogger as log } from '../../utils/logger';
-import { convertOpenAIReasoningPayload } from '../../utils/providers';
-import { convertChatCompletionsRequestToResponses } from '../../utils/openai-responses';
+import {
+  extractReasoningFromResponsesResponse,
+  extractTextFromResponsesResponse,
+} from '../../utils/openai-responses';
+import { buildChatProviderRequest } from '../../utils/chat-provider';
 import { Tokenizer } from '../../utils/tokenizer';
 import type { WebSearchHit } from '../../utils/web-search';
 import { serializeQuotaSnapshot } from '../../utils/quota';
@@ -34,11 +36,30 @@ import {
   type ToolCall,
 } from './tool-handlers';
 import {
+  type LegacyFunctionCall,
+  type ToolSchema,
+  appendLegacyFunctionCallDelta,
+  appendOpenAIToolCallDelta,
+  appendResponsesToolCallEvent,
+  buildUnsupportedToolResult,
+  buildTextToolResultMessage,
+  buildToolRequest,
+  createToolCallBuffers,
+  extractToolCallsFromMessage,
+  extractToolCallsFromResponsesOutput,
+  isUnsupportedFunctionParamError,
+  isUnsupportedToolParamError,
+  normalizeToolHandlerResult,
+  parseToolCalls,
+  resolveToolSchema,
+} from './tool-protocol';
+import {
   type AgentWebSearchConfig,
   type AgentPythonToolConfig,
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
 } from './agent-tool-config';
+import type { ProviderType } from '../../utils/providers';
 
 // Re-export for backwards compatibility
 export { AgentWebSearchConfig, AgentPythonToolConfig, buildAgentWebSearchConfig, buildAgentPythonToolConfig };
@@ -493,35 +514,32 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       if (toolDefinitions.length === 0) {
         throw new Error('Agent 工具未启用');
       }
+      let toolSchema: ToolSchema = resolveToolSchema({ provider, requestData });
       const maxIterations =
         agentMaxToolIterations > 0 ? agentMaxToolIterations : Number.POSITIVE_INFINITY;
       let currentProviderController: AbortController | null = null;
+      const streamEnabled = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai';
 
-      const callProvider = async (messages: any[]) => {
-        const chatBody = convertOpenAIReasoningPayload({
-          ...requestData,
-          stream: true,
+      const callProvider = async (messages: any[], schema: ToolSchema) => {
+        const { body: chatBody, messages: preparedMessages, textPromptAdded } = buildToolRequest({
+          requestData,
           messages,
-          tools: toolDefinitions,
-          tool_choice: 'auto',
+          toolDefinitions,
+          schema,
+          provider,
+          stream: streamEnabled,
         });
-        const body = provider === 'openai_responses'
-          ? convertChatCompletionsRequestToResponses(chatBody)
-          : chatBody
-
-        let url = '';
-        if (provider === 'openai') {
-          url = `${baseUrl}/chat/completions`;
-        } else if (provider === 'openai_responses') {
-          url = `${baseUrl}/responses`;
-        } else if (provider === 'azure_openai') {
-          const v = session.connection?.azureApiVersion || '2024-02-15-preview';
-          url = `${baseUrl}/openai/deployments/${encodeURIComponent(
-            session.modelRawId!,
-          )}/chat/completions?api-version=${encodeURIComponent(v)}`;
-        } else {
-          throw new Error(`Provider ${provider} does not support agent web search`);
+        if (textPromptAdded) {
+          messages.splice(0, messages.length, ...preparedMessages);
         }
+        const { url, body, streamMode } = buildChatProviderRequest({
+          provider: provider as ProviderType,
+          baseUrl,
+          rawModelId: session.modelRawId!,
+          body: chatBody,
+          azureApiVersion: session.connection?.azureApiVersion,
+          stream: streamEnabled,
+        });
 
         const headers = {
           'Content-Type': 'application/json',
@@ -536,7 +554,14 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           headerKeys: Object.keys(headers || {}),
           authHeaderProvided: Object.keys(authHeader || {}).length > 0,
           extraHeaderKeys: Object.keys(extraHeaders || {}),
-          toolsRequested: Array.isArray(body.tools) ? body.tools.map((t: any) => t?.function?.name || t?.type || 'unknown') : [],
+          streamMode,
+          toolsRequested:
+            schema === 'functions'
+              ? toolDefinitions.map((fn: any) => fn?.function?.name || 'unknown')
+              : Array.isArray(body.tools)
+                ? body.tools.map((t: any) => t?.function?.name || t?.type || 'unknown')
+                : [],
+          toolSchema: schema,
         });
 
         currentProviderController = new AbortController();
@@ -588,232 +613,379 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         let iterations = 0;
         while (iterations < maxIterations) {
           iterations += 1;
-          const response = await callProvider(workingMessages);
-          const reader = response.body?.getReader();
-          if (!reader) {
+          let response: Response;
+          try {
+            response = await callProvider(workingMessages, toolSchema);
+          } catch (error) {
+            if (
+              toolSchema === 'tools' &&
+              provider !== 'openai_responses' &&
+              isUnsupportedToolParamError(error)
+            ) {
+              toolSchema = 'functions';
+              traceRecorder.log('agent:tool_schema_fallback', {
+                provider,
+                model: session.modelRawId,
+                schema: toolSchema,
+              });
+              response = await callProvider(workingMessages, toolSchema);
+            } else if (toolSchema === 'functions' && isUnsupportedFunctionParamError(error)) {
+              toolSchema = 'text';
+              traceRecorder.log('agent:tool_schema_fallback', {
+                provider,
+                model: session.modelRawId,
+                schema: toolSchema,
+              });
+              response = await callProvider(workingMessages, toolSchema);
+            } else {
+              throw error;
+            }
+          }
+          const reader = streamEnabled ? response.body?.getReader() : null;
+          if (streamEnabled && !reader) {
             throw new Error('AI provider returned no response body');
           }
           const decoder = new TextDecoder();
           let buffer = '';
-          let finishReason: string | null = null;
+          let sawSse = false;
           let providerUsage: any = null;
           let iterationContent = '';
           let iterationReasoning = '';
           let iterationReasoningStartedAt: number | null = null;
-          const toolCallBuffers = new Map<
-            number,
-            { id?: string; type?: string; function: { name?: string; arguments: string } }
-          >();
-          const responsesToolCallBuffers = new Map<
-            string,
-            { callId: string; name?: string; arguments: string; order: number }
-          >();
-
-          const aggregateToolCalls = () =>
-            (responsesToolCallBuffers.size > 0
-              ? Array.from(responsesToolCallBuffers.values())
-                  .sort((a, b) => a.order - b.order)
-                  .map((entry) => ({
-                    id: entry.callId,
-                    type: 'function',
-                    function: {
-                      name: entry.name || 'web_search',
-                      arguments: entry.arguments || '{}',
-                    },
-                  }))
-              : Array.from(toolCallBuffers.entries())
-                  .sort((a, b) => a[0] - b[0])
-                  .map(([_, entry]) => ({
-                    id: entry.id || randomUUID(),
-                    type: entry.type || 'function',
-                    function: {
-                      name: entry.function.name || 'web_search',
-                      arguments: entry.function.arguments || '{}',
-                    },
-                  })));
-
-          let streamFinished = false;
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            lastChunkAt = Date.now();
-            idleWarned = false;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-              const normalized = line.replace(/\r$/, '');
-              if (!normalized.startsWith('data: ')) continue;
-              const data = normalized.slice(6);
-              if (data === '[DONE]') {
-                buffer = '';
-                streamFinished = true;
-                break;
-              }
-              let parsed: any;
-              try {
-                parsed = JSON.parse(data);
-              } catch {
-                continue;
-              }
-
-              if (typeof parsed?.type === 'string' && parsed.type.startsWith('response.')) {
-                if (firstChunkAt == null) firstChunkAt = Date.now();
-
-                if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
-                  iterationContent += parsed.delta;
-                  aiResponseContent += parsed.delta;
-                  safeEnqueue({ type: 'content', content: parsed.delta });
-                  await persistAssistantProgress();
-                } else if (
-                  (parsed.type === 'response.reasoning_text.delta' || parsed.type === 'response.reasoning_summary_text.delta') &&
-                  typeof parsed.delta === 'string'
-                ) {
-                  if (!reasoningStartedAt) reasoningStartedAt = Date.now();
-                  if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
-                  iterationReasoning += parsed.delta;
-                  emitReasoning(parsed.delta, { kind: 'model', stage: 'stream' });
-                  await persistAssistantProgress();
-                } else if (parsed.type === 'response.output_item.added' || parsed.type === 'response.output_item.done') {
-                  const item = parsed.item;
-                  if (item?.type === 'function_call') {
-                    const callId = typeof item.call_id === 'string' ? item.call_id : null;
-                    if (callId) {
-                      const existing = responsesToolCallBuffers.get(callId) || {
-                        callId,
-                        name: undefined,
-                        arguments: '',
-                        order: typeof parsed.output_index === 'number' ? parsed.output_index : responsesToolCallBuffers.size,
-                      };
-                      if (typeof item.name === 'string' && item.name) existing.name = item.name;
-                      if (typeof item.arguments === 'string') existing.arguments = item.arguments || existing.arguments;
-                      responsesToolCallBuffers.set(callId, existing);
-                    }
-                  }
-                } else if (parsed.type === 'response.function_call_arguments.delta') {
-                  const callId = typeof parsed.call_id === 'string' ? parsed.call_id : null;
-                  const delta = typeof parsed.delta === 'string' ? parsed.delta : '';
-                  if (callId && delta) {
-                    const existing = responsesToolCallBuffers.get(callId) || {
-                      callId,
-                      name: undefined,
-                      arguments: '',
-                      order: responsesToolCallBuffers.size,
-                    };
-                    existing.arguments = `${existing.arguments || ''}${delta}`;
-                    responsesToolCallBuffers.set(callId, existing);
-                  }
-                } else if (
-                  parsed.type === 'response.completed' ||
-                  parsed.type === 'response.failed' ||
-                  parsed.type === 'response.incomplete'
-                ) {
-                  providerUsage = parsed.response?.usage ?? providerUsage;
-                  if (providerUsage) {
-                    providerUsageSeen = true;
-                    safeEnqueue({ type: 'usage', usage: providerUsage });
-                  }
-                  streamFinished = true;
-                  break;
+          let contentAlreadySent = false;
+          const toolCallBuffers = createToolCallBuffers();
+          let messageToolCalls: ToolCall[] = [];
+          let legacyFunctionCall: LegacyFunctionCall | null = null;
+          const activeToolSchema = toolSchema;
+          const bufferTextOutput = activeToolSchema === 'text';
+          const parseNonSsePayload = (raw: string) => {
+            if (!raw) return;
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed?.output)) {
+                iterationContent = extractTextFromResponsesResponse(parsed) || '';
+                const reasoningText = extractReasoningFromResponsesResponse(parsed) || '';
+                if (reasoningText) {
+                  iterationReasoning = reasoningText;
+                  emitReasoning(reasoningText, { kind: 'model', stage: 'stream' });
                 }
-                continue;
-              }
-
-              const choice = parsed.choices?.[0];
-              if (!choice) continue;
-              if (firstChunkAt == null) {
-                firstChunkAt = Date.now();
-              }
-              const delta = choice.delta ?? {};
-              if (delta.reasoning_content) {
-                if (!reasoningStartedAt) reasoningStartedAt = Date.now();
-                if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
-                iterationReasoning += delta.reasoning_content;
-                emitReasoning(delta.reasoning_content, { kind: 'model', stage: 'stream' });
-                await persistAssistantProgress();
-              }
-              if (delta.content) {
-                iterationContent += delta.content;
-                aiResponseContent += delta.content;
-                safeEnqueue({ type: 'content', content: delta.content });
-                await persistAssistantProgress();
-              }
-              if (Array.isArray(delta.tool_calls)) {
-                for (const toolDelta of delta.tool_calls) {
-                  const idx = typeof toolDelta.index === 'number' ? toolDelta.index : 0;
-                  const existing =
-                    toolCallBuffers.get(idx) || { function: { name: undefined, arguments: '' } };
-                  if (toolDelta.id) existing.id = toolDelta.id;
-                  if (toolDelta.type) existing.type = toolDelta.type;
-                  if (toolDelta.function?.name) existing.function.name = toolDelta.function.name;
-                  if (toolDelta.function?.arguments) {
-                    existing.function.arguments = `${existing.function.arguments || ''}${toolDelta.function.arguments
-                      }`;
-                  }
-                  toolCallBuffers.set(idx, existing);
+                const outputToolCalls = extractToolCallsFromResponsesOutput(parsed.output);
+                if (outputToolCalls.length > 0) {
+                  messageToolCalls = outputToolCalls;
                 }
+                if (parsed?.usage) {
+                  providerUsage = parsed.usage;
+                  providerUsageSeen = true;
+                  safeEnqueue({ type: 'usage', usage: parsed.usage });
+                }
+                return;
               }
-              if (choice.finish_reason) {
-                finishReason = choice.finish_reason;
+              const message = parsed?.choices?.[0]?.message ?? {};
+              const content = typeof message.content === 'string' ? message.content : '';
+              if (content) {
+                iterationContent = content;
               }
-              if (parsed.usage) {
+              const reasoningText =
+                (typeof message.reasoning_content === 'string' && message.reasoning_content) ||
+                (typeof message.reasoning === 'string' && message.reasoning) ||
+                (typeof message.analysis === 'string' && message.analysis) ||
+                '';
+              if (reasoningText) {
+                iterationReasoning = reasoningText;
+                emitReasoning(reasoningText, { kind: 'model', stage: 'stream' });
+              }
+              const nextToolCalls = extractToolCallsFromMessage(message);
+              if (nextToolCalls.length > 0) {
+                messageToolCalls = nextToolCalls;
+              }
+              if (parsed?.usage) {
                 providerUsage = parsed.usage;
                 providerUsageSeen = true;
                 safeEnqueue({ type: 'usage', usage: parsed.usage });
               }
+            } catch {
+              // ignore invalid JSON
             }
-            if (streamFinished) break;
+          };
+
+          let streamFinished = false;
+          if (streamEnabled && reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              lastChunkAt = Date.now();
+              idleWarned = false;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+              for (const line of lines) {
+                const normalized = line.replace(/\r$/, '');
+                if (!normalized.startsWith('data: ')) continue;
+                sawSse = true;
+                const data = normalized.slice(6);
+                if (data === '[DONE]') {
+                  buffer = '';
+                  streamFinished = true;
+                  break;
+                }
+                let parsed: any;
+                try {
+                  parsed = JSON.parse(data);
+                } catch {
+                  continue;
+                }
+
+                if (typeof parsed?.type === 'string' && parsed.type.startsWith('response.')) {
+                  if (firstChunkAt == null) firstChunkAt = Date.now();
+
+                  if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
+                    iterationContent += parsed.delta;
+                    if (!bufferTextOutput) {
+                      aiResponseContent += parsed.delta;
+                      safeEnqueue({ type: 'content', content: parsed.delta });
+                      contentAlreadySent = true;
+                      await persistAssistantProgress();
+                    }
+                  } else if (
+                    (parsed.type === 'response.reasoning_text.delta' || parsed.type === 'response.reasoning_summary_text.delta') &&
+                    typeof parsed.delta === 'string'
+                  ) {
+                    if (!reasoningStartedAt) reasoningStartedAt = Date.now();
+                    if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
+                    iterationReasoning += parsed.delta;
+                    emitReasoning(parsed.delta, { kind: 'model', stage: 'stream' });
+                    await persistAssistantProgress();
+                  } else if (
+                    parsed.type === 'response.completed' ||
+                    parsed.type === 'response.failed' ||
+                    parsed.type === 'response.incomplete'
+                  ) {
+                    providerUsage = parsed.response?.usage ?? providerUsage;
+                    if (providerUsage) {
+                      providerUsageSeen = true;
+                      safeEnqueue({ type: 'usage', usage: providerUsage });
+                    }
+                    streamFinished = true;
+                    break;
+                  }
+                  appendResponsesToolCallEvent(toolCallBuffers.responses, parsed);
+                  continue;
+                }
+
+                const choice = parsed.choices?.[0];
+                if (!choice) continue;
+                if (firstChunkAt == null) {
+                  firstChunkAt = Date.now();
+                }
+                const delta = choice.delta ?? {};
+                if (delta.reasoning_content) {
+                  if (!reasoningStartedAt) reasoningStartedAt = Date.now();
+                  if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
+                  iterationReasoning += delta.reasoning_content;
+                  emitReasoning(delta.reasoning_content, { kind: 'model', stage: 'stream' });
+                  await persistAssistantProgress();
+                }
+                if (delta.content) {
+                  iterationContent += delta.content;
+                  if (!bufferTextOutput) {
+                    aiResponseContent += delta.content;
+                    safeEnqueue({ type: 'content', content: delta.content });
+                    contentAlreadySent = true;
+                    await persistAssistantProgress();
+                  }
+                }
+                if (Array.isArray(delta.tool_calls)) {
+                  for (const toolDelta of delta.tool_calls) {
+                    appendOpenAIToolCallDelta(toolCallBuffers.openai, toolDelta);
+                  }
+                }
+                const legacyDelta = delta.function_call;
+                if (legacyDelta && typeof legacyDelta === 'object') {
+                  legacyFunctionCall = appendLegacyFunctionCallDelta(legacyFunctionCall, legacyDelta);
+                }
+                if (choice.message && messageToolCalls.length === 0) {
+                  const nextToolCalls = extractToolCallsFromMessage(choice.message);
+                  if (nextToolCalls.length > 0) {
+                    messageToolCalls = nextToolCalls;
+                  }
+                }
+                if (parsed.usage) {
+                  providerUsage = parsed.usage;
+                  providerUsageSeen = true;
+                  safeEnqueue({ type: 'usage', usage: parsed.usage });
+                }
+              }
+              if (streamFinished) break;
+            }
+            await reader.cancel().catch(() => { });
+          } else {
+            const raw = await response.text().catch(() => '');
+            parseNonSsePayload(raw.trim());
           }
-          await reader.cancel().catch(() => { });
           currentProviderController = null;
           setStreamController(null);
 
-          const aggregatedToolCalls = aggregateToolCalls();
+          if (streamEnabled && !sawSse) {
+            parseNonSsePayload(buffer.trim());
+          }
+
+          const { toolCalls: effectiveToolCalls, textContent } = parseToolCalls({
+            openaiToolCallBuffers: toolCallBuffers.openai,
+            responsesToolCallBuffers: toolCallBuffers.responses,
+            messageToolCalls,
+            legacyFunctionCall,
+            textContent: iterationContent,
+            textProtocolEnabled: activeToolSchema === 'text',
+            toolDefinitions,
+            allowedToolNames,
+          });
+          const cleanedContent = typeof textContent === 'string' ? textContent : iterationContent;
+
+          if (!contentAlreadySent && !bufferTextOutput && cleanedContent) {
+            aiResponseContent += cleanedContent;
+            safeEnqueue({ type: 'content', content: cleanedContent });
+            contentAlreadySent = true;
+            await persistAssistantProgress();
+          }
+          if (bufferTextOutput && effectiveToolCalls.length === 0 && cleanedContent) {
+            aiResponseContent += cleanedContent;
+            safeEnqueue({ type: 'content', content: cleanedContent });
+            contentAlreadySent = true;
+            await persistAssistantProgress();
+          }
 
           if (iterationReasoning.trim()) {
             reasoningChunks.push(iterationReasoning.trim());
           }
 
-          if (finishReason === 'tool_calls' && aggregatedToolCalls.length > 0) {
+          if (effectiveToolCalls.length > 0) {
             const reasoningPayload = iterationReasoning.trim();
+            if (activeToolSchema === 'functions') {
+              let isFirstToolCall = true;
+              for (const toolCall of effectiveToolCalls) {
+                const toolName = toolCall?.function?.name || '';
+                const toolArguments = toolCall?.function?.arguments || '{}';
+                workingMessages.push({
+                  role: 'assistant',
+                  content: isFirstToolCall ? cleanedContent : '',
+                  function_call: {
+                    name: toolName || 'unknown',
+                    arguments: toolArguments,
+                  },
+                });
+                isFirstToolCall = false;
+                let args: Record<string, unknown> = {};
+                try {
+                  args = JSON.parse(toolArguments || '{}');
+                } catch {
+                  args = {};
+                }
+                let result = null as Awaited<ReturnType<typeof toolRegistry.handleToolCall>> | null;
+                if (toolName && allowedToolNames.has(toolName)) {
+                  result = await toolRegistry.handleToolCall(
+                    toolName,
+                    toolCall as ToolCall,
+                    args,
+                    {
+                      sessionId,
+                      emitReasoning,
+                      sendToolEvent,
+                    },
+                  );
+                }
+                if (!result) {
+                  sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
+                  result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown');
+                }
+                result = normalizeToolHandlerResult(result, toolCall.id);
+                workingMessages.push({
+                  role: 'function',
+                  name: result.toolName,
+                  content: result.message.content,
+                });
+              }
+              continue;
+            }
+
+            if (activeToolSchema === 'text') {
+              workingMessages.push({
+                role: 'assistant',
+                content: iterationContent,
+              });
+              for (const toolCall of effectiveToolCalls) {
+                const toolName = toolCall?.function?.name || '';
+                let result = null as Awaited<ReturnType<typeof toolRegistry.handleToolCall>> | null;
+                let args: Record<string, unknown> = {};
+                try {
+                  args = JSON.parse(toolCall.function?.arguments ?? '{}');
+                } catch {
+                  args = {};
+                }
+                if (toolName && allowedToolNames.has(toolName)) {
+                  result = await toolRegistry.handleToolCall(
+                    toolName,
+                    toolCall as ToolCall,
+                    args,
+                    {
+                      sessionId,
+                      emitReasoning,
+                      sendToolEvent,
+                    },
+                  );
+                }
+                if (!result) {
+                  sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
+                  result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown');
+                }
+                result = normalizeToolHandlerResult(result, toolCall.id);
+                workingMessages.push(buildTextToolResultMessage({
+                  toolName: result.toolName,
+                  content: result.message.content,
+                }));
+              }
+              continue;
+            }
+
             workingMessages.push({
               role: 'assistant',
-              content: iterationContent,
+              content: cleanedContent,
               ...(reasoningPayload ? { reasoning_content: reasoningPayload } : {}),
-              tool_calls: aggregatedToolCalls,
+              tool_calls: effectiveToolCalls,
             });
 
-            for (const toolCall of aggregatedToolCalls) {
+            for (const toolCall of effectiveToolCalls) {
               const toolName = toolCall?.function?.name || '';
-              if (!toolName || !allowedToolNames.has(toolName)) {
-                sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
-                continue;
-              }
+              let result = null as Awaited<ReturnType<typeof toolRegistry.handleToolCall>> | null;
               let args: Record<string, unknown> = {};
               try {
                 args = JSON.parse(toolCall.function?.arguments ?? '{}');
               } catch {
                 args = {};
               }
-              const result = await toolRegistry.handleToolCall(
-                toolName,
-                toolCall as ToolCall,
-                args,
-                {
-                  sessionId,
-                  emitReasoning,
-                  sendToolEvent,
-                },
-              );
-              if (result) {
-                workingMessages.push(result.message);
+              if (toolName && allowedToolNames.has(toolName)) {
+                result = await toolRegistry.handleToolCall(
+                  toolName,
+                  toolCall as ToolCall,
+                  args,
+                  {
+                    sessionId,
+                    emitReasoning,
+                    sendToolEvent,
+                  },
+                );
               }
+              if (!result) {
+                sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
+                result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown');
+              }
+              result = normalizeToolHandlerResult(result, toolCall.id);
+              workingMessages.push(result.message);
             }
 
             continue;
           }
 
-          finalContent = iterationContent.trim();
+          finalContent = cleanedContent.trim();
           if (!finalContent) {
             throw new Error('Model finished without producing a final answer');
           }

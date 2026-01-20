@@ -61,38 +61,30 @@ export function ConfigStep({
     }, [systemSettings, settingsLoading, fetchSystemSettings])
 
     const toolAvailability = (model: ModelItem) => {
-        const provider = (model.provider || '').toLowerCase()
-        const providerSupportsTools = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
         const isWebSearchCapable = typeof model.capabilities?.web_search === 'boolean' ? model.capabilities.web_search : true
         const isPythonCapable = typeof model.capabilities?.code_interpreter === 'boolean' ? model.capabilities.code_interpreter : true
 
         const canUseWebSearch =
             Boolean(systemSettings?.webSearchAgentEnable && systemSettings?.webSearchHasApiKey) &&
-            providerSupportsTools &&
             isWebSearchCapable
 
         const canUsePython =
             Boolean(systemSettings?.pythonToolEnable) &&
-            providerSupportsTools &&
             isPythonCapable
 
         const webSearchDisabledNote = !systemSettings?.webSearchAgentEnable
             ? '管理员未启用联网搜索'
             : !systemSettings?.webSearchHasApiKey
                 ? '尚未配置搜索 API Key'
-                : !providerSupportsTools
-                    ? '当前连接不支持工具调用'
-                    : !isWebSearchCapable
-                        ? '当前模型未开放联网搜索'
-                        : undefined
+                : !isWebSearchCapable
+                    ? '当前模型未开放联网搜索'
+                    : undefined
 
         const pythonDisabledNote = !systemSettings?.pythonToolEnable
             ? '管理员未开启 Python 工具'
-            : !providerSupportsTools
-                ? '当前连接不支持工具调用'
-                : !isPythonCapable
-                    ? '当前模型未启用 Python 工具'
-                    : undefined
+            : !isPythonCapable
+                ? '当前模型未启用 Python 工具'
+                : undefined
 
         return {
             canUseWebSearch,

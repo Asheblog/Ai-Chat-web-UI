@@ -7,7 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import { getModelResolverService, resolveModelForActor } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
-import { buildHeaders, convertOpenAIReasoningPayload, type ProviderType } from '../utils/providers';
+import { buildHeaders, type ProviderType } from '../utils/providers';
+import { buildChatProviderRequest, flattenMessageContent } from '../utils/chat-provider';
 import { TaskTraceRecorder, shouldEnableTaskTrace, type TaskTraceStatus } from '../utils/task-trace';
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../utils/trace-helpers';
 import { truncateString } from '../utils/task-trace';
@@ -131,19 +132,6 @@ const embeddingsSchema = z.object({
   dimensions: z.number().int().positive().optional(),
 });
 
-function flattenMessageContent(content: z.infer<typeof messageContentSchema>): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .map((part) => {
-      if (part.type === 'text') return part.text;
-      if (part.type === 'image_url') return `[image:${part.image_url.url}]`;
-      return '';
-    })
-    .filter(Boolean)
-    .join('\n');
-}
-
 function cloneMessages(messages: z.infer<typeof chatMessageSchema>[]) {
   return messages.map((msg) => ({
     ...msg,
@@ -176,61 +164,16 @@ async function buildProviderRequest(opts: ProviderRequestOptions) {
     extraHeaders,
   );
 
-  let url = '';
-  let payload = { ...opts.body };
+  const { url, body } = buildChatProviderRequest({
+    provider: opts.provider,
+    baseUrl,
+    rawModelId: opts.rawModelId,
+    body: opts.body,
+    azureApiVersion: opts.connection.azureApiVersion,
+    stream: Boolean(opts.body?.stream),
+  })
 
-  if (opts.provider === 'openai') {
-    url = `${baseUrl}/chat/completions`;
-    payload = convertOpenAIReasoningPayload({
-      ...payload,
-      model: opts.rawModelId,
-    });
-  } else if (opts.provider === 'azure_openai') {
-    const apiVersion = opts.connection.azureApiVersion || '2024-02-15-preview';
-    url = `${baseUrl}/openai/deployments/${encodeURIComponent(opts.rawModelId)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
-    payload = convertOpenAIReasoningPayload({
-      ...payload,
-      model: opts.rawModelId,
-    });
-  } else if (opts.provider === 'ollama') {
-    url = `${baseUrl}/api/chat`;
-    payload = {
-      model: opts.rawModelId,
-      stream: Boolean(opts.body?.stream),
-      messages: (opts.body?.messages || []).map((msg: any) => ({
-        role: msg.role,
-        content:
-          typeof msg.content === 'string'
-            ? msg.content
-            : flattenMessageContent(msg.content),
-      })),
-    };
-  } else if (opts.provider === 'google_genai') {
-    const endpoint = Boolean(opts.body?.stream) ? ':streamGenerateContent' : ':generateContent';
-    url = `${baseUrl}/models/${encodeURIComponent(opts.rawModelId)}${endpoint}`;
-    payload = {
-      contents: (opts.body?.messages || []).map((msg: any) => ({
-        role: msg.role,
-        parts: [
-          {
-            text:
-              typeof msg.content === 'string'
-                ? msg.content
-                : flattenMessageContent(msg.content),
-          },
-        ],
-      })),
-      generationConfig: {
-        temperature: opts.body?.temperature,
-        topP: opts.body?.top_p,
-        maxOutputTokens: opts.body?.max_tokens || opts.body?.max_output_tokens,
-      },
-    };
-  } else {
-    throw new Error('Unsupported provider');
-  }
-
-  return { url, headers, payload };
+  return { url, headers, payload: body };
 }
 
 interface EmbeddingsRequestOptions {

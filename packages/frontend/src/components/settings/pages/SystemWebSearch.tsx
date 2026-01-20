@@ -126,6 +126,7 @@ export function SystemWebSearchPage() {
   const agentIterationRange = { min: 0, max: 20 }
   const agentIterationValid =
     maxToolIterations >= agentIterationRange.min && maxToolIterations <= agentIterationRange.max
+  const defaultToolIterations = Number(systemSettings.agentMaxToolIterations ?? 4)
 
   const changed =
     enabled !== Boolean(systemSettings.webSearchAgentEnable ?? false) ||
@@ -501,7 +502,7 @@ export function SystemWebSearchPage() {
       </div>
     </div>
     <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium">工具调用上限（0 表示无限制）</label>
+      <label className="text-sm font-medium">Agent 工具最大迭代次数（0 表示无限制）</label>
       <Input
         type="text"
         value={maxToolIterations}
@@ -509,7 +510,7 @@ export function SystemWebSearchPage() {
         className={!agentIterationValid ? "border-destructive" : undefined}
       />
       <p className="text-xs text-muted-foreground">
-        建议根据资源情况设置合适次数（范围 {agentIterationRange.min}-{agentIterationRange.max}），0 表示允许模型无限次调用工具。
+        当前默认值：{defaultToolIterations}；范围 {agentIterationRange.min}-{agentIterationRange.max}，0 表示允许模型无限次调用工具。
       </p>
     </div>
   </div>

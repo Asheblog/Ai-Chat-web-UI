@@ -1,17 +1,34 @@
-import crypto from 'node:crypto'
 import type { Connection } from '@prisma/client'
 import type { ChatRequestBuilder, PreparedChatRequest } from '../../modules/chat/services/chat-request-builder'
 import { chatRequestBuilder as defaultChatRequestBuilder } from '../../modules/chat/services/chat-request-builder'
 import type { ProviderRequester } from '../../modules/chat/services/provider-requester'
 import { providerRequester as defaultProviderRequester } from '../../modules/chat/services/provider-requester'
-import { convertOpenAIReasoningPayload } from '../../utils/providers'
-import { convertChatCompletionsRequestToResponses, extractReasoningFromResponsesResponse, extractTextFromResponsesResponse } from '../../utils/openai-responses'
+import { extractReasoningFromResponsesResponse, extractTextFromResponsesResponse } from '../../utils/openai-responses'
+import { buildChatProviderRequest } from '../../utils/chat-provider'
 import { buildAgentPythonToolConfig, buildAgentWebSearchConfig } from '../../modules/chat/agent-tool-config'
 import {
   createToolHandlerRegistry,
   type ToolCall,
   type ToolHandlerResult,
 } from '../../modules/chat/tool-handlers'
+import {
+  type LegacyFunctionCall,
+  type ToolSchema,
+  appendLegacyFunctionCallDelta,
+  appendOpenAIToolCallDelta,
+  appendResponsesToolCallEvent,
+  buildUnsupportedToolResult,
+  buildTextToolResultMessage,
+  buildToolRequest,
+  createToolCallBuffers,
+  extractToolCallsFromMessage,
+  extractToolCallsFromResponsesOutput,
+  isUnsupportedFunctionParamError,
+  isUnsupportedToolParamError,
+  normalizeToolHandlerResult,
+  parseToolCalls,
+  resolveToolSchema,
+} from '../../modules/chat/tool-protocol'
 import type { TaskTraceRecorder } from '../../utils/task-trace'
 import type { BattleModelFeatures, BattleModelInput } from './battle-types'
 import { safeParseJson } from './battle-serialization'
@@ -97,20 +114,14 @@ export class BattleExecutor {
     context.checkAttemptCancelled()
 
     const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
-    const providerSupportsTools =
-      resolved.connection.provider === 'openai' ||
-      resolved.connection.provider === 'openai_responses' ||
-      resolved.connection.provider === 'azure_openai'
     const requestedFeatures = modelConfig.features || {}
     const webSearchConfig = buildAgentWebSearchConfig(systemSettings)
     const pythonConfig = buildAgentPythonToolConfig(systemSettings)
     const webSearchActive =
-      providerSupportsTools &&
       requestedFeatures.web_search === true &&
       webSearchConfig.enabled &&
       Boolean(webSearchConfig.apiKey)
     const pythonActive =
-      providerSupportsTools &&
       requestedFeatures.python_tool === true &&
       pythonConfig.enabled
     const effectiveFeatures: BattleModelFeatures = {
@@ -478,9 +489,8 @@ export class BattleExecutor {
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
     const provider = prepared.providerRequest.providerLabel
-    if (provider !== 'openai' && provider !== 'openai_responses' && provider !== 'azure_openai') {
-      return this.executeSimple(prepared, context)
-    }
+    const streamEnabled = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
+    const shouldStream = Boolean(emitDelta) && streamEnabled
 
     const sysMap = prepared.systemSettings
     const webSearchConfig = buildAgentWebSearchConfig(sysMap)
@@ -507,6 +517,10 @@ export class BattleExecutor {
     const toolDefinitions = toolRegistry.getToolDefinitions()
     const allowedToolNames = toolRegistry.getAllowedToolNames()
     const maxIterations = resolveMaxToolIterations(sysMap)
+    let toolSchema: ToolSchema = resolveToolSchema({
+      provider,
+      requestData: prepared.baseRequestBody,
+    })
 
     let workingMessages = prepared.messagesPayload.map((msg) => ({ ...msg }))
     let lastUsage = null as any
@@ -514,15 +528,59 @@ export class BattleExecutor {
     for (let iteration = 0; iteration < maxIterations; iteration += 1) {
       context.checkRunCancelled()
       context.checkAttemptCancelled()
-      if (emitDelta) {
-        const streamed = await this.streamToolIteration({
-          prepared,
-          provider,
-          messages: workingMessages,
-          toolDefinitions,
-          context,
-          emitDelta,
-        })
+      if (shouldStream) {
+        let streamed: {
+          content: string
+          toolCalls: ToolCall[]
+          usage: Record<string, any> | null
+        }
+        try {
+          streamed = await this.streamToolIteration({
+            prepared,
+            provider,
+            messages: workingMessages,
+            toolDefinitions,
+            allowedToolNames,
+            toolSchema,
+            streamEnabled,
+            context,
+            emitDelta,
+          })
+        } catch (error) {
+          if (
+            toolSchema === 'tools' &&
+            provider !== 'openai_responses' &&
+            isUnsupportedToolParamError(error)
+          ) {
+            toolSchema = 'functions'
+            streamed = await this.streamToolIteration({
+              prepared,
+              provider,
+              messages: workingMessages,
+              toolDefinitions,
+              allowedToolNames,
+              toolSchema,
+              streamEnabled,
+              context,
+              emitDelta,
+            })
+          } else if (toolSchema === 'functions' && isUnsupportedFunctionParamError(error)) {
+            toolSchema = 'text'
+            streamed = await this.streamToolIteration({
+              prepared,
+              provider,
+              messages: workingMessages,
+              toolDefinitions,
+              allowedToolNames,
+              toolSchema,
+              streamEnabled,
+              context,
+              emitDelta,
+            })
+          } else {
+            throw error
+          }
+        }
         if (streamed.usage) {
           lastUsage = streamed.usage
         }
@@ -539,6 +597,72 @@ export class BattleExecutor {
             })
             : {}
           return { content: text, usage }
+        }
+
+        if (toolSchema === 'functions') {
+          let isFirstToolCall = true
+          for (const toolCall of streamed.toolCalls) {
+            const toolName = toolCall?.function?.name || ''
+            const toolArguments = toolCall?.function?.arguments || '{}'
+            workingMessages = workingMessages.concat({
+              role: 'assistant',
+              content: isFirstToolCall ? (streamed.content || '') : '',
+              function_call: {
+                name: toolName || 'unknown',
+                arguments: toolArguments,
+              },
+            })
+            isFirstToolCall = false
+            const args = this.safeParseToolArgs(toolCall)
+            let result: ToolHandlerResult | null = null
+            if (toolName && allowedToolNames.has(toolName)) {
+              result = await toolRegistry.handleToolCall(toolName, toolCall as ToolCall, args, {
+                sessionId: 0,
+                emitReasoning: () => {},
+                sendToolEvent: () => {},
+              })
+            }
+            if (!result) {
+              result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown')
+            }
+            result = normalizeToolHandlerResult(result, toolCall.id)
+            workingMessages = workingMessages.concat({
+              role: 'function',
+              name: result.toolName,
+              content: result.message.content,
+            })
+          }
+          continue
+        }
+
+        if (toolSchema === 'text') {
+          workingMessages = workingMessages.concat({
+            role: 'assistant',
+            content: streamed.content || '',
+          })
+          for (const toolCall of streamed.toolCalls) {
+            const toolName = toolCall?.function?.name || ''
+            const args = this.safeParseToolArgs(toolCall)
+            let result: ToolHandlerResult | null = null
+            if (toolName && allowedToolNames.has(toolName)) {
+              result = await toolRegistry.handleToolCall(toolName, toolCall as ToolCall, args, {
+                sessionId: 0,
+                emitReasoning: () => {},
+                sendToolEvent: () => {},
+              })
+            }
+            if (!result) {
+              result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown')
+            }
+            result = normalizeToolHandlerResult(result, toolCall.id)
+            workingMessages = workingMessages.concat(
+              buildTextToolResultMessage({
+                toolName: result.toolName,
+                content: result.message.content,
+              }),
+            )
+          }
+          continue
         }
 
         workingMessages = workingMessages.concat({
@@ -559,50 +683,74 @@ export class BattleExecutor {
             })
           }
           if (!result) {
-            result = {
-              toolCallId: toolCall.id || crypto.randomUUID(),
-              toolName: toolName || 'unknown',
-              message: {
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                name: toolName || 'unknown',
-                content: JSON.stringify({ error: 'Unsupported tool requested by the model' }),
-              },
-            }
+            result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown')
           }
+          result = normalizeToolHandlerResult(result, toolCall.id)
 
           workingMessages = workingMessages.concat(result.message)
         }
         continue
       }
 
-      const body = convertOpenAIReasoningPayload({
-        ...prepared.baseRequestBody,
-        stream: false,
-        messages: workingMessages,
-        tools: toolDefinitions,
-        tool_choice: 'auto',
-      })
-
-      const response = await this.requester.requestWithBackoff({
-        request: {
-          url: prepared.providerRequest.url,
-          headers: prepared.providerRequest.headers,
-          body,
-        },
-        context: {
-          sessionId: 0,
+      const callProvider = async (schema: ToolSchema) => {
+        const { body: chatBody, messages: preparedMessages, textPromptAdded } = buildToolRequest({
+          requestData: prepared.baseRequestBody,
+          messages: workingMessages,
+          toolDefinitions,
+          schema,
           provider,
-          route: '/api/battle/execute',
-          timeoutMs: prepared.providerRequest.timeoutMs,
-        },
-        traceRecorder: context.traceRecorder,
-        traceContext: context.buildTraceContext({
-          phase: 'tool',
-          iteration,
-        }),
-        ...context.buildAbortHandlers(),
-      })
+          stream: false,
+        })
+        if (textPromptAdded) {
+          workingMessages = preparedMessages
+        }
+        const { url, body } = buildChatProviderRequest({
+          provider,
+          baseUrl: prepared.providerRequest.baseUrl,
+          rawModelId: prepared.providerRequest.rawModelId,
+          body: chatBody,
+          azureApiVersion: prepared.providerRequest.azureApiVersion,
+          stream: false,
+        })
+        return this.requester.requestWithBackoff({
+          request: {
+            url,
+            headers: prepared.providerRequest.headers,
+            body,
+          },
+          context: {
+            sessionId: 0,
+            provider,
+            route: '/api/battle/execute',
+            timeoutMs: prepared.providerRequest.timeoutMs,
+          },
+          traceRecorder: context.traceRecorder,
+          traceContext: context.buildTraceContext({
+            phase: 'tool',
+            iteration,
+          }),
+          ...context.buildAbortHandlers(),
+        })
+      }
+
+      let response: Response
+      try {
+        response = await callProvider(toolSchema)
+      } catch (error) {
+        if (
+          toolSchema === 'tools' &&
+          provider !== 'openai_responses' &&
+          isUnsupportedToolParamError(error)
+        ) {
+          toolSchema = 'functions'
+          response = await callProvider(toolSchema)
+        } else if (toolSchema === 'functions' && isUnsupportedFunctionParamError(error)) {
+          toolSchema = 'text'
+          response = await callProvider(toolSchema)
+        } else {
+          throw error
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '')
@@ -610,12 +758,35 @@ export class BattleExecutor {
       }
 
       const json = (await response.json()) as any
-      const message = json?.choices?.[0]?.message || {}
       lastUsage = json?.usage ?? null
 
-      const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
+      let rawContent = ''
+      let messageToolCalls: ToolCall[] = []
+      if (Array.isArray(json?.output)) {
+        rawContent = extractTextFromResponsesResponse(json) || ''
+        messageToolCalls = extractToolCallsFromResponsesOutput(json.output)
+      } else {
+        const message = json?.choices?.[0]?.message || {}
+        rawContent = typeof message.content === 'string' ? message.content : ''
+        messageToolCalls = extractToolCallsFromMessage(message)
+      }
+
+      const { toolCalls, textContent } = parseToolCalls({
+        openaiToolCallBuffers: new Map(),
+        responsesToolCallBuffers: new Map(),
+        messageToolCalls,
+        legacyFunctionCall: null as LegacyFunctionCall | null,
+        textContent: rawContent,
+        textProtocolEnabled: toolSchema === 'text',
+        toolDefinitions,
+        allowedToolNames,
+      })
+      const cleanedContent = typeof textContent === 'string' ? textContent : rawContent
+      const messageContent =
+        toolSchema === 'text' && toolCalls.length > 0 ? rawContent : cleanedContent
+
       if (toolCalls.length === 0) {
-        const text = message.content || ''
+        const text = cleanedContent || ''
         if (!text.trim()) {
           throw new Error('模型未返回有效文本')
         }
@@ -624,12 +795,82 @@ export class BattleExecutor {
           contextLimit: prepared.contextLimit,
           contextRemaining: prepared.contextRemaining,
         })
+        if (emitDelta && !shouldStream) {
+          emitDelta({ content: text })
+        }
         return { content: text, usage }
+      }
+
+      if (toolSchema === 'functions') {
+        let isFirstToolCall = true
+        for (const toolCall of toolCalls) {
+          const toolName = toolCall?.function?.name || ''
+          const toolArguments = toolCall?.function?.arguments || '{}'
+          workingMessages = workingMessages.concat({
+            role: 'assistant',
+            content: isFirstToolCall ? messageContent : '',
+            function_call: {
+              name: toolName || 'unknown',
+              arguments: toolArguments,
+            },
+          })
+          isFirstToolCall = false
+          const args = this.safeParseToolArgs(toolCall)
+          let result: ToolHandlerResult | null = null
+          if (toolName && allowedToolNames.has(toolName)) {
+            result = await toolRegistry.handleToolCall(toolName, toolCall as ToolCall, args, {
+              sessionId: 0,
+              emitReasoning: () => {},
+              sendToolEvent: () => {},
+            })
+          }
+          if (!result) {
+            result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown')
+          }
+          result = normalizeToolHandlerResult(result, toolCall.id)
+          workingMessages = workingMessages.concat({
+            role: 'function',
+            name: result.toolName,
+            content: result.message.content,
+          })
+        }
+        continue
+      }
+
+      if (toolSchema === 'text') {
+        workingMessages = workingMessages.concat({
+          role: 'assistant',
+          content: messageContent,
+        })
+        for (const toolCall of toolCalls) {
+          const toolName = toolCall?.function?.name || ''
+          const args = this.safeParseToolArgs(toolCall)
+          let result: ToolHandlerResult | null = null
+          if (toolName && allowedToolNames.has(toolName)) {
+            result = await toolRegistry.handleToolCall(toolName, toolCall as ToolCall, args, {
+              sessionId: 0,
+              emitReasoning: () => {},
+              sendToolEvent: () => {},
+            })
+          }
+          if (!result) {
+            result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown')
+          }
+          result = normalizeToolHandlerResult(result, toolCall.id)
+
+          workingMessages = workingMessages.concat(
+            buildTextToolResultMessage({
+              toolName: result.toolName,
+              content: result.message.content,
+            }),
+          )
+        }
+        continue
       }
 
       workingMessages = workingMessages.concat({
         role: 'assistant',
-        content: message.content || '',
+        content: messageContent,
         tool_calls: toolCalls,
       })
 
@@ -645,17 +886,9 @@ export class BattleExecutor {
           })
         }
         if (!result) {
-          result = {
-            toolCallId: toolCall.id || crypto.randomUUID(),
-            toolName: toolName || 'unknown',
-            message: {
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              name: toolName || 'unknown',
-              content: JSON.stringify({ error: 'Unsupported tool requested by the model' }),
-            },
-          }
+          result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown')
         }
+        result = normalizeToolHandlerResult(result, toolCall.id)
 
         workingMessages = workingMessages.concat(result.message)
       }
@@ -673,30 +906,47 @@ export class BattleExecutor {
       context_remaining: prepared.contextRemaining,
     }
 
-    return { content: '工具调用次数已达上限，未生成最终答案。', usage: fallbackUsage }
+    const fallbackContent = '工具调用次数已达上限，未生成最终答案。'
+    if (emitDelta && !shouldStream) {
+      emitDelta({ content: fallbackContent })
+    }
+    return { content: fallbackContent, usage: fallbackUsage }
   }
 
   private async streamToolIteration(params: {
     prepared: PreparedChatRequest
-    provider: string
+    provider: PreparedChatRequest['providerRequest']['providerLabel']
     messages: any[]
     toolDefinitions: any[]
+    allowedToolNames: Set<string>
+    toolSchema: ToolSchema
+    streamEnabled: boolean
     context: BattleExecutionContext
     emitDelta: (delta: { content?: string; reasoning?: string }) => void
   }) {
-    const chatBody = convertOpenAIReasoningPayload({
-      ...params.prepared.baseRequestBody,
-      stream: true,
+    const { body: chatBody, messages: preparedMessages, textPromptAdded } = buildToolRequest({
+      requestData: params.prepared.baseRequestBody,
       messages: params.messages,
-      tools: params.toolDefinitions,
-      tool_choice: 'auto',
+      toolDefinitions: params.toolDefinitions,
+      schema: params.toolSchema,
+      provider: params.provider,
+      stream: params.streamEnabled,
     })
-    const body =
-      params.provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
+    if (textPromptAdded) {
+      params.messages.splice(0, params.messages.length, ...preparedMessages)
+    }
+    const { url, body } = buildChatProviderRequest({
+      provider: params.provider,
+      baseUrl: params.prepared.providerRequest.baseUrl,
+      rawModelId: params.prepared.providerRequest.rawModelId,
+      body: chatBody,
+      azureApiVersion: params.prepared.providerRequest.azureApiVersion,
+      stream: params.streamEnabled,
+    })
 
     const response = await this.requester.requestWithBackoff({
       request: {
-        url: params.prepared.providerRequest.url,
+        url,
         headers: params.prepared.providerRequest.headers,
         body,
       },
@@ -730,50 +980,11 @@ export class BattleExecutor {
     let usageSnapshot: Record<string, any> | null = null
     let sawSse = false
     let doneSeen = false
-    const toolCallBuffers = new Map<
-      number,
-      { id?: string; type?: string; function: { name?: string; arguments: string } }
-    >()
-    const responsesToolCallBuffers = new Map<
-      string,
-      { callId: string; name?: string; arguments: string; order: number }
-    >()
-    let fallbackToolCalls: ToolCall[] = []
-
-    const handleToolDelta = (toolDelta: any) => {
-      const idx = typeof toolDelta?.index === 'number' ? toolDelta.index : 0
-      const existing = toolCallBuffers.get(idx) || { function: { name: undefined, arguments: '' } }
-      if (toolDelta?.id) existing.id = toolDelta.id
-      if (toolDelta?.type) existing.type = toolDelta.type
-      if (toolDelta?.function?.name) existing.function.name = toolDelta.function.name
-      if (toolDelta?.function?.arguments) {
-        existing.function.arguments = `${existing.function.arguments || ''}${toolDelta.function.arguments}`
-      }
-      toolCallBuffers.set(idx, existing)
-    }
-
-    const aggregateToolCalls = () =>
-      (responsesToolCallBuffers.size > 0
-        ? Array.from(responsesToolCallBuffers.values())
-            .sort((a, b) => a.order - b.order)
-            .map((entry) => ({
-              id: entry.callId,
-              type: 'function',
-              function: {
-                name: entry.name || 'unknown',
-                arguments: entry.arguments || '{}',
-              },
-            }))
-        : Array.from(toolCallBuffers.entries())
-            .sort((a, b) => a[0] - b[0])
-            .map(([_, entry]) => ({
-              id: entry.id || crypto.randomUUID(),
-              type: entry.type || 'function',
-              function: {
-                name: entry.function.name || 'unknown',
-                arguments: entry.function.arguments || '{}',
-              },
-            })))
+    const toolCallBuffers = createToolCallBuffers()
+    let messageToolCalls: ToolCall[] = []
+    let legacyFunctionCall: LegacyFunctionCall | null = null
+    let contentAlreadySent = false
+    const bufferTextOutput = params.toolSchema === 'text'
 
     const extractDeltaPayload = (payload: any) => {
       const contentDelta =
@@ -829,42 +1040,16 @@ export class BattleExecutor {
             if (typeof parsed?.type === 'string' && parsed.type.startsWith('response.')) {
               if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string' && parsed.delta) {
                 content += parsed.delta
-                params.emitDelta({ content: parsed.delta })
+                if (!bufferTextOutput) {
+                  params.emitDelta({ content: parsed.delta })
+                  contentAlreadySent = true
+                }
               } else if (
                 (parsed.type === 'response.reasoning_text.delta' || parsed.type === 'response.reasoning_summary_text.delta') &&
                 typeof parsed.delta === 'string' &&
                 parsed.delta
               ) {
                 params.emitDelta({ reasoning: parsed.delta })
-              } else if (parsed.type === 'response.output_item.added' || parsed.type === 'response.output_item.done') {
-                const item = parsed.item
-                if (item?.type === 'function_call') {
-                  const callId = typeof item.call_id === 'string' ? item.call_id : null
-                  if (callId) {
-                    const existing = responsesToolCallBuffers.get(callId) || {
-                      callId,
-                      name: undefined,
-                      arguments: '',
-                      order: typeof parsed.output_index === 'number' ? parsed.output_index : responsesToolCallBuffers.size,
-                    }
-                    if (typeof item.name === 'string' && item.name) existing.name = item.name
-                    if (typeof item.arguments === 'string') existing.arguments = item.arguments || existing.arguments
-                    responsesToolCallBuffers.set(callId, existing)
-                  }
-                }
-              } else if (parsed.type === 'response.function_call_arguments.delta') {
-                const callId = typeof parsed.call_id === 'string' ? parsed.call_id : null
-                const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
-                if (callId && delta) {
-                  const existing = responsesToolCallBuffers.get(callId) || {
-                    callId,
-                    name: undefined,
-                    arguments: '',
-                    order: responsesToolCallBuffers.size,
-                  }
-                  existing.arguments = `${existing.arguments || ''}${delta}`
-                  responsesToolCallBuffers.set(callId, existing)
-                }
               } else if (
                 parsed.type === 'response.completed' ||
                 parsed.type === 'response.failed' ||
@@ -875,12 +1060,16 @@ export class BattleExecutor {
                   usageSnapshot = parsed.response.usage
                 }
               }
+              appendResponsesToolCallEvent(toolCallBuffers.responses, parsed)
               continue
             }
             const { contentDelta, reasoningDelta } = extractDeltaPayload(parsed)
             if (typeof contentDelta === 'string' && contentDelta) {
               content += contentDelta
-              params.emitDelta({ content: contentDelta })
+              if (!bufferTextOutput) {
+                params.emitDelta({ content: contentDelta })
+                contentAlreadySent = true
+              }
             }
             if (typeof reasoningDelta === 'string' && reasoningDelta) {
               params.emitDelta({ reasoning: reasoningDelta })
@@ -889,7 +1078,17 @@ export class BattleExecutor {
             const delta = choice?.delta || {}
             if (Array.isArray(delta.tool_calls)) {
               for (const toolDelta of delta.tool_calls) {
-                handleToolDelta(toolDelta)
+                appendOpenAIToolCallDelta(toolCallBuffers.openai, toolDelta)
+              }
+            }
+            const legacyDelta = delta.function_call
+            if (legacyDelta && typeof legacyDelta === 'object') {
+              legacyFunctionCall = appendLegacyFunctionCallDelta(legacyFunctionCall, legacyDelta)
+            }
+            if (choice?.message && messageToolCalls.length === 0) {
+              const nextToolCalls = extractToolCallsFromMessage(choice.message)
+              if (nextToolCalls.length > 0) {
+                messageToolCalls = nextToolCalls
               }
             }
             if (parsed?.usage) {
@@ -912,6 +1111,10 @@ export class BattleExecutor {
             content = extractTextFromResponsesResponse(parsed) || ''
             const reasoningText = extractReasoningFromResponsesResponse(parsed) || ''
             if (reasoningText) params.emitDelta({ reasoning: reasoningText })
+            const outputToolCalls = extractToolCallsFromResponsesOutput(parsed.output)
+            if (outputToolCalls.length > 0) {
+              messageToolCalls = outputToolCalls
+            }
             if (parsed?.usage) usageSnapshot = parsed.usage
           } else {
             const message = parsed?.choices?.[0]?.message || {}
@@ -926,8 +1129,10 @@ export class BattleExecutor {
             if (reasoningText) {
               params.emitDelta({ reasoning: reasoningText })
             }
-            const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
-            fallbackToolCalls = toolCalls as ToolCall[]
+            const nextToolCalls = extractToolCallsFromMessage(message)
+            if (nextToolCalls.length > 0) {
+              messageToolCalls = nextToolCalls
+            }
             if (parsed?.usage) usageSnapshot = parsed.usage
           }
         } catch {
@@ -936,10 +1141,32 @@ export class BattleExecutor {
       }
     }
 
-    const toolCalls = toolCallBuffers.size > 0 ? aggregateToolCalls() : fallbackToolCalls
+    const { toolCalls, textContent } = parseToolCalls({
+      openaiToolCallBuffers: toolCallBuffers.openai,
+      responsesToolCallBuffers: toolCallBuffers.responses,
+      messageToolCalls,
+      legacyFunctionCall,
+      textContent: content,
+      textProtocolEnabled: params.toolSchema === 'text',
+      toolDefinitions: params.toolDefinitions,
+      allowedToolNames: params.allowedToolNames,
+    })
+    const cleanedContent = typeof textContent === 'string' ? textContent : content
+
+    if (!contentAlreadySent && !bufferTextOutput && cleanedContent) {
+      params.emitDelta({ content: cleanedContent })
+      contentAlreadySent = true
+    }
+    if (bufferTextOutput && toolCalls.length === 0 && cleanedContent) {
+      params.emitDelta({ content: cleanedContent })
+      contentAlreadySent = true
+    }
+
+    const messageContent =
+      params.toolSchema === 'text' && toolCalls.length > 0 ? content : cleanedContent
 
     return {
-      content,
+      content: messageContent,
       toolCalls,
       usage: usageSnapshot,
     }
