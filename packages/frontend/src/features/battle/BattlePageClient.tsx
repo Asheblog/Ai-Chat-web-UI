@@ -27,6 +27,7 @@ import './battle.css'
 import { buildModelKey, parseModelKey } from './utils/model-key'
 
 const RUN_STORAGE_KEY = 'battle:active-run-id'
+const LAST_VIEWED_RUN_KEY = 'battle:last-viewed-run-id'
 
 export function BattlePageClient() {
   const { toast } = useToast()
@@ -161,11 +162,14 @@ export function BattlePageClient() {
     if (restoredRef.current) return
     restoredRef.current = true
     if (typeof window === 'undefined') return
-    const stored = window.sessionStorage.getItem(RUN_STORAGE_KEY)
+    const storedActive = window.sessionStorage.getItem(RUN_STORAGE_KEY)
+    const storedViewed = window.sessionStorage.getItem(LAST_VIEWED_RUN_KEY)
+    const stored = storedActive || storedViewed
     if (!stored) return
     const runId = Number.parseInt(stored, 10)
     if (!Number.isFinite(runId)) {
       window.sessionStorage.removeItem(RUN_STORAGE_KEY)
+      window.sessionStorage.removeItem(LAST_VIEWED_RUN_KEY)
       return
     }
     void fetchRunDetail(runId, { silent: true })
@@ -205,7 +209,7 @@ export function BattlePageClient() {
     const detail = await fetchRunDetail(runId)
     if (!detail) return
     if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(RUN_STORAGE_KEY, String(runId))
+      window.sessionStorage.setItem(LAST_VIEWED_RUN_KEY, String(runId))
     }
     setShareLink(null)
     setSelectedNode(null)
@@ -261,6 +265,7 @@ export function BattlePageClient() {
   const handleNewBattle = useCallback(() => {
     if (typeof window !== 'undefined') {
       window.sessionStorage.removeItem(RUN_STORAGE_KEY)
+      window.sessionStorage.removeItem(LAST_VIEWED_RUN_KEY)
     }
     setSelectedNode(null)
     flow.resetBattle()
