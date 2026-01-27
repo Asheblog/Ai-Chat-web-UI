@@ -40,6 +40,8 @@ export function BattlePageClient() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [shareLink, setShareLink] = useState<string | null>(null)
+  const [retryingJudgeResultId, setRetryingJudgeResultId] = useState<number | null>(null)
+  const [retryingJudgeRun, setRetryingJudgeRun] = useState(false)
   const [selectedNode, setSelectedNode] = useState<{ modelKey: string; attemptIndex: number } | null>(null)
   const restoredRef = useRef(false)
 
@@ -303,15 +305,20 @@ export function BattlePageClient() {
       toast({ title: '缺少结果 ID，无法重试裁判', variant: 'destructive' })
       return
     }
-    const res = await retryBattleJudgeResult(resultId)
-    if (!res?.success) {
-      toast({ title: res?.error || '重试裁判失败', variant: 'destructive' })
-      return
-    }
-    toast({ title: '已触发重试裁判' })
-    const nextRunId = runId || flow.currentRunId
-    if (nextRunId) {
-      await fetchRunDetail(nextRunId, { silent: true })
+    setRetryingJudgeResultId(resultId)
+    try {
+      const res = await retryBattleJudgeResult(resultId)
+      if (!res?.success) {
+        toast({ title: res?.error || '重试裁判失败', variant: 'destructive' })
+        return
+      }
+      toast({ title: '已触发重试裁判' })
+      const nextRunId = runId || flow.currentRunId
+      if (nextRunId) {
+        await fetchRunDetail(nextRunId, { silent: true })
+      }
+    } finally {
+      setRetryingJudgeResultId(null)
     }
   }, [fetchRunDetail, flow.currentRunId, toast])
 
@@ -321,13 +328,18 @@ export function BattlePageClient() {
       toast({ title: '缺少 runId，无法重试裁判', variant: 'destructive' })
       return
     }
-    const res = await retryBattleJudgeRun(runId)
-    if (!res?.success) {
-      toast({ title: res?.error || '批量重试裁判失败', variant: 'destructive' })
-      return
+    setRetryingJudgeRun(true)
+    try {
+      const res = await retryBattleJudgeRun(runId)
+      if (!res?.success) {
+        toast({ title: res?.error || '批量重试裁判失败', variant: 'destructive' })
+        return
+      }
+      toast({ title: '已触发批量重试裁判' })
+      await fetchRunDetail(runId, { silent: true })
+    } finally {
+      setRetryingJudgeRun(false)
     }
-    toast({ title: '已触发批量重试裁判' })
-    await fetchRunDetail(runId, { silent: true })
   }, [fetchRunDetail, flow.currentRunId, toast])
 
   // Handle step navigation
@@ -505,12 +517,19 @@ export function BattlePageClient() {
                 runsPerModel: flow.judgeConfig.runsPerModel,
                 judgeThreshold: flow.judgeConfig.threshold,
               }}
+              judgeInfo={flow.currentRunId && flow.judgeConfig.model ? {
+                modelId: flow.judgeConfig.model.id,
+                connectionId: flow.judgeConfig.model.connectionId ?? null,
+                rawId: flow.judgeConfig.model.rawId ?? null,
+                threshold: flow.judgeConfig.threshold,
+              } : undefined}
               currentRunId={flow.currentRunId}
               status={flow.runStatus}
               onShare={handleShare}
               onNewBattle={handleNewBattle}
               onSelectResult={handleSelectResult}
               onRetryFailedJudges={handleRetryFailedJudges}
+              retryingJudgeAll={retryingJudgeRun}
               onRejudgeComplete={() => {
                 if (flow.currentRunId) {
                   fetchRunDetail(flow.currentRunId, { silent: true })
@@ -534,6 +553,7 @@ export function BattlePageClient() {
         onCancelAttempt={handleCancelAttempt}
         onRetryAttempt={handleRetryAttempt}
         onRetryJudge={handleRetryJudge}
+        retryingJudgeId={retryingJudgeResultId}
       />
     </div>
   )

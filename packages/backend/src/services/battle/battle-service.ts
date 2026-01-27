@@ -891,12 +891,18 @@ export class BattleService {
       runId: number
       expectedAnswer: string
       resultIds?: number[] | null
+      judge?: {
+        modelId: string
+        connectionId?: number
+        rawId?: string
+      }
+      judgeThreshold?: number
     },
     options?: {
       emitEvent?: (event: RejudgeStreamEvent) => void
     },
   ) {
-    const { runId, expectedAnswer, resultIds } = params
+    const { runId, expectedAnswer, resultIds, judge, judgeThreshold } = params
     const emitEvent = options?.emitEvent
 
     // 1. 验证权限并获取 Run
@@ -907,17 +913,36 @@ export class BattleService {
       throw new Error('Battle run not found')
     }
 
-    // 2. 更新期望答案
+    const resolvedThreshold = typeof judgeThreshold === 'number'
+      ? this.normalizeJudgeThreshold(judgeThreshold)
+      : run.judgeThreshold
+
+    // 2. 更新期望答案 + 可选裁判配置
+    const nextJudge = judge?.modelId
+      ? {
+        modelId: judge.modelId,
+        connectionId: judge.connectionId ?? null,
+        rawId: judge.rawId ?? null,
+      }
+      : null
+
     await this.prisma.battleRun.update({
       where: { id: runId },
-      data: { expectedAnswer },
+      data: {
+        expectedAnswer,
+        ...(nextJudge ? {
+          judgeModelId: nextJudge.modelId,
+          judgeConnectionId: nextJudge.connectionId,
+          judgeRawId: nextJudge.rawId,
+        } : {}),
+        judgeThreshold: resolvedThreshold,
+      },
     })
 
-    // 3. 获取裁判模型
     const judgeResolution = await this.resolveModel(actor, {
-      modelId: run.judgeModelId,
-      connectionId: run.judgeConnectionId ?? undefined,
-      rawId: run.judgeRawId ?? undefined,
+      modelId: nextJudge?.modelId ?? run.judgeModelId,
+      connectionId: nextJudge?.connectionId ?? run.judgeConnectionId ?? undefined,
+      rawId: nextJudge?.rawId ?? run.judgeRawId ?? undefined,
     })
     if (!judgeResolution) {
       throw new Error('Judge model not found')
@@ -969,7 +994,7 @@ export class BattleService {
           prompt: run.prompt,
           expectedAnswer, // 使用新的期望答案
           answer: item.output || '',
-          threshold: run.judgeThreshold,
+          threshold: resolvedThreshold,
           judgeModel: judgeResolution,
           context: executionContext,
         })

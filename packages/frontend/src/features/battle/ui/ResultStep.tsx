@@ -35,6 +35,13 @@ interface ResultStepProps {
         judgeThreshold: number
     }
     currentRunId: number | null
+    judgeInfo?: {
+        modelId: string
+        connectionId?: number | null
+        rawId?: string | null
+        threshold?: number
+    }
+    retryingJudgeAll?: boolean
     status?: BattleRunSummary['status'] | null
     onShare: () => void
     onNewBattle: () => void
@@ -76,6 +83,8 @@ export function ResultStep({
     statsMap,
     fallbackConfig,
     currentRunId,
+    judgeInfo,
+    retryingJudgeAll,
     status,
     onShare,
     onNewBattle,
@@ -305,9 +314,14 @@ export function ResultStep({
                     </div>
                     <div className="flex items-center gap-2">
                         {currentRunId && retryableJudgeCount > 0 && onRetryFailedJudges && (
-                            <Button variant="outline" size="default" onClick={onRetryFailedJudges}>
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                重试裁判（{retryableJudgeCount}）
+                            <Button
+                                variant="outline"
+                                size="default"
+                                onClick={onRetryFailedJudges}
+                                disabled={retryingJudgeAll}
+                            >
+                                <RefreshCw className={cn("h-4 w-4 mr-2", retryingJudgeAll && 'animate-spin')} />
+                                {retryingJudgeAll ? '裁判中...' : `重试裁判（${retryableJudgeCount}）`}
                             </Button>
                         )}
                         {currentRunId && (
@@ -368,12 +382,13 @@ export function ResultStep({
             </Collapsible>
 
             {/* 修正答案对话框 */}
-            {currentRunId && (
+            {currentRunId && judgeInfo && (
                 <RejudgeDialog
                     open={rejudgeOpen}
                     onOpenChange={setRejudgeOpen}
                     currentAnswer={expectedAnswer}
                     runId={currentRunId}
+                    currentJudge={judgeInfo}
                     onComplete={() => onRejudgeComplete?.()}
                 />
             )}

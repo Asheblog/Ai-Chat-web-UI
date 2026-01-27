@@ -25,6 +25,7 @@ interface DetailDrawerProps {
     onCancelAttempt?: (detail: BattleAttemptDetail) => void
     onRetryAttempt?: (detail: BattleAttemptDetail) => void
     onRetryJudge?: (detail: BattleAttemptDetail) => void
+    retryingJudgeId?: number | null
 }
 
 export type BattleAttemptDetail =| (BattleResult & { isLive?: false; status?: NodeStatus; modelKey: string })
@@ -75,6 +76,7 @@ export function DetailDrawer({
     onCancelAttempt,
     onRetryAttempt,
     onRetryJudge,
+    retryingJudgeId,
 }: DetailDrawerProps) {
     const isLive = detail?.isLive === true
     const title = detail?.modelLabel || detail?.modelId || ''
@@ -108,6 +110,7 @@ export function DetailDrawer({
     const judgeError = (detail as any).judgeError as string | null | undefined
     const judgeReady = judgeStatus === 'success'
     const judgeRunning = judgeStatus === 'running'
+    const currentRetrying = !isLive && retryingJudgeId != null && (detail as any).id === retryingJudgeId
     const judgeFailed = judgeStatus === 'error'
     const judgeUnknown = !judgeStatus || judgeStatus === 'unknown' || judgeStatus === 'skipped'
 
@@ -188,8 +191,14 @@ export function DetailDrawer({
                                         </Button>
                                     )}
                                     {!isLive && canRetryJudge && (
-                                        <Button variant="outline" size="sm" onClick={() => onRetryJudge?.(detail)}>
-                                            重试裁判</Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => onRetryJudge?.(detail)}
+                                            disabled={currentRetrying}
+                                        >
+                                            {currentRetrying ? '裁判中...' : '重试裁判'}
+                                        </Button>
                                     )}
                                 </div>
                             ) : null}

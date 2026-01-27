@@ -201,6 +201,12 @@ export const createBattleShare = async (runId: number, payload?: { title?: strin
 export interface RejudgePayload {
   expectedAnswer: string
   resultIds?: number[]
+  judge?: {
+    modelId: string
+    connectionId?: number
+    rawId?: string
+  }
+  judgeThreshold?: number
 }
 
 export async function* rejudgeWithNewAnswer(

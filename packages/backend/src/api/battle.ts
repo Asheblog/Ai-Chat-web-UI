@@ -75,6 +75,12 @@ const judgeRetrySchema = z.object({
 const rejudgeSchema = z.object({
   expectedAnswer: z.string().min(1).max(10000),
   resultIds: z.array(z.number().int().positive()).max(200).optional(),
+  judge: z.object({
+    modelId: z.string().min(1),
+    connectionId: z.number().int().positive().optional(),
+    rawId: z.string().min(1).optional(),
+  }).optional(),
+  judgeThreshold: z.number().min(0).max(1).optional(),
 })
 
 const parsePagination = (value: string | null, fallback: number) => {
@@ -286,6 +292,8 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
               runId,
               expectedAnswer: payload.expectedAnswer,
               resultIds: payload.resultIds || null,
+              judge: payload.judge,
+              judgeThreshold: payload.judgeThreshold,
             },
             {
               emitEvent: send,
