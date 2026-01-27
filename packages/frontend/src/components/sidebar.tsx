@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Github, Pin, PinOff, Plus, Settings, Trash2, Trophy } from 'lucide-react'
@@ -70,12 +70,20 @@ export function Sidebar() {
     sessionUsageTotalsMap,
     isSessionsLoading,
   } = useChatStore()
-  const { systemSettings, sidebarCollapsed, setSidebarCollapsed, publicBrandText } = useSettingsStore()
+  const {
+    systemSettings,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    publicBrandText,
+    fetchSystemSettings,
+    fetchPublicBranding,
+  } = useSettingsStore()
   const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
   const { models, fetchAll } = useModelsStore()
   const preferredModel = useModelPreferenceStore((state) => state.preferred)
 
   const isAnonymous = actorState !== 'authenticated'
+  const hasRequestedBranding = useRef(false)
   const quotaRemaining = quota?.unlimited
     ? Infinity
     : quota?.remaining ?? (quota ? Math.max(0, quota.dailyLimit - quota.usedCount) : null)
@@ -87,6 +95,22 @@ export function Sidebar() {
   useEffect(() => {
     fetchSessions()
   }, [fetchSessions])
+
+  useEffect(() => {
+    const brandText = (systemSettings?.brandText ?? publicBrandText ?? '').trim()
+    if (brandText || hasRequestedBranding.current) return
+    if (actorState === 'loading') return
+    hasRequestedBranding.current = true
+    if (actorState === 'authenticated') {
+      fetchSystemSettings().catch(() => {
+        hasRequestedBranding.current = false
+      })
+      return
+    }
+    fetchPublicBranding().catch(() => {
+      hasRequestedBranding.current = false
+    })
+  }, [systemSettings, publicBrandText, actorState, fetchSystemSettings, fetchPublicBranding])
 
   // 监听全局事件以从外部打开/关闭移动端侧栏
   useEffect(() => {
