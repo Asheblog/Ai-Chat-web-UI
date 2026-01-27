@@ -1638,6 +1638,13 @@ export class BattleService {
     }
   }
 
+  logRunTrace(runId: number, eventType: string, payload: Record<string, unknown>) {
+    const control = this.activeRuns.get(runId)
+    if (!control?.traceRecorder) return false
+    control.traceRecorder.log(eventType, payload)
+    return true
+  }
+
   private createAttemptTask(params: {
     battleRunId: number
     model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }

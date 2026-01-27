@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { ApiResponse, Actor } from '../types'
 import { actorMiddleware } from '../middleware/auth'
 import { battleService, BattleService } from '../services/battle/battle-service'
+import { prisma } from '../db'
 
 export interface BattleApiDeps {
   battleService?: BattleService
@@ -95,9 +96,28 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
   const svc = deps.battleService ?? battleService
   const router = new Hono()
 
+  const resolveStreamKeepaliveIntervalMs = async () => {
+    let raw = process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'
+    try {
+      const record = await prisma.systemSetting.findUnique({
+        where: { key: 'stream_keepalive_interval_ms' },
+        select: { value: true },
+      })
+      if (record?.value != null && String(record.value).trim() !== '') {
+        raw = String(record.value)
+      }
+    } catch {}
+    const parsed = Number.parseInt(raw, 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed
+    }
+    return 0
+  }
+
   router.post('/stream', actorMiddleware, zValidator('json', battleStreamSchema), async (c) => {
     const actor = c.get('actor') as Actor
     const payload = c.req.valid('json')
+    const requestSignal = c.req.raw.signal
 
     const sseHeaders: Record<string, string> = {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -111,13 +131,52 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
+        let lastSentAt = Date.now()
+        let runId: number | null = null
         const send = (event: Record<string, unknown>) => {
           try {
+            lastSentAt = Date.now()
+            if (event?.type === 'run_start') {
+              const id = Number((event as any)?.payload?.id)
+              if (Number.isFinite(id)) {
+                runId = id
+              }
+            }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
           } catch {}
         }
 
+        const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
+        let keepaliveTimer: ReturnType<typeof setInterval> | null = null
+        const startHeartbeat = () => {
+          if (keepaliveIntervalMs <= 0 || keepaliveTimer) return
+          keepaliveTimer = setInterval(() => {
+            send({ type: 'keepalive', ts: Date.now() })
+          }, keepaliveIntervalMs)
+        }
+        const stopHeartbeat = () => {
+          if (keepaliveTimer) {
+            clearInterval(keepaliveTimer)
+            keepaliveTimer = null
+          }
+        }
+        const handleAbort = () => {
+          if (!runId) return
+          const idleMs = Math.max(0, Date.now() - lastSentAt)
+          svc.logRunTrace(runId, 'battle:stream_aborted', {
+            endpoint: '/battle/stream',
+            idleMs,
+            reason: String((requestSignal as any)?.reason ?? 'abort'),
+          })
+        }
+        if (requestSignal && requestSignal.aborted) {
+          handleAbort()
+        } else if (requestSignal) {
+          requestSignal.addEventListener('abort', handleAbort, { once: true })
+        }
+
         try {
+          startHeartbeat()
           await svc.executeRun(actor, payload, {
             emitEvent: (event) => send(event),
           })
@@ -126,6 +185,12 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
           const message = error instanceof Error ? error.message : 'Battle failed'
           send({ type: 'error', error: message })
         } finally {
+          if (requestSignal) {
+            try {
+              requestSignal.removeEventListener('abort', handleAbort)
+            } catch {}
+          }
+          stopHeartbeat()
           try {
             controller.enqueue(encoder.encode('data: [DONE]\n\n'))
           } catch {}
@@ -266,6 +331,7 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
       return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
     }
     const payload = c.req.valid('json')
+    const requestSignal = c.req.raw.signal
 
     const sseHeaders: Record<string, string> = {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -279,13 +345,44 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
+        let lastSentAt = Date.now()
         const send = (event: unknown) => {
           try {
+            lastSentAt = Date.now()
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
           } catch {}
         }
 
+        const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
+        let keepaliveTimer: ReturnType<typeof setInterval> | null = null
+        const startHeartbeat = () => {
+          if (keepaliveIntervalMs <= 0 || keepaliveTimer) return
+          keepaliveTimer = setInterval(() => {
+            send({ type: 'keepalive', ts: Date.now() })
+          }, keepaliveIntervalMs)
+        }
+        const stopHeartbeat = () => {
+          if (keepaliveTimer) {
+            clearInterval(keepaliveTimer)
+            keepaliveTimer = null
+          }
+        }
+        const handleAbort = () => {
+          const idleMs = Math.max(0, Date.now() - lastSentAt)
+          svc.logRunTrace(runId, 'battle:stream_aborted', {
+            endpoint: '/battle/runs/:id/rejudge',
+            idleMs,
+            reason: String((requestSignal as any)?.reason ?? 'abort'),
+          })
+        }
+        if (requestSignal && requestSignal.aborted) {
+          handleAbort()
+        } else if (requestSignal) {
+          requestSignal.addEventListener('abort', handleAbort, { once: true })
+        }
+
         try {
+          startHeartbeat()
           await svc.rejudgeWithNewAnswer(
             actor,
             {
@@ -303,6 +400,12 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
           const message = error instanceof Error ? error.message : 'Rejudge failed'
           send({ type: 'error', error: message })
         } finally {
+          if (requestSignal) {
+            try {
+              requestSignal.removeEventListener('abort', handleAbort)
+            } catch {}
+          }
+          stopHeartbeat()
           try {
             controller.enqueue(encoder.encode('data: [DONE]\n\n'))
           } catch {}
