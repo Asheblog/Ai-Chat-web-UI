@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { Check, X, Clock, AlertCircle, Scale, ChevronDown, ChevronRight } from 'lucide-react'
+import { useToast } from '@/components/ui/use-toast'
+import { Check, X, Clock, AlertCircle, Scale, ChevronDown, ChevronRight, Copy } from 'lucide-react'
 import type { BattleResult } from '@/types'
 import type { NodeStatus } from '../hooks/useBattleFlow'
 
@@ -78,6 +79,7 @@ export function DetailDrawer({
     onRetryJudge,
     retryingJudgeId,
 }: DetailDrawerProps) {
+    const { toast } = useToast()
     const isLive = detail?.isLive === true
     const title = detail?.modelLabel || detail?.modelId || ''
     const usage = detail?.usage || {}
@@ -87,6 +89,7 @@ export function DetailDrawer({
     const [renderReasoning, setRenderReasoning] = useState(!reasoningHeavy)
     const [manualOverride, setManualOverride] = useState(false)
     const [showReasoning, setShowReasoning] = useState(true)
+    const [copied, setCopied] = useState(false)
 
     useEffect(() => {
         if (!detailSignature) return
@@ -102,6 +105,22 @@ export function DetailDrawer({
     const toggleReasoningRender = () => {
         setManualOverride(true)
         setRenderReasoning((prev) => !prev)
+    }
+
+    const handleCopyOutput = async () => {
+        const output = detail?.output?.trim()
+        if (!output) {
+            toast({ title: '无输出内容可复制' })
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(output)
+            setCopied(true)
+            toast({ title: '已复制', description: '模型输出已复制到剪贴板' })
+            window.setTimeout(() => setCopied(false), 2000)
+        } catch (error) {
+            toast({ title: '复制失败', description: '无法复制模型输出', variant: 'destructive' })
+        }
     }
 
     if (!detail) return null
@@ -253,7 +272,19 @@ export function DetailDrawer({
 
                         {/* Model Output */}
                         <div className="min-w-0">
-                            <h4 className="text-sm font-medium mb-2">模型输出</h4>
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                                <h4 className="text-sm font-medium">模型输出</h4>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs gap-1"
+                                    onClick={handleCopyOutput}
+                                    disabled={!detail.output?.trim()}
+                                >
+                                    <Copy className="h-3.5 w-3.5" />
+                                    {copied ? '已复制' : '复制'}
+                                </Button>
+                            </div>
                             <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
                                 {detail.output ? (
                                     <div className="prose prose-sm max-w-none dark:prose-invert min-w-0">
