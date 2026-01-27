@@ -204,6 +204,9 @@ export function BattlePageClient() {
   const handleLoadRun = async (runId: number) => {
     const detail = await fetchRunDetail(runId)
     if (!detail) return
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(RUN_STORAGE_KEY, String(runId))
+    }
     setShareLink(null)
     setSelectedNode(null)
     setHistoryOpen(false)
@@ -256,6 +259,9 @@ export function BattlePageClient() {
   }
 
   const handleNewBattle = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(RUN_STORAGE_KEY)
+    }
     setSelectedNode(null)
     flow.resetBattle()
   }, [flow.resetBattle])
