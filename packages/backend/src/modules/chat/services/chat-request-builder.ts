@@ -183,11 +183,17 @@ export class ChatRequestBuilder {
       params.images ?? [],
     )
 
+    const temperature = await this.resolveTemperature({
+      connectionId: params.session.connectionId,
+      rawModelId: params.session.modelRawId,
+      systemSettings,
+    })
+
     let baseRequestBody: any = {
       model: params.session.modelRawId,
       messages: messagesPayload,
       stream: params.mode === 'stream',
-      temperature: 0.7,
+      temperature,
       max_tokens: contextInfo.appliedMaxTokens,
     }
 
@@ -556,6 +562,45 @@ export class ChatRequestBuilder {
       acc[row.key] = row.value ?? ''
       return acc
     }, {})
+  }
+
+  private async resolveTemperature(params: {
+    connectionId: number
+    rawModelId: string
+    systemSettings: Record<string, string>
+  }): Promise<number> {
+    const { connectionId, rawModelId, systemSettings } = params
+    const catalog = await this.prisma.modelCatalog.findFirst({
+      where: { connectionId, rawId: rawModelId },
+      select: { metaJson: true },
+    })
+    const modelOverride = this.parseTemperatureValue(catalog?.metaJson)
+    if (modelOverride !== null) {
+      return modelOverride
+    }
+    const systemDefault = this.parseTemperatureValue(systemSettings.temperature_default)
+    if (systemDefault !== null) {
+      return systemDefault
+    }
+    return 0.7
+  }
+
+  private parseTemperatureValue(raw: unknown): number | null {
+    if (raw == null || raw === '') return null
+    let value: unknown = raw
+    if (typeof raw === 'string') {
+      try {
+        const parsedJson = JSON.parse(raw)
+        if (parsedJson && typeof parsedJson === 'object' && 'temperature' in (parsedJson as any)) {
+          value = (parsedJson as any).temperature
+        }
+      } catch {
+        value = raw
+      }
+    }
+    const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value))
+    if (!Number.isFinite(numeric) || numeric < 0 || numeric > 2) return null
+    return numeric
   }
 
   private scheduleImageCleanup(settings: Record<string, string>) {

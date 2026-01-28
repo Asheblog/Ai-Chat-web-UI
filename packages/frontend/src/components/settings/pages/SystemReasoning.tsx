@@ -32,6 +32,7 @@ export function SystemReasoningPage() {
   const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<'unset'|'low'|'medium'|'high'>('unset')
   const [ollamaThink, setOllamaThink] = useState(false)
   const [reasoningMaxTokens, setReasoningMaxTokens] = useState('')
+  const [temperatureDefault, setTemperatureDefault] = useState('')
 
   const parseDeltaChunkSize = (value: string, fallback: number) => {
     const trimmed = value.trim()
@@ -62,6 +63,8 @@ export function SystemReasoningPage() {
     setOllamaThink(Boolean((systemSettings as any).ollamaThink ?? false))
     const sysMaxTokens = systemSettings?.reasoningMaxOutputTokensDefault
     setReasoningMaxTokens(typeof sysMaxTokens === 'number' ? String(sysMaxTokens) : '')
+    const sysTemperature = systemSettings?.temperatureDefault
+    setTemperatureDefault(typeof sysTemperature === 'number' ? String(sysTemperature) : '')
   }, [systemSettings])
 
   const handleSave = async () => {
@@ -121,6 +124,23 @@ export function SystemReasoningPage() {
       maxTokensValue = Math.min(256000, parsed)
     }
 
+    let temperatureValue: number | null
+    const trimmedTemperature = temperatureDefault.trim()
+    if (trimmedTemperature === '') {
+      temperatureValue = null
+    } else {
+      const parsed = Number.parseFloat(trimmedTemperature)
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 2) {
+        toast({
+          title: '默认温度无效',
+          description: '请输入 0~2 的数字，或留空表示默认值（0.7）',
+          variant: 'destructive',
+        })
+        return
+      }
+      temperatureValue = parsed
+    }
+
     await updateSystemSettings({
       reasoningEnabled,
       reasoningDefaultExpand,
@@ -133,6 +153,7 @@ export function SystemReasoningPage() {
       streamKeepaliveIntervalMs: keepaliveMs,
       openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : 'unset',
       reasoningMaxOutputTokensDefault: maxTokensValue,
+      temperatureDefault: temperatureValue,
       ollamaThink,
     } as any)
     toast({ title: '已保存推理链设置' })
@@ -192,6 +213,29 @@ export function SystemReasoningPage() {
               size="sm"
               className="w-full sm:w-auto"
               onClick={()=>setReasoningMaxTokens('')}
+            >
+              恢复默认
+            </Button>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="默认温度"
+          description="为空表示使用系统默认值（0.7），范围 0~2"
+        >
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <Input
+              type="text"
+              placeholder="0.7"
+              value={temperatureDefault}
+              onChange={(e)=>setTemperatureDefault(e.target.value)}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-32 text-right"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={()=>setTemperatureDefault('')}
             >
               恢复默认
             </Button>

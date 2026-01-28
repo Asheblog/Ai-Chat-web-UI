@@ -23,6 +23,7 @@ export const updateModelTags = async (
     capabilities?: Record<string, boolean>
     maxOutputTokens?: number | null
     contextWindow?: number | null
+    temperature?: number | null
     accessPolicy?:
       | {
           anonymous?: 'allow' | 'deny' | 'inherit'
@@ -46,6 +47,9 @@ export const updateModelTags = async (
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'contextWindow')) {
     body.context_window = payload.contextWindow
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'temperature')) {
+    body.temperature = payload.temperature
   }
   if (payload && Object.prototype.hasOwnProperty.call(payload, 'accessPolicy')) {
     body.access_policy = payload.accessPolicy

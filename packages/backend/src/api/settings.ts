@@ -129,6 +129,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
     // 供应商参数（可选）
     openai_reasoning_effort: z.enum(['low', 'medium', 'high', 'unset']).optional(),
     reasoning_max_output_tokens_default: z.number().int().min(1).max(256000).nullable().optional(),
+    temperature_default: z.number().min(0).max(2).nullable().optional(),
     ollama_think: z.boolean().optional(),
     chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
     assistant_reply_history_limit: z.number().int().min(1).max(20).optional(),

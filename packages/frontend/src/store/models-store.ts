@@ -17,6 +17,7 @@ export type ModelItem = {
   overridden?: boolean
   contextWindow?: number | null
   maxOutputTokens?: number | null
+  temperature?: number | null
   accessPolicy?: { anonymous?: 'allow' | 'deny' | 'inherit'; user?: 'allow' | 'deny' | 'inherit' }
   resolvedAccess?: {
     anonymous: { decision: 'allow' | 'deny'; source: 'default' | 'override' }

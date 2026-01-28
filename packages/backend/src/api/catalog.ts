@@ -40,6 +40,16 @@ const normalizeAccessPolicyInput = (
   return Object.keys(normalized).length ? (normalized as any) : null
 }
 
+const normalizeTemperatureInput = (value: unknown): number | null | undefined => {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value))
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 2) {
+    throw new ModelCatalogServiceError('temperature must be between 0 and 2')
+  }
+  return numeric
+}
+
 const handleServiceError = (
   c: any,
   error: unknown,
@@ -84,6 +94,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     }
     const maxOutputTokens = toPositiveIntOrNull(body.max_output_tokens, 'max_output_tokens')
     const contextWindow = toPositiveIntOrNull(body.context_window, 'context_window')
+    const temperature = normalizeTemperatureInput(body.temperature)
     const accessPolicy = normalizeAccessPolicyInput(body.access_policy)
     const payload: any = {
       connectionId,
@@ -92,6 +103,7 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
       capabilitiesInput: body.capabilities,
       maxOutputTokens,
       contextWindow,
+      temperature,
     }
     if (accessPolicy !== undefined) {
       payload.accessPolicyInput = accessPolicy

@@ -13,6 +13,7 @@ export async function updateModelCapabilities(
     capabilities?: Record<string, boolean>
     maxOutputTokens?: number | null
     contextWindow?: number | null
+    temperature?: number | null
     accessPolicy?: { anonymous?: 'allow' | 'deny' | 'inherit'; user?: 'allow' | 'deny' | 'inherit' } | null
   }
 ) {

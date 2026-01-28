@@ -214,6 +214,43 @@ export function useSystemModels() {
     }
   }
 
+  const handleSaveTemperature = async (model: any, rawValue: string) => {
+    const key = keyOf(model)
+    const trimmed = rawValue.trim()
+    let payloadValue: number | null
+    if (trimmed === '') {
+      payloadValue = null
+    } else {
+      const parsed = Number.parseFloat(trimmed)
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 2) {
+        toast({
+          title: '温度无效',
+          description: '请输入 0~2 的数字，或留空使用默认值',
+          variant: 'destructive',
+        })
+        return
+      }
+      payloadValue = parsed
+    }
+    try {
+      setSavingKey(key)
+      await updateModelCapabilities(model.connectionId, model.rawId, { temperature: payloadValue })
+      await fetchAll()
+      toast({
+        title: '温度已更新',
+        description: payloadValue !== null ? `已设置为 ${payloadValue}` : '已恢复供应商默认值',
+      })
+    } catch (err: any) {
+      toast({
+        title: '保存失败',
+        description: err?.message || '更新温度失败',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingKey('')
+    }
+  }
+
   const handleUpdateAccessPolicy = async (
     model: any,
     target: 'anonymous' | 'user',
@@ -389,6 +426,7 @@ export function useSystemModels() {
       capabilities: model.capabilities || {},
       capabilitySource: model.capabilitySource || null,
       accessPolicy: model.accessPolicy || undefined,
+      temperature: model.temperature ?? null,
     }))
     const blob = new Blob([JSON.stringify({ items }, null, 2)], { type: 'application/json;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -432,6 +470,7 @@ export function useSystemModels() {
           tags,
           capabilities: capPayload,
           accessPolicy,
+          temperature: typeof item.temperature === 'number' ? item.temperature : null,
         })
       }
       await fetchAll()
@@ -517,6 +556,7 @@ export function useSystemModels() {
     handleToggleCapability,
     handleSaveMaxTokens,
     handleSaveContextWindow,
+    handleSaveTemperature,
     handleUpdateAccessPolicy,
     resetModel,
     handleBatchReset,

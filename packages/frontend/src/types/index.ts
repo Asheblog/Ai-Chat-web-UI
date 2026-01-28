@@ -264,6 +264,7 @@ export interface SystemSettings {
   // 供应商参数（可选）
   openaiReasoningEffort?: 'low' | 'medium' | 'high' | '' | 'unset';
   reasoningMaxOutputTokensDefault?: number | null;
+  temperatureDefault?: number | null;
   ollamaThink?: boolean;
   chatImageRetentionDays?: number;
   assistantReplyHistoryLimit?: number | null;

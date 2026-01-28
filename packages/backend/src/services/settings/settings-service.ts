@@ -352,6 +352,7 @@ export class SettingsService {
       title_summary_model_source: (settingsObj.title_summary_model_source || process.env.TITLE_SUMMARY_MODEL_SOURCE || 'current') as 'current' | 'specified',
       title_summary_connection_id: settingsObj.title_summary_connection_id ? Number(settingsObj.title_summary_connection_id) : null,
       title_summary_model_id: settingsObj.title_summary_model_id || null,
+      temperature_default: this.parseFloat(settingsObj.temperature_default, 0.7),
       // RAG 文档解析设置
       rag_enabled: this.parseBoolean(settingsObj.rag_enabled, 'false'),
       rag_embedding_connection_id: settingsObj.rag_embedding_connection_id ? Number(settingsObj.rag_embedding_connection_id) : null,
@@ -593,6 +594,12 @@ export class SettingsService {
     } else if (payload.reasoning_max_output_tokens_default === null) {
       updates.push(this.prisma.systemSetting.deleteMany({ where: { key: 'reasoning_max_output_tokens_default' } }))
       this.invalidateReasoningMaxOutputTokensDefaultCache()
+    }
+
+    if (typeof payload.temperature_default === 'number') {
+      updates.push(upsert('temperature_default', String(payload.temperature_default)))
+    } else if (payload.temperature_default === null) {
+      updates.push(this.prisma.systemSetting.deleteMany({ where: { key: 'temperature_default' } }))
     }
 
     await Promise.all(updates)

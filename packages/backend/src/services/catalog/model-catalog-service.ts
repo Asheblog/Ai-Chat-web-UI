@@ -74,6 +74,22 @@ const extractMaxOutputTokens = (metaJson: string | null | undefined): number | n
   return null
 }
 
+const extractTemperature = (metaJson: string | null | undefined): number | null => {
+  if (!metaJson) return null
+  try {
+    const parsed = JSON.parse(metaJson)
+    const raw = (parsed as any)?.temperature
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
+      return raw
+    }
+    const coerced = Number.parseFloat(String(raw ?? ''))
+    if (Number.isFinite(coerced) && coerced >= 0) {
+      return coerced
+    }
+  } catch {}
+  return null
+}
+
 const clampMaxOutputTokens = (value: number): number => {
   if (!Number.isFinite(value)) return 0
   if (value < 1) return 0
@@ -105,6 +121,7 @@ export interface SaveOverridePayload {
   capabilitiesInput?: unknown
   maxOutputTokens?: number | null
   contextWindow?: number | null
+  temperature?: number | null
   accessPolicyInput?: unknown
 }
 
@@ -235,6 +252,7 @@ export class ModelCatalogService {
         }
         const contextWindow = extractContextWindow(row.metaJson)
         const maxOutputTokens = extractMaxOutputTokens(row.metaJson)
+        const temperature = extractTemperature(row.metaJson)
         const storedCaps = this.parseCapabilityEnvelope(row.capabilitiesJson)
         let capabilities = storedCaps?.flags
         let capabilitySource = storedCaps?.source ?? null
@@ -268,6 +286,7 @@ export class ModelCatalogService {
           overridden: row.manualOverride,
           contextWindow,
           maxOutputTokens,
+          temperature,
           accessPolicy: accessInfo.policy ?? undefined,
           resolvedAccess: accessInfo.resolved,
           accessDecision: decision,
@@ -334,6 +353,18 @@ export class ModelCatalogService {
           throw new ModelCatalogServiceError('context_window must be positive')
         }
         metaPayload.context_window = numeric
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'temperature')) {
+      if (payload.temperature == null) {
+        delete metaPayload.temperature
+      } else {
+        const numeric = Number.parseFloat(String(payload.temperature))
+        if (!Number.isFinite(numeric) || numeric < 0 || numeric > 2) {
+          throw new ModelCatalogServiceError('temperature must be between 0 and 2')
+        }
+        metaPayload.temperature = numeric
       }
     }
 
@@ -453,6 +484,7 @@ export class ModelCatalogService {
         capabilities: parsedCaps?.flags || undefined,
         capabilitySource: parsedCaps?.source || null,
         accessPolicy: parseAccessPolicyFromMeta(row.metaJson) || undefined,
+        temperature: extractTemperature(row.metaJson),
       }
     })
   }

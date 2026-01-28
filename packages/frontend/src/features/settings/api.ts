@@ -62,6 +62,19 @@ export const getSystemSettings = async () => {
     }
     return undefined
   })()
+  const temperatureDefault = (() => {
+    const value = raw.temperature_default
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.min(2, value))
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number.parseFloat(value)
+      if (Number.isFinite(parsed)) {
+        return Math.max(0, Math.min(2, parsed))
+      }
+    }
+    return undefined
+  })()
   const ollamaThink = Boolean(raw.ollama_think ?? false)
   const chatImageRetentionDays = (() => {
     const v = raw.chat_image_retention_days
@@ -277,6 +290,7 @@ export const getSystemSettings = async () => {
       streamKeepaliveIntervalMs,
       openaiReasoningEffort,
       reasoningMaxOutputTokensDefault,
+      temperatureDefault,
       ollamaThink,
       chatImageRetentionDays,
       assistantReplyHistoryLimit: Number(raw.assistant_reply_history_limit ?? 5),
@@ -432,6 +446,13 @@ export const updateSystemSettings = async (
       payload.reasoning_max_output_tokens_default = rest.reasoningMaxOutputTokensDefault
     } else if (rest.reasoningMaxOutputTokensDefault === null) {
       payload.reasoning_max_output_tokens_default = null
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(rest, 'temperatureDefault')) {
+    if (typeof rest.temperatureDefault === 'number') {
+      payload.temperature_default = rest.temperatureDefault
+    } else if (rest.temperatureDefault === null) {
+      payload.temperature_default = null
     }
   }
   if (typeof rest.ollamaThink === 'boolean') payload.ollama_think = !!rest.ollamaThink

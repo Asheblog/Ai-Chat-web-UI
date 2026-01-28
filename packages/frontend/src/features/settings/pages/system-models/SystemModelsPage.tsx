@@ -71,6 +71,7 @@ export function SystemModelsPage() {
     handleToggleCapability,
     handleSaveMaxTokens,
     handleSaveContextWindow,
+    handleSaveTemperature,
     resetModel,
     handleBatchReset,
     hasCapability,
@@ -84,6 +85,9 @@ export function SystemModelsPage() {
   const [contextDialogOpen, setContextDialogOpen] = useState(false)
   const [contextDialogModel, setContextDialogModel] = useState<any | null>(null)
   const [contextDialogValue, setContextDialogValue] = useState('')
+  const [temperatureDialogOpen, setTemperatureDialogOpen] = useState(false)
+  const [temperatureDialogModel, setTemperatureDialogModel] = useState<any | null>(null)
+  const [temperatureDialogValue, setTemperatureDialogValue] = useState('')
   const [page, setPage] = useState(1)
   const pageSize = 80
 
@@ -111,8 +115,21 @@ export function SystemModelsPage() {
     setContextDialogValue('')
   }
 
+  const openTemperatureDialog = (model: any) => {
+    setTemperatureDialogModel(model)
+    setTemperatureDialogValue(typeof model.temperature === 'number' ? String(model.temperature) : '')
+    setTemperatureDialogOpen(true)
+  }
+
+  const closeTemperatureDialog = () => {
+    setTemperatureDialogOpen(false)
+    setTemperatureDialogModel(null)
+    setTemperatureDialogValue('')
+  }
+
   const dialogSaving = tokenDialogModel ? savingKey === modelKey(tokenDialogModel) : false
   const contextDialogSaving = contextDialogModel ? savingKey === modelKey(contextDialogModel) : false
+  const temperatureDialogSaving = temperatureDialogModel ? savingKey === modelKey(temperatureDialogModel) : false
 
   const handleTokenDialogSave = async () => {
     if (!tokenDialogModel) return
@@ -124,6 +141,12 @@ export function SystemModelsPage() {
     if (!contextDialogModel) return
     await handleSaveContextWindow(contextDialogModel, contextDialogValue)
     closeContextDialog()
+  }
+
+  const handleTemperatureDialogSave = async () => {
+    if (!temperatureDialogModel) return
+    await handleSaveTemperature(temperatureDialogModel, temperatureDialogValue)
+    closeTemperatureDialog()
   }
 
   useEffect(() => {
@@ -487,6 +510,9 @@ export function SystemModelsPage() {
                               <DropdownMenuItem onClick={()=>openContextDialog(m)}>
                                 修改上下文窗口
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={()=>openTemperatureDialog(m)}>
+                                修改温度
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 disabled={!m.overridden || isBusy}
@@ -566,6 +592,48 @@ export function SystemModelsPage() {
               取消
             </Button>
             <Button onClick={handleTokenDialogSave} disabled={dialogSaving}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={temperatureDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (temperatureDialogSaving) return
+            closeTemperatureDialog()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>修改温度</DialogTitle>
+            <DialogDescription>
+              {temperatureDialogModel?.name || temperatureDialogModel?.id || '未选择模型'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="text"
+              placeholder="0.7"
+              value={temperatureDialogValue}
+              onChange={(e)=>setTemperatureDialogValue(e.target.value)}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={temperatureDialogSaving}
+            />
+            <p className="text-sm text-muted-foreground">留空表示恢复供应商默认。允许 0~2 的数值。</p>
+          </div>
+          <DialogFooter className="pt-4">
+            <Button
+              variant="outline"
+              onClick={closeTemperatureDialog}
+              disabled={temperatureDialogSaving}
+            >
+              取消
+            </Button>
+            <Button onClick={handleTemperatureDialogSave} disabled={temperatureDialogSaving}>
               保存
             </Button>
           </DialogFooter>
