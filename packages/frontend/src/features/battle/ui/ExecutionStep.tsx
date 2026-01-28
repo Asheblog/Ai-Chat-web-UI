@@ -1,10 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { X, Clock, Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { X, Clock, Loader2, CheckCircle, XCircle, AlertTriangle, Share2 } from 'lucide-react'
 import { FlowGraph } from './FlowGraph'
 import type { JudgeConfig, NodeState } from '../hooks/useBattleFlow'
 
@@ -18,6 +17,8 @@ interface ExecutionStepProps {
     error: string | null
     onCancel: () => void
     onNodeClick?: (modelKey: string, attemptIndex: number) => void
+    onShare?: () => void
+    shareLink?: string | null
 }
 
 export function ExecutionStep({
@@ -30,6 +31,8 @@ export function ExecutionStep({
     error,
     onCancel,
     onNodeClick,
+    onShare,
+    shareLink,
 }: ExecutionStepProps) {
     // Calculate statistics
     const stats = useMemo(() => {
@@ -102,12 +105,20 @@ export function ExecutionStep({
                         )}
                     </h2>
                 </div>
-                {isRunning && (
-                    <Button variant="outline" onClick={onCancel} className="gap-2">
-                        <X className="h-4 w-4" />
-                        取消
-                    </Button>
-                )}
+                <div className="flex items-center gap-2">
+                    {onShare && (
+                        <Button variant="outline" onClick={onShare} className="gap-2">
+                            <Share2 className="h-4 w-4" />
+                            分享
+                        </Button>
+                    )}
+                    {isRunning && (
+                        <Button variant="outline" onClick={onCancel} className="gap-2">
+                            <X className="h-4 w-4" />
+                            取消
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Error Message */}
@@ -115,6 +126,19 @@ export function ExecutionStep({
                 <Card className="border-destructive bg-destructive/10">
                     <CardContent className="pt-4">
                         <p className="text-sm text-destructive">{error}</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {shareLink && (
+                <Card className="bg-muted/30">
+                    <CardContent className="pt-4">
+                        <div className="text-sm text-muted-foreground">
+                            分享链接：
+                            <a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
+                                {shareLink}
+                            </a>
+                        </div>
                     </CardContent>
                 </Card>
             )}

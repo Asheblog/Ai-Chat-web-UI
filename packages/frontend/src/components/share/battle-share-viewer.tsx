@@ -1,15 +1,20 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import type { BattleShare } from '@/types'
+import type { BattleShare, BattleResult } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { formatDate } from '@/lib/utils'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Scale, AlertCircle } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Scale, AlertCircle, Loader2, AlertTriangle } from 'lucide-react'
 import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
+import { FlowGraph } from '@/features/battle/ui/FlowGraph'
+import { buildNodeStatesFromRun, type BattleNodeModel, type LiveAttempt } from '@/features/battle/hooks/useBattleFlow'
+import { getBattleShare } from '@/features/battle/api'
+import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
 
 interface BattleShareViewerProps {
   share: BattleShare
@@ -56,11 +61,104 @@ const getOutputSummary = (output: string | null | undefined, maxLen = 100): stri
 }
 
 export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareViewerProps) {
-  const payload = share.payload
+  const [shareState, setShareState] = useState(share)
+  const payload = shareState.payload
+  const refreshTimerRef = useRef<number | null>(null)
+  const pollTimerRef = useRef<number | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const mountedRef = useRef(true)
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
   const [showQuestion, setShowQuestion] = useState(false)
   const [selectedAttempt, setSelectedAttempt] = useState<AttemptResult | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const isLive = payload.status === 'running' || payload.status === 'pending'
+  const isLiveRef = useRef(isLive)
+
+  useEffect(() => {
+    isLiveRef.current = isLive
+  }, [isLive])
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const refreshShare = useCallback(async () => {
+    if (!shareState.token) return
+    try {
+      const res = await getBattleShare(shareState.token)
+      if (!mountedRef.current) return
+      if (res?.success && res.data) {
+        setShareState(res.data)
+      }
+    } catch (error) {
+      console.warn('[battle-share] failed to refresh', error)
+    }
+  }, [shareState.token])
+
+  const queueRefresh = useCallback(() => {
+    if (refreshTimerRef.current != null) return
+    refreshTimerRef.current = window.setTimeout(async () => {
+      refreshTimerRef.current = null
+      await refreshShare()
+    }, 300)
+  }, [refreshShare])
+
+  const startPolling = useCallback(() => {
+    if (pollTimerRef.current != null) return
+    pollTimerRef.current = window.setInterval(() => {
+      if (!isLiveRef.current) return
+      void refreshShare()
+    }, 2000)
+  }, [refreshShare])
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current == null) return
+    window.clearInterval(pollTimerRef.current)
+    pollTimerRef.current = null
+  }, [])
+
+  useEffect(() => {
+    if (!shareState.token || !isLive) return
+    const base = DEFAULT_API_BASE_URL.replace(/\/$/, '')
+    const streamUrl = `${base}/battle/shares/${encodeURIComponent(shareState.token)}/stream`
+    const source = new EventSource(streamUrl)
+    eventSourceRef.current = source
+
+    source.onmessage = (event) => {
+      if (!event?.data || event.data === '[DONE]') return
+      let payload: any = null
+      try {
+        payload = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      if (!payload) return
+      if (payload.type === 'share_update') {
+        queueRefresh()
+      }
+      if (payload.type === 'share_complete') {
+        queueRefresh()
+        source.close()
+      }
+    }
+
+    source.onerror = () => {
+      source.close()
+      startPolling()
+    }
+
+    return () => {
+      source.close()
+      eventSourceRef.current = null
+      stopPolling()
+      if (refreshTimerRef.current != null) {
+        window.clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
+    }
+  }, [isLive, queueRefresh, shareState.token, startPolling, stopPolling])
 
   const statsMap = useMemo(() => {
     const map = new Map<string, typeof payload.summary.modelStats[number]>()
@@ -84,6 +182,14 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
     return Array.from(map.values())
   }, [payload.results])
 
+  const normalizedResults = useMemo<BattleResult[]>(() => {
+    return payload.results.map((result, index) => ({
+      ...result,
+      id: index + 1,
+      battleRunId: shareState.battleRunId,
+    } as BattleResult))
+  }, [payload.results, shareState.battleRunId])
+
   // Sort by passAtK and accuracy
   const rankedModels = useMemo(() => {
     return [...groupedResults].sort((a, b) => {
@@ -95,6 +201,50 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
       return (statB?.accuracy ?? 0) - (statA?.accuracy ?? 0)
     })
   }, [groupedResults, statsMap])
+
+  const nodeStates = useMemo(() => {
+    if (!isLive) return new Map()
+    const models: BattleNodeModel[] = payload.models.map((model) => ({
+      modelId: model.modelId,
+      connectionId: model.connectionId ?? null,
+      rawId: model.rawId ?? null,
+      label: model.modelLabel ?? undefined,
+    }))
+    const runsPerModel = Number.isFinite(payload.summary?.runsPerModel) ? payload.summary.runsPerModel : 1
+    const liveAttempts = payload.live?.attempts as LiveAttempt[] | undefined
+    return buildNodeStatesFromRun(models, runsPerModel, normalizedResults, undefined, liveAttempts)
+  }, [isLive, payload.models, payload.summary?.runsPerModel, payload.live?.attempts, normalizedResults])
+
+  const progressPercentage = useMemo(() => {
+    if (!payload.progress?.totalAttempts) return 0
+    return Math.min(100, (payload.progress.completedAttempts / payload.progress.totalAttempts) * 100)
+  }, [payload.progress?.completedAttempts, payload.progress?.totalAttempts])
+
+  const statusMeta = useMemo(() => {
+    if (isLive) {
+      return {
+        icon: <Loader2 className="h-5 w-5 text-primary animate-spin" />,
+        label: '对战进行中',
+        badge: '实时',
+      }
+    }
+    if (payload.status === 'error') {
+      return {
+        icon: <AlertTriangle className="h-5 w-5 text-destructive" />,
+        label: '对战出错',
+      }
+    }
+    if (payload.status === 'cancelled') {
+      return {
+        icon: <AlertTriangle className="h-5 w-5 text-muted-foreground" />,
+        label: '对战已取消',
+      }
+    }
+    return {
+      icon: <Trophy className="h-5 w-5 text-yellow-500" />,
+      label: '对战完成',
+    }
+  }, [isLive, payload.status])
 
   // Adapt statsMap for ModelStatsTable
   const adaptedStatsMap = useMemo(() => {
@@ -136,17 +286,36 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           {/* Summary line */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-yellow-500" />
-              <span className="font-semibold text-foreground">对战完成</span>
+              {statusMeta.icon}
+              <span className="font-semibold text-foreground">{statusMeta.label}</span>
+              {statusMeta.badge && (
+                <Badge variant="secondary" className="text-xs">
+                  {statusMeta.badge}
+                </Badge>
+              )}
             </div>
             <span className="text-muted-foreground/40">·</span>
-            <span className="font-semibold text-foreground">
-              {payload.summary.passModelCount}/{payload.summary.totalModels}模型通过
-            </span>
+            {isLive ? (
+              <>
+                <span className="font-semibold text-foreground">
+                  {payload.progress.completedAttempts}/{payload.progress.totalAttempts} 已完成
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span>进行中 {payload.progress.runningAttempts}</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span>等待 {payload.progress.pendingAttempts}</span>
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-foreground">
+                  {payload.summary.passModelCount}/{payload.summary.totalModels}模型通过
+                </span>
+              </>
+            )}
             <span className="text-muted-foreground/40">·</span>
             <span>阈值 {payload.judge.threshold.toFixed(2)}</span>
             <span className="text-muted-foreground/40">·</span>
-            <span>{formatRelativeTime(share.createdAt)}</span>
+            <span>{formatRelativeTime(shareState.createdAt)}</span>
           </div>
         </header>
 
@@ -179,15 +348,81 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           )}
         </div>
 
+        {isLive && (
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">对战进度</span>
+                <span className="font-medium">
+                  {payload.progress.completedAttempts}/{payload.progress.totalAttempts}
+                </span>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                通过 {payload.progress.successAttempts} · 未通过 {payload.progress.failedAttempts}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5">
+                <CardContent className="pt-4">
+                  <div className="text-xs text-muted-foreground">进行中</div>
+                  <div className="text-2xl font-bold text-blue-500">{payload.progress.runningAttempts}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5">
+                <CardContent className="pt-4">
+                  <div className="text-xs text-muted-foreground">已完成</div>
+                  <div className="text-2xl font-bold text-green-500">{payload.progress.completedAttempts}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5">
+                <CardContent className="pt-4">
+                  <div className="text-xs text-muted-foreground">等待</div>
+                  <div className="text-2xl font-bold text-amber-500">{payload.progress.pendingAttempts}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5">
+                <CardContent className="pt-4">
+                  <div className="text-xs text-muted-foreground">通过</div>
+                  <div className="text-2xl font-bold text-purple-500">{payload.progress.successAttempts}</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardContent className="pt-4">
+                <FlowGraph
+                  judgeLabel={payload.judge.modelLabel || payload.judge.modelId}
+                  nodeStates={nodeStates}
+                  isRunning
+                />
+              </CardContent>
+            </Card>
+
+            <div className="text-xs text-muted-foreground">
+              对战结束后会自动切换到结果页面。
+            </div>
+          </div>
+        )}
+
         {/* Model Stats Table */}
-        <ModelStatsTable
-          groupedResults={rankedModels}
-          statsMap={adaptedStatsMap}
-          className="mb-4"
-        />
+        {!isLive && (
+          <ModelStatsTable
+            groupedResults={rankedModels}
+            statsMap={adaptedStatsMap}
+            className="mb-4"
+          />
+        )}
 
         {/* Model cards */}
-        <div className="space-y-3">
+        {!isLive && (
+          <div className="space-y-3">
           {rankedModels.map((group, index) => {
             const stat = statsMap.get(group.key)
             const isExpanded = expandedModels.has(group.key)
@@ -290,10 +525,11 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
               </div>
             )
           })}
-        </div>
+          </div>
+        )}
       </div><footer className="border-t bg-muted/30 py-4">
         <div className="w-full px-4 md:px-8 lg:px-12 text-center text-sm text-muted-foreground">
-          由<span className="font-medium text-foreground">{brandText}</span> 生成 · {formatDate(share.createdAt)}
+          由<span className="font-medium text-foreground">{brandText}</span> 生成 · {formatDate(shareState.createdAt)}
         </div>
       </footer>
 

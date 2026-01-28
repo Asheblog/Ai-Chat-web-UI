@@ -117,6 +117,21 @@ export interface BattleSharePayload {
     modelLabel: string | null
     threshold: number
   }
+  status: BattleRunStatus
+  progress: {
+    totalAttempts: number
+    completedAttempts: number
+    runningAttempts: number
+    pendingAttempts: number
+    successAttempts: number
+    failedAttempts: number
+  }
+  models: Array<{
+    modelId: string
+    modelLabel: string | null
+    connectionId: number | null
+    rawId: string | null
+  }>
   summary: BattleRunSummary['summary']
   results: Array<{
     modelId: string
@@ -136,6 +151,20 @@ export interface BattleSharePayload {
     judgeReason: string | null
     judgeFallbackUsed: boolean
   }>
+  live?: {
+    attempts: Array<{
+      modelId: string
+      modelLabel: string | null
+      connectionId: number | null
+      rawId: string | null
+      attemptIndex: number
+      status: 'pending' | 'running' | 'success' | 'error' | 'judging'
+      output?: string | null
+      reasoning?: string | null
+      durationMs?: number | null
+      error?: string | null
+    }>
+  }
   createdAt: string
 }
 

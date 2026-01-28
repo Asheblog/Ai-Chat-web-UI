@@ -38,6 +38,7 @@ type BattleRunControl = {
     isClosed: () => boolean
   }
   emitEvent?: (event: BattleStreamEvent) => void
+  eventListeners: Set<(event: BattleStreamEvent) => void>
   runContext?: {
     prompt: string
     expectedAnswer: string
@@ -1039,104 +1040,13 @@ export class BattleService {
     // 8. 刷新统计
     await this.refreshRunSummary(runId)
 
-    // 9. 更新已有的分享
-    await this.updateActiveShares(runId)
-
-    // 10. 发送完成事件
+    // 9. 发送完成事件
     emitEvent?.({
       type: 'rejudge_complete',
       payload: { completed, total },
     })
 
     return { total, updated: updatedCount, errors: errorCount }
-  }
-
-  private async updateActiveShares(runId: number) {
-    const shares = await this.prisma.battleShare.findMany({
-      where: { battleRunId: runId, revokedAt: null },
-    })
-
-    if (shares.length === 0) return
-
-    // 获取最新的 run 和 results
-    const run = await this.prisma.battleRun.findFirst({
-      where: { id: runId },
-    })
-    if (!run) return
-
-    const results = await this.prisma.battleResult.findMany({
-      where: { battleRunId: runId },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
-    })
-
-    // 获取连接信息
-    const connectionIds = Array.from(
-      new Set(
-        results
-          .map((item) => item.connectionId)
-          .filter((value): value is number => typeof value === 'number'),
-      ),
-    )
-    const connections = connectionIds.length > 0
-      ? await this.prisma.connection.findMany({
-        where: { id: { in: connectionIds } },
-        select: { id: true, prefixId: true },
-      })
-      : []
-    const connectionMap = new Map(connections.map((c) => [c.id, c]))
-
-    const judgeConnection = run.judgeConnectionId
-      ? await this.prisma.connection.findFirst({
-        where: { id: run.judgeConnectionId },
-        select: { id: true, prefixId: true },
-      })
-      : null
-
-    const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
-    const summary = normalizeSummary(rawSummary, {
-      runsPerModel: run.runsPerModel,
-      passK: run.passK,
-      judgeThreshold: run.judgeThreshold,
-    })
-
-    // 更新每个分享
-    for (const share of shares) {
-      const payload: BattleSharePayload = {
-        title: run.title,
-        prompt: run.prompt,
-        expectedAnswer: run.expectedAnswer,
-        judge: {
-          modelId: run.judgeModelId,
-          modelLabel: composeModelLabel(judgeConnection, run.judgeRawId, run.judgeModelId),
-          threshold: run.judgeThreshold,
-        },
-        summary,
-        results: results.map((item) => ({
-          modelId: item.modelId,
-          modelLabel: composeModelLabel(connectionMap.get(item.connectionId || -1) || null, item.rawId, item.modelId),
-          connectionId: item.connectionId,
-          rawId: item.rawId,
-          attemptIndex: item.attemptIndex,
-          output: item.output,
-          reasoning: item.reasoning || '',
-          durationMs: item.durationMs,
-          error: item.error,
-          usage: safeParseJson(item.usageJson, {} as Record<string, any>),
-          judgeStatus: item.judgeStatus as any,
-          judgeError: item.judgeError,
-          judgePass: item.judgePass,
-          judgeScore: item.judgeScore,
-          judgeReason: item.judgeReason,
-          judgeFallbackUsed: item.judgeFallbackUsed,
-        })),
-        createdAt: run.createdAt.toISOString(),
-      }
-
-      await this.prisma.battleShare.update({
-        where: { id: share.id },
-        data: { payloadJson: safeJsonStringify(payload, '{}') },
-      })
-    }
   }
 
   async createShare(
@@ -1153,73 +1063,27 @@ export class BattleService {
       where: { battleRunId: run.id },
       orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
-    const connectionIds = Array.from(
-      new Set(
-        results
-          .map((item) => item.connectionId)
-          .filter((value): value is number => typeof value === 'number'),
-      ),
-    )
-    const connections = connectionIds.length > 0
-      ? await this.prisma.connection.findMany({
-        where: { id: { in: connectionIds } },
-        select: { id: true, prefixId: true },
-      })
-      : []
-    const connectionMap = new Map(connections.map((c) => [c.id, c]))
+    const rawConfig = safeParseJson<Record<string, any>>(run.configJson, {})
+    const configModels = normalizeConfigModels(rawConfig)
+    const models = this.buildShareModels(configModels, results)
+    const connectionMap = await this.buildShareConnectionMap(results, models)
     const judgeConnection = run.judgeConnectionId
       ? await this.prisma.connection.findFirst({
         where: { id: run.judgeConnectionId },
         select: { id: true, prefixId: true },
       })
       : null
-
-    const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
-    let summary = normalizeSummary(rawSummary, {
-      runsPerModel: run.runsPerModel,
-      passK: run.passK,
-      judgeThreshold: run.judgeThreshold,
-    })
-    const shouldRebuildSummary =
-      results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
-    if (shouldRebuildSummary) {
-      summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
-      if (run.status === 'completed' || run.status === 'cancelled') {
-        await this.prisma.battleRun.update({
-          where: { id: run.id },
-          data: { summaryJson: safeJsonStringify(summary, '{}') },
-        })
-      }
-    }
-
-    const payload: BattleSharePayload = {
-      title: run.title,
-      prompt: run.prompt,
-      expectedAnswer: run.expectedAnswer,
-      judge: {
-        modelId: run.judgeModelId,
-        modelLabel: composeModelLabel(judgeConnection, run.judgeRawId, run.judgeModelId),
-        threshold: run.judgeThreshold,
-      },
+    const summary = await this.resolveShareSummary(run, results)
+    const liveAttempts = this.collectLiveAttempts(run.id, connectionMap)
+    const payload = this.buildSharePayload({
+      run,
       summary,
-      results: results.map((item) => ({
-        modelId: item.modelId,
-        modelLabel: composeModelLabel(connectionMap.get(item.connectionId || -1) || null, item.rawId, item.modelId),
-        connectionId: item.connectionId,
-        rawId: item.rawId,
-        attemptIndex: item.attemptIndex,
-        output: item.output,
-        reasoning: item.reasoning || '',
-        durationMs: item.durationMs,
-        error: item.error,
-        usage: safeParseJson(item.usageJson, {} as Record<string, any>),
-        judgePass: item.judgePass,
-        judgeScore: item.judgeScore,
-        judgeReason: item.judgeReason,
-        judgeFallbackUsed: item.judgeFallbackUsed,
-      })),
-      createdAt: run.createdAt.toISOString(),
-    }
+      results,
+      models,
+      connectionMap,
+      judgeConnection,
+      liveAttempts,
+    })
 
     const token = await this.generateToken()
     const expiresAt = this.computeExpiry(params.expiresInHours)
@@ -1278,8 +1142,35 @@ export class BattleService {
     if (record.expiresAt && record.expiresAt <= now) {
       return null
     }
-    const payload = safeParseJson<BattleSharePayload>(record.payloadJson, null as any)
-    if (!payload) return null
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: record.battleRunId },
+    })
+    if (!run) return null
+    const results = await this.prisma.battleResult.findMany({
+      where: { battleRunId: run.id },
+      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+    })
+    const rawConfig = safeParseJson<Record<string, any>>(run.configJson, {})
+    const configModels = normalizeConfigModels(rawConfig)
+    const models = this.buildShareModels(configModels, results)
+    const connectionMap = await this.buildShareConnectionMap(results, models)
+    const judgeConnection = run.judgeConnectionId
+      ? await this.prisma.connection.findFirst({
+        where: { id: run.judgeConnectionId },
+        select: { id: true, prefixId: true },
+      })
+      : null
+    const summary = await this.resolveShareSummary(run, results)
+    const liveAttempts = this.collectLiveAttempts(run.id, connectionMap)
+    const payload = this.buildSharePayload({
+      run,
+      summary,
+      results,
+      models,
+      connectionMap,
+      judgeConnection,
+      liveAttempts,
+    })
     return {
       id: record.id,
       battleRunId: record.battleRunId,
@@ -1350,10 +1241,20 @@ export class BattleService {
       },
     })
     const runControl = this.createRunControl(run.id)
+    runControl.emitEvent = (event) => {
+      options?.emitEvent?.(event)
+      if (runControl.eventListeners && runControl.eventListeners.size > 0) {
+        for (const listener of runControl.eventListeners) {
+          try {
+            listener(event)
+          } catch {}
+        }
+      }
+    }
     let traceFinalStatus: TaskTraceStatus | null = null
     let traceFinalError: string | null = null
 
-    options?.emitEvent?.({
+    runControl.emitEvent?.({
       type: 'run_start',
       payload: {
         id: run.id,
@@ -1381,7 +1282,7 @@ export class BattleService {
         reason: 'start_cancelled',
       })
       traceFinalStatus = 'cancelled'
-      options?.emitEvent?.({
+      runControl.emitEvent?.({
         type: 'run_cancelled',
         payload: {
           id: run.id,
@@ -1475,7 +1376,6 @@ export class BattleService {
       const taskGroups = new Map<string, { queue: AttemptTask[]; running: boolean }>()
       const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>()
 
-      runControl.emitEvent = options?.emitEvent
       runControl.runContext = {
         prompt: input.prompt,
         expectedAnswer: input.expectedAnswer,
@@ -1522,7 +1422,7 @@ export class BattleService {
           reason: 'run_cancelled',
         })
         traceFinalStatus = 'cancelled'
-        options?.emitEvent?.({
+        runControl.emitEvent?.({
           type: 'run_cancelled',
           payload: {
             id: run.id,
@@ -1556,7 +1456,7 @@ export class BattleService {
             reason: 'status_cancelled',
           })
           traceFinalStatus = 'cancelled'
-          options?.emitEvent?.({
+          runControl.emitEvent?.({
             type: 'run_cancelled',
             payload: {
               id: run.id,
@@ -1570,7 +1470,7 @@ export class BattleService {
         }
       }
 
-      options?.emitEvent?.({
+      runControl.emitEvent?.({
         type: 'run_complete',
         payload: {
           id: run.id,
@@ -1601,7 +1501,7 @@ export class BattleService {
           reason: 'cancelled_in_error',
         })
         traceFinalStatus = 'cancelled'
-        options?.emitEvent?.({
+        runControl.emitEvent?.({
           type: 'run_cancelled',
           payload: {
             id: run.id,
@@ -1643,6 +1543,15 @@ export class BattleService {
     if (!control?.traceRecorder) return false
     control.traceRecorder.log(eventType, payload)
     return true
+  }
+
+  subscribeRunEvents(runId: number, listener: (event: BattleStreamEvent) => void) {
+    const control = this.activeRuns.get(runId)
+    if (!control) return null
+    control.eventListeners.add(listener)
+    return () => {
+      control.eventListeners.delete(listener)
+    }
   }
 
   private createAttemptTask(params: {
@@ -2115,6 +2024,7 @@ export class BattleService {
       taskGroups: new Map(),
       cancelled: false,
       traceRecorder: null,
+      eventListeners: new Set(),
     }
     this.activeRuns.set(runId, control)
     return control
@@ -2436,6 +2346,194 @@ export class BattleService {
       orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
     return this.buildSummary(results as BattleResultRecord[], config.runsPerModel, config.passK, config.judgeThreshold)
+  }
+
+  private buildShareModels(
+    configModels: BattleRunConfigModel[],
+    results: BattleResultRecord[],
+  ): BattleRunConfigModel[] {
+    if (configModels.length > 0) return configModels
+    const fallbackModels = new Map<string, BattleRunConfigModel>()
+    for (const item of results) {
+      const key = `${item.modelId}:${item.connectionId ?? 'null'}:${item.rawId ?? 'null'}`
+      if (fallbackModels.has(key)) continue
+      fallbackModels.set(key, {
+        modelId: item.modelId,
+        connectionId: item.connectionId ?? null,
+        rawId: item.rawId ?? null,
+      })
+    }
+    return Array.from(fallbackModels.values())
+  }
+
+  private async buildShareConnectionMap(
+    results: BattleResultRecord[],
+    models: BattleRunConfigModel[],
+  ): Promise<Map<number, { id: number; prefixId: string }>> {
+    const connectionIds = Array.from(
+      new Set(
+        [
+          ...results.map((item) => item.connectionId),
+          ...models.map((item) => item.connectionId),
+        ].filter((value): value is number => typeof value === 'number'),
+      ),
+    )
+    if (connectionIds.length === 0) {
+      return new Map()
+    }
+    const connections = await this.prisma.connection.findMany({
+      where: { id: { in: connectionIds } },
+      select: { id: true, prefixId: true },
+    })
+    return new Map(connections.map((connection) => [connection.id, connection]))
+  }
+
+  private async resolveShareSummary(run: BattleRunRecord, results: BattleResultRecord[]) {
+    const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
+    let summary = normalizeSummary(rawSummary, {
+      runsPerModel: run.runsPerModel,
+      passK: run.passK,
+      judgeThreshold: run.judgeThreshold,
+    })
+    const shouldRebuildSummary =
+      results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
+    if (shouldRebuildSummary) {
+      summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+      if (run.status === 'completed' || run.status === 'cancelled') {
+        await this.prisma.battleRun.update({
+          where: { id: run.id },
+          data: { summaryJson: safeJsonStringify(summary, '{}') },
+        })
+      }
+    }
+    return summary
+  }
+
+  private buildShareProgress(params: {
+    modelCount: number
+    runsPerModel: number
+    results: BattleResultRecord[]
+    liveAttempts: Array<LiveAttemptState & { modelLabel: string | null }> | null
+  }) {
+    const totalAttempts = Math.max(0, params.modelCount) * Math.max(1, Math.floor(params.runsPerModel))
+    const completedAttempts = params.results.length
+    let successAttempts = 0
+    let failedAttempts = 0
+    for (const result of params.results) {
+      if (!result.error && result.judgePass === true) {
+        successAttempts += 1
+      } else {
+        failedAttempts += 1
+      }
+    }
+
+    const resultKeys = new Set(
+      params.results.map((item) => `${buildModelKey(item.modelId, item.connectionId, item.rawId)}#${item.attemptIndex}`),
+    )
+    let runningAttempts = 0
+    let pendingAttempts = 0
+    if (params.liveAttempts) {
+      for (const attempt of params.liveAttempts) {
+        const key = `${buildModelKey(attempt.modelId, attempt.connectionId, attempt.rawId)}#${attempt.attemptIndex}`
+        if (resultKeys.has(key)) continue
+        if (attempt.status === 'running' || attempt.status === 'judging') {
+          runningAttempts += 1
+          continue
+        }
+        if (attempt.status === 'pending') {
+          pendingAttempts += 1
+        }
+      }
+    }
+
+    const remaining = Math.max(0, totalAttempts - completedAttempts - runningAttempts - pendingAttempts)
+    pendingAttempts += remaining
+
+    return {
+      totalAttempts,
+      completedAttempts,
+      runningAttempts,
+      pendingAttempts,
+      successAttempts,
+      failedAttempts,
+    }
+  }
+
+  private buildSharePayload(params: {
+    run: BattleRunRecord
+    summary: BattleRunSummary
+    results: BattleResultRecord[]
+    models: BattleRunConfigModel[]
+    connectionMap: Map<number, { id: number; prefixId: string }>
+    judgeConnection: { id: number; prefixId: string } | null
+    liveAttempts: Array<LiveAttemptState & { modelLabel: string | null }> | null
+  }): BattleSharePayload {
+    const models = params.models.map((model) => ({
+      modelId: model.modelId,
+      modelLabel: composeModelLabel(
+        model.connectionId != null ? params.connectionMap.get(model.connectionId) || null : null,
+        model.rawId,
+        model.modelId,
+      ),
+      connectionId: model.connectionId ?? null,
+      rawId: model.rawId ?? null,
+    }))
+    const progress = this.buildShareProgress({
+      modelCount: models.length,
+      runsPerModel: params.run.runsPerModel,
+      results: params.results,
+      liveAttempts: params.liveAttempts,
+    })
+    const live = params.liveAttempts && params.liveAttempts.length > 0
+      ? {
+        attempts: params.liveAttempts.map((attempt) => ({
+          modelId: attempt.modelId,
+          modelLabel: attempt.modelLabel ?? null,
+          connectionId: attempt.connectionId,
+          rawId: attempt.rawId,
+          attemptIndex: attempt.attemptIndex,
+          status: attempt.status,
+          output: attempt.output,
+          reasoning: attempt.reasoning,
+          durationMs: attempt.durationMs,
+          error: attempt.error,
+        })),
+      }
+      : undefined
+    return {
+      title: params.run.title,
+      prompt: params.run.prompt,
+      expectedAnswer: params.run.expectedAnswer,
+      judge: {
+        modelId: params.run.judgeModelId,
+        modelLabel: composeModelLabel(params.judgeConnection, params.run.judgeRawId, params.run.judgeModelId),
+        threshold: params.run.judgeThreshold,
+      },
+      status: params.run.status,
+      progress,
+      models,
+      summary: params.summary,
+      results: params.results.map((item) => ({
+        modelId: item.modelId,
+        modelLabel: composeModelLabel(params.connectionMap.get(item.connectionId || -1) || null, item.rawId, item.modelId),
+        connectionId: item.connectionId,
+        rawId: item.rawId,
+        attemptIndex: item.attemptIndex,
+        output: item.output,
+        reasoning: item.reasoning || '',
+        durationMs: item.durationMs,
+        error: item.error,
+        usage: safeParseJson(item.usageJson, {} as Record<string, any>),
+        judgeStatus: item.judgeStatus as any,
+        judgeError: item.judgeError,
+        judgePass: item.judgePass,
+        judgeScore: item.judgeScore,
+        judgeReason: item.judgeReason,
+        judgeFallbackUsed: item.judgeFallbackUsed,
+      })),
+      ...(live ? { live } : {}),
+      createdAt: params.run.createdAt.toISOString(),
+    }
   }
 
   private async finalizeCancelledRun(

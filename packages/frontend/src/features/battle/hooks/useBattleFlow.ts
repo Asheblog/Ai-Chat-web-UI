@@ -49,7 +49,7 @@ export interface NodeState {
   judgeReason?: string | null
 }
 
-type LiveAttempt = {
+export type LiveAttempt = {
   modelId: string
   modelLabel?: string | null
   connectionId?: number | null
@@ -157,7 +157,7 @@ export const sanitizeHeaders = (
 const isPlaceholderModel = (model: ModelItem) =>
   model.provider === 'unknown' || model.channelName === 'unknown' || model.connectionId === 0
 
-type BattleNodeModel = {
+export type BattleNodeModel = {
   modelId: string
   connectionId?: number | null
   rawId?: string | null
@@ -294,7 +294,7 @@ const resolveNodeLabel = (model: BattleNodeModel, catalog?: ModelItem[]) => {
   return matched?.name || model.rawId || model.modelId
 }
 
-const buildNodeStatesFromRun = (
+export const buildNodeStatesFromRun = (
   models: BattleNodeModel[],
   runsPerModel: number,
   results: BattleResult[],

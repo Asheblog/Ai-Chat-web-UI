@@ -513,6 +513,8 @@ export function BattlePageClient() {
               error={flow.error}
               onCancel={flow.cancelBattle}
               onNodeClick={handleNodeClick}
+              onShare={handleShare}
+              shareLink={shareLink}
             />
           )}
 

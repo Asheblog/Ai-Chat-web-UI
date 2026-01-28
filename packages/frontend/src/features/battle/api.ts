@@ -198,6 +198,11 @@ export const createBattleShare = async (runId: number, payload?: { title?: strin
   return response.data
 }
 
+export const getBattleShare = async (token: string) => {
+  const response = await client.get<ApiResponse<BattleShare>>(`/battle/shares/${token}`)
+  return response.data
+}
+
 export interface RejudgePayload {
   expectedAnswer: string
   resultIds?: number[]

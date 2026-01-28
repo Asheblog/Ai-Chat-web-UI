@@ -437,6 +437,117 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
     }
   })
 
+  router.get('/shares/:token/stream', async (c) => {
+    const token = c.req.param('token')
+    if (!token) {
+      return c.json<ApiResponse>({ success: false, error: 'Invalid token' }, 400)
+    }
+    const share = await svc.getShareByToken(token)
+    if (!share) {
+      return c.json<ApiResponse>({ success: false, error: 'Share not found' }, 404)
+    }
+
+    const requestSignal = c.req.raw.signal
+    const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
+    const sseHeaders: Record<string, string> = {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control',
+    }
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder()
+        let closed = false
+        let keepaliveTimer: ReturnType<typeof setInterval> | null = null
+        let unsubscribe: (() => void) | null = null
+
+        const send = (event: Record<string, unknown>) => {
+          if (closed) return
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          } catch {}
+        }
+
+        const stop = () => {
+          if (closed) return
+          closed = true
+          if (keepaliveTimer) {
+            clearInterval(keepaliveTimer)
+            keepaliveTimer = null
+          }
+          if (unsubscribe) {
+            try {
+              unsubscribe()
+            } catch {}
+            unsubscribe = null
+          }
+          try {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+          } catch {}
+          controller.close()
+        }
+
+        const startHeartbeat = () => {
+          if (keepaliveIntervalMs <= 0) return
+          keepaliveTimer = setInterval(() => {
+            send({ type: 'keepalive', ts: Date.now() })
+          }, keepaliveIntervalMs)
+        }
+
+        const handleAbort = () => {
+          stop()
+        }
+
+        if (requestSignal && requestSignal.aborted) {
+          handleAbort()
+          return
+        }
+        if (requestSignal) {
+          requestSignal.addEventListener('abort', handleAbort, { once: true })
+        }
+
+        startHeartbeat()
+        send({ type: 'share_ready', runId: share.battleRunId, status: share.payload.status })
+
+        if (share.payload.status === 'completed' || share.payload.status === 'cancelled' || share.payload.status === 'error') {
+          send({ type: 'share_complete', status: share.payload.status })
+          stop()
+          return
+        }
+
+        unsubscribe = svc.subscribeRunEvents(share.battleRunId, (event) => {
+          if (closed) return
+          switch (event.type) {
+            case 'attempt_start':
+            case 'attempt_complete':
+            case 'run_complete':
+            case 'run_cancelled':
+            case 'error':
+              send({ type: 'share_update', eventType: event.type })
+              break
+            default:
+              break
+          }
+          if (event.type === 'run_complete' || event.type === 'run_cancelled') {
+            send({ type: 'share_complete', status: event.type })
+            stop()
+          }
+        })
+
+        if (!unsubscribe) {
+          send({ type: 'share_complete', status: 'inactive' })
+          stop()
+        }
+      },
+    })
+
+    return new Response(stream, { headers: sseHeaders })
+  })
+
   router.get('/shares/:token', async (c) => {
     try {
       const token = c.req.param('token')
