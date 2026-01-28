@@ -529,6 +529,12 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
             case 'error':
               send({ type: 'share_update', eventType: event.type })
               break
+            case 'attempt_delta':
+              send({
+                type: 'attempt_delta',
+                payload: event.payload ?? {},
+              })
+              break
             default:
               break
           }

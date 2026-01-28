@@ -6,13 +6,13 @@ import type { BattleShare, BattleResult } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { formatDate } from '@/lib/utils'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent } from '@/components/ui/card'
-import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Scale, AlertCircle, Loader2, AlertTriangle } from 'lucide-react'
+import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Loader2, AlertTriangle } from 'lucide-react'
 import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
 import { FlowGraph } from '@/features/battle/ui/FlowGraph'
-import { buildNodeStatesFromRun, type BattleNodeModel, type LiveAttempt } from '@/features/battle/hooks/useBattleFlow'
+import { DetailDrawer, type BattleAttemptDetail } from '@/features/battle/ui/DetailDrawer'
+import { buildNodeStatesFromRun, type BattleNodeModel, type LiveAttempt, type NodeState } from '@/features/battle/hooks/useBattleFlow'
+import { buildModelKey } from '@/features/battle/utils/model-key'
 import { getBattleShare } from '@/features/battle/api'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
 
@@ -69,8 +69,10 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   const mountedRef = useRef(true)
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
   const [showQuestion, setShowQuestion] = useState(false)
-  const [selectedAttempt, setSelectedAttempt] = useState<AttemptResult | null>(null)
+  const [selectedDetail, setSelectedDetail] = useState<BattleAttemptDetail | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null)
+  const [liveDeltas, setLiveDeltas] = useState<Map<string, { output: string; reasoning: string }>>(new Map())
   const isLive = payload.status === 'running' || payload.status === 'pending'
   const isLiveRef = useRef(isLive)
 
@@ -91,6 +93,33 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
       if (!mountedRef.current) return
       if (res?.success && res.data) {
         setShareState(res.data)
+        setLiveDeltas((prev) => {
+          if (prev.size === 0) return prev
+          const activeKeys = new Set<string>()
+          const liveAttempts = res.data.payload.live?.attempts || []
+          for (const attempt of liveAttempts) {
+            const key = buildModelKey({
+              modelId: attempt.modelId,
+              connectionId: attempt.connectionId ?? null,
+              rawId: attempt.rawId ?? null,
+            })
+            activeKeys.add(`${key}#${attempt.attemptIndex}`)
+          }
+          const results = res.data.payload.results || []
+          for (const result of results) {
+            const key = buildModelKey({
+              modelId: result.modelId,
+              connectionId: result.connectionId ?? null,
+              rawId: result.rawId ?? null,
+            })
+            activeKeys.add(`${key}#${result.attemptIndex}`)
+          }
+          const next = new Map(prev)
+          for (const key of activeKeys) {
+            next.delete(key)
+          }
+          return next
+        })
       }
     } catch (error) {
       console.warn('[battle-share] failed to refresh', error)
@@ -128,17 +157,48 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
 
     source.onmessage = (event) => {
       if (!event?.data || event.data === '[DONE]') return
-      let payload: any = null
+      let eventPayload: any = null
       try {
-        payload = JSON.parse(event.data)
+        eventPayload = JSON.parse(event.data)
       } catch {
         return
       }
-      if (!payload) return
-      if (payload.type === 'share_update') {
+      if (!eventPayload) return
+      if (eventPayload.type === 'share_update') {
         queueRefresh()
       }
-      if (payload.type === 'share_complete') {
+      if (eventPayload.type === 'attempt_delta') {
+        const data = eventPayload.payload || {}
+        const modelKey = data.modelKey || buildModelKey({
+          modelId: data.modelId,
+          connectionId: data.connectionId ?? null,
+          rawId: data.rawId ?? null,
+        })
+        const attemptIndex = Number(data.attemptIndex)
+        if (!modelKey || !Number.isFinite(attemptIndex)) return
+        const deltaKey = `${modelKey}#${attemptIndex}`
+        const outputDelta = typeof data.delta === 'string' ? data.delta : ''
+        const reasoningDelta = typeof data.reasoning === 'string' ? data.reasoning : ''
+        if (!outputDelta && !reasoningDelta) return
+        setLiveDeltas((prev) => {
+          const next = new Map(prev)
+          const current = next.get(deltaKey) || { output: '', reasoning: '' }
+          next.set(deltaKey, {
+            output: current.output + outputDelta,
+            reasoning: current.reasoning + reasoningDelta,
+          })
+          return next
+        })
+        setSelectedDetail((prev) => {
+          if (!prev || prev.modelKey !== modelKey || prev.attemptIndex !== attemptIndex) return prev
+          return {
+            ...prev,
+            output: `${prev.output || ''}${outputDelta}`,
+            reasoning: `${prev.reasoning || ''}${reasoningDelta}`,
+          } as BattleAttemptDetail
+        })
+      }
+      if (eventPayload.type === 'share_complete') {
         queueRefresh()
         source.close()
       }
@@ -190,6 +250,24 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
     } as BattleResult))
   }, [payload.results, shareState.battleRunId])
 
+  const modelKeyMap = useMemo(() => {
+    const map = new Map<string, { modelId: string; modelLabel: string | null; connectionId: number | null; rawId: string | null }>()
+    for (const model of payload.models) {
+      const key = buildModelKey({
+        modelId: model.modelId,
+        connectionId: model.connectionId ?? null,
+        rawId: model.rawId ?? null,
+      })
+      map.set(key, {
+        modelId: model.modelId,
+        modelLabel: model.modelLabel ?? null,
+        connectionId: model.connectionId ?? null,
+        rawId: model.rawId ?? null,
+      })
+    }
+    return map
+  }, [payload.models])
+
   // Sort by passAtK and accuracy
   const rankedModels = useMemo(() => {
     return [...groupedResults].sort((a, b) => {
@@ -202,8 +280,8 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
     })
   }, [groupedResults, statsMap])
 
-  const nodeStates = useMemo(() => {
-    if (!isLive) return new Map()
+  const nodeStates = useMemo<Map<string, NodeState[]>>(() => {
+    if (!isLive) return new Map<string, NodeState[]>()
     const models: BattleNodeModel[] = payload.models.map((model) => ({
       modelId: model.modelId,
       connectionId: model.connectionId ?? null,
@@ -214,6 +292,24 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
     const liveAttempts = payload.live?.attempts as LiveAttempt[] | undefined
     return buildNodeStatesFromRun(models, runsPerModel, normalizedResults, undefined, liveAttempts)
   }, [isLive, payload.models, payload.summary?.runsPerModel, payload.live?.attempts, normalizedResults])
+
+  const mergedNodeStates = useMemo(() => {
+    if (liveDeltas.size === 0) return nodeStates
+    const next = new Map<string, NodeState[]>()
+    nodeStates.forEach((attempts, modelKey) => {
+      const updated = attempts.map((attempt) => {
+        const delta = liveDeltas.get(`${modelKey}#${attempt.attemptIndex}`)
+        if (!delta) return attempt
+        return {
+          ...attempt,
+          output: `${attempt.output || ''}${delta.output}`,
+          reasoning: `${attempt.reasoning || ''}${delta.reasoning}`,
+        }
+      })
+      next.set(modelKey, updated)
+    })
+    return next
+  }, [liveDeltas, nodeStates])
 
   const progressPercentage = useMemo(() => {
     if (!payload.progress?.totalAttempts) return 0
@@ -275,9 +371,66 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   }
 
   const handleAttemptClick = (attempt: AttemptResult) => {
-    setSelectedAttempt(attempt)
+    const modelKey = buildModelKey({
+      modelId: attempt.modelId,
+      connectionId: attempt.connectionId ?? null,
+      rawId: attempt.rawId ?? null,
+    })
+    const detail: BattleAttemptDetail = {
+      ...attempt,
+      id: normalizedResults.find((item) => item.modelId === attempt.modelId
+        && item.connectionId === attempt.connectionId
+        && item.rawId === attempt.rawId
+        && item.attemptIndex === attempt.attemptIndex)?.id || 0,
+      battleRunId: shareState.battleRunId,
+      modelKey,
+      isLive: false,
+    }
+    setSelectedNodeKey(`${modelKey}-${attempt.attemptIndex}`)
+    setSelectedDetail(detail)
     setDrawerOpen(true)
   }
+
+  const handleNodeClick = useCallback((modelKey: string, attemptIndex: number) => {
+    const attempts = mergedNodeStates.get(modelKey)
+    const attempt = attempts?.find((item) => item.attemptIndex === attemptIndex)
+    if (!attempt) return
+    const modelInfo = modelKeyMap.get(modelKey)
+    const matchedResult = normalizedResults.find((item) => (
+      buildModelKey({
+        modelId: item.modelId,
+        connectionId: item.connectionId ?? null,
+        rawId: item.rawId ?? null,
+      }) === modelKey && item.attemptIndex === attemptIndex
+    ))
+    if (matchedResult) {
+      setSelectedDetail({
+        ...matchedResult,
+        modelKey,
+        isLive: false,
+      })
+    } else {
+      setSelectedDetail({
+        isLive: true,
+        modelKey,
+        modelId: modelInfo?.modelId || '',
+        modelLabel: modelInfo?.modelLabel ?? attempt.modelLabel,
+        attemptIndex,
+        output: attempt.output,
+        reasoning: attempt.reasoning,
+        durationMs: attempt.durationMs ?? null,
+        error: attempt.error ?? null,
+        status: attempt.status,
+        judgeStatus: attempt.judgeStatus,
+        judgeError: attempt.judgeError,
+        judgePass: attempt.judgePass,
+        judgeScore: attempt.judgeScore,
+        judgeReason: attempt.judgeReason,
+      })
+    }
+    setSelectedNodeKey(`${modelKey}-${attemptIndex}`)
+    setDrawerOpen(true)
+  }, [mergedNodeStates, modelKeyMap, normalizedResults])
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col"><div className="flex-1 w-full px-4 md:px-8 lg:px-12 py-8 space-y-6">
@@ -399,11 +552,58 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
               <CardContent className="pt-4">
                 <FlowGraph
                   judgeLabel={payload.judge.modelLabel || payload.judge.modelId}
-                  nodeStates={nodeStates}
+                  nodeStates={mergedNodeStates}
                   isRunning
+                  selectedNodeKey={selectedNodeKey || undefined}
+                  onNodeClick={handleNodeClick}
                 />
               </CardContent>
             </Card>
+
+            <div className="space-y-3">
+              {Array.from(mergedNodeStates.entries()).map(([modelKey, attempts]) => {
+                const latest = attempts.reduce<NodeState | null>((acc, item) => {
+                  if (!acc) return item
+                  return item.attemptIndex >= acc.attemptIndex ? item : acc
+                }, null)
+                if (!latest) return null
+                const summary = getOutputSummary(latest.output || '')
+                return (
+                  <Card key={modelKey} className="bg-background/70 border-border/60">
+                    <button
+                      type="button"
+                      className="w-full text-left hover:bg-muted/30 transition-colors rounded-lg"
+                      onClick={() => handleNodeClick(modelKey, latest.attemptIndex)}
+                    >
+                      <CardContent className="pt-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-semibold break-words">{latest.modelLabel}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {latest.status === 'running' ? '进行中' : latest.status === 'judging' ? '评测中' : latest.status === 'success' ? '完成' : latest.status === 'error' ? '错误' : '等待'}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">#{latest.attemptIndex}</Badge>
+                            </div>
+                            {summary ? (
+                              <p className="text-xs text-muted-foreground line-clamp-2">{summary}</p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">暂无输出</p>
+                            )}
+                          </div>
+                          {latest.durationMs != null && (
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {(latest.durationMs / 1000).toFixed(1)}s
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </button>
+                  </Card>
+                )
+              })}
+            </div>
 
             <div className="text-xs text-muted-foreground">
               对战结束后会自动切换到结果页面。
@@ -533,137 +733,13 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
         </div>
       </footer>
 
-      {/* Detail Dialog */}
-      <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DialogContent
-          className={cn(
-            "w-[95vw] max-w-3xl p-0",
-            "h-[90vh] sm:h-[85vh]",
-            "flex flex-col overflow-hidden",
-            "rounded-lg sm:rounded-xl"
-          )}
-        >
-          <DialogTitle className="sr-only">
-            {selectedAttempt?.modelLabel || selectedAttempt?.modelId || '模型输出详情'} #{selectedAttempt?.attemptIndex}
-          </DialogTitle>
-          {selectedAttempt && (
-            <ScrollArea className="h-full w-full">
-              <div className="p-4 sm:p-6 space-y-5 min-w-0 overflow-hidden">
-                {/* Header */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h2 className="text-lg font-semibold">{selectedAttempt.modelLabel || selectedAttempt.modelId}</h2>
-                    <Badge variant="outline" className="text-xs">#{selectedAttempt.attemptIndex}</Badge>
-                  </div>
-                  {/* Status badges */}
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    {selectedAttempt.error ? (
-                      <Badge variant="destructive" className="text-xs gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        错误
-                      </Badge>
-                    ) : selectedAttempt.judgePass != null ? (
-                      <Badge
-                        variant={selectedAttempt.judgePass ? 'default' : 'destructive'}
-                        className="text-xs gap-1"
-                      >
-                        {selectedAttempt.judgePass ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                        {selectedAttempt.judgePass ? '通过' : '未通过'}
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-xs">未评测</Badge>
-                    )}
-                    {selectedAttempt.durationMs != null && (
-                      <span className="text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {(selectedAttempt.durationMs / 1000).toFixed(2)}s
-                      </span>
-                    )}
-                    {selectedAttempt.judgeFallbackUsed && (
-                      <Badge variant="secondary" className="text-xs">阈值兜底</Badge>
-                    )}
-                  </div>
-                </div>
-
-                {/* Error */}
-                {selectedAttempt.error && (
-                  <div className="rounded-lg bg-destructive/10 p-3">
-                    <div className="flex items-center gap-2 text-sm text-destructive font-medium mb-1">
-                      <AlertCircle className="h-4 w-4" />
-                      执行错误
-                    </div>
-                    <p className="text-sm text-destructive/80">{selectedAttempt.error}</p>
-                  </div>
-                )}
-
-                {/* Reasoning */}
-                {selectedAttempt.reasoning && (
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-medium mb-2">推理过程</h4>
-                    <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
-                      <div className="prose prose-sm max-w-none dark:prose-invert overflow-x-auto min-w-0">
-                        <MarkdownRenderer html={null} fallback={selectedAttempt.reasoning} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Model Output */}
-                <div className="min-w-0">
-                  <h4 className="text-sm font-medium mb-2">模型输出</h4>
-                  <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
-                    {selectedAttempt.output ? (
-                      <div className="prose prose-sm max-w-none dark:prose-invert min-w-0">
-                        <MarkdownRenderer html={null} fallback={selectedAttempt.output} />
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">无输出内容</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Judge Evaluation */}
-                {selectedAttempt.judgePass != null && (
-                  <div>
-                    <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                      <Scale className="h-4 w-4" />
-                      裁判评估
-                    </h4>
-                    <div className="rounded-lg bg-muted/30 p-3">
-                      {/* Score bar */}
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className={cn(
-                          'text-2xl font-bold',
-                          selectedAttempt.judgePass ? 'text-green-500' : 'text-destructive'
-                        )}>
-                          {selectedAttempt.judgeScore != null ? selectedAttempt.judgeScore.toFixed(2) : '--'}
-                        </div>
-                        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={cn(
-                              'h-full rounded-full transition-all',
-                              selectedAttempt.judgePass ? 'bg-green-500' : 'bg-destructive'
-                            )}
-                            style={{ width: `${(selectedAttempt.judgeScore ?? 0) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Reason */}
-                      {selectedAttempt.judgeReason && (
-                        <div className="text-sm text-muted-foreground">
-                          <span className="text-xs text-muted-foreground/70">评判理由：</span>
-                          {selectedAttempt.judgeReason}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Detail Drawer */}
+      <DetailDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        detail={selectedDetail}
+        isRunning={isLive}
+      />
     </div>
   )
 }
