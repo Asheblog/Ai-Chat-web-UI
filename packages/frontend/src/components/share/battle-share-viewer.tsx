@@ -4,10 +4,11 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import type { BattleShare, BattleResult } from '@/types'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
-import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Loader2, AlertTriangle } from 'lucide-react'
+import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Loader2, AlertTriangle, ArrowDown } from 'lucide-react'
 import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
 import { FlowGraph } from '@/features/battle/ui/FlowGraph'
 import { DetailDrawer, type BattleAttemptDetail } from '@/features/battle/ui/DetailDrawer'
@@ -75,6 +76,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   const [liveDeltas, setLiveDeltas] = useState<Map<string, { output: string; reasoning: string }>>(new Map())
   const isLive = payload.status === 'running' || payload.status === 'pending'
   const isLiveRef = useRef(isLive)
+  const resultsRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     isLiveRef.current = isLive
@@ -432,6 +434,15 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
     setDrawerOpen(true)
   }, [mergedNodeStates, modelKeyMap, normalizedResults])
 
+  const scrollToResults = useCallback(() => {
+    const target = resultsRef.current
+    if (!target) return
+    const prefersReducedMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    target.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' })
+  }, [])
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col"><div className="flex-1 w-full px-4 md:px-8 lg:px-12 py-8 space-y-6">
         {/* Header */}
@@ -469,6 +480,12 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
             <span>阈值 {payload.judge.threshold.toFixed(2)}</span>
             <span className="text-muted-foreground/40">·</span>
             <span>{formatRelativeTime(shareState.createdAt)}</span>
+          </div>
+          <div>
+            <Button variant="outline" size="sm" className="gap-2" onClick={scrollToResults}>
+              <ArrowDown className="h-4 w-4" />
+              直达结果
+            </Button>
           </div>
         </header>
 
@@ -560,6 +577,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
               </CardContent>
             </Card>
 
+            <div ref={resultsRef} id="battle-results" className="scroll-mt-24" />
             <div className="space-y-3">
               {Array.from(mergedNodeStates.entries()).map(([modelKey, attempts]) => {
                 const latest = attempts.reduce<NodeState | null>((acc, item) => {
@@ -621,6 +639,10 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
         )}
 
         {/* Model cards */}
+        {!isLive && (
+          <div ref={resultsRef} id="battle-results" className="scroll-mt-24" />
+        )}
+
         {!isLive && (
           <div className="space-y-3">
           {rankedModels.map((group, index) => {
@@ -734,12 +756,25 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
       </footer>
 
       {/* Detail Drawer */}
-      <DetailDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        detail={selectedDetail}
-        isRunning={isLive}
-      />
+        <DetailDrawer
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          detail={selectedDetail}
+          isRunning={isLive}
+        />
+
+      <div className="fixed bottom-6 right-4 sm:right-6 z-50">
+        <Button
+          variant="default"
+          size="icon"
+          className="h-11 w-11 rounded-full shadow-md"
+          onClick={scrollToResults}
+          aria-label="直达模型输出"
+          title="直达模型输出"
+        >
+          <ArrowDown className="h-5 w-5" />
+        </Button>
+      </div>
     </div>
   )
 }
