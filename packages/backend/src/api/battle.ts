@@ -37,10 +37,15 @@ const battleModelSchema = z.object({
   ollamaThink: z.boolean().optional(),
 })
 
+const BATTLE_TEXT_MAX = 128 * 1024
+const BATTLE_TEXT_MAX_LABEL = '128K'
+const buildTextLimitMessage = (field: string) =>
+  `${field} 长度不能超过 ${BATTLE_TEXT_MAX_LABEL}（${BATTLE_TEXT_MAX} 字符）`
+
 const battleStreamSchema = z.object({
   title: z.string().max(200).optional(),
-  prompt: z.string().min(1).max(10000),
-  expectedAnswer: z.string().min(1).max(10000),
+  prompt: z.string().min(1).max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('prompt') }),
+  expectedAnswer: z.string().min(1).max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('expectedAnswer') }),
   judge: z.object({
     modelId: z.string().min(1),
     connectionId: z.number().int().positive().optional(),
@@ -74,7 +79,7 @@ const judgeRetrySchema = z.object({
 })
 
 const rejudgeSchema = z.object({
-  expectedAnswer: z.string().min(1).max(10000),
+  expectedAnswer: z.string().min(1).max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('expectedAnswer') }),
   resultIds: z.array(z.number().int().positive()).max(200).optional(),
   judge: z.object({
     modelId: z.string().min(1),

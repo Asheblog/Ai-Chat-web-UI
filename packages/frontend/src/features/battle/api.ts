@@ -38,6 +38,18 @@ export interface BattleStreamPayload {
   maxConcurrency?: number
 }
 
+const buildValidationMessage = (payload: any): string | null => {
+  if (!payload) return null
+  const issues = payload?.error?.issues
+  if (Array.isArray(issues) && issues.length > 0) {
+    const message = typeof issues[0]?.message === 'string' ? issues[0].message.trim() : ''
+    if (message) return message
+  }
+  if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error
+  if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message
+  return null
+}
+
 export async function* streamBattle(
   payload: BattleStreamPayload,
   options?: { signal?: AbortSignal },
@@ -71,7 +83,8 @@ export async function* streamBattle(
     } catch {
       // ignore
     }
-    const error: any = new Error(`HTTP error ${response.status}`)
+    const detail = buildValidationMessage(payload)
+    const error: any = new Error(detail || `HTTP error ${response.status}`)
     error.status = response.status
     error.payload = payload
     throw error
@@ -248,7 +261,8 @@ export async function* rejudgeWithNewAnswer(
     } catch {
       // ignore
     }
-    const error: any = new Error(`HTTP error ${response.status}`)
+    const detail = buildValidationMessage(errPayload)
+    const error: any = new Error(detail || `HTTP error ${response.status}`)
     error.status = response.status
     error.payload = errPayload
     throw error
