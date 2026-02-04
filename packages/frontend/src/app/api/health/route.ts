@@ -6,7 +6,7 @@ export async function GET() {
       status: 'ok',
       timestamp: new Date().toISOString(),
       service: 'aichat-frontend',
-      version: 'v1.1.0',
+      version: 'v1.9.0',
       environment: process.env.NODE_ENV || 'unknown',
       uptime: process.uptime()
     });

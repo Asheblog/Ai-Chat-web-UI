@@ -12,7 +12,7 @@ export class AppInfoService {
 
   constructor(deps: AppInfoServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
-    this.version = deps.version ?? process.env.APP_VERSION ?? 'v1.1.0'
+    this.version = deps.version ?? process.env.APP_VERSION ?? 'v1.9.0'
   }
 
   async getAppInfo() {

@@ -2,6 +2,8 @@
 
 ## 未发布
 
+## v1.9.0 · 2026-02-04
+
 - BREAKING: 文档/知识库工具接口升级为 `document_list`/`document_search`/`document_get_content` 等新体系，移除旧的 `document_get_outline`/`document_get_page`/`document_get_page_range`/`kb_search_v2`；迁移策略为无迁移、直接替换。
 - 文档分块新增分页字段（`pageNumber/pageStart/pageEnd`）及索引，迁移文件为 `20260202090000_add_document_chunk_page_fields`。
 - RAG 检索改为多文档均衡采样与概览模式，增强多文档总结覆盖度。

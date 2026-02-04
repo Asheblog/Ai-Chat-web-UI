@@ -1,6 +1,6 @@
 {
   "name": "aichat",
-  "version": "1.4.5",
+  "version": "1.9.0",
   "description": "AI Chat Platform - 轻量级AI聊天平台",
   "private": true,
   "workspaces": [

@@ -1,6 +1,6 @@
 {
   "name": "@aichat/shared",
-  "version": "1.0.0",
+  "version": "1.9.0",
   "description": "Shared utilities for AIChat (frontend + backend)",
   "type": "module",
   "main": "dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@aichat/backend",
-  "version": "1.0.0",
+  "version": "1.9.0",
   "description": "AI Chat Platform Backend - Hono API Server",
   "main": "dist/index.js",
   "type": "module",

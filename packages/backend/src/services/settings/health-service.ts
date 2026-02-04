@@ -27,7 +27,7 @@ export class HealthService {
   constructor(deps: HealthServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.now = deps.now ?? (() => new Date())
-    this.version = deps.version ?? process.env.APP_VERSION ?? 'v1.1.0'
+    this.version = deps.version ?? process.env.APP_VERSION ?? 'v1.9.0'
     this.memoryUsage = deps.memoryUsage ?? process.memoryUsage
   }
 
