@@ -38,6 +38,7 @@ export const sendMessageSchema = z.object({
       web_search_include_summary: z.boolean().optional(),
       web_search_include_raw: z.boolean().optional(),
       web_search_size: z.number().int().min(1).max(10).optional(),
+      url_reader: z.boolean().optional(),
       python_tool: z.boolean().optional(),
     })
     .optional(),

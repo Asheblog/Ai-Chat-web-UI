@@ -13,6 +13,7 @@ import type {
 } from './types'
 import { WebSearchToolHandler } from './web-search-handler'
 import { PythonToolHandler } from './python-handler'
+import { UrlReaderToolHandler } from './url-reader-handler'
 import {
   DocumentToolHandlerAdapter,
   documentToolNames,
@@ -144,6 +145,11 @@ export function createToolHandlerRegistry(
   // 注册 Web 搜索处理器
   if (params.webSearch?.enabled) {
     registry.register(new WebSearchToolHandler(params.webSearch))
+  }
+
+  // 注册 URL Reader 处理器
+  if (params.urlReader?.enabled) {
+    registry.register(new UrlReaderToolHandler(params.urlReader))
   }
 
   // 注册 Python 处理器

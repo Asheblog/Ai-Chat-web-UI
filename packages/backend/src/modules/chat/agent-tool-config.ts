@@ -38,6 +38,15 @@ export interface AgentPythonToolConfig {
   maxSourceChars: number;
 }
 
+/**
+ * URL Reader 配置
+ */
+export interface AgentUrlReaderConfig {
+  enabled: boolean;
+  timeout: number;
+  maxContentLength: number;
+}
+
 const WEB_SEARCH_SCOPES = ['webpage', 'document', 'paper', 'image', 'video', 'podcast'] as const;
 
 /**
@@ -163,5 +172,42 @@ export const buildAgentPythonToolConfig = (
     timeoutMs,
     maxOutputChars,
     maxSourceChars,
+  };
+};
+
+/**
+ * 构建 URL Reader 配置
+ */
+export const buildAgentUrlReaderConfig = (
+  sysMap: Record<string, string>,
+  env: NodeJS.ProcessEnv = process.env
+): AgentUrlReaderConfig => {
+  const enabled = parseBooleanSetting(
+    sysMap.url_reader_enable ?? env.URL_READER_ENABLE,
+    false
+  );
+
+  const timeout = clampNumber(
+    parseNumberSetting(
+      sysMap.url_reader_timeout ?? env.URL_READER_TIMEOUT,
+      { fallback: 30000 }
+    ),
+    5000,
+    120000
+  );
+
+  const maxContentLength = clampNumber(
+    parseNumberSetting(
+      sysMap.url_reader_max_content_length ?? env.URL_READER_MAX_CONTENT_LENGTH,
+      { fallback: 100000 }
+    ),
+    10000,
+    500000
+  );
+
+  return {
+    enabled,
+    timeout,
+    maxContentLength,
   };
 };

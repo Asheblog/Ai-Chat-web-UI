@@ -87,6 +87,7 @@ export interface ToolHandlerFactoryParams {
   python?: PythonHandlerConfig | null
   document?: DocumentHandlerConfig | null
   knowledgeBase?: KnowledgeBaseHandlerConfig | null
+  urlReader?: UrlReaderHandlerConfig | null
 }
 
 /**
@@ -114,6 +115,15 @@ export interface PythonHandlerConfig {
   timeoutMs: number
   maxOutputChars: number
   maxSourceChars: number
+}
+
+/**
+ * URL Reader 处理器配置
+ */
+export interface UrlReaderHandlerConfig {
+  enabled: boolean
+  timeout?: number
+  maxContentLength?: number
 }
 
 /**

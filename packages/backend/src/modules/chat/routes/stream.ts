@@ -18,6 +18,7 @@ import {
   createAgentWebSearchResponse,
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
+  buildAgentUrlReaderConfig,
 } from '../../chat/agent-web-search-response';
 import { createImageGenerationResponse, checkImageGenerationCapability } from '../../chat/image-generation-response';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
@@ -347,6 +348,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
       });
       const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
       const pythonToolConfig = buildAgentPythonToolConfig(sysMap);
+      const urlReaderConfig = buildAgentUrlReaderConfig(sysMap);
       const agentMaxToolIterations = (() => {
         const raw =
           sysMap.agent_max_tool_iterations ??
@@ -419,16 +421,24 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       const webSearchFeatureRequested = requestedFeatures?.web_search === true;
       const pythonToolFeatureRequested = requestedFeatures?.python_tool === true;
+      const urlReaderFeatureRequested =
+        webSearchFeatureRequested || requestedFeatures?.url_reader === true;
       const agentWebSearchActive =
         webSearchFeatureRequested &&
         agentWebSearchConfig.enabled &&
         Boolean(agentWebSearchConfig.apiKey);
       const pythonToolActive =
         pythonToolFeatureRequested && pythonToolConfig.enabled;
+      const urlReaderActive = urlReaderFeatureRequested && urlReaderConfig.enabled;
       // 文档工具和知识库工具也需要进入 agent 模式
       const documentToolsActive = hasSessionDocuments;
       const knowledgeBaseToolsActive = hasKnowledgeBases;
-      const agentToolsActive = agentWebSearchActive || pythonToolActive || documentToolsActive || knowledgeBaseToolsActive;
+      const agentToolsActive =
+        agentWebSearchActive ||
+        pythonToolActive ||
+        urlReaderActive ||
+        documentToolsActive ||
+        knowledgeBaseToolsActive;
       const resolvedMaxConcurrentStreams = (() => {
         const raw =
           sysMap.chat_max_concurrent_streams ||
@@ -549,10 +559,12 @@ export const registerChatStreamRoutes = (router: Hono) => {
           sseHeaders,
           agentConfig: agentWebSearchConfig,
           pythonToolConfig,
+          urlReaderConfig,
           agentMaxToolIterations,
           toolFlags: {
             webSearch: agentWebSearchActive,
             python: pythonToolActive,
+            urlReader: urlReaderActive,
             document: hasSessionDocuments, // 如果会话有文档则启用文档工具
             knowledgeBase: hasKnowledgeBases, // 如果有知识库则启用知识库工具
           },

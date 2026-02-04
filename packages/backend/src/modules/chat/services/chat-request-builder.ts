@@ -139,7 +139,14 @@ export class ChatRequestBuilder {
       systemPrompts.push({
         role: 'system',
         content:
-          '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。若结果不足以回答，可以继续调用 web_search 直到信息充分或达到上限。',
+          '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。若结果不足以回答，可以继续调用 web_search 直到信息充分或达到上限。若用户提供了明确 URL 并需要读取内容，请使用 read_url 获取网页正文。',
+      })
+    }
+    if (requestedFeatures.url_reader === true && requestedFeatures.web_search !== true) {
+      systemPrompts.push({
+        role: 'system',
+        content:
+          '当用户提供明确 URL 并需要读取内容时，调用 read_url 获取网页正文。对于动态/JS 渲染页面，可能无法完整读取。',
       })
     }
     if (requestedFeatures.python_tool === true) {

@@ -22,6 +22,7 @@ const describeTool = (tool?: string | null) => {
   if (!tool) return '工具调用'
   if (tool === 'web_search') return '联网搜索'
   if (tool === 'python_runner') return 'Python 工具'
+  if (tool === 'read_url') return '网页读取'
   return tool
 }
 

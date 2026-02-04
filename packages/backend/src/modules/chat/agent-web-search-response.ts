@@ -56,13 +56,22 @@ import {
 import {
   type AgentWebSearchConfig,
   type AgentPythonToolConfig,
+  type AgentUrlReaderConfig,
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
+  buildAgentUrlReaderConfig,
 } from './agent-tool-config';
 import type { ProviderType } from '../../utils/providers';
 
 // Re-export for backwards compatibility
-export { AgentWebSearchConfig, AgentPythonToolConfig, buildAgentWebSearchConfig, buildAgentPythonToolConfig };
+export {
+  AgentWebSearchConfig,
+  AgentPythonToolConfig,
+  AgentUrlReaderConfig,
+  buildAgentWebSearchConfig,
+  buildAgentPythonToolConfig,
+  buildAgentUrlReaderConfig,
+};
 
 type ChatSessionWithConnection = ChatSession & { connection: Connection | null };
 
@@ -79,8 +88,15 @@ export type AgentResponseParams = {
   sseHeaders: Record<string, string>;
   agentConfig: AgentWebSearchConfig;
   pythonToolConfig: AgentPythonToolConfig;
+  urlReaderConfig: AgentUrlReaderConfig;
   agentMaxToolIterations: number;
-  toolFlags: { webSearch: boolean; python: boolean; document?: boolean; knowledgeBase?: boolean };
+  toolFlags: {
+    webSearch: boolean;
+    python: boolean;
+    urlReader?: boolean;
+    document?: boolean;
+    knowledgeBase?: boolean;
+  };
   knowledgeBaseIds?: number[];
   provider: string;
   baseUrl: string;
@@ -116,6 +132,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     sseHeaders,
     agentConfig,
     pythonToolConfig,
+    urlReaderConfig,
     agentMaxToolIterations,
     toolFlags,
     provider,
@@ -149,6 +166,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     tools: {
       web_search: toolFlags.webSearch,
       python_runner: toolFlags.python,
+      url_reader: Boolean(toolFlags.urlReader),
       document_tools: Boolean(toolFlags.document),
       knowledge_base_tools: Boolean(toolFlags.knowledgeBase),
     },
@@ -502,6 +520,11 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       const toolRegistry = createToolHandlerRegistry({
         webSearch: toolFlags.webSearch ? agentConfig : null,
         python: toolFlags.python ? pythonToolConfig : null,
+        urlReader: toolFlags.urlReader ? {
+          enabled: true,
+          timeout: urlReaderConfig.timeout,
+          maxContentLength: urlReaderConfig.maxContentLength,
+        } : null,
         document: ragService && toolFlags.document
           ? { enabled: true, sessionId, ragService }
           : null,

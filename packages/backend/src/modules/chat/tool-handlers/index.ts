@@ -17,6 +17,7 @@ export type {
   ToolHandlerFactoryParams,
   WebSearchHandlerConfig,
   PythonHandlerConfig,
+  UrlReaderHandlerConfig,
   DocumentHandlerConfig,
   KnowledgeBaseHandlerConfig,
   ToolLogDetails,
@@ -25,6 +26,7 @@ export type {
 // 处理器实现
 export { WebSearchToolHandler } from './web-search-handler'
 export { PythonToolHandler } from './python-handler'
+export { UrlReaderToolHandler } from './url-reader-handler'
 export {
   DocumentToolHandlerAdapter,
   documentToolNames,
