@@ -521,7 +521,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         webSearch: toolFlags.webSearch ? agentConfig : null,
         python: toolFlags.python ? pythonToolConfig : null,
         urlReader: toolFlags.urlReader ? {
-          enabled: true,
           timeout: urlReaderConfig.timeout,
           maxContentLength: urlReaderConfig.maxContentLength,
         } : null,

@@ -148,7 +148,7 @@ export function createToolHandlerRegistry(
   }
 
   // 注册 URL Reader 处理器
-  if (params.urlReader?.enabled) {
+  if (params.urlReader) {
     registry.register(new UrlReaderToolHandler(params.urlReader))
   }
 

@@ -421,15 +421,14 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
       const webSearchFeatureRequested = requestedFeatures?.web_search === true;
       const pythonToolFeatureRequested = requestedFeatures?.python_tool === true;
-      const urlReaderFeatureRequested =
-        webSearchFeatureRequested || requestedFeatures?.url_reader === true;
+      const urlReaderFeatureRequested = webSearchFeatureRequested;
       const agentWebSearchActive =
         webSearchFeatureRequested &&
         agentWebSearchConfig.enabled &&
         Boolean(agentWebSearchConfig.apiKey);
       const pythonToolActive =
         pythonToolFeatureRequested && pythonToolConfig.enabled;
-      const urlReaderActive = urlReaderFeatureRequested && urlReaderConfig.enabled;
+      const urlReaderActive = urlReaderFeatureRequested;
       // 文档工具和知识库工具也需要进入 agent 模式
       const documentToolsActive = hasSessionDocuments;
       const knowledgeBaseToolsActive = hasKnowledgeBases;

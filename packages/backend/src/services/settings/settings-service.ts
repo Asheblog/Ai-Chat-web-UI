@@ -297,21 +297,6 @@ export class SettingsService {
       web_search_scope: settingsObj.web_search_scope || process.env.WEB_SEARCH_SCOPE || 'webpage',
       web_search_include_summary: this.parseBoolean(settingsObj.web_search_include_summary, process.env.WEB_SEARCH_INCLUDE_SUMMARY || 'false'),
       web_search_include_raw: this.parseBoolean(settingsObj.web_search_include_raw, process.env.WEB_SEARCH_INCLUDE_RAW || 'false'),
-      url_reader_enable: this.parseBoolean(settingsObj.url_reader_enable, process.env.URL_READER_ENABLE || 'false'),
-      url_reader_timeout: this.parseIntInRange(
-        settingsObj.url_reader_timeout,
-        process.env.URL_READER_TIMEOUT,
-        5000,
-        120000,
-        30000,
-      ),
-      url_reader_max_content_length: this.parseIntInRange(
-        settingsObj.url_reader_max_content_length,
-        process.env.URL_READER_MAX_CONTENT_LENGTH,
-        5000,
-        200000,
-        100000,
-      ),
       agent_max_tool_iterations: this.parseIntInRange(
         settingsObj.agent_max_tool_iterations,
         process.env.AGENT_MAX_TOOL_ITERATIONS,
@@ -418,9 +403,6 @@ export class SettingsService {
         web_search_scope: formatted.web_search_scope,
         web_search_include_summary: formatted.web_search_include_summary,
         web_search_include_raw: formatted.web_search_include_raw,
-        url_reader_enable: formatted.url_reader_enable,
-        url_reader_timeout: formatted.url_reader_timeout,
-        url_reader_max_content_length: formatted.url_reader_max_content_length,
         python_tool_enable: formatted.python_tool_enable,
         assistant_avatar_url: formatted.assistant_avatar_url,
         chat_system_prompt: formatted.chat_system_prompt,
@@ -477,8 +459,6 @@ export class SettingsService {
     assignIfNumber('python_tool_timeout_ms', payload.python_tool_timeout_ms)
     assignIfNumber('python_tool_max_output_chars', payload.python_tool_max_output_chars)
     assignIfNumber('python_tool_max_source_chars', payload.python_tool_max_source_chars)
-    assignIfNumber('url_reader_timeout', payload.url_reader_timeout)
-    assignIfNumber('url_reader_max_content_length', payload.url_reader_max_content_length)
     assignIfNumber('task_trace_retention_days', payload.task_trace_retention_days)
     assignIfNumber('task_trace_max_events', payload.task_trace_max_events)
     assignIfNumber('task_trace_idle_timeout_ms', payload.task_trace_idle_timeout_ms)
@@ -509,7 +489,6 @@ export class SettingsService {
       'web_search_agent_enable',
       'web_search_include_summary',
       'web_search_include_raw',
-      'url_reader_enable',
       'python_tool_enable',
       'task_trace_enabled',
       'task_trace_default_on',
@@ -551,8 +530,6 @@ export class SettingsService {
       { key: 'web_search_api_key_metaso', value: payload.web_search_api_key_metaso },
       { key: 'web_search_domain_filter', value: Array.isArray(payload.web_search_domain_filter) ? JSON.stringify(payload.web_search_domain_filter) : undefined },
       { key: 'web_search_scope', value: payload.web_search_scope },
-      { key: 'url_reader_timeout', value: payload.url_reader_timeout },
-      { key: 'url_reader_max_content_length', value: payload.url_reader_max_content_length },
       { key: 'python_tool_command', value: payload.python_tool_command },
       { key: 'python_tool_args', value: Array.isArray(payload.python_tool_args) ? JSON.stringify(payload.python_tool_args) : undefined },
       { key: 'task_trace_env', value: payload.task_trace_env },

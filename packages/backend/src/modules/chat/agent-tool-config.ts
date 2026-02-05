@@ -42,7 +42,6 @@ export interface AgentPythonToolConfig {
  * URL Reader 配置
  */
 export interface AgentUrlReaderConfig {
-  enabled: boolean;
   timeout: number;
   maxContentLength: number;
 }
@@ -182,11 +181,6 @@ export const buildAgentUrlReaderConfig = (
   sysMap: Record<string, string>,
   env: NodeJS.ProcessEnv = process.env
 ): AgentUrlReaderConfig => {
-  const enabled = parseBooleanSetting(
-    sysMap.url_reader_enable ?? env.URL_READER_ENABLE,
-    false
-  );
-
   const timeout = clampNumber(
     parseNumberSetting(
       sysMap.url_reader_timeout ?? env.URL_READER_TIMEOUT,
@@ -206,7 +200,6 @@ export const buildAgentUrlReaderConfig = (
   );
 
   return {
-    enabled,
     timeout,
     maxContentLength,
   };
