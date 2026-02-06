@@ -21,6 +21,7 @@ RUN apt-get update && \
         python3-scipy \
         python3-matplotlib \
         python3-pandas \
+        python3-pulp \
         openssl \
         ca-certificates \
         gosu \
@@ -108,6 +109,7 @@ RUN apt-get update && \
         python3-scipy \
         python3-matplotlib \
         python3-pandas \
+        python3-pulp \
         gosu \
         openssl \
         ca-certificates \
