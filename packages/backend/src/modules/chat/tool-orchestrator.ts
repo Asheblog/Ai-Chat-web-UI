@@ -317,19 +317,20 @@ async function parseToolTurnResponse(params: {
   onFirstResponseEvent?: () => MaybePromise<void>
   checkAbort?: () => void
 }): Promise<ParsedToolTurn> {
-  if (!params.response.ok) {
-    const errorText = await params.response.text().catch(() => '')
-    throw buildProviderRequestError(params.response, errorText)
+  const response = ensureResponseLike(params.response)
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    throw buildProviderRequestError(response, errorText)
   }
   if (!params.stream) {
     return parseNonStreamingTurn({
-      response: params.response,
+      response,
       schema: params.schema,
       toolDefinitions: params.toolDefinitions,
       allowedToolNames: params.allowedToolNames,
     })
   }
-  return parseStreamingTurn(params)
+  return parseStreamingTurn({ ...params, response })
 }
 
 async function parseStreamingTurn(params: {
@@ -651,13 +652,52 @@ function normalizeTurnRequestResult(result: ToolTurnRequestResult): {
   response: Response
   onDone?: () => MaybePromise<void>
 } {
-  if (result instanceof Response) {
-    return { response: result }
+  if (isResponseLike(result)) {
+    return { response: result as Response }
   }
-  return {
-    response: result.response,
-    onDone: result.onDone,
+  const responseCandidate = (result as any)?.response
+  if (isResponseLike(responseCandidate)) {
+    return {
+      response: responseCandidate as Response,
+      onDone: typeof (result as any)?.onDone === 'function' ? (result as any).onDone : undefined,
+    }
   }
+  throw new Error(
+    `Tool orchestrator requestTurn must return Response or { response: Response }, got ${describeTurnResult(
+      result,
+    )}`,
+  )
+}
+
+function ensureResponseLike(response: unknown): Response {
+  if (isResponseLike(response)) {
+    return response as Response
+  }
+  throw new Error(
+    `Tool orchestrator received invalid provider response: ${describeTurnResult(response)}`,
+  )
+}
+
+function isResponseLike(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.ok === 'boolean' &&
+    typeof candidate.status === 'number' &&
+    typeof candidate.text === 'function'
+  )
+}
+
+function describeTurnResult(value: unknown): string {
+  if (value == null) return String(value)
+  if (typeof value !== 'object') return typeof value
+  if (Array.isArray(value)) return `array(length=${value.length})`
+  const keys = Object.keys(value as Record<string, unknown>)
+  const ctor =
+    typeof (value as { constructor?: { name?: string } })?.constructor?.name === 'string'
+      ? (value as { constructor?: { name?: string } }).constructor!.name
+      : 'Object'
+  return `${ctor}(${keys.join(',') || 'no-keys'})`
 }
 
 function resolveFallbackSchema(params: {

@@ -159,5 +159,14 @@ describe('api-error-parser', () => {
       expect(message).toContain('上游服务配额已用尽')
       expect(message).toContain('team')
     })
+
+    it('应优先展示 Error.message，而不是 "{}"', () => {
+      const message = getFriendlyErrorMessage(
+        new TypeError("Cannot read properties of undefined (reading 'ok')")
+      )
+
+      expect(message).toContain("Cannot read properties of undefined (reading 'ok')")
+      expect(message).not.toBe('{}')
+    })
   })
 })

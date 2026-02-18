@@ -145,6 +145,25 @@ function extractErrorTexts(error: unknown): string[] {
 }
 
 /**
+ * 归一化错误文本，过滤无信息噪音（如 "{}"）
+ */
+function normalizeErrorTexts(texts: string[]): string[] {
+  const noisy = new Set(['{}', '[]', 'null', 'undefined']);
+  const normalized = texts
+    .map((text) => (typeof text === 'string' ? text.trim() : ''))
+    .filter(Boolean);
+  const hasInformative = normalized.some((text) => !noisy.has(text));
+  const deduped: string[] = [];
+  for (const text of normalized) {
+    if (hasInformative && noisy.has(text)) continue;
+    if (!deduped.includes(text)) {
+      deduped.push(text);
+    }
+  }
+  return deduped;
+}
+
+/**
  * 解析上游配额限制错误的重置时间
  */
 function parseUpstreamQuotaResetInfo(text: string): { resetsAt?: number; resetsInSeconds?: number } | null {
@@ -227,7 +246,8 @@ function parseContextLengthDetails(text: string): string | null {
  * 解析 API 错误
  */
 export function parseApiError(error: unknown): ParsedApiError {
-  const texts = extractErrorTexts(error);
+  const texts = normalizeErrorTexts(extractErrorTexts(error));
+  const primaryText = texts[0] || '';
   const combinedText = texts.join(' ');
 
   // 检查内容审查错误
@@ -235,7 +255,7 @@ export function parseApiError(error: unknown): ParsedApiError {
     return {
       type: 'content_moderation',
       message: '返回内容因安全审查被截断',
-      originalMessage: texts[0],
+      originalMessage: primaryText,
       suggestion: '当前 API 供应商对内容进行了安全过滤，建议更换其他 API 供应商或调整对话内容后重试。',
     };
   }
@@ -247,7 +267,7 @@ export function parseApiError(error: unknown): ParsedApiError {
       return {
         type: 'context_length',
         message: `超过模型上下文长度限制${detail}`,
-        originalMessage: texts[0],
+        originalMessage: primaryText,
         suggestion: '请缩短输入、减少历史消息或降低期望回复长度后重试。',
       };
     }
@@ -271,7 +291,7 @@ export function parseApiError(error: unknown): ParsedApiError {
     return {
       type: 'model_cooldown',
       message,
-      originalMessage: texts[0],
+      originalMessage: primaryText,
       suggestion,
       resetInfo: resetInfo || undefined,
     };
@@ -298,7 +318,7 @@ export function parseApiError(error: unknown): ParsedApiError {
     return {
       type: 'upstream_quota',
       message,
-      originalMessage: texts[0],
+      originalMessage: primaryText,
       suggestion,
       resetInfo: resetInfo || undefined,
     };
@@ -309,7 +329,7 @@ export function parseApiError(error: unknown): ParsedApiError {
     return {
       type: 'rate_limit',
       message: '请求过于频繁',
-      originalMessage: texts[0],
+      originalMessage: primaryText,
       suggestion: '请稍等片刻后重试。',
     };
   }
@@ -319,7 +339,7 @@ export function parseApiError(error: unknown): ParsedApiError {
     return {
       type: 'quota_exceeded',
       message: 'API 配额已用尽',
-      originalMessage: texts[0],
+      originalMessage: primaryText,
       suggestion: '请检查 API 供应商账户余额或更换其他 API 密钥。',
     };
   }
@@ -329,7 +349,7 @@ export function parseApiError(error: unknown): ParsedApiError {
     return {
       type: 'authentication',
       message: 'API 认证失败',
-      originalMessage: texts[0],
+      originalMessage: primaryText,
       suggestion: '请检查 API 密钥是否正确配置。',
     };
   }
@@ -341,7 +361,7 @@ export function parseApiError(error: unknown): ParsedApiError {
       return {
         type: 'authentication',
         message: 'API 认证失败',
-        originalMessage: texts[0],
+        originalMessage: primaryText,
         suggestion: '请检查 API 密钥是否正确配置。',
       };
     }
@@ -349,7 +369,7 @@ export function parseApiError(error: unknown): ParsedApiError {
       return {
         type: 'rate_limit',
         message: '请求过于频繁',
-        originalMessage: texts[0],
+        originalMessage: primaryText,
         suggestion: '请稍等片刻后重试。',
       };
     }
@@ -357,7 +377,7 @@ export function parseApiError(error: unknown): ParsedApiError {
       return {
         type: 'server_error',
         message: 'API 服务暂时不可用',
-        originalMessage: texts[0],
+        originalMessage: primaryText,
         suggestion: '请稍后重试或更换其他 API 供应商。',
       };
     }
@@ -366,8 +386,8 @@ export function parseApiError(error: unknown): ParsedApiError {
   // 未知错误
   return {
     type: 'unknown',
-    message: texts[0] || 'AI 服务请求失败',
-    originalMessage: texts[0],
+    message: primaryText || 'AI 服务请求失败',
+    originalMessage: primaryText || undefined,
   };
 }
 
