@@ -51,7 +51,10 @@ const normalizeJudgeScore = (value: unknown) => {
 const resolveMaxToolIterations = (sysMap: Record<string, string>) => {
   const raw = sysMap.agent_max_tool_iterations || process.env.AGENT_MAX_TOOL_ITERATIONS || '4'
   const parsed = Number.parseInt(String(raw), 10)
-  if (Number.isFinite(parsed) && parsed > 0) {
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    if (parsed === 0) {
+      return Number.POSITIVE_INFINITY
+    }
     return Math.min(20, parsed)
   }
   return 4
@@ -581,27 +584,14 @@ export class BattleExecutor {
     })
 
     const usageSource = orchestration.usage ?? latestUsage
-    if (orchestration.status === 'completed') {
-      const usage = usageSource
-        ? buildUsage(
-          { usage: usageSource },
-          {
-            promptTokens: prepared.promptTokens,
-            contextLimit: prepared.contextLimit,
-            contextRemaining: prepared.contextRemaining,
-          },
-        )
-        : {}
-      if (emitDelta && !shouldStream) {
-        emitDelta({ content: orchestration.content })
-      }
-      return {
-        content: orchestration.content,
-        usage,
-      }
+    if (orchestration.status !== 'completed') {
+      const iterationLabel = Number.isFinite(maxIterations)
+        ? String(maxIterations)
+        : '无限制'
+      throw new Error(`工具调用次数已达上限（${iterationLabel}），未生成最终答案`)
     }
 
-    const fallbackUsage = usageSource
+    const usage = usageSource
       ? buildUsage(
         { usage: usageSource },
         {
@@ -610,21 +600,13 @@ export class BattleExecutor {
           contextRemaining: prepared.contextRemaining,
         },
       )
-      : {
-        prompt_tokens: prepared.promptTokens,
-        completion_tokens: 0,
-        total_tokens: prepared.promptTokens,
-        context_limit: prepared.contextLimit,
-        context_remaining: prepared.contextRemaining,
-      }
-
-    const fallbackContent = '工具调用次数已达上限，未生成最终答案。'
+      : {}
     if (emitDelta && !shouldStream) {
-      emitDelta({ content: fallbackContent })
+      emitDelta({ content: orchestration.content })
     }
     return {
-      content: fallbackContent,
-      usage: fallbackUsage,
+      content: orchestration.content,
+      usage,
     }
   }
 
