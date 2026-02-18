@@ -97,18 +97,16 @@ export async function runToolOrchestration(
   const provider = params.provider || ''
   const includeReasoningInToolMessage = params.includeReasoningInToolMessage !== false
   const workingMessages = params.initialMessages.map((msg) => ({ ...msg }))
-  const maxIterations =
-    Number.isFinite(params.maxIterations) && params.maxIterations > 0
-      ? Math.floor(params.maxIterations)
-      : 1
+  const maxToolRounds = normalizeMaxToolRounds(params.maxIterations)
   let toolSchema: ToolSchema = resolveToolSchema({
     provider,
     requestData: params.requestData ?? undefined,
   })
   let lastUsage: Record<string, any> | null = null
   const reasoningChunks: string[] = []
+  let toolRoundsUsed = 0
 
-  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+  for (let iteration = 0; ; iteration += 1) {
     params.checkAbort?.()
 
     const turn = await executeTurnWithFallback({
@@ -154,6 +152,16 @@ export async function runToolOrchestration(
       }
     }
 
+    if (Number.isFinite(maxToolRounds) && toolRoundsUsed >= maxToolRounds) {
+      return {
+        status: 'max_iterations',
+        usage: lastUsage,
+        messages: workingMessages,
+        reasoningChunks,
+        toolSchema,
+      }
+    }
+
     const reasoningPayload = turn.parsed.reasoning.trim()
     if (toolSchema === 'functions') {
       let isFirstToolCall = true
@@ -182,6 +190,7 @@ export async function runToolOrchestration(
           content: result.message.content,
         })
       }
+      toolRoundsUsed += 1
       continue
     }
 
@@ -206,6 +215,7 @@ export async function runToolOrchestration(
           }),
         )
       }
+      toolRoundsUsed += 1
       continue
     }
 
@@ -229,15 +239,16 @@ export async function runToolOrchestration(
       })
       workingMessages.push(result.message)
     }
+    toolRoundsUsed += 1
   }
+}
 
-  return {
-    status: 'max_iterations',
-    usage: lastUsage,
-    messages: workingMessages,
-    reasoningChunks,
-    toolSchema,
+function normalizeMaxToolRounds(raw: number): number {
+  if (raw === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY
+  if (Number.isFinite(raw) && raw >= 0) {
+    return Math.floor(raw)
   }
+  return 1
 }
 
 async function executeTurnWithFallback(params: {

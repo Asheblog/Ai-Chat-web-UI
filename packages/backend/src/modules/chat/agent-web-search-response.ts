@@ -673,6 +673,12 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           },
         });
 
+        if (orchestration.status === 'max_iterations') {
+          const iterationLabel = Number.isFinite(maxIterations)
+            ? String(maxIterations)
+            : '无限制';
+          throw new Error(`工具调用次数已达上限（${iterationLabel}），未生成最终答案`);
+        }
         if (orchestration.status !== 'completed') {
           throw new Error('AI provider did not return a response');
         }
