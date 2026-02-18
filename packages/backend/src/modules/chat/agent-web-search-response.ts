@@ -1,10 +1,6 @@
 import { Prisma, type ChatSession, type Connection } from '@prisma/client';
 import { prisma } from '../../db';
 import { BackendLogger as log } from '../../utils/logger';
-import {
-  extractReasoningFromResponsesResponse,
-  extractTextFromResponsesResponse,
-} from '../../utils/openai-responses';
 import { buildChatProviderRequest } from '../../utils/chat-provider';
 import { Tokenizer } from '../../utils/tokenizer';
 import type { WebSearchHit } from '../../utils/web-search';
@@ -33,26 +29,12 @@ import { StreamEventEmitter } from './stream-event-emitter';
 import {
   createToolHandlerRegistry,
   sendUnsupportedToolError,
-  type ToolCall,
 } from './tool-handlers';
 import {
-  type LegacyFunctionCall,
   type ToolSchema,
-  appendLegacyFunctionCallDelta,
-  appendOpenAIToolCallDelta,
-  appendResponsesToolCallEvent,
-  buildUnsupportedToolResult,
-  buildTextToolResultMessage,
   buildToolRequest,
-  createToolCallBuffers,
-  extractToolCallsFromMessage,
-  extractToolCallsFromResponsesOutput,
-  isUnsupportedFunctionParamError,
-  isUnsupportedToolParamError,
-  normalizeToolHandlerResult,
-  parseToolCalls,
-  resolveToolSchema,
 } from './tool-protocol';
+import { runToolOrchestration } from './tool-orchestrator';
 import {
   type AgentWebSearchConfig,
   type AgentPythonToolConfig,
@@ -521,6 +503,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         webSearch: toolFlags.webSearch ? agentConfig : null,
         python: toolFlags.python ? pythonToolConfig : null,
         urlReader: toolFlags.urlReader ? {
+          enabled: true,
           timeout: urlReaderConfig.timeout,
           maxContentLength: urlReaderConfig.maxContentLength,
         } : null,
@@ -536,13 +519,12 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       if (toolDefinitions.length === 0) {
         throw new Error('Agent 工具未启用');
       }
-      let toolSchema: ToolSchema = resolveToolSchema({ provider, requestData });
       const maxIterations =
         agentMaxToolIterations > 0 ? agentMaxToolIterations : Number.POSITIVE_INFINITY;
       let currentProviderController: AbortController | null = null;
       const streamEnabled = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai';
 
-      const callProvider = async (messages: any[], schema: ToolSchema) => {
+      const callProvider = async (messages: any[], schema: ToolSchema, iteration: number) => {
         const { body: chatBody, messages: preparedMessages, textPromptAdded } = buildToolRequest({
           requestData,
           messages,
@@ -584,6 +566,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 ? body.tools.map((t: any) => t?.function?.name || t?.type || 'unknown')
                 : [],
           toolSchema: schema,
+          iteration,
         });
 
         currentProviderController = new AbortController();
@@ -596,23 +579,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             body: JSON.stringify(body),
             signal: currentProviderController.signal,
           });
-          if (!response.ok) {
-            const text = await response.text();
-            let parsed: any = null;
-            try {
-              parsed = JSON.parse(text);
-            } catch {
-              // ignore
-            }
-            const requestError: any = new Error(
-              `AI provider request failed (${response.status}): ${text}`,
-            );
-            requestError.status = response.status;
-            if (parsed) {
-              requestError.payload = parsed;
-            }
-            throw requestError;
-          }
           return response;
         } catch (error) {
           setStreamController(null);
@@ -632,393 +598,96 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let providerUsageSeen = false;
 
       try {
-        let iterations = 0;
-        while (iterations < maxIterations) {
-          iterations += 1;
-          let response: Response;
-          try {
-            response = await callProvider(workingMessages, toolSchema);
-          } catch (error) {
-            if (
-              toolSchema === 'tools' &&
-              provider !== 'openai_responses' &&
-              isUnsupportedToolParamError(error)
-            ) {
-              toolSchema = 'functions';
-              traceRecorder.log('agent:tool_schema_fallback', {
-                provider,
-                model: session.modelRawId,
-                schema: toolSchema,
-              });
-              response = await callProvider(workingMessages, toolSchema);
-            } else if (toolSchema === 'functions' && isUnsupportedFunctionParamError(error)) {
-              toolSchema = 'text';
-              traceRecorder.log('agent:tool_schema_fallback', {
-                provider,
-                model: session.modelRawId,
-                schema: toolSchema,
-              });
-              response = await callProvider(workingMessages, toolSchema);
-            } else {
-              throw error;
+        const orchestration = await runToolOrchestration({
+          provider,
+          requestData,
+          initialMessages: workingMessages,
+          toolDefinitions,
+          allowedToolNames,
+          maxIterations,
+          stream: streamEnabled,
+          includeReasoningInToolMessage: true,
+          emptyContentErrorMessage: 'Model finished without producing a final answer',
+          checkAbort: () => {
+            if (checkCancelled()) {
+              throw new Error('Agent stream cancelled by client');
             }
-          }
-          const reader = streamEnabled ? response.body?.getReader() : null;
-          if (streamEnabled && !reader) {
-            throw new Error('AI provider returned no response body');
-          }
-          const decoder = new TextDecoder();
-          let buffer = '';
-          let sawSse = false;
-          let providerUsage: any = null;
-          let iterationContent = '';
-          let iterationReasoning = '';
-          let iterationReasoningStartedAt: number | null = null;
-          let contentAlreadySent = false;
-          const toolCallBuffers = createToolCallBuffers();
-          let messageToolCalls: ToolCall[] = [];
-          let legacyFunctionCall: LegacyFunctionCall | null = null;
-          const activeToolSchema = toolSchema;
-          const bufferTextOutput = activeToolSchema === 'text';
-          const parseNonSsePayload = (raw: string) => {
-            if (!raw) return;
-            try {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed?.output)) {
-                iterationContent = extractTextFromResponsesResponse(parsed) || '';
-                const reasoningText = extractReasoningFromResponsesResponse(parsed) || '';
-                if (reasoningText) {
-                  iterationReasoning = reasoningText;
-                  emitReasoning(reasoningText, { kind: 'model', stage: 'stream' });
-                }
-                const outputToolCalls = extractToolCallsFromResponsesOutput(parsed.output);
-                if (outputToolCalls.length > 0) {
-                  messageToolCalls = outputToolCalls;
-                }
-                if (parsed?.usage) {
-                  providerUsage = parsed.usage;
-                  providerUsageSeen = true;
-                  safeEnqueue({ type: 'usage', usage: parsed.usage });
-                }
-                return;
-              }
-              const message = parsed?.choices?.[0]?.message ?? {};
-              const content = typeof message.content === 'string' ? message.content : '';
-              if (content) {
-                iterationContent = content;
-              }
-              const reasoningText =
-                (typeof message.reasoning_content === 'string' && message.reasoning_content) ||
-                (typeof message.reasoning === 'string' && message.reasoning) ||
-                (typeof message.analysis === 'string' && message.analysis) ||
-                '';
-              if (reasoningText) {
-                iterationReasoning = reasoningText;
-                emitReasoning(reasoningText, { kind: 'model', stage: 'stream' });
-              }
-              const nextToolCalls = extractToolCallsFromMessage(message);
-              if (nextToolCalls.length > 0) {
-                messageToolCalls = nextToolCalls;
-              }
-              if (parsed?.usage) {
-                providerUsage = parsed.usage;
-                providerUsageSeen = true;
-                safeEnqueue({ type: 'usage', usage: parsed.usage });
-              }
-            } catch {
-              // ignore invalid JSON
-            }
-          };
-
-          let streamFinished = false;
-          if (streamEnabled && reader) {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              lastChunkAt = Date.now();
-              idleWarned = false;
-              buffer += decoder.decode(value, { stream: true });
-              const lines = buffer.split('\n');
-              buffer = lines.pop() || '';
-              for (const line of lines) {
-                const normalized = line.replace(/\r$/, '');
-                if (!normalized.startsWith('data: ')) continue;
-                sawSse = true;
-                const data = normalized.slice(6);
-                if (data === '[DONE]') {
-                  buffer = '';
-                  streamFinished = true;
-                  break;
-                }
-                let parsed: any;
-                try {
-                  parsed = JSON.parse(data);
-                } catch {
-                  continue;
-                }
-
-                if (typeof parsed?.type === 'string' && parsed.type.startsWith('response.')) {
-                  if (firstChunkAt == null) firstChunkAt = Date.now();
-
-                  if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
-                    iterationContent += parsed.delta;
-                    if (!bufferTextOutput) {
-                      aiResponseContent += parsed.delta;
-                      safeEnqueue({ type: 'content', content: parsed.delta });
-                      contentAlreadySent = true;
-                      await persistAssistantProgress();
-                    }
-                  } else if (
-                    (parsed.type === 'response.reasoning_text.delta' || parsed.type === 'response.reasoning_summary_text.delta') &&
-                    typeof parsed.delta === 'string'
-                  ) {
-                    if (!reasoningStartedAt) reasoningStartedAt = Date.now();
-                    if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
-                    iterationReasoning += parsed.delta;
-                    emitReasoning(parsed.delta, { kind: 'model', stage: 'stream' });
-                    await persistAssistantProgress();
-                  } else if (
-                    parsed.type === 'response.completed' ||
-                    parsed.type === 'response.failed' ||
-                    parsed.type === 'response.incomplete'
-                  ) {
-                    providerUsage = parsed.response?.usage ?? providerUsage;
-                    if (providerUsage) {
-                      providerUsageSeen = true;
-                      safeEnqueue({ type: 'usage', usage: providerUsage });
-                    }
-                    streamFinished = true;
-                    break;
-                  }
-                  appendResponsesToolCallEvent(toolCallBuffers.responses, parsed);
-                  continue;
-                }
-
-                const choice = parsed.choices?.[0];
-                if (!choice) continue;
-                if (firstChunkAt == null) {
-                  firstChunkAt = Date.now();
-                }
-                const delta = choice.delta ?? {};
-                if (delta.reasoning_content) {
-                  if (!reasoningStartedAt) reasoningStartedAt = Date.now();
-                  if (!iterationReasoningStartedAt) iterationReasoningStartedAt = Date.now();
-                  iterationReasoning += delta.reasoning_content;
-                  emitReasoning(delta.reasoning_content, { kind: 'model', stage: 'stream' });
-                  await persistAssistantProgress();
-                }
-                if (delta.content) {
-                  iterationContent += delta.content;
-                  if (!bufferTextOutput) {
-                    aiResponseContent += delta.content;
-                    safeEnqueue({ type: 'content', content: delta.content });
-                    contentAlreadySent = true;
-                    await persistAssistantProgress();
-                  }
-                }
-                if (Array.isArray(delta.tool_calls)) {
-                  for (const toolDelta of delta.tool_calls) {
-                    appendOpenAIToolCallDelta(toolCallBuffers.openai, toolDelta);
-                  }
-                }
-                const legacyDelta = delta.function_call;
-                if (legacyDelta && typeof legacyDelta === 'object') {
-                  legacyFunctionCall = appendLegacyFunctionCallDelta(legacyFunctionCall, legacyDelta);
-                }
-                if (choice.message && messageToolCalls.length === 0) {
-                  const nextToolCalls = extractToolCallsFromMessage(choice.message);
-                  if (nextToolCalls.length > 0) {
-                    messageToolCalls = nextToolCalls;
-                  }
-                }
-                if (parsed.usage) {
-                  providerUsage = parsed.usage;
-                  providerUsageSeen = true;
-                  safeEnqueue({ type: 'usage', usage: parsed.usage });
-                }
-              }
-              if (streamFinished) break;
-            }
-            await reader.cancel().catch(() => { });
-          } else {
-            const raw = await response.text().catch(() => '');
-            parseNonSsePayload(raw.trim());
-          }
-          currentProviderController = null;
-          setStreamController(null);
-
-          if (streamEnabled && !sawSse) {
-            parseNonSsePayload(buffer.trim());
-          }
-
-          const { toolCalls: effectiveToolCalls, textContent } = parseToolCalls({
-            openaiToolCallBuffers: toolCallBuffers.openai,
-            responsesToolCallBuffers: toolCallBuffers.responses,
-            messageToolCalls,
-            legacyFunctionCall,
-            textContent: iterationContent,
-            textProtocolEnabled: activeToolSchema === 'text',
-            toolDefinitions,
-            allowedToolNames,
-          });
-          const cleanedContent = typeof textContent === 'string' ? textContent : iterationContent;
-
-          if (!contentAlreadySent && !bufferTextOutput && cleanedContent) {
-            aiResponseContent += cleanedContent;
-            safeEnqueue({ type: 'content', content: cleanedContent });
-            contentAlreadySent = true;
-            await persistAssistantProgress();
-          }
-          if (bufferTextOutput && effectiveToolCalls.length === 0 && cleanedContent) {
-            aiResponseContent += cleanedContent;
-            safeEnqueue({ type: 'content', content: cleanedContent });
-            contentAlreadySent = true;
-            await persistAssistantProgress();
-          }
-
-          if (iterationReasoning.trim()) {
-            reasoningChunks.push(iterationReasoning.trim());
-          }
-
-          if (effectiveToolCalls.length > 0) {
-            const reasoningPayload = iterationReasoning.trim();
-            if (activeToolSchema === 'functions') {
-              let isFirstToolCall = true;
-              for (const toolCall of effectiveToolCalls) {
-                const toolName = toolCall?.function?.name || '';
-                const toolArguments = toolCall?.function?.arguments || '{}';
-                workingMessages.push({
-                  role: 'assistant',
-                  content: isFirstToolCall ? cleanedContent : '',
-                  function_call: {
-                    name: toolName || 'unknown',
-                    arguments: toolArguments,
-                  },
-                });
-                isFirstToolCall = false;
-                let args: Record<string, unknown> = {};
-                try {
-                  args = JSON.parse(toolArguments || '{}');
-                } catch {
-                  args = {};
-                }
-                let result = null as Awaited<ReturnType<typeof toolRegistry.handleToolCall>> | null;
-                if (toolName && allowedToolNames.has(toolName)) {
-                  result = await toolRegistry.handleToolCall(
-                    toolName,
-                    toolCall as ToolCall,
-                    args,
-                    {
-                      sessionId,
-                      emitReasoning,
-                      sendToolEvent,
-                    },
-                  );
-                }
-                if (!result) {
-                  sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
-                  result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown');
-                }
-                result = normalizeToolHandlerResult(result, toolCall.id);
-                workingMessages.push({
-                  role: 'function',
-                  name: result.toolName,
-                  content: result.message.content,
-                });
-              }
-              continue;
-            }
-
-            if (activeToolSchema === 'text') {
-              workingMessages.push({
-                role: 'assistant',
-                content: iterationContent,
-              });
-              for (const toolCall of effectiveToolCalls) {
-                const toolName = toolCall?.function?.name || '';
-                let result = null as Awaited<ReturnType<typeof toolRegistry.handleToolCall>> | null;
-                let args: Record<string, unknown> = {};
-                try {
-                  args = JSON.parse(toolCall.function?.arguments ?? '{}');
-                } catch {
-                  args = {};
-                }
-                if (toolName && allowedToolNames.has(toolName)) {
-                  result = await toolRegistry.handleToolCall(
-                    toolName,
-                    toolCall as ToolCall,
-                    args,
-                    {
-                      sessionId,
-                      emitReasoning,
-                      sendToolEvent,
-                    },
-                  );
-                }
-                if (!result) {
-                  sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
-                  result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown');
-                }
-                result = normalizeToolHandlerResult(result, toolCall.id);
-                workingMessages.push(buildTextToolResultMessage({
-                  toolName: result.toolName,
-                  content: result.message.content,
-                }));
-              }
-              continue;
-            }
-
-            workingMessages.push({
-              role: 'assistant',
-              content: cleanedContent,
-              ...(reasoningPayload ? { reasoning_content: reasoningPayload } : {}),
-              tool_calls: effectiveToolCalls,
+          },
+          onSchemaFallback: (schema) => {
+            traceRecorder.log('agent:tool_schema_fallback', {
+              provider,
+              model: session.modelRawId,
+              schema,
             });
-
-            for (const toolCall of effectiveToolCalls) {
-              const toolName = toolCall?.function?.name || '';
-              let result = null as Awaited<ReturnType<typeof toolRegistry.handleToolCall>> | null;
-              let args: Record<string, unknown> = {};
-              try {
-                args = JSON.parse(toolCall.function?.arguments ?? '{}');
-              } catch {
-                args = {};
-              }
-              if (toolName && allowedToolNames.has(toolName)) {
-                result = await toolRegistry.handleToolCall(
-                  toolName,
-                  toolCall as ToolCall,
-                  args,
-                  {
-                    sessionId,
-                    emitReasoning,
-                    sendToolEvent,
-                  },
-                );
-              }
-              if (!result) {
-                sendUnsupportedToolError(toolName || 'unknown', toolCall.id, sendToolEvent);
-                result = buildUnsupportedToolResult(toolCall.id, toolName || 'unknown');
-              }
-              result = normalizeToolHandlerResult(result, toolCall.id);
-              workingMessages.push(result.message);
+          },
+          onStreamChunk: () => {
+            lastChunkAt = Date.now();
+            idleWarned = false;
+          },
+          onFirstResponseEvent: () => {
+            if (firstChunkAt == null) {
+              firstChunkAt = Date.now();
             }
+          },
+          onContentDelta: async (delta) => {
+            aiResponseContent += delta;
+            safeEnqueue({ type: 'content', content: delta });
+            await persistAssistantProgress();
+          },
+          onReasoningDelta: async (delta) => {
+            if (!reasoningStartedAt) {
+              reasoningStartedAt = Date.now();
+            }
+            emitReasoning(delta, { kind: 'model', stage: 'stream' });
+            await persistAssistantProgress();
+          },
+          onUsage: (usage) => {
+            providerUsageSeen = true;
+            safeEnqueue({ type: 'usage', usage });
+          },
+          requestTurn: async ({ schema, messages, iteration }) => {
+            const response = await callProvider(messages, schema, iteration);
+            return {
+              response,
+              onDone: () => {
+                currentProviderController = null;
+                setStreamController(null);
+              },
+            };
+          },
+          handleToolCall: async (toolName, toolCall, args) => {
+            if (!toolName || !allowedToolNames.has(toolName)) return null;
+            return toolRegistry.handleToolCall(
+              toolName,
+              toolCall,
+              args,
+              {
+                sessionId,
+                emitReasoning,
+                sendToolEvent,
+              },
+            );
+          },
+          onUnsupportedTool: (toolName, toolCallId) => {
+            sendUnsupportedToolError(toolName || 'unknown', toolCallId, sendToolEvent);
+          },
+        });
 
-            continue;
-          }
-
-          finalContent = cleanedContent.trim();
-          if (!finalContent) {
-            throw new Error('Model finished without producing a final answer');
-          }
-
-          if (iterationReasoningStartedAt && reasoningStartedAt) {
-            reasoningDurationSeconds = Math.max(0, Math.round((Date.now() - reasoningStartedAt) / 1000));
-          }
-
-          finalUsageSnapshot = providerUsage;
-          break;
+        if (orchestration.status !== 'completed') {
+          throw new Error('AI provider did not return a response');
         }
+        finalContent = orchestration.content.trim();
+        if (!finalContent) {
+          throw new Error('Model finished without producing a final answer');
+        }
+        reasoningChunks.push(...orchestration.reasoningChunks);
+        if (reasoningStartedAt && orchestration.reasoningChunks.length > 0) {
+          reasoningDurationSeconds = Math.max(
+            0,
+            Math.round((Date.now() - reasoningStartedAt) / 1000),
+          );
+        }
+        finalUsageSnapshot = orchestration.usage;
 
         if (checkCancelled()) {
           await persistAssistantProgress({ force: true, status: 'cancelled' });
