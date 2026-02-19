@@ -2,11 +2,14 @@
 
 ## 未发布
 
-## v1.9.0 · 2026-02-04
+## v1.9.0 · 2026-02-19
 
-- BREAKING: 文档/知识库工具接口升级为 `document_list`/`document_search`/`document_get_content` 等新体系，移除旧的 `document_get_outline`/`document_get_page`/`document_get_page_range`/`kb_search_v2`；迁移策略为无迁移、直接替换。
-- 文档分块新增分页字段（`pageNumber/pageStart/pageEnd`）及索引，迁移文件为 `20260202090000_add_document_chunk_page_fields`。
-- RAG 检索改为多文档均衡采样与概览模式，增强多文档总结覆盖度。
+- BREAKING: 移除 URL Reader 开关配置（`enableUrlReader` 等），聊天与工具调用统一按新编排链路执行；迁移策略为无迁移、直接替换。
+- Battle 对战支持“题目图片 + 期望答案图片”全链路能力：后端入库与执行器、前端流程与分享页、共享契约同步升级（含未推送提交 `453ec7c`）。
+- Tool Orchestrator 重构为独立模块，并增强最大迭代控制：`maxIterations <= 0` 视为无限迭代，达到上限时抛出明确错误，Chat/Battle 行为保持一致。
+- 错误处理增强：工具编排异常与 API 错误解析器补充结构化处理路径，并新增对应测试用例。
+- 运行环境更新：后端 Docker 镜像增加 PuLP 线性规划依赖。
+- 升级指引：执行 `pnpm --filter backend prisma migrate deploy` 应用 `20260218110000_add_battle_run_images`（新增 `battle_runs.promptImagesJson` 与 `battle_runs.expectedAnswerImagesJson`），随后执行 `pnpm --filter backend prisma generate`；Docker 部署请重建后端镜像。
 
 ## v1.3.8 · 2025-11-05
 
