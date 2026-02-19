@@ -19,6 +19,9 @@ RUN apt-get update && \
         python3-numpy \
         python3-sympy \
         python3-scipy \
+        python3-statsmodels \
+        python3-networkx \
+        python3-sklearn \
         python3-matplotlib \
         python3-pandas \
         python3-pulp \
@@ -107,6 +110,9 @@ RUN apt-get update && \
         python3-numpy \
         python3-sympy \
         python3-scipy \
+        python3-statsmodels \
+        python3-networkx \
+        python3-sklearn \
         python3-matplotlib \
         python3-pandas \
         python3-pulp \
