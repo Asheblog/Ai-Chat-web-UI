@@ -574,6 +574,10 @@ export interface ModelSelectorProps {
 }
 
 export type {
+  BattleContent,
+  BattleContentInput,
+  BattleUploadImage,
+  RejudgeExpectedAnswerInput,
   BattleRunStatus,
   BattleSummaryStats,
   BattleRunSummary,

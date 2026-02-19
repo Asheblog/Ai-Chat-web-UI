@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
 import {
   Dialog,
   DialogContent,
@@ -15,13 +16,19 @@ import { Label } from '@/components/ui/label'
 import { ModelSelector } from '@/components/model-selector'
 import { useToast } from '@/components/ui/use-toast'
 import { rejudgeWithNewAnswer } from '../api'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, X } from 'lucide-react'
 import type { ModelItem } from '@/store/models-store'
+import { useModelsStore } from '@/store/models-store'
+import { ImagePreviewList } from '@/features/chat/welcome/ImagePreviewList'
+import { useImageAttachments } from '@/features/chat/composer'
 
 interface RejudgeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  currentAnswer: string
+  currentAnswer: {
+    text: string
+    images: string[]
+  }
   runId: number
   currentJudge: {
     modelId: string
@@ -30,6 +37,23 @@ interface RejudgeDialogProps {
     threshold?: number
   }
   onComplete: () => void
+}
+
+const toUploadImages = (images: Array<{ dataUrl: string; mime: string }>) => {
+  return images
+    .map((item) => ({
+      data: item.dataUrl.split(',')[1] || '',
+      mime: item.mime,
+    }))
+    .filter((item) => item.data && item.mime)
+}
+
+const sameImageList = (a: string[], b: string[]) => {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
 }
 
 export function RejudgeDialog({
@@ -41,7 +65,9 @@ export function RejudgeDialog({
   onComplete,
 }: RejudgeDialogProps) {
   const { toast } = useToast()
-  const [newAnswer, setNewAnswer] = useState(currentAnswer)
+  const { models } = useModelsStore()
+  const [newAnswer, setNewAnswer] = useState(currentAnswer.text)
+  const [keepImages, setKeepImages] = useState<string[]>(currentAnswer.images)
   const [isRejudging, setIsRejudging] = useState(false)
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
   const [judgeRef, setJudgeRef] = useState<{
@@ -56,10 +82,17 @@ export function RejudgeDialog({
   const [judgeThreshold, setJudgeThreshold] = useState<number>(currentJudge.threshold ?? 0.8)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // 当对话框打开时，重置状态
+  const newImages = useImageAttachments({
+    isVisionEnabled: true,
+    limits: DEFAULT_CHAT_IMAGE_LIMITS,
+    toast,
+  })
+
   useEffect(() => {
     if (open) {
-      setNewAnswer(currentAnswer)
+      setNewAnswer(currentAnswer.text)
+      setKeepImages(currentAnswer.images)
+      newImages.setSelectedImages([])
       setProgress(null)
       setIsRejudging(false)
       setJudgeRef({
@@ -69,7 +102,16 @@ export function RejudgeDialog({
       })
       setJudgeThreshold(currentJudge.threshold ?? 0.8)
     }
-  }, [open, currentAnswer, currentJudge.modelId, currentJudge.connectionId, currentJudge.rawId, currentJudge.threshold])
+  }, [
+    open,
+    currentAnswer.text,
+    currentAnswer.images,
+    currentJudge.modelId,
+    currentJudge.connectionId,
+    currentJudge.rawId,
+    currentJudge.threshold,
+    newImages.setSelectedImages,
+  ])
 
   const selectedModelId = useMemo(() => {
     if (judgeRef.connectionId != null && judgeRef.rawId) {
@@ -78,8 +120,35 @@ export function RejudgeDialog({
     return judgeRef.rawId || judgeRef.modelId
   }, [judgeRef])
 
+  const selectedJudgeModel = useMemo(() => {
+    if (judgeRef.connectionId != null && judgeRef.rawId) {
+      return models.find((item) => item.connectionId === judgeRef.connectionId && item.rawId === judgeRef.rawId) || null
+    }
+    return models.find((item) => item.id === judgeRef.modelId) || null
+  }, [models, judgeRef])
+
+  const judgeVisionCapable = selectedJudgeModel?.capabilities?.vision === true
+
+  const nextHasImages = keepImages.length > 0 || newImages.selectedImages.length > 0
+  const nextImageCount = keepImages.length + newImages.selectedImages.length
+  const nextHasContent = newAnswer.trim().length > 0 || nextHasImages
+  const isTextChanged = newAnswer.trim() !== currentAnswer.text.trim()
+  const isKeepImagesChanged = !sameImageList(keepImages, currentAnswer.images)
+  const hasNewImages = newImages.selectedImages.length > 0
+
+  const canSubmit = nextHasContent && Boolean(judgeRef.modelId) && (isTextChanged || isKeepImagesChanged || hasNewImages)
+
   const handleRejudge = useCallback(async () => {
-    if (!runId || newAnswer.trim() === currentAnswer.trim()) return
+    if (!runId || !canSubmit) return
+
+    if (nextHasImages && !judgeVisionCapable) {
+      toast({ title: '答案包含图片时，裁判模型必须支持 Vision', variant: 'destructive' })
+      return
+    }
+    if (nextImageCount > 4) {
+      toast({ title: '答案图片最多 4 张（保留+新增）', variant: 'destructive' })
+      return
+    }
 
     setIsRejudging(true)
     setProgress(null)
@@ -89,7 +158,11 @@ export function RejudgeDialog({
       for await (const event of rejudgeWithNewAnswer(
         runId,
         {
-          expectedAnswer: newAnswer.trim(),
+          expectedAnswer: {
+            ...(newAnswer.trim() ? { text: newAnswer.trim() } : {}),
+            ...(keepImages.length > 0 ? { keepImages } : {}),
+            ...(newImages.selectedImages.length > 0 ? { newImages: toUploadImages(newImages.selectedImages) } : {}),
+          },
           judge: judgeRef.modelId
             ? {
               modelId: judgeRef.modelId,
@@ -125,7 +198,21 @@ export function RejudgeDialog({
       setProgress(null)
       abortControllerRef.current = null
     }
-  }, [runId, newAnswer, currentAnswer, toast, onComplete, onOpenChange, judgeRef, judgeThreshold])
+  }, [
+    runId,
+    canSubmit,
+    nextHasImages,
+    nextImageCount,
+    judgeVisionCapable,
+    toast,
+    newAnswer,
+    keepImages,
+    newImages.selectedImages,
+    judgeRef,
+    judgeThreshold,
+    onComplete,
+    onOpenChange,
+  ])
 
   const handleCancel = useCallback(() => {
     if (isRejudging && abortControllerRef.current) {
@@ -134,16 +221,13 @@ export function RejudgeDialog({
     onOpenChange(false)
   }, [isRejudging, onOpenChange])
 
-  const progressPercent = progress && progress.total > 0 
-    ? Math.round((progress.completed / progress.total) * 100) 
+  const progressPercent = progress && progress.total > 0
+    ? Math.round((progress.completed / progress.total) * 100)
     : 0
-
-  const canSubmit = newAnswer.trim() !== currentAnswer.trim() && newAnswer.trim().length > 0
-    && Boolean(judgeRef.modelId)
 
   return (
     <Dialog open={open} onOpenChange={isRejudging ? undefined : onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>修正期望答案</DialogTitle>
           <DialogDescription>
@@ -165,6 +249,7 @@ export function RejudgeDialog({
               className="w-full justify-between"
             />
           </div>
+
           <div className="space-y-2">
             <Label>裁判阈值</Label>
             <Input
@@ -177,16 +262,66 @@ export function RejudgeDialog({
               }}
             />
           </div>
-          <textarea
-            value={newAnswer}
-            onChange={(e) => setNewAnswer(e.target.value)}
-            disabled={isRejudging}
-            rows={6}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-            placeholder="输入正确的期望答案..."
-          />
 
-          {/* 进度显示 */}
+          <div className="space-y-2">
+            <Label>答案文本</Label>
+            <textarea
+              value={newAnswer}
+              onChange={(e) => setNewAnswer(e.target.value)}
+              onPaste={newImages.handlePaste}
+              disabled={isRejudging}
+              rows={6}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+              placeholder="输入正确的期望答案（可留空，仅用图片）..."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>保留原有图片</Label>
+              {keepImages.length > 0 && (
+                <span className="text-xs text-muted-foreground">{keepImages.length} 张</span>
+              )}
+            </div>
+            {keepImages.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2">
+                {keepImages.map((url, index) => (
+                  <div key={`${url}-${index}`} className="relative rounded border overflow-hidden">
+                    <img src={url} alt={`保留图片 ${index + 1}`} className="h-20 w-full object-contain bg-background" />
+                    <button
+                      type="button"
+                      className="absolute top-1 right-1 rounded-full border bg-background p-1"
+                      onClick={() => setKeepImages((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">无保留图片</div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={newImages.pickImages} disabled={isRejudging}>
+                新增答案图片
+              </Button>
+              <span className="text-xs text-muted-foreground">最多 4 张（保留+新增）</span>
+            </div>
+            <ImagePreviewList images={newImages.selectedImages} onRemove={newImages.removeImage} />
+            <input
+              ref={newImages.fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={newImages.onFilesSelected}
+              disabled={isRejudging}
+            />
+          </div>
+
           {progress && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm text-muted-foreground">

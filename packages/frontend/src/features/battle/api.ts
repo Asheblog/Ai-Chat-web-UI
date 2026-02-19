@@ -1,13 +1,23 @@
 import { apiHttpClient, handleUnauthorizedRedirect } from '@/lib/api'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
-import type { ApiResponse, BattleRunDetail, BattleRunListResponse, BattleRunSummary, BattleShare, BattleStreamEvent, RejudgeStreamEvent } from '@/types'
+import type {
+  ApiResponse,
+  BattleContentInput,
+  BattleRunDetail,
+  BattleRunListResponse,
+  BattleRunSummary,
+  BattleShare,
+  BattleStreamEvent,
+  RejudgeExpectedAnswerInput,
+  RejudgeStreamEvent,
+} from '@/types'
 
 const client = apiHttpClient
 
 export interface BattleStreamPayload {
   title?: string
-  prompt: string
-  expectedAnswer: string
+  prompt: BattleContentInput
+  expectedAnswer: BattleContentInput
   judge: {
     modelId: string
     connectionId?: number
@@ -217,7 +227,7 @@ export const getBattleShare = async (token: string) => {
 }
 
 export interface RejudgePayload {
-  expectedAnswer: string
+  expectedAnswer: RejudgeExpectedAnswerInput
   resultIds?: number[]
   judge?: {
     modelId: string

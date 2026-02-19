@@ -1,4 +1,8 @@
-import type { BattleRunStatus } from '@aichat/shared/battle-contract'
+import type {
+  BattleContent,
+  BattleContentInput,
+  BattleRunStatus,
+} from '@aichat/shared/battle-contract'
 
 export type BattleModelFeatures = {
   web_search?: boolean
@@ -30,8 +34,8 @@ export type BattleJudgeInput = {
 
 export interface BattleRunCreateInput {
   title?: string
-  prompt: string
-  expectedAnswer: string
+  prompt: BattleContentInput
+  expectedAnswer: BattleContentInput
   judge: BattleJudgeInput
   judgeThreshold?: number
   runsPerModel: number
@@ -102,13 +106,15 @@ export interface BattleRunRecord {
   title: string
   prompt: string
   expectedAnswer: string
+  promptImagesJson: string
+  expectedAnswerImagesJson: string
   judgeModelId: string
   judgeConnectionId: number | null
   judgeRawId: string | null
   judgeThreshold: number
   runsPerModel: number
   passK: number
-  status: BattleRunStatus
+  status: string
   configJson: string
   summaryJson: string
   createdAt: Date
@@ -128,8 +134,8 @@ export interface BattleShareDetail {
 
 export interface BattleSharePayload {
   title: string
-  prompt: string
-  expectedAnswer: string
+  prompt: BattleContent
+  expectedAnswer: BattleContent
   judge: {
     modelId: string
     modelLabel: string | null

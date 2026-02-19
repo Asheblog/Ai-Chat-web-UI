@@ -7,9 +7,21 @@ import { modelResolverService as defaultModelResolverService } from '../catalog/
 import { consumeBattleQuota } from '../../utils/battle-quota'
 import { getBattlePolicy } from '../../utils/system-settings'
 import { TaskTraceRecorder, shouldEnableTaskTrace, truncateString, type TaskTraceStatus } from '../../utils/task-trace'
-import type { BattleStreamEvent, RejudgeStreamEvent } from '@aichat/shared/battle-contract'
+import {
+  parseCapabilityEnvelope,
+} from '../../utils/capabilities'
+import type {
+  BattleContent,
+  BattleContentInput,
+  BattleRunStatus,
+  BattleStreamEvent,
+  BattleUploadImage,
+  RejudgeExpectedAnswerInput,
+  RejudgeStreamEvent,
+} from '@aichat/shared/battle-contract'
 import { BattleExecutor, type BattleExecutionContext } from './battle-executor'
 import { safeJsonStringify, safeParseJson } from './battle-serialization'
+import { battleImageService as defaultBattleImageService, type BattleImageService } from './battle-image-service'
 import type {
   BattleModelFeatures,
   BattleModelInput,
@@ -42,6 +54,8 @@ type BattleRunControl = {
   runContext?: {
     prompt: string
     expectedAnswer: string
+    promptImages: BattleUploadImage[]
+    expectedAnswerImages: BattleUploadImage[]
     judgeThreshold: number
     judgeModel: { connection: Connection; rawModelId: string }
     systemSettings: Record<string, string>
@@ -88,6 +102,7 @@ export interface BattleServiceDeps {
   prisma?: PrismaClient
   modelResolver?: ModelResolverService
   executor?: BattleExecutor
+  imageService?: BattleImageService
 }
 
 const DEFAULT_JUDGE_THRESHOLD = 0.8
@@ -175,24 +190,25 @@ const normalizeSummary = (
   const data = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {}
   const rawStats = Array.isArray(data.modelStats) ? data.modelStats : []
   const modelStats = rawStats
-    .filter((item) => item && typeof item === 'object')
-    .map((item) => {
-      const modelId = typeof item.modelId === 'string' ? item.modelId : ''
+    .map((item): BattleRunSummary['modelStats'][number] | null => {
+      if (!item || typeof item !== 'object') return null
+      const stats = item as Record<string, any>
+      const modelId = typeof stats.modelId === 'string' ? stats.modelId : ''
       if (!modelId) return null
-      const accuracy = isFiniteNumber(item.accuracy) ? clamp(item.accuracy, 0, 1) : 0
+      const accuracy = isFiniteNumber(stats.accuracy) ? clamp(stats.accuracy, 0, 1) : 0
       return {
         modelId,
-        connectionId: isFiniteNumber(item.connectionId) ? item.connectionId : null,
-        rawId: typeof item.rawId === 'string' && item.rawId.trim().length > 0 ? item.rawId : null,
-        passAtK: Boolean(item.passAtK),
-        passCount: isFiniteNumber(item.passCount) ? item.passCount : 0,
+        connectionId: isFiniteNumber(stats.connectionId) ? stats.connectionId : null,
+        rawId: typeof stats.rawId === 'string' && stats.rawId.trim().length > 0 ? stats.rawId : null,
+        passAtK: Boolean(stats.passAtK),
+        passCount: isFiniteNumber(stats.passCount) ? stats.passCount : 0,
         accuracy,
-        judgedCount: isFiniteNumber(item.judgedCount) ? Math.max(0, Math.floor(item.judgedCount)) : undefined,
-        totalAttempts: isFiniteNumber(item.totalAttempts) ? Math.max(0, Math.floor(item.totalAttempts)) : undefined,
-        judgeErrorCount: isFiniteNumber(item.judgeErrorCount) ? Math.max(0, Math.floor(item.judgeErrorCount)) : undefined,
+        judgedCount: isFiniteNumber(stats.judgedCount) ? Math.max(0, Math.floor(stats.judgedCount)) : undefined,
+        totalAttempts: isFiniteNumber(stats.totalAttempts) ? Math.max(0, Math.floor(stats.totalAttempts)) : undefined,
+        judgeErrorCount: isFiniteNumber(stats.judgeErrorCount) ? Math.max(0, Math.floor(stats.judgeErrorCount)) : undefined,
       }
     })
-    .filter((item): item is BattleRunSummary['modelStats'][number] => Boolean(item))
+    .filter((item): item is NonNullable<typeof item> => item !== null)
 
   const runsPerModel = isFiniteNumber(data.runsPerModel) ? data.runsPerModel : defaults.runsPerModel
   const passK = isFiniteNumber(data.passK) ? data.passK : defaults.passK
@@ -224,37 +240,38 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
   const data = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {}
   const rawModels = Array.isArray(data.models) ? data.models : []
   return rawModels
-    .filter((item) => item && typeof item === 'object')
-    .map((item) => {
-      const modelId = typeof item.modelId === 'string' ? item.modelId.trim() : ''
+    .map((item): BattleRunConfigModel | null => {
+      if (!item || typeof item !== 'object') return null
+      const model = item as Record<string, any>
+      const modelId = typeof model.modelId === 'string' ? model.modelId.trim() : ''
       if (!modelId) return null
-      const features = normalizeConfigFeatures((item as Record<string, any>).features)
+      const features = normalizeConfigFeatures(model.features)
       const customHeaders = normalizeCustomHeadersForConfig(
-        Array.isArray((item as Record<string, any>).customHeaders)
-          ? (item as Record<string, any>).customHeaders
-          : (item as Record<string, any>).custom_headers,
+        Array.isArray(model.customHeaders)
+          ? model.customHeaders
+          : model.custom_headers,
       )
       const customBody = normalizeCustomBodyForConfig(
-        ((item as Record<string, any>).customBody ?? (item as Record<string, any>).custom_body) as
+        (model.customBody ?? model.custom_body) as
           | Record<string, any>
           | null
           | undefined,
       )
-      const extraPromptRaw = (item as Record<string, any>).extraPrompt
+      const extraPromptRaw = model.extraPrompt
       const extraPrompt = typeof extraPromptRaw === 'string' ? extraPromptRaw.trim() : ''
       const reasoningEnabled =
-        typeof (item as Record<string, any>).reasoningEnabled === 'boolean'
-          ? (item as Record<string, any>).reasoningEnabled
+        typeof model.reasoningEnabled === 'boolean'
+          ? model.reasoningEnabled
           : null
-      const reasoningEffort = normalizeReasoningEffort((item as Record<string, any>).reasoningEffort)
+      const reasoningEffort = normalizeReasoningEffort(model.reasoningEffort)
       const ollamaThink =
-        typeof (item as Record<string, any>).ollamaThink === 'boolean'
-          ? (item as Record<string, any>).ollamaThink
+        typeof model.ollamaThink === 'boolean'
+          ? model.ollamaThink
           : null
       return {
         modelId,
-        connectionId: isFiniteNumber(item.connectionId) ? item.connectionId : null,
-        rawId: typeof item.rawId === 'string' && item.rawId.trim().length > 0 ? item.rawId.trim() : null,
+        connectionId: isFiniteNumber(model.connectionId) ? model.connectionId : null,
+        rawId: typeof model.rawId === 'string' && model.rawId.trim().length > 0 ? model.rawId.trim() : null,
         ...(features ? { features } : {}),
         ...(extraPrompt ? { extraPrompt } : {}),
         ...(customHeaders.length > 0 ? { customHeaders } : {}),
@@ -264,7 +281,12 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
         ollamaThink,
       }
     })
-    .filter((item): item is BattleRunConfigModel => Boolean(item))
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+}
+
+type LabelConnection = {
+  id: number
+  prefixId: string | null
 }
 
 const buildRunTitle = (prompt: string, explicit?: string) => {
@@ -275,12 +297,23 @@ const buildRunTitle = (prompt: string, explicit?: string) => {
   return base.length > 30 ? `${base.slice(0, 30)}…` : base
 }
 
-const composeModelLabel = (connection: Connection | null, rawId?: string | null, fallback?: string | null) => {
+const composeModelLabel = (
+  connection: Pick<LabelConnection, 'prefixId'> | null,
+  rawId?: string | null,
+  fallback?: string | null,
+) => {
   const raw = (rawId || '').trim()
   const prefix = (connection?.prefixId || '').trim()
   if (raw && prefix) return `${prefix}.${raw}`
   if (raw) return raw
   return fallback || null
+}
+
+const normalizeRunStatus = (value: string | null | undefined): BattleRunStatus => {
+  if (value === 'pending' || value === 'running' || value === 'completed' || value === 'error' || value === 'cancelled') {
+    return value
+  }
+  return 'error'
 }
 
 const buildModelKey = (modelId: string, connectionId?: number | null, rawId?: string | null) => {
@@ -292,16 +325,34 @@ const buildModelKey = (modelId: string, connectionId?: number | null, rawId?: st
 
 const buildAttemptKey = (modelKey: string, attemptIndex: number) => `${modelKey}#${attemptIndex}`
 
+const parseImagePathsJson = (raw: string | null | undefined) => {
+  const parsed = safeParseJson<unknown>(raw || '[]', [])
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map((item) => String(item || '').trim())
+    .filter((item) => item.length > 0)
+}
+
+const normalizeBattleText = (raw: unknown) => (typeof raw === 'string' ? raw.trim() : '')
+
+const isBattleContentEmpty = (content: BattleContentInput) => {
+  const text = normalizeBattleText(content.text)
+  const hasImages = Array.isArray(content.images) && content.images.length > 0
+  return !text && !hasImages
+}
+
 export class BattleService {
   private prisma: PrismaClient
   private modelResolver: ModelResolverService
   private executor: BattleExecutor
+  private imageService: BattleImageService
   private activeRuns = new Map<number, BattleRunControl>()
 
   constructor(deps: BattleServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.modelResolver = deps.modelResolver ?? defaultModelResolverService
     this.executor = deps.executor ?? new BattleExecutor()
+    this.imageService = deps.imageService ?? defaultBattleImageService
   }
 
   async listRuns(actor: Actor, params?: { page?: number; limit?: number }) {
@@ -428,10 +479,13 @@ export class BattleService {
   async deleteRun(actor: Actor, runId: number) {
     const existing = await this.prisma.battleRun.findFirst({
       where: { id: runId, ...this.buildOwnershipWhere(actor) },
-      select: { id: true },
+      select: { id: true, promptImagesJson: true, expectedAnswerImagesJson: true },
     })
     if (!existing) return false
     await this.prisma.battleRun.delete({ where: { id: runId } })
+    const promptImagePaths = parseImagePathsJson(existing.promptImagesJson)
+    const expectedAnswerImagePaths = parseImagePathsJson(existing.expectedAnswerImagesJson)
+    await this.imageService.deleteImages([...promptImagePaths, ...expectedAnswerImagePaths])
     return true
   }
 
@@ -737,11 +791,27 @@ export class BattleService {
       data: { judgeStatus: 'running', judgeError: null },
     })
 
+    const promptImagePaths = parseImagePathsJson(run.promptImagesJson)
+    const expectedAnswerImagePaths = parseImagePathsJson(run.expectedAnswerImagesJson)
+    await this.ensureVisionCapabilities({
+      judge: {
+        modelId: run.judgeModelId,
+        resolved: judgeResolution,
+      },
+      models: [],
+      promptHasImages: promptImagePaths.length > 0,
+      expectedAnswerHasImages: expectedAnswerImagePaths.length > 0,
+    })
+    const promptImages = await this.imageService.loadImages(promptImagePaths)
+    const expectedAnswerImages = await this.imageService.loadImages(expectedAnswerImagePaths)
+
     const executionContext = this.buildExecutionContext(undefined, undefined)
     try {
       const judged = await this.executor.judgeAnswer({
         prompt: run.prompt,
+        promptImages,
         expectedAnswer: run.expectedAnswer,
+        expectedAnswerImages,
         answer: record.output || '',
         threshold: run.judgeThreshold,
         judgeModel: judgeResolution,
@@ -829,6 +899,20 @@ export class BattleService {
       data: { judgeStatus: 'running', judgeError: null },
     })
 
+    const promptImagePaths = parseImagePathsJson(run.promptImagesJson)
+    const expectedAnswerImagePaths = parseImagePathsJson(run.expectedAnswerImagesJson)
+    await this.ensureVisionCapabilities({
+      judge: {
+        modelId: run.judgeModelId,
+        resolved: judgeResolution,
+      },
+      models: [],
+      promptHasImages: promptImagePaths.length > 0,
+      expectedAnswerHasImages: expectedAnswerImagePaths.length > 0,
+    })
+    const promptImages = await this.imageService.loadImages(promptImagePaths)
+    const expectedAnswerImages = await this.imageService.loadImages(expectedAnswerImagePaths)
+
     const executionContext = this.buildExecutionContext(undefined, undefined)
     let updatedCount = 0
     let skippedCount = 0
@@ -843,7 +927,9 @@ export class BattleService {
       try {
         const judged = await this.executor.judgeAnswer({
           prompt: run.prompt,
+          promptImages,
           expectedAnswer: run.expectedAnswer,
+          expectedAnswerImages,
           answer: item.output || '',
           threshold: run.judgeThreshold,
           judgeModel: judgeResolution,
@@ -890,7 +976,7 @@ export class BattleService {
     actor: Actor,
     params: {
       runId: number
-      expectedAnswer: string
+      expectedAnswer: RejudgeExpectedAnswerInput
       resultIds?: number[] | null
       judge?: {
         modelId: string
@@ -906,7 +992,6 @@ export class BattleService {
     const { runId, expectedAnswer, resultIds, judge, judgeThreshold } = params
     const emitEvent = options?.emitEvent
 
-    // 1. 验证权限并获取 Run
     const run = await this.prisma.battleRun.findFirst({
       where: { id: runId, ...this.buildOwnershipWhere(actor) },
     })
@@ -918,7 +1003,6 @@ export class BattleService {
       ? this.normalizeJudgeThreshold(judgeThreshold)
       : run.judgeThreshold
 
-    // 2. 更新期望答案 + 可选裁判配置
     const nextJudge = judge?.modelId
       ? {
         modelId: judge.modelId,
@@ -927,29 +1011,69 @@ export class BattleService {
       }
       : null
 
-    await this.prisma.battleRun.update({
-      where: { id: runId },
-      data: {
-        expectedAnswer,
-        ...(nextJudge ? {
-          judgeModelId: nextJudge.modelId,
-          judgeConnectionId: nextJudge.connectionId,
-          judgeRawId: nextJudge.rawId,
-        } : {}),
-        judgeThreshold: resolvedThreshold,
-      },
-    })
-
-    const judgeResolution = await this.resolveModel(actor, {
-      modelId: nextJudge?.modelId ?? run.judgeModelId,
-      connectionId: nextJudge?.connectionId ?? run.judgeConnectionId ?? undefined,
-      rawId: nextJudge?.rawId ?? run.judgeRawId ?? undefined,
-    })
-    if (!judgeResolution) {
-      throw new Error('Judge model not found')
+    const existingExpectedAnswerImagePaths = parseImagePathsJson(run.expectedAnswerImagesJson)
+    const keptImagePaths = this.imageService.resolveKeptRelativePaths(
+      Array.isArray(expectedAnswer.keepImages) ? expectedAnswer.keepImages : [],
+      existingExpectedAnswerImagePaths,
+    )
+    const newImagePaths = await this.imageService.persistImages(expectedAnswer.newImages)
+    const nextExpectedAnswerImagePaths = Array.from(new Set([...keptImagePaths, ...newImagePaths]))
+    const nextExpectedAnswerText = normalizeBattleText(expectedAnswer.text)
+    if (!nextExpectedAnswerText && nextExpectedAnswerImagePaths.length === 0) {
+      await this.imageService.deleteImages(newImagePaths)
+      throw new Error('expectedAnswer 不能为空（需提供文本或图片）')
     }
 
-    // 4. 获取需要重新裁决的结果
+    let judgeResolution: { connection: Connection; rawModelId: string }
+    const promptImagePaths = parseImagePathsJson(run.promptImagesJson)
+    let promptImages: BattleUploadImage[]
+    let expectedAnswerImages: BattleUploadImage[]
+    try {
+      const resolvedJudge = await this.resolveModel(actor, {
+        modelId: nextJudge?.modelId ?? run.judgeModelId,
+        connectionId: nextJudge?.connectionId ?? run.judgeConnectionId ?? undefined,
+        rawId: nextJudge?.rawId ?? run.judgeRawId ?? undefined,
+      })
+      if (!resolvedJudge) {
+        throw new Error('Judge model not found')
+      }
+      judgeResolution = resolvedJudge
+
+      await this.ensureVisionCapabilities({
+        judge: {
+          modelId: nextJudge?.modelId ?? run.judgeModelId,
+          resolved: judgeResolution,
+        },
+        models: [],
+        promptHasImages: promptImagePaths.length > 0,
+        expectedAnswerHasImages: nextExpectedAnswerImagePaths.length > 0,
+      })
+      promptImages = await this.imageService.loadImages(promptImagePaths)
+      expectedAnswerImages = await this.imageService.loadImages(nextExpectedAnswerImagePaths)
+
+      await this.prisma.battleRun.update({
+        where: { id: runId },
+        data: {
+          expectedAnswer: nextExpectedAnswerText,
+          expectedAnswerImagesJson: safeJsonStringify(nextExpectedAnswerImagePaths, '[]'),
+          ...(nextJudge ? {
+            judgeModelId: nextJudge.modelId,
+            judgeConnectionId: nextJudge.connectionId,
+            judgeRawId: nextJudge.rawId,
+          } : {}),
+          judgeThreshold: resolvedThreshold,
+        },
+      })
+    } catch (error) {
+      await this.imageService.deleteImages(newImagePaths)
+      throw error
+    }
+
+    const removedImagePaths = existingExpectedAnswerImagePaths.filter((item) => !nextExpectedAnswerImagePaths.includes(item))
+    if (removedImagePaths.length > 0) {
+      await this.imageService.deleteImages(removedImagePaths)
+    }
+
     const scopedIds = Array.isArray(resultIds) && resultIds.length > 0
       ? Array.from(new Set(resultIds.filter((id) => Number.isFinite(id)))).slice(0, 200)
       : null
@@ -971,19 +1095,17 @@ export class BattleService {
 
     const total = targets.length
 
-    // 5. 发送开始事件
+    const expectedAnswerContent = this.toBattleContent(nextExpectedAnswerText, nextExpectedAnswerImagePaths)
     emitEvent?.({
       type: 'rejudge_start',
-      payload: { total, expectedAnswer },
+      payload: { total, expectedAnswer: expectedAnswerContent },
     })
 
-    // 6. 标记所有为 running
     await this.prisma.battleResult.updateMany({
       where: { id: { in: targets.map((t) => t.id) } },
       data: { judgeStatus: 'running', judgeError: null },
     })
 
-    // 7. 逐个裁决并发送进度
     let completed = 0
     let updatedCount = 0
     let errorCount = 0
@@ -993,7 +1115,9 @@ export class BattleService {
       try {
         const judged = await this.executor.judgeAnswer({
           prompt: run.prompt,
-          expectedAnswer, // 使用新的期望答案
+          promptImages,
+          expectedAnswer: nextExpectedAnswerText,
+          expectedAnswerImages,
           answer: item.output || '',
           threshold: resolvedThreshold,
           judgeModel: judgeResolution,
@@ -1037,10 +1161,8 @@ export class BattleService {
       })
     }
 
-    // 8. 刷新统计
     await this.refreshRunSummary(runId)
 
-    // 9. 发送完成事件
     emitEvent?.({
       type: 'rejudge_complete',
       payload: { completed, total },
@@ -1188,7 +1310,18 @@ export class BattleService {
     input: BattleRunCreateInput,
     options?: { emitEvent?: (event: BattleStreamEvent) => void },
   ) {
-    const title = buildRunTitle(input.prompt, input.title)
+    if (isBattleContentEmpty(input.prompt)) {
+      throw new Error('请输入问题或上传题目图片')
+    }
+    if (isBattleContentEmpty(input.expectedAnswer)) {
+      throw new Error('请输入期望答案或上传答案图片')
+    }
+
+    const promptText = normalizeBattleText(input.prompt.text)
+    const expectedAnswerText = normalizeBattleText(input.expectedAnswer.text)
+    const promptImages = Array.isArray(input.prompt.images) ? input.prompt.images : []
+    const expectedAnswerImages = Array.isArray(input.expectedAnswer.images) ? input.expectedAnswer.images : []
+    const title = buildRunTitle(promptText, input.title)
     const judgeThreshold = this.normalizeJudgeThreshold(input.judgeThreshold)
     const battlePolicy = await getBattlePolicy()
     if (actor.type === 'user' && !battlePolicy.allowUsers) {
@@ -1201,6 +1334,9 @@ export class BattleService {
     if (!quotaResult.success) {
       throw new Error('今日模型大乱斗额度已耗尽')
     }
+
+    const promptImagePaths = await this.imageService.persistImages(promptImages)
+    const expectedAnswerImagePaths = await this.imageService.persistImages(expectedAnswerImages)
 
     const configPayload = {
       runsPerModel: input.runsPerModel,
@@ -1223,23 +1359,31 @@ export class BattleService {
       }),
     }
 
-    const run = await this.prisma.battleRun.create({
-      data: {
-        ...(actor.type === 'user' ? { userId: actor.id } : {}),
-        ...(actor.type === 'anonymous' ? { anonymousKey: actor.key } : {}),
-        title,
-        prompt: input.prompt,
-        expectedAnswer: input.expectedAnswer,
-        judgeModelId: input.judge.modelId,
-        judgeConnectionId: input.judge.connectionId ?? null,
-        judgeRawId: input.judge.rawId ?? null,
-        judgeThreshold,
-        runsPerModel: input.runsPerModel,
-        passK: input.passK,
-        status: 'pending',
-        configJson: safeJsonStringify(configPayload, '{}'),
-      },
-    })
+    let run: BattleRunRecord
+    try {
+      run = await this.prisma.battleRun.create({
+        data: {
+          ...(actor.type === 'user' ? { userId: actor.id } : {}),
+          ...(actor.type === 'anonymous' ? { anonymousKey: actor.key } : {}),
+          title,
+          prompt: promptText,
+          expectedAnswer: expectedAnswerText,
+          promptImagesJson: safeJsonStringify(promptImagePaths, '[]'),
+          expectedAnswerImagesJson: safeJsonStringify(expectedAnswerImagePaths, '[]'),
+          judgeModelId: input.judge.modelId,
+          judgeConnectionId: input.judge.connectionId ?? null,
+          judgeRawId: input.judge.rawId ?? null,
+          judgeThreshold,
+          runsPerModel: input.runsPerModel,
+          passK: input.passK,
+          status: 'pending',
+          configJson: safeJsonStringify(configPayload, '{}'),
+        },
+      })
+    } catch (error) {
+      await this.imageService.deleteImages([...promptImagePaths, ...expectedAnswerImagePaths])
+      throw error
+    }
     const runControl = this.createRunControl(run.id)
     runControl.emitEvent = (event) => {
       options?.emitEvent?.(event)
@@ -1259,8 +1403,8 @@ export class BattleService {
       payload: {
         id: run.id,
         title: run.title,
-        prompt: run.prompt,
-        expectedAnswer: run.expectedAnswer,
+        prompt: this.toBattleContent(run.prompt, promptImagePaths),
+        expectedAnswer: this.toBattleContent(run.expectedAnswer, expectedAnswerImagePaths),
         judgeThreshold: run.judgeThreshold,
         runsPerModel: run.runsPerModel,
         passK: run.passK,
@@ -1310,8 +1454,8 @@ export class BattleService {
           feature: 'battle',
           runId: run.id,
           title: run.title,
-          promptPreview: truncateString(input.prompt || '', 200),
-          expectedAnswerPreview: truncateString(input.expectedAnswer || '', 200),
+          promptPreview: truncateString(promptText || '', 200),
+          expectedAnswerPreview: truncateString(expectedAnswerText || '', 200),
           runsPerModel: input.runsPerModel,
           passK: input.passK,
           judgeThreshold,
@@ -1373,12 +1517,27 @@ export class BattleService {
         resolved: item.resolved!,
       }))
 
+      await this.ensureVisionCapabilities({
+        judge: {
+          modelId: input.judge.modelId,
+          resolved: judgeResolution,
+        },
+        models: resolved.map((item) => ({
+          modelId: item.config.modelId,
+          resolved: item.resolved,
+        })),
+        promptHasImages: promptImages.length > 0,
+        expectedAnswerHasImages: expectedAnswerImages.length > 0,
+      })
+
       const taskGroups = new Map<string, { queue: AttemptTask[]; running: boolean }>()
       const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>()
 
       runControl.runContext = {
-        prompt: input.prompt,
-        expectedAnswer: input.expectedAnswer,
+        prompt: promptText,
+        expectedAnswer: expectedAnswerText,
+        promptImages,
+        expectedAnswerImages,
         judgeThreshold,
         judgeModel: judgeResolution,
         systemSettings,
@@ -1581,6 +1740,8 @@ export class BattleService {
           battleRunId: params.battleRunId,
           prompt: context.prompt,
           expectedAnswer: context.expectedAnswer,
+          promptImages: context.promptImages,
+          expectedAnswerImages: context.expectedAnswerImages,
           judgeThreshold: context.judgeThreshold,
           judgeModel: context.judgeModel,
           model: params.model,
@@ -1598,6 +1759,8 @@ export class BattleService {
       battleRunId: number
       prompt: string
       expectedAnswer: string
+      promptImages: BattleUploadImage[]
+      expectedAnswerImages: BattleUploadImage[]
       judgeThreshold: number
       judgeModel: { connection: Connection; rawModelId: string }
       model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }
@@ -1612,6 +1775,8 @@ export class BattleService {
       battleRunId,
       prompt,
       expectedAnswer,
+      promptImages,
+      expectedAnswerImages,
       judgeThreshold,
       judgeModel,
       model,
@@ -1720,6 +1885,7 @@ export class BattleService {
     try {
       const runResult = await this.executor.executeModel({
         prompt,
+        promptImages,
         modelConfig: model.config,
         resolved: model.resolved,
         systemSettings,
@@ -1794,7 +1960,9 @@ export class BattleService {
         judgeStatus = 'running'
         judgeResult = await this.executor.judgeAnswer({
           prompt,
+          promptImages,
           expectedAnswer,
+          expectedAnswerImages,
           answer: output,
           threshold: judgeThreshold,
           judgeModel,
@@ -2299,7 +2467,7 @@ export class BattleService {
     }
   }
 
-  private collectLiveAttempts(runId: number, connectionMap: Map<number, { id: number; prefixId: string }>) {
+  private collectLiveAttempts(runId: number, connectionMap: Map<number, LabelConnection>) {
     const control = this.activeRuns.get(runId)
     if (!control) return null
     const attempts: Array<LiveAttemptState & { modelLabel: string | null }> = []
@@ -2369,7 +2537,7 @@ export class BattleService {
   private async buildShareConnectionMap(
     results: BattleResultRecord[],
     models: BattleRunConfigModel[],
-  ): Promise<Map<number, { id: number; prefixId: string }>> {
+  ): Promise<Map<number, LabelConnection>> {
     const connectionIds = Array.from(
       new Set(
         [
@@ -2464,10 +2632,12 @@ export class BattleService {
     summary: BattleRunSummary
     results: BattleResultRecord[]
     models: BattleRunConfigModel[]
-    connectionMap: Map<number, { id: number; prefixId: string }>
-    judgeConnection: { id: number; prefixId: string } | null
+    connectionMap: Map<number, LabelConnection>
+    judgeConnection: LabelConnection | null
     liveAttempts: Array<LiveAttemptState & { modelLabel: string | null }> | null
   }): BattleSharePayload {
+    const promptImagePaths = parseImagePathsJson(params.run.promptImagesJson)
+    const expectedAnswerImagePaths = parseImagePathsJson(params.run.expectedAnswerImagesJson)
     const models = params.models.map((model) => ({
       modelId: model.modelId,
       modelLabel: composeModelLabel(
@@ -2502,14 +2672,14 @@ export class BattleService {
       : undefined
     return {
       title: params.run.title,
-      prompt: params.run.prompt,
-      expectedAnswer: params.run.expectedAnswer,
+      prompt: this.toBattleContent(params.run.prompt, promptImagePaths),
+      expectedAnswer: this.toBattleContent(params.run.expectedAnswer, expectedAnswerImagePaths),
       judge: {
         modelId: params.run.judgeModelId,
         modelLabel: composeModelLabel(params.judgeConnection, params.run.judgeRawId, params.run.judgeModelId),
         threshold: params.run.judgeThreshold,
       },
-      status: params.run.status,
+      status: normalizeRunStatus(params.run.status),
       progress,
       models,
       summary: params.summary,
@@ -2549,6 +2719,81 @@ export class BattleService {
       },
     })
     return summary
+  }
+
+  private toBattleContent(text: string, imagePaths: string[]): BattleContent {
+    return {
+      text: text || '',
+      images: this.imageService.resolveImageUrls(imagePaths, { baseUrl: '' }),
+    }
+  }
+
+  private async ensureVisionCapabilities(params: {
+    judge: { modelId: string; resolved: { connection: Connection; rawModelId: string } }
+    models: Array<{ modelId: string; resolved: { connection: Connection; rawModelId: string } }>
+    promptHasImages: boolean
+    expectedAnswerHasImages: boolean
+  }) {
+    const checks: Array<{
+      label: string
+      connectionId: number
+      rawModelId: string
+    }> = []
+
+    if (params.promptHasImages) {
+      for (const model of params.models) {
+        checks.push({
+          label: composeModelLabel(model.resolved.connection, model.resolved.rawModelId, model.modelId) || model.modelId,
+          connectionId: model.resolved.connection.id,
+          rawModelId: model.resolved.rawModelId,
+        })
+      }
+      checks.push({
+        label: `裁判 ${composeModelLabel(params.judge.resolved.connection, params.judge.resolved.rawModelId, params.judge.modelId) || params.judge.modelId}`,
+        connectionId: params.judge.resolved.connection.id,
+        rawModelId: params.judge.resolved.rawModelId,
+      })
+    } else if (params.expectedAnswerHasImages) {
+      checks.push({
+        label: `裁判 ${composeModelLabel(params.judge.resolved.connection, params.judge.resolved.rawModelId, params.judge.modelId) || params.judge.modelId}`,
+        connectionId: params.judge.resolved.connection.id,
+        rawModelId: params.judge.resolved.rawModelId,
+      })
+    }
+
+    if (checks.length === 0) return
+
+    const deduped = new Map<string, { label: string; connectionId: number; rawModelId: string }>()
+    for (const item of checks) {
+      deduped.set(`${item.connectionId}:${item.rawModelId}`, item)
+    }
+
+    const unsupported: string[] = []
+    for (const item of deduped.values()) {
+      const supported = await this.isVisionEnabledModel(item.connectionId, item.rawModelId)
+      if (!supported) {
+        unsupported.push(item.label)
+      }
+    }
+
+    if (unsupported.length > 0) {
+      throw new Error(`以下模型不支持图片输入：${unsupported.join('、')}`)
+    }
+  }
+
+  private async isVisionEnabledModel(connectionId: number, rawModelId: string) {
+    const row = await this.prisma.modelCatalog.findFirst({
+      where: {
+        connectionId,
+        rawId: rawModelId,
+      },
+      select: { capabilitiesJson: true },
+    })
+    if (!row?.capabilitiesJson) {
+      return false
+    }
+    const envelope = parseCapabilityEnvelope(row.capabilitiesJson)
+    return envelope?.flags?.vision === true
   }
 
   private normalizeJudgeThreshold(value?: number) {
@@ -2689,18 +2934,21 @@ export class BattleService {
       judgeThreshold: run.judgeThreshold,
     })
 
+    const promptImagePaths = parseImagePathsJson(run.promptImagesJson)
+    const expectedAnswerImagePaths = parseImagePathsJson(run.expectedAnswerImagesJson)
+
     return {
       id: run.id,
       title: run.title,
-      prompt: run.prompt,
-      expectedAnswer: run.expectedAnswer,
+      prompt: this.toBattleContent(run.prompt, promptImagePaths),
+      expectedAnswer: this.toBattleContent(run.expectedAnswer, expectedAnswerImagePaths),
       judgeModelId: run.judgeModelId,
       judgeConnectionId: run.judgeConnectionId,
       judgeRawId: run.judgeRawId,
       judgeThreshold: run.judgeThreshold,
       runsPerModel: run.runsPerModel,
       passK: run.passK,
-      status: run.status,
+      status: normalizeRunStatus(run.status),
       createdAt: run.createdAt.toISOString(),
       updatedAt: run.updatedAt.toISOString(),
       summary,

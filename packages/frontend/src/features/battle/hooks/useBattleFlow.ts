@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ModelItem } from '@/store/models-store'
 import { useSettingsStore } from '@/store/settings-store'
-import type { BattleResult, BattleRunSummary } from '@/types'
+import type { BattleContent, BattleResult, BattleRunSummary, BattleUploadImage } from '@/types'
 import {
   cancelBattleAttempt,
   cancelBattleRun,
@@ -70,12 +70,22 @@ export interface JudgeConfig {
   maxConcurrency: number
 }
 
+export type BattleDraftImage = {
+  dataUrl: string
+  mime: string
+  size: number
+}
+
 export interface BattleFlowState {
   step: BattleStep
   selectedModels: ModelConfigState[]
   judgeConfig: JudgeConfig
   prompt: string
   expectedAnswer: string
+  promptImages: BattleDraftImage[]
+  expectedAnswerImages: BattleDraftImage[]
+  promptImageUrls: string[]
+  expectedAnswerImageUrls: string[]
   nodeStates: Map<string, NodeState[]>
   results: BattleResult[]
   summary: BattleRunSummary['summary'] | null
@@ -99,6 +109,24 @@ const FORBIDDEN_HEADER_NAMES = new Set([
   'content-length',
   'accept-encoding',
 ])
+
+const isVisionCapable = (model: ModelItem | null | undefined) => {
+  return model?.capabilities?.vision === true
+}
+
+const hasBattleContent = (text: string, images: BattleDraftImage[]) => {
+  return text.trim().length > 0 || images.length > 0
+}
+
+const toBattleUploadImages = (images: BattleDraftImage[]): BattleUploadImage[] => {
+  return images
+    .map((item) => {
+      const data = typeof item.dataUrl === 'string' ? item.dataUrl.split(',')[1] || '' : ''
+      const mime = typeof item.mime === 'string' ? item.mime.trim() : ''
+      return { data, mime }
+    })
+    .filter((item) => item.data.length > 0 && item.mime.length > 0)
+}
 
 // ==================== Helpers ====================
 
@@ -294,6 +322,20 @@ const resolveNodeLabel = (model: BattleNodeModel, catalog?: ModelItem[]) => {
   return matched?.name || model.rawId || model.modelId
 }
 
+const normalizeBattleContent = (raw: unknown): BattleContent => {
+  if (!raw || typeof raw !== 'object') {
+    return { text: '', images: [] }
+  }
+  const payload = raw as { text?: unknown; images?: unknown }
+  const text = typeof payload.text === 'string' ? payload.text : ''
+  const images = Array.isArray(payload.images)
+    ? payload.images
+      .map((item) => String(item || '').trim())
+      .filter((item) => item.length > 0)
+    : []
+  return { text, images }
+}
+
 export const buildNodeStatesFromRun = (
   models: BattleNodeModel[],
   runsPerModel: number,
@@ -425,6 +467,10 @@ export function useBattleFlow() {
   })
   const [prompt, setPrompt] = useState('')
   const [expectedAnswer, setExpectedAnswer] = useState('')
+  const [promptImages, setPromptImages] = useState<BattleDraftImage[]>([])
+  const [expectedAnswerImages, setExpectedAnswerImages] = useState<BattleDraftImage[]>([])
+  const [promptImageUrls, setPromptImageUrls] = useState<string[]>([])
+  const [expectedAnswerImageUrls, setExpectedAnswerImageUrls] = useState<string[]>([])
   const [nodeStates, setNodeStates] = useState<Map<string, NodeState[]>>(new Map())
   const [results, setResults] = useState<BattleResult[]>([])
   const [summary, setSummary] = useState<BattleRunSummary['summary'] | null>(null)
@@ -482,8 +528,8 @@ export function useBattleFlow() {
   }, [selectedModels.length, judgeConfig.model])
 
   const canStartBattle = useMemo(() => {
-    return prompt.trim().length > 0 && expectedAnswer.trim().length > 0
-  }, [prompt, expectedAnswer])
+    return hasBattleContent(prompt, promptImages) && hasBattleContent(expectedAnswer, expectedAnswerImages)
+  }, [prompt, promptImages, expectedAnswer, expectedAnswerImages])
 
   // Initialize node states for execution visualization
   const initializeNodeStates = useCallback(() => {
@@ -559,11 +605,16 @@ export function useBattleFlow() {
     error?: string;
     updatedConfigs?: ModelConfigState[];
   } => {
-    if (!prompt.trim()) {
-      return { valid: false, error: '请输入问题' }
+    const promptText = prompt.trim()
+    const expectedAnswerText = expectedAnswer.trim()
+    const promptHasImages = promptImages.length > 0
+    const expectedAnswerHasImages = expectedAnswerImages.length > 0
+
+    if (!hasBattleContent(prompt, promptImages)) {
+      return { valid: false, error: '请输入问题或上传题目图片' }
     }
-    if (!expectedAnswer.trim()) {
-      return { valid: false, error: '请输入期望答案' }
+    if (!hasBattleContent(expectedAnswer, expectedAnswerImages)) {
+      return { valid: false, error: '请输入期望答案或上传答案图片' }
     }
     if (!judgeConfig.model) {
       return { valid: false, error: '请选择裁判模型' }
@@ -573,6 +624,23 @@ export function useBattleFlow() {
     }
     if (judgeConfig.passK > judgeConfig.runsPerModel) {
       return { valid: false, error: 'pass@k 不能大于运行次数' }
+    }
+
+    if (promptHasImages) {
+      if (!isVisionCapable(judgeConfig.model)) {
+        return { valid: false, error: '题目包含图片时，裁判模型必须支持 Vision' }
+      }
+      const unsupportedContestants = selectedModels
+        .filter((item) => !isVisionCapable(item.model))
+        .map((item) => item.model.name || item.model.id)
+      if (unsupportedContestants.length > 0) {
+        return {
+          valid: false,
+          error: `题目包含图片时，以下参赛模型不支持 Vision：${unsupportedContestants.join('、')}`,
+        }
+      }
+    } else if (expectedAnswerHasImages && !isVisionCapable(judgeConfig.model)) {
+      return { valid: false, error: '答案包含图片时，裁判模型必须支持 Vision' }
     }
 
     const modelPayloads: BattleStreamPayload['models'] = []
@@ -624,9 +692,27 @@ export function useBattleFlow() {
       }
     }
 
+    const promptPayload: BattleStreamPayload['prompt'] = {}
+    if (promptText) {
+      promptPayload.text = promptText
+    }
+    const promptUploadImages = toBattleUploadImages(promptImages)
+    if (promptUploadImages.length > 0) {
+      promptPayload.images = promptUploadImages
+    }
+
+    const expectedAnswerPayload: BattleStreamPayload['expectedAnswer'] = {}
+    if (expectedAnswerText) {
+      expectedAnswerPayload.text = expectedAnswerText
+    }
+    const expectedAnswerUploadImages = toBattleUploadImages(expectedAnswerImages)
+    if (expectedAnswerUploadImages.length > 0) {
+      expectedAnswerPayload.images = expectedAnswerUploadImages
+    }
+
     const payload: BattleStreamPayload = {
-      prompt: prompt.trim(),
-      expectedAnswer: expectedAnswer.trim(),
+      prompt: promptPayload,
+      expectedAnswer: expectedAnswerPayload,
       judge: {
         modelId: judgeConfig.model.id,
         connectionId: judgeConfig.model.connectionId,
@@ -640,7 +726,7 @@ export function useBattleFlow() {
     }
 
     return { valid: true, payload, updatedConfigs }
-  }, [prompt, expectedAnswer, judgeConfig, selectedModels])
+  }, [prompt, promptImages, expectedAnswer, expectedAnswerImages, judgeConfig, selectedModels])
 
   // Execute battle
   const startBattle = useCallback(async (models: ModelItem[]) => {
@@ -669,6 +755,8 @@ export function useBattleFlow() {
     setSummary(null)
     setCurrentRunId(null)
     setError(null)
+    setPromptImageUrls(promptImages.map((item) => item.dataUrl))
+    setExpectedAnswerImageUrls(expectedAnswerImages.map((item) => item.dataUrl))
     initializeNodeStates()
     setStep('execution')
 
@@ -676,6 +764,16 @@ export function useBattleFlow() {
       for await (const event of streamBattle(validation.payload, { signal: controller.signal })) {
         if (event.type === 'run_start') {
           const id = Number(event.payload?.id)
+          const nextPrompt = normalizeBattleContent(event.payload?.prompt)
+          const nextExpectedAnswer = normalizeBattleContent(event.payload?.expectedAnswer)
+          if (nextPrompt.text || nextPrompt.images.length > 0) {
+            setPrompt(nextPrompt.text)
+            setPromptImageUrls(nextPrompt.images)
+          }
+          if (nextExpectedAnswer.text || nextExpectedAnswer.images.length > 0) {
+            setExpectedAnswer(nextExpectedAnswer.text)
+            setExpectedAnswerImageUrls(nextExpectedAnswer.images)
+          }
           if (Number.isFinite(id)) {
             setCurrentRunId(id)
             if (cancelRequestedRef.current) {
@@ -831,7 +929,15 @@ export function useBattleFlow() {
         abortControllerRef.current = null
       }
     }
-  }, [validateAndBuildPayload, initializeNodeStates, updateNodeState, appendNodeOutput, cancelBattleRun])
+  }, [
+    validateAndBuildPayload,
+    initializeNodeStates,
+    updateNodeState,
+    appendNodeOutput,
+    cancelBattleRun,
+    promptImages,
+    expectedAnswerImages,
+  ])
 
   // Cancel execution
   const cancelBattle = useCallback(async () => {
@@ -935,13 +1041,17 @@ export function useBattleFlow() {
     setIsStreaming(false)
     setRunStatus(null)
     setError(null)
+    setPromptImages([])
+    setExpectedAnswerImages([])
+    setPromptImageUrls([])
+    setExpectedAnswerImageUrls([])
     setNodeStates(new Map())
   }, [])
 
   // Load existing run
   const loadRun = useCallback((detail: {
-    prompt: string
-    expectedAnswer: string
+    prompt: BattleContent
+    expectedAnswer: BattleContent
     judgeModelId: string
     judgeConnectionId?: number | null
     judgeRawId?: string | null
@@ -1012,8 +1122,12 @@ export function useBattleFlow() {
       })
     }
     const fallbackModels = Array.from(fallbackMap.values())
-    setPrompt(detail.prompt)
-    setExpectedAnswer(detail.expectedAnswer)
+    setPrompt(detail.prompt.text || '')
+    setExpectedAnswer(detail.expectedAnswer.text || '')
+    setPromptImages([])
+    setExpectedAnswerImages([])
+    setPromptImageUrls(Array.isArray(detail.prompt.images) ? detail.prompt.images : [])
+    setExpectedAnswerImageUrls(Array.isArray(detail.expectedAnswer.images) ? detail.expectedAnswer.images : [])
     const judgeRef = {
       modelId: detail.judgeModelId,
       connectionId: detail.judgeConnectionId ?? null,
@@ -1135,6 +1249,10 @@ export function useBattleFlow() {
     judgeConfig,
     prompt,
     expectedAnswer,
+    promptImages,
+    expectedAnswerImages,
+    promptImageUrls,
+    expectedAnswerImageUrls,
     nodeStates,
     results,
     summary,
@@ -1153,6 +1271,8 @@ export function useBattleFlow() {
     // Actions
     setPrompt,
     setExpectedAnswer,
+    setPromptImages,
+    setExpectedAnswerImages,
     setJudgeConfig,
     addModel,
     removeModel,

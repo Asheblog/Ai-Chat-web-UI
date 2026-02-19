@@ -491,10 +491,14 @@ export function BattlePageClient() {
             <PromptStep
               prompt={flow.prompt}
               expectedAnswer={flow.expectedAnswer}
+              promptImages={flow.promptImages}
+              expectedAnswerImages={flow.expectedAnswerImages}
               selectedModels={flow.selectedModels}
               judgeConfig={flow.judgeConfig}
               onPromptChange={flow.setPrompt}
               onExpectedAnswerChange={flow.setExpectedAnswer}
+              onPromptImagesChange={flow.setPromptImages}
+              onExpectedAnswerImagesChange={flow.setExpectedAnswerImages}
               onBack={() => flow.goToStep('config')}
               onStart={handleStartBattle}
               canStart={flow.canStartBattle}
@@ -506,6 +510,8 @@ export function BattlePageClient() {
             <ExecutionStep
               prompt={flow.prompt}
               expectedAnswer={flow.expectedAnswer}
+              promptImages={flow.promptImageUrls}
+              expectedAnswerImages={flow.expectedAnswerImageUrls}
               judgeConfig={flow.judgeConfig}
               nodeStates={flow.nodeStates}
               selectedNodeKey={selectedNodeKey || undefined}
@@ -522,6 +528,8 @@ export function BattlePageClient() {
             <ResultStep
               prompt={flow.prompt}
               expectedAnswer={flow.expectedAnswer}
+              promptImages={flow.promptImageUrls}
+              expectedAnswerImages={flow.expectedAnswerImageUrls}
               summary={flow.summary}
               groupedResults={flow.groupedResults}
               statsMap={flow.statsMap}

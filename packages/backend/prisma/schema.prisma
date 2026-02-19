@@ -518,6 +518,8 @@ model BattleRun {
   title           String
   prompt          String
   expectedAnswer  String
+  promptImagesJson String   @default("[]")
+  expectedAnswerImagesJson String @default("[]")
   judgeModelId    String
   judgeConnectionId Int?
   judgeRawId      String?

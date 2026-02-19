@@ -22,10 +22,13 @@ import {Trophy,
 import type { BattleResult, BattleRunSummary } from '@/types'
 import { ModelStatsTable } from './ModelStatsTable'
 import { RejudgeDialog } from './RejudgeDialog'
+import { BattleContentBlock } from './BattleContentBlock'
 
 interface ResultStepProps {
     prompt: string
     expectedAnswer: string
+    promptImages: string[]
+    expectedAnswerImages: string[]
     summary: BattleRunSummary['summary'] | null
     groupedResults: Array<{ key: string; label: string; attempts: BattleResult[] }>
     statsMap: Map<string, BattleRunSummary['summary']['modelStats'][number]>
@@ -78,6 +81,8 @@ const getOutputSummary = (output: string | null | undefined, maxLen = 100): stri
 export function ResultStep({
     prompt,
     expectedAnswer,
+    promptImages,
+    expectedAnswerImages,
     summary,
     groupedResults,
     statsMap,
@@ -356,11 +361,8 @@ export function ResultStep({
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-3">
                     <div className="rounded-lg bg-muted/30 p-4 space-y-3">
-                        <div>
-                            <div className="text-xs font-medium text-muted-foreground mb-1">题目</div>
-                            <div className="text-sm text-foreground leading-relaxed">{prompt}</div>
-                        </div>
-                        <div>
+                        <BattleContentBlock title="题目" text={prompt} images={promptImages} />
+                        <div className="space-y-2">
                             <div className="flex items-center justify-between mb-1">
                                 <div className="text-xs font-medium text-muted-foreground">期望答案</div>
                                 {currentRunId && (
@@ -375,7 +377,7 @@ export function ResultStep({
                                     </Button>
                                 )}
                             </div>
-                            <div className="text-sm text-foreground leading-relaxed">{expectedAnswer}</div>
+                            <BattleContentBlock title="答案内容" text={expectedAnswer} images={expectedAnswerImages} />
                         </div>
                     </div>
                 </CollapsibleContent>
@@ -386,7 +388,10 @@ export function ResultStep({
                 <RejudgeDialog
                     open={rejudgeOpen}
                     onOpenChange={setRejudgeOpen}
-                    currentAnswer={expectedAnswer}
+                    currentAnswer={{
+                        text: expectedAnswer,
+                        images: expectedAnswerImages,
+                    }}
                     runId={currentRunId}
                     currentJudge={judgeInfo}
                     onComplete={() => onRejudgeComplete?.()}

@@ -42,10 +42,45 @@ const BATTLE_TEXT_MAX_LABEL = '128K'
 const buildTextLimitMessage = (field: string) =>
   `${field} 长度不能超过 ${BATTLE_TEXT_MAX_LABEL}（${BATTLE_TEXT_MAX} 字符）`
 
+const battleUploadImageSchema = z.object({
+  data: z.string().min(1),
+  mime: z.string().min(1),
+})
+
+const battleContentInputSchema = z.object({
+  text: z.string().max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('text') }).optional(),
+  images: z.array(battleUploadImageSchema).max(4).optional(),
+}).refine((value) => {
+  const hasText = typeof value.text === 'string' && value.text.trim().length > 0
+  const hasImages = Array.isArray(value.images) && value.images.length > 0
+  return hasText || hasImages
+}, {
+  message: 'text 或 images 至少提供一项',
+})
+
+const rejudgeExpectedAnswerInputSchema = z.object({
+  text: z.string().max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('expectedAnswer.text') }).optional(),
+  keepImages: z.array(z.string().min(1)).max(4).optional(),
+  newImages: z.array(battleUploadImageSchema).max(4).optional(),
+}).refine((value) => {
+  const hasText = typeof value.text === 'string' && value.text.trim().length > 0
+  const hasKeepImages = Array.isArray(value.keepImages) && value.keepImages.length > 0
+  const hasNewImages = Array.isArray(value.newImages) && value.newImages.length > 0
+  return hasText || hasKeepImages || hasNewImages
+}, {
+  message: 'expectedAnswer 不能为空（需提供文本或图片）',
+}).refine((value) => {
+  const keepCount = Array.isArray(value.keepImages) ? value.keepImages.length : 0
+  const newCount = Array.isArray(value.newImages) ? value.newImages.length : 0
+  return keepCount + newCount <= 4
+}, {
+  message: '答案图片最多 4 张',
+})
+
 const battleStreamSchema = z.object({
   title: z.string().max(200).optional(),
-  prompt: z.string().min(1).max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('prompt') }),
-  expectedAnswer: z.string().min(1).max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('expectedAnswer') }),
+  prompt: battleContentInputSchema,
+  expectedAnswer: battleContentInputSchema,
   judge: z.object({
     modelId: z.string().min(1),
     connectionId: z.number().int().positive().optional(),
@@ -79,7 +114,7 @@ const judgeRetrySchema = z.object({
 })
 
 const rejudgeSchema = z.object({
-  expectedAnswer: z.string().min(1).max(BATTLE_TEXT_MAX, { message: buildTextLimitMessage('expectedAnswer') }),
+  expectedAnswer: rejudgeExpectedAnswerInputSchema,
   resultIds: z.array(z.number().int().positive()).max(200).optional(),
   judge: z.object({
     modelId: z.string().min(1),
@@ -89,7 +124,7 @@ const rejudgeSchema = z.object({
   judgeThreshold: z.number().min(0).max(1).optional(),
 })
 
-const parsePagination = (value: string | null, fallback: number) => {
+const parsePagination = (value: string | null | undefined, fallback: number) => {
   const parsed = parseInt(value || '', 10)
   if (Number.isFinite(parsed) && parsed > 0) {
     return parsed
@@ -138,16 +173,17 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
         const encoder = new TextEncoder()
         let lastSentAt = Date.now()
         let runId: number | null = null
-        const send = (event: Record<string, unknown>) => {
+        const send = (event: unknown) => {
           try {
             lastSentAt = Date.now()
-            if (event?.type === 'run_start') {
-              const id = Number((event as any)?.payload?.id)
+            const payload = event as any
+            if (payload?.type === 'run_start') {
+              const id = Number(payload?.payload?.id)
               if (Number.isFinite(id)) {
                 runId = id
               }
             }
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
           } catch {}
         }
 

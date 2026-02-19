@@ -5,11 +5,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { X, Clock, Loader2, CheckCircle, XCircle, AlertTriangle, Share2 } from 'lucide-react'
 import { FlowGraph } from './FlowGraph'
+import { BattleContentBlock } from './BattleContentBlock'
 import type { JudgeConfig, NodeState } from '../hooks/useBattleFlow'
 
 interface ExecutionStepProps {
     prompt: string
     expectedAnswer: string
+    promptImages: string[]
+    expectedAnswerImages: string[]
     judgeConfig: JudgeConfig
     nodeStates: Map<string, NodeState[]>
     selectedNodeKey?: string
@@ -24,6 +27,8 @@ interface ExecutionStepProps {
 export function ExecutionStep({
     prompt,
     expectedAnswer,
+    promptImages,
+    expectedAnswerImages,
     judgeConfig,
     nodeStates,
     selectedNodeKey,
@@ -147,14 +152,18 @@ export function ExecutionStep({
             <Card className="bg-muted/30">
                 <CardContent className="pt-4 space-y-2">
                     <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                            <div className="text-xs text-muted-foreground mb-1">题目</div>
-                            <div className="text-sm line-clamp-3">{prompt}</div>
-                        </div>
-                        <div>
-                            <div className="text-xs text-muted-foreground mb-1">期望答案</div>
-                            <div className="text-sm line-clamp-3">{expectedAnswer}</div>
-                        </div>
+                        <BattleContentBlock
+                            title="题目"
+                            text={prompt}
+                            images={promptImages}
+                            compact
+                        />
+                        <BattleContentBlock
+                            title="期望答案"
+                            text={expectedAnswer}
+                            images={expectedAnswerImages}
+                            compact
+                        />
                     </div>
                 </CardContent>
             </Card>

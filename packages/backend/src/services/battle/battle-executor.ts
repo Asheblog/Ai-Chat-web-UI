@@ -13,6 +13,7 @@ import {
 } from '../../modules/chat/tool-protocol'
 import { runToolOrchestration } from '../../modules/chat/tool-orchestrator'
 import type { TaskTraceRecorder } from '../../utils/task-trace'
+import type { BattleUploadImage } from '@aichat/shared/battle-contract'
 import type { BattleModelFeatures, BattleModelInput } from './battle-types'
 import { safeParseJson } from './battle-serialization'
 
@@ -89,13 +90,14 @@ export class BattleExecutor {
 
   async executeModel(params: {
     prompt: string
+    promptImages?: BattleUploadImage[]
     modelConfig: BattleModelInput
     resolved: { connection: Connection; rawModelId: string }
     systemSettings: Record<string, string>
     context: BattleExecutionContext
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void
   }) {
-    const { prompt, modelConfig, resolved, systemSettings, context, emitDelta } = params
+    const { prompt, promptImages, modelConfig, resolved, systemSettings, context, emitDelta } = params
     context.checkRunCancelled()
     context.checkAttemptCancelled()
 
@@ -140,7 +142,7 @@ export class BattleExecutor {
       session,
       payload,
       content: prompt,
-      images: [],
+      images: promptImages || [],
       mode: emitDelta ? 'stream' : 'completion',
       personalPrompt: null,
       extraSystemPrompts: extraPrompt ? [extraPrompt] : [],
@@ -163,17 +165,30 @@ export class BattleExecutor {
 
   async judgeAnswer(params: {
     prompt: string
+    promptImages?: BattleUploadImage[]
     expectedAnswer: string
+    expectedAnswerImages?: BattleUploadImage[]
     answer: string
     threshold: number
     judgeModel: { connection: Connection; rawModelId: string }
     context: BattleExecutionContext
   }) {
-    const { prompt, expectedAnswer, answer, threshold, judgeModel, context } = params
+    const {
+      prompt,
+      promptImages,
+      expectedAnswer,
+      expectedAnswerImages,
+      answer,
+      threshold,
+      judgeModel,
+      context,
+    } = params
     context.checkRunCancelled()
     context.checkAttemptCancelled()
 
-    const judgePrompt = this.buildJudgePrompt(prompt, expectedAnswer, answer)
+    const questionImageCount = Array.isArray(promptImages) ? promptImages.length : 0
+    const expectedImageCount = Array.isArray(expectedAnswerImages) ? expectedAnswerImages.length : 0
+    const judgePrompt = this.buildJudgePrompt(prompt, expectedAnswer, answer, questionImageCount, expectedImageCount)
     const session = this.buildVirtualSession(judgeModel.connection, judgeModel.rawModelId)
     const payload: any = {
       sessionId: 0,
@@ -186,7 +201,7 @@ export class BattleExecutor {
       session,
       payload,
       content: judgePrompt,
-      images: [],
+      images: [...(promptImages || []), ...(expectedAnswerImages || [])],
       mode: 'completion',
       personalPrompt: null,
     })
@@ -610,11 +625,32 @@ export class BattleExecutor {
     }
   }
 
-  private buildJudgePrompt(question: string, expectedAnswer: string, answer: string) {
+  private buildJudgePrompt(
+    question: string,
+    expectedAnswer: string,
+    answer: string,
+    questionImageCount: number,
+    expectedImageCount: number,
+  ) {
+    const imageHint = (() => {
+      if (questionImageCount <= 0 && expectedImageCount <= 0) return '无图片输入。'
+      const lines: string[] = []
+      if (questionImageCount > 0) {
+        lines.push(`前 ${questionImageCount} 张图为“问题图片”，编号 Q1..Q${questionImageCount}。`)
+      }
+      if (expectedImageCount > 0) {
+        lines.push(
+          `接下来的 ${expectedImageCount} 张图为“期望答案图片”，编号 E1..E${expectedImageCount}。`,
+        )
+      }
+      return lines.join(' ')
+    })()
+
     return [
       '你是严格的答案裁判，只输出 JSON，不要包含多余解释。',
       '请根据“问题”和“期望答案”判断“模型答案”是否准确。',
       '输出格式：{"pass": true/false, "score": 0~1, "reason": "简短原因"}',
+      `图片说明：${imageHint}`,
       '',
       `问题：${question}`,
       `期望答案：${expectedAnswer}`,

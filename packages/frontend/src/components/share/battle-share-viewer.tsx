@@ -5,13 +5,13 @@ import { cn } from '@/lib/utils'
 import type { BattleShare, BattleResult } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Loader2, AlertTriangle, ArrowDown } from 'lucide-react'
 import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
 import { FlowGraph } from '@/features/battle/ui/FlowGraph'
 import { DetailDrawer, type BattleAttemptDetail } from '@/features/battle/ui/DetailDrawer'
+import { BattleContentBlock } from '@/features/battle/ui/BattleContentBlock'
 import { buildNodeStatesFromRun, type BattleNodeModel, type LiveAttempt, type NodeState } from '@/features/battle/hooks/useBattleFlow'
 import { buildModelKey } from '@/features/battle/utils/model-key'
 import { getBattleShare } from '@/features/battle/api'
@@ -94,11 +94,12 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
       const res = await getBattleShare(shareState.token)
       if (!mountedRef.current) return
       if (res?.success && res.data) {
-        setShareState(res.data)
+        const latestShare = res.data
+        setShareState(latestShare)
         setLiveDeltas((prev) => {
           if (prev.size === 0) return prev
           const activeKeys = new Set<string>()
-          const liveAttempts = res.data.payload.live?.attempts || []
+          const liveAttempts = latestShare.payload.live?.attempts || []
           for (const attempt of liveAttempts) {
             const key = buildModelKey({
               modelId: attempt.modelId,
@@ -107,7 +108,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
             })
             activeKeys.add(`${key}#${attempt.attemptIndex}`)
           }
-          const results = res.data.payload.results || []
+          const results = latestShare.payload.results || []
           for (const result of results) {
             const key = buildModelKey({
               modelId: result.modelId,
@@ -117,7 +118,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
             activeKeys.add(`${key}#${result.attemptIndex}`)
           }
           const next = new Map(prev)
-          for (const key of activeKeys) {
+          for (const key of Array.from(activeKeys)) {
             next.delete(key)
           }
           return next
@@ -500,18 +501,16 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           </button>
           {showQuestion && (
             <div className="mt-3 rounded-lg bg-muted/30 p-4 space-y-3">
-              <div>
-                <div className="text-xs font-medium text-muted-foreground mb-1">题目</div>
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  <MarkdownRenderer html={null} fallback={payload.prompt} />
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground mb-1">期望答案</div>
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  <MarkdownRenderer html={null} fallback={payload.expectedAnswer} />
-                </div>
-              </div>
+              <BattleContentBlock
+                title="题目"
+                text={payload.prompt.text}
+                images={payload.prompt.images}
+              />
+              <BattleContentBlock
+                title="期望答案"
+                text={payload.expectedAnswer.text}
+                images={payload.expectedAnswer.images}
+              />
               <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border/50">
                 <span>裁判模型：{payload.judge.modelLabel || payload.judge.modelId}</span></div>
             </div>

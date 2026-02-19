@@ -1,5 +1,26 @@
 export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 
+export interface BattleContent {
+  text: string
+  images: string[]
+}
+
+export interface BattleUploadImage {
+  data: string
+  mime: string
+}
+
+export interface BattleContentInput {
+  text?: string
+  images?: BattleUploadImage[]
+}
+
+export interface RejudgeExpectedAnswerInput {
+  text?: string
+  keepImages?: string[]
+  newImages?: BattleUploadImage[]
+}
+
 export interface BattleSummaryStats {
   totalModels: number
   runsPerModel: number
@@ -23,8 +44,8 @@ export interface BattleSummaryStats {
 export interface BattleRunSummary {
   id: number
   title: string
-  prompt: string
-  expectedAnswer: string
+  prompt: BattleContent
+  expectedAnswer: BattleContent
   judgeModelId: string
   judgeConnectionId?: number | null
   judgeRawId?: string | null
@@ -110,8 +131,8 @@ export interface BattleRunListResponse {
 
 export interface BattleSharePayload {
   title: string
-  prompt: string
-  expectedAnswer: string
+  prompt: BattleContent
+  expectedAnswer: BattleContent
   judge: {
     modelId: string
     modelLabel: string | null
@@ -191,7 +212,7 @@ export interface RejudgeStreamEvent {
     completed?: number
     total?: number
     resultId?: number
-    expectedAnswer?: string
+    expectedAnswer?: BattleContent
   }
   error?: string
 }
