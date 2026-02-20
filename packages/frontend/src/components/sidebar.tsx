@@ -180,7 +180,7 @@ export function Sidebar() {
         !cur.title || cur.title.trim() === '' || cur.title === '新的对话' || cur.title === 'New Chat'
       )
       const serverCount = cur ? (sessions.find(s => s.id === cur.id)?._count?.messages ?? null) : null
-      const localCount = cur ? messageMetas.length : 0
+      const localCount = cur ? messageMetas.filter((meta) => meta.sessionId === cur.id).length : 0
       const definitelyEmpty = Boolean(cur && isDefaultTitle && localCount === 0 && (serverCount === null || serverCount === 0))
       if (definitelyEmpty) {
         // 直接返回，复用当前空白会话
@@ -210,6 +210,10 @@ export function Sidebar() {
   }
 
   const handleSessionClick = (sessionId: number) => {
+    if (currentSession?.id === sessionId) {
+      setIsMobileMenuOpen(false)
+      return
+    }
     selectSession(sessionId)
     router.push(`/main/${sessionId}`)
     setIsMobileMenuOpen(false)

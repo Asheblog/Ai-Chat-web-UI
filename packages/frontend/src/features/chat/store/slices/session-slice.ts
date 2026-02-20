@@ -104,31 +104,32 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
     if (!session) return
     const alreadyCurrent = snapshot.currentSession?.id === sessionId
     const alreadyHydrated = messagesHydrated[sessionId] === true
+    const hasSessionMessages = snapshot.messageMetas.some((meta) => meta.sessionId === sessionId)
+
     if (alreadyCurrent && alreadyHydrated) {
       set(() => ({
         currentSession: session,
+        isStreaming: snapshot.activeStreamSessionId === session.id,
       }))
+      get().fetchUsage(sessionId)
       return
     }
-    const nextHydrated = { ...messagesHydrated }
-    if (nextHydrated[sessionId]) {
-      delete nextHydrated[sessionId]
-    }
+
+    const shouldFetchMessages = !alreadyHydrated
+
     set((state) => ({
       currentSession: session,
-      messageMetas: [],
-      assistantVariantSelections: {},
-      messageBodies: {},
-      messageRenderCache: {},
-      messageMetrics: {},
       usageCurrent: null,
       usageLastRound: null,
       usageTotals: null,
-      messagesHydrated: nextHydrated,
+      isMessagesLoading: shouldFetchMessages && !hasSessionMessages,
       isStreaming: state.activeStreamSessionId === session.id,
       shareSelection: createInitialShareSelection(),
     }))
-    get().fetchMessages(sessionId)
+
+    if (shouldFetchMessages) {
+      get().fetchMessages(sessionId)
+    }
     get().fetchUsage(sessionId)
   },
 

@@ -27,6 +27,36 @@ export interface UseChatComposerOptions {
 }
 
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 96
+const SESSION_SCROLL_STORAGE_KEY = 'aichat:chat-session-scroll'
+
+const readSessionScrollState = (): Record<number, number> => {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_SCROLL_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object') return {}
+    const next: Record<number, number> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      const sessionId = Number.parseInt(key, 10)
+      const top = Number(value)
+      if (!Number.isFinite(sessionId) || !Number.isFinite(top)) continue
+      next[sessionId] = Math.max(0, Math.floor(top))
+    }
+    return next
+  } catch {
+    return {}
+  }
+}
+
+const writeSessionScrollState = (state: Record<number, number>) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(SESSION_SCROLL_STORAGE_KEY, JSON.stringify(state))
+  } catch {
+    // ignore
+  }
+}
 
 export function useChatComposer(options?: UseChatComposerOptions) {
   const knowledgeBaseIds = options?.knowledgeBaseIds
@@ -36,6 +66,9 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true)
   const autoScrollEnabledRef = useRef(true)
+  const scrollStateRef = useRef<Record<number, number>>({})
+  const scrollPersistTimerRef = useRef<number | null>(null)
+  const pendingRestoreSessionRef = useRef<number | null>(null)
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
   const {
     currentSession,
@@ -52,6 +85,11 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     assistantVariantSelections,
     updateSessionPrefs,
   } = useChatStore()
+
+  const sessionMessageMetas = useMemo(() => {
+    if (!currentSession) return []
+    return messageMetas.filter((meta) => meta.sessionId === currentSession.id)
+  }, [messageMetas, currentSession])
 
   const {
     customBodyInput,
@@ -200,16 +238,105 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     [getScrollViewport, setAutoScrollState],
   )
 
-  useEffect(() => {
-    setAutoScrollState(true)
+  const persistScrollState = useCallback(() => {
+    writeSessionScrollState(scrollStateRef.current)
+  }, [])
+
+  const schedulePersistScrollState = useCallback(() => {
     if (typeof window === 'undefined') return
+    if (scrollPersistTimerRef.current !== null) return
+    scrollPersistTimerRef.current = window.setTimeout(() => {
+      scrollPersistTimerRef.current = null
+      persistScrollState()
+    }, 120)
+  }, [persistScrollState])
+
+  const saveSessionScrollTop = useCallback(
+    (sessionId: number | null, top: number) => {
+      if (sessionId == null) return
+      if (!Number.isFinite(top)) return
+      const normalized = Math.max(0, Math.floor(top))
+      if (scrollStateRef.current[sessionId] === normalized) return
+      scrollStateRef.current = {
+        ...scrollStateRef.current,
+        [sessionId]: normalized,
+      }
+      schedulePersistScrollState()
+    },
+    [schedulePersistScrollState],
+  )
+
+  useEffect(() => {
+    scrollStateRef.current = readSessionScrollState()
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (scrollPersistTimerRef.current !== null && typeof window !== 'undefined') {
+        window.clearTimeout(scrollPersistTimerRef.current)
+        scrollPersistTimerRef.current = null
+      }
+      persistScrollState()
+    }
+  }, [persistScrollState])
+
+  useEffect(() => {
+    const sessionId = currentSession?.id ?? null
+    pendingRestoreSessionRef.current = sessionId
+    if (sessionId == null) return
+    const savedTop = scrollStateRef.current[sessionId]
+    if (Number.isFinite(savedTop)) {
+      setAutoScrollState(false)
+    } else {
+      setAutoScrollState(true)
+    }
+  }, [currentSession?.id, setAutoScrollState])
+
+  useEffect(() => {
+    const sessionId = currentSession?.id ?? null
+    if (sessionId == null) return
+    if (pendingRestoreSessionRef.current !== sessionId) return
+
+    const scrollElement = getScrollViewport()
+    if (!scrollElement) return
+    if (isMessagesLoading && sessionMessageMetas.length === 0) return
+
+    pendingRestoreSessionRef.current = null
+    const savedTop = scrollStateRef.current[sessionId]
+    const hasSavedTop = Number.isFinite(savedTop)
+    if (typeof window === 'undefined') return
+
     const frame = window.requestAnimationFrame(() => {
-      scrollToBottom(true)
+      const maxTop = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight)
+      const targetTop = hasSavedTop
+        ? Math.max(0, Math.min(Number(savedTop), maxTop))
+        : maxTop
+      scrollElement.scrollTop = targetTop
+      saveSessionScrollTop(sessionId, scrollElement.scrollTop)
+      setAutoScrollState(isNearBottom(scrollElement))
     })
+
     return () => {
       window.cancelAnimationFrame(frame)
     }
-  }, [currentSession?.id, scrollToBottom, setAutoScrollState])
+  }, [
+    currentSession?.id,
+    getScrollViewport,
+    isMessagesLoading,
+    isNearBottom,
+    saveSessionScrollTop,
+    sessionMessageMetas.length,
+    setAutoScrollState,
+  ])
+
+  useEffect(() => {
+    return () => {
+      const sessionId = currentSession?.id ?? null
+      const scrollElement = getScrollViewport()
+      if (!scrollElement || sessionId == null) return
+      saveSessionScrollTop(sessionId, scrollElement.scrollTop)
+    }
+  }, [currentSession?.id, getScrollViewport, saveSessionScrollTop])
 
   useEffect(() => {
     const scrollElement = getScrollViewport()
@@ -217,6 +344,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
     const updateAutoScrollState = () => {
       setAutoScrollState(isNearBottom(scrollElement))
+      saveSessionScrollTop(currentSession?.id ?? null, scrollElement.scrollTop)
     }
 
     updateAutoScrollState()
@@ -225,11 +353,11 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     return () => {
       scrollElement.removeEventListener('scroll', updateAutoScrollState)
     }
-  }, [currentSession?.id, getScrollViewport, isNearBottom, setAutoScrollState])
+  }, [currentSession?.id, getScrollViewport, isNearBottom, saveSessionScrollTop, setAutoScrollState])
 
   useEffect(() => {
     scrollToBottom()
-  }, [messageMetas.length, scrollToBottom])
+  }, [sessionMessageMetas.length, scrollToBottom])
 
   useEffect(() => {
     if (!isStreaming) return
@@ -476,7 +604,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     customBodyInput,
     customBodyError,
     customHeaders,
-    messageMetas,
+    messageMetas: sessionMessageMetas,
     messageBodies,
     messageRenderCache,
     sessionPromptDraft,

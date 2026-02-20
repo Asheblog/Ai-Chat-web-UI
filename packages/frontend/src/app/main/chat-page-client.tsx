@@ -61,6 +61,12 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       router.replace(target)
     }
 
+    const ensureSessionsLoaded = async () => {
+      const state = useChatStore.getState()
+      if (state.sessions.length > 0) return
+      await fetchSessions()
+    }
+
     const ensureSelection = () => {
       if (cancelled || normalizedSessionId === null) {
         return
@@ -71,12 +77,16 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       if (matched) {
         if (state.currentSession?.id !== matched.id) {
           state.selectSession(matched.id)
-        } else if (state.messageMetas.length === 0) {
+        } else {
+          const hasMatchedMessages = state.messageMetas.some((meta) => meta.sessionId === matched.id)
           if (state.messagesHydrated[matched.id] !== true) {
             // 防止极端情况下刷新后会话已恢复但消息仍为空
             state.fetchMessages(matched.id)
-            state.fetchUsage(matched.id)
+          } else if (!hasMatchedMessages) {
+            // 已标记 hydrated 但内存中没有该会话消息（例如浏览器刚恢复）
+            state.fetchMessages(matched.id)
           }
+          state.fetchUsage(matched.id)
         }
         return
       }
@@ -93,9 +103,10 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
     void (async () => {
       try {
         if (normalizedSessionId !== null && !cancelled) {
-          setIsHydrating(true)
+          const hasSessions = useChatStore.getState().sessions.length > 0
+          setIsHydrating(!hasSessions)
         }
-        await fetchSessions()
+        await ensureSessionsLoaded()
       } finally {
         ensureSelection()
         if (!cancelled) {

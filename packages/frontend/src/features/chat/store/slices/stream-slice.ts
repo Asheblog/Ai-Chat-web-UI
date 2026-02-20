@@ -426,6 +426,7 @@ export const createStreamSlice: ChatSliceCreator<
             set((state) => {
               const userMetaIdx = state.messageMetas.findIndex(
                 (meta) =>
+                  meta.sessionId === sessionId &&
                   meta.role === 'user' &&
                   meta.clientMessageId === clientId &&
                   meta.id !== realUserId,
