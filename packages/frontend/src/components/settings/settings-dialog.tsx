@@ -44,6 +44,8 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   const [activeMain, setActiveMain] = useState<string>(defaultTab)
   const [activeSub, setActiveSub] = useState<string>("personal.about")
   const denialNotifiedRef = useRef(false)
+  const lastSyncedHrefRef = useRef<string | null>(null)
+  const lastClearedHrefRef = useRef<string | null>(null)
 
   const filteredTree = useMemo<SettingsNavItem[]>(() => {
     return settingsNav.reduce<SettingsNavItem[]>((acc, item) => {
@@ -65,6 +67,8 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   useEffect(() => {
     if (!open) {
       denialNotifiedRef.current = false
+      lastSyncedHrefRef.current = null
+      lastClearedHrefRef.current = null
     }
   }, [open])
 
@@ -130,7 +134,11 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   // 同步 URL 与记忆
   useEffect(() => {
     if (!open || !activeMain) return
-    const sp = new URLSearchParams(searchParams?.toString())
+    const currentSearch =
+      typeof window !== 'undefined'
+        ? window.location.search.replace(/^\?/, '')
+        : (searchParams?.toString() ?? '')
+    const sp = new URLSearchParams(currentSearch)
     sp.set('settings', '1')
     sp.set('main', activeMain)
     if (activeSub) {
@@ -138,7 +146,18 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     } else {
       sp.delete('sub')
     }
-    router.replace(`${pathname}?${sp.toString()}`)
+    const query = sp.toString()
+    const href = query ? `${pathname}?${query}` : pathname
+    const currentHref =
+      typeof window !== 'undefined'
+        ? `${window.location.pathname}${window.location.search}`
+        : (searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname)
+    if (lastSyncedHrefRef.current === href || currentHref === href) {
+      lastSyncedHrefRef.current = href
+    } else {
+      lastSyncedHrefRef.current = href
+      router.replace(href)
+    }
     if (isAuthenticated && typeof window !== 'undefined') {
       localStorage.setItem('settings:lastMain', activeMain)
       localStorage.setItem('settings:lastSub', activeSub)
@@ -147,18 +166,33 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
 
   // 关闭时清理 URL 的 settings 参数（保留其他参数）
   const handleOpenChange = (v: boolean) => {
-    if (!v) {
-      const sp = new URLSearchParams(searchParams?.toString())
-      sp.delete('settings'); sp.delete('main'); sp.delete('sub')
-      router.replace(`${pathname}?${sp.toString()}`)
-    }
     onOpenChange(v)
+    if (!v) {
+      const currentSearch =
+        typeof window !== 'undefined'
+          ? window.location.search.replace(/^\?/, '')
+          : (searchParams?.toString() ?? '')
+      const sp = new URLSearchParams(currentSearch)
+      const hadSettingsParams = sp.has('settings') || sp.has('main') || sp.has('sub')
+      sp.delete('settings'); sp.delete('main'); sp.delete('sub')
+      const query = sp.toString()
+      const href = query ? `${pathname}?${query}` : pathname
+      const currentHref =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : (searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname)
+      if (hadSettingsParams && lastClearedHrefRef.current !== href && currentHref !== href) {
+        lastClearedHrefRef.current = href
+        router.replace(href)
+      }
+      lastSyncedHrefRef.current = null
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="h-[100dvh] w-screen max-w-none border-0 bg-[hsl(var(--surface))/0.96] p-0 shadow-none sm:h-[84vh] sm:max-h-[86vh] sm:w-[92vw] sm:max-w-5xl sm:rounded-[calc(var(--radius)+0.4rem)] sm:border sm:border-border/80 sm:bg-card/95 sm:shadow-[0_30px_80px_hsl(var(--background)/0.5)] flex min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] animate-in fade-in-0 zoom-in-95 duration-200"
+        className="h-[100dvh] w-screen max-w-none border-0 bg-[hsl(var(--surface))/0.96] p-0 shadow-none sm:h-[84vh] sm:max-h-[86vh] sm:w-[92vw] sm:max-w-5xl sm:rounded-[calc(var(--radius)+0.4rem)] sm:border sm:border-border/80 sm:bg-card/95 sm:shadow-[0_30px_80px_hsl(var(--background)/0.5)] flex min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>设置</DialogTitle>

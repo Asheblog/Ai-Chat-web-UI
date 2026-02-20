@@ -101,6 +101,7 @@ export const useSettingsStore = create<SettingsStore>()(
           })
         })
       }
+      let systemSettingsInFlight: Promise<void> | null = null
 
       return {
         theme: 'system',
@@ -114,24 +115,30 @@ export const useSettingsStore = create<SettingsStore>()(
         assistantAvatarReadyFor: null,
 
         fetchSystemSettings: async () => {
+          if (systemSettingsInFlight) return systemSettingsInFlight
           set({ isLoading: true, error: null })
-          try {
-            const response = await fetchSystemSettingsApi()
-            const prevSettings = get().systemSettings
-            const merged = mergeSystemSettings(prevSettings, response.data)
-            const normalizedBrand = normalizeBrandText(merged.brandText)
-            set((state) => ({
-              systemSettings: merged,
-              publicBrandText: normalizedBrand ?? state.publicBrandText,
-              isLoading: false,
-            }))
-            ensureAssistantAvatarReady(merged.assistantAvatarUrl)
-          } catch (error: any) {
-            set({
-              error: error.response?.data?.error || error.message || '获取系统设置失败',
-              isLoading: false,
-            })
-          }
+          systemSettingsInFlight = (async () => {
+            try {
+              const response = await fetchSystemSettingsApi()
+              const prevSettings = get().systemSettings
+              const merged = mergeSystemSettings(prevSettings, response.data)
+              const normalizedBrand = normalizeBrandText(merged.brandText)
+              set((state) => ({
+                systemSettings: merged,
+                publicBrandText: normalizedBrand ?? state.publicBrandText,
+                isLoading: false,
+              }))
+              ensureAssistantAvatarReady(merged.assistantAvatarUrl)
+            } catch (error: any) {
+              set({
+                error: error.response?.data?.error || error.message || '获取系统设置失败',
+                isLoading: false,
+              })
+            } finally {
+              systemSettingsInFlight = null
+            }
+          })()
+          return systemSettingsInFlight
         },
 
         updateSystemSettings: async (settings: SystemSettingsUpdatePayload) => {

@@ -131,7 +131,7 @@ export function Sidebar() {
   // 深链：URL 带 settings=1 时自动打开
   useEffect(() => {
     if (searchParams?.get('settings') === '1') {
-      setIsSettingsOpen(true)
+      setIsSettingsOpen((prev) => (prev ? prev : true))
     }
   }, [searchParams])
 
