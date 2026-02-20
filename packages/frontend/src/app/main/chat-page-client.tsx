@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { ChatInterface } from '@/components/chat-interface'
@@ -19,6 +19,8 @@ interface ChatPageClientProps {
 
 export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const redirectedRef = useRef<string | null>(null)
   const { currentSession, fetchSessions } = useChatStore((state) => ({
     currentSession: state.currentSession,
     fetchSessions: state.fetchSessions,
@@ -38,7 +40,23 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
   }, [normalizedSessionId])
 
   useEffect(() => {
+    redirectedRef.current = null
+  }, [pathname])
+
+  useEffect(() => {
     let cancelled = false
+
+    const safeReplace = (target: string) => {
+      const currentPath =
+        typeof window !== 'undefined' ? window.location.pathname : pathname
+      if (currentPath === target) {
+        redirectedRef.current = null
+        return
+      }
+      if (redirectedRef.current === target) return
+      redirectedRef.current = target
+      router.replace(target)
+    }
 
     const ensureSelection = () => {
       if (cancelled || normalizedSessionId === null) {
@@ -63,9 +81,9 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       if (state.sessions.length > 0) {
         const fallback = state.sessions[0]
         state.selectSession(fallback.id)
-        router.replace(`/main/${fallback.id}`)
+        safeReplace(`/main/${fallback.id}`)
       } else {
-        router.replace('/main')
+        safeReplace('/main')
       }
     }
 
@@ -88,7 +106,7 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
     return () => {
       cancelled = true
     }
-  }, [fetchSessions, fetchSystemSettings, normalizedSessionId, router])
+  }, [fetchSessions, fetchSystemSettings, normalizedSessionId, pathname, router])
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">

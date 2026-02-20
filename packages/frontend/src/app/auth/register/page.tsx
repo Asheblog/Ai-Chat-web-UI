@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AuthFormLayout } from '@/components/auth-form-layout'
@@ -19,13 +19,18 @@ export default function RegisterPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const router = useRouter()
+  const redirectedRef = useRef(false)
   const { register, user, error, clearError } = useAuthStore()
   const errorMessage = error ? extractErrorMessage(error) : null
 
   useEffect(() => {
-    if (user) {
-      router.replace('/main')
+    if (!user) {
+      redirectedRef.current = false
+      return
     }
+    if (redirectedRef.current) return
+    redirectedRef.current = true
+    router.replace('/main')
   }, [user, router])
 
   useEffect(() => {

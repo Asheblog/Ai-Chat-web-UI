@@ -1,5 +1,5 @@
 "use client"
-import { ReactNode, useEffect, useMemo } from "react"
+import { ReactNode, useEffect, useMemo, useRef } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { SettingsShell, type SettingsSection } from "@/components/settings/shell"
 import { useAuthStore } from "@/store/auth-store"
@@ -22,6 +22,7 @@ const deriveSection = (pathname: string | null): "personal" | "system" => {
 export function SettingsLayoutClient({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const redirectedRef = useRef<string | null>(null)
   const { user, actorState } = useAuthStore((state) => ({
     user: state.user,
     actorState: state.actorState,
@@ -40,9 +41,12 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isAdmin && activeSection === "system") {
+      if (pathname === SECTION_PATH.personal) return
+      if (redirectedRef.current === SECTION_PATH.personal) return
+      redirectedRef.current = SECTION_PATH.personal
       router.replace(SECTION_PATH.personal)
     }
-  }, [isAdmin, activeSection, router])
+  }, [isAdmin, activeSection, pathname, router])
 
   const handleChange = (key: string) => {
     const target = SECTION_PATH[key]

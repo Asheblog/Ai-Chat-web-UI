@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -25,6 +25,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
 
   const router = useRouter()
   const searchParams = useSearchParams()
+  const redirectedRef = useRef<string | null>(null)
   const { login, user, error, clearError } = useAuthStore()
   const { systemSettings, publicBrandText, bootstrapBrandText } = useSettingsStore((state) => ({
     systemSettings: state.systemSettings,
@@ -51,9 +52,13 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
   }, [initialBrandText, bootstrapBrandText])
 
   useEffect(() => {
-    if (user) {
-      router.replace(nextPath)
+    if (!user) {
+      redirectedRef.current = null
+      return
     }
+    if (redirectedRef.current === nextPath) return
+    redirectedRef.current = nextPath
+    router.replace(nextPath)
   }, [nextPath, user, router])
 
   useEffect(() => {

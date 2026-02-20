@@ -10,7 +10,7 @@ export function WelcomeScreen() {
   const { header, hero, form, footerNote } = useWelcomeScreenViewModel()
   return (
     <div className="relative flex-1 flex flex-col">
-      <header className="hidden h-14 items-center border-b border-border/70 bg-[hsl(var(--background-alt))/0.86] px-4 backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background-alt))/0.72] lg:flex">
+      <header className="hidden h-14 items-center bg-[hsl(var(--background-alt))/0.86] px-4 backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background-alt))/0.72] lg:flex">
         <div className="flex w-full items-center justify-between gap-4">
           <ModelSelector
             selectedModelId={header.selectedModelId}

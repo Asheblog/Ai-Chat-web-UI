@@ -1,13 +1,15 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth-store'
 
 export default function SettingsIndexPage() {
   const router = useRouter()
+  const pathname = usePathname()
+  const redirectedRef = useRef<string | null>(null)
   const { user, actorState } = useAuthStore((state) => ({
     user: state.user,
     actorState: state.actorState,
@@ -16,8 +18,11 @@ export default function SettingsIndexPage() {
   useEffect(() => {
     if (actorState === 'loading') return
     const target = user?.role === 'ADMIN' ? '/main/settings/system' : '/main/settings/personal'
+    if (pathname === target) return
+    if (redirectedRef.current === target) return
+    redirectedRef.current = target
     router.replace(target)
-  }, [actorState, router, user?.role])
+  }, [actorState, pathname, router, user?.role])
 
   return (
     <div className="flex h-full flex-1 items-center justify-center text-sm text-muted-foreground">

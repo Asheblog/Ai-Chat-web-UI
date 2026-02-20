@@ -44,8 +44,9 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   const [activeMain, setActiveMain] = useState<string>(defaultTab)
   const [activeSub, setActiveSub] = useState<string>("personal.about")
   const denialNotifiedRef = useRef(false)
-  const lastSyncedHrefRef = useRef<string | null>(null)
   const lastClearedHrefRef = useRef<string | null>(null)
+  const openedFromQueryRef = useRef(false)
+  const closeCleanupTimerRef = useRef<number | null>(null)
 
   const filteredTree = useMemo<SettingsNavItem[]>(() => {
     return settingsNav.reduce<SettingsNavItem[]>((acc, item) => {
@@ -67,10 +68,33 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   useEffect(() => {
     if (!open) {
       denialNotifiedRef.current = false
-      lastSyncedHrefRef.current = null
       lastClearedHrefRef.current = null
+      openedFromQueryRef.current = false
+      if (closeCleanupTimerRef.current) {
+        window.clearTimeout(closeCleanupTimerRef.current)
+        closeCleanupTimerRef.current = null
+      }
+      return
     }
-  }, [open])
+    const currentSearch =
+      typeof window !== 'undefined'
+        ? window.location.search.replace(/^\?/, '')
+        : (searchParams?.toString() ?? '')
+    const sp = new URLSearchParams(currentSearch)
+    const main = sp.get('main')
+    const sub = sp.get('sub')
+    const hasLegacySettingsHint =
+      main === 'personal' ||
+      main === 'system' ||
+      sub?.startsWith('personal.') ||
+      sub?.startsWith('system.')
+    // 仅深链进入 settings 时标记 URL 清理；普通按钮打开不改 URL，避免路由重渲染闪烁。
+    openedFromQueryRef.current = sp.get('settings') === '1' || Boolean(hasLegacySettingsHint)
+    if (closeCleanupTimerRef.current) {
+      window.clearTimeout(closeCleanupTimerRef.current)
+      closeCleanupTimerRef.current = null
+    }
+  }, [open, searchParams])
 
   // 初始化：来自 URL > localStorage > 角色默认
   useEffect(() => {
@@ -131,61 +155,55 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     }
   }, [filteredTree, activeMain, activeSub])
 
-  // 同步 URL 与记忆
+  // 仅同步记忆；不在弹窗打开期间写 URL，避免动画期路由重渲染造成闪烁。
   useEffect(() => {
     if (!open || !activeMain) return
-    const currentSearch =
-      typeof window !== 'undefined'
-        ? window.location.search.replace(/^\?/, '')
-        : (searchParams?.toString() ?? '')
-    const sp = new URLSearchParams(currentSearch)
-    sp.set('settings', '1')
-    sp.set('main', activeMain)
-    if (activeSub) {
-      sp.set('sub', activeSub)
-    } else {
-      sp.delete('sub')
-    }
-    const query = sp.toString()
-    const href = query ? `${pathname}?${query}` : pathname
-    const currentHref =
-      typeof window !== 'undefined'
-        ? `${window.location.pathname}${window.location.search}`
-        : (searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname)
-    if (lastSyncedHrefRef.current === href || currentHref === href) {
-      lastSyncedHrefRef.current = href
-    } else {
-      lastSyncedHrefRef.current = href
-      router.replace(href)
-    }
     if (isAuthenticated && typeof window !== 'undefined') {
       localStorage.setItem('settings:lastMain', activeMain)
       localStorage.setItem('settings:lastSub', activeSub)
     }
-  }, [open, activeMain, activeSub, pathname, router, searchParams, isAuthenticated])
+  }, [open, activeMain, activeSub, isAuthenticated])
 
   // 关闭时清理 URL 的 settings 参数（保留其他参数）
   const handleOpenChange = (v: boolean) => {
     onOpenChange(v)
     if (!v) {
-      const currentSearch =
-        typeof window !== 'undefined'
-          ? window.location.search.replace(/^\?/, '')
-          : (searchParams?.toString() ?? '')
-      const sp = new URLSearchParams(currentSearch)
-      const hadSettingsParams = sp.has('settings') || sp.has('main') || sp.has('sub')
-      sp.delete('settings'); sp.delete('main'); sp.delete('sub')
-      const query = sp.toString()
-      const href = query ? `${pathname}?${query}` : pathname
-      const currentHref =
-        typeof window !== 'undefined'
-          ? `${window.location.pathname}${window.location.search}`
-          : (searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname)
-      if (hadSettingsParams && lastClearedHrefRef.current !== href && currentHref !== href) {
-        lastClearedHrefRef.current = href
-        router.replace(href)
+      if (closeCleanupTimerRef.current) {
+        window.clearTimeout(closeCleanupTimerRef.current)
+        closeCleanupTimerRef.current = null
       }
-      lastSyncedHrefRef.current = null
+      if (!openedFromQueryRef.current) {
+        lastClearedHrefRef.current = null
+        return
+      }
+      const cleanupUrl = () => {
+        const currentSearch =
+          typeof window !== 'undefined'
+            ? window.location.search.replace(/^\?/, '')
+            : (searchParams?.toString() ?? '')
+        const sp = new URLSearchParams(currentSearch)
+        const hadSettingsParams = sp.has('settings') || sp.has('main') || sp.has('sub')
+        sp.delete('settings')
+        sp.delete('main')
+        sp.delete('sub')
+        const query = sp.toString()
+        const href = query ? `${pathname}?${query}` : pathname
+        const currentHref =
+          typeof window !== 'undefined'
+            ? `${window.location.pathname}${window.location.search}`
+            : (searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname)
+        if (hadSettingsParams && lastClearedHrefRef.current !== href && currentHref !== href) {
+          lastClearedHrefRef.current = href
+          router.replace(href)
+        }
+        openedFromQueryRef.current = false
+      }
+      // 等待关闭动画接近结束再清 URL，避免路由更新与退场动画叠加导致的视觉闪烁。
+      if (typeof window !== 'undefined') {
+        closeCleanupTimerRef.current = window.setTimeout(cleanupUrl, 180)
+      } else {
+        cleanupUrl()
+      }
     }
   }
 

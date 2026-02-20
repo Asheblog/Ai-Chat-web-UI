@@ -90,6 +90,8 @@ export function Sidebar() {
   const quotaExhausted = Boolean(isAnonymous && quota && quotaRemaining !== null && quotaRemaining <= 0)
   const quotaDisplay = quota?.unlimited ? '无限' : Math.max(0, quotaRemaining ?? 0)
   const searchParams = useSearchParams()
+  const settingsDeepLink = searchParams?.get('settings') === '1'
+  const settingsDeepLinkHandledRef = useRef(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -130,10 +132,14 @@ export function Sidebar() {
 
   // 深链：URL 带 settings=1 时自动打开
   useEffect(() => {
-    if (searchParams?.get('settings') === '1') {
-      setIsSettingsOpen((prev) => (prev ? prev : true))
+    if (!settingsDeepLink) {
+      settingsDeepLinkHandledRef.current = false
+      return
     }
-  }, [searchParams])
+    if (isSettingsOpen || settingsDeepLinkHandledRef.current) return
+    settingsDeepLinkHandledRef.current = true
+    setIsSettingsOpen(true)
+  }, [settingsDeepLink, isSettingsOpen])
 
   useEffect(() => {
     const openSettings = () => setIsSettingsOpen(true)
