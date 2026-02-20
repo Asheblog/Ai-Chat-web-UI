@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Brain, ChevronDown, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ToolEvent, ToolEventDetails } from '@/types'
@@ -143,6 +143,7 @@ function ReasoningPanelComponent({
 }: ReasoningPanelProps) {
   const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
   const [activePythonCallId, setActivePythonCallId] = useState<string | null>(null)
+  const toolToggleButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const pythonCalls = useMemo(() => aggregatePythonCalls(toolTimeline), [toolTimeline])
   const otherToolEvents = useMemo(
@@ -161,6 +162,11 @@ function ReasoningPanelComponent({
       setActivePythonCallId(null)
     }
   }, [activePythonCallId, pythonCalls])
+
+  useEffect(() => {
+    if (!toolTimelineOpen) return
+    toolToggleButtonRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [toolTimelineOpen])
 
   const hasReasoning = reasoningRaw.trim().length > 0 || Boolean(reasoningHtml)
   const placeholderText =
@@ -267,6 +273,7 @@ function ReasoningPanelComponent({
                 </div>
                 {toolTimeline.length > 0 && (
                   <button
+                    ref={toolToggleButtonRef}
                     type="button"
                     className="reasoning-tools__toggle"
                     onClick={() => setToolTimelineOpen((prev) => !prev)}
