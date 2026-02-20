@@ -217,6 +217,10 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   will-change: max-height, opacity;
 }
 
+.chat-message-viewport [data-radix-scroll-area-viewport] {
+  overflow-anchor: none;
+}
+
 /* DeepSeek 风格思维链 */
 .reasoning-panel {
   --reasoning-padding-x: 0.65rem;

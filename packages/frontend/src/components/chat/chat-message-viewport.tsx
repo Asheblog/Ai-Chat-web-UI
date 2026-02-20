@@ -116,7 +116,7 @@ export function ChatMessageViewport({
   }
 
   return (
-    <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 md:px-6">
+    <ScrollArea ref={scrollAreaRef} className="chat-message-viewport flex-1 px-4 md:px-6">
       <div className={cn('pt-4 md:pt-6', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
         {shareModeActive ? (
           <div className="mb-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground shadow-sm">
