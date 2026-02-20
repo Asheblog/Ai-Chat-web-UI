@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Brain, ChevronDown, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ToolEvent, ToolEventDetails } from '@/types'
@@ -143,8 +143,6 @@ function ReasoningPanelComponent({
 }: ReasoningPanelProps) {
   const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
   const [activePythonCallId, setActivePythonCallId] = useState<string | null>(null)
-  const toolToggleButtonRef = useRef<HTMLButtonElement | null>(null)
-  const pendingScrollAnchorRef = useRef<{ viewport: HTMLElement; top: number } | null>(null)
 
   const pythonCalls = useMemo(() => aggregatePythonCalls(toolTimeline), [toolTimeline])
   const otherToolEvents = useMemo(
@@ -204,55 +202,6 @@ function ReasoningPanelComponent({
     if (status === 'idle') return '准备推理中'
     return '查看模型推理轨迹'
   }, [typewriterStillPlaying, durationLabel, idleLabel, status])
-
-  const captureToggleAnchor = useCallback(() => {
-    const button = toolToggleButtonRef.current
-    if (!button) {
-      pendingScrollAnchorRef.current = null
-      return
-    }
-    const viewport = button.closest('[data-radix-scroll-area-viewport]') as HTMLElement | null
-    if (!viewport) {
-      pendingScrollAnchorRef.current = null
-      return
-    }
-    pendingScrollAnchorRef.current = {
-      viewport,
-      top: button.getBoundingClientRect().top,
-    }
-  }, [])
-
-  useLayoutEffect(() => {
-    if (!pendingScrollAnchorRef.current) return
-    if (typeof window === 'undefined') return
-
-    const restoreAnchor = () => {
-      const anchor = pendingScrollAnchorRef.current
-      const button = toolToggleButtonRef.current
-      if (!anchor || !button) return
-      const nextTop = button.getBoundingClientRect().top
-      const delta = nextTop - anchor.top
-      if (Math.abs(delta) >= 0.5) {
-        anchor.viewport.scrollTop += delta
-      }
-    }
-
-    let raf1 = 0
-    let raf2 = 0
-    raf1 = window.requestAnimationFrame(() => {
-      restoreAnchor()
-      raf2 = window.requestAnimationFrame(() => {
-        restoreAnchor()
-        pendingScrollAnchorRef.current = null
-      })
-    })
-
-    return () => {
-      window.cancelAnimationFrame(raf1)
-      window.cancelAnimationFrame(raf2)
-    }
-  }, [toolTimelineOpen])
-
 
   return (
     <div className={`reasoning-panel${expanded ? ' reasoning-panel--expanded' : ''}`}>
@@ -318,13 +267,9 @@ function ReasoningPanelComponent({
                 </div>
                 {toolTimeline.length > 0 && (
                   <button
-                    ref={toolToggleButtonRef}
                     type="button"
                     className="reasoning-tools__toggle"
-                    onClick={() => {
-                      captureToggleAnchor()
-                      setToolTimelineOpen((prev) => !prev)
-                    }}
+                    onClick={() => setToolTimelineOpen((prev) => !prev)}
                   >
                     {toolTimelineOpen ? '收起详情' : '展开详情'}
                   </button>
