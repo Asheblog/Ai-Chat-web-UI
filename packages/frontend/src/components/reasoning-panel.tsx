@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Brain, ChevronDown, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ToolEvent, ToolEventDetails } from '@/types'
@@ -144,6 +144,7 @@ function ReasoningPanelComponent({
   const [toolTimelineOpen, setToolTimelineOpen] = useState(false)
   const [activePythonCallId, setActivePythonCallId] = useState<string | null>(null)
   const toolToggleButtonRef = useRef<HTMLButtonElement | null>(null)
+  const pendingViewportScrollRef = useRef<{ viewport: HTMLElement; scrollTop: number } | null>(null)
 
   const pythonCalls = useMemo(() => aggregatePythonCalls(toolTimeline), [toolTimeline])
   const otherToolEvents = useMemo(
@@ -163,10 +164,34 @@ function ReasoningPanelComponent({
     }
   }, [activePythonCallId, pythonCalls])
 
-  useEffect(() => {
-    if (!toolTimelineOpen) return
-    toolToggleButtonRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  useLayoutEffect(() => {
+    const pending = pendingViewportScrollRef.current
+    if (!pending) return
+
+    pending.viewport.scrollTop = pending.scrollTop
+
+    if (typeof window === 'undefined') {
+      pendingViewportScrollRef.current = null
+      return
+    }
+
+    const raf = window.requestAnimationFrame(() => {
+      pending.viewport.scrollTop = pending.scrollTop
+      pendingViewportScrollRef.current = null
+    })
+
+    return () => {
+      window.cancelAnimationFrame(raf)
+    }
   }, [toolTimelineOpen])
+
+  const handleToolTimelineToggle = () => {
+    const viewport = toolToggleButtonRef.current?.closest('[data-radix-scroll-area-viewport]') as HTMLElement | null
+    pendingViewportScrollRef.current = viewport
+      ? { viewport, scrollTop: viewport.scrollTop }
+      : null
+    setToolTimelineOpen((prev) => !prev)
+  }
 
   const hasReasoning = reasoningRaw.trim().length > 0 || Boolean(reasoningHtml)
   const placeholderText =
@@ -276,7 +301,7 @@ function ReasoningPanelComponent({
                     ref={toolToggleButtonRef}
                     type="button"
                     className="reasoning-tools__toggle"
-                    onClick={() => setToolTimelineOpen((prev) => !prev)}
+                    onClick={handleToolTimelineToggle}
                   >
                     {toolTimelineOpen ? '收起详情' : '展开详情'}
                   </button>
