@@ -14,6 +14,22 @@ import type {
   WebSearchHandlerConfig,
 } from './types'
 
+const parseRequestedLimit = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = Math.floor(value)
+    return normalized > 0 ? normalized : null
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number.parseInt(trimmed, 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed
+    }
+  }
+  return null
+}
+
 export class WebSearchToolHandler implements IToolHandler {
   readonly toolName = 'web_search'
   private config: WebSearchHandlerConfig
@@ -35,12 +51,6 @@ export class WebSearchToolHandler implements IToolHandler {
             query: {
               type: 'string',
               description: 'Search query describing the missing information',
-            },
-            num_results: {
-              type: 'integer',
-              minimum: 1,
-              maximum: this.config.resultLimit,
-              description: 'Desired number of results',
             },
           },
           required: ['query'],
@@ -86,14 +96,29 @@ export class WebSearchToolHandler implements IToolHandler {
       }
     }
 
-    context.emitReasoning(`联网搜索：${query}`, { ...reasoningMetaBase, stage: 'start' })
-    context.sendToolEvent({ id: callId, tool: 'web_search', stage: 'start', query })
+    const modelRequestedLimit = parseRequestedLimit(args.num_results)
+    const appliedLimit = this.config.resultLimit
+
+    context.emitReasoning(`联网搜索：${query}（目标 ${appliedLimit} 条）`, {
+      ...reasoningMetaBase,
+      stage: 'start',
+    })
+    context.sendToolEvent({
+      id: callId,
+      tool: 'web_search',
+      stage: 'start',
+      query,
+      details: {
+        requestedLimit: modelRequestedLimit,
+        appliedLimit,
+      },
+    })
 
     try {
       const hits = await runWebSearch(query, {
         engine: this.config.engine,
         apiKey: this.config.apiKey,
-        limit: (args.num_results as number) || this.config.resultLimit,
+        limit: appliedLimit,
         domains: this.config.domains,
         endpoint: this.config.endpoint,
         scope: this.config.scope,
@@ -112,6 +137,10 @@ export class WebSearchToolHandler implements IToolHandler {
         stage: 'result',
         query,
         hits,
+        details: {
+          requestedLimit: modelRequestedLimit,
+          appliedLimit,
+        },
       })
 
       const summary = formatHitsForModel(query, hits)
