@@ -205,6 +205,7 @@ function MessageBubbleComponent({
   }`
 
   const avatarSrc = isUser ? currentUser?.avatarUrl ?? undefined : assistantAvatarUrl ?? undefined
+  const avatarHasImage = Boolean(avatarSrc)
   const avatarFallbackText = isUser
     ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
     : 'A'
@@ -268,6 +269,7 @@ function MessageBubbleComponent({
         <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted mt-1.5'}`}>
           <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
           <AvatarFallback
+            delayMs={avatarHasImage ? 180 : 0}
             className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
               assistantFallbackHidden ? 'opacity-0' : ''
             }`}

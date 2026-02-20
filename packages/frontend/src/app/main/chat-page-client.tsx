@@ -25,7 +25,10 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
     currentSession: state.currentSession,
     fetchSessions: state.fetchSessions,
   }))
-  const fetchSystemSettings = useSettingsStore((state) => state.fetchSystemSettings)
+  const { fetchSystemSettings, hasSystemSettings } = useSettingsStore((state) => ({
+    fetchSystemSettings: state.fetchSystemSettings,
+    hasSystemSettings: Boolean(state.systemSettings),
+  }))
 
   const normalizedSessionId =
     typeof initialSessionId === 'number' && Number.isFinite(initialSessionId)
@@ -101,12 +104,14 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       }
     })()
 
-    fetchSystemSettings()
+    if (!hasSystemSettings) {
+      fetchSystemSettings()
+    }
 
     return () => {
       cancelled = true
     }
-  }, [fetchSessions, fetchSystemSettings, normalizedSessionId, pathname, router])
+  }, [fetchSessions, fetchSystemSettings, hasSystemSettings, normalizedSessionId, pathname, router])
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
