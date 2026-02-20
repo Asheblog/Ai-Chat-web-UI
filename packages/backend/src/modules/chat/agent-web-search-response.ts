@@ -467,8 +467,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       };
 
       const emitReasoning = (content: string, meta?: Record<string, unknown>) => {
-        const text = (content || '').trim();
-        if (!text) return;
+        const text = typeof content === 'string' ? content : '';
+        // Preserve provider delta exactly (including newlines/leading spaces)
+        // to keep streaming CoT layout consistent with persisted rendering.
+        if (text.length === 0) return;
         appendReasoningChunk(text, meta);
         const payload: Record<string, unknown> = { type: 'reasoning', content: text };
         if (meta && Object.keys(meta).length > 0) {

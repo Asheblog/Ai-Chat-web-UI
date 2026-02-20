@@ -86,8 +86,8 @@ export class StreamEventEmitter {
    * 发送推理事件
    */
   emitReasoning(content: string, meta?: Record<string, unknown>): void {
-    const text = (content || '').trim();
-    if (!text) return;
+    const text = typeof content === 'string' ? content : '';
+    if (text.length === 0) return;
 
     this.appendReasoningChunk(text, meta);
 
