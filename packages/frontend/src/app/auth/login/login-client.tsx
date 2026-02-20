@@ -96,7 +96,6 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
       } catch { }
 
       await login(username, password)
-      router.replace(nextPath)
     } catch (error) {
       // 错误已经在store中处理
       console.error('Login failed:', error)

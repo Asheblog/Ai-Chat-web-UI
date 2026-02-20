@@ -26,6 +26,8 @@ import { cn } from '@/lib/utils'
 
 type WizardStep = 'welcome' | 'connections' | 'models' | 'finish'
 
+let setupStatusInFlight: Promise<SetupStatusResponse | null> | null = null
+
 const isAdminPayload = (
   payload: SetupStatusResponse | null,
 ): payload is Extract<SetupStatusResponse, { diagnostics: any }> =>
@@ -79,20 +81,25 @@ export function SetupWizard() {
   const canComplete = Boolean(adminStatus?.can_complete)
 
   const refreshStatus = useCallback(async () => {
+    if (setupStatusInFlight) return setupStatusInFlight
     setStatusLoading(true)
     setStatusError(null)
-    try {
-      const res = await getSetupStatus()
-      const payload = res.data ?? null
-      setStatus(payload)
-      return payload
-    } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.message || '获取引导状态失败'
-      setStatusError(msg)
-      return null
-    } finally {
-      setStatusLoading(false)
-    }
+    setupStatusInFlight = (async () => {
+      try {
+        const res = await getSetupStatus()
+        const payload = res.data ?? null
+        setStatus(payload)
+        return payload
+      } catch (error: any) {
+        const msg = error?.response?.data?.error || error?.message || '获取引导状态失败'
+        setStatusError(msg)
+        return null
+      } finally {
+        setStatusLoading(false)
+        setupStatusInFlight = null
+      }
+    })()
+    return setupStatusInFlight
   }, [])
 
   useEffect(() => {

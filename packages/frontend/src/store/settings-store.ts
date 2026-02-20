@@ -102,6 +102,7 @@ export const useSettingsStore = create<SettingsStore>()(
         })
       }
       let systemSettingsInFlight: Promise<void> | null = null
+      let publicBrandingInFlight: Promise<boolean> | null = null
 
       return {
         theme: 'system',
@@ -164,21 +165,27 @@ export const useSettingsStore = create<SettingsStore>()(
         },
 
       fetchPublicBranding: async () => {
-        try {
-          const response = await getPublicBrandingApi()
-          const normalized = normalizeBrandText(response.data?.brand_text)
-          if (!normalized) return false
-          set((state) => ({
-            publicBrandText: normalized,
-            systemSettings: state.systemSettings
-              ? { ...state.systemSettings, brandText: normalized }
-              : state.systemSettings,
-          }))
-          return true
-        } catch (error) {
-          console.warn('[settings-store] failed to fetch branding:', error)
-          return false
-        }
+        if (publicBrandingInFlight) return publicBrandingInFlight
+        publicBrandingInFlight = (async () => {
+          try {
+            const response = await getPublicBrandingApi()
+            const normalized = normalizeBrandText(response.data?.brand_text)
+            if (!normalized) return false
+            set((state) => ({
+              publicBrandText: normalized,
+              systemSettings: state.systemSettings
+                ? { ...state.systemSettings, brandText: normalized }
+                : state.systemSettings,
+            }))
+            return true
+          } catch (error) {
+            console.warn('[settings-store] failed to fetch branding:', error)
+            return false
+          } finally {
+            publicBrandingInFlight = null
+          }
+        })()
+        return publicBrandingInFlight
       },
 
       bootstrapBrandText: (brandText?: string | null) => {

@@ -28,27 +28,36 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
   sessions: ChatSession[]
   isSessionsLoading: boolean
   error: string | null
-}> = (set, get, runtime) => ({
+}> = (set, get, runtime) => {
+  let fetchSessionsInFlight: Promise<void> | null = null
+
+  return {
   currentSession: null,
   sessions: [],
   isSessionsLoading: false,
   error: null,
 
   fetchSessions: async () => {
+    if (fetchSessionsInFlight) return fetchSessionsInFlight
     set({ isSessionsLoading: true, error: null })
-    try {
-      const response = await getSessions()
-      set({
-        sessions: sortSessions(response.data || []),
-        isSessionsLoading: false,
-      })
-      get().fetchSessionsUsage().catch(() => {})
-    } catch (error: any) {
-      set({
-        error: error?.response?.data?.error || error?.message || '获取会话列表失败',
-        isSessionsLoading: false,
-      })
-    }
+    fetchSessionsInFlight = (async () => {
+      try {
+        const response = await getSessions()
+        set({
+          sessions: sortSessions(response.data || []),
+          isSessionsLoading: false,
+        })
+        get().fetchSessionsUsage().catch(() => {})
+      } catch (error: any) {
+        set({
+          error: error?.response?.data?.error || error?.message || '获取会话列表失败',
+          isSessionsLoading: false,
+        })
+      } finally {
+        fetchSessionsInFlight = null
+      }
+    })()
+    return fetchSessionsInFlight
   },
 
   createSession: async (modelId, title, connectionId, rawId, systemPrompt) => {
@@ -276,4 +285,5 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       return false
     }
   },
-})
+  }
+}

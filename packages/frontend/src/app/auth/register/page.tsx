@@ -46,10 +46,7 @@ export default function RegisterPage() {
 
     try {
       const result = await register(username, password)
-      if (result.token) {
-        router.replace('/main')
-        return
-      }
+      if (result.token) return
       setSuccessMessage('注册申请已提交，请等待管理员审批通知后再登录。')
       setUsername('')
       setPassword('')

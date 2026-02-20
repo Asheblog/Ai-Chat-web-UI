@@ -34,20 +34,34 @@ interface ModelsStoreState {
   setOne: (item: ModelItem) => void
 }
 
-export const useModelsStore = create<ModelsStoreState>((set, get) => ({
-  models: [],
-  isLoading: false,
-  error: null,
-  fetchAll: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      const res = await getAggregatedModels()
-      set({ models: res?.data || [], isLoading: false })
-    } catch (e: any) {
-      set({ error: e?.message || '加载模型失败', isLoading: false })
-    }
-  },
-  setOne: (item) => {
-    set((state) => ({ models: state.models.map(m => (m.connectionId === item.connectionId && m.id === item.id) ? item : m) }))
+export const useModelsStore = create<ModelsStoreState>((set) => {
+  let fetchAllInFlight: Promise<void> | null = null
+
+  return {
+    models: [],
+    isLoading: false,
+    error: null,
+    fetchAll: async () => {
+      if (fetchAllInFlight) return fetchAllInFlight
+      set({ isLoading: true, error: null })
+      fetchAllInFlight = (async () => {
+        try {
+          const res = await getAggregatedModels()
+          set({ models: res?.data || [], isLoading: false })
+        } catch (e: any) {
+          set({ error: e?.message || '加载模型失败', isLoading: false })
+        } finally {
+          fetchAllInFlight = null
+        }
+      })()
+      return fetchAllInFlight
+    },
+    setOne: (item) => {
+      set((state) => ({
+        models: state.models.map((m) => (
+          m.connectionId === item.connectionId && m.id === item.id ? item : m
+        )),
+      }))
+    },
   }
-}))
+})
