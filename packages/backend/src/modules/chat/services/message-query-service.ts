@@ -110,31 +110,36 @@ export class ChatMessageQueryService {
   async listMessages(params: {
     actor: Actor
     sessionId: number
-    page: number
+    page: number | 'latest'
     limit: number
     request: Request
   }): Promise<ListMessagesResult> {
-    const [messages, total, baseUrl] = await Promise.all([
-      this.prisma.message.findMany({
-        where: { sessionId: params.sessionId },
-        select: messageSelectFields,
-        orderBy: { createdAt: 'asc' },
-        skip: (params.page - 1) * params.limit,
-        take: params.limit,
-      }),
+    const safeLimit = Math.max(1, Math.min(params.limit, 200))
+    const [total, baseUrl] = await Promise.all([
       this.prisma.message.count({
         where: { sessionId: params.sessionId },
       }),
       this.resolveImageBaseUrl(params.request),
     ])
 
+    const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 1
+    const requestedPage = params.page === 'latest' ? totalPages : params.page
+    const page = Math.max(1, Math.min(requestedPage, totalPages))
+    const messages = await this.prisma.message.findMany({
+      where: { sessionId: params.sessionId },
+      select: messageSelectFields,
+      orderBy: { createdAt: 'asc' },
+      skip: (page - 1) * safeLimit,
+      take: safeLimit,
+    })
+
     return {
       messages: messages.map((msg) => this.normalizeMessage(msg, baseUrl)),
       pagination: {
-        page: params.page,
-        limit: params.limit,
+        page,
+        limit: safeLimit,
         total,
-        totalPages: Math.ceil(total / params.limit),
+        totalPages,
       },
     }
   }

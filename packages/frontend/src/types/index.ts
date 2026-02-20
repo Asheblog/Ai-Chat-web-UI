@@ -349,6 +349,14 @@ export interface ChatState {
   error: string | null;
   messageImageCache: Record<string, string[]>;
   messagesHydrated: Record<number, boolean>;
+  messagePaginationBySession: Record<number, {
+    oldestLoadedPage: number;
+    newestLoadedPage: number;
+    totalPages: number;
+    limit: number;
+    hasOlder: boolean;
+    isLoadingOlder: boolean;
+  }>;
   // usage 展示状态
   usageCurrent?: UsageStats | null;
   usageLastRound?: UsageStats | null;

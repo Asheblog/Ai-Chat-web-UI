@@ -124,7 +124,15 @@ export interface UsageSlice {
 }
 
 export interface MessageSlice {
-  fetchMessages: (sessionId: number) => Promise<void>
+  fetchMessages: (
+    sessionId: number,
+    options?: {
+      page?: number | 'latest'
+      mode?: 'replace' | 'prepend'
+      limit?: number
+    },
+  ) => Promise<void>
+  loadOlderMessages: (sessionId: number) => Promise<void>
   addMessage: (message: Message) => void
   applyRenderedContent: (
     messageId: MessageId,

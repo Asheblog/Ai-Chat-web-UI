@@ -16,6 +16,7 @@ import {
 
 // 用于取消消息加载请求的 AbortController
 let messagesAbortController: AbortController | null = null
+const DEFAULT_MESSAGE_PAGE_LIMIT = 50
 
 export const createMessageSlice: ChatSliceCreator<
   MessageSlice & {
@@ -25,6 +26,17 @@ export const createMessageSlice: ChatSliceCreator<
     messageMetrics: Record<string, import('@/types').MessageStreamMetrics>
     messageImageCache: Record<string, string[]>
     messagesHydrated: Record<number, boolean>
+    messagePaginationBySession: Record<
+      number,
+      {
+        oldestLoadedPage: number
+        newestLoadedPage: number
+        totalPages: number
+        limit: number
+        hasOlder: boolean
+        isLoadingOlder: boolean
+      }
+    >
     isMessagesLoading: boolean
     toolEvents: import('@/types').ToolEvent[]
     assistantVariantSelections: Record<string, MessageId>
@@ -36,11 +48,38 @@ export const createMessageSlice: ChatSliceCreator<
   messageMetrics: {},
   messageImageCache: {},
   messagesHydrated: {},
+  messagePaginationBySession: {},
   isMessagesLoading: false,
   toolEvents: [],
   assistantVariantSelections: {},
 
-  fetchMessages: async (sessionId: number) => {
+  fetchMessages: async (sessionId: number, options) => {
+    const mode = options?.mode ?? 'replace'
+    const isPrependMode = mode === 'prepend'
+    const requestedPage = options?.page ?? 'latest'
+    let effectivePage: number | 'latest' = requestedPage
+    const limit = Number.isFinite(options?.limit) ? Number(options?.limit) : DEFAULT_MESSAGE_PAGE_LIMIT
+
+    if (isPrependMode) {
+      const paging = get().messagePaginationBySession[sessionId]
+      if (!paging || paging.isLoadingOlder || !paging.hasOlder) return
+      const nextPage = typeof requestedPage === 'number' ? requestedPage : paging.oldestLoadedPage - 1
+      if (!Number.isFinite(nextPage) || nextPage < 1) {
+        set((state) => ({
+          messagePaginationBySession: {
+            ...state.messagePaginationBySession,
+            [sessionId]: {
+              ...paging,
+              hasOlder: false,
+              isLoadingOlder: false,
+            },
+          },
+        }))
+        return
+      }
+      effectivePage = nextPage
+    }
+
     // 取消之前的消息加载请求
     if (messagesAbortController) {
       messagesAbortController.abort()
@@ -48,9 +87,32 @@ export const createMessageSlice: ChatSliceCreator<
     messagesAbortController = new AbortController()
     const currentController = messagesAbortController
 
-    set({ isMessagesLoading: true, error: null })
+    set((state) => ({
+      isMessagesLoading: isPrependMode ? state.isMessagesLoading : true,
+      error: null,
+      messagePaginationBySession: {
+        ...state.messagePaginationBySession,
+        ...(isPrependMode
+          ? {
+              [sessionId]: {
+                ...(state.messagePaginationBySession[sessionId] || {
+                  oldestLoadedPage: 1,
+                  newestLoadedPage: 1,
+                  totalPages: 1,
+                  limit,
+                  hasOlder: false,
+                }),
+                isLoadingOlder: true,
+              },
+            }
+          : {}),
+      },
+    }))
     try {
-      const response = await getMessages(sessionId, currentController.signal)
+      const response = await getMessages(sessionId, currentController.signal, {
+        page: effectivePage,
+        limit,
+      })
 
       // 如果请求被取消，直接返回
       if (currentController.signal.aborted) {
@@ -68,10 +130,37 @@ export const createMessageSlice: ChatSliceCreator<
         }
       })
 
+      const pagination = response.pagination
+      const resolvedPageRaw =
+        typeof pagination?.page === 'number'
+          ? pagination.page
+          : typeof effectivePage === 'number'
+            ? effectivePage
+            : 1
+      const resolvedPage = Math.max(1, Math.floor(resolvedPageRaw))
+      const totalPagesRaw = typeof pagination?.totalPages === 'number' ? pagination.totalPages : resolvedPage
+      const totalPages = Math.max(1, Math.floor(totalPagesRaw))
+      const resolvedLimitRaw = typeof pagination?.limit === 'number' ? pagination.limit : limit
+      const resolvedLimit = Math.max(1, Math.floor(resolvedLimitRaw))
+
       set((state) => {
         // 二次验证：如果当前会话已经切换，丢弃过期数据
         if (state.currentSession?.id !== sessionId) {
-          return { isMessagesLoading: false }
+          const existingPaging = state.messagePaginationBySession[sessionId]
+          return {
+            isMessagesLoading: false,
+            messagePaginationBySession: {
+              ...state.messagePaginationBySession,
+              ...(existingPaging
+                ? {
+                    [sessionId]: {
+                      ...existingPaging,
+                      isLoadingOlder: false,
+                    },
+                  }
+                : {}),
+            },
+          }
         }
 
         const existingSessionMetas = state.messageMetas.filter((meta) => meta.sessionId === sessionId)
@@ -166,6 +255,25 @@ export const createMessageSlice: ChatSliceCreator<
           nextMetrics[key] = metrics
         })
 
+        const previousPaging = state.messagePaginationBySession[sessionId]
+        const oldestLoadedPage =
+          previousPaging && isPrependMode
+            ? Math.min(previousPaging.oldestLoadedPage, resolvedPage)
+            : resolvedPage
+        const newestLoadedPage =
+          previousPaging && isPrependMode
+            ? Math.max(previousPaging.newestLoadedPage, resolvedPage)
+            : resolvedPage
+        const hasOlder = oldestLoadedPage > 1
+        const nextPaging = {
+          oldestLoadedPage,
+          newestLoadedPage,
+          totalPages,
+          limit: resolvedLimit,
+          hasOlder,
+          isLoadingOlder: false,
+        }
+
         return {
           messageMetas: nextMetas,
           assistantVariantSelections: buildVariantSelections(nextMetas),
@@ -175,6 +283,10 @@ export const createMessageSlice: ChatSliceCreator<
           messageImageCache: nextCache,
           messagesHydrated: { ...state.messagesHydrated, [sessionId]: true },
           isMessagesLoading: false,
+          messagePaginationBySession: {
+            ...state.messagePaginationBySession,
+            [sessionId]: nextPaging,
+          },
           toolEvents: state.toolEvents.filter((event) => event.sessionId !== sessionId),
         }
       })
@@ -204,14 +316,62 @@ export const createMessageSlice: ChatSliceCreator<
     } catch (error: any) {
       // 如果是请求被取消，静默处理，不显示错误
       if (error?.name === 'AbortError' || error?.name === 'CanceledError' || currentController.signal.aborted) {
-        set({ isMessagesLoading: false })
+        set((state) => ({
+          isMessagesLoading: false,
+          messagePaginationBySession: {
+            ...state.messagePaginationBySession,
+            ...(state.messagePaginationBySession[sessionId]
+              ? {
+                  [sessionId]: {
+                    ...state.messagePaginationBySession[sessionId],
+                    isLoadingOlder: false,
+                  },
+                }
+              : {}),
+          },
+        }))
         return
       }
-      set({
+      set((state) => ({
         error: error?.response?.data?.error || error?.message || '获取消息列表失败',
         isMessagesLoading: false,
-      })
+        messagePaginationBySession: {
+          ...state.messagePaginationBySession,
+          ...(state.messagePaginationBySession[sessionId]
+            ? {
+                [sessionId]: {
+                  ...state.messagePaginationBySession[sessionId],
+                  isLoadingOlder: false,
+                },
+              }
+            : {}),
+        },
+      }))
     }
+  },
+
+  loadOlderMessages: async (sessionId: number) => {
+    const paging = get().messagePaginationBySession[sessionId]
+    if (!paging || paging.isLoadingOlder || !paging.hasOlder) return
+    const targetPage = paging.oldestLoadedPage - 1
+    if (!Number.isFinite(targetPage) || targetPage < 1) {
+      set((state) => ({
+        messagePaginationBySession: {
+          ...state.messagePaginationBySession,
+          [sessionId]: {
+            ...paging,
+            hasOlder: false,
+            isLoadingOlder: false,
+          },
+        },
+      }))
+      return
+    }
+    await get().fetchMessages(sessionId, {
+      mode: 'prepend',
+      page: targetPage,
+      limit: paging.limit || DEFAULT_MESSAGE_PAGE_LIMIT,
+    })
   },
 
   addMessage: (message: Message) => {

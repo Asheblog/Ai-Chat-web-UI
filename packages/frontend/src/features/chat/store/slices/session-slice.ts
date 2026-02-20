@@ -75,12 +75,18 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       set((state) => ({
         sessions: sortSessions([newSession, ...state.sessions]),
         currentSession: newSession,
-        messageMetas: [],
-        assistantVariantSelections: {},
-        messageBodies: {},
-        messageRenderCache: {},
-        messageMetrics: {},
         messagesHydrated: { ...state.messagesHydrated, [newSession.id]: true },
+        messagePaginationBySession: {
+          ...state.messagePaginationBySession,
+          [newSession.id]: {
+            oldestLoadedPage: 1,
+            newestLoadedPage: 1,
+            totalPages: 1,
+            limit: 50,
+            hasOlder: false,
+            isLoadingOlder: false,
+          },
+        },
         isMessagesLoading: false,
         isSessionsLoading: false,
         isStreaming: false,
@@ -115,14 +121,14 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       return
     }
 
-    const shouldFetchMessages = !alreadyHydrated
+    const shouldFetchMessages = !alreadyHydrated || !hasSessionMessages
 
     set((state) => ({
       currentSession: session,
       usageCurrent: null,
       usageLastRound: null,
       usageTotals: null,
-      isMessagesLoading: shouldFetchMessages && !hasSessionMessages,
+      isMessagesLoading: shouldFetchMessages,
       isStreaming: state.activeStreamSessionId === session.id,
       shareSelection: createInitialShareSelection(),
     }))
@@ -168,6 +174,14 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
         relatedKeys.forEach((key) => {
           delete metrics[key]
         })
+        const nextHydrated = { ...state.messagesHydrated }
+        if (Object.prototype.hasOwnProperty.call(nextHydrated, sessionId)) {
+          delete nextHydrated[sessionId]
+        }
+        const nextPaging = { ...state.messagePaginationBySession }
+        if (Object.prototype.hasOwnProperty.call(nextPaging, sessionId)) {
+          delete nextPaging[sessionId]
+        }
         return {
           sessions: newSessions,
           currentSession: shouldClear ? null : state.currentSession,
@@ -176,6 +190,8 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
           messageBodies: shouldClear ? {} : state.messageBodies,
           messageRenderCache: shouldClear ? {} : state.messageRenderCache,
           messageMetrics: shouldClear ? {} : metrics,
+          messagesHydrated: nextHydrated,
+          messagePaginationBySession: nextPaging,
           shareSelection: shouldClear ? createInitialShareSelection() : state.shareSelection,
         }
       })

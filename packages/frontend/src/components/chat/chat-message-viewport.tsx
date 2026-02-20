@@ -22,6 +22,8 @@ export interface ChatMessageViewportProps {
   renderCache: Record<string, MessageRenderCacheEntry>
   isStreaming: boolean
   isLoading: boolean
+  hasOlder?: boolean
+  isLoadingOlder?: boolean
   isAutoScrollEnabled: boolean
   variantSelections: Record<string, number | string>
   sessionId: number
@@ -36,6 +38,8 @@ export function ChatMessageViewport({
   renderCache,
   isStreaming,
   isLoading,
+  hasOlder = false,
+  isLoadingOlder = false,
   isAutoScrollEnabled,
   variantSelections,
   sessionId,
@@ -118,6 +122,11 @@ export function ChatMessageViewport({
   return (
     <ScrollArea ref={scrollAreaRef} className="chat-message-viewport flex-1 px-4 md:px-6">
       <div className={cn('pt-4 md:pt-6', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
+        {hasOlder && (
+          <div className="mb-2 text-center text-xs text-muted-foreground">
+            {isLoadingOlder ? '正在加载更早消息…' : '上滑可加载更早消息'}
+          </div>
+        )}
         {shareModeActive ? (
           <div className="mb-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground shadow-sm">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

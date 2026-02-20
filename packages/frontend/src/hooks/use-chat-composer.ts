@@ -27,6 +27,7 @@ export interface UseChatComposerOptions {
 }
 
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 96
+const AUTO_LOAD_OLDER_TOP_THRESHOLD = 80
 const SESSION_SCROLL_STORAGE_KEY = 'aichat:chat-session-scroll'
 
 const readSessionScrollState = (): Record<number, number> => {
@@ -69,17 +70,21 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const scrollStateRef = useRef<Record<number, number>>({})
   const scrollPersistTimerRef = useRef<number | null>(null)
   const pendingRestoreSessionRef = useRef<number | null>(null)
+  const prependAnchorRef = useRef<{ sessionId: number; scrollTop: number; scrollHeight: number } | null>(null)
+  const loadingOlderRef = useRef(false)
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
   const {
     currentSession,
     messageMetas,
     messageBodies,
     messageRenderCache,
+    messagePaginationBySession,
     isMessagesLoading,
     isStreaming,
     activeStreamCount,
     streamMessage,
     stopStreaming,
+    loadOlderMessages,
     clearError,
     error,
     assistantVariantSelections,
@@ -90,6 +95,13 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     if (!currentSession) return []
     return messageMetas.filter((meta) => meta.sessionId === currentSession.id)
   }, [messageMetas, currentSession])
+
+  const currentSessionPagination = useMemo(() => {
+    if (!currentSession) return null
+    return messagePaginationBySession[currentSession.id] || null
+  }, [messagePaginationBySession, currentSession])
+  const hasOlderMessages = Boolean(currentSessionPagination?.hasOlder)
+  const isLoadingOlderMessages = Boolean(currentSessionPagination?.isLoadingOlder)
 
   const {
     customBodyInput,
@@ -283,6 +295,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   useEffect(() => {
     const sessionId = currentSession?.id ?? null
     pendingRestoreSessionRef.current = sessionId
+    loadingOlderRef.current = false
+    prependAnchorRef.current = null
     if (sessionId == null) return
     const savedTop = scrollStateRef.current[sessionId]
     if (Number.isFinite(savedTop)) {
@@ -330,6 +344,38 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   ])
 
   useEffect(() => {
+    const anchor = prependAnchorRef.current
+    if (!anchor) return
+    if (currentSession?.id !== anchor.sessionId) {
+      prependAnchorRef.current = null
+      return
+    }
+    if (currentSessionPagination?.isLoadingOlder) return
+    const scrollElement = getScrollViewport()
+    if (!scrollElement) return
+    if (typeof window === 'undefined') return
+
+    const frame = window.requestAnimationFrame(() => {
+      const delta = scrollElement.scrollHeight - anchor.scrollHeight
+      if (delta > 0) {
+        scrollElement.scrollTop = Math.max(0, anchor.scrollTop + delta)
+        saveSessionScrollTop(anchor.sessionId, scrollElement.scrollTop)
+      }
+      prependAnchorRef.current = null
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [
+    currentSession?.id,
+    currentSessionPagination?.isLoadingOlder,
+    getScrollViewport,
+    saveSessionScrollTop,
+    sessionMessageMetas.length,
+  ])
+
+  useEffect(() => {
     return () => {
       const sessionId = currentSession?.id ?? null
       const scrollElement = getScrollViewport()
@@ -345,6 +391,22 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     const updateAutoScrollState = () => {
       setAutoScrollState(isNearBottom(scrollElement))
       saveSessionScrollTop(currentSession?.id ?? null, scrollElement.scrollTop)
+      if (!currentSession) return
+      if (isMessagesLoading) return
+      if (scrollElement.scrollTop > AUTO_LOAD_OLDER_TOP_THRESHOLD) return
+      if (!currentSessionPagination?.hasOlder || currentSessionPagination.isLoadingOlder) return
+      if (loadingOlderRef.current) return
+      if (prependAnchorRef.current) return
+
+      loadingOlderRef.current = true
+      prependAnchorRef.current = {
+        sessionId: currentSession.id,
+        scrollTop: scrollElement.scrollTop,
+        scrollHeight: scrollElement.scrollHeight,
+      }
+      void loadOlderMessages(currentSession.id).finally(() => {
+        loadingOlderRef.current = false
+      })
     }
 
     updateAutoScrollState()
@@ -353,7 +415,17 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     return () => {
       scrollElement.removeEventListener('scroll', updateAutoScrollState)
     }
-  }, [currentSession?.id, getScrollViewport, isNearBottom, saveSessionScrollTop, setAutoScrollState])
+  }, [
+    currentSession,
+    currentSessionPagination?.hasOlder,
+    currentSessionPagination?.isLoadingOlder,
+    getScrollViewport,
+    isMessagesLoading,
+    isNearBottom,
+    loadOlderMessages,
+    saveSessionScrollTop,
+    setAutoScrollState,
+  ])
 
   useEffect(() => {
     scrollToBottom()
@@ -612,6 +684,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     sessionPromptSourceLabel,
     sessionPromptPlaceholder,
     isAutoScrollEnabled,
+    hasOlderMessages,
+    isLoadingOlderMessages,
     assistantVariantSelections,
     isMessagesLoading,
     isStreaming,

@@ -31,8 +31,28 @@ export const registerChatMessageRoutes = (router: Hono) => {
         throw error
       }
 
-      const page = parseInt(c.req.query('page') || '1');
-      const limit = parseInt(c.req.query('limit') || '50');
+      const pageQuery = (c.req.query('page') || '').trim();
+      const pageRaw = pageQuery.toLowerCase();
+      const pageParsed = parseInt(pageQuery || '0', 10);
+      const page: number | 'latest' =
+        !pageQuery || pageRaw === 'latest'
+          ? 'latest'
+          : Number.isFinite(pageParsed) && pageParsed > 0
+            ? pageParsed
+            : NaN;
+
+      if (page !== 'latest' && Number.isNaN(page)) {
+        return c.json<ApiResponse>({
+          success: false,
+          error: 'Invalid page value',
+        }, 400);
+      }
+
+      const limitRaw = parseInt(c.req.query('limit') || '50', 10);
+      const limit =
+        Number.isFinite(limitRaw) && limitRaw > 0
+          ? Math.max(1, Math.min(limitRaw, 200))
+          : 50;
 
       const result = await chatMessageQueryService.listMessages({
         actor,

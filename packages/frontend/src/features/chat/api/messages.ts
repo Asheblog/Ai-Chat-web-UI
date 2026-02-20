@@ -3,13 +3,38 @@ import type { ApiResponse, Message } from '@/types'
 
 const client = apiHttpClient
 
-export const getMessages = async (sessionId: number, signal?: AbortSignal) => {
-  const response = await client.get<ApiResponse<{ messages: any[] }>>(
+export interface MessagesPagination {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+export interface GetMessagesOptions {
+  page?: number | 'latest'
+  limit?: number
+}
+
+export const getMessages = async (
+  sessionId: number,
+  signal?: AbortSignal,
+  options?: GetMessagesOptions,
+) => {
+  const response = await client.get<ApiResponse<{ messages: any[]; pagination?: MessagesPagination }>>(
     `/chat/sessions/${sessionId}/messages`,
-    { signal },
+    {
+      signal,
+      params: {
+        ...(typeof options?.page !== 'undefined' ? { page: options.page } : {}),
+        ...(typeof options?.limit === 'number' ? { limit: options.limit } : {}),
+      },
+    },
   )
   const { data } = response.data
-  return { data: data?.messages || [] }
+  return {
+    data: data?.messages || [],
+    pagination: data?.pagination,
+  }
 }
 
 export const getMessageProgress = async (
