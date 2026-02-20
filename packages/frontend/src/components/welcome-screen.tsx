@@ -10,7 +10,7 @@ export function WelcomeScreen() {
   const { header, hero, form, footerNote } = useWelcomeScreenViewModel()
   return (
     <div className="relative flex-1 flex flex-col">
-      <header className="hidden lg:flex bg-background/80 supports-[backdrop-filter]:backdrop-blur px-4 h-14 items-center">
+      <header className="hidden h-14 items-center border-b border-border/70 bg-[hsl(var(--background-alt))/0.86] px-4 backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background-alt))/0.72] lg:flex">
         <div className="flex w-full items-center justify-between gap-4">
           <ModelSelector
             selectedModelId={header.selectedModelId}
@@ -21,7 +21,8 @@ export function WelcomeScreen() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8">
+      <div className="relative flex flex-1 flex-col items-center justify-center px-4 sm:px-6 lg:px-8">
+        <div className="pointer-events-none absolute left-1/2 top-[10%] h-64 w-64 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,hsl(var(--primary)/0.12),transparent_68%)]" />
         <WelcomeHero {...hero} />
         <WelcomeForm form={form} />
         <p className="mt-8 text-xs sm:text-[13px] text-muted-foreground text-center px-4">{footerNote}</p>

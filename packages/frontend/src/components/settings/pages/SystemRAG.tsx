@@ -245,10 +245,10 @@ export function SystemRAGPage() {
   // 状态徽章
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      ready: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-      processing: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-      error: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-      pending: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+      ready: 'border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]',
+      processing: 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]',
+      error: 'border border-destructive/30 bg-destructive/10 text-destructive',
+      pending: 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground',
     }
     const labels: Record<string, string> = {
       ready: '就绪',

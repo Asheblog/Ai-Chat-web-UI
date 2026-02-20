@@ -93,32 +93,23 @@ function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessag
   const isUser = msg.role === 'user'
 
   return (
-    <article
-      className={cn(
-        'rounded-xl border shadow-sm overflow-hidden',
-        isUser ? 'bg-muted/40' : 'bg-background',
-      )}
-    >
-      {/* 消息头部 */}
-      <div className="flex items-center justify-between border-b px-4 py-2.5 bg-muted/20">
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-full',
-              isUser ? 'bg-primary/10 text-primary' : 'bg-emerald-500/10 text-emerald-600'
-            )}
-          >
-            {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-          </div>
-          <span className="font-medium text-sm text-foreground">
-            {isUser ? '用户' : 'AI 助手'}
-          </span>
-        </div>
-        <span className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</span>
+    <article className={cn('flex gap-3 border-b border-border/70 py-5', isUser && 'flex-row-reverse')}>
+      <div
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+          isUser
+            ? 'bg-[hsl(var(--surface-hover))] text-muted-foreground'
+            : 'bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-primary-foreground'
+        )}
+      >
+        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className={cn('flex items-center gap-2 text-xs', isUser ? 'justify-end' : 'justify-start')}>
+          <span className="font-medium uppercase tracking-[0.08em] text-muted-foreground">{isUser ? '用户' : 'AI 助手'}</span>
+          <span className="text-muted-foreground/80">{formatDate(msg.createdAt)}</span>
+        </div>
 
-      <div className="px-4 py-3 space-y-3">
-        {/* 思维链面板 - 在消息内容上方，默认折叠 */}
         {!isUser && hasReasoningSection && (
           <ReasoningPanel
             status="done"
@@ -134,20 +125,26 @@ function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessag
           />
         )}
 
-        {/* 消息正文内容 */}
-        <div className="prose prose-sm max-w-none dark:prose-invert">
-          <MarkdownRenderer html={null} fallback={msg.content} />
+        <div
+          className={cn(
+            'max-w-none text-sm leading-7',
+            isUser &&
+              'ml-auto inline-block rounded-2xl rounded-tr-md border border-border/80 bg-[hsl(var(--surface-hover))] px-4 py-2.5'
+          )}
+        >
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            <MarkdownRenderer html={null} fallback={msg.content} />
+          </div>
         </div>
 
-        {/* 图片区域 */}
         {msg.images && msg.images.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {msg.images.map((src, index) => (
               <img
                 key={`${src}-${index}`}
                 src={src}
                 alt="分享图片"
-                className="max-h-48 w-full rounded-md object-contain border bg-white"
+                className="max-h-48 w-full rounded-lg border border-border/70 bg-[hsl(var(--surface))] object-contain"
               />
             ))}
           </div>
@@ -159,40 +156,37 @@ function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessag
 
 export function ShareViewer({ share, brandText = 'AIChat' }: ShareViewerProps) {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* 主内容区 */}
-      <div className="flex-1 w-full px-4 md:px-6 lg:px-8 py-8">
-        {/* 简化的页头 */}
-        <header className="mb-8">
-          <h1 className="text-2xl font-semibold text-foreground mb-2">
-            {share.title || share.sessionTitle}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {formatRelativeTime(share.createdAt)} · {share.messageCount} 条消息
-          </p>
-        </header>
+    <div className="flex min-h-screen flex-col bg-[hsl(var(--background))] text-foreground">
+      <header className="mx-auto flex w-full max-w-[860px] items-center justify-between border-b border-border/80 px-6 py-5">
+        <div className="flex items-center gap-3 font-semibold">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
+            AI
+          </span>
+          {brandText} 分享
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="rounded-md bg-[hsl(var(--surface-hover))] px-2.5 py-1">{share.messageCount} 条消息</span>
+          <span>{formatRelativeTime(share.createdAt)}</span>
+        </div>
+      </header>
 
-        {/* 消息列表 */}
-        <section className="space-y-4">
+      <div className="mx-auto w-full max-w-[860px] flex-1 px-6 py-6">
+        <h1 className="mb-6 text-2xl font-semibold tracking-tight">{share.title || share.sessionTitle}</h1>
+        <section>
           {share.messages.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
+            <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-muted-foreground">
               分享中暂无可展示的内容
             </div>
           ) : (
             share.messages.map((msg) => (
-              <ShareMessageItem
-                key={`${msg.id}-${msg.createdAt}`}
-                msg={msg}
-                defaultReasoningExpanded={false}
-              />
+              <ShareMessageItem key={`${msg.id}-${msg.createdAt}`} msg={msg} defaultReasoningExpanded={false} />
             ))
           )}
         </section>
       </div>
 
-      {/* 页脚 */}
-      <footer className="border-t bg-muted/30 py-4">
-        <div className="w-full px-4 md:px-6 lg:px-8 text-center text-xs text-muted-foreground">
+      <footer className="border-t border-border/80 py-4">
+        <div className="mx-auto w-full max-w-[860px] px-6 text-center text-xs text-muted-foreground">
           本页面分享由 <span className="font-medium text-foreground">{brandText}</span> 系统生成
         </div>
       </footer>

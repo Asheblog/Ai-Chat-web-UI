@@ -13,7 +13,7 @@ const mockSessions = (count = 2): ChatSession[] =>
   Array.from({ length: count }).map((_, idx) => ({
     id: idx + 1,
     title: `Session ${idx + 1}`,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(Date.UTC(2026, 1, 20, 0, 0, idx)).toISOString(),
     modelLabel: 'gpt-test',
     modelRawId: 'gpt-test',
     connectionId: 1,
@@ -27,14 +27,17 @@ describe('session slice', () => {
   it('fetchSessions should load sessions list and stop loading flag', async () => {
     const store = createChatStoreInstance()
     const sessions = mockSessions()
+    const expectedSortedSessions = [...sessions].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
     vi.mocked(chatApi.getSessions).mockResolvedValue({ data: sessions })
-    vi.mocked(chatApi.getSessionsUsage).mockResolvedValue({ data: [] })
+    vi.mocked(chatApi.getSessionsUsage).mockResolvedValue({ success: true, data: [] })
 
     await store.getState().fetchSessions()
 
     expect(chatApi.getSessions).toHaveBeenCalledTimes(1)
     expect(chatApi.getSessionsUsage).toHaveBeenCalledTimes(1)
-    expect(store.getState().sessions).toEqual(sessions)
+    expect(store.getState().sessions).toEqual(expectedSortedSessions)
     expect(store.getState().isSessionsLoading).toBe(false)
     expect(store.getState().error).toBeNull()
   })

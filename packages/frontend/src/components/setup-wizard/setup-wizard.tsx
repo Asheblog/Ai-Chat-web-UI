@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Settings } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -65,6 +65,8 @@ export function SetupWizard() {
   const [manualOpen, setManualOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [skipConfirmOpen, setSkipConfirmOpen] = useState(false)
+  const [showSkipReminder, setShowSkipReminder] = useState(false)
+  const previousSetupStateRef = useRef<SetupStatusResponse['setup_state'] | null>(null)
 
   const { models, isLoading: modelsLoading, fetchAll } = useModelsStore()
 
@@ -81,8 +83,9 @@ export function SetupWizard() {
     setStatusError(null)
     try {
       const res = await getSetupStatus()
-      setStatus(res.data)
-      return res.data
+      const payload = res.data ?? null
+      setStatus(payload)
+      return payload
     } catch (error: any) {
       const msg = error?.response?.data?.error || error?.message || '获取引导状态失败'
       setStatusError(msg)
@@ -112,6 +115,34 @@ export function SetupWizard() {
       return
     }
   }, [isAdmin, open, step, status?.setup_state])
+
+  useEffect(() => {
+    const setupState = status?.setup_state ?? null
+    const previousSetupState = previousSetupStateRef.current
+    previousSetupStateRef.current = setupState
+
+    if (!isAdmin) {
+      setShowSkipReminder(false)
+      return
+    }
+
+    if (setupState !== 'skipped') {
+      setShowSkipReminder(false)
+      return
+    }
+
+    if (previousSetupState !== 'skipped') {
+      setShowSkipReminder(true)
+    }
+  }, [isAdmin, status?.setup_state])
+
+  useEffect(() => {
+    if (!showSkipReminder) return
+    const timer = window.setTimeout(() => {
+      setShowSkipReminder(false)
+    }, 8000)
+    return () => window.clearTimeout(timer)
+  }, [showSkipReminder])
 
   const openSettingsDialog = () => {
     try {
@@ -238,13 +269,13 @@ export function SetupWizard() {
 
   const currentIndex = steps.findIndex((s) => s.key === step)
 
-  const reminderVisible = status?.setup_state === 'skipped' && isAdmin
+  const reminderVisible = showSkipReminder && !open
 
   return (
     <>
       {reminderVisible && (
         <div className="fixed bottom-4 left-4 z-[60] max-w-[min(520px,calc(100vw-2rem))]">
-          <div className="rounded-xl border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-lg p-4 space-y-2">
+          <div className="space-y-2 rounded-xl border border-border/80 bg-[hsl(var(--surface))/0.96] p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--surface))/0.84]">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
               <div className="flex-1 min-w-0">
@@ -259,6 +290,7 @@ export function SetupWizard() {
                 type="button"
                 variant="outline"
                 onClick={() => {
+                  setShowSkipReminder(false)
                   setManualOpen(true)
                   setStep('welcome')
                 }}
@@ -268,6 +300,7 @@ export function SetupWizard() {
               <Button
                 type="button"
                 onClick={() => {
+                  setShowSkipReminder(false)
                   openSettingsDialog()
                 }}
               >
@@ -289,13 +322,13 @@ export function SetupWizard() {
           }
         }}
       >
-        <DialogContent className="w-screen h-[100dvh] max-w-none border-0 p-0 shadow-none sm:w-[92vw] sm:h-[85vh] sm:max-h-[88vh] sm:max-w-6xl sm:border sm:rounded-2xl sm:shadow-2xl flex flex-col min-h-0 overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-          <DialogHeader className="px-5 py-4 border-b">
+        <DialogContent className="h-[100dvh] w-screen max-w-none border-0 bg-[hsl(var(--surface))/0.96] p-0 shadow-none sm:h-[85vh] sm:max-h-[88vh] sm:w-[92vw] sm:max-w-6xl sm:rounded-[calc(var(--radius)+0.4rem)] sm:border sm:border-border/80 sm:bg-card/95 sm:shadow-[0_30px_80px_hsl(var(--background)/0.5)] flex min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+          <DialogHeader className="border-b border-border/80 px-5 py-4">
             <DialogTitle className="text-base sm:text-lg">{overlayTitle}</DialogTitle>
             <DialogDescription className="text-sm">{overlayDesc}</DialogDescription>
           </DialogHeader>
 
-          <div className="px-5 py-3 border-b bg-muted/20">
+          <div className="border-b border-border/80 bg-[hsl(var(--background-alt))/0.5] px-5 py-3">
             <div className="flex flex-wrap gap-2">
               {steps.map((s, idx) => (
                 <StepBadge
@@ -574,7 +607,7 @@ export function SetupWizard() {
             )}
           </div>
 
-          <div className="border-t p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-background">
+          <div className="flex flex-col gap-2 border-t border-border/80 bg-[hsl(var(--background-alt))/0.52] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs text-muted-foreground">
               {statusLoading ? (
                 <span className="inline-flex items-center gap-2">

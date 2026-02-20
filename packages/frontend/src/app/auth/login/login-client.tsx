@@ -107,22 +107,22 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
 
   return (
     <AuthFormLayout
-      title={brandText}
-      description="登录您的账户开始对话"
+      title={`${brandText} 登录`}
+      description="使用你的账号继续当前对话与配置。"
       error={errorMessage}
       footer={
         <>
           <div>
             还没有账户？{' '}
-            <Link href="/auth/register" className="text-primary hover:underline">立即注册</Link>
+            <Link href="/auth/register" className="text-primary hover:text-[hsl(var(--primary-hover))] hover:underline">立即注册</Link>
           </div>
-          <div className="text-muted-foreground">界面已自适应移动端，无需切换。</div>
+          <div>界面已适配桌面与移动端。</div>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="username">用户名</Label>
+          <Label htmlFor="username" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">用户名</Label>
           <Input
             id="username"
             type="text"
@@ -131,10 +131,11 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
             onChange={(e) => setUsername(e.target.value)}
             required
             disabled={isLoading}
+            className="h-11"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">密码</Label>
+          <Label htmlFor="password" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">密码</Label>
           <Input
             id="password"
             type="password"
@@ -143,6 +144,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
             onChange={(e) => setPassword(e.target.value)}
             required
             disabled={isLoading}
+            className="h-11"
           />
         </div>
         <div className="flex items-center justify-between">
@@ -157,7 +159,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         </div>
         <Button
           type="submit"
-          className="w-full"
+          className="h-11 w-full"
           disabled={isLoading || !username || !password}
         >
           {isLoading ? (

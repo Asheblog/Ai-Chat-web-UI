@@ -11,10 +11,10 @@ import { RefreshCcw, Search, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const levelColors: Record<string, string> = {
-  debug: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  info: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  warn: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-  error: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+  debug: 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground',
+  info: 'border border-primary/30 bg-primary/10 text-primary',
+  warn: 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.14)] text-[hsl(var(--warning))]',
+  error: 'border border-destructive/30 bg-destructive/10 text-destructive',
 }
 
 const levelLabels: Record<string, string> = {
@@ -126,7 +126,7 @@ export function SystemLogsPage() {
 
   if (!isAdmin) {
     return (
-      <div className="p-6 text-center text-muted-foreground">
+      <div className="rounded-2xl border border-border/80 bg-card/90 p-6 text-center text-muted-foreground">
         只有管理员可以查看系统日志
       </div>
     )
@@ -137,7 +137,7 @@ export function SystemLogsPage() {
   return (
     <div className="space-y-4">
       {/* 过滤条件 */}
-      <div className="flex flex-wrap gap-3 items-end">
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border/80 bg-card/95 p-4 shadow-sm">
         <div className="flex-1 min-w-[200px]">
           <label className="text-xs text-muted-foreground mb-1 block">搜索关键词</label>
           <div className="flex gap-2">
@@ -210,7 +210,7 @@ export function SystemLogsPage() {
       </div>
 
       {/* 统计信息 */}
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
+      <div className="flex items-center justify-between rounded-xl border border-border/70 bg-[hsl(var(--surface))/0.55] px-4 py-2 text-sm text-muted-foreground">
         <span>
           共 {total} 条日志
           {items.length > 0 && ` (显示 ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)})`}
@@ -239,7 +239,7 @@ export function SystemLogsPage() {
       </div>
 
       {/* 日志列表 */}
-      <div className="border rounded-lg overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/95 shadow-sm">
         {loading && items.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             加载中...
@@ -249,13 +249,13 @@ export function SystemLogsPage() {
             暂无日志记录
           </div>
         ) : (
-          <div className="divide-y">
+          <div className="divide-y divide-border/70">
             {items.map((item) => (
               <div
                 key={item.id}
                 className={cn(
-                  "px-4 py-2 hover:bg-muted/50 cursor-pointer transition-colors",
-                  expandedIds.has(item.id) && "bg-muted/30"
+                  "cursor-pointer px-4 py-2 transition-colors hover:bg-[hsl(var(--surface-hover))/0.7]",
+                  expandedIds.has(item.id) && "bg-[hsl(var(--surface-hover))/0.5]"
                 )}
                 onClick={() => toggleExpand(item.id)}
               >
@@ -283,8 +283,8 @@ export function SystemLogsPage() {
                   {/* 消息 */}
                   <span className={cn(
                     "flex-1 text-sm",
-                    item.level === 'error' && "text-red-600 dark:text-red-400",
-                    item.level === 'warn' && "text-yellow-600 dark:text-yellow-400"
+                    item.level === 'error' && "text-destructive",
+                    item.level === 'warn' && "text-[hsl(var(--warning))]"
                   )}>
                     {item.msg}
                   </span>
@@ -292,7 +292,7 @@ export function SystemLogsPage() {
 
                 {/* 展开的上下文 */}
                 {expandedIds.has(item.id) && item.ctx && (
-                  <div className="mt-2 ml-20 p-2 bg-muted rounded text-xs font-mono overflow-x-auto">
+                  <div className="mt-2 ml-20 overflow-x-auto rounded-lg border border-border/70 bg-[hsl(var(--surface-hover))/0.6] p-2 text-xs font-mono">
                     <pre className="whitespace-pre-wrap break-all">
                       {JSON.stringify(item.ctx, null, 2)}
                     </pre>

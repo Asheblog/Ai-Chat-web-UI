@@ -89,6 +89,7 @@ interface WelcomeFormProps {
       onAddHeader: () => void
       onHeaderChange: (index: number, field: 'name' | 'value', value: string) => void
       onRemoveHeader: (index: number) => void
+      canAddHeader: boolean
       customBodyInput: string
       onCustomBodyChange: (value: string) => void
       customBodyError: string | null
@@ -129,7 +130,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
 
   return (
     <div className="w-full max-w-3xl">
-      <div className="flex items-center rounded-full border bg-background shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 gap-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition min-h-14">
+      <div className="flex min-h-14 items-center gap-2 rounded-[1.6rem] border border-border/80 bg-[hsl(var(--background-alt))/0.9] px-3 py-2 shadow-[0_18px_42px_hsl(var(--background)/0.22)] transition focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-ring/60 sm:px-4">
         <AdvancedOptions {...advancedOptions} />
         <div className="flex-1">
           <Textarea
@@ -142,7 +143,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
             onPaste={attachments.onPaste}
-            className="h-auto min-h-[40px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 sm:px-4 py-2 leading-[1.4] text-left placeholder:text-muted-foreground"
+            className="h-auto min-h-[40px] resize-none border-0 bg-transparent px-3 py-2 text-left leading-[1.4] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 sm:px-4"
             rows={1}
           />
         </div>
@@ -150,9 +151,9 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           {showExpand && (
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="h-10 w-10 rounded-full"
+              className="h-10 w-10 rounded-full border border-border/70 bg-[hsl(var(--surface))/0.45] hover:bg-[hsl(var(--surface-hover))]"
               onClick={onOpenExpand}
               disabled={creationDisabled}
               aria-label="全屏编辑"

@@ -62,7 +62,7 @@ const getRankDisplay = (rank: number) => {
         case 1:
             return { icon: <Trophy className="h-6 w-6 text-yellow-500" />, bg: 'bg-yellow-500/10 border-yellow-500/20' }
         case 2:
-            return { icon: <Medal className="h-6 w-6 text-gray-400" />, bg: 'bg-gray-400/10 border-gray-400/20' }
+            return { icon: <Medal className="h-6 w-6 text-muted-foreground" />, bg: 'bg-[hsl(var(--surface-hover))] border-border/70' }
         case 3:
             return { icon: <Award className="h-6 w-6 text-amber-600" />, bg: 'bg-amber-600/10 border-amber-600/20' }
         default:

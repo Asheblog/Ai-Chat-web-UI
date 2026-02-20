@@ -190,18 +190,18 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       return (
         <div
           className={cn(
-            'relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0',
+            'relative group rounded-xl my-2 bg-[hsl(var(--code-bg))] border border-[hsl(var(--code-border))] text-[hsl(var(--code-text))] rs-terminal pt-8 max-w-full min-w-0',
           )}
         >
-          <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
+          <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[hsl(var(--code-border))] bg-[hsl(var(--code-header))/0.85]">
             <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
             <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
             <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
-            {!isPlain && <span className="ml-2 text-[11px] text-slate-400">{normalized}</span>}
+            {!isPlain && <span className="ml-2 text-[11px] text-muted-foreground">{normalized}</span>}
             <Button
               variant="ghost"
               size="icon"
-              className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
+              className="ml-auto h-6 w-6 z-10 text-muted-foreground opacity-90 hover:opacity-100"
               onClick={() => handleCopyCode(codeContent)}
               title="复制代码"
               aria-label="复制代码"
@@ -217,7 +217,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             className={cn('m-0 text-sm px-3 py-3', isStreaming && 'typing-cursor')}
             style={{
               background: 'transparent',
-              color: '#e6edf3',
+              color: 'hsl(var(--code-text))',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
               overflowX: 'hidden' as const,
@@ -240,7 +240,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     return (
       <div
         className={cn(
-          'relative group rounded-xl my-2 bg-[#0d1117] border border-[#22262e] text-slate-200 rs-terminal pt-8 max-w-full min-w-0',
+          'relative group rounded-xl my-2 bg-[hsl(var(--code-bg))] border border-[hsl(var(--code-border))] text-[hsl(var(--code-text))] rs-terminal pt-8 max-w-full min-w-0',
         )}
         style={{
           maxWidth: '100%',
@@ -248,15 +248,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           wordBreak: 'break-word' as const,
         }}
       >
-        <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[#22262e] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.15))]">
+        <div className="absolute left-0 right-0 top-0 h-7 px-3 flex items-center gap-2 border-b border-[hsl(var(--code-border))] bg-[hsl(var(--code-header))/0.85]">
           <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
           <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
           <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
-          {!isPlain && <span className="ml-2 text-[11px] text-slate-400">{normalized}</span>}
+          {!isPlain && <span className="ml-2 text-[11px] text-muted-foreground">{normalized}</span>}
           <Button
             variant="ghost"
             size="icon"
-            className="ml-auto h-6 w-6 z-10 opacity-90 hover:opacity-100 text-slate-400"
+            className="ml-auto h-6 w-6 z-10 text-muted-foreground opacity-90 hover:opacity-100"
             onClick={() => handleCopyCode(codeContent)}
             title="复制代码"
             aria-label="复制代码"
@@ -396,4 +396,3 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     />
   )
 })
-

@@ -76,27 +76,27 @@ export default function RegisterPage() {
 
   return (
     <AuthFormLayout
-      title="AI聊天平台"
-      description="创建新账户开始对话"
+      title="AIChat 注册"
+      description="创建账号后即可进入模型对话与设置管理。"
       error={errorMessage}
       footer={
         <>
           <div>
             已有账户？{' '}
-            <Link href="/auth/login" className="text-primary hover:underline">立即登录</Link>
+            <Link href="/auth/login" className="text-primary hover:text-[hsl(var(--primary-hover))] hover:underline">立即登录</Link>
           </div>
-          <div className="text-muted-foreground">界面已自适应移动端，无需切换。</div>
+          <div>注册申请通过后可登录。</div>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {successMessage && (
-          <div className="text-sm text-emerald-600 bg-emerald-100/60 border border-emerald-200 rounded px-3 py-2">
+          <div className="rounded-[calc(var(--radius)-4px)] border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-300">
             {successMessage}
           </div>
         )}
         <div className="space-y-2">
-          <Label htmlFor="username">用户名</Label>
+          <Label htmlFor="username" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">用户名</Label>
           <Input
             id="username"
             type="text"
@@ -106,10 +106,11 @@ export default function RegisterPage() {
             required
             disabled={isLoading}
             minLength={3}
+            className="h-11"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">密码</Label>
+          <Label htmlFor="password" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">密码</Label>
           <Input
             id="password"
             type="password"
@@ -119,10 +120,11 @@ export default function RegisterPage() {
             required
             disabled={isLoading}
             minLength={6}
+            className="h-11"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">确认密码</Label>
+          <Label htmlFor="confirmPassword" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">确认密码</Label>
           <Input
             id="confirmPassword"
             type="password"
@@ -131,6 +133,7 @@ export default function RegisterPage() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
             disabled={isLoading}
+            className="h-11"
           />
           {passwordError && (
             <p className="text-sm text-destructive">{passwordError}</p>
@@ -138,7 +141,7 @@ export default function RegisterPage() {
         </div>
         <Button
           type="submit"
-          className="w-full"
+          className="h-11 w-full"
           disabled={isLoading || !isValid}
         >
           {isLoading ? '注册中...' : '注册'}

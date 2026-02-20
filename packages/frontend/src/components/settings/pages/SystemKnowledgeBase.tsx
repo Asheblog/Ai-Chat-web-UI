@@ -653,8 +653,8 @@ export function SystemKnowledgeBasePage() {
                         <TableCell>{kb.totalChunks}</TableCell>
                         <TableCell>
                           <span className={`text-xs px-2 py-0.5 rounded ${kb.status === 'active'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                            ? 'border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]'
+                            : 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground'
                             }`}>
                             {kb.status === 'active' ? '启用' : '禁用'}
                           </span>
@@ -796,7 +796,7 @@ export function SystemKnowledgeBasePage() {
                   </div>
                   <div className="h-2 w-full rounded bg-muted">
                     <div
-                      className="h-2 rounded bg-blue-500 transition-all duration-300"
+                      className="h-2 rounded bg-primary transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
@@ -805,8 +805,8 @@ export function SystemKnowledgeBasePage() {
                       <div key={index} className="flex items-center justify-between text-xs">
                         <span className="truncate max-w-[200px]">{file.name}</span>
                         <span className={
-                          file.status === 'success' ? 'text-green-600' :
-                          file.status === 'error' ? 'text-red-600' :
+                          file.status === 'success' ? 'text-[hsl(var(--success))]' :
+                          file.status === 'error' ? 'text-destructive' :
                           'text-muted-foreground'
                         }>
                           {file.status === 'pending' && '等待中'}
@@ -905,12 +905,12 @@ export function SystemKnowledgeBasePage() {
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
                                 <span className={`text-xs px-2 py-0.5 rounded ${doc.status === 'ready'
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                  ? 'border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]'
                                   : doc.status === 'processing'
-                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                                    ? 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]'
                                     : doc.status === 'error'
-                                      ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                                      : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                      ? 'border border-destructive/30 bg-destructive/10 text-destructive'
+                                      : 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground'
                                   }`}>
                                   {doc.status === 'ready' ? '就绪' :
                                     doc.status === 'processing' ? '处理中' :
@@ -918,7 +918,7 @@ export function SystemKnowledgeBasePage() {
                                         doc.status === 'pending' ? '等待中' : doc.status}
                                 </span>
                                 {(doc.status === 'processing' || doc.status === 'pending') && (
-                                  <Loader2 className="h-3 w-3 animate-spin text-yellow-600" />
+                                  <Loader2 className="h-3 w-3 animate-spin text-[hsl(var(--warning))]" />
                                 )}
                               </div>
                               {/* 显示处理阶段和进度 */}
@@ -933,7 +933,7 @@ export function SystemKnowledgeBasePage() {
                                   {typeof doc.processingProgress === 'number' && (
                                     <div className="h-1.5 w-20 rounded bg-muted">
                                       <div
-                                        className="h-1.5 rounded bg-yellow-500 transition-all"
+                                        className="h-1.5 rounded bg-[hsl(var(--warning))] transition-all"
                                         style={{ width: `${Math.min(100, doc.processingProgress)}%` }}
                                       />
                                     </div>
@@ -942,7 +942,7 @@ export function SystemKnowledgeBasePage() {
                               )}
                               {/* 显示错误信息 */}
                               {doc.status === 'error' && doc.errorMessage && (
-                                <p className="text-xs text-red-500 truncate max-w-[150px]" title={doc.errorMessage}>
+                                <p className="text-xs text-destructive truncate max-w-[150px]" title={doc.errorMessage}>
                                   {doc.errorMessage}
                                 </p>
                               )}

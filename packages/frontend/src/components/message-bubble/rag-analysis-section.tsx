@@ -132,7 +132,7 @@ export function RAGAnalysisSection({
 
             {/* 错误 */}
             {hasError && (
-              <div className="text-sm text-red-600 dark:text-red-400">
+              <div className="text-sm text-destructive">
                 检索失败: {errorEvent?.error}
               </div>
             )}
@@ -145,8 +145,8 @@ export function RAGAnalysisSection({
                     key={`${hit.documentId}-${hit.chunkIndex}-${index}`}
                     className={cn(
                       'rounded-md border p-2 text-sm',
-                      'bg-white dark:bg-gray-900',
-                      'border-gray-200 dark:border-gray-700'
+                      'bg-[hsl(var(--surface))/0.9]',
+                      'border-border/80'
                     )}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -158,10 +158,10 @@ export function RAGAnalysisSection({
                         className={cn(
                           'text-xs px-1.5 py-0.5 rounded',
                           hit.score >= 0.7
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            ? 'border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]'
                             : hit.score >= 0.5
-                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                              : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                              ? 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]'
+                              : 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground'
                         )}
                       >
                         {formatScore(hit.score)}

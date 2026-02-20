@@ -71,7 +71,7 @@ function getFileIcon(mimeType: string) {
   if (mimeType.includes('csv')) {
     return <Table className="h-4 w-4 text-green-500" />
   }
-  return <File className="h-4 w-4 text-gray-500" />
+  return <File className="h-4 w-4 text-muted-foreground" />
 }
 
 function getStatusIcon(status: AttachedDocument['status']) {
@@ -185,7 +185,7 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
         {progress != null && (document.status === 'pending' || document.status === 'processing') && (
           <div className="mt-1 h-1.5 w-full rounded bg-muted">
             <div
-              className="h-1.5 rounded bg-blue-500 transition-all"
+              className="h-1.5 rounded bg-primary transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>

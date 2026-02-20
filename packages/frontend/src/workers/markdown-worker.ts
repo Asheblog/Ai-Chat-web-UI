@@ -73,7 +73,7 @@ const extractText = (node: any): string => {
 }
 
 const extractCodeBlocks = () => (tree: any) => {
-  visit(tree, 'element', (node: any, index: number | null, parent: any) => {
+  visit(tree, 'element', (node: any, index: number | undefined, parent: any) => {
     if (!parent || typeof index !== 'number') return
     if (node?.tagName !== 'pre' || !Array.isArray(node.children)) return
     const codeNode = node.children.find((child: any) => child?.type === 'element' && child?.tagName === 'code') ?? null

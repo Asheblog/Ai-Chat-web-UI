@@ -45,7 +45,7 @@ const getRankDisplay = (rank: number) => {
     case 1:
       return { icon: <Trophy className="h-6 w-6 text-yellow-500" />, bg: 'bg-yellow-500/10 border-yellow-500/20' }
     case 2:
-      return { icon: <Medal className="h-6 w-6 text-gray-400" />, bg: 'bg-gray-400/10 border-gray-400/20' }
+      return { icon: <Medal className="h-6 w-6 text-muted-foreground" />, bg: 'bg-[hsl(var(--surface-hover))] border-border/70' }
     case 3:
       return { icon: <Award className="h-6 w-6 text-amber-600" />, bg: 'bg-amber-600/10 border-amber-600/20' }
     default:
@@ -445,7 +445,16 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   }, [])
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col"><div className="flex-1 w-full px-4 md:px-8 lg:px-12 py-8 space-y-6">
+    <div className="flex min-h-screen flex-col bg-[hsl(var(--background))] text-foreground"><div className="mx-auto flex-1 w-full max-w-[1100px] px-4 py-8 md:px-6 lg:px-8 space-y-6">
+        <div className="flex items-center justify-between border-b border-border/80 pb-4">
+          <div className="flex items-center gap-3 text-sm font-semibold">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
+              AI
+            </span>
+            {brandText} Battle 分享
+          </div>
+          <span className="text-xs text-muted-foreground">{formatRelativeTime(shareState.createdAt)}</span>
+        </div>
         {/* Header */}
         <header className="flex flex-col gap-3">
           {/* Summary line */}
@@ -748,8 +757,8 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           })}
           </div>
         )}
-      </div><footer className="border-t bg-muted/30 py-4">
-        <div className="w-full px-4 md:px-8 lg:px-12 text-center text-sm text-muted-foreground">
+      </div><footer className="border-t border-border/80 py-4">
+        <div className="mx-auto w-full max-w-[1100px] px-4 text-center text-sm text-muted-foreground md:px-6 lg:px-8">
           由<span className="font-medium text-foreground">{brandText}</span> 生成 · {formatDate(shareState.createdAt)}
         </div>
       </footer>

@@ -57,7 +57,7 @@ const getRankIcon = (rank: number) => {
     case 1:
       return <Trophy className="h-4 w-4 text-yellow-500" />
     case 2:
-      return <Medal className="h-4 w-4 text-gray-400" />
+      return <Medal className="h-4 w-4 text-muted-foreground" />
     case 3:
       return <Award className="h-4 w-4 text-amber-600" />
     default:
@@ -197,9 +197,9 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                   <td className="text-center py-3 px-3">
                     <span className={cn(
                       "font-semibold",
-                      model.accuracy >= 0.8 ? "text-green-600 dark:text-green-400" :
-                      model.accuracy >= 0.5 ? "text-amber-600 dark:text-amber-400" :
-                      "text-red-600 dark:text-red-400"
+                      model.accuracy >= 0.8 ? "text-[hsl(var(--success))]" :
+                      model.accuracy >= 0.5 ? "text-[hsl(var(--warning))]" :
+                      "text-destructive"
                     )}>
                       {(model.accuracy * 100).toFixed(0)}%
                     </span>
@@ -230,7 +230,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                           ) : attempt.passed != null ? (
                             <span className={cn(
                               "text-xs font-medium",
-                              attempt.passed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                              attempt.passed ? "text-[hsl(var(--success))]" : "text-destructive"
                             )}>
                               {attempt.passed ? '✓' : '✗'} {attempt.score?.toFixed(2) ?? '--'}
                             </span>

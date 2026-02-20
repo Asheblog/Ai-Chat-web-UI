@@ -31,6 +31,12 @@ const buildShareUrl = (token: string) => {
   return `/share/${token}`
 }
 
+const toShareSummary = (share: ChatShareSummary): ChatShareSummary => ({
+  ...share,
+  expiresAt: share.expiresAt ?? null,
+  revokedAt: share.revokedAt ?? null,
+})
+
 export function ShareManagementPanel() {
   const { toast } = useToast()
   const [shares, setShares] = useState<ChatShareSummary[]>([])
@@ -81,12 +87,12 @@ export function ShareManagementPanel() {
     setUpdatingId(shareId)
     try {
       const response = await revokeChatShare(shareId)
-      if (response?.success && response.data) {
-        toast({ title: "已撤销分享链接" })
-        setShares((prev) => prev.map((item) => (item.id === shareId ? response.data : item)))
-      } else {
+      if (!response?.success || !response.data) {
         throw new Error(response?.error || "撤销失败")
       }
+      toast({ title: "已撤销分享链接" })
+      const updated = toShareSummary(response.data)
+      setShares((prev) => prev.map((item) => (item.id === shareId ? updated : item)))
     } catch (err: any) {
       toast({
         title: "撤销失败",
@@ -102,12 +108,22 @@ export function ShareManagementPanel() {
     setUpdatingId(shareId)
     try {
       const response = await updateChatShare(shareId, { expiresInHours: hours })
-      if (response?.success && response.data) {
-        toast({ title: "有效期已更新" })
-        setShares((prev) => prev.map((item) => (item.id === shareId ? response.data : item)))
-      } else {
+      if (!response?.success || !response.data) {
         throw new Error(response?.error || "更新失败")
       }
+      toast({ title: "有效期已更新" })
+      const updated: ChatShareSummary = {
+        id: response.data.id,
+        sessionId: response.data.sessionId,
+        token: response.data.token,
+        title: response.data.title,
+        sessionTitle: response.data.sessionTitle,
+        messageCount: response.data.messageCount,
+        createdAt: response.data.createdAt,
+        expiresAt: response.data.expiresAt ?? null,
+        revokedAt: response.data.revokedAt ?? null,
+      }
+      setShares((prev) => prev.map((item) => (item.id === shareId ? updated : item)))
     } catch (err: any) {
       toast({
         title: "更新失败",

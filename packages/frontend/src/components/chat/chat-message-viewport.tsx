@@ -114,7 +114,7 @@ export function ChatMessageViewport({
     <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 md:px-6">
       <div className={cn('pt-4 md:pt-6', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
         {shareModeActive ? (
-          <div className="mb-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          <div className="mb-3 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground shadow-sm">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="font-medium text-primary">分享选择模式已开启</p>
@@ -164,6 +164,7 @@ export function ChatMessageViewport({
                 type="button"
                 size="sm"
                 variant="ghost"
+                className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.45] hover:bg-[hsl(var(--surface-hover))]"
                 onClick={() => enterShareSelectionMode(sessionId)}
               >
                 <Share2 className="mr-2 h-4 w-4" />
@@ -189,7 +190,7 @@ export function ChatMessageViewport({
       </div>
       {shareModeActive && (
         <div className="lg:hidden fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
-          <div className="pointer-events-auto rounded-full border border-primary/30 bg-background/95 shadow-lg px-4 py-3 flex items-center justify-between gap-3">
+          <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-full border border-primary/30 bg-[hsl(var(--surface))/0.95] px-4 py-3 shadow-lg backdrop-blur">
             <span className="text-sm text-foreground">
               已选 <span className="font-semibold text-primary">{selectedCount}</span> 条消息
             </span>

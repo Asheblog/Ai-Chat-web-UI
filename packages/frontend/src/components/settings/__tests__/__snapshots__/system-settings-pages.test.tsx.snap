@@ -78,7 +78,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex items-center gap-4"
@@ -100,13 +100,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
                 class="flex flex-wrap gap-2"
               >
                 <button
-                  class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+                  class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-10 px-4 py-2"
                   type="button"
                 >
                   上传头像
                 </button>
                 <button
-                  class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+                  class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))] h-10 px-4 py-2"
                   disabled=""
                   type="button"
                 >
@@ -202,7 +202,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <button
             aria-checked="true"
@@ -238,13 +238,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               id="anonymousDailyQuota"
               type="text"
               value="5"
@@ -258,7 +258,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
               aria-controls="radix-:rp:"
               aria-expanded="false"
               aria-haspopup="dialog"
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
               data-state="closed"
               type="button"
             >
@@ -285,13 +285,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               id="defaultUserDailyQuota"
               type="text"
               value="50"
@@ -397,7 +397,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <button
             aria-checked="true"
@@ -433,13 +433,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               id="battleAnonymousDailyQuota"
               type="text"
               value="8"
@@ -470,7 +470,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <button
             aria-checked="true"
@@ -506,13 +506,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               id="battleUserDailyQuota"
               type="text"
               value="40"
@@ -599,13 +599,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-[320px]"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-[320px]"
               id="brandText"
               maxlength="40"
               placeholder="例如：AIChat 或公司名"
@@ -632,13 +632,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="w-full space-y-2"
           >
             <textarea
-              class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              class="flex min-h-[80px] w-full rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               placeholder="例如：你是一位专业助教，请使用简洁、结构化的回答。"
               rows="4"
             />
@@ -668,20 +668,20 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-[320px]"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-[320px]"
               id="chatImageDomain"
               placeholder="例如：https://chat.example.com"
               type="text"
               value="https://chat.example.com"
             />
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               刷新
             </button>
@@ -756,13 +756,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               id="chatImageRetentionDays"
               inputmode="numeric"
               type="text"
@@ -794,13 +794,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               id="assistantReplyHistoryLimit"
               inputmode="numeric"
               type="text"
@@ -832,13 +832,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               id="anonymousRetentionDays"
               type="text"
               value="10"
@@ -926,7 +926,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <button
             aria-checked="false"
@@ -962,13 +962,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <div
             class="flex w-full flex-wrap items-center justify-end gap-2"
           >
             <input
-              class="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
               disabled=""
               id="titleSummaryMaxLength"
               inputmode="numeric"
@@ -1001,13 +1001,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           </p>
         </div>
         <div
-          class="w-full flex sm:flex-1 sm:justify-end sm:text-right"
+          class="w-full flex sm:flex-1 sm:justify-end"
         >
           <button
             aria-autocomplete="none"
             aria-controls="radix-:rs:"
             aria-expanded="false"
-            class="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 w-full sm:w-[200px]"
+            class="flex h-10 items-center justify-between rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background placeholder:text-muted-foreground/90 focus:outline-none focus:ring-2 focus:ring-ring/60 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 w-full sm:w-[200px]"
             data-disabled=""
             data-state="closed"
             dir="ltr"
@@ -1022,7 +1022,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
             </span>
             <svg
               aria-hidden="true"
-              class="h-4 w-4 opacity-50"
+              class="h-4 w-4 opacity-60"
               fill="none"
               height="24"
               stroke="currentColor"
@@ -1045,13 +1045,13 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
       class="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:justify-end"
     >
       <button
-        class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+        class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-10 px-4 py-2"
         disabled=""
       >
         还原更改
       </button>
       <button
-        class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+        class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 bg-primary text-primary-foreground shadow-[0_1px_2px_hsl(var(--primary)/0.35)] hover:bg-[hsl(var(--primary-hover))] active:translate-y-[1px] h-10 px-4 py-2"
         disabled=""
       >
         保存通用设置
@@ -1136,7 +1136,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
         </div>
       </div>
       <div
-        class="rounded-lg border bg-card text-card-foreground shadow-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+        class="rounded-[calc(var(--radius)+0.25rem)] border border-border/90 bg-card/95 text-card-foreground shadow-[0_20px_45px_hsl(var(--background)/0.35)] backdrop-blur-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
       >
         <div
           class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
@@ -1169,7 +1169,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                 />
               </svg>
               <input
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-9"
+                class="flex h-10 w-full rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-9"
                 placeholder="搜索模型/提供方..."
                 value=""
               />
@@ -1194,7 +1194,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 w-full sm:w-auto"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3 w-full sm:w-auto"
             >
               <svg
                 class="w-4 h-4 mr-1 "
@@ -1224,7 +1224,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
               重新加载
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-3 w-full sm:w-auto"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 bg-primary text-primary-foreground shadow-[0_1px_2px_hsl(var(--primary)/0.35)] hover:bg-[hsl(var(--primary-hover))] active:translate-y-[1px] h-9 px-3 w-full sm:w-auto"
             >
               <svg
                 class="w-4 h-4 mr-1 "
@@ -1256,7 +1256,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             <button
               aria-expanded="false"
               aria-haspopup="menu"
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 w-full sm:w-auto"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3 w-full sm:w-auto"
               data-state="closed"
               id="radix-:rv:"
               type="button"
@@ -1293,7 +1293,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             </button>
             <input
               accept="application/json"
-              class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 hidden"
+              class="h-10 w-full rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 hidden"
               type="file"
             />
           </div>
@@ -1361,7 +1361,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
       </div>
     </div>
     <div
-      class="rounded-lg border bg-card text-card-foreground shadow-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+      class="rounded-[calc(var(--radius)+0.25rem)] border border-border/90 bg-card/95 text-card-foreground shadow-[0_20px_45px_hsl(var(--background)/0.35)] backdrop-blur-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
     >
       <div
         class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
@@ -1424,12 +1424,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               开启
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               关闭
             </button>
@@ -1474,12 +1474,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               开启
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               关闭
             </button>
@@ -1526,12 +1526,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               开启
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               关闭
             </button>
@@ -1580,12 +1580,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               开启
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               关闭
             </button>
@@ -1627,12 +1627,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               开启
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
             >
               关闭
             </button>
@@ -1655,7 +1655,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
         </h3>
       </div>
       <div
-        class="rounded-lg border bg-card text-card-foreground shadow-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+        class="rounded-[calc(var(--radius)+0.25rem)] border border-border/90 bg-card/95 text-card-foreground shadow-[0_20px_45px_hsl(var(--background)/0.35)] backdrop-blur-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
       >
         <div
           class="overflow-x-auto"
@@ -2019,7 +2019,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     <button
                       aria-expanded="false"
                       aria-haspopup="menu"
-                      class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 rounded-full"
+                      class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))] h-8 w-8 rounded-full"
                       data-state="closed"
                       id="radix-:r1a:"
                       type="button"
@@ -2209,7 +2209,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     <button
                       aria-expanded="false"
                       aria-haspopup="menu"
-                      class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 rounded-full"
+                      class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))] h-8 w-8 rounded-full"
                       data-state="closed"
                       id="radix-:r1c:"
                       type="button"
@@ -2268,7 +2268,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-2"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
               disabled=""
             >
               上一页
@@ -2281,7 +2281,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                页
             </span>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
               disabled=""
             >
               下一页

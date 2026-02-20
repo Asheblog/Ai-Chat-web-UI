@@ -65,19 +65,19 @@ function SettingsShellLayout({
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-5xl bg-background flex-1 min-h-0",
-        bare ? "" : "rounded-2xl border shadow-2xl",
+        "mx-auto w-full max-w-5xl flex-1 min-h-0 bg-[hsl(var(--surface))/0.96]",
+        bare ? "" : "rounded-[calc(var(--radius)+0.35rem)] border border-border/80 shadow-[0_24px_56px_hsl(var(--background)/0.4)]",
         className
       )}
     >
       <div className="flex h-full min-h-0 min-w-0 flex-col md:flex-row">
         <aside
           className={cn(
-            "w-full shrink-0 border-b bg-muted/30 flex flex-col min-h-0 md:w-60 md:border-b-0 md:border-r overflow-y-auto",
+            "w-full shrink-0 border-b border-border/80 bg-[hsl(var(--background-alt))/0.65] flex min-h-0 flex-col overflow-y-auto md:w-60 md:border-b-0 md:border-r",
             asideClassName
           )}
         >
-          <div className="px-4 py-6 font-bold text-lg sticky top-0 z-10 bg-muted/30 md:static">
+          <div className="sticky top-0 z-10 bg-[hsl(var(--background-alt))/0.95] px-4 py-6 text-lg font-semibold md:static">
             {title}
           </div>
           {nav}
@@ -108,7 +108,9 @@ function SettingsShellFlatImpl({
           onClick={() => onChange(s.key)}
           className={cn(
             "w-full flex items-center gap-3 rounded-md px-4 py-2.5 text-left text-sm transition-all mx-2",
-            active === s.key ? "bg-primary text-primary-foreground font-medium shadow-sm" : "text-foreground hover:bg-accent"
+            active === s.key
+              ? "bg-primary/90 text-primary-foreground font-medium shadow-sm"
+              : "text-foreground hover:bg-[hsl(var(--surface-hover))]"
           )}
         >
           {s.icon && <span className="shrink-0 w-[1.125rem] h-[1.125rem]">{s.icon}</span>}
@@ -120,7 +122,7 @@ function SettingsShellFlatImpl({
 
   const content = (
     <section className="flex-1 min-h-0 min-w-0 flex flex-col">
-      <div className="border-b px-8 py-6 font-semibold text-2xl">{activeLabel}</div>
+      <div className="border-b border-border/80 px-8 py-6 text-2xl font-semibold">{activeLabel}</div>
       <div className="flex-1 min-h-0 min-w-0 overflow-auto px-8 py-6">{children}</div>
     </section>
   )
@@ -167,7 +169,9 @@ function SettingsShellNestedImpl({
               onClick={() => setOpenKey(isOpen ? "" : m.key)}
               className={cn(
                 "w-full flex items-center gap-2 rounded-md px-4 py-2.5 text-left text-sm font-medium transition-all",
-                isActiveMain ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent/50"
+                isActiveMain
+                  ? "bg-[hsl(var(--surface-hover))] text-foreground"
+                  : "text-foreground hover:bg-[hsl(var(--surface-hover))/0.75]"
               )}
             >
               {isOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
@@ -187,7 +191,9 @@ function SettingsShellNestedImpl({
                       }}
                       className={cn(
                         "w-full flex items-center gap-3 rounded-md px-4 py-2.5 text-left text-sm transition-all",
-                        isActive ? "bg-primary text-primary-foreground font-medium shadow-sm" : "text-foreground hover:bg-accent"
+                        isActive
+                          ? "bg-primary/90 text-primary-foreground font-medium shadow-sm"
+                          : "text-foreground hover:bg-[hsl(var(--surface-hover))]"
                       )}
                     >
                       {s.icon && <span className="shrink-0 w-[1.125rem] h-[1.125rem]">{s.icon}</span>}
@@ -206,7 +212,7 @@ function SettingsShellNestedImpl({
   const content = (
     <section className="flex-1 min-h-0 min-w-0 flex flex-col">
       {readOnly && (
-        <div className="px-6 py-3 border-b bg-muted/20 text-sm text-muted-foreground">
+        <div className="border-b border-border/80 bg-muted/20 px-6 py-3 text-sm text-muted-foreground">
           {readOnlyMessage || "当前模式下无法编辑设置，请登录后再试。"}
         </div>
       )}

@@ -360,10 +360,10 @@ export function BattlePageClient() {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto">
-      <div className="px-4 md:px-6 py-6 space-y-8">
+    <div className="flex flex-1 flex-col overflow-y-auto bg-[hsl(var(--background-alt))/0.32]">
+      <div className="mx-auto w-full max-w-[1200px] space-y-8 px-4 py-6 md:px-6">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col justify-between gap-4 rounded-[calc(var(--radius)+0.35rem)] border border-border/70 bg-[hsl(var(--surface))/0.7] p-4 md:flex-row md:items-center md:p-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Trophy className="h-6 w-6 text-yellow-500" />

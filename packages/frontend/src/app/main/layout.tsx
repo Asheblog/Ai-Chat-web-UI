@@ -59,26 +59,26 @@ export default function MainLayout({
   const isActorReady = actorState !== 'loading'
 
   return (
-    <div className="flex h-screen min-h-0 w-full min-w-0 bg-background overflow-x-hidden">
+    <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-[hsl(var(--background))]">
       <Sidebar />
-      <MainContent className="relative">
+      <MainContent className="relative border-l border-border/60 bg-transparent">
         <SetupWizard />
         {!isActorReady ? (
           <div className="flex h-full w-full items-center justify-center">
-            <div className="text-center text-muted-foreground space-y-3">
-              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-border border-t-primary" />
+            <div className="space-y-3 text-center text-muted-foreground">
+              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-border/80 border-t-primary" />
               <p>正在同步身份信息...</p>
             </div>
           </div>
         ) : (
           <div className="flex flex-col h-full min-h-0">
-            <div className="lg:hidden sticky top-0 z-40 grid grid-cols-3 items-center gap-2 px-4 py-3 border-b border-border/60 rounded-b-3xl shadow-sm bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="sticky top-0 z-40 grid grid-cols-3 items-center gap-2 border-b border-border/70 bg-[hsl(var(--background-alt))/0.88] px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background-alt))/0.7] lg:hidden">
               <div className="justify-self-start">
                 <Button
                   variant="ghost"
                   size="icon"
                   aria-label={sidebarCollapsed ? '展开侧边栏' : '打开侧边栏'}
-                  className="h-10 w-10 rounded-full border border-border/50 bg-background/60 hover:bg-accent/60"
+                  className="h-10 w-10 rounded-full border border-border/70 bg-[hsl(var(--surface))/0.45] hover:bg-[hsl(var(--surface-hover))]"
                   onClick={() => {
                     try {
                       if (sidebarCollapsed) {

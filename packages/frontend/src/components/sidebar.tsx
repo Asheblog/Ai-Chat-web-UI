@@ -223,11 +223,11 @@ export function Sidebar() {
   }
 
   const sidebarContent = (
-    <div className="flex h-full w-full lg:w-72 flex-col bg-slate-50 dark:bg-slate-900 dark:text-slate-100">
+    <div className="flex h-full w-full flex-col border-r border-border/70 bg-[hsl(var(--sidebar-bg))] text-foreground lg:w-72">
       {/* 顶部文字LOGO + 折叠按钮 */}
-      <div className="px-4 pt-[10px] pb-2 flex items-center justify-between">
+      <div className="flex items-center justify-between px-4 pb-2 pt-[10px]">
         <Link href="/main" className="block flex-1 select-none text-center">
-          <span className="text-lg font-semibold tracking-tight">
+          <span className="text-lg font-semibold tracking-tight bg-[linear-gradient(135deg,hsl(var(--hero-from)),hsl(var(--hero-to)))] bg-clip-text text-transparent">
             {(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
           </span>
         </Link>
@@ -237,7 +237,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="折叠侧边栏"
-            className="inline-flex lg:hidden h-10 w-10 rounded-full border border-slate-200/70 hover:bg-slate-200 dark:border-slate-800/70 dark:hover:bg-slate-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
+            className="inline-flex h-10 w-10 rounded-full border border-border/70 bg-[hsl(var(--surface))/0.5] hover:bg-[hsl(var(--sidebar-hover))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors lg:hidden"
             onClick={() => {
               setSidebarCollapsed(true)
               setIsMobileMenuOpen(false)
@@ -250,7 +250,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="收起侧边栏"
-            className="hidden lg:inline-flex ml-2 hover:bg-slate-200 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors"
+            className="ml-2 hidden bg-transparent hover:bg-[hsl(var(--sidebar-hover))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors lg:inline-flex"
             onClick={() => setSidebarCollapsed(true)}
           >
             <SidebarToggleIcon className="h-6 w-6" />
@@ -262,7 +262,7 @@ export function Sidebar() {
       <div className="px-4 pb-4 space-y-2">
         <Button
           onClick={handleNewChat}
-          className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
+          className="w-full justify-start border border-dashed border-border/70 bg-transparent text-foreground shadow-none hover:border-primary/60 hover:bg-[hsl(var(--sidebar-hover))]"
           variant="ghost"
           disabled={isCreating || quotaExhausted}
           aria-busy={isCreating}
@@ -280,7 +280,7 @@ export function Sidebar() {
             router.push('/main/battle')
             setIsMobileMenuOpen(false)
           }}
-          className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
+          className="w-full justify-start border-0 bg-transparent text-foreground shadow-none hover:bg-[hsl(var(--sidebar-hover))]"
           variant="ghost"
         >
           <Trophy className="mr-2 h-4 w-4" />
@@ -288,7 +288,7 @@ export function Sidebar() {
         </Button>
         <Button
           onClick={() => setIsSettingsOpen(true)}
-          className="w-full justify-start text-foreground hover:bg-slate-100 dark:hover:bg-slate-800 border-0 shadow-none bg-transparent"
+          className="w-full justify-start border-0 bg-transparent text-foreground shadow-none hover:bg-[hsl(var(--sidebar-hover))]"
           variant="ghost"
         >
           <Settings className="mr-2 h-4 w-4" />
@@ -313,7 +313,7 @@ export function Sidebar() {
       )}
 
       <div className="px-4 pb-4">
-        <div className="border-t border-slate-200 dark:border-slate-800" />
+        <div className="border-t border-border/70" />
       </div>
       {/* 会话列表 */}
       <ScrollArea className="flex-1 px-4 overflow-hidden">
@@ -351,8 +351,8 @@ export function Sidebar() {
                   exit="exit"
                   layout
                   className={cn(
-                    "group relative flex items-center justify-between rounded-lg p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
-                    currentSession?.id === session.id && "bg-slate-100 dark:bg-slate-800"
+                    "group relative flex cursor-pointer items-center justify-between rounded-xl border border-transparent p-3 transition-colors hover:bg-[hsl(var(--sidebar-hover))]",
+                    currentSession?.id === session.id && "border-primary/20 bg-primary/10"
                   )}
                   onClick={() => handleSessionClick(session.id)}
                   whileHover={{ x: 4 }}
@@ -382,7 +382,7 @@ export function Sidebar() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-7 w-7 sm:h-6 sm:w-6 text-amber-500/80 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                            className="h-7 w-7 text-amber-500/80 opacity-70 transition hover:bg-amber-500/10 hover:text-amber-500 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
                             onClick={(e) => {
                               e.stopPropagation()
                               toggleSessionPin(session.id, !session.pinnedAt)
@@ -406,7 +406,7 @@ export function Sidebar() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-7 w-7 sm:h-6 sm:w-6 text-destructive/80 hover:text-destructive hover:bg-destructive/10 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                            className="h-7 w-7 text-destructive/80 opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
                             onClick={(e) => requestDeleteSession(session.id, e)}
                             aria-label="删除会话"
                           >
@@ -424,8 +424,8 @@ export function Sidebar() {
         </div>
       </ScrollArea>
 
-      <div className="px-4 pt-4 pb-5 border-t border-slate-200/80 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/40">
-        <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/60 bg-gradient-to-br from-white/90 to-slate-50/60 dark:from-slate-800/80 dark:to-slate-900/60 shadow-sm px-3 py-3">
+      <div className="border-t border-border/70 bg-[hsl(var(--sidebar-bg))/0.6] px-4 pb-5 pt-4">
+        <div className="rounded-xl border border-border/70 bg-[linear-gradient(135deg,hsl(var(--surface))/0.88,hsl(var(--background-alt))/0.65)] px-3 py-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="font-mono text-[11px] leading-none px-2 py-1">
@@ -450,7 +450,7 @@ export function Sidebar() {
   )
 
   const collapsedSidebar = (
-    <div className="flex h-full w-14 flex-col items-center justify-between bg-slate-50 dark:bg-slate-900 dark:text-slate-100 py-3">
+    <div className="flex h-full w-14 flex-col items-center justify-between border-r border-border/70 bg-[hsl(var(--sidebar-bg))] py-3 text-foreground">
       {/* 顶部：展开按钮 + 新建聊天 + 系统设置 */}
       <div className="flex flex-col items-center gap-2">
         <TooltipProvider>
@@ -536,7 +536,7 @@ export function Sidebar() {
                 href={PROJECT_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center h-10 w-10 rounded-md text-muted-foreground hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[hsl(var(--sidebar-hover))] hover:text-primary"
                 aria-label="项目地址"
               >
                 <Github className="h-5 w-5" />
@@ -560,7 +560,7 @@ export function Sidebar() {
       <div className="hidden lg:flex">
         <div
           className={cn(
-            "relative h-full overflow-hidden transition-[width] duration-300 ease-in-out bg-slate-50 dark:bg-slate-900 will-change-[width]",
+            "relative h-full overflow-hidden bg-[hsl(var(--sidebar-bg))] transition-[width] duration-300 ease-in-out will-change-[width]",
             sidebarCollapsed ? "w-14" : "w-72"
           )}
         >
@@ -593,7 +593,7 @@ export function Sidebar() {
           side="left"
           showCloseButton={false}
           dialogTitle="侧边栏导航"
-          className="w-72 border-r border-slate-200/70 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-900 p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
+          className="w-72 border-r border-border/70 bg-[hsl(var(--sidebar-bg))] p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
         >
           {sidebarContent}
         </SheetContent>
@@ -648,7 +648,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="展开侧边栏"
-            className="h-12 w-12 rounded-full border border-slate-200/80 dark:border-slate-800/80 bg-background/95 shadow-lg hover:bg-accent/70 dark:hover:bg-slate-800/80"
+            className="h-12 w-12 rounded-full border border-border/80 bg-[hsl(var(--surface))/0.95] shadow-lg hover:bg-[hsl(var(--surface-hover))]"
             onClick={() => {
               setSidebarCollapsed(false)
               setIsMobileMenuOpen(true)

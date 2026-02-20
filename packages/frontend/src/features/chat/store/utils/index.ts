@@ -187,7 +187,6 @@ export const createMeta = (message: Message, overrides: Partial<MessageMeta> = {
   return {
     id: message.id,
     sessionId: message.sessionId,
-    stableKey,
     role: message.role,
     createdAt: message.createdAt,
     clientMessageId: message.clientMessageId ?? null,
