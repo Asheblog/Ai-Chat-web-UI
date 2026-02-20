@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
@@ -47,6 +47,15 @@ interface MessageListProps {
   }
   onShareToggle?: (messageId: number) => void
   onShareStart?: (messageId: number) => void
+}
+
+interface VirtualizerResizeItem {
+  index: number
+  start: number
+}
+
+interface VirtualizerResizeInstance {
+  getScrollOffset: () => number
 }
 
 function MessageListComponent({
@@ -121,6 +130,16 @@ function MessageListComponent({
     }
     return new Set(shareSelectionState.selectedMessageIds.map((id) => messageKey(id)))
   }, [shareSelectionState.selectedMessageIds])
+  const lastDisplayIndex = displayMetas.length - 1
+  const shouldAdjustScrollPositionOnItemSizeChange = useCallback(
+    (item: VirtualizerResizeItem, _delta: number, instance: VirtualizerResizeInstance) => {
+      if (!autoScrollEnabled) return false
+      if (!isStreaming) return false
+      if (item.index !== lastDisplayIndex) return false
+      return item.start < instance.getScrollOffset()
+    },
+    [autoScrollEnabled, isStreaming, lastDisplayIndex],
+  )
 
   const virtualizer = useVirtualizer({
     count: displayMetas.length,
@@ -130,7 +149,7 @@ function MessageListComponent({
     paddingStart: 0,
     paddingEnd: 16,
     // 当前 react-virtual 类型定义缺少该字段，运行时由 virtual-core 实际支持。
-    ...({ shouldAdjustScrollPositionOnItemSizeChange: () => autoScrollEnabled } as Record<string, unknown>),
+    ...({ shouldAdjustScrollPositionOnItemSizeChange } as Record<string, unknown>),
   })
 
   if (isLoading && displayMetas.length === 0) {
