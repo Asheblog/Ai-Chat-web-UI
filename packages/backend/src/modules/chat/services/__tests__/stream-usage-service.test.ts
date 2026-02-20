@@ -1,4 +1,4 @@
-import { StreamUsageService } from '../stream-usage-service'
+import { StreamUsageService, resolveCompletionTokensForMetrics } from '../stream-usage-service'
 
 const build = () => {
   const persistAssistantFinalResponse = jest.fn(async () => 10)
@@ -33,6 +33,24 @@ const baseParams = () => ({
 })
 
 describe('StreamUsageService', () => {
+  it('uses provider completion tokens for metrics when fallback tokens are zero', () => {
+    const completion = resolveCompletionTokensForMetrics({
+      providerUsageSeen: true,
+      providerUsageSnapshot: { prompt_tokens: 100, completion_tokens: 42, total_tokens: 142 },
+      completionTokensFallback: 0,
+    })
+    expect(completion).toBe(42)
+  })
+
+  it('derives completion from total minus prompt when provider omits completion field', () => {
+    const completion = resolveCompletionTokensForMetrics({
+      providerUsageSeen: true,
+      providerUsageSnapshot: { prompt_tokens: 60, total_tokens: 90 },
+      completionTokensFallback: 0,
+    })
+    expect(completion).toBe(30)
+  })
+
   it('uses provider usage when present', async () => {
     const { service, persistAssistantFinalResponse } = build()
     const result = await service.finalize({

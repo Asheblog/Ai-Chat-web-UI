@@ -47,7 +47,9 @@ export interface FinalizeResult {
   providerUsageSource: 'provider' | 'fallback'
 }
 
-const extractUsageNumbers = (u: ProviderUsageSnapshot | null): { prompt: number; completion: number; total: number } => {
+export const extractUsageNumbers = (
+  u: ProviderUsageSnapshot | null,
+): { prompt: number; completion: number; total: number } => {
   try {
     const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0
     const completion = Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0
@@ -56,6 +58,23 @@ const extractUsageNumbers = (u: ProviderUsageSnapshot | null): { prompt: number;
   } catch {
     return { prompt: 0, completion: 0, total: 0 }
   }
+}
+
+export const resolveCompletionTokensForMetrics = (params: {
+  providerUsageSeen: boolean
+  providerUsageSnapshot: ProviderUsageSnapshot | null
+  completionTokensFallback: number
+}): number => {
+  const fallback = Math.max(0, Number(params.completionTokensFallback) || 0)
+  if (!params.providerUsageSeen) return fallback
+
+  const providerNums = extractUsageNumbers(params.providerUsageSnapshot)
+  const providerValid =
+    providerNums.prompt > 0 || providerNums.completion > 0 || providerNums.total > 0
+  if (!providerValid) return fallback
+
+  if (providerNums.completion > 0) return providerNums.completion
+  return Math.max(0, providerNums.total - providerNums.prompt)
 }
 
 export interface StreamMetrics {

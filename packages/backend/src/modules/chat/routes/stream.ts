@@ -62,7 +62,11 @@ import { providerRequester } from '../services/provider-requester';
 import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
 import { assistantProgressService } from '../services/assistant-progress-service';
 import { extractOpenAIResponsesStreamEvent } from '../../../utils/openai-responses';
-import { streamUsageService, computeStreamMetrics } from '../services/stream-usage-service';
+import {
+  streamUsageService,
+  computeStreamMetrics,
+  resolveCompletionTokensForMetrics,
+} from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
@@ -1541,6 +1545,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
             }
 
             // 计算流式响应的性能指标
+            const completionTokensForMetrics = resolveCompletionTokensForMetrics({
+              providerUsageSeen,
+              providerUsageSnapshot,
+              completionTokensFallback,
+            });
             const completedAt = Date.now();
             const streamMetrics = computeStreamMetrics({
               timing: {
@@ -1548,7 +1557,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 firstChunkAt,
                 completedAt,
               },
-              completionTokens: completionTokensFallback || 0,
+              completionTokens: completionTokensForMetrics,
             });
 
             // 发送完成事件（包含后端计算的 metrics）
