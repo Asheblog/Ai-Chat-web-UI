@@ -36,6 +36,7 @@ interface MessageListProps {
   renderCache: Record<string, MessageRenderCacheEntry>
   isStreaming: boolean
   isLoading?: boolean
+  autoScrollEnabled?: boolean
   scrollRootRef?: RefObject<HTMLElement | null>
   variantSelections?: Record<string, number | string>
   metrics?: Record<string, MessageStreamMetrics>
@@ -54,6 +55,7 @@ function MessageListComponent({
   renderCache,
   isStreaming,
   isLoading,
+  autoScrollEnabled = true,
   scrollRootRef,
   variantSelections,
   metrics,
@@ -127,6 +129,8 @@ function MessageListComponent({
     overscan: 8,
     paddingStart: 0,
     paddingEnd: 16,
+    // 当前 react-virtual 类型定义缺少该字段，运行时由 virtual-core 实际支持。
+    ...({ shouldAdjustScrollPositionOnItemSizeChange: () => autoScrollEnabled } as Record<string, unknown>),
   })
 
   if (isLoading && displayMetas.length === 0) {
@@ -283,6 +287,7 @@ export const MessageList = memo(
     prev.metas === next.metas &&
     prev.bodies === next.bodies &&
     prev.renderCache === next.renderCache &&
+    prev.autoScrollEnabled === next.autoScrollEnabled &&
     prev.scrollRootRef === next.scrollRootRef &&
     prev.variantSelections === next.variantSelections &&
     prev.shareSelection === next.shareSelection &&

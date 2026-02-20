@@ -22,6 +22,7 @@ export interface ChatMessageViewportProps {
   renderCache: Record<string, MessageRenderCacheEntry>
   isStreaming: boolean
   isLoading: boolean
+  isAutoScrollEnabled: boolean
   variantSelections: Record<string, number | string>
   sessionId: number
   sessionTitle: string
@@ -35,6 +36,7 @@ export function ChatMessageViewport({
   renderCache,
   isStreaming,
   isLoading,
+  isAutoScrollEnabled,
   variantSelections,
   sessionId,
   sessionTitle,
@@ -73,7 +75,10 @@ export function ChatMessageViewport({
     }
   }, [shareModeActive, isShareDialogOpen])
 
-  const selectedMessageIds = shareModeActive ? shareSelection.selectedMessageIds : []
+  const selectedMessageIds = useMemo(
+    () => (shareModeActive ? shareSelection.selectedMessageIds : []),
+    [shareModeActive, shareSelection.selectedMessageIds],
+  )
   const shareSelectableMessageIds = useMemo(() => {
     const ids: number[] = []
     const seen = new Set<number>()
@@ -180,6 +185,7 @@ export function ChatMessageViewport({
           renderCache={renderCache}
           isStreaming={isStreaming}
           isLoading={isLoading}
+          autoScrollEnabled={isAutoScrollEnabled}
           scrollRootRef={scrollAreaRef}
           variantSelections={variantSelections}
           metrics={messageMetrics}

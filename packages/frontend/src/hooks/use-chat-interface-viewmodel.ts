@@ -35,6 +35,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     messageRenderCache,
     isMessagesLoading,
     isStreaming,
+    isAutoScrollEnabled,
     currentSession,
     error,
     isVisionEnabled,
@@ -131,6 +132,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     isStreaming,
     isLoading: isMessagesLoading,
     variantSelections: assistantVariantSelections,
+    isAutoScrollEnabled,
     sessionId: currentSession.id,
     sessionTitle: currentSession.title || '分享链接',
   }

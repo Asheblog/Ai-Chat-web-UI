@@ -26,12 +26,16 @@ export interface UseChatComposerOptions {
   knowledgeBaseIds?: number[]
 }
 
+const AUTO_SCROLL_BOTTOM_THRESHOLD = 96
+
 export function useChatComposer(options?: UseChatComposerOptions) {
   const knowledgeBaseIds = options?.knowledgeBaseIds
   const [input, setInput] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true)
+  const autoScrollEnabledRef = useRef(true)
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
   const {
     currentSession,
@@ -168,24 +172,79 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setSessionPromptDraft,
   ])
 
-  useEffect(() => {
-    if (!scrollAreaRef.current) return
-    const scrollElement = scrollAreaRef.current.querySelector(
-      '[data-radix-scroll-area-viewport]',
-    ) as HTMLElement | null
-    if (scrollElement) {
+  const setAutoScrollState = useCallback((enabled: boolean) => {
+    autoScrollEnabledRef.current = enabled
+    setIsAutoScrollEnabled((prev) => (prev === enabled ? prev : enabled))
+  }, [])
+
+  const getScrollViewport = useCallback((): HTMLElement | null => {
+    if (!scrollAreaRef.current) return null
+    return scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null
+  }, [])
+
+  const isNearBottom = useCallback((element: HTMLElement) => {
+    const distance = element.scrollHeight - element.scrollTop - element.clientHeight
+    return distance <= AUTO_SCROLL_BOTTOM_THRESHOLD
+  }, [])
+
+  const scrollToBottom = useCallback(
+    (force = false) => {
+      const scrollElement = getScrollViewport()
+      if (!scrollElement) return
+      if (!force && !autoScrollEnabledRef.current) return
       scrollElement.scrollTop = scrollElement.scrollHeight
+      if (!autoScrollEnabledRef.current) {
+        setAutoScrollState(true)
+      }
+    },
+    [getScrollViewport, setAutoScrollState],
+  )
+
+  useEffect(() => {
+    setAutoScrollState(true)
+    if (typeof window === 'undefined') return
+    const frame = window.requestAnimationFrame(() => {
+      scrollToBottom(true)
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
     }
-  }, [messageMetas.length])
+  }, [currentSession?.id, scrollToBottom, setAutoScrollState])
+
+  useEffect(() => {
+    const scrollElement = getScrollViewport()
+    if (!scrollElement) return
+
+    const updateAutoScrollState = () => {
+      setAutoScrollState(isNearBottom(scrollElement))
+    }
+
+    updateAutoScrollState()
+    scrollElement.addEventListener('scroll', updateAutoScrollState, { passive: true })
+
+    return () => {
+      scrollElement.removeEventListener('scroll', updateAutoScrollState)
+    }
+  }, [currentSession?.id, getScrollViewport, isNearBottom, setAutoScrollState])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messageMetas.length, scrollToBottom])
+
+  useEffect(() => {
+    if (!isStreaming) return
+    scrollToBottom()
+  }, [isStreaming, messageBodies, scrollToBottom])
 
   useEffect(() => {
     if (!textareaRef.current) return
+    if (!isAutoScrollEnabled) return
     const active = typeof document !== 'undefined' ? document.activeElement : null
     const advancedEditing = active instanceof HTMLElement && active.dataset?.advancedInput === 'true'
     if (advancedEditing) return
     if (active && active !== document.body && active !== textareaRef.current) return
     textareaRef.current.focus()
-  }, [isStreaming])
+  }, [isAutoScrollEnabled, isStreaming])
 
   const {
     fileInputRef,
@@ -424,6 +483,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     sessionPromptSaving,
     sessionPromptSourceLabel,
     sessionPromptPlaceholder,
+    isAutoScrollEnabled,
     assistantVariantSelections,
     isMessagesLoading,
     isStreaming,
