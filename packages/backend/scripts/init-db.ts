@@ -17,6 +17,34 @@ const readEnvFlag = (value: unknown): boolean => {
   return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y'
 }
 
+const getMissingSkillTable = (error: unknown): string | null => {
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  const record = error as {
+    code?: unknown
+    meta?: {
+      table?: unknown
+      modelName?: unknown
+    }
+  }
+
+  if (record.code !== 'P2021') {
+    return null
+  }
+
+  const table = typeof record.meta?.table === 'string' ? record.meta.table : ''
+  const modelName = typeof record.meta?.modelName === 'string' ? record.meta.modelName : ''
+  const relatedKeywords = ['skills', 'skill_versions', 'skill_bindings', 'Skill', 'SkillVersion', 'SkillBinding']
+  const matched = relatedKeywords.some((keyword) => table.includes(keyword) || modelName.includes(keyword))
+  if (!matched) {
+    return null
+  }
+
+  return table || modelName || 'skills'
+}
+
 async function initDatabase() {
   try {
     console.log('🔄 开始初始化数据库...');
@@ -45,6 +73,15 @@ async function initDatabase() {
     console.log('🎉 数据库初始化完成！');
 
   } catch (error) {
+    const missingSkillTable = getMissingSkillTable(error)
+    if (missingSkillTable) {
+      console.error('❌ 数据库初始化失败：Skill 相关数据表不存在')
+      console.error(`   缺失表/模型: ${missingSkillTable}`)
+      console.error('   请先同步 Prisma schema 后重试：')
+      console.error('   1) pnpm --filter @aichat/backend db:deploy')
+      console.error('   2) pnpm --filter @aichat/backend db:init')
+      process.exit(1)
+    }
     console.error('❌ 数据库初始化失败:', error);
     process.exit(1);
   } finally {

@@ -351,21 +351,21 @@ function ensureDatabase(pm) {
     }
   }
 
-  // 保险：若未检测到 DB 文件，则生成 + push；若检测到也可以仅 generate（极低成本）
+  // 优先使用 migrate deploy 同步 schema，避免 db:push 在存在破坏性变更时被阻断
   const run = (script) => {
     const { cmd, args } = workspaceScript(pm, '@aichat/backend', script)
     runSync(cmd, args, { cwd: process.cwd() })
   }
 
   if (!inited) {
-    logInfo('未检测到数据库文件，准备初始化 Prisma（generate + db:push）...')
+    logInfo('未检测到数据库文件，准备初始化 Prisma（db:deploy + generate）...')
     try {
+      run('db:deploy')
       run('db:generate')
-      run('db:push')
       logSuccess('数据库初始化完成')
     } catch (e) {
       logError('数据库初始化失败，请检查 Prisma 配置与环境变量')
-      // 退避降级：调整引擎/日志后重试一次
+      // 退避降级：在新库场景下可安全回退到 db:push
       try {
         logWarn('2s 后重试一次 Prisma db:push（启用调试日志/二进制引擎）...')
         // 简单延迟
@@ -375,18 +375,20 @@ function ensureDatabase(pm) {
         process.env.RUST_LOG = process.env.RUST_LOG || 'info'
         process.env.PRISMA_CLI_QUERY_ENGINE_TYPE = process.env.PRISMA_CLI_QUERY_ENGINE_TYPE || 'binary'
         run('db:push')
+        run('db:generate')
         logSuccess('数据库初始化已在重试后完成')
       } catch (_) {
         throw e
       }
     }
   } else {
-    logInfo('检测到数据库已存在，执行 prisma generate 保持客户端同步...')
+    logInfo('检测到数据库已存在，执行 prisma migrate deploy 同步 schema 并重新生成 Prisma Client...')
     try {
+      run('db:deploy')
       run('db:generate')
-      logSuccess('Prisma Client 已生成')
+      logSuccess('数据库结构同步完成，Prisma Client 已重新生成')
     } catch (e) {
-      logWarn('Prisma Client 生成失败，请稍后手动执行')
+      logWarn('数据库结构同步失败，请手动执行：npm run --workspace @aichat/backend db:deploy')
     }
   }
 }
