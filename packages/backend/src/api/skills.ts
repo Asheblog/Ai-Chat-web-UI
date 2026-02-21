@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { actorMiddleware, adminOnlyMiddleware, requireUserActor } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import { prisma } from '../db'
@@ -10,6 +12,9 @@ import {
   pythonRuntimeService,
   PythonRuntimeServiceError,
 } from '../services/python-runtime'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('SkillsApi')
 
 const installSchema = z.object({
   source: z.string().min(3).max(256),
@@ -64,6 +69,40 @@ const safeJsonObject = (raw: string | null | undefined): Record<string, unknown>
     // ignore parse errors
   }
   return {}
+}
+
+const resolveSkillStorageRoot = (): string => {
+  const configured = process.env.SKILL_STORAGE_ROOT
+  if (configured && configured.trim()) {
+    return path.resolve(configured.trim())
+  }
+  const appDataDir = process.env.APP_DATA_DIR || process.env.DATA_DIR
+  if (appDataDir && appDataDir.trim()) {
+    return path.resolve(appDataDir.trim(), 'skills')
+  }
+  return path.resolve(process.cwd(), 'data', 'skills')
+}
+
+const isSubPath = (rootDir: string, targetPath: string): boolean => {
+  const normalizedRoot = path.resolve(rootDir)
+  const normalizedTarget = path.resolve(targetPath)
+  if (normalizedRoot === normalizedTarget) return true
+  return normalizedTarget.startsWith(`${normalizedRoot}${path.sep}`)
+}
+
+const collectPythonRequirementsFromManifest = (manifestJson: string | null | undefined): string[] => {
+  if (!manifestJson) return []
+  try {
+    const parsed = JSON.parse(manifestJson)
+    if (!parsed || typeof parsed !== 'object') return []
+    const list = (parsed as Record<string, unknown>).python_packages
+    if (!Array.isArray(list)) return []
+    return list
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+  } catch {
+    return []
+  }
 }
 
 export const createSkillsApi = () => {
@@ -292,6 +331,131 @@ export const createSkillsApi = () => {
       return c.json<ApiResponse>({ success: true, data: result })
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Install skill failed' }, 400)
+    }
+  })
+
+  router.delete('/:skillId', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+    try {
+      const skillId = Number.parseInt(c.req.param('skillId'), 10)
+      if (!Number.isFinite(skillId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid skill id' }, 400)
+      }
+
+      const skill = await (prisma as any).skill.findUnique({
+        where: { id: skillId },
+        select: {
+          id: true,
+          slug: true,
+          sourceType: true,
+          versions: {
+            select: {
+              id: true,
+              version: true,
+              manifestJson: true,
+              packagePath: true,
+            },
+          },
+        },
+      })
+
+      if (!skill) {
+        return c.json<ApiResponse>({ success: false, error: 'Skill not found' }, 404)
+      }
+      if (skill.sourceType === 'builtin') {
+        return c.json<ApiResponse>({ success: false, error: 'Builtin skill cannot be uninstalled' }, 400)
+      }
+
+      const removedRequirements = Array.from(
+        new Set(
+          (skill.versions || []).flatMap((version: any) =>
+            collectPythonRequirementsFromManifest(version.manifestJson),
+          ),
+        ),
+      )
+      const packagePaths = Array.from(
+        new Set(
+          (skill.versions || [])
+            .map((version: any) => (typeof version.packagePath === 'string' ? version.packagePath.trim() : ''))
+            .filter(Boolean),
+        ),
+      )
+
+      await (prisma as any).skill.delete({
+        where: { id: skill.id },
+      })
+
+      const storageRoot = resolveSkillStorageRoot()
+      const removedPackageDirs: string[] = []
+      const skippedPackageDirs: string[] = []
+      for (const packagePath of packagePaths) {
+        if (!isSubPath(storageRoot, packagePath)) {
+          skippedPackageDirs.push(packagePath)
+          logger.warn('skip deleting skill package path outside storage root', {
+            skillId: skill.id,
+            skillSlug: skill.slug,
+            packagePath,
+            storageRoot,
+          })
+          continue
+        }
+        try {
+          await fs.rm(packagePath, { recursive: true, force: true })
+          removedPackageDirs.push(packagePath)
+        } catch (error) {
+          skippedPackageDirs.push(packagePath)
+          logger.warn('delete skill package path failed', {
+            skillId: skill.id,
+            skillSlug: skill.slug,
+            packagePath,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
+      let pythonCleanup: Record<string, unknown> | null = null
+      if (removedRequirements.length > 0) {
+        try {
+          const cleanup = await pythonRuntimeService.cleanupPackagesAfterSkillRemoval({
+            removedRequirements,
+          })
+          pythonCleanup = cleanup as unknown as Record<string, unknown>
+        } catch (error) {
+          if (error instanceof PythonRuntimeServiceError) {
+            pythonCleanup = {
+              error: error.message,
+              code: error.code,
+              details: error.details,
+            }
+          } else {
+            pythonCleanup = {
+              error: error instanceof Error ? error.message : 'Unknown python cleanup error',
+              code: 'PYTHON_RUNTIME_SKILL_CLEANUP_UNKNOWN_ERROR',
+            }
+          }
+        }
+      }
+
+      logger.info('skill uninstalled', {
+        skillId: skill.id,
+        skillSlug: skill.slug,
+        removedRequirementsCount: removedRequirements.length,
+        removedPackageDirCount: removedPackageDirs.length,
+        skippedPackageDirCount: skippedPackageDirs.length,
+      })
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          skillId: skill.id,
+          slug: skill.slug,
+          removedRequirements,
+          removedPackageDirs,
+          skippedPackageDirs,
+          pythonCleanup,
+        },
+      })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Uninstall skill failed' }, 500)
     }
   })
 

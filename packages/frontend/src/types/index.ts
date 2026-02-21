@@ -374,6 +374,7 @@ export interface PythonRuntimeStatus {
   pythonPath: string;
   ready: boolean;
   indexes: PythonRuntimeIndexes;
+  manualPackages: string[];
   installedPackages: PythonRuntimeInstalledPackage[];
   activeDependencies: PythonRuntimeDependencyItem[];
   conflicts: PythonRuntimeConflictItem[];

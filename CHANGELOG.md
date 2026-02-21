@@ -5,6 +5,7 @@
 - BREAKING: 系统设置导航从 13 个子页收敛为单一「配置中心」入口，模块改为页内二级分组切换（基础运行、模型与工具、知识与文档、治理与审计）；迁移策略为无迁移、直接替换。
 - BREAKING: Python 工具链路切换为受管运行环境（持久化 venv），`python_runner` 与 Python Skill 统一使用受管解释器；移除并停用系统设置旧字段 `python_tool_command`、`python_tool_args`；迁移策略为无迁移、直接替换。
 - 新增系统设置模块「Python 运行环境」：支持在线配置索引、安装/卸载依赖、冲突告警与 reconcile；Skill manifest 新增 `python_packages`，在版本激活时自动安装并执行 `pip check`，失败即阻断激活。
+- 新增 Skill 卸载接口：删除第三方 Skill 时自动清理其安装包目录，并自动回收未被其他激活 Skill/手动保留依赖占用的 Python 包。
 
 ## v1.9.0 · 2026-02-19
 

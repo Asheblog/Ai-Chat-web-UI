@@ -76,6 +76,7 @@ UI 展示为中文描述，但底层仍使用稳定的 slug/tool 名，便于 AP
    - 拉取并解压 -> manifest 校验 -> 风险分级 -> 入库
 3. 对 `pending_approval` 版本先审批，再激活。
 4. 在“绑定管理”中绑定作用域（`system/user/session/battle_model`）。
+5. 支持卸载第三方 Skill：卸载后会自动尝试回收仅由该 Skill 使用、且未被其他激活 Skill/手动保留依赖占用的 Python 包。
 
 ### 6. 审批与审计
 
@@ -139,6 +140,7 @@ Skill 管理相关 API 一览：
 
 - `GET /api/skills/catalog`
 - `POST /api/skills/install`
+- `DELETE /api/skills/:skillId`
 - `POST /api/skills/:skillId/versions/:versionId/approve`
 - `POST /api/skills/:skillId/versions/:versionId/activate`
 - `POST /api/skills/bindings`

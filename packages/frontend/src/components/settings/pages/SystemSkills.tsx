@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/use-toast'
 import {
   activateSkillVersion,
   approveSkillVersion,
+  deleteSkill,
   deleteSkillBinding,
   installSkillFromGithub,
   listSkillApprovals,
@@ -26,6 +27,7 @@ export function SystemSkillsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [versionActionKey, setVersionActionKey] = useState<string | null>(null)
+  const [skillActionKey, setSkillActionKey] = useState<string | null>(null)
   const [bindingSubmitting, setBindingSubmitting] = useState(false)
   const [approvalActionId, setApprovalActionId] = useState<number | null>(null)
 
@@ -176,6 +178,50 @@ export function SystemSkillsPage() {
     }
   }
 
+  const handleUninstallSkill = async (skillId: number) => {
+    const skill = catalog.find((item) => item.id === skillId)
+    if (!skill) return
+    const confirmed = typeof window === 'undefined'
+      ? true
+      : window.confirm(`确认卸载 Skill「${skill.displayName}」？该操作会删除版本记录，并自动尝试回收未复用的 Python 依赖。`)
+    if (!confirmed) return
+
+    const key = `delete:${skillId}`
+    setSkillActionKey(key)
+    try {
+      const response = await deleteSkill(skillId)
+      if (!response?.success) {
+        throw new Error(response?.error || '卸载失败')
+      }
+
+      const removedPackages = Array.isArray((response.data as any)?.pythonCleanup?.removedPackages)
+        ? (response.data as any).pythonCleanup.removedPackages.length
+        : 0
+      const cleanupError = (response.data as any)?.pythonCleanup?.error
+      if (cleanupError) {
+        toast({
+          title: 'Skill 已卸载，依赖回收有告警',
+          description: String(cleanupError),
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Skill 已卸载',
+          description: removedPackages > 0 ? `已自动回收 ${removedPackages} 个 Python 包` : '没有需要回收的 Python 包',
+        })
+      }
+      await refreshAll(false)
+    } catch (error) {
+      toast({
+        title: '卸载 Skill 失败',
+        description: error instanceof Error ? error.message : '未知错误',
+        variant: 'destructive',
+      })
+    } finally {
+      setSkillActionKey(null)
+    }
+  }
+
   const handleUpsertBinding = async () => {
     if (!bindingSkillId) {
       toast({ title: '请先选择 Skill', variant: 'destructive' })
@@ -282,8 +328,10 @@ export function SystemSkillsPage() {
         loading={loading}
         catalog={catalog}
         versionActionKey={versionActionKey}
+        skillActionKey={skillActionKey}
         onApproveVersion={handleApproveVersion}
         onActivateVersion={handleActivateVersion}
+        onUninstallSkill={handleUninstallSkill}
       />
 
       <SkillBindingsSection

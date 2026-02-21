@@ -39,6 +39,7 @@ const baseStatus: PythonRuntimeStatus = {
     trustedHosts: ["mirror.example"],
     autoInstallOnActivate: true,
   },
+  manualPackages: ["numpy"],
   installedPackages: [
     { name: "numpy", version: "2.1.0" },
     { name: "pandas", version: "2.2.2" },

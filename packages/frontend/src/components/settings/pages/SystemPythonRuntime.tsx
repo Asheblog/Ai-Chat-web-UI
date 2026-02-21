@@ -218,6 +218,7 @@ export function SystemPythonRuntimePage() {
         <div className="flex items-center gap-2">
           <Badge variant={status.ready ? "default" : "secondary"}>{status.ready ? "Ready" : "Not Ready"}</Badge>
           <Badge variant="outline">已安装 {status.installedPackages.length} 个包</Badge>
+          <Badge variant="outline">手动保留 {Array.isArray(status.manualPackages) ? status.manualPackages.length : 0} 个包</Badge>
           <Badge variant="outline">激活依赖 {status.activeDependencies.length} 条</Badge>
           {status.conflicts.length > 0 ? <Badge variant="destructive">冲突 {status.conflicts.length}</Badge> : <Badge variant="outline">无冲突</Badge>}
         </div>

@@ -10,6 +10,7 @@ const INDEX_KEY = 'python_runtime_index_url'
 const EXTRA_INDEXES_KEY = 'python_runtime_extra_index_urls'
 const TRUSTED_HOSTS_KEY = 'python_runtime_trusted_hosts'
 const AUTO_INSTALL_ON_ACTIVATE_KEY = 'python_runtime_auto_install_on_activate'
+const MANUAL_PACKAGES_KEY = 'python_runtime_manual_packages'
 
 const DEFAULT_OPERATION_TIMEOUT_MS = 120_000
 const DEFAULT_PIP_TIMEOUT_MS = 240_000
@@ -58,6 +59,7 @@ export interface PythonRuntimeStatus {
   pythonPath: string
   ready: boolean
   indexes: PythonRuntimeIndexes
+  manualPackages: string[]
   installedPackages: PythonRuntimeInstalledPackage[]
   activeDependencies: PythonRuntimeDependencyItem[]
   conflicts: PythonRuntimeConflictItem[]
@@ -84,6 +86,13 @@ export interface PythonRuntimeReconcileResult {
   pipCheckOutput: string
   installedPackages: PythonRuntimeInstalledPackage[]
   conflicts: PythonRuntimeConflictItem[]
+}
+
+export interface PythonRuntimeSkillCleanupResult {
+  removedSkillPackages: string[]
+  keptByActiveSkills: string[]
+  keptByManual: string[]
+  removedPackages: string[]
 }
 
 export class PythonRuntimeServiceError extends Error {
@@ -228,6 +237,26 @@ const parseRequirement = (value: string): RequirementEntry => {
   return { raw, packageName }
 }
 
+const parseRequirementSafe = (value: string): RequirementEntry | null => {
+  try {
+    return parseRequirement(value)
+  } catch {
+    return null
+  }
+}
+
+const normalizePackageList = (items: string[] | undefined, max = 512): string[] => {
+  if (!Array.isArray(items)) return []
+  const dedup = new Set<string>()
+  for (const item of items) {
+    const normalized = validatePackageName(item || '')
+    if (!normalized) continue
+    dedup.add(normalized)
+    if (dedup.size >= max) break
+  }
+  return Array.from(dedup).sort((a, b) => a.localeCompare(b))
+}
+
 export class PythonRuntimeService {
   private readonly prisma: PrismaClient
   private readonly env: NodeJS.ProcessEnv
@@ -332,6 +361,94 @@ export class PythonRuntimeService {
     }
 
     return this.getIndexes()
+  }
+
+  async getManualPackages(): Promise<string[]> {
+    const map = await this.readSettings([MANUAL_PACKAGES_KEY])
+    const rawList = parseJsonArray(map.get(MANUAL_PACKAGES_KEY))
+    return normalizePackageList(rawList)
+  }
+
+  private async saveManualPackages(packages: string[]): Promise<void> {
+    const normalized = normalizePackageList(packages)
+    await this.upsertSetting(MANUAL_PACKAGES_KEY, JSON.stringify(normalized))
+  }
+
+  private async addManualPackages(packages: string[]): Promise<void> {
+    const existing = await this.getManualPackages()
+    const merged = normalizePackageList([...existing, ...packages])
+    await this.saveManualPackages(merged)
+  }
+
+  private async removeManualPackages(packages: string[]): Promise<void> {
+    const existing = await this.getManualPackages()
+    if (existing.length === 0) return
+    const removeSet = new Set(normalizePackageList(packages))
+    if (removeSet.size === 0) return
+    const next = existing.filter((item) => !removeSet.has(item))
+    await this.saveManualPackages(next)
+  }
+
+  async cleanupPackagesAfterSkillRemoval(input: {
+    removedRequirements: string[]
+  }): Promise<PythonRuntimeSkillCleanupResult> {
+    const removedSkillPackages = Array.from(
+      new Set(
+        (input.removedRequirements || [])
+          .map((item) => parseRequirementSafe(item))
+          .filter((item): item is RequirementEntry => Boolean(item))
+          .map((item) => item.packageName),
+      ),
+    ).sort((a, b) => a.localeCompare(b))
+
+    if (removedSkillPackages.length === 0) {
+      return {
+        removedSkillPackages: [],
+        keptByActiveSkills: [],
+        keptByManual: [],
+        removedPackages: [],
+      }
+    }
+
+    const [activeDependencies, manualPackages] = await Promise.all([
+      this.collectActiveDependencies(),
+      this.getManualPackages(),
+    ])
+    const activePackageSet = new Set(activeDependencies.map((item) => item.packageName))
+    const manualPackageSet = new Set(manualPackages)
+
+    const keptByActiveSkills: string[] = []
+    const keptByManual: string[] = []
+    const removable: string[] = []
+
+    for (const pkg of removedSkillPackages) {
+      if (activePackageSet.has(pkg)) {
+        keptByActiveSkills.push(pkg)
+        continue
+      }
+      if (manualPackageSet.has(pkg)) {
+        keptByManual.push(pkg)
+        continue
+      }
+      removable.push(pkg)
+    }
+
+    if (removable.length === 0) {
+      return {
+        removedSkillPackages,
+        keptByActiveSkills,
+        keptByManual,
+        removedPackages: [],
+      }
+    }
+
+    const result = await this.uninstallPackages(removable)
+    return {
+      removedSkillPackages,
+      keptByActiveSkills,
+      keptByManual,
+      removedPackages: result.packages,
+    }
   }
 
   private async fileExists(targetPath: string): Promise<boolean> {
@@ -657,8 +774,9 @@ export class PythonRuntimeService {
 
   async getRuntimeStatus(): Promise<PythonRuntimeStatus> {
     const paths = await this.ensureManagedRuntime()
-    const [indexes, installedPackages, dependencies] = await Promise.all([
+    const [indexes, manualPackages, installedPackages, dependencies] = await Promise.all([
       this.getIndexes(),
+      this.getManualPackages(),
       this.listInstalledPackages(),
       this.collectActiveDependencies(),
     ])
@@ -671,6 +789,7 @@ export class PythonRuntimeService {
       pythonPath: paths.pythonPath,
       ready: true,
       indexes,
+      manualPackages,
       installedPackages,
       activeDependencies: dependencies,
       conflicts,
@@ -722,6 +841,10 @@ export class PythonRuntimeService {
           400,
           'PYTHON_RUNTIME_PIP_CHECK_FAILED',
         )
+      }
+
+      if (input.source === 'manual') {
+        await this.addManualPackages(entries.map((item) => item.packageName))
       }
 
       logger.info('installed python requirements', {
@@ -800,6 +923,8 @@ export class PythonRuntimeService {
           'PYTHON_RUNTIME_PIP_CHECK_FAILED',
         )
       }
+
+      await this.removeManualPackages(normalized)
 
       logger.info('uninstalled python packages', {
         packages: normalized,

@@ -11,16 +11,20 @@ type SkillVersionSectionProps = {
   loading: boolean
   catalog: SkillCatalogItem[]
   versionActionKey: string | null
+  skillActionKey: string | null
   onApproveVersion: (skillId: number, versionId: number) => void
   onActivateVersion: (skillId: number, versionId: number) => void
+  onUninstallSkill: (skillId: number) => void
 }
 
 export function SkillVersionSection({
   loading,
   catalog,
   versionActionKey,
+  skillActionKey,
   onApproveVersion,
   onActivateVersion,
+  onUninstallSkill,
 }: SkillVersionSectionProps) {
   return (
     <div className="space-y-4">
@@ -50,6 +54,16 @@ export function SkillVersionSection({
                 {skill.defaultVersion ? (
                   <Badge variant="secondary">default: {skill.defaultVersion.version}</Badge>
                 ) : null}
+                <div className="ml-auto">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={skillActionKey === `delete:${skill.id}`}
+                    onClick={() => onUninstallSkill(skill.id)}
+                  >
+                    {skillActionKey === `delete:${skill.id}` ? '卸载中...' : '卸载 Skill'}
+                  </Button>
+                </div>
               </div>
               {skill.description ? (
                 <p className="line-clamp-2 text-xs text-muted-foreground">{skill.description}</p>

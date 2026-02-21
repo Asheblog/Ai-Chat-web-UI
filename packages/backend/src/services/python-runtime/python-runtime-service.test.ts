@@ -116,4 +116,38 @@ describe('PythonRuntimeService', () => {
       statusCode: 409,
     })
   })
+
+  it('cleans up only packages no longer required after skill removal', async () => {
+    const prisma = createMockPrisma()
+    const service = new PythonRuntimeService({ prisma: prisma as any })
+
+    jest.spyOn(service, 'collectActiveDependencies').mockResolvedValue([
+      {
+        skillId: 2,
+        skillSlug: 'other',
+        skillDisplayName: 'Other',
+        versionId: 202,
+        version: '2.0.0',
+        requirement: 'numpy>=2.0',
+        packageName: 'numpy',
+      },
+    ])
+    jest.spyOn(service, 'getManualPackages').mockResolvedValue(['pandas'])
+    jest.spyOn(service, 'uninstallPackages').mockResolvedValue({
+      packages: ['scipy'],
+      pipCheckPassed: true,
+      pipCheckOutput: '',
+      installedPackages: [],
+    })
+
+    const result = await service.cleanupPackagesAfterSkillRemoval({
+      removedRequirements: ['numpy==2.1.0', 'pandas>=2.2', 'scipy==1.13'],
+    })
+
+    expect(service.uninstallPackages).toHaveBeenCalledWith(['scipy'])
+    expect(result.removedSkillPackages).toEqual(['numpy', 'pandas', 'scipy'])
+    expect(result.keptByActiveSkills).toEqual(['numpy'])
+    expect(result.keptByManual).toEqual(['pandas'])
+    expect(result.removedPackages).toEqual(['scipy'])
+  })
 })

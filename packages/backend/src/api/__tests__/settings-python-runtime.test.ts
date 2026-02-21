@@ -120,6 +120,7 @@ describe('settings python-runtime api', () => {
         trustedHosts: [],
         autoInstallOnActivate: true,
       },
+      manualPackages: [],
       installedPackages: [{ name: 'numpy', version: '2.1.0' }],
       activeDependencies: [],
       conflicts: [],
