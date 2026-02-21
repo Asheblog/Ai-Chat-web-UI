@@ -30,13 +30,9 @@ export interface BattleStreamPayload {
     modelId: string
     connectionId?: number
     rawId?: string
-    features?: {
-      web_search?: boolean
-      web_search_scope?: 'webpage' | 'document' | 'paper' | 'image' | 'video' | 'podcast'
-      web_search_include_summary?: boolean
-      web_search_include_raw?: boolean
-      web_search_size?: number
-      python_tool?: boolean
+    skills?: {
+      enabled: string[]
+      overrides?: Record<string, Record<string, unknown>>
     }
     extraPrompt?: string
     custom_body?: Record<string, any>

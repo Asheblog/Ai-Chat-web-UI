@@ -39,6 +39,8 @@ model User {
   battleShares   BattleShare[] @relation("UserBattleShares")
   documents      Document[]
   knowledgeBases KnowledgeBase[]
+  createdSkills Skill[] @relation("UserCreatedSkills")
+  decidedSkillApprovals SkillApprovalRequest[] @relation("UserDecidedSkillApprovals")
 
   @@index([status])
   @@map("users")
@@ -198,6 +200,148 @@ model SystemSetting {
   value String
 
   @@map("system_settings")
+}
+
+model Skill {
+  id               Int      @id @default(autoincrement())
+  slug             String   @unique
+  displayName      String
+  description      String?
+  sourceType       String   @default("builtin") // builtin | github
+  sourceUrl        String?
+  status           String   @default("active") // active | disabled
+  defaultVersionId Int?      @unique
+  createdByUserId  Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy      User?                @relation("UserCreatedSkills", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  versions       SkillVersion[]
+  bindings       SkillBinding[]
+  approvals      SkillApprovalRequest[]
+  audits         SkillExecutionAudit[]
+  defaultVersion SkillVersion?        @relation("SkillDefaultVersion", fields: [defaultVersionId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("skills")
+}
+
+model SkillVersion {
+  id              Int      @id @default(autoincrement())
+  skillId         Int
+  version         String
+  status          String   @default("pending_validation") // pending_validation | pending_approval | active | rejected | deprecated
+  riskLevel       String   @default("low") // low | medium | high | critical
+  entry           String
+  instruction     String?
+  manifestJson    String   @default("{}")
+  packageHash     String?
+  packagePath     String?
+  sourceRef       String?
+  sourceSubdir    String?
+  approvedAt      DateTime?
+  activatedAt     DateTime?
+  createdByUserId Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  skill           Skill                 @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  defaultForSkill Skill?                @relation("SkillDefaultVersion")
+  bindings        SkillBinding[]
+  approvals       SkillApprovalRequest[]
+  audits          SkillExecutionAudit[]
+
+  @@unique([skillId, version])
+  @@index([skillId, status])
+  @@index([createdByUserId])
+  @@map("skill_versions")
+}
+
+model SkillBinding {
+  id              Int      @id @default(autoincrement())
+  skillId         Int
+  versionId       Int?
+  scopeType       String   // system | user | session | battle_model
+  scopeId         String
+  enabled         Boolean  @default(true)
+  policyJson      String   @default("{}")
+  overridesJson   String   @default("{}")
+  createdByUserId Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  skill     Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version   SkillVersion?     @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  approvals SkillApprovalRequest[]
+
+  @@unique([skillId, scopeType, scopeId])
+  @@index([scopeType, scopeId])
+  @@index([versionId])
+  @@map("skill_bindings")
+}
+
+model SkillApprovalRequest {
+  id                 Int      @id @default(autoincrement())
+  skillId            Int
+  versionId          Int?
+  bindingId          Int?
+  sessionId          Int?
+  battleRunId        Int?
+  messageId          Int?
+  toolName           String
+  toolCallId         String?
+  status             String   @default("pending") // pending | approved | denied | expired
+  reason             String?
+  requestPayloadJson String   @default("{}")
+  decisionNote       String?
+  requestedByActor   String
+  requestedAt        DateTime @default(now())
+  decidedAt          DateTime?
+  decidedByUserId    Int?
+  expiresAt          DateTime?
+
+  skill          Skill               @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version        SkillVersion?       @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  binding        SkillBinding?       @relation(fields: [bindingId], references: [id], onDelete: SetNull)
+  decidedBy      User?               @relation("UserDecidedSkillApprovals", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  audits         SkillExecutionAudit[]
+
+  @@index([status, expiresAt])
+  @@index([sessionId])
+  @@index([battleRunId])
+  @@index([messageId])
+  @@index([toolCallId])
+  @@map("skill_approval_requests")
+}
+
+model SkillExecutionAudit {
+  id                  Int      @id @default(autoincrement())
+  skillId             Int
+  versionId           Int?
+  approvalRequestId   Int?
+  sessionId           Int?
+  battleRunId         Int?
+  messageId           Int?
+  toolName            String
+  toolCallId          String?
+  requestPayloadJson  String   @default("{}")
+  responsePayloadJson String   @default("{}")
+  approvalStatus      String?
+  platform            String?
+  durationMs          Int?
+  error               String?
+  createdAt           DateTime @default(now())
+
+  skill           Skill                @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version         SkillVersion?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  approvalRequest SkillApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt])
+  @@index([battleRunId, createdAt])
+  @@index([messageId, createdAt])
+  @@index([toolCallId])
+  @@map("skill_execution_audits")
 }
 
 model UsageQuota {

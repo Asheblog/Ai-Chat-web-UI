@@ -6,6 +6,10 @@ jest.mock('../../../../utils/providers', () => ({
   convertOpenAIReasoningPayload: (body: any) => body,
 }))
 
+jest.mock('../../../../db', () => ({
+  prisma: {},
+}))
+
 import { ChatRequestBuilder } from '../chat-request-builder'
 
 const baseSession = {
@@ -32,6 +36,9 @@ const buildBuilder = () => {
     },
     systemSetting: {
       findMany: jest.fn(),
+    },
+    modelCatalog: {
+      findFirst: jest.fn(),
     },
   }
   const tokenizer = {
@@ -64,7 +71,7 @@ const buildBuilder = () => {
 }
 
 describe('ChatRequestBuilder', () => {
-  it('builds stream request with web search prefix', async () => {
+  it('builds stream request with web-search skill prompt', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([
       { role: 'assistant', content: 'hi', createdAt: new Date('2024-01-01T00:00:00Z') },
@@ -73,6 +80,7 @@ describe('ChatRequestBuilder', () => {
       { key: 'provider_timeout_ms', value: '123000' },
       { key: 'reasoning_enabled', value: 'true' },
     ])
+    prisma.modelCatalog.findFirst.mockResolvedValue(null)
     tokenizer.truncateMessages.mockResolvedValue([
       { role: 'assistant', content: 'hi' },
       { role: 'user', content: 'hello' },
@@ -83,7 +91,7 @@ describe('ChatRequestBuilder', () => {
 
     const prepared = await builder.prepare({
       session: baseSession as any,
-      payload: { sessionId: 1, content: 'hello', features: { web_search: true } } as any,
+      payload: { sessionId: 1, content: 'hello', skills: { enabled: ['web-search'] } } as any,
       content: 'hello',
       images: [],
       mode: 'stream',
@@ -112,6 +120,7 @@ describe('ChatRequestBuilder', () => {
       { key: 'reasoning_enabled', value: 'false' },
       { key: 'ollama_think', value: 'true' },
     ])
+    prisma.modelCatalog.findFirst.mockResolvedValue(null)
     tokenizer.truncateMessages.mockResolvedValue([
       { role: 'assistant', content: 'old' },
       { role: 'user', content: 'replay' },
@@ -157,6 +166,7 @@ describe('ChatRequestBuilder', () => {
     prisma.systemSetting.findMany.mockResolvedValue([
       { key: 'chat_system_prompt', value: 'global prompt' },
     ])
+    prisma.modelCatalog.findFirst.mockResolvedValue(null)
     tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
     tokenizer.countConversationTokens.mockResolvedValue(10)
     resolveContextLimit.mockResolvedValue(1000)
@@ -182,6 +192,7 @@ describe('ChatRequestBuilder', () => {
     prisma.systemSetting.findMany.mockResolvedValue([
       { key: 'chat_system_prompt', value: 'global prompt' },
     ])
+    prisma.modelCatalog.findFirst.mockResolvedValue(null)
     tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
     tokenizer.countConversationTokens.mockResolvedValue(10)
     resolveContextLimit.mockResolvedValue(1000)

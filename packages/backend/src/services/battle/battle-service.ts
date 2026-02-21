@@ -23,7 +23,7 @@ import { BattleExecutor, type BattleExecutionContext } from './battle-executor'
 import { safeJsonStringify, safeParseJson } from './battle-serialization'
 import { battleImageService as defaultBattleImageService, type BattleImageService } from './battle-image-service'
 import type {
-  BattleModelFeatures,
+  BattleModelSkills,
   BattleModelInput,
   BattleRunConfig,
   BattleRunConfigModel,
@@ -34,6 +34,7 @@ import type {
   BattleSharePayload,
   BattleResultRecord,
 } from './battle-types'
+import { BUILTIN_SKILL_SLUGS } from '../../modules/skills/types'
 
 type BattleRunControl = {
   runId: number
@@ -154,26 +155,31 @@ const normalizeCustomBodyForConfig = (body?: Record<string, any> | null) => {
   return body
 }
 
-const normalizeConfigFeatures = (raw: unknown): BattleModelFeatures | undefined => {
+const normalizeConfigSkills = (raw: unknown): BattleModelSkills | undefined => {
   if (!raw || typeof raw !== 'object') return undefined
   const data = raw as Record<string, any>
-  const features: BattleModelFeatures = {}
-  if (typeof data.web_search === 'boolean') features.web_search = data.web_search
-  if (typeof data.web_search_scope === 'string') {
-    const scope = data.web_search_scope as BattleModelFeatures['web_search_scope']
-    if (scope) features.web_search_scope = scope
+
+  const enabledFromPayload = Array.isArray(data.enabled)
+    ? data.enabled
+        .map((item) => (typeof item === 'string' ? item.trim().toLowerCase() : ''))
+        .filter((item) => item.length > 0)
+    : []
+
+  const legacyEnabled: string[] = []
+  if (data.web_search === true) legacyEnabled.push(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
+  if (data.python_tool === true) legacyEnabled.push(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
+
+  const enabled = Array.from(new Set([...enabledFromPayload, ...legacyEnabled]))
+  const overrides =
+    data.overrides && typeof data.overrides === 'object' && !Array.isArray(data.overrides)
+      ? (data.overrides as Record<string, Record<string, unknown>>)
+      : undefined
+
+  if (enabled.length === 0 && !overrides) return undefined
+  return {
+    enabled,
+    ...(overrides ? { overrides } : {}),
   }
-  if (typeof data.web_search_include_summary === 'boolean') {
-    features.web_search_include_summary = data.web_search_include_summary
-  }
-  if (typeof data.web_search_include_raw === 'boolean') {
-    features.web_search_include_raw = data.web_search_include_raw
-  }
-  if (typeof data.web_search_size === 'number' && Number.isFinite(data.web_search_size)) {
-    features.web_search_size = Math.min(10, Math.max(1, Math.floor(data.web_search_size)))
-  }
-  if (typeof data.python_tool === 'boolean') features.python_tool = data.python_tool
-  return Object.keys(features).length > 0 ? features : undefined
 }
 
 const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | null => {
@@ -245,7 +251,7 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
       const model = item as Record<string, any>
       const modelId = typeof model.modelId === 'string' ? model.modelId.trim() : ''
       if (!modelId) return null
-      const features = normalizeConfigFeatures(model.features)
+      const skills = normalizeConfigSkills(model.skills ?? model.features)
       const customHeaders = normalizeCustomHeadersForConfig(
         Array.isArray(model.customHeaders)
           ? model.customHeaders
@@ -272,7 +278,7 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
         modelId,
         connectionId: isFiniteNumber(model.connectionId) ? model.connectionId : null,
         rawId: typeof model.rawId === 'string' && model.rawId.trim().length > 0 ? model.rawId.trim() : null,
-        ...(features ? { features } : {}),
+        ...(skills ? { skills } : {}),
         ...(extraPrompt ? { extraPrompt } : {}),
         ...(customHeaders.length > 0 ? { customHeaders } : {}),
         ...(customBody ? { customBody } : {}),
@@ -588,7 +594,7 @@ export class BattleService {
         connectionId: target.connectionId,
         rawId: target.rawId,
         attemptIndex: params.attemptIndex,
-        features: modelEntry.config.features,
+        skills: modelEntry.config.skills,
         customBody: modelEntry.config.custom_body,
         customHeaders: modelEntry.config.custom_headers,
         output: '',
@@ -1344,11 +1350,12 @@ export class BattleService {
       judgeThreshold,
       models: input.models.map((model) => {
         const extraPrompt = typeof model.extraPrompt === 'string' ? model.extraPrompt.trim() : ''
+        const normalizedSkills = normalizeConfigSkills(model.skills) || { enabled: [] as string[] }
         return {
           modelId: model.modelId,
           connectionId: model.connectionId ?? null,
           rawId: model.rawId ?? null,
-          features: model.features ?? {},
+          skills: normalizedSkills,
           ...(extraPrompt ? { extraPrompt } : {}),
           customHeaders: normalizeCustomHeadersForConfig(model.custom_headers),
           customBody: normalizeCustomBodyForConfig(model.custom_body),
@@ -1470,9 +1477,8 @@ export class BattleService {
             modelId: model.modelId,
             connectionId: model.connectionId ?? null,
             rawId: model.rawId ?? null,
-            features: model.features ? {
-              web_search: model.features.web_search === true,
-              python_tool: model.features.python_tool === true,
+            skills: model.skills ? {
+              enabled: model.skills.enabled,
             } : undefined,
             reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : undefined,
             reasoningEffort: model.reasoningEffort || undefined,
@@ -1821,7 +1827,7 @@ export class BattleService {
         connectionId: model.resolved.connection.id,
         rawId: model.resolved.rawModelId,
         attemptIndex,
-        features: model.config.features,
+        skills: model.config.skills,
         customBody: model.config.custom_body,
         customHeaders: model.config.custom_headers,
         output: '',
@@ -1854,10 +1860,7 @@ export class BattleService {
     traceRecorder?.log('battle:attempt_start', {
       ...attemptTraceContext,
       attemptIndex,
-      features: model.config.features ? {
-        web_search: model.config.features.web_search === true,
-        python_tool: model.config.features.python_tool === true,
-      } : undefined,
+      skills: model.config.skills ?? undefined,
       reasoningEnabled: typeof model.config.reasoningEnabled === 'boolean' ? model.config.reasoningEnabled : undefined,
       reasoningEffort: model.config.reasoningEffort || undefined,
       ollamaThink: typeof model.config.ollamaThink === 'boolean' ? model.config.ollamaThink : undefined,
@@ -1992,7 +1995,7 @@ export class BattleService {
       connectionId: model.resolved.connection.id,
       rawId: model.resolved.rawModelId,
       attemptIndex,
-      features: model.config.features,
+      skills: model.config.skills,
       customBody: model.config.custom_body,
       customHeaders: model.config.custom_headers,
       output,
@@ -2048,7 +2051,7 @@ export class BattleService {
     connectionId: number | null
     rawId: string | null
     attemptIndex: number
-    features?: BattleModelFeatures
+    skills?: BattleModelSkills
     customBody?: Record<string, any>
     customHeaders?: Array<{ name: string; value: string }>
     output: string
@@ -2067,7 +2070,7 @@ export class BattleService {
         connectionId: params.connectionId,
         rawId: params.rawId,
         attemptIndex: params.attemptIndex,
-        featuresJson: safeJsonStringify(params.features || {}, '{}'),
+        featuresJson: safeJsonStringify(params.skills || {}, '{}'),
         customBodyJson: safeJsonStringify(summarizeCustomBody(params.customBody), '{}'),
         customHeadersJson: safeJsonStringify(sanitizeHeaders(params.customHeaders), '[]'),
         output: params.output || '',

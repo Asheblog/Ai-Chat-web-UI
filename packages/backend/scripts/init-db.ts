@@ -39,6 +39,9 @@ async function initDatabase() {
     // 5. 初始化首次启动引导状态（可选）
     await initSetupState({ initialUserCount })
 
+    // 6. 初始化内置 Skills（系统级默认绑定）
+    await initBuiltinSkills()
+
     console.log('🎉 数据库初始化完成！');
 
   } catch (error) {
@@ -193,6 +196,284 @@ async function createExampleSystemConnection() {
   } else {
     console.log('✅ 已存在系统连接，跳过示例创建')
   }
+}
+
+async function initBuiltinSkills() {
+  const now = new Date()
+  const builtinVersion = 'builtin-1.0.0'
+  const builtins: Array<{
+    slug: string
+    displayName: string
+    description: string
+    riskLevel: 'low' | 'medium' | 'high' | 'critical'
+    tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>
+  }> = [
+    {
+      slug: 'web-search',
+      displayName: 'Web Search',
+      description: '内置联网搜索能力',
+      riskLevel: 'medium',
+      tools: [
+        {
+          name: 'web_search',
+          description: 'Search the web for up-to-date information.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'Search query' },
+            },
+            required: ['query'],
+          },
+        },
+      ],
+    },
+    {
+      slug: 'python-runner',
+      displayName: 'Python Runner',
+      description: '内置 Python 执行能力',
+      riskLevel: 'high',
+      tools: [
+        {
+          name: 'python_runner',
+          description: 'Run deterministic Python snippets.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              code: { type: 'string', description: 'Python source code' },
+            },
+            required: ['code'],
+          },
+        },
+      ],
+    },
+    {
+      slug: 'url-reader',
+      displayName: 'URL Reader',
+      description: '内置网页正文读取能力',
+      riskLevel: 'medium',
+      tools: [
+        {
+          name: 'read_url',
+          description: 'Read and extract text from a URL.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              url: { type: 'string', description: 'URL to read' },
+            },
+            required: ['url'],
+          },
+        },
+      ],
+    },
+    {
+      slug: 'document-search',
+      displayName: 'Document Search',
+      description: '会话文档检索能力',
+      riskLevel: 'low',
+      tools: [
+        { name: 'document_list', description: 'List attached documents.', input_schema: { type: 'object', properties: {} } },
+        {
+          name: 'document_search',
+          description: 'Search within attached documents.',
+          input_schema: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
+        },
+        {
+          name: 'document_get_content',
+          description: 'Get full document content.',
+          input_schema: {
+            type: 'object',
+            properties: { document_id: { type: 'number' } },
+            required: ['document_id'],
+          },
+        },
+        {
+          name: 'document_get_toc',
+          description: 'Get document table of contents.',
+          input_schema: {
+            type: 'object',
+            properties: { document_id: { type: 'number' } },
+            required: ['document_id'],
+          },
+        },
+        {
+          name: 'document_get_section',
+          description: 'Get a section from document.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              document_id: { type: 'number' },
+              section_id: { type: 'string' },
+            },
+            required: ['document_id', 'section_id'],
+          },
+        },
+      ],
+    },
+    {
+      slug: 'knowledge-base-search',
+      displayName: 'Knowledge Base Search',
+      description: '知识库检索能力',
+      riskLevel: 'low',
+      tools: [
+        {
+          name: 'kb_search',
+          description: 'Search in knowledge bases.',
+          input_schema: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
+        },
+        {
+          name: 'kb_get_documents',
+          description: 'List knowledge base documents.',
+          input_schema: {
+            type: 'object',
+            properties: { kb_id: { type: 'number' } },
+            required: ['kb_id'],
+          },
+        },
+        {
+          name: 'kb_get_document_content',
+          description: 'Get knowledge base document content.',
+          input_schema: {
+            type: 'object',
+            properties: { document_id: { type: 'number' } },
+            required: ['document_id'],
+          },
+        },
+        {
+          name: 'kb_get_toc',
+          description: 'Get knowledge base document TOC.',
+          input_schema: {
+            type: 'object',
+            properties: { document_id: { type: 'number' } },
+            required: ['document_id'],
+          },
+        },
+        {
+          name: 'kb_get_section',
+          description: 'Get section from knowledge base document.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              document_id: { type: 'number' },
+              section_id: { type: 'string' },
+            },
+            required: ['document_id', 'section_id'],
+          },
+        },
+      ],
+    },
+  ]
+
+  for (const skill of builtins) {
+    const manifest = {
+      id: skill.slug,
+      name: skill.displayName,
+      version: builtinVersion,
+      entry: 'builtin',
+      tools: skill.tools,
+      capabilities: ['builtin'],
+      runtime: {
+        type: 'node',
+        command: 'builtin',
+        args: [],
+        timeout_ms: 30_000,
+        max_output_chars: 20_000,
+      },
+      permissions: [],
+      platforms: ['linux', 'windows', 'darwin'],
+      risk_level: skill.riskLevel,
+    }
+
+    const skillRow = await prisma.skill.upsert({
+      where: { slug: skill.slug },
+      update: {
+        displayName: skill.displayName,
+        description: skill.description,
+        sourceType: 'builtin',
+        sourceUrl: `builtin://${skill.slug}`,
+        status: 'active',
+      },
+      create: {
+        slug: skill.slug,
+        displayName: skill.displayName,
+        description: skill.description,
+        sourceType: 'builtin',
+        sourceUrl: `builtin://${skill.slug}`,
+        status: 'active',
+      },
+    })
+
+    const versionRow = await prisma.skillVersion.upsert({
+      where: {
+        skillId_version: {
+          skillId: skillRow.id,
+          version: builtinVersion,
+        },
+      },
+      update: {
+        status: 'active',
+        riskLevel: skill.riskLevel,
+        entry: manifest.entry,
+        manifestJson: JSON.stringify(manifest),
+        approvedAt: now,
+        activatedAt: now,
+      },
+      create: {
+        skillId: skillRow.id,
+        version: builtinVersion,
+        status: 'active',
+        riskLevel: skill.riskLevel,
+        entry: manifest.entry,
+        manifestJson: JSON.stringify(manifest),
+        packageHash: `builtin:${skill.slug}:${builtinVersion}`,
+        sourceRef: 'builtin',
+        approvedAt: now,
+        activatedAt: now,
+      },
+    })
+
+    await prisma.skill.update({
+      where: { id: skillRow.id },
+      data: {
+        defaultVersionId: versionRow.id,
+        status: 'active',
+      },
+    })
+
+    await prisma.skillBinding.upsert({
+      where: {
+        skillId_scopeType_scopeId: {
+          skillId: skillRow.id,
+          scopeType: 'system',
+          scopeId: 'global',
+        },
+      },
+      update: {
+        versionId: versionRow.id,
+        enabled: true,
+        policyJson: '{}',
+        overridesJson: '{}',
+      },
+      create: {
+        skillId: skillRow.id,
+        versionId: versionRow.id,
+        scopeType: 'system',
+        scopeId: 'global',
+        enabled: true,
+        policyJson: '{}',
+        overridesJson: '{}',
+      },
+    })
+  }
+
+  console.log('✅ 内置 Skills 初始化完成')
 }
 
 // 如果直接运行此脚本（ESM 兼容）

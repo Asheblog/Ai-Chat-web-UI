@@ -27,7 +27,6 @@ import type { RAGService } from '../../services/document/rag-service';
 import { ToolLogManager } from './tool-log-manager';
 import { StreamEventEmitter } from './stream-event-emitter';
 import {
-  createToolHandlerRegistry,
   sendUnsupportedToolError,
 } from './tool-handlers';
 import {
@@ -44,6 +43,8 @@ import {
   buildAgentUrlReaderConfig,
 } from './agent-tool-config';
 import type { ProviderType } from '../../utils/providers';
+import { createSkillRegistry } from '../skills/skill-registry';
+import type { RequestedSkillsPayload } from '../skills/types';
 
 // Re-export for backwards compatibility
 export {
@@ -79,6 +80,7 @@ export type AgentResponseParams = {
     document?: boolean;
     knowledgeBase?: boolean;
   };
+  requestedSkills: RequestedSkillsPayload;
   knowledgeBaseIds?: number[];
   provider: string;
   baseUrl: string;
@@ -88,6 +90,7 @@ export type AgentResponseParams = {
   reasoningSaveToDb: boolean;
   clientMessageId?: string | null;
   actorIdentifier: string;
+  actorUserId?: number | null;
   requestSignal?: AbortSignal;
   assistantMessageId: number | null;
   assistantClientMessageId?: string | null;
@@ -117,6 +120,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     urlReaderConfig,
     agentMaxToolIterations,
     toolFlags,
+    requestedSkills,
     provider,
     baseUrl,
     authHeader,
@@ -125,6 +129,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     reasoningSaveToDb,
     clientMessageId,
     actorIdentifier,
+    actorUserId,
     requestSignal,
     assistantMessageId,
     assistantClientMessageId,
@@ -443,6 +448,11 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         traceRecorder.log('tool:event', summarizeSsePayload(enriched));
       };
 
+      const sendStreamEvent = (payload: Record<string, unknown>) => {
+        safeEnqueue(payload);
+        traceRecorder.log('skill:event', summarizeSsePayload(payload));
+      };
+
       const startIdleWatch = () => {
         if (!idleTimeout || idleWatchTimer) return;
         idleWatchTimer = setInterval(() => {
@@ -501,20 +511,25 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
 
       const workingMessages = JSON.parse(JSON.stringify(messagesPayload));
       const knowledgeBaseIds = params.knowledgeBaseIds || [];
-      const toolRegistry = createToolHandlerRegistry({
-        webSearch: toolFlags.webSearch ? agentConfig : null,
-        python: toolFlags.python ? pythonToolConfig : null,
-        urlReader: toolFlags.urlReader ? {
-          enabled: true,
-          timeout: urlReaderConfig.timeout,
-          maxContentLength: urlReaderConfig.maxContentLength,
-        } : null,
-        document: ragService && toolFlags.document
-          ? { enabled: true, sessionId, ragService }
-          : null,
-        knowledgeBase: ragService && toolFlags.knowledgeBase
-          ? { enabled: true, knowledgeBaseIds, ragService }
-          : null,
+      const toolRegistry = await createSkillRegistry({
+        requestedSkills,
+        sessionId,
+        actorUserId,
+        builtins: {
+          webSearch: toolFlags.webSearch ? agentConfig : null,
+          python: toolFlags.python ? pythonToolConfig : null,
+          urlReader: toolFlags.urlReader ? {
+            enabled: true,
+            timeout: urlReaderConfig.timeout,
+            maxContentLength: urlReaderConfig.maxContentLength,
+          } : null,
+          document: ragService && toolFlags.document
+            ? { enabled: true, sessionId, ragService }
+            : null,
+          knowledgeBase: ragService && toolFlags.knowledgeBase
+            ? { enabled: true, knowledgeBaseIds, ragService }
+            : null,
+        },
       });
       const toolDefinitions = toolRegistry.getToolDefinitions();
       const allowedToolNames = toolRegistry.getAllowedToolNames();
@@ -665,8 +680,11 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               args,
               {
                 sessionId,
+                actorIdentifier,
+                messageId: activeAssistantMessageId,
                 emitReasoning,
                 sendToolEvent,
+                sendStreamEvent,
               },
             );
           },

@@ -3,7 +3,7 @@
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Square, Brain, Globe, Plus } from 'lucide-react'
+import { Send, Square, Brain, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -178,27 +178,6 @@ export function MobileComposer({
                 <Brain className="h-3.5 w-3.5" />
               </span>
               <span className="text-xs font-medium">思考</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${webSearchEnabled
-                  ? 'bg-sky-100 border-sky-200 text-sky-700 dark:bg-sky-900/40 dark:border-sky-800 dark:text-sky-200'
-                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
-                }`}
-              onClick={() => onToggleWebSearch(!webSearchEnabled)}
-              aria-pressed={webSearchEnabled}
-              disabled={!canUseWebSearch || isStreaming}
-              aria-label="联网搜索"
-            >
-              <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full ${webSearchEnabled ? 'bg-sky-600 text-white shadow-sm' : 'bg-muted text-muted-foreground'
-                  }`}
-              >
-                <Globe className="h-3.5 w-3.5" />
-              </span>
-              <span className="text-xs font-medium">联网</span>
             </Button>
 
             <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>

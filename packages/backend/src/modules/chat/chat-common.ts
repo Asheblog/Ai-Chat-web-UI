@@ -29,18 +29,22 @@ export const sendMessageSchema = z.object({
   saveReasoning: z.boolean().optional(),
   clientMessageId: z.string().min(1).max(128).optional(),
   contextEnabled: z.boolean().optional(),
-  features: z
+  skills: z
     .object({
-      web_search: z.boolean().optional(),
-      web_search_scope: z
-        .enum(['webpage', 'document', 'paper', 'image', 'video', 'podcast'])
-        .optional(),
-      web_search_include_summary: z.boolean().optional(),
-      web_search_include_raw: z.boolean().optional(),
-      web_search_size: z.number().int().min(1).max(10).optional(),
-      python_tool: z.boolean().optional(),
+      enabled: z
+        .array(
+          z
+            .string()
+            .min(1)
+            .max(128)
+            .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'skill slug 必须为 kebab-case'),
+        )
+        .max(64),
+      overrides: z.record(z.record(z.unknown())).optional(),
     })
     .optional(),
+  // 无向后兼容：旧字段明确报错，提示升级到 skills。
+  features: z.unknown().optional(),
   custom_body: z.record(z.any()).optional(),
   custom_headers: z
     .array(
@@ -59,6 +63,14 @@ export const sendMessageSchema = z.object({
     .optional(),
   traceEnabled: z.boolean().optional(),
   knowledgeBaseIds: z.array(z.number().int().positive()).max(10).optional(),
+}).superRefine((value, ctx) => {
+  if (typeof value.features !== 'undefined') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['features'],
+      message: '请求体中的 features 已废弃，请改用 skills.enabled / skills.overrides',
+    })
+  }
 }).refine((value) => {
   const hasContent = typeof value.content === 'string' && value.content.trim().length > 0
   const hasReference =

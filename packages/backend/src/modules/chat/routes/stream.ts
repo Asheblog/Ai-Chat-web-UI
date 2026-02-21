@@ -73,6 +73,7 @@ import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
 import { GeneratedImageStorage, type GeneratedImage } from '../../../services/image-generation';
+import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/types';
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
@@ -90,7 +91,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const replyToClientMessageId = replyToClientMessageIdRaw || null
       let content = typeof payload?.content === 'string' ? payload.content : ''
       let images = replyToMessageId || replyToClientMessageId ? undefined : payload.images;
-      const requestedFeatures = payload?.features || {};
+      const requestedSkills = normalizeRequestedSkills(payload?.skills)
+      const requestedSkillSet = new Set(requestedSkills.enabled)
       const traceToggle = typeof payload?.traceEnabled === 'boolean' ? payload.traceEnabled : undefined;
 
       // 验证会话是否存在且属于当前用户
@@ -371,20 +373,51 @@ export const registerChatStreamRoutes = (router: Hono) => {
           ? normalized
           : undefined;
       };
-      if (requestedFeatures) {
-        if (typeof requestedFeatures.web_search_scope === 'string') {
-          agentWebSearchConfig.scope = sanitizeScope(requestedFeatures.web_search_scope);
-        }
-        if (typeof requestedFeatures.web_search_include_summary === 'boolean') {
-          agentWebSearchConfig.includeSummary = requestedFeatures.web_search_include_summary;
-        }
-        if (typeof requestedFeatures.web_search_include_raw === 'boolean') {
-          agentWebSearchConfig.includeRawContent = requestedFeatures.web_search_include_raw;
-        }
-        if (typeof requestedFeatures.web_search_size === 'number' && Number.isFinite(requestedFeatures.web_search_size)) {
-          const next = Math.max(1, Math.min(10, requestedFeatures.web_search_size));
-          agentWebSearchConfig.resultLimit = next;
-        }
+      const webSearchSkillOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}
+      const webSearchScopeOverride =
+        typeof webSearchSkillOverride.scope === 'string'
+          ? webSearchSkillOverride.scope
+          : typeof webSearchSkillOverride.web_search_scope === 'string'
+            ? webSearchSkillOverride.web_search_scope
+            : null
+      if (webSearchScopeOverride) {
+        agentWebSearchConfig.scope = sanitizeScope(webSearchScopeOverride) || agentWebSearchConfig.scope
+      }
+      const includeSummaryOverride =
+        typeof webSearchSkillOverride.includeSummary === 'boolean'
+          ? webSearchSkillOverride.includeSummary
+          : typeof webSearchSkillOverride.include_summary === 'boolean'
+            ? webSearchSkillOverride.include_summary
+            : typeof webSearchSkillOverride.web_search_include_summary === 'boolean'
+              ? webSearchSkillOverride.web_search_include_summary
+              : null
+      if (typeof includeSummaryOverride === 'boolean') {
+        agentWebSearchConfig.includeSummary = includeSummaryOverride
+      }
+      const includeRawOverride =
+        typeof webSearchSkillOverride.includeRawContent === 'boolean'
+          ? webSearchSkillOverride.includeRawContent
+          : typeof webSearchSkillOverride.include_raw === 'boolean'
+            ? webSearchSkillOverride.include_raw
+            : typeof webSearchSkillOverride.web_search_include_raw === 'boolean'
+              ? webSearchSkillOverride.web_search_include_raw
+              : null
+      if (typeof includeRawOverride === 'boolean') {
+        agentWebSearchConfig.includeRawContent = includeRawOverride
+      }
+      const resultLimitOverrideRaw =
+        typeof webSearchSkillOverride.resultLimit === 'number'
+          ? webSearchSkillOverride.resultLimit
+          : typeof webSearchSkillOverride.result_limit === 'number'
+            ? webSearchSkillOverride.result_limit
+            : typeof webSearchSkillOverride.size === 'number'
+              ? webSearchSkillOverride.size
+              : typeof webSearchSkillOverride.web_search_size === 'number'
+                ? webSearchSkillOverride.web_search_size
+                : null
+      if (typeof resultLimitOverrideRaw === 'number' && Number.isFinite(resultLimitOverrideRaw)) {
+        const next = Math.max(1, Math.min(10, resultLimitOverrideRaw));
+        agentWebSearchConfig.resultLimit = next;
       }
       const assistantReplyHistoryLimit = (() => {
         const raw =
@@ -423,25 +456,39 @@ export const registerChatStreamRoutes = (router: Hono) => {
         'Access-Control-Allow-Headers': 'Cache-Control',
       };
 
-      const webSearchFeatureRequested = requestedFeatures?.web_search === true;
-      const pythonToolFeatureRequested = requestedFeatures?.python_tool === true;
-      const urlReaderFeatureRequested = webSearchFeatureRequested;
+      const webSearchSkillRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH);
+      const pythonSkillRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER);
+      const urlReaderSkillRequested =
+        requestedSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchSkillRequested;
+      const documentSkillRequested =
+        requestedSkillSet.has(BUILTIN_SKILL_SLUGS.DOCUMENT_SEARCH) || hasSessionDocuments;
+      const knowledgeBaseSkillRequested =
+        requestedSkillSet.has(BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH) || hasKnowledgeBases;
       const agentWebSearchActive =
-        webSearchFeatureRequested &&
+        webSearchSkillRequested &&
         agentWebSearchConfig.enabled &&
         Boolean(agentWebSearchConfig.apiKey);
       const pythonToolActive =
-        pythonToolFeatureRequested && pythonToolConfig.enabled;
-      const urlReaderActive = urlReaderFeatureRequested;
+        pythonSkillRequested && pythonToolConfig.enabled;
+      const urlReaderActive = urlReaderSkillRequested;
       // 文档工具和知识库工具也需要进入 agent 模式
-      const documentToolsActive = hasSessionDocuments;
-      const knowledgeBaseToolsActive = hasKnowledgeBases;
+      const documentToolsActive = documentSkillRequested && hasSessionDocuments;
+      const knowledgeBaseToolsActive = knowledgeBaseSkillRequested && hasKnowledgeBases;
+      const builtinSkillSlugs = new Set<string>([
+          BUILTIN_SKILL_SLUGS.WEB_SEARCH,
+          BUILTIN_SKILL_SLUGS.PYTHON_RUNNER,
+          BUILTIN_SKILL_SLUGS.URL_READER,
+          BUILTIN_SKILL_SLUGS.DOCUMENT_SEARCH,
+          BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH,
+        ])
+      const dynamicSkillRequested = Array.from(requestedSkillSet).some((slug) => !builtinSkillSlugs.has(slug));
       const agentToolsActive =
         agentWebSearchActive ||
         pythonToolActive ||
         urlReaderActive ||
         documentToolsActive ||
-        knowledgeBaseToolsActive;
+        knowledgeBaseToolsActive ||
+        dynamicSkillRequested;
       const resolvedMaxConcurrentStreams = (() => {
         const raw =
           sysMap.chat_max_concurrent_streams ||
@@ -480,7 +527,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           provider,
           model: session.modelRawId,
           connectionId: session.connectionId,
-          features: requestedFeatures,
+          skills: requestedSkills,
           agentWebSearchActive,
           reasoningEnabled: effectiveReasoningEnabled,
           reasoningEffort: effectiveReasoningEffort,
@@ -513,7 +560,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         clientMessageId,
         contentPreview: truncateString(content || '', 200),
         imagesCount: Array.isArray(images) ? images.length : 0,
-        features: requestedFeatures,
+        skills: requestedSkills,
         traceRequested: traceToggle ?? null,
       })
 
@@ -564,12 +611,13 @@ export const registerChatStreamRoutes = (router: Hono) => {
           pythonToolConfig,
           urlReaderConfig,
           agentMaxToolIterations,
+          requestedSkills,
           toolFlags: {
             webSearch: agentWebSearchActive,
             python: pythonToolActive,
             urlReader: urlReaderActive,
-            document: hasSessionDocuments, // 如果会话有文档则启用文档工具
-            knowledgeBase: hasKnowledgeBases, // 如果有知识库则启用知识库工具
+            document: documentToolsActive,
+            knowledgeBase: knowledgeBaseToolsActive,
           },
           provider,
           baseUrl,
@@ -579,6 +627,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           reasoningSaveToDb: effectiveReasoningSaveToDb,
           clientMessageId,
           actorIdentifier: actor.identifier,
+          actorUserId: actor.type === 'user' ? actor.id : null,
           requestSignal: c.req.raw.signal,
           assistantMessageId,
           assistantClientMessageId,

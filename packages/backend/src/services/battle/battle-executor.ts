@@ -4,18 +4,21 @@ import { chatRequestBuilder as defaultChatRequestBuilder } from '../../modules/c
 import type { ProviderRequester } from '../../modules/chat/services/provider-requester'
 import { providerRequester as defaultProviderRequester } from '../../modules/chat/services/provider-requester'
 import { buildChatProviderRequest } from '../../utils/chat-provider'
-import { buildAgentPythonToolConfig, buildAgentWebSearchConfig } from '../../modules/chat/agent-tool-config'
 import {
-  createToolHandlerRegistry,
-} from '../../modules/chat/tool-handlers'
+  buildAgentPythonToolConfig,
+  buildAgentUrlReaderConfig,
+  buildAgentWebSearchConfig,
+} from '../../modules/chat/agent-tool-config'
 import {
   buildToolRequest,
 } from '../../modules/chat/tool-protocol'
 import { runToolOrchestration } from '../../modules/chat/tool-orchestrator'
 import type { TaskTraceRecorder } from '../../utils/task-trace'
 import type { BattleUploadImage } from '@aichat/shared/battle-contract'
-import type { BattleModelFeatures, BattleModelInput } from './battle-types'
+import type { BattleModelInput, BattleModelSkills } from './battle-types'
 import { safeParseJson } from './battle-serialization'
+import { createSkillRegistry } from '../../modules/skills/skill-registry'
+import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../modules/skills/types'
 
 export interface BattleExecutionContext {
   checkRunCancelled: () => void
@@ -102,26 +105,62 @@ export class BattleExecutor {
     context.checkAttemptCancelled()
 
     const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
-    const requestedFeatures = modelConfig.features || {}
+    const requestedSkills = normalizeRequestedSkills(modelConfig.skills)
+    const requestedSkillSet = new Set(requestedSkills.enabled)
     const webSearchConfig = buildAgentWebSearchConfig(systemSettings)
     const pythonConfig = buildAgentPythonToolConfig(systemSettings)
+    const urlReaderConfig = buildAgentUrlReaderConfig(systemSettings)
+
+    const webSearchOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}
+    if (typeof webSearchOverride.scope === 'string') {
+      webSearchConfig.scope = webSearchOverride.scope
+    }
+    if (typeof webSearchOverride.includeSummary === 'boolean') {
+      webSearchConfig.includeSummary = webSearchOverride.includeSummary
+    } else if (typeof webSearchOverride.include_summary === 'boolean') {
+      webSearchConfig.includeSummary = webSearchOverride.include_summary
+    }
+    if (typeof webSearchOverride.includeRawContent === 'boolean') {
+      webSearchConfig.includeRawContent = webSearchOverride.includeRawContent
+    } else if (typeof webSearchOverride.include_raw === 'boolean') {
+      webSearchConfig.includeRawContent = webSearchOverride.include_raw
+    }
+    const resultLimitOverrideRaw =
+      typeof webSearchOverride.resultLimit === 'number'
+        ? webSearchOverride.resultLimit
+        : typeof webSearchOverride.result_limit === 'number'
+          ? webSearchOverride.result_limit
+          : typeof webSearchOverride.size === 'number'
+            ? webSearchOverride.size
+            : null
+    if (typeof resultLimitOverrideRaw === 'number' && Number.isFinite(resultLimitOverrideRaw)) {
+      webSearchConfig.resultLimit = Math.max(1, Math.min(10, resultLimitOverrideRaw))
+    }
+
+    const webSearchRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
+    const pythonRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
+    const urlReaderRequested =
+      requestedSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchRequested
     const webSearchActive =
-      requestedFeatures.web_search === true &&
+      webSearchRequested &&
       webSearchConfig.enabled &&
       Boolean(webSearchConfig.apiKey)
     const pythonActive =
-      requestedFeatures.python_tool === true &&
+      pythonRequested &&
       pythonConfig.enabled
-    const effectiveFeatures: BattleModelFeatures = {
-      ...requestedFeatures,
-      web_search: webSearchActive,
-      python_tool: pythonActive,
-    }
-    if (!webSearchActive) {
-      delete effectiveFeatures.web_search_scope
-      delete effectiveFeatures.web_search_include_summary
-      delete effectiveFeatures.web_search_include_raw
-      delete effectiveFeatures.web_search_size
+    const urlReaderActive = urlReaderRequested
+    const builtinSkillSet = new Set<string>([
+      BUILTIN_SKILL_SLUGS.WEB_SEARCH,
+      BUILTIN_SKILL_SLUGS.PYTHON_RUNNER,
+      BUILTIN_SKILL_SLUGS.URL_READER,
+    ])
+    const effectiveEnabled = requestedSkills.enabled.filter((slug) => !builtinSkillSet.has(slug))
+    if (webSearchActive) effectiveEnabled.push(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
+    if (pythonActive) effectiveEnabled.push(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
+    if (urlReaderActive) effectiveEnabled.push(BUILTIN_SKILL_SLUGS.URL_READER)
+    const effectiveSkills: BattleModelSkills = {
+      enabled: Array.from(new Set(effectiveEnabled)),
+      ...(requestedSkills.overrides ? { overrides: requestedSkills.overrides } : {}),
     }
 
     const payload: any = {
@@ -131,7 +170,7 @@ export class BattleExecutor {
       reasoningEffort: modelConfig.reasoningEffort,
       ollamaThink: modelConfig.ollamaThink,
       contextEnabled: false,
-      features: effectiveFeatures,
+      skills: effectiveSkills,
       custom_body: modelConfig.custom_body,
       custom_headers: modelConfig.custom_headers,
     }
@@ -148,10 +187,18 @@ export class BattleExecutor {
       extraSystemPrompts: extraPrompt ? [extraPrompt] : [],
     })
 
-    if (effectiveFeatures.web_search || effectiveFeatures.python_tool) {
+    if (effectiveSkills.enabled.length > 0) {
       return this.executeWithTools(
         prepared,
-        { webSearchActive, pythonActive, features: effectiveFeatures },
+        {
+          skills: effectiveSkills,
+          webSearchActive,
+          pythonActive,
+          urlReaderActive,
+          webSearchConfig,
+          pythonConfig,
+          urlReaderConfig,
+        },
         context,
         emitDelta,
       )
@@ -485,7 +532,15 @@ export class BattleExecutor {
 
   private async executeWithTools(
     prepared: PreparedChatRequest,
-    toolFlags: { webSearchActive: boolean; pythonActive: boolean; features: BattleModelFeatures },
+    toolFlags: {
+      skills: BattleModelSkills
+      webSearchActive: boolean
+      pythonActive: boolean
+      urlReaderActive: boolean
+      webSearchConfig: ReturnType<typeof buildAgentWebSearchConfig>
+      pythonConfig: ReturnType<typeof buildAgentPythonToolConfig>
+      urlReaderConfig: ReturnType<typeof buildAgentUrlReaderConfig>
+    },
     context: BattleExecutionContext,
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
@@ -494,29 +549,27 @@ export class BattleExecutor {
     const shouldStream = Boolean(emitDelta) && streamEnabled
 
     const sysMap = prepared.systemSettings
-    const webSearchConfig = buildAgentWebSearchConfig(sysMap)
-    const pythonConfig = buildAgentPythonToolConfig(sysMap)
-    const requestedFeatures = toolFlags.features || {}
-    if (typeof requestedFeatures.web_search_scope === 'string') {
-      webSearchConfig.scope = requestedFeatures.web_search_scope
-    }
-    if (typeof requestedFeatures.web_search_include_summary === 'boolean') {
-      webSearchConfig.includeSummary = requestedFeatures.web_search_include_summary
-    }
-    if (typeof requestedFeatures.web_search_include_raw === 'boolean') {
-      webSearchConfig.includeRawContent = requestedFeatures.web_search_include_raw
-    }
-    if (typeof requestedFeatures.web_search_size === 'number' && Number.isFinite(requestedFeatures.web_search_size)) {
-      const next = Math.max(1, Math.min(10, requestedFeatures.web_search_size))
-      webSearchConfig.resultLimit = next
-    }
-
-    const toolRegistry = createToolHandlerRegistry({
-      webSearch: toolFlags.webSearchActive ? webSearchConfig : null,
-      python: toolFlags.pythonActive ? pythonConfig : null,
+    const toolRegistry = await createSkillRegistry({
+      requestedSkills: toolFlags.skills,
+      sessionId: 0,
+      actorUserId: null,
+      builtins: {
+        webSearch: toolFlags.webSearchActive ? toolFlags.webSearchConfig : null,
+        python: toolFlags.pythonActive ? toolFlags.pythonConfig : null,
+        urlReader: toolFlags.urlReaderActive
+          ? {
+              enabled: true,
+              timeout: toolFlags.urlReaderConfig.timeout,
+              maxContentLength: toolFlags.urlReaderConfig.maxContentLength,
+            }
+          : null,
+      },
     })
     const toolDefinitions = toolRegistry.getToolDefinitions()
     const allowedToolNames = toolRegistry.getAllowedToolNames()
+    if (toolDefinitions.length === 0) {
+      throw new Error('当前 Battle 配置请求了 Skills，但未找到可执行工具')
+    }
     const maxIterations = resolveMaxToolIterations(sysMap)
     let latestUsage: Record<string, any> | null = null
 
@@ -592,6 +645,7 @@ export class BattleExecutor {
         if (!toolName || !allowedToolNames.has(toolName)) return null
         return toolRegistry.handleToolCall(toolName, toolCall, args, {
           sessionId: 0,
+          actorIdentifier: 'battle',
           emitReasoning: () => {},
           sendToolEvent: () => {},
         })

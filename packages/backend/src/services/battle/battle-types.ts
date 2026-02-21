@@ -4,20 +4,16 @@ import type {
   BattleRunStatus,
 } from '@aichat/shared/battle-contract'
 
-export type BattleModelFeatures = {
-  web_search?: boolean
-  web_search_scope?: 'webpage' | 'document' | 'paper' | 'image' | 'video' | 'podcast'
-  web_search_include_summary?: boolean
-  web_search_include_raw?: boolean
-  web_search_size?: number
-  python_tool?: boolean
+export type BattleModelSkills = {
+  enabled: string[]
+  overrides?: Record<string, Record<string, unknown>>
 }
 
 export type BattleModelInput = {
   modelId: string
   connectionId?: number
   rawId?: string
-  features?: BattleModelFeatures
+  skills?: BattleModelSkills
   extraPrompt?: string
   custom_body?: Record<string, any>
   custom_headers?: Array<{ name: string; value: string }>
@@ -68,7 +64,7 @@ export interface BattleRunConfigModel {
   modelId: string
   connectionId: number | null
   rawId: string | null
-  features?: BattleModelFeatures
+  skills?: BattleModelSkills
   extraPrompt?: string | null
   customHeaders?: Array<{ name: string; value: string }>
   customBody?: Record<string, any> | null

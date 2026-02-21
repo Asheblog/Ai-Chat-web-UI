@@ -15,26 +15,42 @@ const headerSchema = z.object({
   value: z.string().transform((v) => v.trim()).refine((v) => v.length <= 2048),
 })
 
-const featureSchema = z.object({
-  web_search: z.boolean().optional(),
-  web_search_scope: z.enum(['webpage', 'document', 'paper', 'image', 'video', 'podcast']).optional(),
-  web_search_include_summary: z.boolean().optional(),
-  web_search_include_raw: z.boolean().optional(),
-  web_search_size: z.number().int().min(1).max(10).optional(),
-  python_tool: z.boolean().optional(),
-}).optional()
+const skillSchema = z
+  .object({
+    enabled: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'skill slug 必须为 kebab-case'),
+      )
+      .max(64),
+    overrides: z.record(z.record(z.unknown())).optional(),
+  })
+  .optional()
 
 const battleModelSchema = z.object({
   modelId: z.string().min(1),
   connectionId: z.number().int().positive().optional(),
   rawId: z.string().min(1).optional(),
-  features: featureSchema,
+  skills: skillSchema,
+  // 无向后兼容：旧字段 features 明确报错
+  features: z.unknown().optional(),
   extraPrompt: z.string().max(4000).optional(),
   custom_body: z.record(z.any()).optional(),
   custom_headers: z.array(headerSchema).max(10).optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),
+}).superRefine((value, ctx) => {
+  if (typeof value.features !== 'undefined') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['features'],
+      message: 'models[].features 已废弃，请改用 models[].skills',
+    })
+  }
 })
 
 const BATTLE_TEXT_MAX = 128 * 1024

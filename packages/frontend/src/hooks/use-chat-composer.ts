@@ -575,22 +575,34 @@ export function useChatComposer(options?: UseChatComposerOptions) {
         toast({ title: '发送失败', description: requestPayload.reason, variant: 'destructive' })
         return
       }
-      const featureFlags: Record<string, any> = {}
+      const enabledSkills: string[] = []
+      const skillOverrides: Record<string, Record<string, unknown>> = {}
       if (webSearchEnabled && canUseWebSearch) {
-        featureFlags.web_search = true
-        if (isMetasoEngine) featureFlags.web_search_scope = webSearchScope
-        if (systemSettings?.webSearchIncludeSummary) featureFlags.web_search_include_summary = true
-        if (systemSettings?.webSearchIncludeRaw) featureFlags.web_search_include_raw = true
+        enabledSkills.push('web-search', 'url-reader')
+        const webSearchOverride: Record<string, unknown> = {}
+        if (isMetasoEngine) webSearchOverride.scope = webSearchScope
+        if (systemSettings?.webSearchIncludeSummary) webSearchOverride.includeSummary = true
+        if (systemSettings?.webSearchIncludeRaw) webSearchOverride.includeRawContent = true
+        if (Object.keys(webSearchOverride).length > 0) {
+          skillOverrides['web-search'] = webSearchOverride
+        }
       }
       if (pythonToolEnabled && canUsePythonTool) {
-        featureFlags.python_tool = true
+        enabledSkills.push('python-runner')
       }
+      const skillsPayload =
+        enabledSkills.length > 0
+          ? {
+              enabled: Array.from(new Set(enabledSkills)),
+              ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
+            }
+          : undefined
       const options = {
         reasoningEnabled: thinkingEnabled,
         reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
         ollamaThink: thinkingEnabled ? ollamaThink : undefined,
         saveReasoning: !noSaveThisRound,
-        features: Object.keys(featureFlags).length ? featureFlags : undefined,
+        skills: skillsPayload,
         traceEnabled: canUseTrace ? traceEnabled : undefined,
         customBody: requestPayload.customBody,
         customHeaders: requestPayload.customHeaders,

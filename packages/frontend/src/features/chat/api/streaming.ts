@@ -28,6 +28,10 @@ export const streamChat = async function* streamChat(
     traceEnabled?: boolean
     replyToMessageId?: number | string
     replyToClientMessageId?: string
+    skills?: {
+      enabled: string[]
+      overrides?: Record<string, Record<string, unknown>>
+    }
     customBody?: Record<string, any>
     customHeaders?: Array<{ name: string; value: string }>
     streamKey?: string

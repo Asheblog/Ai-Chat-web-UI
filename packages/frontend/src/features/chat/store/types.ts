@@ -18,12 +18,9 @@ export type StreamSendOptions = {
   reasoningEffort?: 'low' | 'medium' | 'high'
   ollamaThink?: boolean
   saveReasoning?: boolean
-  features?: {
-    web_search?: boolean
-    web_search_scope?: string
-    web_search_include_summary?: boolean
-    web_search_include_raw?: boolean
-    web_search_size?: number
+  skills?: {
+    enabled: string[]
+    overrides?: Record<string, Record<string, unknown>>
   }
   replyToMessageId?: number | string
   replyToClientMessageId?: string

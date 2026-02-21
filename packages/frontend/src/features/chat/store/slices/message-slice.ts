@@ -551,18 +551,21 @@ export const createMessageSlice: ChatSliceCreator<
     const targetSession = findSessionById(snapshot.sessions, snapshot.currentSession, sessionId)
     const shouldRequestWebSearch = shouldEnableWebSearchForSession(targetSession)
     const shouldRequestPythonTool = shouldEnablePythonToolForSession(targetSession)
-    const featureFlags: Record<string, any> = {}
+    const enabledSkills: string[] = []
     if (shouldRequestWebSearch) {
-      featureFlags.web_search = true
+      enabledSkills.push('web-search', 'url-reader')
     }
     if (shouldRequestPythonTool) {
-      featureFlags.python_tool = true
+      enabledSkills.push('python-runner')
     }
 
     await get().streamMessage(sessionId, '', undefined, {
       replyToMessageId: messageId,
       replyToClientMessageId: meta.clientMessageId ?? undefined,
-      features: Object.keys(featureFlags).length > 0 ? featureFlags : undefined,
+      skills:
+        enabledSkills.length > 0
+          ? { enabled: Array.from(new Set(enabledSkills)) }
+          : undefined,
     })
 
     return true
@@ -592,19 +595,22 @@ export const createMessageSlice: ChatSliceCreator<
     const targetSession = findSessionById(snapshot.sessions, snapshot.currentSession, meta.sessionId)
     const shouldRequestWebSearch = shouldEnableWebSearchForSession(targetSession)
     const shouldRequestPythonTool = shouldEnablePythonToolForSession(targetSession)
-    const featureFlags: Record<string, any> = {}
+    const enabledSkills: string[] = []
     if (shouldRequestWebSearch) {
-      featureFlags.web_search = true
+      enabledSkills.push('web-search', 'url-reader')
     }
     if (shouldRequestPythonTool) {
-      featureFlags.python_tool = true
+      enabledSkills.push('python-runner')
     }
     await snapshot.streamMessage(meta.sessionId, '', undefined, {
       replyToMessageId: typeof meta.parentMessageId === 'number' ? meta.parentMessageId : undefined,
       replyToClientMessageId:
         parentMeta?.clientMessageId ??
         (typeof meta.parentMessageId === 'string' ? meta.parentMessageId : undefined),
-      features: Object.keys(featureFlags).length > 0 ? featureFlags : undefined,
+      skills:
+        enabledSkills.length > 0
+          ? { enabled: Array.from(new Set(enabledSkills)) }
+          : undefined,
     })
   },
 

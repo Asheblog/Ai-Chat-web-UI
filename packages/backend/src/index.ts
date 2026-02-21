@@ -25,6 +25,7 @@ import { createKnowledgeBasesApi } from './api/knowledge-bases';
 import { getDocumentServices } from './services/document-services-factory';
 import { setRAGInitializerDeps, reloadRAGServices } from './services/rag-initializer';
 import { createSystemLogsApi } from './api/system-logs';
+import { createSkillsApi } from './api/skills';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -98,6 +99,7 @@ app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 
 // 系统日志路由
 app.route('/api/system-logs', createSystemLogsApi());
+app.route('/api/skills', createSkillsApi());
 
 app.route(
   '/v1',
@@ -198,6 +200,16 @@ app.get('/api', (c) => {
         'POST /api/battle/runs/:id/attempts/retry': '重试单次模型尝试',
         'POST /api/battle/runs/:id/share': '创建乱斗分享',
         'GET /api/battle/shares/:token': '查看乱斗分享',
+      },
+      skills: {
+        'GET /api/skills/catalog': 'Skill 目录',
+        'POST /api/skills/install': '从 GitHub 安装 Skill（管理员）',
+        'POST /api/skills/:skillId/versions/:versionId/approve': '审批 Skill 版本（管理员）',
+        'POST /api/skills/:skillId/versions/:versionId/activate': '激活 Skill 版本（管理员）',
+        'POST /api/skills/bindings': '创建/更新 Skill 绑定（管理员）',
+        'GET /api/skills/bindings': '查询 Skill 绑定',
+        'DELETE /api/skills/bindings/:bindingId': '删除 Skill 绑定（管理员）',
+        'POST /api/skills/approvals/:requestId/respond': '响应 Skill 审批请求（管理员）',
       },
     },
   });

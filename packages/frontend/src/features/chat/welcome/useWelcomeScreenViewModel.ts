@@ -455,20 +455,30 @@ export const useWelcomeScreenViewModel = () => {
             selectedImages.length > 0
               ? selectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
               : undefined
-          const featureFlags: Record<string, any> = {}
+          const enabledSkills: string[] = []
+          const skillOverrides: Record<string, Record<string, unknown>> = {}
           if (webSearchEnabled && canUseWebSearch) {
-            featureFlags.web_search = true
-            if (isMetasoEngine) featureFlags.web_search_scope = webSearchScope
-            if (systemSettings?.webSearchIncludeSummary) featureFlags.web_search_include_summary = true
-            if (systemSettings?.webSearchIncludeRaw) featureFlags.web_search_include_raw = true
+            enabledSkills.push('web-search', 'url-reader')
+            const webSearchOverride: Record<string, unknown> = {}
+            if (isMetasoEngine) webSearchOverride.scope = webSearchScope
+            if (systemSettings?.webSearchIncludeSummary) webSearchOverride.includeSummary = true
+            if (systemSettings?.webSearchIncludeRaw) webSearchOverride.includeRawContent = true
+            if (Object.keys(webSearchOverride).length > 0) {
+              skillOverrides['web-search'] = webSearchOverride
+            }
           }
           if (pythonToolEnabled && canUsePythonTool) {
-            featureFlags.python_tool = true
+            enabledSkills.push('python-runner')
           }
           const options: Record<string, any> = {}
           if (thinkingTouched) options.reasoningEnabled = thinkingEnabled
           if (effortTouched && effort !== 'unset') options.reasoningEffort = effort
-          if (Object.keys(featureFlags).length > 0) options.features = featureFlags
+          if (enabledSkills.length > 0) {
+            options.skills = {
+              enabled: Array.from(new Set(enabledSkills)),
+              ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
+            }
+          }
           if (requestPayload.customBody) options.customBody = requestPayload.customBody
           if (requestPayload.customHeaders && requestPayload.customHeaders.length) {
             options.customHeaders = requestPayload.customHeaders

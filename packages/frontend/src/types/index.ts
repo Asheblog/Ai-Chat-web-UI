@@ -406,6 +406,51 @@ export interface ToolEvent {
   details?: ToolEventDetails;
 }
 
+export interface SkillCatalogItem {
+  id: number;
+  slug: string;
+  displayName: string;
+  description?: string | null;
+  sourceType?: string | null;
+  sourceUrl?: string | null;
+  status?: string | null;
+  defaultVersion?: {
+    id: number;
+    version: string;
+    status: string;
+    riskLevel?: string | null;
+    createdAt?: string | Date | null;
+    activatedAt?: string | Date | null;
+    manifest?: Record<string, unknown>;
+  } | null;
+}
+
+export interface SkillBindingItem {
+  id: number;
+  skillId: number;
+  versionId?: number | null;
+  scopeType: 'system' | 'user' | 'session' | 'battle_model';
+  scopeId: string;
+  enabled: boolean;
+  policyJson?: string | null;
+  overridesJson?: string | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
+export interface SkillApprovalEvent {
+  type: 'skill_approval_request' | 'skill_approval_result';
+  requestId: number;
+  skillId: number;
+  skillSlug: string;
+  skillVersionId?: number;
+  tool?: string;
+  toolCallId?: string;
+  reason?: string;
+  decision?: 'approved' | 'denied' | 'expired';
+  expiresAt?: string | Date;
+}
+
 export interface AuthState {
   actor: ActorProfile | null;
   user: User | null;
@@ -436,7 +481,19 @@ export interface ApiResponse<T = any> {
 
 // 流式响应类型
 export interface ChatStreamChunk {
-  type?: 'content' | 'usage' | 'start' | 'end' | 'complete' | 'error' | 'reasoning' | 'quota' | 'tool' | 'image';
+  type?:
+    | 'content'
+    | 'usage'
+    | 'start'
+    | 'end'
+    | 'complete'
+    | 'error'
+    | 'reasoning'
+    | 'quota'
+    | 'tool'
+    | 'image'
+    | 'skill_approval_request'
+    | 'skill_approval_result';
   content?: string;
   messageId?: number | null;
   assistantMessageId?: number | null;
@@ -469,6 +526,14 @@ export interface ChatStreamChunk {
   };
   /** 生成的图片（type='image' 时） */
   generatedImages?: GeneratedImage[];
+  requestId?: number;
+  skillId?: number;
+  skillSlug?: string;
+  skillVersionId?: number;
+  toolCallId?: string;
+  reason?: string;
+  decision?: 'approved' | 'denied' | 'expired';
+  expiresAt?: string | Date;
 }
 
 /** API 错误类型 */

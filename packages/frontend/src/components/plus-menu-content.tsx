@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -26,6 +27,7 @@ interface PlusMenuContentProps {
   pythonToolDisabledNote?: string
   contentClassName?: string
   bodyClassName?: string
+  onOpenSkillPanel?: () => void
   onOpenAdvanced?: () => void
   onOpenSessionPrompt?: () => void
   showThinkingToggle?: boolean
@@ -53,11 +55,13 @@ export function PlusMenuContent({
   pythonToolDisabledNote,
   contentClassName,
   bodyClassName,
+  onOpenSkillPanel,
   onOpenAdvanced,
   onOpenSessionPrompt,
   showThinkingToggle = true,
   showWebSearchToggle = true,
 }: PlusMenuContentProps) {
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
   const shouldShowWebSearchScope = Boolean(showWebSearchScope && webSearchEnabled && canUseWebSearch)
 
   return (
@@ -89,50 +93,70 @@ export function PlusMenuContent({
           </div>
         ) : null}
 
-        {/* 联网搜索 */}
-        {showWebSearchToggle && onToggleWebSearch ? (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">联网搜索</span>
-            <Switch
-              checked={Boolean(webSearchEnabled && canUseWebSearch)}
-              onCheckedChange={(checked) => onToggleWebSearch(Boolean(checked))}
-              disabled={!canUseWebSearch}
-            />
-          </div>
-        ) : null}
+        <button
+          type="button"
+          className="w-full rounded-xl border border-dashed border-border/70 bg-muted/30 px-3 py-2 text-left hover:bg-muted text-sm font-medium"
+          onClick={() => {
+            setSkillPanelOpen((prev) => !prev)
+            onOpenSkillPanel?.()
+          }}
+        >
+          {skillPanelOpen ? '收起 Skill 面板' : '打开 Skill 面板'}
+        </button>
 
-        {onTogglePythonTool ? (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Python 工具</span>
-            <Switch
-              checked={Boolean(pythonToolEnabled && canUsePythonTool)}
-              onCheckedChange={(checked) => onTogglePythonTool(Boolean(checked))}
-              disabled={!canUsePythonTool}
-            />
-          </div>
-        ) : null}
+        {skillPanelOpen ? (
+          <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 p-2">
+            {showWebSearchToggle && onToggleWebSearch ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">web-search</span>
+                <Switch
+                  checked={Boolean(webSearchEnabled && canUseWebSearch)}
+                  onCheckedChange={(checked) => onToggleWebSearch(Boolean(checked))}
+                  disabled={!canUseWebSearch}
+                />
+              </div>
+            ) : null}
 
-        {/* 搜索范围 */}
-        {shouldShowWebSearchScope && onWebSearchScopeChange ? (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">搜索范围（Metaso）</span>
-            <Select
-              value={webSearchScope}
-              onValueChange={(value) => onWebSearchScopeChange(value)}
-              disabled={!canUseWebSearch}
-            >
-              <SelectTrigger className="h-8">
-                <SelectValue placeholder="选择范围" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="webpage">网页</SelectItem>
-                <SelectItem value="document">文档</SelectItem>
-                <SelectItem value="paper">论文</SelectItem>
-                <SelectItem value="image">图片</SelectItem>
-                <SelectItem value="video">视频</SelectItem>
-                <SelectItem value="podcast">播客</SelectItem>
-              </SelectContent>
-            </Select>
+            {onTogglePythonTool ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">python-runner</span>
+                <Switch
+                  checked={Boolean(pythonToolEnabled && canUsePythonTool)}
+                  onCheckedChange={(checked) => onTogglePythonTool(Boolean(checked))}
+                  disabled={!canUsePythonTool}
+                />
+              </div>
+            ) : null}
+
+            {shouldShowWebSearchScope && onWebSearchScopeChange ? (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">搜索范围（web-search）</span>
+                <Select
+                  value={webSearchScope}
+                  onValueChange={(value) => onWebSearchScopeChange(value)}
+                  disabled={!canUseWebSearch}
+                >
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="选择范围" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="webpage">网页</SelectItem>
+                    <SelectItem value="document">文档</SelectItem>
+                    <SelectItem value="paper">论文</SelectItem>
+                    <SelectItem value="image">图片</SelectItem>
+                    <SelectItem value="video">视频</SelectItem>
+                    <SelectItem value="podcast">播客</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
+            {webSearchDisabledNote ? (
+              <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
+            ) : null}
+            {pythonToolDisabledNote ? (
+              <p className="text-[11px] text-muted-foreground">{pythonToolDisabledNote}</p>
+            ) : null}
           </div>
         ) : null}
 
@@ -145,13 +169,6 @@ export function PlusMenuContent({
             </div>
             <p className="text-[11px] text-muted-foreground">仅管理员可见，用于临时关闭某次追踪。</p>
           </div>
-        ) : null}
-
-        {webSearchDisabledNote ? (
-          <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
-        ) : null}
-        {pythonToolDisabledNote ? (
-          <p className="text-[11px] text-muted-foreground">{pythonToolDisabledNote}</p>
         ) : null}
 
         {/* 编辑自定义请求头 */}

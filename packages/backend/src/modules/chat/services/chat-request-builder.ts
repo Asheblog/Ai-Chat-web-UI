@@ -16,6 +16,7 @@ import {
 } from '../../../utils/providers'
 import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { sendMessageSchema } from '../chat-common'
+import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/types'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
@@ -134,15 +135,17 @@ export class ChatRequestBuilder {
       }
     }
 
-    const requestedFeatures = params.payload?.features || {}
-    if (requestedFeatures.web_search === true) {
+    const requestedSkills = normalizeRequestedSkills(params.payload?.skills)
+    const enabledSkillSet = new Set(requestedSkills.enabled)
+
+    if (enabledSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH)) {
       systemPrompts.push({
         role: 'system',
         content:
           '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。若结果不足以回答，可以继续调用 web_search 直到信息充分或达到上限。若用户提供了明确 URL 并需要读取内容，请使用 read_url 获取网页正文。',
       })
     }
-    if (requestedFeatures.python_tool === true) {
+    if (enabledSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)) {
       systemPrompts.push({
         role: 'system',
         content:

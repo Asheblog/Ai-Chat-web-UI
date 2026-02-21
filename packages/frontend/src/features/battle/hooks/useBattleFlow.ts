@@ -202,9 +202,9 @@ type BattleRunConfigModel = {
   modelId: string
   connectionId?: number | null
   rawId?: string | null
-  features?: {
-    web_search?: boolean
-    python_tool?: boolean
+  skills?: {
+    enabled: string[]
+    overrides?: Record<string, Record<string, unknown>>
   }
   extraPrompt?: string | null
   customHeaders?: Array<{ name: string; value: string }>
@@ -269,8 +269,8 @@ const buildConfigStateFromConfig = (
   const advancedOpen = customHeaders.length > 0 || customBody.trim().length > 0 || extraPrompt.trim().length > 0
   return {
     ...base,
-    webSearchEnabled: Boolean(config?.features?.web_search),
-    pythonEnabled: Boolean(config?.features?.python_tool),
+    webSearchEnabled: Boolean(config?.skills?.enabled?.includes('web-search')),
+    pythonEnabled: Boolean(config?.skills?.enabled?.includes('python-runner')),
     reasoningEnabled,
     reasoningEffort,
     ollamaThink,
@@ -667,13 +667,16 @@ export function useBattleFlow() {
         continue
       }
 
+      const enabledSkills: string[] = []
+      if (item.webSearchEnabled) enabledSkills.push('web-search', 'url-reader')
+      if (item.pythonEnabled) enabledSkills.push('python-runner')
+
       modelPayloads.push({
         modelId: item.model.id,
         connectionId: item.model.connectionId,
         rawId: item.model.rawId,
-        features: {
-          web_search: item.webSearchEnabled,
-          python_tool: item.pythonEnabled,
+        skills: {
+          enabled: Array.from(new Set(enabledSkills)),
         },
         ...(extraPrompt ? { extraPrompt } : {}),
         custom_body: bodyResult.value,
@@ -1067,13 +1070,9 @@ export function useBattleFlow() {
         modelId: string
         connectionId: number | null
         rawId: string | null
-        features?: {
-          web_search?: boolean
-          web_search_scope?: 'webpage' | 'document' | 'paper' | 'image' | 'video' | 'podcast'
-          web_search_include_summary?: boolean
-          web_search_include_raw?: boolean
-          web_search_size?: number
-          python_tool?: boolean
+        skills?: {
+          enabled: string[]
+          overrides?: Record<string, Record<string, unknown>>
         }
         customHeaders?: Array<{ name: string; value: string }>
         customBody?: Record<string, any> | null
@@ -1092,7 +1091,7 @@ export function useBattleFlow() {
         modelId: item.modelId,
         connectionId: item.connectionId ?? null,
         rawId: item.rawId ?? null,
-        features: item.features,
+        skills: item.skills,
         extraPrompt: item.extraPrompt ?? null,
         customHeaders: item.customHeaders,
         customBody: item.customBody ?? null,
