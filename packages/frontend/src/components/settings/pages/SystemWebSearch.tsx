@@ -41,8 +41,6 @@ export function SystemWebSearchPage() {
   const [includeSummary, setIncludeSummary] = useState(false)
   const [includeRaw, setIncludeRaw] = useState(false)
   const [pythonEnabled, setPythonEnabled] = useState(false)
-  const [pythonCommand, setPythonCommand] = useState("python3")
-  const [pythonArgsText, setPythonArgsText] = useState("")
   const [pythonTimeout, setPythonTimeout] = useState(8000)
   const [pythonMaxOutput, setPythonMaxOutput] = useState(4000)
   const [pythonMaxSource, setPythonMaxSource] = useState(4000)
@@ -68,8 +66,6 @@ export function SystemWebSearchPage() {
     setIncludeSummary(Boolean(systemSettings.webSearchIncludeSummary ?? false))
     setIncludeRaw(Boolean(systemSettings.webSearchIncludeRaw ?? false))
     setPythonEnabled(Boolean(systemSettings.pythonToolEnable ?? false))
-    setPythonCommand(systemSettings.pythonToolCommand || "python3")
-    setPythonArgsText((systemSettings.pythonToolArgs ?? []).join("\n"))
     setPythonTimeout(Number(systemSettings.pythonToolTimeoutMs ?? 8000))
     setPythonMaxOutput(Number(systemSettings.pythonToolMaxOutputChars ?? 4000))
     setPythonMaxSource(Number(systemSettings.pythonToolMaxSourceChars ?? 4000))
@@ -99,11 +95,6 @@ export function SystemWebSearchPage() {
   const normalizeDomains = (text: string) =>
     text
       .split(/\r?\n|,/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  const normalizeArgs = (text: string) =>
-    text
-      .split(/\r?\n/)
       .map((item) => item.trim())
       .filter(Boolean)
   const parseNumericInput = (value: string, fallback: number) => {
@@ -137,8 +128,6 @@ export function SystemWebSearchPage() {
     includeSummary !== Boolean(systemSettings.webSearchIncludeSummary ?? false) ||
     includeRaw !== Boolean(systemSettings.webSearchIncludeRaw ?? false) ||
     pythonEnabled !== Boolean(systemSettings.pythonToolEnable ?? false) ||
-    pythonCommand !== (systemSettings.pythonToolCommand || "python3") ||
-    pythonArgsText !== (systemSettings.pythonToolArgs ?? []).join("\n") ||
     pythonTimeout !== Number(systemSettings.pythonToolTimeoutMs ?? 8000) ||
     pythonMaxOutput !== Number(systemSettings.pythonToolMaxOutputChars ?? 4000) ||
     pythonMaxSource !== Number(systemSettings.pythonToolMaxSourceChars ?? 4000) ||
@@ -164,8 +153,6 @@ export function SystemWebSearchPage() {
       webSearchIncludeSummary: includeSummary,
       webSearchIncludeRaw: includeRaw,
       pythonToolEnable: pythonEnabled,
-      pythonToolCommand: pythonCommand.trim() || "python3",
-      pythonToolArgs: normalizeArgs(pythonArgsText),
       pythonToolTimeoutMs: Math.max(
         pythonTimeoutRange.min,
         Math.min(pythonTimeoutRange.max, Math.round(pythonTimeout)),
@@ -440,29 +427,9 @@ export function SystemWebSearchPage() {
       </div>
       <Switch checked={pythonEnabled} onCheckedChange={(v)=>setPythonEnabled(!!v)} />
     </div>
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium">Python 命令</label>
-        <Input
-          value={pythonCommand}
-          onChange={(e)=>setPythonCommand(e.target.value)}
-          placeholder="python3"
-        />
-        <p className="text-xs text-muted-foreground">
-          Linux/WSL 默认 python3，Windows 可改为 python 或绝对路径。
-        </p>
-      </div>
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium">额外参数（每行一个，可选）</label>
-        <Textarea
-          value={pythonArgsText}
-          onChange={(e)=>setPythonArgsText(e.target.value)}
-          placeholder="-O"
-          rows={4}
-        />
-        <p className="text-xs text-muted-foreground">无需填写 -c，系统会自动拼接。</p>
-      </div>
-    </div>
+    <p className="text-xs text-muted-foreground">
+      Python 解释器由受管运行环境统一提供（`/app/data/python-runtime/venv`），不再支持在此处自定义命令参数。
+    </p>
     <div className="grid gap-4 md:grid-cols-3">
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium">超时时间（毫秒）</label>

@@ -1,0 +1,878 @@
+import { spawn } from 'node:child_process'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import type { PrismaClient } from '@prisma/client'
+import { createLogger } from '../../utils/logger'
+
+const logger = createLogger('PythonRuntime')
+
+const INDEX_KEY = 'python_runtime_index_url'
+const EXTRA_INDEXES_KEY = 'python_runtime_extra_index_urls'
+const TRUSTED_HOSTS_KEY = 'python_runtime_trusted_hosts'
+const AUTO_INSTALL_ON_ACTIVATE_KEY = 'python_runtime_auto_install_on_activate'
+
+const DEFAULT_OPERATION_TIMEOUT_MS = 120_000
+const DEFAULT_PIP_TIMEOUT_MS = 240_000
+const OUTPUT_LIMIT = 200_000
+
+export type PythonRuntimeInstallSource = 'manual' | 'skill'
+
+export interface PythonRuntimeIndexes {
+  indexUrl?: string
+  extraIndexUrls: string[]
+  trustedHosts: string[]
+  autoInstallOnActivate: boolean
+}
+
+export interface PythonRuntimeInstalledPackage {
+  name: string
+  version: string
+}
+
+export interface PythonRuntimeDependencyItem {
+  skillId: number
+  skillSlug: string
+  skillDisplayName: string
+  versionId: number
+  version: string
+  requirement: string
+  packageName: string
+}
+
+export interface PythonRuntimeConflictItem {
+  packageName: string
+  requirements: string[]
+  skills: Array<{
+    skillId: number
+    skillSlug: string
+    versionId: number
+    version: string
+    requirement: string
+  }>
+}
+
+export interface PythonRuntimeStatus {
+  dataRoot: string
+  runtimeRoot: string
+  venvPath: string
+  pythonPath: string
+  ready: boolean
+  indexes: PythonRuntimeIndexes
+  installedPackages: PythonRuntimeInstalledPackage[]
+  activeDependencies: PythonRuntimeDependencyItem[]
+  conflicts: PythonRuntimeConflictItem[]
+}
+
+export interface PythonRuntimeInstallResult {
+  source: PythonRuntimeInstallSource
+  requirements: string[]
+  pipCheckPassed: boolean
+  pipCheckOutput: string
+  installedPackages: PythonRuntimeInstalledPackage[]
+}
+
+export interface PythonRuntimeUninstallResult {
+  packages: string[]
+  pipCheckPassed: boolean
+  pipCheckOutput: string
+  installedPackages: PythonRuntimeInstalledPackage[]
+}
+
+export interface PythonRuntimeReconcileResult {
+  requirements: string[]
+  pipCheckPassed: boolean
+  pipCheckOutput: string
+  installedPackages: PythonRuntimeInstalledPackage[]
+  conflicts: PythonRuntimeConflictItem[]
+}
+
+export class PythonRuntimeServiceError extends Error {
+  readonly statusCode: number
+  readonly code: string
+  readonly details?: Record<string, unknown>
+
+  constructor(
+    message: string,
+    statusCode = 400,
+    code = 'PYTHON_RUNTIME_ERROR',
+    details?: Record<string, unknown>,
+  ) {
+    super(message)
+    this.name = 'PythonRuntimeServiceError'
+    this.statusCode = statusCode
+    this.code = code
+    this.details = details
+  }
+}
+
+interface RequirementEntry {
+  raw: string
+  packageName: string
+}
+
+interface RuntimePaths {
+  dataRoot: string
+  runtimeRoot: string
+  venvPath: string
+  pythonPath: string
+}
+
+interface CommandResult {
+  stdout: string
+  stderr: string
+  exitCode: number | null
+  durationMs: number
+}
+
+interface PythonRuntimeServiceDeps {
+  prisma?: PrismaClient
+  env?: NodeJS.ProcessEnv
+  platform?: NodeJS.Platform
+}
+
+const normalizePackageName = (value: string) => value.trim().toLowerCase().replace(/[-_.]+/g, '-')
+
+const parseJsonArray = (value: string | undefined): string[] => {
+  if (!value || !value.trim()) return []
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+const sanitizeList = (items: string[] | undefined, max = 32): string[] => {
+  if (!Array.isArray(items)) return []
+  const dedup = new Set<string>()
+  for (const item of items) {
+    const trimmed = (item || '').trim()
+    if (!trimmed) continue
+    dedup.add(trimmed)
+    if (dedup.size >= max) break
+  }
+  return Array.from(dedup)
+}
+
+const ensureString = (value: string | undefined | null, maxLength = 512) => {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return ''
+  if (trimmed.length > maxLength) {
+    throw new PythonRuntimeServiceError(
+      `配置值过长（最大 ${maxLength} 字符）`,
+      400,
+      'PYTHON_RUNTIME_INVALID_INDEX',
+    )
+  }
+  return trimmed
+}
+
+const validatePackageName = (value: string): string | null => {
+  const normalized = value.trim()
+  if (!normalized) return null
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(normalized)) return null
+  return normalizePackageName(normalized)
+}
+
+const parseRequirement = (value: string): RequirementEntry => {
+  const raw = value.trim()
+  if (!raw) {
+    throw new PythonRuntimeServiceError('依赖项不能为空', 400, 'PYTHON_RUNTIME_INVALID_REQUIREMENT')
+  }
+
+  const lower = raw.toLowerCase()
+  if (raw.startsWith('-') || lower.includes('git+') || raw.includes('://') || raw.includes('\\') || raw.includes('/')) {
+    throw new PythonRuntimeServiceError(
+      `依赖格式不安全：${raw}`,
+      400,
+      'PYTHON_RUNTIME_INVALID_REQUIREMENT',
+      { requirement: raw },
+    )
+  }
+  if (raw.includes('@')) {
+    throw new PythonRuntimeServiceError(
+      `不支持直接引用依赖：${raw}`,
+      400,
+      'PYTHON_RUNTIME_INVALID_REQUIREMENT',
+      { requirement: raw },
+    )
+  }
+
+  const matched = raw.match(/^([A-Za-z0-9][A-Za-z0-9._-]*)(\[[A-Za-z0-9,._-]+\])?(.*)$/)
+  if (!matched) {
+    throw new PythonRuntimeServiceError(
+      `依赖格式无效：${raw}`,
+      400,
+      'PYTHON_RUNTIME_INVALID_REQUIREMENT',
+      { requirement: raw },
+    )
+  }
+
+  const packageName = normalizePackageName(matched[1])
+  const rest = (matched[3] || '').trim()
+  if (
+    rest &&
+    !/^(?:[!<>=~]{1,2}\s*[^,;\s]+(?:\s*,\s*[!<>=~]{1,2}\s*[^,;\s]+)*)?(?:\s*;\s*.+)?$/.test(rest)
+  ) {
+    throw new PythonRuntimeServiceError(
+      `依赖版本约束无效：${raw}`,
+      400,
+      'PYTHON_RUNTIME_INVALID_REQUIREMENT',
+      { requirement: raw },
+    )
+  }
+
+  return { raw, packageName }
+}
+
+export class PythonRuntimeService {
+  private readonly prisma: PrismaClient
+  private readonly env: NodeJS.ProcessEnv
+  private readonly platform: NodeJS.Platform
+  private operationQueue: Promise<unknown> = Promise.resolve()
+
+  constructor(deps: PythonRuntimeServiceDeps = {}) {
+    if (!deps.prisma) {
+      throw new PythonRuntimeServiceError(
+        'PythonRuntimeService requires prisma instance',
+        500,
+        'PYTHON_RUNTIME_MISSING_PRISMA',
+      )
+    }
+    this.prisma = deps.prisma
+    this.env = deps.env ?? process.env
+    this.platform = deps.platform ?? process.platform
+  }
+
+  resolvePaths(): RuntimePaths {
+    const rawDataRoot = this.env.APP_DATA_DIR || this.env.DATA_DIR || path.resolve(process.cwd(), 'data')
+    const dataRoot = path.resolve(rawDataRoot)
+    const runtimeRoot = path.resolve(dataRoot, 'python-runtime')
+    const venvPath = path.resolve(runtimeRoot, 'venv')
+    const pythonPath =
+      this.platform === 'win32'
+        ? path.resolve(venvPath, 'Scripts', 'python.exe')
+        : path.resolve(venvPath, 'bin', 'python')
+
+    return {
+      dataRoot,
+      runtimeRoot,
+      venvPath,
+      pythonPath,
+    }
+  }
+
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.operationQueue.then(fn, fn)
+    this.operationQueue = run.then(() => undefined, () => undefined)
+    return run
+  }
+
+  private async readSettings(keys: string[]): Promise<Map<string, string>> {
+    const rows = await this.prisma.systemSetting.findMany({
+      where: { key: { in: keys } },
+      select: { key: true, value: true },
+    })
+    return new Map(rows.map((item) => [item.key, item.value]))
+  }
+
+  private async upsertSetting(key: string, value: string): Promise<void> {
+    await this.prisma.systemSetting.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    })
+  }
+
+  async getIndexes(): Promise<PythonRuntimeIndexes> {
+    const map = await this.readSettings([INDEX_KEY, EXTRA_INDEXES_KEY, TRUSTED_HOSTS_KEY, AUTO_INSTALL_ON_ACTIVATE_KEY])
+    const indexUrl = ensureString(map.get(INDEX_KEY)) || undefined
+    const extraIndexUrls = sanitizeList(parseJsonArray(map.get(EXTRA_INDEXES_KEY)))
+    const trustedHosts = sanitizeList(parseJsonArray(map.get(TRUSTED_HOSTS_KEY)))
+    const autoInstallRaw = (map.get(AUTO_INSTALL_ON_ACTIVATE_KEY) || '').trim().toLowerCase()
+    const autoInstallOnActivate = autoInstallRaw ? autoInstallRaw === 'true' : true
+
+    return {
+      indexUrl,
+      extraIndexUrls,
+      trustedHosts,
+      autoInstallOnActivate,
+    }
+  }
+
+  async getAutoInstallOnActivate(): Promise<boolean> {
+    const indexes = await this.getIndexes()
+    return indexes.autoInstallOnActivate
+  }
+
+  async updateIndexes(input: {
+    indexUrl?: string
+    extraIndexUrls?: string[]
+    trustedHosts?: string[]
+    autoInstallOnActivate?: boolean
+  }): Promise<PythonRuntimeIndexes> {
+    const indexUrl = input.indexUrl !== undefined ? ensureString(input.indexUrl) : undefined
+    const extraIndexUrls = input.extraIndexUrls !== undefined ? sanitizeList(input.extraIndexUrls) : undefined
+    const trustedHosts = input.trustedHosts !== undefined ? sanitizeList(input.trustedHosts) : undefined
+
+    if (indexUrl !== undefined) {
+      await this.upsertSetting(INDEX_KEY, indexUrl)
+    }
+    if (extraIndexUrls !== undefined) {
+      await this.upsertSetting(EXTRA_INDEXES_KEY, JSON.stringify(extraIndexUrls))
+    }
+    if (trustedHosts !== undefined) {
+      await this.upsertSetting(TRUSTED_HOSTS_KEY, JSON.stringify(trustedHosts))
+    }
+    if (typeof input.autoInstallOnActivate === 'boolean') {
+      await this.upsertSetting(AUTO_INSTALL_ON_ACTIVATE_KEY, String(input.autoInstallOnActivate))
+    }
+
+    return this.getIndexes()
+  }
+
+  private async fileExists(targetPath: string): Promise<boolean> {
+    try {
+      await fs.access(targetPath)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private async runCommand(
+    command: string,
+    args: string[],
+    options?: { cwd?: string; timeoutMs?: number },
+  ): Promise<CommandResult> {
+    const timeoutMs = Math.max(1_000, options?.timeoutMs ?? DEFAULT_OPERATION_TIMEOUT_MS)
+    const startedAt = Date.now()
+
+    return new Promise<CommandResult>((resolve, reject) => {
+      const child = spawn(command, args, {
+        cwd: options?.cwd,
+        stdio: 'pipe',
+      })
+
+      const stdoutChunks: Buffer[] = []
+      const stderrChunks: Buffer[] = []
+      let stdoutLength = 0
+      let stderrLength = 0
+
+      const collect = (chunks: Buffer[], chunk: Buffer, currentLength: number): number => {
+        const nextLength = currentLength + chunk.length
+        if (nextLength <= OUTPUT_LIMIT) {
+          chunks.push(chunk)
+          return nextLength
+        }
+        const remain = OUTPUT_LIMIT - currentLength
+        if (remain > 0) {
+          chunks.push(chunk.subarray(0, remain))
+        }
+        return OUTPUT_LIMIT
+      }
+
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL')
+        reject(
+          new PythonRuntimeServiceError(
+            `命令执行超时（${timeoutMs}ms）`,
+            504,
+            'PYTHON_RUNTIME_TIMEOUT',
+            { command, args },
+          ),
+        )
+      }, timeoutMs)
+
+      child.on('error', (error) => {
+        clearTimeout(timer)
+        reject(
+          new PythonRuntimeServiceError(
+            `命令执行失败：${error.message}`,
+            500,
+            'PYTHON_RUNTIME_COMMAND_ERROR',
+            { command, args },
+          ),
+        )
+      })
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdoutLength = collect(stdoutChunks, chunk, stdoutLength)
+      })
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderrLength = collect(stderrChunks, chunk, stderrLength)
+      })
+
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        resolve({
+          stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+          stderr: Buffer.concat(stderrChunks).toString('utf8'),
+          exitCode: typeof code === 'number' ? code : null,
+          durationMs: Math.max(0, Date.now() - startedAt),
+        })
+      })
+    })
+  }
+
+  private async createVenv(paths: RuntimePaths): Promise<void> {
+    const bootstrapCandidates =
+      this.platform === 'win32'
+        ? [this.env.PYTHON_BOOTSTRAP_COMMAND || 'python', 'py']
+        : [this.env.PYTHON_BOOTSTRAP_COMMAND || 'python3', 'python']
+
+    let lastError: unknown = null
+    for (const candidate of bootstrapCandidates) {
+      const command = (candidate || '').trim()
+      if (!command) continue
+      try {
+        const result = await this.runCommand(command, ['-m', 'venv', paths.venvPath], {
+          timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+        })
+        if ((result.exitCode ?? 1) !== 0) {
+          lastError = new Error(result.stderr || `exit code ${result.exitCode}`)
+          continue
+        }
+        logger.info('created managed venv', {
+          command,
+          venvPath: paths.venvPath,
+          durationMs: result.durationMs,
+        })
+        return
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    const message = lastError instanceof Error ? lastError.message : 'unknown error'
+    throw new PythonRuntimeServiceError(
+      `无法创建 Python 虚拟环境：${message}`,
+      500,
+      'PYTHON_RUNTIME_CREATE_VENV_FAILED',
+      { venvPath: paths.venvPath },
+    )
+  }
+
+  async ensureManagedRuntime(): Promise<RuntimePaths> {
+    const paths = this.resolvePaths()
+    await fs.mkdir(paths.runtimeRoot, { recursive: true })
+
+    if (!(await this.fileExists(paths.pythonPath))) {
+      await this.createVenv(paths)
+    }
+
+    const pipVersion = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
+      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+    })
+    if ((pipVersion.exitCode ?? 1) !== 0) {
+      throw new PythonRuntimeServiceError(
+        `受管环境 pip 不可用：${pipVersion.stderr || 'unknown error'}`,
+        500,
+        'PYTHON_RUNTIME_PIP_UNAVAILABLE',
+      )
+    }
+
+    return paths
+  }
+
+  async getManagedPythonPath(): Promise<string> {
+    const paths = await this.ensureManagedRuntime()
+    return paths.pythonPath
+  }
+
+  private buildPipIndexArgs(indexes: PythonRuntimeIndexes): string[] {
+    const args: string[] = []
+    if (indexes.indexUrl) {
+      args.push('--index-url', indexes.indexUrl)
+    }
+    for (const extraIndex of indexes.extraIndexUrls) {
+      args.push('--extra-index-url', extraIndex)
+    }
+    for (const host of indexes.trustedHosts) {
+      args.push('--trusted-host', host)
+    }
+    return args
+  }
+
+  private parseRequirements(requirements: string[]): RequirementEntry[] {
+    if (!Array.isArray(requirements) || requirements.length === 0) {
+      throw new PythonRuntimeServiceError('至少提供一个依赖项', 400, 'PYTHON_RUNTIME_EMPTY_REQUIREMENTS')
+    }
+
+    const dedup = new Map<string, RequirementEntry>()
+    for (const requirement of requirements) {
+      const parsed = parseRequirement(requirement)
+      if (!dedup.has(parsed.raw)) {
+        dedup.set(parsed.raw, parsed)
+      }
+    }
+    return Array.from(dedup.values())
+  }
+
+  async listInstalledPackages(): Promise<PythonRuntimeInstalledPackage[]> {
+    const paths = await this.ensureManagedRuntime()
+    const result = await this.runCommand(paths.pythonPath, ['-m', 'pip', 'list', '--format=json'], {
+      timeoutMs: DEFAULT_PIP_TIMEOUT_MS,
+    })
+
+    if ((result.exitCode ?? 1) !== 0) {
+      throw new PythonRuntimeServiceError(
+        `读取已安装包失败：${result.stderr || 'unknown error'}`,
+        500,
+        'PYTHON_RUNTIME_LIST_PACKAGES_FAILED',
+      )
+    }
+
+    try {
+      const parsed = JSON.parse(result.stdout)
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .map((item) => ({
+          name: typeof item?.name === 'string' ? item.name : '',
+          version: typeof item?.version === 'string' ? item.version : '',
+        }))
+        .filter((item) => item.name)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    } catch {
+      return []
+    }
+  }
+
+  private async runPipCheck(paths: RuntimePaths): Promise<{ passed: boolean; output: string }> {
+    const checkResult = await this.runCommand(paths.pythonPath, ['-m', 'pip', 'check'], {
+      timeoutMs: DEFAULT_PIP_TIMEOUT_MS,
+    })
+
+    const output = `${checkResult.stdout}\n${checkResult.stderr}`.trim()
+    return {
+      passed: (checkResult.exitCode ?? 1) === 0,
+      output,
+    }
+  }
+
+  async collectActiveDependencies(): Promise<PythonRuntimeDependencyItem[]> {
+    const skills = await (this.prisma as any).skill.findMany({
+      where: { status: 'active' },
+      include: {
+        defaultVersion: {
+          select: {
+            id: true,
+            version: true,
+            status: true,
+            manifestJson: true,
+            createdAt: true,
+            activatedAt: true,
+          },
+        },
+        versions: {
+          where: { status: 'active' },
+          select: {
+            id: true,
+            version: true,
+            status: true,
+            manifestJson: true,
+            createdAt: true,
+            activatedAt: true,
+          },
+          orderBy: [{ activatedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+        },
+      },
+    })
+
+    const items: PythonRuntimeDependencyItem[] = []
+
+    for (const skill of skills) {
+      const version =
+        skill.defaultVersion && skill.defaultVersion.status === 'active'
+          ? skill.defaultVersion
+          : Array.isArray(skill.versions) && skill.versions.length > 0
+            ? skill.versions[0]
+            : null
+      if (!version) continue
+
+      let manifest: Record<string, unknown> = {}
+      try {
+        manifest = version.manifestJson ? JSON.parse(version.manifestJson) : {}
+      } catch {
+        manifest = {}
+      }
+
+      const pythonPackages = Array.isArray(manifest.python_packages)
+        ? manifest.python_packages
+        : []
+
+      for (const requirement of pythonPackages) {
+        if (typeof requirement !== 'string') continue
+        const parsed = parseRequirement(requirement)
+        items.push({
+          skillId: skill.id,
+          skillSlug: skill.slug,
+          skillDisplayName: skill.displayName,
+          versionId: version.id,
+          version: version.version,
+          requirement: parsed.raw,
+          packageName: parsed.packageName,
+        })
+      }
+    }
+
+    return items.sort((a, b) => {
+      const skillCompare = a.skillSlug.localeCompare(b.skillSlug)
+      if (skillCompare !== 0) return skillCompare
+      return a.packageName.localeCompare(b.packageName)
+    })
+  }
+
+  analyzeConflicts(dependencies: PythonRuntimeDependencyItem[]): PythonRuntimeConflictItem[] {
+    const packageMap = new Map<string, PythonRuntimeDependencyItem[]>()
+    for (const dependency of dependencies) {
+      const list = packageMap.get(dependency.packageName) ?? []
+      list.push(dependency)
+      packageMap.set(dependency.packageName, list)
+    }
+
+    const conflicts: PythonRuntimeConflictItem[] = []
+    for (const [packageName, list] of packageMap.entries()) {
+      const requirementSet = Array.from(new Set(list.map((item) => item.requirement)))
+      if (requirementSet.length <= 1) continue
+      conflicts.push({
+        packageName,
+        requirements: requirementSet,
+        skills: list.map((item) => ({
+          skillId: item.skillId,
+          skillSlug: item.skillSlug,
+          versionId: item.versionId,
+          version: item.version,
+          requirement: item.requirement,
+        })),
+      })
+    }
+
+    return conflicts.sort((a, b) => a.packageName.localeCompare(b.packageName))
+  }
+
+  async getRuntimeStatus(): Promise<PythonRuntimeStatus> {
+    const paths = await this.ensureManagedRuntime()
+    const [indexes, installedPackages, dependencies] = await Promise.all([
+      this.getIndexes(),
+      this.listInstalledPackages(),
+      this.collectActiveDependencies(),
+    ])
+
+    const conflicts = this.analyzeConflicts(dependencies)
+    return {
+      dataRoot: paths.dataRoot,
+      runtimeRoot: paths.runtimeRoot,
+      venvPath: paths.venvPath,
+      pythonPath: paths.pythonPath,
+      ready: true,
+      indexes,
+      installedPackages,
+      activeDependencies: dependencies,
+      conflicts,
+    }
+  }
+
+  async installRequirements(input: {
+    requirements: string[]
+    source: PythonRuntimeInstallSource
+    skillId?: number
+    versionId?: number
+  }): Promise<PythonRuntimeInstallResult> {
+    const entries = this.parseRequirements(input.requirements)
+    return this.enqueue(async () => {
+      const paths = await this.ensureManagedRuntime()
+      const indexes = await this.getIndexes()
+      const args = [
+        '-m',
+        'pip',
+        'install',
+        '--disable-pip-version-check',
+        '--no-input',
+        ...this.buildPipIndexArgs(indexes),
+        ...entries.map((item) => item.raw),
+      ]
+
+      const result = await this.runCommand(paths.pythonPath, args, {
+        timeoutMs: DEFAULT_PIP_TIMEOUT_MS,
+      })
+
+      if ((result.exitCode ?? 1) !== 0) {
+        throw new PythonRuntimeServiceError(
+          `安装依赖失败：${result.stderr || result.stdout || 'unknown error'}`,
+          400,
+          'PYTHON_RUNTIME_INSTALL_FAILED',
+          {
+            requirements: entries.map((item) => item.raw),
+            source: input.source,
+            skillId: input.skillId,
+            versionId: input.versionId,
+          },
+        )
+      }
+
+      const pipCheck = await this.runPipCheck(paths)
+      if (!pipCheck.passed) {
+        throw new PythonRuntimeServiceError(
+          `pip check 失败：${pipCheck.output || 'unknown error'}`,
+          400,
+          'PYTHON_RUNTIME_PIP_CHECK_FAILED',
+        )
+      }
+
+      logger.info('installed python requirements', {
+        source: input.source,
+        requirements: entries.map((item) => item.raw),
+        skillId: input.skillId,
+        versionId: input.versionId,
+        durationMs: result.durationMs,
+      })
+
+      const installedPackages = await this.listInstalledPackages()
+      return {
+        source: input.source,
+        requirements: entries.map((item) => item.raw),
+        pipCheckPassed: true,
+        pipCheckOutput: pipCheck.output,
+        installedPackages,
+      }
+    })
+  }
+
+  async uninstallPackages(packages: string[]): Promise<PythonRuntimeUninstallResult> {
+    if (!Array.isArray(packages) || packages.length === 0) {
+      throw new PythonRuntimeServiceError('至少提供一个包名', 400, 'PYTHON_RUNTIME_EMPTY_PACKAGES')
+    }
+
+    const normalized = Array.from(
+      new Set(
+        packages
+          .map((pkg) => validatePackageName(pkg))
+          .filter((pkg): pkg is string => Boolean(pkg)),
+      ),
+    )
+
+    if (normalized.length === 0) {
+      throw new PythonRuntimeServiceError('包名格式无效', 400, 'PYTHON_RUNTIME_INVALID_PACKAGE_NAME')
+    }
+
+    const dependencies = await this.collectActiveDependencies()
+    const blocked = dependencies.filter((item) => normalized.includes(item.packageName))
+    if (blocked.length > 0) {
+      throw new PythonRuntimeServiceError(
+        '存在激活 Skill 依赖，禁止卸载',
+        409,
+        'PYTHON_RUNTIME_PACKAGE_IN_USE',
+        {
+          blocked,
+        },
+      )
+    }
+
+    return this.enqueue(async () => {
+      const paths = await this.ensureManagedRuntime()
+      const result = await this.runCommand(
+        paths.pythonPath,
+        ['-m', 'pip', 'uninstall', '-y', ...normalized],
+        {
+          timeoutMs: DEFAULT_PIP_TIMEOUT_MS,
+        },
+      )
+
+      if ((result.exitCode ?? 1) !== 0) {
+        throw new PythonRuntimeServiceError(
+          `卸载失败：${result.stderr || result.stdout || 'unknown error'}`,
+          400,
+          'PYTHON_RUNTIME_UNINSTALL_FAILED',
+          { packages: normalized },
+        )
+      }
+
+      const pipCheck = await this.runPipCheck(paths)
+      if (!pipCheck.passed) {
+        throw new PythonRuntimeServiceError(
+          `pip check 失败：${pipCheck.output || 'unknown error'}`,
+          400,
+          'PYTHON_RUNTIME_PIP_CHECK_FAILED',
+        )
+      }
+
+      logger.info('uninstalled python packages', {
+        packages: normalized,
+        durationMs: result.durationMs,
+      })
+
+      const installedPackages = await this.listInstalledPackages()
+      return {
+        packages: normalized,
+        pipCheckPassed: true,
+        pipCheckOutput: pipCheck.output,
+        installedPackages,
+      }
+    })
+  }
+
+  async reconcile(): Promise<PythonRuntimeReconcileResult> {
+    const dependencies = await this.collectActiveDependencies()
+    const conflicts = this.analyzeConflicts(dependencies)
+    const requirements = Array.from(new Set(dependencies.map((item) => item.requirement)))
+
+    return this.enqueue(async () => {
+      const paths = await this.ensureManagedRuntime()
+      if (requirements.length > 0) {
+        const indexes = await this.getIndexes()
+        const installResult = await this.runCommand(
+          paths.pythonPath,
+          [
+            '-m',
+            'pip',
+            'install',
+            '--disable-pip-version-check',
+            '--no-input',
+            ...this.buildPipIndexArgs(indexes),
+            ...requirements,
+          ],
+          {
+            timeoutMs: DEFAULT_PIP_TIMEOUT_MS,
+          },
+        )
+
+        if ((installResult.exitCode ?? 1) !== 0) {
+          throw new PythonRuntimeServiceError(
+            `reconcile 安装失败：${installResult.stderr || installResult.stdout || 'unknown error'}`,
+            400,
+            'PYTHON_RUNTIME_RECONCILE_INSTALL_FAILED',
+            { requirements },
+          )
+        }
+      }
+
+      const pipCheck = await this.runPipCheck(paths)
+      if (!pipCheck.passed) {
+        throw new PythonRuntimeServiceError(
+          `pip check 失败：${pipCheck.output || 'unknown error'}`,
+          400,
+          'PYTHON_RUNTIME_PIP_CHECK_FAILED',
+        )
+      }
+
+      logger.info('reconciled python runtime', {
+        requirements,
+        conflicts: conflicts.length,
+      })
+
+      const installedPackages = await this.listInstalledPackages()
+      return {
+        requirements,
+        pipCheckPassed: true,
+        pipCheckOutput: pipCheck.output,
+        installedPackages,
+        conflicts,
+      }
+    })
+  }
+}

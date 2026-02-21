@@ -6,6 +6,10 @@ import type { Actor, ApiResponse } from '../types'
 import { prisma } from '../db'
 import { skillInstaller } from '../modules/skills/skill-installer'
 import { skillApprovalService } from '../modules/skills/skill-approval-service'
+import {
+  pythonRuntimeService,
+  PythonRuntimeServiceError,
+} from '../services/python-runtime'
 
 const installSchema = z.object({
   source: z.string().min(3).max(256),
@@ -341,6 +345,47 @@ export const createSkillsApi = () => {
         })
         if (!version) {
           return c.json<ApiResponse>({ success: false, error: 'Skill version not found' }, 404)
+        }
+
+        const indexes = await pythonRuntimeService.getIndexes()
+        if (indexes.autoInstallOnActivate) {
+          let manifest: Record<string, unknown> = {}
+          try {
+            manifest = version.manifestJson ? JSON.parse(version.manifestJson) : {}
+          } catch {
+            manifest = {}
+          }
+
+          const pythonPackages = Array.isArray(manifest.python_packages)
+            ? manifest.python_packages
+                .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                .filter(Boolean)
+            : []
+
+          if (pythonPackages.length > 0) {
+            try {
+              await pythonRuntimeService.installRequirements({
+                requirements: pythonPackages,
+                source: 'skill',
+                skillId,
+                versionId,
+              })
+            } catch (error) {
+              if (error instanceof PythonRuntimeServiceError) {
+                return c.json<ApiResponse>(
+                  {
+                    success: false,
+                    error: `Skill 依赖安装失败：${error.message}`,
+                    data: error.details
+                      ? { code: error.code, details: error.details }
+                      : { code: error.code },
+                  },
+                  error.statusCode,
+                )
+              }
+              throw error
+            }
+          }
         }
 
         const now = new Date()

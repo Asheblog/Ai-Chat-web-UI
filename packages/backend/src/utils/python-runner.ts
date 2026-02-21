@@ -1,10 +1,9 @@
 import { spawn } from 'node:child_process';
+import { pythonRuntimeService } from '../services/python-runtime';
 
 export interface PythonRunnerOptions {
   code: string;
   input?: string;
-  command: string;
-  args?: string[];
   timeoutMs: number;
   maxOutputChars: number;
   maxSourceChars: number;
@@ -18,11 +17,8 @@ export interface PythonRunnerResult {
   truncated: boolean;
 }
 
-const sanitizeArgs = (args?: string[]) =>
-  Array.isArray(args) ? args.map((value) => value ?? '').filter((value) => typeof value === 'string') : [];
-
 export const runPythonSnippet = async (options: PythonRunnerOptions): Promise<PythonRunnerResult> => {
-  const { code, input, command, timeoutMs, maxOutputChars, maxSourceChars } = options;
+  const { code, input, timeoutMs, maxOutputChars, maxSourceChars } = options;
   if (!code || !code.trim()) {
     throw new Error('Python code不能为空');
   }
@@ -30,7 +26,8 @@ export const runPythonSnippet = async (options: PythonRunnerOptions): Promise<Py
   if (normalizedCode.length > maxSourceChars) {
     throw new Error(`Python 代码超出限制（最大 ${maxSourceChars} 字符）`);
   }
-  const args = [...sanitizeArgs(options.args), '-c', normalizedCode];
+  const command = await pythonRuntimeService.getManagedPythonPath();
+  const args = ['-c', normalizedCode];
   const outputLimit = Math.max(256, maxOutputChars);
   const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
@@ -54,9 +51,9 @@ export const runPythonSnippet = async (options: PythonRunnerOptions): Promise<Py
     return outputLimit;
   };
 
-  const attemptRun = (cmd: string): Promise<PythonRunnerResult> =>
+  const attemptRun = (): Promise<PythonRunnerResult> =>
     new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, { stdio: 'pipe' });
+      const child = spawn(command, args, { stdio: 'pipe' });
       const timer =
         timeoutMs > 0
           ? setTimeout(() => {
@@ -94,10 +91,7 @@ export const runPythonSnippet = async (options: PythonRunnerOptions): Promise<Py
       child.stdin.end();
     });
 
-  return attemptRun(command).catch((error: any) => {
-    if (error?.code === 'ENOENT' && command === 'python3') {
-      return attemptRun('python');
-    }
+  return attemptRun().catch((error: any) => {
     throw new Error(
       error?.message
         ? `Python 命令执行失败：${error.message}`

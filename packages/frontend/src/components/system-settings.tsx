@@ -16,6 +16,7 @@ import { SystemSkillAuditsPage } from "@/components/settings/pages/SystemSkillAu
 import { SystemUsersPage } from "@/components/settings/pages/SystemUsers"
 import { SystemModelAccessPage } from "@/components/settings/pages/SystemModelAccess"
 import { SystemMonitoringPage } from "@/components/settings/pages/SystemMonitoring"
+import { SystemPythonRuntimePage } from "@/components/settings/pages/SystemPythonRuntime"
 
 type WorkspaceModule = {
   key: string
@@ -92,6 +93,12 @@ const WORKSPACE_GROUPS: WorkspaceGroup[] = [
         label: "模型权限",
         description: "匿名/注册用户默认策略与单模型访问覆写。",
         content: <SystemModelAccessPage />,
+      },
+      {
+        key: "models-tools.python-runtime",
+        label: "Python 运行环境",
+        description: "管理受管 venv、在线依赖安装与激活 Skill 自动补装策略。",
+        content: <SystemPythonRuntimePage />,
       },
       {
         key: "models-tools.skills",

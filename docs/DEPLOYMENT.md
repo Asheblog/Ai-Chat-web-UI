@@ -76,10 +76,32 @@ CORS_ORIGIN=http://localhost:3000
 # Skill 存储目录（可选，默认 backend/data/skills）
 # SKILL_STORAGE_ROOT=/app/data/skills
 
+# 数据目录（可选，默认 process.cwd()/data）
+# Docker 生产环境建议固定为 /app/data
+# APP_DATA_DIR=/app/data
+
 # 私有 GitHub Skill 拉取令牌（可选）
 # 最小权限建议：contents:read
 # GITHUB_SKILL_TOKEN=ghp_xxx
 ```
+
+### Python 受管运行环境（必须持久化）
+
+系统会在数据目录中创建受管 Python 运行环境：
+
+- `<APP_DATA_DIR|DATA_DIR|process.cwd()/data>/python-runtime/venv`
+
+用途：
+
+- 内置 `python_runner`
+- 所有 `runtime.type=python` Skill
+- 系统设置中的“Python 运行环境”在线安装/卸载依赖
+
+部署要求：
+
+- 生产环境必须将 `/app/data` 挂载为持久卷。
+- 仅删除镜像并重拉不会丢失已安装 Python 包（前提是卷保留）。
+- 删除卷（如 `docker compose down -v` 或 `docker volume prune`）会导致 Python 受管环境和已安装包一起丢失。
 
 ### 注册策略
 
@@ -280,6 +302,8 @@ docker volume prune -f
 ./start.sh prod --build
 ```
 
+注意：上面的“删除所有卷”会同时清空数据库、Skill 存储以及 Python 受管运行环境（`/app/data/python-runtime`）。
+
 ## 📈 性能优化
 
 ### 生产环境优化
@@ -317,6 +341,8 @@ git pull
 # 运行数据库迁移（如果有）
 ./scripts/db-manager.sh migrate
 ```
+
+如需保留在线安装的 Python 依赖，请不要删除数据卷（尤其不要执行 `docker compose down -v`）。
 
 ## 匿名访问改造迁移指引
 

@@ -45,8 +45,6 @@ export const baseSettings: SystemSettings = {
   webSearchHasApiKeyBrave: false,
   webSearchHasApiKeyMetaso: false,
   pythonToolEnable: false,
-  pythonToolCommand: 'python3',
-  pythonToolArgs: [],
   pythonToolTimeoutMs: 8000,
   pythonToolMaxOutputChars: 4000,
   pythonToolMaxSourceChars: 4000,

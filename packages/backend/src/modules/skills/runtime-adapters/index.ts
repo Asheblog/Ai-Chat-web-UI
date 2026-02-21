@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
 import type { SkillRuntimeManifest } from '../types'
+import { pythonRuntimeService } from '../../../services/python-runtime'
 
 export interface RuntimeExecutionOptions {
   runtime: SkillRuntimeManifest
@@ -31,7 +32,7 @@ function resolveExecutionCommand(runtime: SkillRuntimeManifest, entryFile: strin
       return { command, args: [...runtimeArgs, entryFile] }
     }
     case 'python': {
-      const command = runtime.command?.trim() || (isWindows ? 'python' : 'python3')
+      const command = runtime.command?.trim() || ''
       return { command, args: [...runtimeArgs, entryFile] }
     }
     case 'shell': {
@@ -100,6 +101,9 @@ export async function executeSkillRuntime(options: RuntimeExecutionOptions): Pro
   }
 
   const cmd = resolveExecutionCommand(options.runtime, entryFile)
+  if (options.runtime.type === 'python') {
+    cmd.command = await pythonRuntimeService.getManagedPythonPath()
+  }
 
   const runOnce = (command: string) =>
     new Promise<RuntimeExecutionResult>((resolve, reject) => {
@@ -152,12 +156,5 @@ export async function executeSkillRuntime(options: RuntimeExecutionOptions): Pro
       child.stdin.end()
     })
 
-  try {
-    return await runOnce(cmd.command)
-  } catch (error: any) {
-    if (error?.code === 'ENOENT' && options.runtime.type === 'python' && cmd.command === 'python3') {
-      return runOnce('python')
-    }
-    throw error
-  }
+  return runOnce(cmd.command)
 }

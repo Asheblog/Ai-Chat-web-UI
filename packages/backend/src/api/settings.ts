@@ -8,13 +8,20 @@ import type { SettingsFacade } from '../services/settings/settings-facade'
 import type { SetupState } from '../services/settings/settings-service'
 import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
 import { reloadRAGServices } from '../services/rag-initializer'
+import {
+  pythonRuntimeService as defaultPythonRuntimeService,
+  PythonRuntimeServiceError,
+  type PythonRuntimeService,
+} from '../services/python-runtime'
 
 export interface SettingsApiDeps {
   settingsFacade?: SettingsFacade
+  pythonRuntimeService?: PythonRuntimeService
 }
 
 export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
   const facade = deps.settingsFacade ?? settingsFacade
+  const pythonRuntimeService = deps.pythonRuntimeService ?? defaultPythonRuntimeService
   const settings = new Hono();
 
   const handleServiceError = (
@@ -155,8 +162,6 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
     web_search_include_raw: z.boolean().optional(),
     agent_max_tool_iterations: z.number().int().min(0).max(20).optional(),
     python_tool_enable: z.boolean().optional(),
-    python_tool_command: z.string().min(1).max(128).optional(),
-    python_tool_args: z.array(z.string().min(1)).optional(),
     python_tool_timeout_ms: z.number().int().min(1000).max(60000).optional(),
     python_tool_max_output_chars: z.number().int().min(256).max(20000).optional(),
     python_tool_max_source_chars: z.number().int().min(256).max(20000).optional(),
@@ -198,6 +203,24 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
   const resetAnonymousQuotaSchema = z.object({
     resetUsed: z.boolean().optional(),
   });
+
+  const pythonRuntimeIndexesSchema = z.object({
+    indexUrl: z.string().max(512).optional(),
+    extraIndexUrls: z.array(z.string().min(1).max(512)).max(64).optional(),
+    trustedHosts: z.array(z.string().min(1).max(255)).max(64).optional(),
+    autoInstallOnActivate: z.boolean().optional(),
+  })
+
+  const pythonRuntimeInstallSchema = z.object({
+    requirements: z.array(z.string().min(1).max(256)).min(1).max(128),
+    source: z.enum(['manual', 'skill']),
+    skillId: z.number().int().positive().optional(),
+    versionId: z.number().int().positive().optional(),
+  })
+
+  const pythonRuntimeUninstallSchema = z.object({
+    packages: z.array(z.string().min(1).max(128)).min(1).max(128),
+  })
 
   const modelPreferenceSchema = z.object({
     modelId: z.string().min(1).nullable().optional(),
@@ -275,6 +298,121 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
       }, 500);
     }
   });
+
+  settings.get('/python-runtime', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+    try {
+      const result = await pythonRuntimeService.getRuntimeStatus()
+      return c.json<ApiResponse>({ success: true, data: result })
+    } catch (error) {
+      if (error instanceof PythonRuntimeServiceError) {
+        return c.json<ApiResponse>(
+          { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
+          error.statusCode,
+        )
+      }
+      console.error('Get python runtime status error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to load python runtime status' }, 500)
+    }
+  })
+
+  settings.put(
+    '/python-runtime/indexes',
+    actorMiddleware,
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', pythonRuntimeIndexesSchema),
+    async (c) => {
+      try {
+        const payload = c.req.valid('json')
+        const result = await pythonRuntimeService.updateIndexes(payload)
+        return c.json<ApiResponse>({ success: true, data: result })
+      } catch (error) {
+        if (error instanceof PythonRuntimeServiceError) {
+          return c.json<ApiResponse>(
+            { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
+            error.statusCode,
+          )
+        }
+        console.error('Update python runtime indexes error:', error)
+        return c.json<ApiResponse>({ success: false, error: 'Failed to update python runtime indexes' }, 500)
+      }
+    },
+  )
+
+  settings.post(
+    '/python-runtime/install',
+    actorMiddleware,
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', pythonRuntimeInstallSchema),
+    async (c) => {
+      try {
+        const payload = c.req.valid('json')
+        const result = await pythonRuntimeService.installRequirements({
+          requirements: payload.requirements,
+          source: payload.source,
+          skillId: payload.skillId,
+          versionId: payload.versionId,
+        })
+        return c.json<ApiResponse>({ success: true, data: result })
+      } catch (error) {
+        if (error instanceof PythonRuntimeServiceError) {
+          return c.json<ApiResponse>(
+            { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
+            error.statusCode,
+          )
+        }
+        console.error('Install python requirements error:', error)
+        return c.json<ApiResponse>({ success: false, error: 'Failed to install python requirements' }, 500)
+      }
+    },
+  )
+
+  settings.post(
+    '/python-runtime/uninstall',
+    actorMiddleware,
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', pythonRuntimeUninstallSchema),
+    async (c) => {
+      try {
+        const payload = c.req.valid('json')
+        const result = await pythonRuntimeService.uninstallPackages(payload.packages)
+        return c.json<ApiResponse>({ success: true, data: result })
+      } catch (error) {
+        if (error instanceof PythonRuntimeServiceError) {
+          return c.json<ApiResponse>(
+            { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
+            error.statusCode,
+          )
+        }
+        console.error('Uninstall python packages error:', error)
+        return c.json<ApiResponse>({ success: false, error: 'Failed to uninstall python packages' }, 500)
+      }
+    },
+  )
+
+  settings.post(
+    '/python-runtime/reconcile',
+    actorMiddleware,
+    requireUserActor,
+    adminOnlyMiddleware,
+    async (c) => {
+      try {
+        const result = await pythonRuntimeService.reconcile()
+        return c.json<ApiResponse>({ success: true, data: result })
+      } catch (error) {
+        if (error instanceof PythonRuntimeServiceError) {
+          return c.json<ApiResponse>(
+            { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
+            error.statusCode,
+          )
+        }
+        console.error('Reconcile python runtime error:', error)
+        return c.json<ApiResponse>({ success: false, error: 'Failed to reconcile python runtime' }, 500)
+      }
+    },
+  )
 
   // 获取用户个人设置
   settings.get('/personal', actorMiddleware, requireUserActor, async (c) => {

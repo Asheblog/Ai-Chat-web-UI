@@ -290,8 +290,6 @@ export interface SystemSettings {
   webSearchIncludeSummary?: boolean;
   webSearchIncludeRaw?: boolean;
   pythonToolEnable?: boolean;
-  pythonToolCommand?: string;
-  pythonToolArgs?: string[];
   pythonToolTimeoutMs?: number;
   pythonToolMaxOutputChars?: number;
   pythonToolMaxSourceChars?: number;
@@ -333,6 +331,52 @@ export interface SystemSettings {
   knowledgeBaseEnabled?: boolean;
   knowledgeBaseAllowAnonymous?: boolean;
   knowledgeBaseAllowUsers?: boolean;
+}
+
+export interface PythonRuntimeIndexes {
+  indexUrl?: string;
+  extraIndexUrls: string[];
+  trustedHosts: string[];
+  autoInstallOnActivate: boolean;
+}
+
+export interface PythonRuntimeInstalledPackage {
+  name: string;
+  version: string;
+}
+
+export interface PythonRuntimeDependencyItem {
+  skillId: number;
+  skillSlug: string;
+  skillDisplayName: string;
+  versionId: number;
+  version: string;
+  requirement: string;
+  packageName: string;
+}
+
+export interface PythonRuntimeConflictItem {
+  packageName: string;
+  requirements: string[];
+  skills: Array<{
+    skillId: number;
+    skillSlug: string;
+    versionId: number;
+    version: string;
+    requirement: string;
+  }>;
+}
+
+export interface PythonRuntimeStatus {
+  dataRoot: string;
+  runtimeRoot: string;
+  venvPath: string;
+  pythonPath: string;
+  ready: boolean;
+  indexes: PythonRuntimeIndexes;
+  installedPackages: PythonRuntimeInstalledPackage[];
+  activeDependencies: PythonRuntimeDependencyItem[];
+  conflicts: PythonRuntimeConflictItem[];
 }
 
 // UI 状态类型

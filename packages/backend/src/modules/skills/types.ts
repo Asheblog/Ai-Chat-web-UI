@@ -35,6 +35,7 @@ export interface SkillManifest {
   version: string
   entry: string
   tools: SkillToolManifest[]
+  python_packages?: string[]
   capabilities: string[]
   runtime: SkillRuntimeManifest
   permissions: string[]

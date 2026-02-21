@@ -148,6 +148,43 @@ Skill 管理相关 API 一览：
 - `GET /api/skills/approvals`
 - `POST /api/skills/approvals/:requestId/respond`
 
+### 9. Python 运行环境与在线依赖管理（BREAKING）
+
+系统已引入受管 Python 运行环境（持久化 venv），用于统一承载：
+
+- 内置 `python_runner`
+- 第三方 `runtime.type=python` Skill
+
+破坏性变更（无迁移、直接替换）：
+
+- 移除并停用系统设置旧字段：`python_tool_command`、`python_tool_args`
+- Python 执行统一使用受管解释器，不再读取旧命令覆盖
+
+受管运行环境路径：
+
+- `<APP_DATA_DIR|DATA_DIR|process.cwd()/data>/python-runtime/venv`
+- Docker 生产建议落在 `/app/data/python-runtime/venv`
+
+管理员可在“系统设置 -> Python 运行环境”进行在线管理：
+
+- 配置索引：`indexUrl` / `extraIndexUrls` / `trustedHosts`
+- 手动安装：`POST /api/settings/python-runtime/install`
+- 手动卸载：`POST /api/settings/python-runtime/uninstall`（若被激活 Skill 依赖占用会阻断）
+- 运行一致性校验：`POST /api/settings/python-runtime/reconcile`
+- 状态查询：`GET /api/settings/python-runtime`
+
+Skill 依赖声明与激活策略：
+
+- Skill manifest 支持 `python_packages?: string[]`
+- 激活 Skill 版本时会按策略自动安装依赖并执行 `pip check`
+- 失败即阻断激活（硬失败）
+- 仅允许 PyPI 包名与版本约束，不支持 `git/url/path`
+
+持久化要求（关键）：
+
+- 必须保留 `/app/data` 持久卷，镜像重建后依赖仍可复用
+- 如果删除卷（如 `docker compose down -v`），受管 Python 环境与已安装包会一起丢失
+
 ---
 
 ## 📁 项目结构
@@ -271,6 +308,7 @@ docker-compose up -d
 | `CORS_ORIGIN` | 前端访问地址（含协议+端口） |
 | `DB_INIT_ON_START` | 首次部署设为 `true`，完成后改为 `false` |
 | `SKILL_STORAGE_ROOT` | Skill 安装包目录，建议固定为 `/app/data/skills`（需落在持久卷内） |
+| `/app/data/python-runtime` | 受管 Python 运行环境目录，在线安装的包会持久化到该卷内 |
 
 **健康检查**
 - 前端：`http://你的IP或域名:3555/api/health`

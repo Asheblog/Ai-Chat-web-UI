@@ -105,8 +105,6 @@ export class PythonToolHandler implements IToolHandler {
       const result = await runPythonSnippet({
         code: source,
         input: stdin,
-        command: this.config.command,
-        args: this.config.args,
         timeoutMs: this.config.timeoutMs,
         maxOutputChars: this.config.maxOutputChars,
         maxSourceChars: this.config.maxSourceChars,

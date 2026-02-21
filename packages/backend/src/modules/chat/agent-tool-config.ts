@@ -31,8 +31,6 @@ export interface AgentWebSearchConfig {
  */
 export interface AgentPythonToolConfig {
   enabled: boolean;
-  command: string;
-  args: string[];
   timeoutMs: number;
   maxOutputChars: number;
   maxSourceChars: number;
@@ -127,12 +125,6 @@ export const buildAgentPythonToolConfig = (
     false
   );
 
-  const command =
-    (sysMap.python_tool_command || env.PYTHON_TOOL_COMMAND || 'python3').trim() || 'python3';
-
-  const argsRaw = sysMap.python_tool_args || env.PYTHON_TOOL_ARGS;
-  const args = parseDomainListSetting(argsRaw)?.map((arg) => arg.replace(/\s+$/g, '')) || [];
-
   const getConfigValue = (sysValue: string | undefined, envKey: string): string | undefined => {
     return sysValue ?? env[envKey];
   };
@@ -166,8 +158,6 @@ export const buildAgentPythonToolConfig = (
 
   return {
     enabled,
-    command,
-    args,
     timeoutMs,
     maxOutputChars,
     maxSourceChars,

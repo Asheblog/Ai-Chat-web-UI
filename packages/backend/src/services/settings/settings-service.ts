@@ -305,8 +305,6 @@ export class SettingsService {
         4,
       ),
       python_tool_enable: this.parseBoolean(settingsObj.python_tool_enable, process.env.PYTHON_TOOL_ENABLE || 'false'),
-      python_tool_command: settingsObj.python_tool_command || process.env.PYTHON_TOOL_COMMAND || 'python3',
-      python_tool_args: this.parseDomainFilter(settingsObj.python_tool_args || process.env.PYTHON_TOOL_ARGS || '[]'),
       python_tool_timeout_ms: this.parseIntInRange(
         settingsObj.python_tool_timeout_ms,
         process.env.PYTHON_TOOL_TIMEOUT_MS,
@@ -530,8 +528,6 @@ export class SettingsService {
       { key: 'web_search_api_key_metaso', value: payload.web_search_api_key_metaso },
       { key: 'web_search_domain_filter', value: Array.isArray(payload.web_search_domain_filter) ? JSON.stringify(payload.web_search_domain_filter) : undefined },
       { key: 'web_search_scope', value: payload.web_search_scope },
-      { key: 'python_tool_command', value: payload.python_tool_command },
-      { key: 'python_tool_args', value: Array.isArray(payload.python_tool_args) ? JSON.stringify(payload.python_tool_args) : undefined },
       { key: 'task_trace_env', value: payload.task_trace_env },
       { key: 'title_summary_model_source', value: payload.title_summary_model_source },
       { key: 'title_summary_model_id', value: payload.title_summary_model_id },

@@ -24,6 +24,7 @@ const manifestSchema = z.object({
   version: z.string().min(1).max(64),
   entry: z.string().min(1).max(512),
   tools: z.array(toolSchema).min(1).max(32),
+  python_packages: z.array(z.string().min(1).max(256)).max(128).optional(),
   capabilities: z.array(z.string().min(1).max(128)).max(64).default([]),
   runtime: runtimeSchema,
   permissions: z.array(z.string().min(1).max(128)).max(64).default([]),

@@ -1,5 +1,5 @@
 import { apiHttpClient } from '@/lib/api'
-import type { ApiResponse, SystemSettings } from '@/types'
+import type { ApiResponse, PythonRuntimeStatus, SystemSettings } from '@/types'
 
 const client = apiHttpClient
 
@@ -158,11 +158,6 @@ export const getSystemSettings = async () => {
   const webSearchIncludeSummary = Boolean(raw.web_search_include_summary ?? false)
   const webSearchIncludeRaw = Boolean(raw.web_search_include_raw ?? false)
   const pythonToolEnable = Boolean(raw.python_tool_enable ?? false)
-  const pythonToolCommand =
-    typeof raw.python_tool_command === 'string' && raw.python_tool_command.trim().length > 0
-      ? raw.python_tool_command
-      : 'python3'
-  const pythonToolArgs = Array.isArray(raw.python_tool_args) ? (raw.python_tool_args as string[]) : []
   const pythonToolTimeoutMs = (() => {
     const v = raw.python_tool_timeout_ms
     if (typeof v === 'number') return Math.max(1000, Math.min(60000, v))
@@ -316,8 +311,6 @@ export const getSystemSettings = async () => {
       webSearchIncludeSummary,
       webSearchIncludeRaw,
       pythonToolEnable,
-      pythonToolCommand,
-      pythonToolArgs,
       pythonToolTimeoutMs,
       pythonToolMaxOutputChars,
       pythonToolMaxSourceChars,
@@ -477,8 +470,6 @@ export const updateSystemSettings = async (
   if (typeof rest.webSearchIncludeSummary === 'boolean') payload.web_search_include_summary = rest.webSearchIncludeSummary
   if (typeof rest.webSearchIncludeRaw === 'boolean') payload.web_search_include_raw = rest.webSearchIncludeRaw
   if (typeof rest.pythonToolEnable === 'boolean') payload.python_tool_enable = rest.pythonToolEnable
-  if (typeof rest.pythonToolCommand === 'string') payload.python_tool_command = rest.pythonToolCommand
-  if (Array.isArray(rest.pythonToolArgs)) payload.python_tool_args = rest.pythonToolArgs
   if (typeof rest.pythonToolTimeoutMs === 'number') payload.python_tool_timeout_ms = rest.pythonToolTimeoutMs
   if (typeof rest.pythonToolMaxOutputChars === 'number') payload.python_tool_max_output_chars = rest.pythonToolMaxOutputChars
   if (typeof rest.pythonToolMaxSourceChars === 'number') payload.python_tool_max_source_chars = rest.pythonToolMaxSourceChars
@@ -592,4 +583,39 @@ export const refreshImageAttachments = async () => {
     }>
   >('/chat/admin/attachments/refresh')
   return res.data
+}
+
+export const getPythonRuntimeStatus = async () => {
+  const response = await client.get<ApiResponse<PythonRuntimeStatus>>('/settings/python-runtime')
+  return response.data
+}
+
+export const updatePythonRuntimeIndexes = async (payload: {
+  indexUrl?: string
+  extraIndexUrls?: string[]
+  trustedHosts?: string[]
+  autoInstallOnActivate?: boolean
+}) => {
+  const response = await client.put<ApiResponse>('/settings/python-runtime/indexes', payload)
+  return response.data
+}
+
+export const installPythonRuntimeRequirements = async (payload: {
+  requirements: string[]
+  source: 'manual' | 'skill'
+  skillId?: number
+  versionId?: number
+}) => {
+  const response = await client.post<ApiResponse>('/settings/python-runtime/install', payload)
+  return response.data
+}
+
+export const uninstallPythonRuntimePackages = async (payload: { packages: string[] }) => {
+  const response = await client.post<ApiResponse>('/settings/python-runtime/uninstall', payload)
+  return response.data
+}
+
+export const reconcilePythonRuntime = async () => {
+  const response = await client.post<ApiResponse>('/settings/python-runtime/reconcile')
+  return response.data
 }

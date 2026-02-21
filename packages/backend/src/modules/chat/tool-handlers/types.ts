@@ -114,8 +114,6 @@ export interface WebSearchHandlerConfig {
  */
 export interface PythonHandlerConfig {
   enabled: boolean
-  command: string
-  args: string[]
   timeoutMs: number
   maxOutputChars: number
   maxSourceChars: number
