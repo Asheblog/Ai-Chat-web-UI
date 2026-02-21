@@ -132,7 +132,14 @@ function MessageListComponent({
   }, [shareSelectionState.selectedMessageIds])
   const lastDisplayIndex = displayMetas.length - 1
   const shouldAdjustScrollPositionOnItemSizeChange = useCallback(
-    (item: VirtualizerResizeItem, _delta: number, instance: VirtualizerResizeInstance) => {
+    (item: VirtualizerResizeItem, delta: number, instance: VirtualizerResizeInstance) => {
+      if (Math.abs(delta) > 240) return false
+      if (typeof document !== 'undefined') {
+        const active = document.activeElement
+        if (active instanceof Element && active.closest('.reasoning-panel')) {
+          return false
+        }
+      }
       if (!autoScrollEnabled) return false
       if (!isStreaming) return false
       if (item.index !== lastDisplayIndex) return false
