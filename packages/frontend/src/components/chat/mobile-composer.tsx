@@ -12,6 +12,7 @@ import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
+import type { ComposerSkillOption } from './chat-composer-panel'
 
 interface MobileComposerProps {
   input: string
@@ -47,6 +48,8 @@ interface MobileComposerProps {
   onTogglePythonTool: (value: boolean) => void
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
+  skillOptions: ComposerSkillOption[]
+  onToggleSkillOption: (slug: string, enabled: boolean) => void
   isVisionEnabled: boolean
   placeholder: string
   traceEnabled: boolean
@@ -94,6 +97,8 @@ export function MobileComposer({
   onTogglePythonTool,
   canUsePythonTool,
   pythonToolDisabledNote,
+  skillOptions,
+  onToggleSkillOption,
   isVisionEnabled,
   placeholder,
   traceEnabled,
@@ -214,6 +219,8 @@ export function MobileComposer({
                 onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
                 canUsePythonTool={canUsePythonTool}
                 pythonToolDisabledNote={pythonToolDisabledNote}
+                skillOptions={skillOptions}
+                onToggleSkillOption={onToggleSkillOption}
                 canUseTrace={canUseTrace}
                 traceEnabled={traceEnabled}
                 onToggleTrace={(checked) => {

@@ -59,6 +59,17 @@ graph TD
     style C fill:#d6f5d6,stroke:#333,stroke-width:2px
 ```
 
+### 3.3 Skill 运行时架构（V2）
+
+系统已将原有 `tool + features` 升级为 `skill + registry + policy`：
+
+- **SkillRegistry**：统一汇总内置 Skill 与 GitHub 安装 Skill，向编排器输出 `ToolDefinition[]`。
+- **PolicyEngine**：按风险级别和绑定策略判定 `allow / deny / require_approval`。
+- **ApprovalService**：处理审批请求、超时与决策落库，并通过 SSE 下发审批事件。
+- **ExecutionAdapter**：按平台执行 Skill（Linux: `bash`/`python3`，Windows: `powershell`/`cmd`/`python`）。
+
+协议层已采用**无向后兼容直接替换**：聊天和 Battle 请求统一使用 `skills` 字段，旧 `features` 字段不再接受。
+
 ## 4. 核心数据流 (Core Data Flows)
 
 本章节详细描述了两个关键业务场景的数据流动过程。

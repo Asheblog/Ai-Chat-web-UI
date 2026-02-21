@@ -25,6 +25,13 @@ interface PlusMenuContentProps {
   onTogglePythonTool?: (value: boolean) => void
   canUsePythonTool?: boolean
   pythonToolDisabledNote?: string
+  skillOptions?: Array<{
+    slug: string
+    label: string
+    description?: string
+    enabled: boolean
+  }>
+  onToggleSkillOption?: (slug: string, enabled: boolean) => void
   contentClassName?: string
   bodyClassName?: string
   onOpenSkillPanel?: () => void
@@ -53,6 +60,8 @@ export function PlusMenuContent({
   onTogglePythonTool,
   canUsePythonTool = true,
   pythonToolDisabledNote,
+  skillOptions = [],
+  onToggleSkillOption,
   contentClassName,
   bodyClassName,
   onOpenSkillPanel,
@@ -125,6 +134,30 @@ export function PlusMenuContent({
                   onCheckedChange={(checked) => onTogglePythonTool(Boolean(checked))}
                   disabled={!canUsePythonTool}
                 />
+              </div>
+            ) : null}
+
+            {skillOptions.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Custom Skills</p>
+                {skillOptions.map((skill) => (
+                  <div key={skill.slug} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">{skill.label}</span>
+                      <Switch
+                        checked={Boolean(skill.enabled)}
+                        onCheckedChange={(checked) =>
+                          onToggleSkillOption?.(skill.slug, Boolean(checked))
+                        }
+                      />
+                    </div>
+                    {skill.description ? (
+                      <p className="text-[11px] text-muted-foreground line-clamp-2">
+                        {skill.description}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             ) : null}
 

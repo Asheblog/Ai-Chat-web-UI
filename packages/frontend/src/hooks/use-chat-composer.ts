@@ -9,6 +9,7 @@ import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
+import { listSkillCatalog } from '@/features/skills/api'
 import {
   useAdvancedRequest,
   useComposerFeatureFlags,
@@ -29,6 +30,13 @@ export interface UseChatComposerOptions {
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 96
 const AUTO_LOAD_OLDER_TOP_THRESHOLD = 80
 const SESSION_SCROLL_STORAGE_KEY = 'aichat:chat-session-scroll'
+const BUILTIN_SKILL_SLUGS = new Set([
+  'web-search',
+  'python-runner',
+  'url-reader',
+  'document-search',
+  'knowledge-base-search',
+])
 
 const readSessionScrollState = (): Record<number, number> => {
   if (typeof window === 'undefined') return {}
@@ -118,6 +126,10 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
   const [sessionPromptDraft, setSessionPromptDraft] = useState<string>('')
   const [sessionPromptSaving, setSessionPromptSaving] = useState<boolean>(false)
+  const [extraSkillsCatalog, setExtraSkillsCatalog] = useState<
+    Array<{ slug: string; displayName: string; description?: string | null }>
+  >([])
+  const [enabledExtraSkills, setEnabledExtraSkills] = useState<string[]>([])
 
   const { systemSettings } = useSettingsStore()
   const { toast } = useToast()
@@ -136,6 +148,56 @@ export function useChatComposer(options?: UseChatComposerOptions) {
       fetchModels().catch(() => { })
     }
   }, [modelsCount, fetchModels])
+
+  useEffect(() => {
+    let cancelled = false
+    listSkillCatalog()
+      .then((response) => {
+        if (cancelled) return
+        const list = Array.isArray(response?.data) ? response.data : []
+        const filtered = list
+          .map((item) => ({
+            slug: String(item.slug || '').trim(),
+            displayName: String(item.displayName || item.slug || '').trim(),
+            description: item.description || null,
+          }))
+          .filter((item) => item.slug.length > 0 && !BUILTIN_SKILL_SLUGS.has(item.slug))
+        setExtraSkillsCatalog(filtered)
+        setEnabledExtraSkills((prev) =>
+          prev.filter((slug) => filtered.some((item) => item.slug === slug)),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExtraSkillsCatalog([])
+          setEnabledExtraSkills([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const skillOptions = useMemo(() => {
+    return extraSkillsCatalog.map((item) => ({
+      slug: item.slug,
+      label: item.displayName || item.slug,
+      description: item.description || undefined,
+      enabled: enabledExtraSkills.includes(item.slug),
+    }))
+  }, [enabledExtraSkills, extraSkillsCatalog])
+
+  const toggleSkillOption = useCallback((slug: string, enabled: boolean) => {
+    const normalized = slug.trim()
+    if (!normalized) return
+    setEnabledExtraSkills((prev) => {
+      if (enabled) {
+        if (prev.includes(normalized)) return prev
+        return [...prev, normalized]
+      }
+      return prev.filter((item) => item !== normalized)
+    })
+  }, [])
 
   const activeModel = useMemo(() => {
     if (!currentSession) return null
@@ -575,7 +637,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
         toast({ title: '发送失败', description: requestPayload.reason, variant: 'destructive' })
         return
       }
-      const enabledSkills: string[] = []
+      const enabledSkills: string[] = [...enabledExtraSkills]
       const skillOverrides: Record<string, Record<string, unknown>> = {}
       if (webSearchEnabled && canUseWebSearch) {
         enabledSkills.push('web-search', 'url-reader')
@@ -645,6 +707,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     canUseTrace,
     traceEnabled,
     buildRequestPayload,
+    enabledExtraSkills,
     canUsePythonTool,
     pythonToolEnabled,
     setSelectedImages,
@@ -745,6 +808,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setPythonToolEnabled: setPythonToolEnabledState,
     canUsePythonTool,
     pythonToolDisabledNote,
+    skillOptions,
+    toggleSkillOption,
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,

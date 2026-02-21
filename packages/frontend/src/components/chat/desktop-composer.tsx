@@ -12,6 +12,7 @@ import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
+import type { ComposerSkillOption } from './chat-composer-panel'
 
 interface DesktopComposerProps {
   input: string
@@ -42,6 +43,8 @@ interface DesktopComposerProps {
   onTogglePythonTool: (value: boolean) => void
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
+  skillOptions: ComposerSkillOption[]
+  onToggleSkillOption: (slug: string, enabled: boolean) => void
   traceEnabled: boolean
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
@@ -95,6 +98,8 @@ export function DesktopComposer({
   onTogglePythonTool,
   canUsePythonTool,
   pythonToolDisabledNote,
+  skillOptions,
+  onToggleSkillOption,
   traceEnabled,
   canUseTrace,
   onToggleTrace,
@@ -147,6 +152,8 @@ export function DesktopComposer({
               onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
               canUsePythonTool={canUsePythonTool}
               pythonToolDisabledNote={pythonToolDisabledNote}
+              skillOptions={skillOptions}
+              onToggleSkillOption={onToggleSkillOption}
               canUseTrace={canUseTrace}
               traceEnabled={traceEnabled}
               onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}

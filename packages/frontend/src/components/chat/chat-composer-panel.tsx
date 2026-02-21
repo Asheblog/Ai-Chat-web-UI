@@ -18,6 +18,13 @@ interface ImageLimitConfig {
   maxTotalMb: number
 }
 
+export interface ComposerSkillOption {
+  slug: string
+  label: string
+  description?: string
+  enabled: boolean
+}
+
 export interface ChatComposerPanelProps {
   input: string
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
@@ -36,6 +43,8 @@ export interface ChatComposerPanelProps {
   onTogglePythonTool: (value: boolean) => void
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
+  skillOptions: ComposerSkillOption[]
+  onToggleSkillOption: (slug: string, enabled: boolean) => void
   isVisionEnabled: boolean
   traceEnabled: boolean
   canUseTrace: boolean
@@ -114,6 +123,8 @@ export function ChatComposerPanel({
   onTogglePythonTool,
   canUsePythonTool,
   pythonToolDisabledNote,
+  skillOptions,
+  onToggleSkillOption,
   isVisionEnabled,
   traceEnabled,
   canUseTrace,
@@ -334,6 +345,8 @@ export function ChatComposerPanel({
         onTogglePythonTool={onTogglePythonTool}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
+        skillOptions={skillOptions}
+        onToggleSkillOption={onToggleSkillOption}
         isVisionEnabled={isVisionEnabled}
         placeholder={mobilePlaceholder}
         traceEnabled={traceEnabled}
@@ -378,6 +391,8 @@ export function ChatComposerPanel({
         onTogglePythonTool={onTogglePythonTool}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
+        skillOptions={skillOptions}
+        onToggleSkillOption={onToggleSkillOption}
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}
         onToggleTrace={onToggleTrace}

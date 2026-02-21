@@ -13,6 +13,7 @@ import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
 import { persistPreferredModel } from '@/store/model-preference-store'
 import { SetupWizard } from '@/components/setup-wizard/setup-wizard'
+import { SkillApprovalInbox } from '@/components/skills/skill-approval-inbox'
 
 export default function MainLayout({
   children,
@@ -63,6 +64,7 @@ export default function MainLayout({
       <Sidebar />
       <MainContent className="relative border-l border-border/60 bg-transparent">
         <SetupWizard />
+        <SkillApprovalInbox />
         {!isActorReady ? (
           <div className="flex h-full w-full items-center justify-center">
             <div className="space-y-3 text-center text-muted-foreground">

@@ -1,10 +1,23 @@
 import { apiHttpClient } from '@/lib/api'
-import type { ApiResponse, SkillBindingItem, SkillCatalogItem } from '@/types'
+import type {
+  ApiResponse,
+  SkillApprovalRequestItem,
+  SkillBindingItem,
+  SkillCatalogItem,
+} from '@/types'
 
 const client = apiHttpClient
 
-export const listSkillCatalog = async () => {
-  const response = await client.get<ApiResponse<SkillCatalogItem[]>>('/skills/catalog')
+export const listSkillCatalog = async (params?: {
+  all?: boolean
+  includeVersions?: boolean
+}) => {
+  const query: Record<string, string> = {}
+  if (params?.all) query.all = '1'
+  if (params?.includeVersions) query.includeVersions = '1'
+  const response = await client.get<ApiResponse<SkillCatalogItem[]>>('/skills/catalog', {
+    params: query,
+  })
   return response.data
 }
 
@@ -58,5 +71,18 @@ export const respondSkillApproval = async (
   payload: { approved: boolean; note?: string },
 ) => {
   const response = await client.post<ApiResponse>(`/skills/approvals/${requestId}/respond`, payload)
+  return response.data
+}
+
+export const listSkillApprovals = async (params?: {
+  status?: 'pending' | 'approved' | 'denied' | 'expired'
+  scopeType?: 'system' | 'user' | 'session' | 'battle_model'
+  scopeId?: string
+  skillId?: number
+  limit?: number
+}) => {
+  const response = await client.get<ApiResponse<SkillApprovalRequestItem[]>>('/skills/approvals', {
+    params,
+  })
   return response.data
 }

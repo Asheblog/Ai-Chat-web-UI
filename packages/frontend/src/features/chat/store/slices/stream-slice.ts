@@ -588,6 +588,21 @@ export const createStreamSlice: ChatSliceCreator<
           continue
         }
 
+        if (evt?.type === 'skill_approval_request' || evt?.type === 'skill_approval_result') {
+          if (typeof window !== 'undefined') {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('aichat:skill-approval', {
+                  detail: evt,
+                }),
+              )
+            } catch {
+              // ignore UI dispatch errors
+            }
+          }
+          continue
+        }
+
         if (evt?.type === 'error') {
           const fallback =
             typeof evt.error === 'string' && evt.error.trim()

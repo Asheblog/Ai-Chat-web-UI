@@ -21,9 +21,30 @@ AI Chat 是一个支持多模型接入的现代化 AI 聊天平台，具备完�
 | **会话管理** | 多会话、会话置顶、会话分享、历史消息、消息重试 |
 | **用户系统** | 注册审批、角色管理（管理员/用户）、匿名访客支持、每日配额 |
 | **知识库** | 文档上传解析、RAG 检索增强生成（开发中） |
+| **Skill 插件系统** | 统一 `skills` 协议、GitHub Skill 安装、审批/激活/绑定、调用审计 |
 | **模型大乱斗** | 多模型同时对比评测、自动评分 |
 | **任务追踪** | 全链路请求追踪、工具调用日志、导出功能 |
 | **系统设置** | 品牌定制、连接管理、模型配置、配额管理 |
+
+---
+
+## 🔧 Skill 系统与协议说明（无向后兼容）
+
+- 聊天与 Battle 已从 `features` 切换为 `skills` 请求结构。
+- 旧 `features` 请求体会被后端直接拒绝，并返回升级提示。
+- 新请求字段：
+  - `skills.enabled: string[]`
+  - `skills.overrides?: Record<string, Record<string, unknown>>`
+- Skill 后端管理 API：
+  - `GET /api/skills/catalog`
+  - `POST /api/skills/install`
+  - `POST /api/skills/:skillId/versions/:versionId/approve`
+  - `POST /api/skills/:skillId/versions/:versionId/activate`
+  - `POST /api/skills/bindings`
+  - `GET /api/skills/bindings`
+  - `DELETE /api/skills/bindings/:bindingId`
+  - `GET /api/skills/approvals`
+  - `POST /api/skills/approvals/:requestId/respond`
 
 ---
 

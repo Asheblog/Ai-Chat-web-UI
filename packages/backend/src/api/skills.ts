@@ -31,13 +31,46 @@ const approvalRespondSchema = z.object({
   note: z.string().max(2000).optional(),
 })
 
+const normalizeBooleanQuery = (value: string | undefined): boolean => {
+  if (!value) return false
+  const normalized = value.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes'
+}
+
+const parseSafeInt = (value: string | undefined, fallback: number, min: number, max: number): number => {
+  const parsed = Number.parseInt(value || '', 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, parsed))
+}
+
+const safeJsonObject = (raw: string | null | undefined): Record<string, unknown> => {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return {}
+}
+
 export const createSkillsApi = () => {
   const router = new Hono()
 
   router.get('/catalog', actorMiddleware, async (c) => {
     try {
+      const actor = c.get('actor') as Actor
+      const includeAll = normalizeBooleanQuery(c.req.query('all'))
+      const includeVersions = normalizeBooleanQuery(c.req.query('includeVersions'))
+      const isAdmin = actor.type === 'user' && actor.role === 'ADMIN'
+      if ((includeAll || includeVersions) && !isAdmin) {
+        return c.json<ApiResponse>({ success: false, error: 'Admin privilege required' }, 403)
+      }
+
       const skills = await (prisma as any).skill.findMany({
-        where: { status: 'active' },
+        where: includeAll ? undefined : { status: 'active' },
         include: {
           defaultVersion: {
             select: {
@@ -50,17 +83,45 @@ export const createSkillsApi = () => {
               activatedAt: true,
             },
           },
+          ...(includeVersions
+            ? {
+                versions: {
+                  select: {
+                    id: true,
+                    version: true,
+                    status: true,
+                    riskLevel: true,
+                    sourceRef: true,
+                    sourceSubdir: true,
+                    createdAt: true,
+                    approvedAt: true,
+                    activatedAt: true,
+                    manifestJson: true,
+                  },
+                  orderBy: [{ createdAt: 'desc' }],
+                },
+              }
+            : {}),
         },
         orderBy: { slug: 'asc' },
       })
 
       const data = skills.map((item: any) => {
-        let manifest: Record<string, unknown> = {}
-        try {
-          manifest = item.defaultVersion?.manifestJson ? JSON.parse(item.defaultVersion.manifestJson) : {}
-        } catch {
-          manifest = {}
-        }
+        const manifest = safeJsonObject(item.defaultVersion?.manifestJson)
+        const versions = Array.isArray(item.versions)
+          ? item.versions.map((version: any) => ({
+              id: version.id,
+              version: version.version,
+              status: version.status,
+              riskLevel: version.riskLevel,
+              sourceRef: version.sourceRef ?? null,
+              sourceSubdir: version.sourceSubdir ?? null,
+              createdAt: version.createdAt,
+              approvedAt: version.approvedAt,
+              activatedAt: version.activatedAt,
+              manifest: safeJsonObject(version.manifestJson),
+            }))
+          : undefined
         return {
           id: item.id,
           slug: item.slug,
@@ -80,12 +141,59 @@ export const createSkillsApi = () => {
                 manifest,
               }
             : null,
+          ...(versions ? { versions } : {}),
         }
       })
 
       return c.json<ApiResponse>({ success: true, data })
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Load catalog failed' }, 500)
+    }
+  })
+
+  router.get('/approvals', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+    try {
+      const status = c.req.query('status')
+      const scopeType = c.req.query('scopeType')
+      const scopeId = c.req.query('scopeId')
+      const skillIdRaw = c.req.query('skillId')
+      const limit = parseSafeInt(c.req.query('limit'), 50, 1, 200)
+      const where: Record<string, unknown> = {}
+      const bindingWhere: Record<string, unknown> = {}
+      if (status && ['pending', 'approved', 'denied', 'expired'].includes(status)) {
+        where.status = status
+      }
+      if (scopeType && ['system', 'user', 'session', 'battle_model'].includes(scopeType)) {
+        bindingWhere.scopeType = scopeType
+      }
+      if (scopeId) {
+        bindingWhere.scopeId = scopeId
+      }
+      if (Object.keys(bindingWhere).length > 0) {
+        where.binding = { is: bindingWhere }
+      }
+      if (skillIdRaw) {
+        const skillId = Number.parseInt(skillIdRaw, 10)
+        if (Number.isFinite(skillId)) {
+          where.skillId = skillId
+        }
+      }
+
+      const list = await (prisma as any).skillApprovalRequest.findMany({
+        where,
+        include: {
+          skill: { select: { id: true, slug: true, displayName: true } },
+          version: { select: { id: true, version: true, status: true, riskLevel: true } },
+          binding: { select: { id: true, scopeType: true, scopeId: true } },
+          decidedBy: { select: { id: true, username: true } },
+        },
+        orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
+        take: limit,
+      })
+
+      return c.json<ApiResponse>({ success: true, data: list })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'List approvals failed' }, 500)
     }
   })
 

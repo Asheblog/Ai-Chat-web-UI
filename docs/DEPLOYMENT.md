@@ -72,6 +72,13 @@ CORS_ORIGIN=http://localhost:3000
 
 # 可选项：初始化时关闭注册
 # DEFAULT_REGISTRATION_ENABLED=false
+
+# Skill 存储目录（可选，默认 backend/data/skills）
+# SKILL_STORAGE_ROOT=/app/data/skills
+
+# 私有 GitHub Skill 拉取令牌（可选）
+# 最小权限建议：contents:read
+# GITHUB_SKILL_TOKEN=ghp_xxx
 ```
 
 ### 注册策略

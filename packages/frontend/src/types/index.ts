@@ -414,15 +414,21 @@ export interface SkillCatalogItem {
   sourceType?: string | null;
   sourceUrl?: string | null;
   status?: string | null;
-  defaultVersion?: {
-    id: number;
-    version: string;
-    status: string;
-    riskLevel?: string | null;
-    createdAt?: string | Date | null;
-    activatedAt?: string | Date | null;
-    manifest?: Record<string, unknown>;
-  } | null;
+  defaultVersion?: SkillVersionItem | null;
+  versions?: SkillVersionItem[];
+}
+
+export interface SkillVersionItem {
+  id: number;
+  version: string;
+  status: string;
+  riskLevel?: string | null;
+  sourceRef?: string | null;
+  sourceSubdir?: string | null;
+  createdAt?: string | Date | null;
+  approvedAt?: string | Date | null;
+  activatedAt?: string | Date | null;
+  manifest?: Record<string, unknown>;
 }
 
 export interface SkillBindingItem {
@@ -436,6 +442,56 @@ export interface SkillBindingItem {
   overridesJson?: string | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  skill?: {
+    id: number;
+    slug: string;
+    displayName: string;
+  };
+  version?: {
+    id: number;
+    version: string;
+    status: string;
+  } | null;
+}
+
+export interface SkillApprovalRequestItem {
+  id: number;
+  skillId: number;
+  versionId?: number | null;
+  bindingId?: number | null;
+  sessionId?: number | null;
+  battleRunId?: number | null;
+  messageId?: number | null;
+  toolName: string;
+  toolCallId?: string | null;
+  status: 'pending' | 'approved' | 'denied' | 'expired';
+  reason?: string | null;
+  requestPayloadJson?: string | null;
+  decisionNote?: string | null;
+  requestedByActor: string;
+  requestedAt?: string | Date | null;
+  decidedAt?: string | Date | null;
+  expiresAt?: string | Date | null;
+  skill?: {
+    id: number;
+    slug: string;
+    displayName: string;
+  };
+  version?: {
+    id: number;
+    version: string;
+    status: string;
+    riskLevel?: string | null;
+  } | null;
+  binding?: {
+    id: number;
+    scopeType: 'system' | 'user' | 'session' | 'battle_model';
+    scopeId: string;
+  } | null;
+  decidedBy?: {
+    id: number;
+    username: string;
+  } | null;
 }
 
 export interface SkillApprovalEvent {

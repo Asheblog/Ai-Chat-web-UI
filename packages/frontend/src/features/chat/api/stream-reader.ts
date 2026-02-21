@@ -155,6 +155,30 @@ const normalizeChunk = (payload: any): ChatStreamChunk | null => {
   if (payload?.type === 'complete') {
     return { type: 'complete' }
   }
+  if (payload?.type === 'skill_approval_request') {
+    return {
+      type: 'skill_approval_request',
+      requestId: payload.requestId,
+      skillId: payload.skillId,
+      skillSlug: payload.skillSlug,
+      skillVersionId: payload.skillVersionId,
+      tool: payload.tool,
+      toolCallId: payload.toolCallId,
+      reason: payload.reason,
+      expiresAt: payload.expiresAt,
+    }
+  }
+  if (payload?.type === 'skill_approval_result') {
+    return {
+      type: 'skill_approval_result',
+      requestId: payload.requestId,
+      skillId: payload.skillId,
+      skillSlug: payload.skillSlug,
+      tool: payload.tool,
+      toolCallId: payload.toolCallId,
+      decision: payload.decision,
+    }
+  }
   if (payload?.type === 'quota' && payload.quota) {
     return { type: 'quota', quota: payload.quota }
   }
