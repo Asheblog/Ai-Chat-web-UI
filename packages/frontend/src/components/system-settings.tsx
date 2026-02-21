@@ -217,9 +217,6 @@ export function SystemSettings() {
       <section className="rounded-2xl border border-border/80 bg-card/95 p-5 sm:p-6">
         <p className="text-xs font-medium uppercase tracking-wide text-primary">System Settings</p>
         <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">配置中心</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          原有系统设置已按业务域整合，先选分组，再在组内切换模块，减少长导航跳转和配置碎片化。
-        </p>
       </section>
 
       <section className="space-y-4 rounded-2xl border border-border/80 bg-card/80 p-4 sm:p-5">
