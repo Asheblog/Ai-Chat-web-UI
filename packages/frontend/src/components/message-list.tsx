@@ -158,6 +158,7 @@ function MessageListComponent({
     // 当前 react-virtual 类型定义缺少该字段，运行时由 virtual-core 实际支持。
     ...({ shouldAdjustScrollPositionOnItemSizeChange } as Record<string, unknown>),
   })
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldAdjustScrollPositionOnItemSizeChange as any
 
   if (isLoading && displayMetas.length === 0) {
     return (
