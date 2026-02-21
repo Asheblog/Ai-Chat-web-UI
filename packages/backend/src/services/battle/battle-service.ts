@@ -38,6 +38,8 @@ import { BUILTIN_SKILL_SLUGS } from '../../modules/skills/types'
 
 type BattleRunControl = {
   runId: number
+  actorUserId: number | null
+  actorIdentifier: string
   abortController: AbortController
   requestControllers: Set<AbortController>
   attemptControllers: Map<string, Set<AbortController>>
@@ -1391,7 +1393,7 @@ export class BattleService {
       await this.imageService.deleteImages([...promptImagePaths, ...expectedAnswerImagePaths])
       throw error
     }
-    const runControl = this.createRunControl(run.id)
+    const runControl = this.createRunControl(run.id, actor)
     runControl.emitEvent = (event) => {
       options?.emitEvent?.(event)
       if (runControl.eventListeners && runControl.eventListeners.size > 0) {
@@ -1883,7 +1885,14 @@ export class BattleService {
     let reasoning = ''
     let usage: Record<string, any> = {}
     let error: string | null = null
-    const executionContext = this.buildExecutionContext(runControl, attemptKey)
+    const executionContext = this.buildExecutionContext(runControl, attemptKey, {
+      battleRunId,
+      modelId,
+      connectionId: model.resolved.connection.id,
+      rawId: model.resolved.rawModelId,
+      modelKey,
+      attemptIndex,
+    })
 
     try {
       const runResult = await this.executor.executeModel({
@@ -2181,11 +2190,13 @@ export class BattleService {
     }
   }
 
-  private createRunControl(runId: number): BattleRunControl {
+  private createRunControl(runId: number, actor: Actor): BattleRunControl {
     const existing = this.activeRuns.get(runId)
     if (existing) return existing
     const control: BattleRunControl = {
       runId,
+      actorUserId: actor.type === 'user' ? actor.id : null,
+      actorIdentifier: actor.identifier,
       abortController: new AbortController(),
       requestControllers: new Set(),
       attemptControllers: new Map(),
@@ -2325,7 +2336,18 @@ export class BattleService {
     }
   }
 
-  private buildExecutionContext(runControl?: BattleRunControl, attemptKey?: string): BattleExecutionContext {
+  private buildExecutionContext(
+    runControl?: BattleRunControl,
+    attemptKey?: string,
+    streamMeta?: {
+      battleRunId?: number | null
+      modelId?: string
+      connectionId?: number | null
+      rawId?: string | null
+      modelKey?: string
+      attemptIndex?: number
+    },
+  ): BattleExecutionContext {
     return {
       checkRunCancelled: () => this.throwIfRunCancelled(runControl),
       checkAttemptCancelled: () => {
@@ -2336,6 +2358,28 @@ export class BattleService {
       buildAbortHandlers: () => this.buildAbortHandlers(runControl, attemptKey),
       traceRecorder: runControl?.traceRecorder ?? null,
       buildTraceContext: (extra) => this.buildAttemptTraceContext(runControl, attemptKey, extra),
+      battleRunId: streamMeta?.battleRunId ?? runControl?.runId ?? null,
+      actorUserId: runControl?.actorUserId ?? null,
+      actorIdentifier: runControl?.actorIdentifier || 'battle',
+      sendStreamEvent: (payload) => {
+        if (!payload || typeof payload !== 'object') return
+        const payloadType = (payload as Record<string, unknown>).type
+        if (payloadType !== 'skill_approval_request' && payloadType !== 'skill_approval_result') {
+          return
+        }
+        runControl?.emitEvent?.({
+          type: payloadType,
+          payload: {
+            ...payload,
+            battleRunId: streamMeta?.battleRunId ?? runControl?.runId ?? null,
+            modelId: streamMeta?.modelId ?? null,
+            connectionId: streamMeta?.connectionId ?? null,
+            rawId: streamMeta?.rawId ?? null,
+            modelKey: streamMeta?.modelKey ?? null,
+            attemptIndex: streamMeta?.attemptIndex ?? null,
+          },
+        })
+      },
     }
   }
 

@@ -2,6 +2,7 @@ import { apiHttpClient } from '@/lib/api'
 import type {
   ApiResponse,
   SkillApprovalRequestItem,
+  SkillExecutionAuditItem,
   SkillBindingItem,
   SkillCatalogItem,
 } from '@/types'
@@ -84,5 +85,26 @@ export const listSkillApprovals = async (params?: {
   const response = await client.get<ApiResponse<SkillApprovalRequestItem[]>>('/skills/approvals', {
     params,
   })
+  return response.data
+}
+
+export const listSkillAudits = async (params?: {
+  page?: number
+  pageSize?: number
+  skillId?: number
+  versionId?: number
+  sessionId?: number
+  battleRunId?: number
+  toolName?: string
+  approvalStatus?: 'approved' | 'denied' | 'expired' | 'skipped'
+  hasError?: boolean
+}) => {
+  const response = await client.get<ApiResponse<{
+    items: SkillExecutionAuditItem[]
+    page: number
+    pageSize: number
+    total: number
+    hasMore: boolean
+  }>>('/skills/audits', { params })
   return response.data
 }

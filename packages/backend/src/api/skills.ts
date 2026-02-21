@@ -43,6 +43,12 @@ const parseSafeInt = (value: string | undefined, fallback: number, min: number, 
   return Math.min(max, Math.max(min, parsed))
 }
 
+const parseOptionalInt = (value: string | undefined): number | null => {
+  const parsed = Number.parseInt(value || '', 10)
+  if (!Number.isFinite(parsed)) return null
+  return parsed
+}
+
 const safeJsonObject = (raw: string | null | undefined): Record<string, unknown> => {
   if (!raw) return {}
   try {
@@ -194,6 +200,77 @@ export const createSkillsApi = () => {
       return c.json<ApiResponse>({ success: true, data: list })
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'List approvals failed' }, 500)
+    }
+  })
+
+  router.get('/audits', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+    try {
+      const page = parseSafeInt(c.req.query('page'), 1, 1, 1_000_000)
+      const pageSize = parseSafeInt(c.req.query('pageSize') || c.req.query('limit'), 50, 1, 200)
+      const skillId = parseOptionalInt(c.req.query('skillId'))
+      const versionId = parseOptionalInt(c.req.query('versionId'))
+      const sessionId = parseOptionalInt(c.req.query('sessionId'))
+      const battleRunId = parseOptionalInt(c.req.query('battleRunId'))
+      const approvalStatus = c.req.query('approvalStatus')
+      const toolName = c.req.query('toolName')
+      const hasError = normalizeBooleanQuery(c.req.query('hasError'))
+
+      const where: Record<string, unknown> = {}
+      if (skillId != null) where.skillId = skillId
+      if (versionId != null) where.versionId = versionId
+      if (sessionId != null) where.sessionId = sessionId
+      if (battleRunId != null) where.battleRunId = battleRunId
+      if (toolName && toolName.trim()) where.toolName = toolName.trim()
+      if (
+        approvalStatus &&
+        ['approved', 'denied', 'expired', 'skipped'].includes(approvalStatus.trim().toLowerCase())
+      ) {
+        where.approvalStatus = approvalStatus.trim().toLowerCase()
+      }
+      if (hasError) {
+        where.error = { not: null }
+      }
+
+      const [total, items] = await Promise.all([
+        (prisma as any).skillExecutionAudit.count({ where }),
+        (prisma as any).skillExecutionAudit.findMany({
+          where,
+          include: {
+            skill: {
+              select: { id: true, slug: true, displayName: true },
+            },
+            version: {
+              select: { id: true, version: true, status: true, riskLevel: true },
+            },
+            approvalRequest: {
+              select: {
+                id: true,
+                status: true,
+                requestedAt: true,
+                decidedAt: true,
+                requestedByActor: true,
+                decidedByUserId: true,
+              },
+            },
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+      ])
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          items,
+          page,
+          pageSize,
+          total,
+          hasMore: page * pageSize < total,
+        },
+      })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'List audits failed' }, 500)
     }
   })
 

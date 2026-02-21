@@ -43,6 +43,7 @@ AI Chat 是一个支持多模型接入的现代化 AI 聊天平台，具备完�
   - `POST /api/skills/bindings`
   - `GET /api/skills/bindings`
   - `DELETE /api/skills/bindings/:bindingId`
+  - `GET /api/skills/audits`
   - `GET /api/skills/approvals`
   - `POST /api/skills/approvals/:requestId/respond`
 

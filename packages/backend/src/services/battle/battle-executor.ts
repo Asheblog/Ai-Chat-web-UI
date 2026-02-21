@@ -26,6 +26,10 @@ export interface BattleExecutionContext {
   buildAbortHandlers: () => { onControllerReady?: (controller: AbortController | null) => void; onControllerClear?: () => void }
   traceRecorder?: TaskTraceRecorder | null
   buildTraceContext: (extra?: Record<string, unknown>) => Record<string, unknown>
+  battleRunId?: number | null
+  actorUserId?: number | null
+  actorIdentifier?: string
+  sendStreamEvent?: (payload: Record<string, unknown>) => void
 }
 
 export interface BattleExecutorDeps {
@@ -552,7 +556,8 @@ export class BattleExecutor {
     const toolRegistry = await createSkillRegistry({
       requestedSkills: toolFlags.skills,
       sessionId: 0,
-      actorUserId: null,
+      actorUserId: context.actorUserId ?? null,
+      battleRunId: context.battleRunId ?? null,
       builtins: {
         webSearch: toolFlags.webSearchActive ? toolFlags.webSearchConfig : null,
         python: toolFlags.pythonActive ? toolFlags.pythonConfig : null,
@@ -645,9 +650,11 @@ export class BattleExecutor {
         if (!toolName || !allowedToolNames.has(toolName)) return null
         return toolRegistry.handleToolCall(toolName, toolCall, args, {
           sessionId: 0,
-          actorIdentifier: 'battle',
+          actorIdentifier: context.actorIdentifier || 'battle',
           emitReasoning: () => {},
           sendToolEvent: () => {},
+          sendStreamEvent: context.sendStreamEvent,
+          battleRunId: context.battleRunId ?? null,
         })
       },
     })

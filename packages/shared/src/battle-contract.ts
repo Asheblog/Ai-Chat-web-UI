@@ -199,7 +199,17 @@ export interface BattleShare {
 }
 
 export interface BattleStreamEvent {
-  type: 'run_start' | 'attempt_start' | 'attempt_delta' | 'attempt_complete' | 'run_complete' | 'run_cancelled' | 'error' | 'complete'
+  type:
+    | 'run_start'
+    | 'attempt_start'
+    | 'attempt_delta'
+    | 'attempt_complete'
+    | 'run_complete'
+    | 'run_cancelled'
+    | 'skill_approval_request'
+    | 'skill_approval_result'
+    | 'error'
+    | 'complete'
   payload?: Record<string, any>
   error?: string
 }

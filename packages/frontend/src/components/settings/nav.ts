@@ -33,6 +33,7 @@ export const settingsNav: SettingsNavItem[] = [
       { key: 'system.knowledge-base', label: '知识库管理' },
       { key: 'system.connections', label: '连接管理' },
       { key: 'system.skills', label: 'Skill 管理' },
+      { key: 'system.skill-audits', label: 'Skill 审计日志' },
       { key: 'system.models', label: '模型管理' },
       { key: 'system.model-access', label: '模型权限管理' },
       { key: 'system.logging', label: '日志与监控' },

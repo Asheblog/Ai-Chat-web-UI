@@ -494,6 +494,44 @@ export interface SkillApprovalRequestItem {
   } | null;
 }
 
+export interface SkillExecutionAuditItem {
+  id: number;
+  skillId: number;
+  versionId?: number | null;
+  approvalRequestId?: number | null;
+  sessionId?: number | null;
+  battleRunId?: number | null;
+  messageId?: number | null;
+  toolName: string;
+  toolCallId?: string | null;
+  requestPayloadJson?: string | null;
+  responsePayloadJson?: string | null;
+  approvalStatus?: string | null;
+  platform?: string | null;
+  durationMs?: number | null;
+  error?: string | null;
+  createdAt?: string | Date | null;
+  skill?: {
+    id: number;
+    slug: string;
+    displayName: string;
+  };
+  version?: {
+    id: number;
+    version: string;
+    status: string;
+    riskLevel?: string | null;
+  } | null;
+  approvalRequest?: {
+    id: number;
+    status: string;
+    requestedAt?: string | Date | null;
+    decidedAt?: string | Date | null;
+    requestedByActor?: string;
+    decidedByUserId?: number | null;
+  } | null;
+}
+
 export interface SkillApprovalEvent {
   type: 'skill_approval_request' | 'skill_approval_result';
   requestId: number;

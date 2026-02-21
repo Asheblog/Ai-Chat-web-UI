@@ -881,6 +881,27 @@ export function useBattleFlow() {
           }
         }
 
+        if (event.type === 'skill_approval_request' || event.type === 'skill_approval_result') {
+          if (typeof window !== 'undefined') {
+            const payload =
+              event.payload && typeof event.payload === 'object'
+                ? (event.payload as Record<string, unknown>)
+                : {}
+            try {
+              window.dispatchEvent(
+                new CustomEvent('aichat:skill-approval', {
+                  detail: {
+                    type: event.type,
+                    ...payload,
+                  },
+                }),
+              )
+            } catch {
+              // ignore UI dispatch errors
+            }
+          }
+        }
+
         if (event.type === 'run_complete') {
           const nextSummary = event.payload?.summary as BattleRunSummary['summary'] | undefined
           if (nextSummary) {
