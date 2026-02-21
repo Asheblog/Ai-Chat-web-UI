@@ -2,7 +2,13 @@
 import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle, CardDescription } from "@/components/ui/card"
-import { APP_VERSION } from "@/lib/app-meta"
+import {
+  APP_COMMIT_BASE_URL,
+  APP_UPDATE_DATE,
+  APP_UPDATE_NOTES,
+  APP_UPDATE_SCOPE,
+  APP_VERSION,
+} from "@/lib/app-meta"
 
 // 关于页面：展示版本信息与更新日志（版本号由 app-meta 统一维护）
 export function AboutPage() {
@@ -52,27 +58,22 @@ export function AboutPage() {
 
         <Card className="px-4 py-4 sm:px-5 sm:py-5">
           <ul className="space-y-3 text-sm">
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1a4f40c</span>
-              <span className="text-muted-foreground leading-relaxed">
-                文档处理链路增强：新增 DocumentRemovedError，文档删除时安全更新并取消处理任务，进度/状态/错误上报更稳健。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1a4f40c</span>
-              <span className="text-muted-foreground leading-relaxed">
-                新增工具协议与适配器工具函数，改进工具调用解析并支持 Gemini 工具定义。
-              </span>
-            </li>
-            <li className="flex gap-3 items-start">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5">1a4f40c</span>
-              <span className="text-muted-foreground leading-relaxed">
-                支持多聊天提供商的请求构建逻辑与适配器处理。
-              </span>
-            </li>
+            {APP_UPDATE_NOTES.map((item) => (
+              <li key={item.commit} className="flex gap-3 items-start">
+                <a
+                  href={`${APP_COMMIT_BASE_URL}/${item.commit}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded mt-0.5 hover:text-foreground"
+                >
+                  {item.commit}
+                </a>
+                <span className="text-muted-foreground leading-relaxed">{item.summary}</span>
+              </li>
+            ))}
           </ul>
           <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-            以上为 2026-01-20 推送变更摘要
+            以上为 {APP_UPDATE_DATE} {APP_UPDATE_SCOPE}
           </p>
         </Card>
       </div>

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { APP_VERSION } from '@/lib/app-meta';
 
 export async function GET() {
   try {
@@ -6,7 +7,7 @@ export async function GET() {
       status: 'ok',
       timestamp: new Date().toISOString(),
       service: 'aichat-frontend',
-      version: 'v1.9.0',
+      version: APP_VERSION,
       environment: process.env.NODE_ENV || 'unknown',
       uptime: process.uptime()
     });
