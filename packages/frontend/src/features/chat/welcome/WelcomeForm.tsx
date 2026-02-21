@@ -79,6 +79,13 @@ interface WelcomeFormProps {
       onTogglePythonTool: (value: boolean) => void
       canUsePythonTool: boolean
       pythonToolDisabledNote?: string
+      skillOptions: Array<{
+        slug: string
+        label: string
+        description?: string
+        enabled: boolean
+      }>
+      onToggleSkillOption: (slug: string, enabled: boolean) => void
       onOpenAdvanced: () => void
       onOpenSessionPrompt: () => void
     }

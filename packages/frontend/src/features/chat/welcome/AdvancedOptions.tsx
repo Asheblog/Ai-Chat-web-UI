@@ -22,6 +22,13 @@ interface AdvancedOptionsProps {
   onTogglePythonTool: (value: boolean) => void
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
+  skillOptions: Array<{
+    slug: string
+    label: string
+    description?: string
+    enabled: boolean
+  }>
+  onToggleSkillOption: (slug: string, enabled: boolean) => void
   onOpenAdvanced: () => void
   onOpenSessionPrompt: () => void
 }
@@ -43,6 +50,8 @@ export function AdvancedOptions({
   onTogglePythonTool,
   canUsePythonTool,
   pythonToolDisabledNote,
+  skillOptions,
+  onToggleSkillOption,
   onOpenAdvanced,
   onOpenSessionPrompt,
 }: AdvancedOptionsProps) {
@@ -86,6 +95,8 @@ export function AdvancedOptions({
           onTogglePythonTool={onTogglePythonTool}
           canUsePythonTool={canUsePythonTool}
           pythonToolDisabledNote={pythonToolDisabledNote}
+          skillOptions={skillOptions}
+          onToggleSkillOption={onToggleSkillOption}
           onOpenSkillPanel={openSkillPanelFromMenu}
           onOpenAdvanced={() => {
             setPlusOpen(false)
@@ -114,6 +125,8 @@ export function AdvancedOptions({
         onTogglePythonTool={onTogglePythonTool}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
+        skillOptions={skillOptions}
+        onToggleSkillOption={onToggleSkillOption}
       />
     </>
   )

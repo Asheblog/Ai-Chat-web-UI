@@ -102,10 +102,10 @@ export function PlusMenuContent({
           }}
           disabled={!onOpenSkillPanel}
         >
-          打开 Skill 面板
+          打开技能面板
         </button>
         <p className="text-[11px] text-muted-foreground">
-          当前已启用 {enabledSkillCount} 个技能（在弹层内管理）
+          当前已启用 {enabledSkillCount} 个技能（内置预设 + 第三方安装）
         </p>
 
         {/* 任务追踪 */}
