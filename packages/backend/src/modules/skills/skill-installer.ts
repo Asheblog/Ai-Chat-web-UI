@@ -47,6 +47,10 @@ function resolveSkillStorageRoot(): string {
   if (configured && configured.trim()) {
     return path.resolve(configured.trim())
   }
+  const appDataDir = process.env.APP_DATA_DIR || process.env.DATA_DIR
+  if (appDataDir && appDataDir.trim()) {
+    return path.resolve(appDataDir.trim(), 'skills')
+  }
   return path.resolve(process.cwd(), 'data', 'skills')
 }
 

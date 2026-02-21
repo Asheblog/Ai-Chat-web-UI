@@ -28,24 +28,125 @@ AI Chat 是一个支持多模型接入的现代化 AI 聊天平台，具备完�
 
 ---
 
-## 🔧 Skill 系统与协议说明（无向后兼容）
+## 🔧 Skill 功能使用说明（无向后兼容）
 
-- 聊天与 Battle 已从 `features` 切换为 `skills` 请求结构。
-- 旧 `features` 请求体会被后端直接拒绝，并返回升级提示。
-- 新请求字段：
+### 1. 协议变更（必须）
+
+- 聊天与 Battle 已从 `features` 完全切换为 `skills`。
+- 旧字段 `features` 会被后端直接拒绝，并返回升级提示。
+- 新字段结构：
   - `skills.enabled: string[]`
   - `skills.overrides?: Record<string, Record<string, unknown>>`
-- Skill 后端管理 API：
-  - `GET /api/skills/catalog`
-  - `POST /api/skills/install`
-  - `POST /api/skills/:skillId/versions/:versionId/approve`
-  - `POST /api/skills/:skillId/versions/:versionId/activate`
-  - `POST /api/skills/bindings`
-  - `GET /api/skills/bindings`
-  - `DELETE /api/skills/bindings/:bindingId`
-  - `GET /api/skills/audits`
-  - `GET /api/skills/approvals`
-  - `POST /api/skills/approvals/:requestId/respond`
+
+### 2. 内置预设与第三方 Skill
+
+当前 UI 已分为两类：
+
+- `内置预设`（系统内置能力）
+  - 联网搜索（slug: `web-search`，tool: `web_search`）
+  - Python 工具（slug: `python-runner`，tool: `python_runner`）
+  - 网页读取（slug: `url-reader`，tool: `read_url`）
+  - 会话文档检索（slug: `document-search`）
+  - 知识库检索（slug: `knowledge-base-search`）
+- `第三方安装`（从 GitHub 安装后显示）
+
+UI 展示为中文描述，但底层仍使用稳定的 slug/tool 名，便于 API 与审计对齐。
+
+### 3. 聊天中如何使用 Skill
+
+1. 在输入框左侧 `+` 菜单点击“打开技能面板”。
+2. 在“内置预设”中打开联网搜索/Python工具，或打开已安装的第三方技能。
+3. 发送消息后，模型会按需调用 Skill；工具时间线可看到调用过程。
+4. 高风险 Skill 会触发审批弹窗（管理员批准后继续）。
+
+### 4. Battle 中如何使用 Skill
+
+1. 在 Battle 模型配置中为每个模型单独配置 `skills.enabled`。
+2. 同一场 Battle 的不同模型可启用不同 Skill 组合。
+3. 审批策略与审计记录与聊天侧共享同一套 Skill 运行时。
+
+### 5. 管理员如何安装第三方 Skill（GitHub）
+
+进入“系统设置 -> Skill 管理”：
+
+1. 在安装输入框填 GitHub 源：
+   - `owner/repo@ref`
+   - `owner/repo@ref:subdir`
+2. 点击安装后，系统会执行：
+   - 拉取并解压 -> manifest 校验 -> 风险分级 -> 入库
+3. 对 `pending_approval` 版本先审批，再激活。
+4. 在“绑定管理”中绑定作用域（`system/user/session/battle_model`）。
+
+### 6. 审批与审计
+
+- 审批队列：`GET /api/skills/approvals`
+- 审批响应：`POST /api/skills/approvals/:requestId/respond`
+- 审计查询：`GET /api/skills/audits`
+
+内置/第三方 Skill 调用都会写入审计日志（请求摘要、输出摘要、耗时、审批结果、错误等）。
+
+### 7. API 示例
+
+聊天请求：
+
+```json
+{
+  "sessionId": 1,
+  "content": "请联网搜索今天的 NVIDIA 新闻并做汇总",
+  "skills": {
+    "enabled": ["web-search", "url-reader", "python-runner"],
+    "overrides": {
+      "web-search": {
+        "scope": "webpage"
+      }
+    }
+  }
+}
+```
+
+Battle 模型配置片段：
+
+```json
+{
+  "models": [
+    {
+      "modelId": "gpt-4.1",
+      "skills": {
+        "enabled": ["web-search", "url-reader"]
+      }
+    }
+  ]
+}
+```
+
+### 8. Skill 存储与持久化（重要）
+
+Skill 包目录优先级：
+
+1. `SKILL_STORAGE_ROOT`（显式配置，优先级最高）
+2. `APP_DATA_DIR/skills`
+3. `process.cwd()/data/skills`（本地开发默认）
+
+生产环境建议显式配置：
+
+- `SKILL_STORAGE_ROOT=/app/data/skills`
+
+并确保 `/app/data` 挂载持久卷。这样即使升级/删除镜像后重建容器，Skill 包仍保留。
+
+注意：如果执行 `docker compose down -v` 或手动删除 `backend_data` 卷，`/app/data/skills` 也会被一并删除。
+
+Skill 管理相关 API 一览：
+
+- `GET /api/skills/catalog`
+- `POST /api/skills/install`
+- `POST /api/skills/:skillId/versions/:versionId/approve`
+- `POST /api/skills/:skillId/versions/:versionId/activate`
+- `POST /api/skills/bindings`
+- `GET /api/skills/bindings`
+- `DELETE /api/skills/bindings/:bindingId`
+- `GET /api/skills/audits`
+- `GET /api/skills/approvals`
+- `POST /api/skills/approvals/:requestId/respond`
 
 ---
 
@@ -110,6 +211,7 @@ services:
       - ENCRYPTION_KEY=请改成强随机密码
       - CORS_ORIGIN=http://你的IP或域名:3555
       - DB_INIT_ON_START=true  # 首次部署后改为 false
+      - SKILL_STORAGE_ROOT=/app/data/skills
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs
@@ -168,6 +270,7 @@ docker-compose up -d
 | `ENCRYPTION_KEY` | API Key 加密密钥，修改后需重新填写连接密钥 |
 | `CORS_ORIGIN` | 前端访问地址（含协议+端口） |
 | `DB_INIT_ON_START` | 首次部署设为 `true`，完成后改为 `false` |
+| `SKILL_STORAGE_ROOT` | Skill 安装包目录，建议固定为 `/app/data/skills`（需落在持久卷内） |
 
 **健康检查**
 - 前端：`http://你的IP或域名:3555/api/health`

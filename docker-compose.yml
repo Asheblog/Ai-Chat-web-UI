@@ -23,6 +23,7 @@ services:
       - ENABLE_CORS=${ENABLE_CORS:-true}
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:${FRONTEND_PORT:-3000}}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SKILL_STORAGE_ROOT=/app/data/skills
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs

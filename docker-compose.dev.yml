@@ -24,6 +24,7 @@ services:
       - ENABLE_CORS=${ENABLE_CORS:-true}
       - CORS_ORIGIN=http://localhost:${DEV_FRONTEND_PORT:-3000}
       - LOG_LEVEL=debug
+      - SKILL_STORAGE_ROOT=/app/data/skills
     volumes:
       # 挂载源代码，支持热重载
       - ./packages/backend:/app
