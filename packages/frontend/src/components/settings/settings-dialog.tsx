@@ -10,20 +10,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { PersonalPreferencesPage } from "./pages/PersonalPreferences"
 import { PersonalSecurityPage } from "./pages/PersonalSecurity"
 import { AboutPage } from "./pages/About"
-import { SystemGeneralPage } from "@/features/settings/pages/system-general"
-import { SystemNetworkPage } from "./pages/SystemNetwork"
-import { SystemReasoningPage } from "./pages/SystemReasoning"
-import { SystemModelsPage } from "@/features/settings/pages/system-models"
-// import { SystemModelsPage } from "./pages/SystemModels"
-import { SystemUsersPage } from "./pages/SystemUsers"
-import { SystemModelAccessPage } from "./pages/SystemModelAccess"
-import { SystemConnectionsPage } from "./pages/SystemConnections"
-import { SystemWebSearchPage } from "./pages/SystemWebSearch"
-import { SystemMonitoringPage } from "./pages/SystemMonitoring"
-import { SystemRAGPage } from "./pages/SystemRAG"
-import { SystemKnowledgeBasePage } from "./pages/SystemKnowledgeBase"
-import { SystemSkillsPage } from "./pages/SystemSkills"
-import { SystemSkillAuditsPage } from "./pages/SystemSkillAudits"
+import { SystemSettings } from "@/components/system-settings"
 
 interface SettingsDialogProps {
   open: boolean
@@ -127,7 +114,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     const subs = filteredTree.find((item) => item.key === nextMain)?.children ?? []
     const roleDefaultSub =
       nextMain === 'system'
-        ? 'system.general'
+        ? 'system.workspace'
         : (isAuthenticated ? 'personal.preferences' : 'personal.about')
     let nextSub = (urlSub || memSub || roleDefaultSub || subs[0]?.key || '') as string
     if (nextSub && !subs.some((item) => item.key === nextSub)) {
@@ -244,19 +231,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
                 case 'personal.preferences': return <PersonalPreferencesPage />
                 case 'personal.security': return <PersonalSecurityPage />
                 case 'personal.about': return <AboutPage />
-                case 'system.general': return <SystemGeneralPage />
-                case 'system.network': return <SystemNetworkPage />
-                case 'system.reasoning': return <SystemReasoningPage />
-                case 'system.web-search': return <SystemWebSearchPage />
-                case 'system.rag': return <SystemRAGPage />
-                case 'system.connections': return <SystemConnectionsPage />
-                case 'system.skills': return <SystemSkillsPage />
-                case 'system.skill-audits': return <SystemSkillAuditsPage />
-                case 'system.models': return <SystemModelsPage />
-                case 'system.model-access': return <SystemModelAccessPage />
-                case 'system.logging': return <SystemMonitoringPage />
-                case 'system.users': return <SystemUsersPage />
-                case 'system.knowledge-base': return <SystemKnowledgeBasePage />
+                case 'system.workspace': return <SystemSettings />
                 default:
                   return activeSub ? (
                     <div className="p-6 text-sm text-muted-foreground">
