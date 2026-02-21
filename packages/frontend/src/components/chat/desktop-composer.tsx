@@ -127,6 +127,12 @@ export function DesktopComposer({
   const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
   const [plusOpen, setPlusOpen] = useState(false)
   const [skillPanelOpen, setSkillPanelOpen] = useState(false)
+  const openSkillPanelFromMenu = () => {
+    setPlusOpen(false)
+    window.setTimeout(() => {
+      setSkillPanelOpen(true)
+    }, 0)
+  }
 
   return (
     <div className="hidden md:block">
@@ -165,10 +171,7 @@ export function DesktopComposer({
               onEffortChange={(value) => onEffortChange(value as typeof effort)}
               contentClassName="rounded-2xl"
               bodyClassName="text-sm"
-              onOpenSkillPanel={() => {
-                setPlusOpen(false)
-                setSkillPanelOpen(true)
-              }}
+              onOpenSkillPanel={openSkillPanelFromMenu}
               onOpenAdvanced={() => {
                 setPlusOpen(false)
                 onOpenAdvanced()

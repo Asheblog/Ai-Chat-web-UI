@@ -115,6 +115,12 @@ export function MobileComposer({
   const disabled = sendLocked || hasProcessingDocuments || (!input.trim() && selectedImages.length === 0)
   const [plusOpen, setPlusOpen] = useState(false)
   const [skillPanelOpen, setSkillPanelOpen] = useState(false)
+  const openSkillPanelFromMenu = () => {
+    setPlusOpen(false)
+    window.setTimeout(() => {
+      setSkillPanelOpen(true)
+    }, 0)
+  }
 
   return (
     <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
@@ -223,10 +229,7 @@ export function MobileComposer({
                 pythonToolDisabledNote={pythonToolDisabledNote}
                 skillOptions={skillOptions}
                 onToggleSkillOption={onToggleSkillOption}
-                onOpenSkillPanel={() => {
-                  setPlusOpen(false)
-                  setSkillPanelOpen(true)
-                }}
+                onOpenSkillPanel={openSkillPanelFromMenu}
                 canUseTrace={canUseTrace}
                 traceEnabled={traceEnabled}
                 onToggleTrace={(checked) => {

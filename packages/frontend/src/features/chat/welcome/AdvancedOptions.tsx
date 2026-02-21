@@ -2,6 +2,8 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Plus } from 'lucide-react'
 import { PlusMenuContent } from '@/components/plus-menu-content'
+import { SkillPanelSheet } from '@/components/chat/skill-panel-sheet'
+import { useState } from 'react'
 
 interface AdvancedOptionsProps {
   disabled: boolean
@@ -44,25 +46,63 @@ export function AdvancedOptions({
   onOpenAdvanced,
   onOpenSessionPrompt,
 }: AdvancedOptionsProps) {
+  const [plusOpen, setPlusOpen] = useState(false)
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
+  const openSkillPanelFromMenu = () => {
+    setPlusOpen(false)
+    window.setTimeout(() => {
+      setSkillPanelOpen(true)
+    }, 0)
+  }
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 rounded-full text-muted-foreground"
-          disabled={disabled}
-          aria-label="更多操作"
-        >
-          <Plus className="h-5 w-5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <PlusMenuContent
-        thinkingEnabled={thinkingEnabled}
-        onToggleThinking={onToggleThinking}
-        effort={effort}
-        onEffortChange={onEffortChange}
+    <>
+      <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full text-muted-foreground"
+            disabled={disabled}
+            aria-label="更多操作"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <PlusMenuContent
+          thinkingEnabled={thinkingEnabled}
+          onToggleThinking={onToggleThinking}
+          effort={effort}
+          onEffortChange={onEffortChange}
+          webSearchEnabled={webSearchEnabled}
+          onToggleWebSearch={onToggleWebSearch}
+          canUseWebSearch={canUseWebSearch}
+          showWebSearchScope={showWebSearchScope}
+          webSearchScope={webSearchScope}
+          onWebSearchScopeChange={onWebSearchScopeChange}
+          webSearchDisabledNote={webSearchDisabledNote}
+          pythonToolEnabled={pythonToolEnabled}
+          onTogglePythonTool={onTogglePythonTool}
+          canUsePythonTool={canUsePythonTool}
+          pythonToolDisabledNote={pythonToolDisabledNote}
+          onOpenSkillPanel={openSkillPanelFromMenu}
+          onOpenAdvanced={() => {
+            setPlusOpen(false)
+            onOpenAdvanced()
+          }}
+          onOpenSessionPrompt={() => {
+            setPlusOpen(false)
+            onOpenSessionPrompt()
+          }}
+          contentClassName="rounded-2xl"
+          bodyClassName="text-sm"
+        />
+      </DropdownMenu>
+
+      <SkillPanelSheet
+        open={skillPanelOpen}
+        onOpenChange={setSkillPanelOpen}
         webSearchEnabled={webSearchEnabled}
         onToggleWebSearch={onToggleWebSearch}
         canUseWebSearch={canUseWebSearch}
@@ -74,11 +114,7 @@ export function AdvancedOptions({
         onTogglePythonTool={onTogglePythonTool}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
-        onOpenAdvanced={onOpenAdvanced}
-        onOpenSessionPrompt={onOpenSessionPrompt}
-        contentClassName="rounded-2xl"
-        bodyClassName="text-sm"
       />
-    </DropdownMenu>
+    </>
   )
 }
