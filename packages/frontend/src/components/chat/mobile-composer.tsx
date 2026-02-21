@@ -13,6 +13,7 @@ import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import type { ComposerSkillOption } from './chat-composer-panel'
+import { SkillPanelSheet } from './skill-panel-sheet'
 
 interface MobileComposerProps {
   input: string
@@ -113,6 +114,7 @@ export function MobileComposer({
 }: MobileComposerProps) {
   const disabled = sendLocked || hasProcessingDocuments || (!input.trim() && selectedImages.length === 0)
   const [plusOpen, setPlusOpen] = useState(false)
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
 
   return (
     <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
@@ -221,6 +223,10 @@ export function MobileComposer({
                 pythonToolDisabledNote={pythonToolDisabledNote}
                 skillOptions={skillOptions}
                 onToggleSkillOption={onToggleSkillOption}
+                onOpenSkillPanel={() => {
+                  setPlusOpen(false)
+                  setSkillPanelOpen(true)
+                }}
                 canUseTrace={canUseTrace}
                 traceEnabled={traceEnabled}
                 onToggleTrace={(checked) => {
@@ -265,6 +271,24 @@ export function MobileComposer({
           </div>
         </div>
       </div>
+
+      <SkillPanelSheet
+        open={skillPanelOpen}
+        onOpenChange={setSkillPanelOpen}
+        webSearchEnabled={webSearchEnabled}
+        onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+        canUseWebSearch={canUseWebSearch}
+        showWebSearchScope={showWebSearchScope}
+        webSearchScope={webSearchScope}
+        onWebSearchScopeChange={onWebSearchScopeChange}
+        webSearchDisabledNote={webSearchDisabledNote}
+        pythonToolEnabled={pythonToolEnabled}
+        onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+        canUsePythonTool={canUsePythonTool}
+        pythonToolDisabledNote={pythonToolDisabledNote}
+        skillOptions={skillOptions}
+        onToggleSkillOption={onToggleSkillOption}
+      />
     </div>
   )
 }

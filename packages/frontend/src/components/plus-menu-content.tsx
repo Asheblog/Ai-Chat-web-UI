@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -47,31 +46,24 @@ export function PlusMenuContent({
   effort = 'unset',
   onEffortChange,
   webSearchEnabled = false,
-  onToggleWebSearch,
   canUseWebSearch = true,
-  showWebSearchScope = false,
-  webSearchScope = 'webpage',
-  onWebSearchScopeChange,
   traceEnabled,
   canUseTrace = false,
   onToggleTrace,
-  webSearchDisabledNote,
   pythonToolEnabled,
-  onTogglePythonTool,
   canUsePythonTool = true,
-  pythonToolDisabledNote,
   skillOptions = [],
-  onToggleSkillOption,
   contentClassName,
   bodyClassName,
   onOpenSkillPanel,
   onOpenAdvanced,
   onOpenSessionPrompt,
   showThinkingToggle = true,
-  showWebSearchToggle = true,
 }: PlusMenuContentProps) {
-  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
-  const shouldShowWebSearchScope = Boolean(showWebSearchScope && webSearchEnabled && canUseWebSearch)
+  const enabledSkillCount =
+    (webSearchEnabled && canUseWebSearch ? 1 : 0) +
+    (pythonToolEnabled && canUsePythonTool ? 1 : 0) +
+    skillOptions.filter((item) => item.enabled).length
 
   return (
     <DropdownMenuContent align="start" className={cn('w-64', contentClassName)}>
@@ -106,92 +98,15 @@ export function PlusMenuContent({
           type="button"
           className="w-full rounded-xl border border-dashed border-border/70 bg-muted/30 px-3 py-2 text-left hover:bg-muted text-sm font-medium"
           onClick={() => {
-            setSkillPanelOpen((prev) => !prev)
             onOpenSkillPanel?.()
           }}
+          disabled={!onOpenSkillPanel}
         >
-          {skillPanelOpen ? '收起 Skill 面板' : '打开 Skill 面板'}
+          打开 Skill 面板
         </button>
-
-        {skillPanelOpen ? (
-          <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 p-2">
-            {showWebSearchToggle && onToggleWebSearch ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">web-search</span>
-                <Switch
-                  checked={Boolean(webSearchEnabled && canUseWebSearch)}
-                  onCheckedChange={(checked) => onToggleWebSearch(Boolean(checked))}
-                  disabled={!canUseWebSearch}
-                />
-              </div>
-            ) : null}
-
-            {onTogglePythonTool ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">python-runner</span>
-                <Switch
-                  checked={Boolean(pythonToolEnabled && canUsePythonTool)}
-                  onCheckedChange={(checked) => onTogglePythonTool(Boolean(checked))}
-                  disabled={!canUsePythonTool}
-                />
-              </div>
-            ) : null}
-
-            {skillOptions.length > 0 ? (
-              <div className="space-y-1.5">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Custom Skills</p>
-                {skillOptions.map((skill) => (
-                  <div key={skill.slug} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">{skill.label}</span>
-                      <Switch
-                        checked={Boolean(skill.enabled)}
-                        onCheckedChange={(checked) =>
-                          onToggleSkillOption?.(skill.slug, Boolean(checked))
-                        }
-                      />
-                    </div>
-                    {skill.description ? (
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">
-                        {skill.description}
-                      </p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {shouldShowWebSearchScope && onWebSearchScopeChange ? (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">搜索范围（web-search）</span>
-                <Select
-                  value={webSearchScope}
-                  onValueChange={(value) => onWebSearchScopeChange(value)}
-                  disabled={!canUseWebSearch}
-                >
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="选择范围" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="webpage">网页</SelectItem>
-                    <SelectItem value="document">文档</SelectItem>
-                    <SelectItem value="paper">论文</SelectItem>
-                    <SelectItem value="image">图片</SelectItem>
-                    <SelectItem value="video">视频</SelectItem>
-                    <SelectItem value="podcast">播客</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-
-            {webSearchDisabledNote ? (
-              <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
-            ) : null}
-            {pythonToolDisabledNote ? (
-              <p className="text-[11px] text-muted-foreground">{pythonToolDisabledNote}</p>
-            ) : null}
-          </div>
-        ) : null}
+        <p className="text-[11px] text-muted-foreground">
+          当前已启用 {enabledSkillCount} 个技能（在弹层内管理）
+        </p>
 
         {/* 任务追踪 */}
         {canUseTrace && onToggleTrace ? (

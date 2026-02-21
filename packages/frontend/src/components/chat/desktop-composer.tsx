@@ -1,6 +1,7 @@
 'use client'
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Maximize2, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
@@ -13,6 +14,7 @@ import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import type { ComposerSkillOption } from './chat-composer-panel'
+import { SkillPanelSheet } from './skill-panel-sheet'
 
 interface DesktopComposerProps {
   input: string
@@ -123,13 +125,15 @@ export function DesktopComposer({
   knowledgeBaseCount,
 }: DesktopComposerProps) {
   const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
+  const [plusOpen, setPlusOpen] = useState(false)
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
 
   return (
     <div className="hidden md:block">
       <div className="mx-auto max-w-3xl px-4 md:px-6 pb-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} />
         <div className="flex items-end gap-3 transition">
-          <DropdownMenu>
+          <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 className="h-12 w-12 inline-flex items-center justify-center rounded-full text-muted-foreground border border-transparent hover:border-border/70 hover:bg-muted/40"
@@ -161,8 +165,22 @@ export function DesktopComposer({
               onEffortChange={(value) => onEffortChange(value as typeof effort)}
               contentClassName="rounded-2xl"
               bodyClassName="text-sm"
-              onOpenAdvanced={onOpenAdvanced}
-              onOpenSessionPrompt={onOpenSessionPrompt}
+              onOpenSkillPanel={() => {
+                setPlusOpen(false)
+                setSkillPanelOpen(true)
+              }}
+              onOpenAdvanced={() => {
+                setPlusOpen(false)
+                onOpenAdvanced()
+              }}
+              onOpenSessionPrompt={
+                onOpenSessionPrompt
+                  ? () => {
+                      setPlusOpen(false)
+                      onOpenSessionPrompt()
+                    }
+                  : undefined
+              }
             />
           </DropdownMenu>
 
@@ -239,6 +257,24 @@ export function DesktopComposer({
             </Tooltip>
           </TooltipProvider>
         </div>
+
+        <SkillPanelSheet
+          open={skillPanelOpen}
+          onOpenChange={setSkillPanelOpen}
+          webSearchEnabled={webSearchEnabled}
+          onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+          canUseWebSearch={canUseWebSearch}
+          showWebSearchScope={showWebSearchScope}
+          webSearchScope={webSearchScope}
+          onWebSearchScopeChange={onWebSearchScopeChange}
+          webSearchDisabledNote={webSearchDisabledNote}
+          pythonToolEnabled={pythonToolEnabled}
+          onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+          canUsePythonTool={canUsePythonTool}
+          pythonToolDisabledNote={pythonToolDisabledNote}
+          skillOptions={skillOptions}
+          onToggleSkillOption={onToggleSkillOption}
+        />
       </div>
     </div>
   )
