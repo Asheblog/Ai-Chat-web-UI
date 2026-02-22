@@ -55,6 +55,12 @@ function isOnDrvfs(cwdPath) {
   return typeof cwdPath === 'string' && /^\/mnt\/[a-z]\//i.test(cwdPath)
 }
 
+function readEnvFlag(value, defaultValue = false) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (!normalized) return defaultValue
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y'
+}
+
 function commandExists(cmd) {
   try {
     const checker = isWin() ? 'where' : 'which'
@@ -598,6 +604,20 @@ async function main() {
     } catch (_) {
       logWarn('数据库种子/初始化未完成，可稍后手动执行：npm run --workspace @aichat/backend db:seed')
     }
+  }
+
+  const reconcileOnStart = readEnvFlag(process.env.PYTHON_RUNTIME_RECONCILE_ON_START, true)
+  if (reconcileOnStart) {
+    logInfo('执行受管 Python 运行环境 reconcile（本地开发）...')
+    try {
+      const { cmd, args } = workspaceScript(pm, '@aichat/backend', 'python-runtime:reconcile')
+      runSync(cmd, args, { cwd: process.cwd() })
+      logSuccess('Python 运行环境 reconcile 完成')
+    } catch (e) {
+      logWarn('Python 运行环境 reconcile 失败，继续启动服务；可稍后手动执行：npm run --workspace @aichat/backend python-runtime:reconcile')
+    }
+  } else {
+    logInfo('已跳过 Python 运行环境 reconcile（PYTHON_RUNTIME_RECONCILE_ON_START=false）')
   }
 
   // 显式设置各自包的工作目录，确保 Next/Prisma 等工具在正确目录解析配置

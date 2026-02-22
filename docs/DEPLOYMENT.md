@@ -105,6 +105,7 @@ CORS_ORIGIN=http://localhost:3000
 - 删除卷（如 `docker compose down -v` 或 `docker volume prune`）会导致 Python 受管环境和已安装包一起丢失。
 - 后端镜像不再预装科学计算 Python 包，统一走受管 venv 依赖治理。
 - 首次冷启动会执行依赖安装，耗时与网络/索引源有关，属于预期行为。
+- 本地 `npm run start:dev` / `npm run start:prod` 同样会自动执行一次 reconcile，可用 `PYTHON_RUNTIME_RECONCILE_ON_START=false` 关闭。
 
 ### 注册策略
 

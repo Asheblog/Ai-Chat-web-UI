@@ -165,6 +165,7 @@ Skill 管理相关 API 一览：
 
 - `python-runner` 的默认科学计算依赖改为声明在内置 Skill manifest 的 `python_packages`
 - 容器启动时会自动同步内置 Skill 清单，并执行一次 Python runtime reconcile（可通过 `PYTHON_RUNTIME_RECONCILE_ON_START=false` 关闭）
+- 本地 `npm run start:dev` / `npm run start:prod` 也会执行一次同名 reconcile（同样受 `PYTHON_RUNTIME_RECONCILE_ON_START` 控制）
 - 首次冷启动可能因为依赖安装而变慢，具体耗时取决于网络与索引源速度
 
 破坏性变更（无迁移、直接替换）：
@@ -261,6 +262,7 @@ services:
       - ENCRYPTION_KEY=请改成强随机密码
       - CORS_ORIGIN=http://你的IP或域名:3555
       - DB_INIT_ON_START=true  # 首次部署后改为 false
+      - PYTHON_RUNTIME_RECONCILE_ON_START=true  # 默认 true，建议保留开启
       - SKILL_STORAGE_ROOT=/app/data/skills
     volumes:
       - backend_data:/app/data
@@ -320,6 +322,7 @@ docker-compose up -d
 | `ENCRYPTION_KEY` | API Key 加密密钥，修改后需重新填写连接密钥 |
 | `CORS_ORIGIN` | 前端访问地址（含协议+端口） |
 | `DB_INIT_ON_START` | 首次部署设为 `true`，完成后改为 `false` |
+| `PYTHON_RUNTIME_RECONCILE_ON_START` | 启动时是否自动执行 Python runtime reconcile，默认 `true`，建议保留开启 |
 | `SKILL_STORAGE_ROOT` | Skill 安装包目录，建议固定为 `/app/data/skills`（需落在持久卷内） |
 | `/app/data/python-runtime` | 受管 Python 运行环境目录，在线安装的包会持久化到该卷内 |
 
