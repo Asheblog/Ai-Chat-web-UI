@@ -12,6 +12,7 @@ DATA_DIR="/app/data"
 LOG_DIR="/app/logs"
 DEFAULT_DB_NAME="app.db"
 IMAGE_DIR_DEFAULT="/app/storage/chat-images"
+RESTORE_USER_PROFILE_MIGRATION_NAME="20260222183000_restore_user_profile_columns"
 
 cd "$APP_ROOT"
 
@@ -82,6 +83,69 @@ run_prisma_migrate_deploy() {
   run_prisma_command "migrate" "deploy" --schema "$PRISMA_SCHEMA_PATH"
 }
 
+sqlite_table_exists() {
+  local table_name="$1"
+  local exists
+  exists="$(sqlite3 "$DB_FILE" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='${table_name}' LIMIT 1;" 2>/dev/null || true)"
+  [ "$exists" = "1" ]
+}
+
+sqlite_table_has_column() {
+  local table_name="$1"
+  local column_name="$2"
+  local exists
+  exists="$(sqlite3 "$DB_FILE" "SELECT 1 FROM pragma_table_info('${table_name}') WHERE name='${column_name}' LIMIT 1;" 2>/dev/null || true)"
+  [ "$exists" = "1" ]
+}
+
+ensure_restore_user_profile_columns() {
+  # 新库由 migration 负责；已有库做幂等补列，避免历史缺陷导致启动后 P2022。
+  if [ ! -f "$DB_FILE" ]; then
+    return 0
+  fi
+
+  if ! sqlite_table_exists "users"; then
+    return 0
+  fi
+
+  if ! sqlite_table_has_column "users" "avatar_path"; then
+    echo "[entrypoint] Patching schema: add users.avatar_path"
+    sqlite3 "$DB_FILE" 'ALTER TABLE "users" ADD COLUMN "avatar_path" TEXT;'
+  fi
+
+  if ! sqlite_table_has_column "users" "personalPrompt"; then
+    echo "[entrypoint] Patching schema: add users.personalPrompt"
+    sqlite3 "$DB_FILE" 'ALTER TABLE "users" ADD COLUMN "personalPrompt" TEXT;'
+  fi
+}
+
+should_resolve_restore_user_profile_migration() {
+  if [ ! -f "$DB_FILE" ]; then
+    return 1
+  fi
+
+  if ! sqlite_table_exists "_prisma_migrations"; then
+    return 1
+  fi
+
+  if ! sqlite_table_has_column "users" "avatar_path"; then
+    return 1
+  fi
+
+  if ! sqlite_table_has_column "users" "personalPrompt"; then
+    return 1
+  fi
+
+  local tracked
+  tracked="$(sqlite3 "$DB_FILE" "SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name='${RESTORE_USER_PROFILE_MIGRATION_NAME}' LIMIT 1;" 2>/dev/null || true)"
+  [ "$tracked" = "1" ]
+}
+
+try_resolve_restore_user_profile_migration() {
+  echo "[entrypoint] Attempting to resolve ${RESTORE_USER_PROFILE_MIGRATION_NAME} as applied..."
+  run_prisma_command "migrate" "resolve" --applied "$RESTORE_USER_PROFILE_MIGRATION_NAME" --schema "$PRISMA_SCHEMA_PATH"
+}
+
 run_as_backend() {
   if command -v su-exec >/dev/null 2>&1; then
     su-exec backend:nodejs "$@"
@@ -101,9 +165,17 @@ fi
 
 run_prisma_generate
 
+if ! ensure_restore_user_profile_columns; then
+  echo "[entrypoint] WARN: pre-migrate schema patch failed; continuing with migrate deploy" >&2
+fi
+
 if ! run_prisma_migrate_deploy; then
-  echo "[entrypoint] WARN: prisma migrate deploy failed, falling back to prisma db push" >&2
-  run_prisma_command "db" "push" --schema "$PRISMA_SCHEMA_PATH" || npm run db:push || true
+  if should_resolve_restore_user_profile_migration && try_resolve_restore_user_profile_migration && run_prisma_migrate_deploy; then
+    echo "[entrypoint] Migration deploy recovered after resolving ${RESTORE_USER_PROFILE_MIGRATION_NAME}"
+  else
+    echo "[entrypoint] WARN: prisma migrate deploy failed, falling back to prisma db push" >&2
+    run_prisma_command "db" "push" --schema "$PRISMA_SCHEMA_PATH" || npm run db:push || true
+  fi
 fi
 
 # 显式触发数据库初始化：DB_INIT_ON_START=true/TRUE/1 时无论数据库是否存在均执行
