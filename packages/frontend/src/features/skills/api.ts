@@ -32,6 +32,11 @@ export const deleteSkill = async (skillId: number) => {
   return response.data
 }
 
+export const previewSkillUninstall = async (skillId: number) => {
+  const response = await client.get<ApiResponse>(`/skills/${skillId}/uninstall-plan`)
+  return response.data
+}
+
 export const approveSkillVersion = async (skillId: number, versionId: number) => {
   const response = await client.post<ApiResponse>(`/skills/${skillId}/versions/${versionId}/approve`)
   return response.data

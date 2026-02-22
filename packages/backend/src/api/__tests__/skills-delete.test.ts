@@ -67,6 +67,7 @@ jest.mock('../../services/python-runtime', () => {
     pythonRuntimeService: {
       getIndexes: jest.fn(),
       installRequirements: jest.fn(),
+      previewCleanupAfterSkillRemoval: jest.fn(),
       cleanupPackagesAfterSkillRemoval: jest.fn(),
     },
     PythonRuntimeServiceError,
@@ -122,6 +123,48 @@ describe('skills api - uninstall skill', () => {
     expect(runtimeMock.cleanupPackagesAfterSkillRemoval).toHaveBeenCalledWith({
       removedRequirements: expect.arrayContaining(['numpy==2.1.0', 'pandas>=2.2']),
     })
+  })
+
+  it('returns uninstall dry-run plan', async () => {
+    const prismaMock = prisma as any
+    const runtimeMock = pythonRuntimeService as any
+
+    prismaMock.skill.findUnique.mockResolvedValue({
+      id: 12,
+      slug: 'data-agent',
+      displayName: 'Data Agent',
+      sourceType: 'github',
+      versions: [
+        {
+          id: 101,
+          version: '1.0.0',
+          manifestJson: JSON.stringify({
+            python_packages: ['numpy==2.1.0', 'pandas>=2.2'],
+          }),
+          packagePath: '/app/data/skills/packages/data-agent/101',
+        },
+      ],
+    })
+    runtimeMock.previewCleanupAfterSkillRemoval.mockResolvedValue({
+      removedSkillPackages: ['numpy', 'pandas'],
+      keptByActiveSkills: ['numpy'],
+      keptByManual: [],
+      removablePackages: ['pandas'],
+    })
+
+    const app = createSkillsApi()
+    const res = await app.request('http://localhost/12/uninstall-plan', {
+      method: 'GET',
+      headers: { 'x-role': 'ADMIN' },
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.success).toBe(true)
+    expect(runtimeMock.previewCleanupAfterSkillRemoval).toHaveBeenCalledWith({
+      removedRequirements: expect.arrayContaining(['numpy==2.1.0', 'pandas>=2.2']),
+    })
+    expect(body.data.cleanupPlan.removablePackages).toEqual(['pandas'])
   })
 
   it('blocks uninstalling builtin skill', async () => {

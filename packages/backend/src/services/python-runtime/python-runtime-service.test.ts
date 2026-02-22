@@ -148,6 +148,36 @@ describe('PythonRuntimeService', () => {
     expect(result.removedSkillPackages).toEqual(['numpy', 'pandas', 'scipy'])
     expect(result.keptByActiveSkills).toEqual(['numpy'])
     expect(result.keptByManual).toEqual(['pandas'])
+    expect(result.removablePackages).toEqual(['scipy'])
     expect(result.removedPackages).toEqual(['scipy'])
+  })
+
+  it('previews skill cleanup plan without uninstalling', async () => {
+    const prisma = createMockPrisma()
+    const service = new PythonRuntimeService({ prisma: prisma as any })
+
+    jest.spyOn(service, 'collectActiveDependencies').mockResolvedValue([
+      {
+        skillId: 2,
+        skillSlug: 'other',
+        skillDisplayName: 'Other',
+        versionId: 202,
+        version: '2.0.0',
+        requirement: 'numpy>=2.0',
+        packageName: 'numpy',
+      },
+    ])
+    jest.spyOn(service, 'getManualPackages').mockResolvedValue(['pandas'])
+    const uninstallSpy = jest.spyOn(service, 'uninstallPackages')
+
+    const plan = await service.previewCleanupAfterSkillRemoval({
+      removedRequirements: ['numpy==2.1.0', 'pandas>=2.2', 'scipy==1.13'],
+    })
+
+    expect(uninstallSpy).not.toHaveBeenCalled()
+    expect(plan.removedSkillPackages).toEqual(['numpy', 'pandas', 'scipy'])
+    expect(plan.keptByActiveSkills).toEqual(['numpy'])
+    expect(plan.keptByManual).toEqual(['pandas'])
+    expect(plan.removablePackages).toEqual(['scipy'])
   })
 })

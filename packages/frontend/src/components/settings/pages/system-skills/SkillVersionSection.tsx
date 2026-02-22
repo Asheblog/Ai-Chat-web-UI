@@ -55,14 +55,21 @@ export function SkillVersionSection({
                   <Badge variant="secondary">default: {skill.defaultVersion.version}</Badge>
                 ) : null}
                 <div className="ml-auto">
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={skillActionKey === `delete:${skill.id}`}
-                    onClick={() => onUninstallSkill(skill.id)}
-                  >
-                    {skillActionKey === `delete:${skill.id}` ? '卸载中...' : '卸载 Skill'}
-                  </Button>
+                  {(() => {
+                    const planning = skillActionKey === `plan:${skill.id}`
+                    const deleting = skillActionKey === `delete:${skill.id}`
+                    const busy = planning || deleting
+                    return (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={busy}
+                        onClick={() => onUninstallSkill(skill.id)}
+                      >
+                        {planning ? '预览中...' : deleting ? '卸载中...' : '卸载 Skill'}
+                      </Button>
+                    )
+                  })()}
                 </div>
               </div>
               {skill.description ? (

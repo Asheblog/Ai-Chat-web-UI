@@ -334,6 +334,83 @@ export const createSkillsApi = () => {
     }
   })
 
+  router.get('/:skillId/uninstall-plan', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+    try {
+      const skillId = Number.parseInt(c.req.param('skillId'), 10)
+      if (!Number.isFinite(skillId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid skill id' }, 400)
+      }
+
+      const skill = await (prisma as any).skill.findUnique({
+        where: { id: skillId },
+        select: {
+          id: true,
+          slug: true,
+          displayName: true,
+          sourceType: true,
+          versions: {
+            select: {
+              id: true,
+              version: true,
+              manifestJson: true,
+              packagePath: true,
+            },
+          },
+        },
+      })
+
+      if (!skill) {
+        return c.json<ApiResponse>({ success: false, error: 'Skill not found' }, 404)
+      }
+      if (skill.sourceType === 'builtin') {
+        return c.json<ApiResponse>({ success: false, error: 'Builtin skill cannot be uninstalled' }, 400)
+      }
+
+      const removedRequirements = Array.from(
+        new Set(
+          (skill.versions || []).flatMap((version: any) =>
+            collectPythonRequirementsFromManifest(version.manifestJson),
+          ),
+        ),
+      )
+      const packagePaths = Array.from(
+        new Set(
+          (skill.versions || [])
+            .map((version: any) => (typeof version.packagePath === 'string' ? version.packagePath.trim() : ''))
+            .filter(Boolean),
+        ),
+      )
+
+      const cleanupPlan = await pythonRuntimeService.previewCleanupAfterSkillRemoval({
+        removedRequirements,
+      })
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          skillId: skill.id,
+          slug: skill.slug,
+          displayName: skill.displayName,
+          removedRequirements,
+          packagePaths,
+          cleanupPlan,
+        },
+      })
+    } catch (error) {
+      if (error instanceof PythonRuntimeServiceError) {
+        return c.json<ApiResponse>(
+          {
+            success: false,
+            error: error.message,
+            data: error.details ? { code: error.code, details: error.details } : { code: error.code },
+          },
+          error.statusCode,
+        )
+      }
+      return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Load uninstall plan failed' }, 500)
+    }
+  })
+
   router.delete('/:skillId', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
     try {
       const skillId = Number.parseInt(c.req.param('skillId'), 10)

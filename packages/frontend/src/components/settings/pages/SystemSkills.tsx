@@ -11,6 +11,7 @@ import {
   listSkillApprovals,
   listSkillBindings,
   listSkillCatalog,
+  previewSkillUninstall,
   respondSkillApproval,
   upsertSkillBinding,
 } from '@/features/skills/api'
@@ -20,6 +21,13 @@ import { SkillBindingsSection } from './system-skills/SkillBindingsSection'
 import { SkillInstallSection } from './system-skills/SkillInstallSection'
 import { SkillVersionSection } from './system-skills/SkillVersionSection'
 import { parseDraftJson, type ScopeType } from './system-skills/shared'
+
+const summarizeList = (items: string[], limit = 8): string => {
+  if (!Array.isArray(items) || items.length === 0) return '无'
+  const head = items.slice(0, limit)
+  const suffix = items.length > limit ? ` ...（+${items.length - limit}）` : ''
+  return `${head.join(', ')}${suffix}`
+}
 
 export function SystemSkillsPage() {
   const { toast } = useToast()
@@ -181,10 +189,48 @@ export function SystemSkillsPage() {
   const handleUninstallSkill = async (skillId: number) => {
     const skill = catalog.find((item) => item.id === skillId)
     if (!skill) return
-    const confirmed = typeof window === 'undefined'
-      ? true
-      : window.confirm(`确认卸载 Skill「${skill.displayName}」？该操作会删除版本记录，并自动尝试回收未复用的 Python 依赖。`)
-    if (!confirmed) return
+
+    const previewKey = `plan:${skillId}`
+    setSkillActionKey(previewKey)
+    let previewData: any = null
+    try {
+      const preview = await previewSkillUninstall(skillId)
+      if (!preview?.success) {
+        throw new Error(preview?.error || '预览失败')
+      }
+      previewData = preview?.data || {}
+    } catch (error) {
+      toast({
+        title: '预览回收计划失败',
+        description: error instanceof Error ? error.message : '未知错误',
+        variant: 'destructive',
+      })
+      setSkillActionKey(null)
+      return
+    }
+
+    const cleanupPlan = previewData?.cleanupPlan || {}
+    const removablePackages = Array.isArray(cleanupPlan?.removablePackages) ? cleanupPlan.removablePackages : []
+    const keptByActiveSkills = Array.isArray(cleanupPlan?.keptByActiveSkills) ? cleanupPlan.keptByActiveSkills : []
+    const keptByManual = Array.isArray(cleanupPlan?.keptByManual) ? cleanupPlan.keptByManual : []
+    const removedRequirements = Array.isArray(previewData?.removedRequirements) ? previewData.removedRequirements : []
+
+    const confirmMessage = [
+      `确认卸载 Skill「${skill.displayName}」？`,
+      '',
+      `依赖声明：${summarizeList(removedRequirements)}`,
+      `将自动删除包：${summarizeList(removablePackages)}`,
+      `保留（被其他激活 Skill 依赖）：${summarizeList(keptByActiveSkills)}`,
+      `保留（手动保留依赖）：${summarizeList(keptByManual)}`,
+      '',
+      '继续将执行真实卸载。',
+    ].join('\n')
+
+    const confirmed = typeof window === 'undefined' ? true : window.confirm(confirmMessage)
+    if (!confirmed) {
+      setSkillActionKey(null)
+      return
+    }
 
     const key = `delete:${skillId}`
     setSkillActionKey(key)

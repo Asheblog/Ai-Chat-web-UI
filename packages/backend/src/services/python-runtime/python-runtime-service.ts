@@ -92,7 +92,15 @@ export interface PythonRuntimeSkillCleanupResult {
   removedSkillPackages: string[]
   keptByActiveSkills: string[]
   keptByManual: string[]
+  removablePackages: string[]
   removedPackages: string[]
+}
+
+export interface PythonRuntimeSkillCleanupPlan {
+  removedSkillPackages: string[]
+  keptByActiveSkills: string[]
+  keptByManual: string[]
+  removablePackages: string[]
 }
 
 export class PythonRuntimeServiceError extends Error {
@@ -389,9 +397,9 @@ export class PythonRuntimeService {
     await this.saveManualPackages(next)
   }
 
-  async cleanupPackagesAfterSkillRemoval(input: {
+  private async buildSkillCleanupPlan(input: {
     removedRequirements: string[]
-  }): Promise<PythonRuntimeSkillCleanupResult> {
+  }): Promise<PythonRuntimeSkillCleanupPlan> {
     const removedSkillPackages = Array.from(
       new Set(
         (input.removedRequirements || [])
@@ -406,7 +414,7 @@ export class PythonRuntimeService {
         removedSkillPackages: [],
         keptByActiveSkills: [],
         keptByManual: [],
-        removedPackages: [],
+        removablePackages: [],
       }
     }
 
@@ -419,7 +427,7 @@ export class PythonRuntimeService {
 
     const keptByActiveSkills: string[] = []
     const keptByManual: string[] = []
-    const removable: string[] = []
+    const removablePackages: string[] = []
 
     for (const pkg of removedSkillPackages) {
       if (activePackageSet.has(pkg)) {
@@ -430,23 +438,37 @@ export class PythonRuntimeService {
         keptByManual.push(pkg)
         continue
       }
-      removable.push(pkg)
+      removablePackages.push(pkg)
     }
 
-    if (removable.length === 0) {
-      return {
-        removedSkillPackages,
-        keptByActiveSkills,
-        keptByManual,
-        removedPackages: [],
-      }
-    }
-
-    const result = await this.uninstallPackages(removable)
     return {
       removedSkillPackages,
       keptByActiveSkills,
       keptByManual,
+      removablePackages,
+    }
+  }
+
+  async previewCleanupAfterSkillRemoval(input: {
+    removedRequirements: string[]
+  }): Promise<PythonRuntimeSkillCleanupPlan> {
+    return this.buildSkillCleanupPlan(input)
+  }
+
+  async cleanupPackagesAfterSkillRemoval(input: {
+    removedRequirements: string[]
+  }): Promise<PythonRuntimeSkillCleanupResult> {
+    const plan = await this.buildSkillCleanupPlan(input)
+    if (plan.removablePackages.length === 0) {
+      return {
+        ...plan,
+        removedPackages: [],
+      }
+    }
+
+    const result = await this.uninstallPackages(plan.removablePackages)
+    return {
+      ...plan,
       removedPackages: result.packages,
     }
   }

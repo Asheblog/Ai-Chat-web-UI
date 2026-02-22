@@ -209,6 +209,7 @@ app.get('/api', (c) => {
       skills: {
         'GET /api/skills/catalog': 'Skill 目录',
         'POST /api/skills/install': '从 GitHub 安装 Skill（管理员）',
+        'GET /api/skills/:skillId/uninstall-plan': '预览卸载 Skill 的 Python 依赖回收计划（管理员）',
         'DELETE /api/skills/:skillId': '卸载 Skill 并自动回收可移除 Python 依赖（管理员）',
         'POST /api/skills/:skillId/versions/:versionId/approve': '审批 Skill 版本（管理员）',
         'POST /api/skills/:skillId/versions/:versionId/activate': '激活 Skill 版本（管理员）',
