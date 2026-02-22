@@ -49,6 +49,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build Backend (Smoke Image)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/backend/Dockerfile
+          target: production
+          push: false
+          load: true
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: aichat-backend:ci-smoke
+
+      - name: Backend Python Runtime Smoke
+        shell: bash
+        run: ./scripts/ci/smoke-backend-python-runtime.sh aichat-backend:ci-smoke
+
       - name: Build & Push Backend
         uses: docker/build-push-action@v6
         with:

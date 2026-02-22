@@ -82,6 +82,18 @@ run_prisma_migrate_deploy() {
   run_prisma_command "migrate" "deploy" --schema "$PRISMA_SCHEMA_PATH"
 }
 
+run_as_backend() {
+  if command -v su-exec >/dev/null 2>&1; then
+    su-exec backend:nodejs "$@"
+    return 0
+  fi
+  if command -v gosu >/dev/null 2>&1; then
+    gosu backend:nodejs "$@"
+    return 0
+  fi
+  "$@"
+}
+
 if [ ! -f "$DB_FILE" ]; then
   echo "[entrypoint] Database not found. Will initialize schema and seed data..."
   SHOULD_INIT_DB=1
@@ -108,6 +120,19 @@ if [ "$SHOULD_INIT_DB" -eq 1 ]; then
   fi
   # 再次修复权限，确保播种后新生成的文件归属 backend 用户
   chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" "$CHAT_IMAGE_DIR" || true
+fi
+
+echo "[entrypoint] Syncing builtin skills (npm run db:sync-builtins)..."
+run_as_backend npm run db:sync-builtins
+
+RECONCILE_ON_START_FLAG="$(printf '%s' "${PYTHON_RUNTIME_RECONCILE_ON_START:-true}" | tr '[:upper:]' '[:lower:]')"
+if [ "$RECONCILE_ON_START_FLAG" = "true" ] || [ "$RECONCILE_ON_START_FLAG" = "1" ]; then
+  echo "[entrypoint] Reconciling managed Python runtime (npm run python-runtime:reconcile)..."
+  if ! run_as_backend npm run python-runtime:reconcile; then
+    echo "[entrypoint] WARN: Python runtime reconcile failed; service will continue. You can retry via System Settings -> Python 运行环境 -> Reconcile." >&2
+  fi
+else
+  echo "[entrypoint] Skip Python runtime reconcile on start (PYTHON_RUNTIME_RECONCILE_ON_START=$RECONCILE_ON_START_FLAG)"
 fi
 
 echo "[entrypoint] Starting backend service..."

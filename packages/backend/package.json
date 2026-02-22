@@ -13,10 +13,12 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:init": "prisma migrate deploy && tsx scripts/init-db.ts",
+    "db:sync-builtins": "tsx scripts/sync-builtin-skills.ts",
     "db:seed": "prisma db seed",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
+    "python-runtime:reconcile": "tsx scripts/reconcile-python-runtime.ts",
     "test": "jest"
   },
   "prisma": {

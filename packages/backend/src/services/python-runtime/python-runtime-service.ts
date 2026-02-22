@@ -13,7 +13,7 @@ const AUTO_INSTALL_ON_ACTIVATE_KEY = 'python_runtime_auto_install_on_activate'
 const MANUAL_PACKAGES_KEY = 'python_runtime_manual_packages'
 
 const DEFAULT_OPERATION_TIMEOUT_MS = 120_000
-const DEFAULT_PIP_TIMEOUT_MS = 240_000
+const DEFAULT_PIP_TIMEOUT_MS = 600_000
 const OUTPUT_LIMIT = 200_000
 
 export type PythonRuntimeInstallSource = 'manual' | 'skill'

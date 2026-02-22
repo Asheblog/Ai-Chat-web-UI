@@ -96,12 +96,15 @@ CORS_ORIGIN=http://localhost:3000
 - 内置 `python_runner`
 - 所有 `runtime.type=python` Skill
 - 系统设置中的“Python 运行环境”在线安装/卸载依赖
+- 容器启动时自动同步内置 Skill 清单并执行一次 reconcile（可通过 `PYTHON_RUNTIME_RECONCILE_ON_START=false` 关闭）
 
 部署要求：
 
 - 生产环境必须将 `/app/data` 挂载为持久卷。
 - 仅删除镜像并重拉不会丢失已安装 Python 包（前提是卷保留）。
 - 删除卷（如 `docker compose down -v` 或 `docker volume prune`）会导致 Python 受管环境和已安装包一起丢失。
+- 后端镜像不再预装科学计算 Python 包，统一走受管 venv 依赖治理。
+- 首次冷启动会执行依赖安装，耗时与网络/索引源有关，属于预期行为。
 
 ### 注册策略
 

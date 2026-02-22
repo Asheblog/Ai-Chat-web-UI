@@ -161,6 +161,12 @@ Skill 管理相关 API 一览：
 - 内置 `python_runner`
 - 第三方 `runtime.type=python` Skill
 
+内置 Skill 依赖策略（无迁移、直接替换）：
+
+- `python-runner` 的默认科学计算依赖改为声明在内置 Skill manifest 的 `python_packages`
+- 容器启动时会自动同步内置 Skill 清单，并执行一次 Python runtime reconcile（可通过 `PYTHON_RUNTIME_RECONCILE_ON_START=false` 关闭）
+- 首次冷启动可能因为依赖安装而变慢，具体耗时取决于网络与索引源速度
+
 破坏性变更（无迁移、直接替换）：
 
 - 移除并停用系统设置旧字段：`python_tool_command`、`python_tool_args`
@@ -185,6 +191,7 @@ Skill 依赖声明与激活策略：
 - 激活 Skill 版本时会按策略自动安装依赖并执行 `pip check`
 - 失败即阻断激活（硬失败）
 - 仅允许 PyPI 包名与版本约束，不支持 `git/url/path`
+- Docker 镜像不再预装科学计算 Python 包，统一由受管 venv 安装与治理
 
 持久化要求（关键）：
 

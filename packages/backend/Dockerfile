@@ -16,15 +16,6 @@ RUN apt-get update && \
         python3 \
         python3-venv \
         python3-pip \
-        python3-numpy \
-        python3-sympy \
-        python3-scipy \
-        python3-statsmodels \
-        python3-networkx \
-        python3-sklearn \
-        python3-matplotlib \
-        python3-pandas \
-        python3-pulp \
         openssl \
         ca-certificates \
         gosu \
@@ -107,15 +98,6 @@ RUN apt-get update && \
         python3 \
         python3-venv \
         python3-pip \
-        python3-numpy \
-        python3-sympy \
-        python3-scipy \
-        python3-statsmodels \
-        python3-networkx \
-        python3-sklearn \
-        python3-matplotlib \
-        python3-pandas \
-        python3-pulp \
         gosu \
         openssl \
         ca-certificates \
