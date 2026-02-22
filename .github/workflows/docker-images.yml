@@ -64,7 +64,7 @@ jobs:
 
       - name: Backend Python Runtime Smoke
         shell: bash
-        run: ./scripts/ci/smoke-backend-python-runtime.sh aichat-backend:ci-smoke
+        run: bash ./scripts/ci/smoke-backend-python-runtime.sh aichat-backend:ci-smoke
 
       - name: Build & Push Backend
         uses: docker/build-push-action@v6
