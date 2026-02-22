@@ -58,6 +58,11 @@ export interface PythonRuntimeStatus {
   venvPath: string
   pythonPath: string
   ready: boolean
+  runtimeIssue?: {
+    code: string
+    message: string
+    details?: Record<string, unknown>
+  }
   indexes: PythonRuntimeIndexes
   manualPackages: string[]
   installedPackages: PythonRuntimeInstalledPackage[]
@@ -280,6 +285,12 @@ const normalizePackageList = (items: string[] | undefined, max = 512): string[] 
   }
   return Array.from(dedup).sort((a, b) => a.localeCompare(b))
 }
+
+const DEGRADED_RUNTIME_STATUS_CODES = new Set([
+  'PYTHON_RUNTIME_PIP_UNAVAILABLE',
+  'PYTHON_RUNTIME_CREATE_VENV_FAILED',
+  'PYTHON_RUNTIME_COMMAND_ERROR',
+])
 
 export class PythonRuntimeService {
   private readonly prisma: PrismaClient
@@ -614,18 +625,19 @@ export class PythonRuntimeService {
     })
   }
 
-  private async createVenv(paths: RuntimePaths): Promise<void> {
+  private async createVenv(paths: RuntimePaths, options?: { clear?: boolean }): Promise<void> {
     const bootstrapCandidates =
       this.platform === 'win32'
         ? [this.env.PYTHON_BOOTSTRAP_COMMAND || 'python', 'py']
         : [this.env.PYTHON_BOOTSTRAP_COMMAND || 'python3', 'python']
+    const args = ['-m', 'venv', ...(options?.clear ? ['--clear'] : []), paths.venvPath]
 
     let lastError: unknown = null
     for (const candidate of bootstrapCandidates) {
       const command = (candidate || '').trim()
       if (!command) continue
       try {
-        const result = await this.runCommand(command, ['-m', 'venv', paths.venvPath], {
+        const result = await this.runCommand(command, args, {
           timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
         })
         if ((result.exitCode ?? 1) !== 0) {
@@ -634,6 +646,7 @@ export class PythonRuntimeService {
         }
         logger.info('created managed venv', {
           command,
+          clear: Boolean(options?.clear),
           venvPath: paths.venvPath,
           durationMs: result.durationMs,
         })
@@ -648,7 +661,75 @@ export class PythonRuntimeService {
       `无法创建 Python 虚拟环境：${message}`,
       500,
       'PYTHON_RUNTIME_CREATE_VENV_FAILED',
-      { venvPath: paths.venvPath },
+      { venvPath: paths.venvPath, clear: Boolean(options?.clear) },
+    )
+  }
+
+  private commandOutput(result: CommandResult): string {
+    const output = `${result.stderr}\n${result.stdout}`.trim()
+    if (output) return output
+    return `exit code ${result.exitCode ?? 'null'}`
+  }
+
+  private buildPipUnavailableHint(): string {
+    if (this.platform === 'win32') {
+      return 'Windows 请确认 Python 安装时已包含 pip/venv，必要时执行 `py -m ensurepip --upgrade`。'
+    }
+    return 'WSL/Linux 请安装系统 venv 组件后重试（如 Debian/Ubuntu: `sudo apt install python3-venv` 或 `sudo apt install python3.12-venv`）。'
+  }
+
+  private async ensurePipAvailable(paths: RuntimePaths): Promise<void> {
+    const diagnostics: Record<string, unknown> = {}
+
+    const firstCheck = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
+      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+    })
+    if ((firstCheck.exitCode ?? 1) === 0) return
+    diagnostics.initialPipCheck = this.commandOutput(firstCheck)
+
+    try {
+      await this.createVenv(paths, { clear: true })
+      diagnostics.recreateVenv = 'ok'
+    } catch (error) {
+      diagnostics.recreateVenv = error instanceof Error ? error.message : String(error)
+    }
+
+    const secondCheck = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
+      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+    })
+    if ((secondCheck.exitCode ?? 1) === 0) {
+      logger.info('recovered managed runtime pip by recreating venv', {
+        venvPath: paths.venvPath,
+      })
+      return
+    }
+    diagnostics.afterRecreatePipCheck = this.commandOutput(secondCheck)
+
+    try {
+      const ensurePipResult = await this.runCommand(paths.pythonPath, ['-m', 'ensurepip', '--upgrade'], {
+        timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+      })
+      diagnostics.ensurePip = this.commandOutput(ensurePipResult)
+    } catch (error) {
+      diagnostics.ensurePip = error instanceof Error ? error.message : String(error)
+    }
+
+    const finalCheck = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
+      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+    })
+    if ((finalCheck.exitCode ?? 1) === 0) {
+      logger.info('recovered managed runtime pip via ensurepip', {
+        venvPath: paths.venvPath,
+      })
+      return
+    }
+    diagnostics.finalPipCheck = this.commandOutput(finalCheck)
+
+    throw new PythonRuntimeServiceError(
+      `受管环境 pip 不可用，自动修复失败。${this.buildPipUnavailableHint()}`,
+      500,
+      'PYTHON_RUNTIME_PIP_UNAVAILABLE',
+      diagnostics,
     )
   }
 
@@ -659,17 +740,7 @@ export class PythonRuntimeService {
     if (!(await this.fileExists(paths.pythonPath))) {
       await this.createVenv(paths)
     }
-
-    const pipVersion = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
-      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
-    })
-    if ((pipVersion.exitCode ?? 1) !== 0) {
-      throw new PythonRuntimeServiceError(
-        `受管环境 pip 不可用：${pipVersion.stderr || 'unknown error'}`,
-        500,
-        'PYTHON_RUNTIME_PIP_UNAVAILABLE',
-      )
-    }
+    await this.ensurePipAvailable(paths)
 
     return paths
   }
@@ -852,26 +923,57 @@ export class PythonRuntimeService {
   }
 
   async getRuntimeStatus(): Promise<PythonRuntimeStatus> {
-    const paths = await this.ensureManagedRuntime()
-    const [indexes, manualPackages, installedPackages, dependencies] = await Promise.all([
+    const paths = this.resolvePaths()
+    const [indexes, manualPackages, dependencies] = await Promise.all([
       this.getIndexes(),
       this.getManualPackages(),
-      this.listInstalledPackages(),
       this.collectActiveDependencies(),
     ])
 
     const conflicts = this.analyzeConflicts(dependencies)
-    return {
-      dataRoot: paths.dataRoot,
-      runtimeRoot: paths.runtimeRoot,
-      venvPath: paths.venvPath,
-      pythonPath: paths.pythonPath,
-      ready: true,
-      indexes,
-      manualPackages,
-      installedPackages,
-      activeDependencies: dependencies,
-      conflicts,
+    try {
+      await this.ensureManagedRuntime()
+      const installedPackages = await this.listInstalledPackages()
+
+      return {
+        dataRoot: paths.dataRoot,
+        runtimeRoot: paths.runtimeRoot,
+        venvPath: paths.venvPath,
+        pythonPath: paths.pythonPath,
+        ready: true,
+        indexes,
+        manualPackages,
+        installedPackages,
+        activeDependencies: dependencies,
+        conflicts,
+      }
+    } catch (error) {
+      if (error instanceof PythonRuntimeServiceError && DEGRADED_RUNTIME_STATUS_CODES.has(error.code)) {
+        logger.warn('python runtime status degraded', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          pythonPath: paths.pythonPath,
+        })
+        return {
+          dataRoot: paths.dataRoot,
+          runtimeRoot: paths.runtimeRoot,
+          venvPath: paths.venvPath,
+          pythonPath: paths.pythonPath,
+          ready: false,
+          runtimeIssue: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+          },
+          indexes,
+          manualPackages,
+          installedPackages: [],
+          activeDependencies: dependencies,
+          conflicts,
+        }
+      }
+      throw error
     }
   }
 

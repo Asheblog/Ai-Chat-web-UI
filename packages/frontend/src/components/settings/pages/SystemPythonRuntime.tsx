@@ -222,6 +222,12 @@ export function SystemPythonRuntimePage() {
           <Badge variant="outline">激活依赖 {status.activeDependencies.length} 条</Badge>
           {status.conflicts.length > 0 ? <Badge variant="destructive">冲突 {status.conflicts.length}</Badge> : <Badge variant="outline">无冲突</Badge>}
         </div>
+        {!status.ready && status.runtimeIssue?.message ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+            <p className="font-medium">运行环境未就绪</p>
+            <p className="mt-1 break-all">{status.runtimeIssue.message}</p>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
@@ -282,7 +288,7 @@ export function SystemPythonRuntimePage() {
           />
           <p className="text-xs text-muted-foreground">仅支持 PyPI 包名+版本约束，不支持 git/url/path。</p>
           <div className="flex justify-end">
-            <Button onClick={handleInstall} disabled={installing}>
+            <Button onClick={handleInstall} disabled={installing || !status.ready}>
               {installing ? "安装中..." : "安装依赖"}
             </Button>
           </div>
@@ -298,7 +304,7 @@ export function SystemPythonRuntimePage() {
           />
           <p className="text-xs text-muted-foreground">若包被激活 Skill 依赖占用，卸载会被阻断。</p>
           <div className="flex justify-end">
-            <Button variant="outline" onClick={handleUninstall} disabled={uninstalling}>
+            <Button variant="outline" onClick={handleUninstall} disabled={uninstalling || !status.ready}>
               {uninstalling ? "卸载中..." : "卸载"}
             </Button>
           </div>
@@ -308,7 +314,7 @@ export function SystemPythonRuntimePage() {
       <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-medium">运行时一致性校验（Reconcile）</p>
-          <Button variant="outline" onClick={handleReconcile} disabled={reconciling}>
+          <Button variant="outline" onClick={handleReconcile} disabled={reconciling || !status.ready}>
             {reconciling ? "执行中..." : "立即执行"}
           </Button>
         </div>

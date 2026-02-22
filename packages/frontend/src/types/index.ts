@@ -373,6 +373,11 @@ export interface PythonRuntimeStatus {
   venvPath: string;
   pythonPath: string;
   ready: boolean;
+  runtimeIssue?: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
   indexes: PythonRuntimeIndexes;
   manualPackages: string[];
   installedPackages: PythonRuntimeInstalledPackage[];

@@ -150,4 +150,25 @@ describe("SystemPythonRuntimePage", () => {
       expect(apiMocks.reconcilePythonRuntime).toHaveBeenCalledTimes(1)
     })
   })
+
+  test("运行环境未就绪时显示诊断并禁用依赖操作", async () => {
+    apiMocks.getPythonRuntimeStatus.mockResolvedValueOnce({
+      data: {
+        ...baseStatus,
+        ready: false,
+        runtimeIssue: {
+          code: "PYTHON_RUNTIME_PIP_UNAVAILABLE",
+          message: "受管环境 pip 不可用，自动修复失败。",
+        },
+      },
+    })
+
+    render(<SystemPythonRuntimePage />)
+
+    await screen.findByText("运行环境未就绪")
+    expect(screen.getByText("受管环境 pip 不可用，自动修复失败。")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "安装依赖" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "卸载" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "立即执行" })).toBeDisabled()
+  })
 })

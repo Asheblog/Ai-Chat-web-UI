@@ -210,4 +210,41 @@ describe('PythonRuntimeService', () => {
     expect(plan.keptByManual).toEqual(['pandas'])
     expect(plan.removablePackages).toEqual(['scipy'])
   })
+
+  it('returns degraded runtime status when managed runtime is unavailable', async () => {
+    const prisma = createMockPrisma()
+    const service = new PythonRuntimeService({
+      prisma: prisma as any,
+      env: { APP_DATA_DIR: '/app/data' } as any,
+      platform: 'linux',
+    })
+
+    jest.spyOn(service, 'getIndexes').mockResolvedValue({
+      indexUrl: undefined,
+      extraIndexUrls: [],
+      trustedHosts: [],
+      autoInstallOnActivate: true,
+    })
+    jest.spyOn(service, 'getManualPackages').mockResolvedValue([])
+    jest.spyOn(service, 'collectActiveDependencies').mockResolvedValue([])
+    jest.spyOn(service, 'ensureManagedRuntime').mockRejectedValue(
+      new PythonRuntimeServiceError(
+        '受管环境 pip 不可用，自动修复失败。',
+        500,
+        'PYTHON_RUNTIME_PIP_UNAVAILABLE',
+        { finalPipCheck: 'No module named pip' },
+      ),
+    )
+    const listInstalledSpy = jest.spyOn(service, 'listInstalledPackages')
+
+    const status = await service.getRuntimeStatus()
+
+    expect(status.ready).toBe(false)
+    expect(status.runtimeIssue?.code).toBe('PYTHON_RUNTIME_PIP_UNAVAILABLE')
+    expect(status.runtimeIssue?.details).toEqual(
+      expect.objectContaining({ finalPipCheck: 'No module named pip' }),
+    )
+    expect(status.installedPackages).toEqual([])
+    expect(listInstalledSpy).not.toHaveBeenCalled()
+  })
 })
