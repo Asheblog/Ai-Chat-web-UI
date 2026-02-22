@@ -8,14 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { DestructiveConfirmDialogContent } from '@/components/ui/destructive-confirm-dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
@@ -735,23 +729,19 @@ export function SetupWizard() {
       </Dialog>
 
       <AlertDialog open={skipConfirmOpen} onOpenChange={setSkipConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>跳过初始化向导？</AlertDialogTitle>
-            <AlertDialogDescription>
-              跳过后所有用户都将直接进入系统，但未完成配置可能导致无法聊天、模型列表为空、文档解析不可用等问题。
-              建议仅在你确认稍后会继续配置时再跳过。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
-            <AlertDialogAction asChild>
-              <Button variant="destructive" onClick={handleSkip} disabled={busy}>
-                仍然跳过
-              </Button>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+        <DestructiveConfirmDialogContent
+          title="跳过初始化向导？"
+          description="跳过后所有用户都将直接进入系统，但未完成配置可能导致无法聊天、模型列表为空、文档解析不可用等问题。"
+          warning="建议仅在你确认稍后会继续配置时再跳过。"
+          cancelLabel="取消"
+          actionLabel="仍然跳过"
+          actionDisabled={busy}
+          cancelDisabled={busy}
+          onAction={(event) => {
+            event.preventDefault()
+            void handleSkip()
+          }}
+        />
       </AlertDialog>
     </>
   )

@@ -14,10 +14,20 @@ import {
 } from '@/features/system/api'
 import type { TaskTraceSummary, TaskTraceEventRecord, LatexTraceSummary, LatexTraceEventRecord } from '@/types'
 import { Button } from '@/components/ui/button'
+import { AlertDialog } from '@/components/ui/alert-dialog'
+import { DestructiveConfirmDialogContent } from '@/components/ui/destructive-confirm-dialog'
 import { RefreshCcw, Trash2 } from 'lucide-react'
 import { TaskTraceDetailDialog } from './TaskTraceDetailDialog'
 import { TaskTraceFilters } from './TaskTraceFilters'
 import { TaskTraceTable } from './TaskTraceTable'
+
+type TraceConfirmState =
+  | { mode: null; trace: null; traceId: null }
+  | { mode: 'deleteTrace'; trace: TaskTraceSummary; traceId: null }
+  | { mode: 'deleteAll'; trace: null; traceId: null }
+  | { mode: 'deleteLatex'; trace: null; traceId: number }
+
+const IDLE_CONFIRM_STATE: TraceConfirmState = { mode: null, trace: null, traceId: null }
 
 export function TaskTraceConsole() {
   const { toast } = useToast()
@@ -39,7 +49,9 @@ export function TaskTraceConsole() {
   const [latexEvents, setLatexEvents] = useState<LatexTraceEventRecord[]>([])
   const [latexTruncated, setLatexTruncated] = useState(false)
   const [latexLoading, setLatexLoading] = useState(false)
+  const [deletingLatexTraceId, setDeletingLatexTraceId] = useState<number | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
+  const [confirmState, setConfirmState] = useState<TraceConfirmState>(IDLE_CONFIRM_STATE)
 
   const fetchList = useCallback(async () => {
     setLoading(true)
@@ -117,9 +129,7 @@ export function TaskTraceConsole() {
   }
 
   const handleDeleteLatex = async (traceId: number) => {
-    if (!window.confirm(`确定要删除 #${traceId} 的 LaTeX 日志吗？`)) {
-      return
-    }
+    setDeletingLatexTraceId(traceId)
     try {
       await deleteLatexTraceApi(traceId)
       toast({ title: '已删除 LaTeX 日志' })
@@ -129,6 +139,9 @@ export function TaskTraceConsole() {
       fetchList()
     } catch (error: any) {
       toast({ title: '删除失败', description: error?.response?.data?.error || error?.message || '未知错误', variant: 'destructive' })
+    } finally {
+      setDeletingLatexTraceId(null)
+      setConfirmState(IDLE_CONFIRM_STATE)
     }
   }
 
@@ -149,9 +162,6 @@ export function TaskTraceConsole() {
   )
 
   const handleDelete = async (trace: TaskTraceSummary) => {
-    if (!window.confirm(`确定要删除追踪 #${trace.id} 吗？该操作无法恢复。`)) {
-      return
-    }
     setDeletingId(trace.id)
     try {
       await deleteTaskTraceApi(trace.id)
@@ -161,13 +171,11 @@ export function TaskTraceConsole() {
       toast({ title: '删除失败', description: error?.response?.data?.error || error?.message || '未知错误', variant: 'destructive' })
     } finally {
       setDeletingId(null)
+      setConfirmState(IDLE_CONFIRM_STATE)
     }
   }
 
   const handleDeleteAll = async () => {
-    if (!window.confirm('确定要清空所有任务追踪日志吗？该操作会删除全部记录且无法恢复。')) {
-      return
-    }
     setClearingAll(true)
     try {
       const res = await deleteAllTaskTracesApi()
@@ -179,6 +187,79 @@ export function TaskTraceConsole() {
       toast({ title: '清空失败', description: error?.response?.data?.error || error?.message || '未知错误', variant: 'destructive' })
     } finally {
       setClearingAll(false)
+      setConfirmState(IDLE_CONFIRM_STATE)
+    }
+  }
+
+  const requestDeleteTrace = (trace: TaskTraceSummary) => {
+    setConfirmState({ mode: 'deleteTrace', trace, traceId: null })
+  }
+
+  const requestDeleteAll = () => {
+    setConfirmState({ mode: 'deleteAll', trace: null, traceId: null })
+  }
+
+  const requestDeleteLatex = (traceId: number) => {
+    setConfirmState({ mode: 'deleteLatex', trace: null, traceId })
+  }
+
+  const confirmBusy = useMemo(() => {
+    if (confirmState.mode === 'deleteTrace') {
+      return deletingId === confirmState.trace.id
+    }
+    if (confirmState.mode === 'deleteAll') {
+      return clearingAll
+    }
+    if (confirmState.mode === 'deleteLatex') {
+      return deletingLatexTraceId === confirmState.traceId
+    }
+    return false
+  }, [clearingAll, confirmState, deletingId, deletingLatexTraceId])
+
+  const confirmCopy = useMemo(() => {
+    if (confirmState.mode === 'deleteTrace') {
+      return {
+        title: `删除任务追踪 #${confirmState.trace.id}`,
+        description: '该操作会删除任务追踪详情与事件日志。',
+        warning: '删除后无法恢复，请确认该追踪已不再需要。',
+        actionLabel: confirmBusy ? '删除中...' : '确认删除',
+      }
+    }
+    if (confirmState.mode === 'deleteAll') {
+      return {
+        title: '清空任务追踪日志',
+        description: '该操作会删除当前系统中的全部任务追踪记录。',
+        warning: '删除后无法恢复，请确认你已完成导出备份。',
+        actionLabel: confirmBusy ? '清空中...' : '确认清空',
+      }
+    }
+    if (confirmState.mode === 'deleteLatex') {
+      return {
+        title: `删除 LaTeX 日志 #${confirmState.traceId}`,
+        description: '该操作仅删除对应追踪的 LaTeX 子日志。',
+        warning: '删除后无法恢复，任务主追踪日志仍会保留。',
+        actionLabel: confirmBusy ? '删除中...' : '确认删除',
+      }
+    }
+    return null
+  }, [confirmBusy, confirmState])
+
+  const closeConfirmDialog = () => {
+    if (confirmBusy) return
+    setConfirmState(IDLE_CONFIRM_STATE)
+  }
+
+  const runConfirmAction = async () => {
+    if (confirmState.mode === 'deleteTrace') {
+      await handleDelete(confirmState.trace)
+      return
+    }
+    if (confirmState.mode === 'deleteAll') {
+      await handleDeleteAll()
+      return
+    }
+    if (confirmState.mode === 'deleteLatex') {
+      await handleDeleteLatex(confirmState.traceId)
     }
   }
 
@@ -227,7 +308,7 @@ export function TaskTraceConsole() {
             <Button variant="ghost" size="icon" onClick={fetchList} disabled={loading}>
               <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
-            <Button variant="destructive" size="sm" disabled={loading || clearingAll} onClick={handleDeleteAll}>
+            <Button variant="destructive" size="sm" disabled={loading || clearingAll} onClick={requestDeleteAll}>
               <Trash2 className="mr-1 h-4 w-4" />
               {clearingAll ? '清空中' : '清空全部'}
             </Button>
@@ -241,7 +322,7 @@ export function TaskTraceConsole() {
             deletingId={deletingId}
             onOpenDetail={handleOpenDetail}
             onExport={handleExport}
-            onDelete={handleDelete}
+            onDelete={requestDeleteTrace}
           />
         </div>
 
@@ -256,6 +337,24 @@ export function TaskTraceConsole() {
         )}
       </div>
 
+      <AlertDialog open={confirmState.mode !== null} onOpenChange={(open) => !open && closeConfirmDialog()}>
+        {confirmCopy ? (
+          <DestructiveConfirmDialogContent
+            title={confirmCopy.title}
+            description={confirmCopy.description}
+            warning={confirmCopy.warning}
+            cancelLabel="取消"
+            actionLabel={confirmCopy.actionLabel}
+            actionDisabled={confirmBusy}
+            cancelDisabled={confirmBusy}
+            onAction={(event) => {
+              event.preventDefault()
+              void runConfirmAction()
+            }}
+          />
+        ) : null}
+      </AlertDialog>
+
       <TaskTraceDetailDialog
         open={!!selected}
         selected={selected}
@@ -266,7 +365,7 @@ export function TaskTraceConsole() {
         onClose={handleDetailClose}
         onExportTrace={handleExport}
         onExportLatex={handleExportLatex}
-        onDeleteLatex={handleDeleteLatex}
+        onDeleteLatex={requestDeleteLatex}
         onEnsureLatexEvents={ensureLatexEvents}
         latexEvents={latexEvents}
         latexTruncated={latexTruncated}

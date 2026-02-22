@@ -12,13 +12,8 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { DestructiveConfirmDialogContent } from '@/components/ui/destructive-confirm-dialog'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { cn } from '@/lib/utils'
@@ -611,42 +606,38 @@ export function Sidebar() {
 
       {/* 删除确认弹框 */}
       <AlertDialog open={deleteTargetId !== null} onOpenChange={(open)=>!open && setDeleteTargetId(null)}>
-        <AlertDialogContent>
-          <AlertDialogTitle>删除会话</AlertDialogTitle>
-          <AlertDialogDescription>此操作不可撤销，确定要删除该会话吗？</AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel asChild>
-              <Button variant="outline">取消</Button>
-            </AlertDialogCancel>
-            <AlertDialogAction asChild>
-              <Button
-                variant="destructive"
-                onClick={async ()=>{
-                  const id = deleteTargetId
-                  setDeleteTargetId(null)
-                  if (typeof id === 'number') {
-                    try {
-                      const wasCurrent = useChatStore.getState().currentSession?.id === id
-                      await deleteSession(id)
-                      if (wasCurrent) {
-                        const state = useChatStore.getState()
-                        if (state.currentSession?.id) {
-                          router.replace(`/main/${state.currentSession.id}`)
-                        } else if (state.sessions.length > 0) {
-                          const nextId = state.sessions[0].id
-                          state.selectSession(nextId)
-                          router.replace(`/main/${nextId}`)
-                        } else {
-                          router.replace('/main')
-                        }
-                      }
-                    } catch (e) { console.error(e) }
+        <DestructiveConfirmDialogContent
+          title="删除会话"
+          description="此操作将删除该会话及其全部消息。"
+          warning="删除后无法撤销，请确认当前会话内容已备份。"
+          cancelLabel="取消"
+          actionLabel="确认删除"
+          onAction={(event) => {
+            event.preventDefault()
+            void (async () => {
+              const id = deleteTargetId
+              setDeleteTargetId(null)
+              if (typeof id === 'number') {
+                try {
+                  const wasCurrent = useChatStore.getState().currentSession?.id === id
+                  await deleteSession(id)
+                  if (wasCurrent) {
+                    const state = useChatStore.getState()
+                    if (state.currentSession?.id) {
+                      router.replace(`/main/${state.currentSession.id}`)
+                    } else if (state.sessions.length > 0) {
+                      const nextId = state.sessions[0].id
+                      state.selectSession(nextId)
+                      router.replace(`/main/${nextId}`)
+                    } else {
+                      router.replace('/main')
+                    }
                   }
-                }}
-              >确定</Button>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+                } catch (e) { console.error(e) }
+              }
+            })()
+          }}
+        />
       </AlertDialog>
       {sidebarCollapsed && !isMobileMenuOpen && (
         <div

@@ -7,15 +7,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { DestructiveConfirmDialogContent } from '@/components/ui/destructive-confirm-dialog'
 import {
   Sheet,
   SheetContent,
@@ -467,27 +461,19 @@ export function BattlePageClient() {
                         {clearingAll ? '清空中...' : '全局一键清空'}
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>确认全局清空乱斗历史？</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          该操作会删除全部用户的乱斗历史与分享记录，并触发数据库空间回收，执行后无法恢复。
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel disabled={clearingAll}>取消</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={(event) => {
-                            event.preventDefault()
-                            void handleClearAllRunsGlobal()
-                          }}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          disabled={clearingAll}
-                        >
-                          {clearingAll ? '处理中...' : '确认清空'}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
+                    <DestructiveConfirmDialogContent
+                      title="确认全局清空乱斗历史？"
+                      description="该操作会删除全部用户的乱斗历史与分享记录，并触发数据库空间回收。"
+                      warning="删除后无法恢复，请确认已完成必要备份。"
+                      cancelLabel="再想想"
+                      actionLabel={clearingAll ? '处理中...' : '确认清空'}
+                      actionDisabled={clearingAll}
+                      cancelDisabled={clearingAll}
+                      onAction={(event) => {
+                        event.preventDefault()
+                        void handleClearAllRunsGlobal()
+                      }}
+                    />
                   </AlertDialog>
                 ) : null}
                 <ScrollArea className="h-[calc(100vh-200px)]">

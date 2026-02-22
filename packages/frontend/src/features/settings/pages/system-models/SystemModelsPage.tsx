@@ -14,14 +14,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { DestructiveConfirmDialogContent } from '@/components/ui/destructive-confirm-dialog'
 import { useSystemModels } from '@/components/settings/system-models/use-system-models'
 import { MODEL_CAP_KEYS, MODEL_CAP_LABELS, MODEL_CAP_ICONS, MODEL_CAP_SOURCE_LABELS } from '@/components/settings/system-models/constants'
 import {
@@ -349,20 +343,19 @@ export function SystemModelsPage() {
 
       {/* 清除全部覆写确认对话框 */}
       <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认清除全部覆写?</AlertDialogTitle>
-            <AlertDialogDescription>
-              该操作将移除全部模型能力覆写配置,且无法撤销。请确认已备份所需规则。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={clearing}>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={handleClearAll} disabled={clearing} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {clearing ? '清除中…' : '确认清除'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+        <DestructiveConfirmDialogContent
+          title="确认清除全部覆写？"
+          description="该操作将移除全部模型能力覆写配置，并恢复默认策略。"
+          warning="清除后无法撤销，请确认已备份所需规则。"
+          cancelLabel="取消"
+          actionLabel={clearing ? '清除中…' : '确认清除'}
+          actionDisabled={clearing}
+          cancelDisabled={clearing}
+          onAction={(event) => {
+            event.preventDefault()
+            void handleClearAll()
+          }}
+        />
       </AlertDialog>
 
       {/* 模型列表区块 */}
