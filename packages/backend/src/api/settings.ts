@@ -148,6 +148,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
     battle_allow_users: z.boolean().optional(),
     battle_anonymous_daily_quota: z.number().int().min(0).optional(),
     battle_user_daily_quota: z.number().int().min(0).optional(),
+    battle_retention_days: z.number().int().min(0).max(3650).optional(),
     model_access_default_anonymous: z.enum(['allow', 'deny']).optional(),
     model_access_default_user: z.enum(['allow', 'deny']).optional(),
     web_search_agent_enable: z.boolean().optional(),

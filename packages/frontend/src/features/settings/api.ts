@@ -134,6 +134,15 @@ export const getSystemSettings = async () => {
     }
     return 200
   })()
+  const battleRetentionDays = (() => {
+    const v = raw.battle_retention_days
+    if (typeof v === 'number') return Math.max(0, Math.min(3650, v))
+    if (typeof v === 'string' && v.trim() !== '') {
+      const parsed = Number.parseInt(v, 10)
+      if (Number.isFinite(parsed)) return Math.max(0, Math.min(3650, parsed))
+    }
+    return 15
+  })()
   const modelAccessDefaultAnonymous: 'allow' | 'deny' =
     raw.model_access_default_anonymous === 'allow' ? 'allow' : 'deny'
   const modelAccessDefaultUser: 'allow' | 'deny' =
@@ -297,6 +306,7 @@ export const getSystemSettings = async () => {
       battleAllowUsers,
       battleAnonymousDailyQuota,
       battleUserDailyQuota,
+      battleRetentionDays,
       modelAccessDefaultAnonymous,
       modelAccessDefaultUser,
       webSearchAgentEnable,
@@ -459,6 +469,7 @@ export const updateSystemSettings = async (
   if (typeof rest.battleAllowUsers === 'boolean') payload.battle_allow_users = rest.battleAllowUsers
   if (typeof rest.battleAnonymousDailyQuota === 'number') payload.battle_anonymous_daily_quota = rest.battleAnonymousDailyQuota
   if (typeof rest.battleUserDailyQuota === 'number') payload.battle_user_daily_quota = rest.battleUserDailyQuota
+  if (typeof rest.battleRetentionDays === 'number') payload.battle_retention_days = rest.battleRetentionDays
   if (typeof rest.modelAccessDefaultAnonymous === 'string')
     payload.model_access_default_anonymous = rest.modelAccessDefaultAnonymous
   if (typeof rest.modelAccessDefaultUser === 'string') payload.model_access_default_user = rest.modelAccessDefaultUser

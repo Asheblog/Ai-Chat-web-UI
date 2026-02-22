@@ -323,6 +323,7 @@ docker-compose up -d
 | `CORS_ORIGIN` | 前端访问地址（含协议+端口） |
 | `DB_INIT_ON_START` | 首次部署设为 `true`，完成后改为 `false` |
 | `PYTHON_RUNTIME_RECONCILE_ON_START` | 启动时是否自动执行 Python runtime reconcile，默认 `true`，建议保留开启 |
+| `BATTLE_RETENTION_DAYS` | 乱斗历史自动清理天数，默认 `15`；设为 `0` 表示关闭自动清理 |
 | `SKILL_STORAGE_ROOT` | Skill 安装包目录，建议固定为 `/app/data/skills`（需落在持久卷内） |
 | `/app/data/python-runtime` | 受管 Python 运行环境目录，在线安装的包会持久化到该卷内 |
 

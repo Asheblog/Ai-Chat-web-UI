@@ -22,6 +22,8 @@ import type {
 import { BattleExecutor, type BattleExecutionContext } from './battle-executor'
 import { safeJsonStringify, safeParseJson } from './battle-serialization'
 import { battleImageService as defaultBattleImageService, type BattleImageService } from './battle-image-service'
+import { BattleRetentionCleanupService } from './battle-retention-cleanup-service'
+import { createLogger } from '../../utils/logger'
 import type {
   BattleModelSkills,
   BattleModelInput,
@@ -106,9 +108,11 @@ export interface BattleServiceDeps {
   modelResolver?: ModelResolverService
   executor?: BattleExecutor
   imageService?: BattleImageService
+  retentionCleanupService?: BattleRetentionCleanupService
 }
 
 const DEFAULT_JUDGE_THRESHOLD = 0.8
+const log = createLogger('BattleService')
 
 const toISOStringSafe = (value: Date | string | null | undefined) => {
   if (!value) return null
@@ -354,13 +358,24 @@ export class BattleService {
   private modelResolver: ModelResolverService
   private executor: BattleExecutor
   private imageService: BattleImageService
+  private retentionCleanupService: BattleRetentionCleanupService
   private activeRuns = new Map<number, BattleRunControl>()
+  private vacuumInFlight: Promise<void> | null = null
 
   constructor(deps: BattleServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.modelResolver = deps.modelResolver ?? defaultModelResolverService
     this.executor = deps.executor ?? new BattleExecutor()
     this.imageService = deps.imageService ?? defaultBattleImageService
+    this.retentionCleanupService =
+      deps.retentionCleanupService ??
+      new BattleRetentionCleanupService({
+        prisma: this.prisma,
+        imageService: this.imageService,
+        scheduleVacuum: () => {
+          this.scheduleAsyncVacuum()
+        },
+      })
   }
 
   async listRuns(actor: Actor, params?: { page?: number; limit?: number }) {
@@ -490,11 +505,71 @@ export class BattleService {
       select: { id: true, promptImagesJson: true, expectedAnswerImagesJson: true },
     })
     if (!existing) return false
-    await this.prisma.battleRun.delete({ where: { id: runId } })
-    const promptImagePaths = parseImagePathsJson(existing.promptImagesJson)
-    const expectedAnswerImagePaths = parseImagePathsJson(existing.expectedAnswerImagesJson)
-    await this.imageService.deleteImages([...promptImagePaths, ...expectedAnswerImagePaths])
-    return true
+
+    this.cancelRunControl(existing.id, 'run_deleted')
+
+    const imagePaths = this.collectUniqueBattleImagePaths([existing])
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.battleShare.deleteMany({ where: { battleRunId: existing.id } })
+      await tx.battleResult.deleteMany({ where: { battleRunId: existing.id } })
+      const runResult = await tx.battleRun.deleteMany({ where: { id: existing.id } })
+      return runResult.count
+    })
+
+    if (result > 0) {
+      await this.imageService.deleteImages(imagePaths)
+      return true
+    }
+    return false
+  }
+
+  async clearAllRunsAndSharesGlobal(actor: Actor) {
+    if (actor.type !== 'user' || actor.role !== 'ADMIN') {
+      throw new Error('Admin access required')
+    }
+
+    for (const runId of Array.from(this.activeRuns.keys())) {
+      this.cancelRunControl(runId, 'admin_clear_all')
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const runs = await tx.battleRun.findMany({
+        select: { id: true, promptImagesJson: true, expectedAnswerImagesJson: true },
+      })
+      const imagePaths = this.collectUniqueBattleImagePaths(runs)
+      const deletedShares = await tx.battleShare.deleteMany({})
+      const deletedResults = await tx.battleResult.deleteMany({})
+      const deletedRuns = await tx.battleRun.deleteMany({})
+      return {
+        deletedRuns: deletedRuns.count,
+        deletedResults: deletedResults.count,
+        deletedShares: deletedShares.count,
+        imagePaths,
+      }
+    })
+
+    await this.imageService.deleteImages(result.imagePaths)
+
+    const deletedImages = result.imagePaths.length
+    const hasDeletion =
+      result.deletedRuns > 0 ||
+      result.deletedResults > 0 ||
+      result.deletedShares > 0 ||
+      deletedImages > 0
+    const vacuumScheduled = hasDeletion ? this.scheduleAsyncVacuum() : false
+
+    return {
+      deletedRuns: result.deletedRuns,
+      deletedResults: result.deletedResults,
+      deletedShares: result.deletedShares,
+      deletedImages,
+      vacuumScheduled,
+      vacuumMode: 'async' as const,
+    }
+  }
+
+  async triggerRetentionCleanupIfDue() {
+    await this.retentionCleanupService.triggerIfDue()
   }
 
   async cancelRun(actor: Actor, runId: number) {
@@ -2772,6 +2847,62 @@ export class BattleService {
     return {
       text: text || '',
       images: this.imageService.resolveImageUrls(imagePaths, { baseUrl: '' }),
+    }
+  }
+
+  private collectUniqueBattleImagePaths(
+    runs: Array<{ promptImagesJson: string | null; expectedAnswerImagesJson: string | null }>,
+  ) {
+    const set = new Set<string>()
+    for (const run of runs) {
+      for (const imagePath of parseImagePathsJson(run.promptImagesJson)) {
+        set.add(imagePath)
+      }
+      for (const imagePath of parseImagePathsJson(run.expectedAnswerImagesJson)) {
+        set.add(imagePath)
+      }
+    }
+    return Array.from(set)
+  }
+
+  private scheduleAsyncVacuum() {
+    if (this.vacuumInFlight) {
+      return true
+    }
+
+    this.vacuumInFlight = new Promise((resolve) => {
+      const execute = async () => {
+        try {
+          await this.runVacuum()
+        } finally {
+          this.vacuumInFlight = null
+          resolve()
+        }
+      }
+      setTimeout(() => {
+        void execute()
+      }, 0)
+    })
+
+    return true
+  }
+
+  private async runVacuum() {
+    try {
+      await this.prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)')
+    } catch (error) {
+      log.debug('battle wal checkpoint skipped', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    try {
+      await this.prisma.$executeRawUnsafe('VACUUM')
+      log.info('battle sqlite vacuum completed')
+    } catch (error) {
+      log.warn('battle sqlite vacuum failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 

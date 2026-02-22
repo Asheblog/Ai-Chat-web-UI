@@ -6,6 +6,17 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
   Sheet,
   SheetContent,
   SheetTrigger,
@@ -13,9 +24,18 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { formatDate } from '@/lib/utils'
 import { useModelsStore } from '@/store/models-store'
+import { useAuthStore } from '@/store/auth-store'
 import { History, Trash2, Eye, Trophy } from 'lucide-react'
 import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
-import { createBattleShare, deleteBattleRun, getBattleRun, listBattleRuns, retryBattleJudgeResult, retryBattleJudgeRun } from './api'
+import {
+  createBattleShare,
+  deleteAllBattleRunsGlobal,
+  deleteBattleRun,
+  getBattleRun,
+  listBattleRuns,
+  retryBattleJudgeResult,
+  retryBattleJudgeRun,
+} from './api'
 import { FlowStepper } from './ui/FlowStepper'
 import { ConfigStep } from './ui/ConfigStep'
 import { PromptStep } from './ui/PromptStep'
@@ -32,6 +52,11 @@ const LAST_VIEWED_RUN_KEY = 'battle:last-viewed-run-id'
 export function BattlePageClient() {
   const { toast } = useToast()
   const { models } = useModelsStore()
+  const { actorState, user } = useAuthStore((state) => ({
+    actorState: state.actorState,
+    user: state.user,
+  }))
+  const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
 
   // Battle flow state
   const flow = useBattleFlow()
@@ -44,6 +69,8 @@ export function BattlePageClient() {
   const [retryingJudgeResultId, setRetryingJudgeResultId] = useState<number | null>(null)
   const [retryingJudgeRun, setRetryingJudgeRun] = useState(false)
   const [selectedNode, setSelectedNode] = useState<{ modelKey: string; attemptIndex: number } | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
+  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false)
   const restoredRef = useRef(false)
 
   // Fetch history
@@ -250,6 +277,37 @@ export function BattlePageClient() {
     }
   }
 
+  const handleClearAllRunsGlobal = useCallback(async () => {
+    if (!isAdmin || clearingAll) return
+    setClearingAll(true)
+    try {
+      const res = await deleteAllBattleRunsGlobal()
+      if (!res?.success || !res.data) {
+        toast({ title: res?.error || '全局清空失败', variant: 'destructive' })
+        return
+      }
+
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(RUN_STORAGE_KEY)
+        window.sessionStorage.removeItem(LAST_VIEWED_RUN_KEY)
+      }
+      setSelectedNode(null)
+      setShareLink(null)
+      flow.resetBattle()
+      await refreshHistory()
+      setClearAllDialogOpen(false)
+
+      toast({
+        title: '已清空全部对战与分享记录',
+        description: `删除 run ${res.data.deletedRuns} 条，share ${res.data.deletedShares} 条`,
+      })
+    } catch (error: any) {
+      toast({ title: error?.message || '全局清空失败', variant: 'destructive' })
+    } finally {
+      setClearingAll(false)
+    }
+  }, [clearingAll, flow.resetBattle, isAdmin, refreshHistory, toast])
+
   // Start battle
   const handleStartBattle = async () => {
     setShareLink(null)
@@ -397,6 +455,41 @@ export function BattlePageClient() {
                 >
                   刷新
                 </Button>
+                {isAdmin ? (
+                  <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="mb-4 ml-2"
+                        disabled={historyLoading || clearingAll}
+                      >
+                        {clearingAll ? '清空中...' : '全局一键清空'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>确认全局清空乱斗历史？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          该操作会删除全部用户的乱斗历史与分享记录，并触发数据库空间回收，执行后无法恢复。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={clearingAll}>取消</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={(event) => {
+                            event.preventDefault()
+                            void handleClearAllRunsGlobal()
+                          }}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          disabled={clearingAll}
+                        >
+                          {clearingAll ? '处理中...' : '确认清空'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                ) : null}
                 <ScrollArea className="h-[calc(100vh-200px)]">
                   {history.length === 0 ? (
                     <div className="text-sm text-muted-foreground text-center py-8">

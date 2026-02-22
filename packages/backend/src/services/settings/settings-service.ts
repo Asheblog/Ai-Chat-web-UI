@@ -270,6 +270,7 @@ export class SettingsService {
       battle_allow_users: battlePolicy.allowUsers,
       battle_anonymous_daily_quota: battlePolicy.anonymousDailyQuota,
       battle_user_daily_quota: battlePolicy.userDailyQuota,
+      battle_retention_days: this.parseIntInRange(settingsObj.battle_retention_days, process.env.BATTLE_RETENTION_DAYS, 0, 3650, 15),
       web_search_agent_enable: this.parseBoolean(settingsObj.web_search_agent_enable, process.env.WEB_SEARCH_AGENT_ENABLE || 'false'),
       web_search_default_engine: settingsObj.web_search_default_engine || process.env.WEB_SEARCH_DEFAULT_ENGINE || 'tavily',
       web_search_result_limit: this.parseIntInRange(settingsObj.web_search_result_limit, process.env.WEB_SEARCH_RESULT_LIMIT, 1, 10, 4),
@@ -463,6 +464,7 @@ export class SettingsService {
     assignIfNumber('chat_max_concurrent_streams', payload.chat_max_concurrent_streams)
     assignIfNumber('title_summary_max_length', payload.title_summary_max_length)
     assignIfNumber('title_summary_connection_id', payload.title_summary_connection_id)
+    assignIfNumber('battle_retention_days', payload.battle_retention_days)
     // RAG 数字字段
     assignIfNumber('rag_top_k', payload.rag_top_k)
     assignIfNumber('rag_relevance_threshold', payload.rag_relevance_threshold)

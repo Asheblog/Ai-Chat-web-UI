@@ -177,6 +177,20 @@ export const deleteBattleRun = async (runId: number) => {
   return response.data
 }
 
+export interface BattleGlobalClearResult {
+  deletedRuns: number
+  deletedResults: number
+  deletedShares: number
+  deletedImages: number
+  vacuumScheduled: boolean
+  vacuumMode: 'async'
+}
+
+export const deleteAllBattleRunsGlobal = async () => {
+  const response = await client.delete<ApiResponse<BattleGlobalClearResult>>('/battle/admin/runs/all')
+  return response.data
+}
+
 export const cancelBattleRun = async (runId: number) => {
   const response = await client.post<ApiResponse<{
     status: BattleRunSummary['status']

@@ -13,6 +13,7 @@ export const baseSettings: SystemSettings = {
   battleAllowUsers: true,
   battleAnonymousDailyQuota: 8,
   battleUserDailyQuota: 40,
+  battleRetentionDays: 15,
   modelAccessDefaultAnonymous: 'deny',
   modelAccessDefaultUser: 'allow',
   assistantAvatarUrl: null,

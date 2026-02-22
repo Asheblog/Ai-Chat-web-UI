@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { ApiResponse, Actor } from '../types'
-import { actorMiddleware } from '../middleware/auth'
+import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import { battleService, BattleService } from '../services/battle/battle-service'
 import { prisma } from '../db'
 
@@ -151,6 +151,11 @@ const parsePagination = (value: string | null | undefined, fallback: number) => 
 export const createBattleApi = (deps: BattleApiDeps = {}) => {
   const svc = deps.battleService ?? battleService
   const router = new Hono()
+
+  router.use('*', async (_c, next) => {
+    void Promise.resolve(svc.triggerRetentionCleanupIfDue?.()).catch(() => {})
+    await next()
+  })
 
   const resolveStreamKeepaliveIntervalMs = async () => {
     let raw = process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'
@@ -302,6 +307,16 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
       return c.json<ApiResponse>({ success: true, message: 'Battle run deleted' })
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: 'Failed to delete battle run' }, 500)
+    }
+  })
+
+  router.delete('/admin/runs/all', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const result = await svc.clearAllRunsAndSharesGlobal(actor)
+      return c.json<ApiResponse<typeof result>>({ success: true, data: result })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: 'Failed to clear battle runs globally' }, 500)
     }
   })
 

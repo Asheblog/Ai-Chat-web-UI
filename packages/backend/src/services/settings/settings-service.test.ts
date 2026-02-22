@@ -1,3 +1,7 @@
+jest.mock('../../db', () => ({
+  prisma: {},
+}))
+
 import { SettingsService, type SettingsServiceDeps } from './settings-service'
 
 const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
@@ -19,7 +23,14 @@ const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
     anonymousRetentionDays: 5,
     defaultUserDailyQuota: 100,
   }))
+  const getBattlePolicy = jest.fn(async () => ({
+    allowAnonymous: true,
+    allowUsers: true,
+    anonymousDailyQuota: 20,
+    userDailyQuota: 200,
+  }))
   const invalidateQuotaPolicyCache = jest.fn()
+  const invalidateBattlePolicyCache = jest.fn()
   const invalidateReasoningMaxOutputTokensDefaultCache = jest.fn()
   const invalidateTaskTraceConfig = jest.fn()
   const syncSharedAnonymousQuota = jest.fn(async () => {})
@@ -30,7 +41,9 @@ const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
   const service = new SettingsService({
     prisma: prisma as any,
     getQuotaPolicy,
+    getBattlePolicy,
     invalidateQuotaPolicyCache,
+    invalidateBattlePolicyCache,
     invalidateReasoningMaxOutputTokensDefaultCache,
     invalidateTaskTraceConfig,
     syncSharedAnonymousQuota,
@@ -41,7 +54,9 @@ const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
   return {
     prisma,
     getQuotaPolicy,
+    getBattlePolicy,
     invalidateQuotaPolicyCache,
+    invalidateBattlePolicyCache,
     invalidateReasoningMaxOutputTokensDefaultCache,
     invalidateTaskTraceConfig,
     syncSharedAnonymousQuota,
@@ -120,6 +135,50 @@ describe('SettingsService', () => {
       expect.objectContaining({
         where: { key: 'assistant_avatar_path' },
         update: { value: 'path/avatar.png' },
+      }),
+    )
+  })
+
+  it('reads battle_retention_days with db/env/default fallback', async () => {
+    const previous = process.env.BATTLE_RETENTION_DAYS
+    process.env.BATTLE_RETENTION_DAYS = '21'
+    try {
+      const { service, prisma } = buildService()
+      prisma.systemSetting.findMany.mockResolvedValueOnce([])
+
+      const adminActor = {
+        type: 'user',
+        id: 1,
+        username: 'admin',
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        identifier: 'user:1',
+      } as any
+
+      const first = await service.getSystemSettings(adminActor)
+      expect(first.battle_retention_days).toBe(21)
+
+      prisma.systemSetting.findMany.mockResolvedValueOnce([
+        { key: 'battle_retention_days', value: '33' },
+      ])
+      const second = await service.getSystemSettings(adminActor)
+      expect(second.battle_retention_days).toBe(33)
+    } finally {
+      if (typeof previous === 'undefined') {
+        delete process.env.BATTLE_RETENTION_DAYS
+      } else {
+        process.env.BATTLE_RETENTION_DAYS = previous
+      }
+    }
+  })
+
+  it('updates battle_retention_days', async () => {
+    const { service, prisma } = buildService()
+    await service.updateSystemSettings({ battle_retention_days: 45 })
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'battle_retention_days' },
+        update: { value: '45' },
       }),
     )
   })

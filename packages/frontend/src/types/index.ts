@@ -276,6 +276,7 @@ export interface SystemSettings {
   battleAllowUsers?: boolean;
   battleAnonymousDailyQuota?: number;
   battleUserDailyQuota?: number;
+  battleRetentionDays?: number;
   modelAccessDefaultAnonymous?: 'allow' | 'deny';
   modelAccessDefaultUser?: 'allow' | 'deny';
   webSearchAgentEnable?: boolean;

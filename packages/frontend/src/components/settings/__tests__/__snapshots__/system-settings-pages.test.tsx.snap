@@ -255,7 +255,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
               次/天
             </span>
             <button
-              aria-controls="radix-:rp:"
+              aria-controls="radix-:rv:"
               aria-expanded="false"
               aria-haspopup="dialog"
               class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
@@ -785,6 +785,44 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
           <div
             class="text-base text-foreground/90 leading-6"
           >
+            乱斗历史保留天数（battle/share）
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            按创建时间自动清理已结束的乱斗与分享记录（0 表示关闭自动清理，范围 0-3650 天）
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="battleRetentionDays"
+              inputmode="numeric"
+              type="text"
+              value="15"
+            />
+            <span
+              class="text-sm text-muted-foreground"
+            >
+              天
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
             单条消息 AI 回答上限
           </div>
           <p
@@ -1005,7 +1043,7 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
         >
           <button
             aria-autocomplete="none"
-            aria-controls="radix-:rs:"
+            aria-controls="radix-:r12:"
             aria-expanded="false"
             class="flex h-10 items-center justify-between rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background placeholder:text-muted-foreground/90 focus:outline-none focus:ring-2 focus:ring-ring/60 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 w-full sm:w-[200px]"
             data-disabled=""
@@ -1258,7 +1296,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
               aria-haspopup="menu"
               class="inline-flex items-center justify-center whitespace-nowrap rounded-[calc(var(--radius)-2px)] border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3 w-full sm:w-auto"
               data-state="closed"
-              id="radix-:rv:"
+              id="radix-:r15:"
               type="button"
             >
               <svg
@@ -2021,7 +2059,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       aria-haspopup="menu"
                       class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))] h-8 w-8 rounded-full"
                       data-state="closed"
-                      id="radix-:r1a:"
+                      id="radix-:r1g:"
                       type="button"
                     >
                       <svg
@@ -2211,7 +2249,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       aria-haspopup="menu"
                       class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))] h-8 w-8 rounded-full"
                       data-state="closed"
-                      id="radix-:r1c:"
+                      id="radix-:r1i:"
                       type="button"
                     >
                       <svg

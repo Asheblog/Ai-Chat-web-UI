@@ -181,6 +181,7 @@ describe("系统设置页面", () => {
         battleAllowUsers: true,
         battleAnonymousDailyQuota: 8,
         battleUserDailyQuota: 40,
+        battleRetentionDays: 15,
         brandText: "NewBrand",
         chatSystemPrompt: "",
         siteBaseUrl: "https://chat.example.com",
@@ -206,6 +207,20 @@ describe("系统设置页面", () => {
     expect(toastSpy).toHaveBeenCalled()
     const toastArg = toastSpy.mock.calls[0]?.[0]
     expect(toastArg?.title).toContain("输入无效")
+  })
+
+  test("乱斗保留天数非法时会阻止保存", async () => {
+    const { container } = render(<SystemGeneralPage />)
+    const retentionInput = container.querySelector<HTMLInputElement>("input#battleRetentionDays")
+    const saveButton = screen.getByRole("button", { name: "保存通用设置" })
+    fireEvent.change(retentionInput!, { target: { value: "-2" } })
+
+    await userEvent.click(saveButton)
+
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(toastSpy).toHaveBeenCalled()
+    const toastArg = toastSpy.mock.calls[0]?.[0]
+    expect(toastArg?.description).toContain("乱斗历史保留天数")
   })
 
   test("推理链设置的自定义标签校验失败会阻断保存", async () => {

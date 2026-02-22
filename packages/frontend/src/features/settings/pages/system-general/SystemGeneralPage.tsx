@@ -65,6 +65,7 @@ export function SystemGeneralPage() {
   const [battleAllowUsersDraft, setBattleAllowUsersDraft] = useState(true)
   const [battleAnonymousQuotaDraft, setBattleAnonymousQuotaDraft] = useState('20')
   const [battleUserQuotaDraft, setBattleUserQuotaDraft] = useState('200')
+  const [battleRetentionDraft, setBattleRetentionDraft] = useState('15')
   const [syncingAnonymousQuota, setSyncingAnonymousQuota] = useState(false)
   const [syncDialogOpen, setSyncDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -91,6 +92,7 @@ export function SystemGeneralPage() {
     setBattleAllowUsersDraft(Boolean(systemSettings.battleAllowUsers ?? true))
     setBattleAnonymousQuotaDraft(String(systemSettings.battleAnonymousDailyQuota ?? 20))
     setBattleUserQuotaDraft(String(systemSettings.battleUserDailyQuota ?? 200))
+    setBattleRetentionDraft(String(systemSettings.battleRetentionDays ?? 15))
     setAssistantAvatarPreview(systemSettings.assistantAvatarUrl || null)
     // 标题总结
     setTitleSummaryEnabledDraft(Boolean(systemSettings.titleSummaryEnabled))
@@ -200,6 +202,7 @@ export function SystemGeneralPage() {
         battleAllowUsers: Boolean(systemSettings.battleAllowUsers ?? true),
         battleAnonymousQuota: String(systemSettings.battleAnonymousDailyQuota ?? 20),
         battleUserQuota: String(systemSettings.battleUserDailyQuota ?? 200),
+        battleRetentionDays: String(systemSettings.battleRetentionDays ?? 15),
         brandText: systemSettings.brandText || '',
         chatSystemPrompt: systemSettings.chatSystemPrompt || '',
         siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
@@ -222,6 +225,7 @@ export function SystemGeneralPage() {
       battleAllowUsersDraft !== normalizedInitials.battleAllowUsers ||
       battleAnonymousQuotaDraft !== normalizedInitials.battleAnonymousQuota ||
       battleUserQuotaDraft !== normalizedInitials.battleUserQuota ||
+      battleRetentionDraft !== normalizedInitials.battleRetentionDays ||
       brandTextDraft !== normalizedInitials.brandText ||
       chatSystemPromptDraft !== normalizedInitials.chatSystemPrompt ||
       siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
@@ -255,6 +259,11 @@ export function SystemGeneralPage() {
       toast({ title: '输入无效', description: '注册用户乱斗额度需为不小于 0 的整数', variant: 'destructive' })
       return
     }
+    const parsedBattleRetentionDays = Number.parseInt(battleRetentionDraft, 10)
+    if (Number.isNaN(parsedBattleRetentionDays) || parsedBattleRetentionDays < 0 || parsedBattleRetentionDays > 3650) {
+      toast({ title: '输入无效', description: '乱斗历史保留天数需在 0 到 3650 之间', variant: 'destructive' })
+      return
+    }
     const parsedRetention = Number.parseInt(retentionDraft, 10)
     if (Number.isNaN(parsedRetention) || parsedRetention < 0) {
       toast({ title: '输入无效', description: '图片保留天数需为不小于 0 的整数', variant: 'destructive' })
@@ -281,6 +290,7 @@ export function SystemGeneralPage() {
         battleAllowUsers: battleAllowUsersDraft,
         battleAnonymousDailyQuota: parsedBattleAnonymousQuota,
         battleUserDailyQuota: parsedBattleUserQuota,
+        battleRetentionDays: parsedBattleRetentionDays,
         brandText: brandTextDraft,
         chatSystemPrompt: chatSystemPromptDraft,
         siteBaseUrl: siteBaseDraft.trim(),
@@ -598,6 +608,25 @@ export function SystemGeneralPage() {
               inputMode="numeric"
               value={retentionDraft}
               onChange={(e) => setRetentionDraft(e.target.value)}
+              className="w-full sm:w-28 text-right"
+              disabled={!isAdmin}
+            />
+            <span className="text-sm text-muted-foreground">天</span>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="乱斗历史保留天数（battle/share）"
+          description="按创建时间自动清理已结束的乱斗与分享记录（0 表示关闭自动清理，范围 0-3650 天）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="battleRetentionDays"
+              type="text"
+              inputMode="numeric"
+              value={battleRetentionDraft}
+              onChange={(e) => setBattleRetentionDraft(e.target.value)}
               className="w-full sm:w-28 text-right"
               disabled={!isAdmin}
             />
