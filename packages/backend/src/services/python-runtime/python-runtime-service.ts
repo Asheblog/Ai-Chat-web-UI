@@ -88,9 +88,24 @@ export interface PythonRuntimeReconcileResult {
   conflicts: PythonRuntimeConflictItem[]
 }
 
+export interface PythonRuntimeSkillDependencyConsumer {
+  skillId: number
+  skillSlug: string
+  skillDisplayName: string
+  versionId: number
+  version: string
+  requirement: string
+}
+
+export interface PythonRuntimeSkillDependencySource {
+  packageName: string
+  consumers: PythonRuntimeSkillDependencyConsumer[]
+}
+
 export interface PythonRuntimeSkillCleanupResult {
   removedSkillPackages: string[]
   keptByActiveSkills: string[]
+  keptByActiveSkillSources: PythonRuntimeSkillDependencySource[]
   keptByManual: string[]
   removablePackages: string[]
   removedPackages: string[]
@@ -99,6 +114,7 @@ export interface PythonRuntimeSkillCleanupResult {
 export interface PythonRuntimeSkillCleanupPlan {
   removedSkillPackages: string[]
   keptByActiveSkills: string[]
+  keptByActiveSkillSources: PythonRuntimeSkillDependencySource[]
   keptByManual: string[]
   removablePackages: string[]
 }
@@ -399,6 +415,7 @@ export class PythonRuntimeService {
 
   private async buildSkillCleanupPlan(input: {
     removedRequirements: string[]
+    excludeSkillIds?: number[]
   }): Promise<PythonRuntimeSkillCleanupPlan> {
     const removedSkillPackages = Array.from(
       new Set(
@@ -413,25 +430,63 @@ export class PythonRuntimeService {
       return {
         removedSkillPackages: [],
         keptByActiveSkills: [],
+        keptByActiveSkillSources: [],
         keptByManual: [],
         removablePackages: [],
       }
     }
 
-    const [activeDependencies, manualPackages] = await Promise.all([
+    const [activeDependenciesRaw, manualPackages] = await Promise.all([
       this.collectActiveDependencies(),
       this.getManualPackages(),
     ])
+    const excludeSkillSet = new Set((input.excludeSkillIds || []).filter((id) => Number.isFinite(id)))
+    const activeDependencies = excludeSkillSet.size > 0
+      ? activeDependenciesRaw.filter((item) => !excludeSkillSet.has(item.skillId))
+      : activeDependenciesRaw
     const activePackageSet = new Set(activeDependencies.map((item) => item.packageName))
     const manualPackageSet = new Set(manualPackages)
+    const activeDependencyMap = new Map<string, PythonRuntimeSkillDependencyConsumer[]>()
+    for (const dependency of activeDependencies) {
+      const list = activeDependencyMap.get(dependency.packageName) ?? []
+      list.push({
+        skillId: dependency.skillId,
+        skillSlug: dependency.skillSlug,
+        skillDisplayName: dependency.skillDisplayName,
+        versionId: dependency.versionId,
+        version: dependency.version,
+        requirement: dependency.requirement,
+      })
+      activeDependencyMap.set(dependency.packageName, list)
+    }
 
     const keptByActiveSkills: string[] = []
+    const keptByActiveSkillSources: PythonRuntimeSkillDependencySource[] = []
     const keptByManual: string[] = []
     const removablePackages: string[] = []
 
     for (const pkg of removedSkillPackages) {
       if (activePackageSet.has(pkg)) {
         keptByActiveSkills.push(pkg)
+        const consumers = activeDependencyMap.get(pkg) ?? []
+        const dedupConsumers = Array.from(
+          new Map(
+            consumers.map((item) => [
+              `${item.skillId}:${item.versionId}:${item.requirement.toLowerCase()}`,
+              item,
+            ]),
+          ).values(),
+        ).sort((a, b) => {
+          const skillCompare = a.skillSlug.localeCompare(b.skillSlug)
+          if (skillCompare !== 0) return skillCompare
+          const versionCompare = a.version.localeCompare(b.version)
+          if (versionCompare !== 0) return versionCompare
+          return a.requirement.localeCompare(b.requirement)
+        })
+        keptByActiveSkillSources.push({
+          packageName: pkg,
+          consumers: dedupConsumers,
+        })
         continue
       }
       if (manualPackageSet.has(pkg)) {
@@ -444,6 +499,7 @@ export class PythonRuntimeService {
     return {
       removedSkillPackages,
       keptByActiveSkills,
+      keptByActiveSkillSources,
       keptByManual,
       removablePackages,
     }
@@ -451,6 +507,7 @@ export class PythonRuntimeService {
 
   async previewCleanupAfterSkillRemoval(input: {
     removedRequirements: string[]
+    excludeSkillIds?: number[]
   }): Promise<PythonRuntimeSkillCleanupPlan> {
     return this.buildSkillCleanupPlan(input)
   }

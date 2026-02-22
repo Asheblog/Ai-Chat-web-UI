@@ -5,6 +5,7 @@ import type {
   SkillExecutionAuditItem,
   SkillBindingItem,
   SkillCatalogItem,
+  SkillUninstallPreviewData,
 } from '@/types'
 
 const client = apiHttpClient
@@ -33,7 +34,7 @@ export const deleteSkill = async (skillId: number) => {
 }
 
 export const previewSkillUninstall = async (skillId: number) => {
-  const response = await client.get<ApiResponse>(`/skills/${skillId}/uninstall-plan`)
+  const response = await client.get<ApiResponse<SkillUninstallPreviewData>>(`/skills/${skillId}/uninstall-plan`)
   return response.data
 }
 

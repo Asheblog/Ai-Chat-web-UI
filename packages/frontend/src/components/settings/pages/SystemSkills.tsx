@@ -1,6 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import {
   activateSkillVersion,
@@ -15,18 +25,196 @@ import {
   respondSkillApproval,
   upsertSkillBinding,
 } from '@/features/skills/api'
-import type { SkillApprovalRequestItem, SkillBindingItem, SkillCatalogItem, SkillVersionItem } from '@/types'
+import type {
+  SkillApprovalRequestItem,
+  SkillBindingItem,
+  SkillCatalogItem,
+  SkillUninstallDependencySource,
+  SkillUninstallPreviewData,
+  SkillVersionItem,
+} from '@/types'
 import { SkillApprovalsSection } from './system-skills/SkillApprovalsSection'
 import { SkillBindingsSection } from './system-skills/SkillBindingsSection'
 import { SkillInstallSection } from './system-skills/SkillInstallSection'
 import { SkillVersionSection } from './system-skills/SkillVersionSection'
 import { parseDraftJson, type ScopeType } from './system-skills/shared'
 
-const summarizeList = (items: string[], limit = 8): string => {
-  if (!Array.isArray(items) || items.length === 0) return '无'
-  const head = items.slice(0, limit)
-  const suffix = items.length > limit ? ` ...（+${items.length - limit}）` : ''
-  return `${head.join(', ')}${suffix}`
+type SkillUninstallPreviewState = {
+  skillId: number
+  skillDisplayName: string
+  removedRequirements: string[]
+  removablePackages: string[]
+  keptByActiveSkills: string[]
+  keptByActiveSkillSources: SkillUninstallDependencySource[]
+  keptByManual: string[]
+}
+
+const ensureStringList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+  return Array.from(
+    new Set(value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)),
+  )
+}
+
+const ensureActiveDependencySources = (value: unknown): SkillUninstallDependencySource[] => {
+  if (!Array.isArray(value)) return []
+
+  const normalizeConsumers = (consumers: SkillUninstallDependencySource['consumers']) =>
+    [...consumers].sort((a, b) => {
+      const skillCompare = a.skillSlug.localeCompare(b.skillSlug)
+      if (skillCompare !== 0) return skillCompare
+      const versionCompare = a.version.localeCompare(b.version)
+      if (versionCompare !== 0) return versionCompare
+      return a.requirement.localeCompare(b.requirement)
+    })
+
+  const packageMap = new Map<string, SkillUninstallDependencySource['consumers'][number][]>()
+
+  for (const rawSource of value) {
+    const source = rawSource as { packageName?: unknown; consumers?: unknown }
+    const packageName = typeof source.packageName === 'string' ? source.packageName.trim() : ''
+    if (!packageName) continue
+    const consumersRaw = Array.isArray(source.consumers) ? source.consumers : []
+    const consumers = packageMap.get(packageName) ?? []
+
+    for (const rawConsumer of consumersRaw) {
+      const consumer = rawConsumer as {
+        skillId?: unknown
+        skillSlug?: unknown
+        skillDisplayName?: unknown
+        versionId?: unknown
+        version?: unknown
+        requirement?: unknown
+      }
+      const skillId = Number(consumer.skillId)
+      const versionId = Number(consumer.versionId)
+      const skillSlug = typeof consumer.skillSlug === 'string' ? consumer.skillSlug.trim() : ''
+      const skillDisplayName =
+        typeof consumer.skillDisplayName === 'string' ? consumer.skillDisplayName.trim() : ''
+      const version = typeof consumer.version === 'string' ? consumer.version.trim() : ''
+      const requirement = typeof consumer.requirement === 'string' ? consumer.requirement.trim() : ''
+      if (!Number.isFinite(skillId) || !Number.isFinite(versionId) || !skillSlug || !version || !requirement) {
+        continue
+      }
+
+      consumers.push({
+        skillId,
+        skillSlug,
+        skillDisplayName: skillDisplayName || skillSlug,
+        versionId,
+        version,
+        requirement,
+      })
+    }
+
+    packageMap.set(packageName, consumers)
+  }
+
+  const normalized: SkillUninstallDependencySource[] = []
+  for (const [packageName, consumers] of packageMap.entries()) {
+    const dedupMap = new Map<string, SkillUninstallDependencySource['consumers'][number]>()
+    for (const consumer of consumers) {
+      dedupMap.set(`${consumer.skillId}:${consumer.versionId}:${consumer.requirement.toLowerCase()}`, consumer)
+    }
+    normalized.push({
+      packageName,
+      consumers: normalizeConsumers(Array.from(dedupMap.values())),
+    })
+  }
+
+  return normalized.sort((a, b) => a.packageName.localeCompare(b.packageName))
+}
+
+const PackageBucket = (props: {
+  title: string
+  hint: string
+  items: string[]
+  emptyText: string
+  className: string
+}) => {
+  const { title, hint, items, emptyText, className } = props
+  return (
+    <div className={`rounded-lg border p-3 ${className}`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">{title}</span>
+        <Badge variant="outline">{items.length}</Badge>
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">{hint}</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{emptyText}</p>
+      ) : (
+        <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
+          {items.map((item) => (
+            <Badge key={item} variant="secondary" className="font-mono text-xs">
+              {item}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const ActiveSkillSourcesBucket = (props: {
+  packageNames: string[]
+  sources: SkillUninstallDependencySource[]
+}) => {
+  const { packageNames, sources } = props
+  const sourceMap = new Map(sources.map((item) => [item.packageName, item.consumers]))
+  const displayPackages = Array.from(
+    new Set([...packageNames, ...sources.map((item) => item.packageName)]),
+  ).sort((a, b) => a.localeCompare(b))
+
+  return (
+    <div className="rounded-lg border border-emerald-500/35 bg-emerald-500/5 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">保留（激活 Skill 占用）</span>
+        <Badge variant="outline">{displayPackages.length}</Badge>
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">这些包仍被其他已激活 Skill 引用，展开可查看具体来源。</p>
+      {displayPackages.length === 0 ? (
+        <p className="text-xs text-muted-foreground">无此类保留包。</p>
+      ) : (
+        <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
+          {displayPackages.map((packageName) => {
+            const consumers = sourceMap.get(packageName) || []
+            return (
+              <details key={packageName} className="rounded-md border border-emerald-500/25 bg-background/70 px-3 py-2">
+                <summary className="flex cursor-pointer items-center justify-between gap-2">
+                  <span className="font-mono text-xs">{packageName}</span>
+                  <Badge variant="outline" className="text-[11px]">
+                    {consumers.length} 条来源
+                  </Badge>
+                </summary>
+                <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+                  {consumers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">暂无来源明细（请刷新后重试）。</p>
+                  ) : (
+                    consumers.map((consumer) => (
+                      <div key={`${consumer.skillId}:${consumer.versionId}:${consumer.requirement}`} className="rounded border border-border/60 bg-muted/20 p-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="text-[11px]">
+                            {consumer.skillDisplayName}
+                          </Badge>
+                          <Badge variant="outline" className="text-[11px]">
+                            {consumer.skillSlug}
+                          </Badge>
+                          <Badge variant="outline" className="text-[11px]">
+                            v{consumer.version}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{consumer.requirement}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function SystemSkillsPage() {
@@ -53,6 +241,8 @@ export function SystemSkillsPage() {
   const [bindingEnabled, setBindingEnabled] = useState(true)
   const [bindingPolicyDraft, setBindingPolicyDraft] = useState('')
   const [bindingOverridesDraft, setBindingOverridesDraft] = useState('')
+  const [uninstallPreview, setUninstallPreview] = useState<SkillUninstallPreviewState | null>(null)
+  const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false)
 
   const selectedSkill = useMemo(
     () => catalog.find((item) => item.id === bindingSkillId) || null,
@@ -192,13 +382,13 @@ export function SystemSkillsPage() {
 
     const previewKey = `plan:${skillId}`
     setSkillActionKey(previewKey)
-    let previewData: any = null
+    let previewData: SkillUninstallPreviewData | null = null
     try {
       const preview = await previewSkillUninstall(skillId)
-      if (!preview?.success) {
+      if (!preview?.success || !preview.data) {
         throw new Error(preview?.error || '预览失败')
       }
-      previewData = preview?.data || {}
+      previewData = preview.data
     } catch (error) {
       toast({
         title: '预览回收计划失败',
@@ -210,28 +400,32 @@ export function SystemSkillsPage() {
     }
 
     const cleanupPlan = previewData?.cleanupPlan || {}
-    const removablePackages = Array.isArray(cleanupPlan?.removablePackages) ? cleanupPlan.removablePackages : []
-    const keptByActiveSkills = Array.isArray(cleanupPlan?.keptByActiveSkills) ? cleanupPlan.keptByActiveSkills : []
-    const keptByManual = Array.isArray(cleanupPlan?.keptByManual) ? cleanupPlan.keptByManual : []
-    const removedRequirements = Array.isArray(previewData?.removedRequirements) ? previewData.removedRequirements : []
+    setUninstallPreview({
+      skillId: skill.id,
+      skillDisplayName: skill.displayName,
+      removedRequirements: ensureStringList(previewData?.removedRequirements),
+      removablePackages: ensureStringList(cleanupPlan?.removablePackages),
+      keptByActiveSkills: ensureStringList(cleanupPlan?.keptByActiveSkills),
+      keptByActiveSkillSources: ensureActiveDependencySources(cleanupPlan?.keptByActiveSkillSources),
+      keptByManual: ensureStringList(cleanupPlan?.keptByManual),
+    })
+    setUninstallDialogOpen(true)
+    setSkillActionKey(null)
+  }
 
-    const confirmMessage = [
-      `确认卸载 Skill「${skill.displayName}」？`,
-      '',
-      `依赖声明：${summarizeList(removedRequirements)}`,
-      `将自动删除包：${summarizeList(removablePackages)}`,
-      `保留（被其他激活 Skill 依赖）：${summarizeList(keptByActiveSkills)}`,
-      `保留（手动保留依赖）：${summarizeList(keptByManual)}`,
-      '',
-      '继续将执行真实卸载。',
-    ].join('\n')
-
-    const confirmed = typeof window === 'undefined' ? true : window.confirm(confirmMessage)
-    if (!confirmed) {
-      setSkillActionKey(null)
+  const handleUninstallDialogOpenChange = (open: boolean) => {
+    if (!open && uninstallPreview && skillActionKey === `delete:${uninstallPreview.skillId}`) {
       return
     }
+    setUninstallDialogOpen(open)
+    if (!open) {
+      setUninstallPreview(null)
+    }
+  }
 
+  const handleConfirmUninstall = async () => {
+    if (!uninstallPreview) return
+    const skillId = uninstallPreview.skillId
     const key = `delete:${skillId}`
     setSkillActionKey(key)
     try {
@@ -256,6 +450,8 @@ export function SystemSkillsPage() {
           description: removedPackages > 0 ? `已自动回收 ${removedPackages} 个 Python 包` : '没有需要回收的 Python 包',
         })
       }
+      setUninstallDialogOpen(false)
+      setUninstallPreview(null)
       await refreshAll(false)
     } catch (error) {
       toast({
@@ -402,6 +598,81 @@ export function SystemSkillsPage() {
         onUpsertBinding={handleUpsertBinding}
         onDeleteBinding={handleDeleteBinding}
       />
+
+      <Dialog open={uninstallDialogOpen} onOpenChange={handleUninstallDialogOpenChange}>
+        <DialogContent className="max-h-[85vh] overflow-hidden p-0 sm:max-w-4xl">
+          <DialogHeader className="border-b border-border/60 px-6 py-5">
+            <DialogTitle>卸载 Skill 前预览回收计划</DialogTitle>
+            <DialogDescription>
+              {uninstallPreview
+                ? `Skill「${uninstallPreview.skillDisplayName}」将根据当前激活依赖与手动保留清单执行回收。`
+                : '加载中'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] space-y-4 overflow-y-auto px-6 py-4">
+            <div className="rounded-lg border border-border/70 bg-card/60 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">Skill 声明依赖</span>
+                <Badge variant="outline">{uninstallPreview?.removedRequirements.length || 0}</Badge>
+              </div>
+              {uninstallPreview?.removedRequirements?.length ? (
+                <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
+                  {uninstallPreview.removedRequirements.map((requirement) => (
+                    <Badge key={requirement} variant="secondary" className="font-mono text-xs">
+                      {requirement}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">该 Skill 未声明 Python 依赖。</p>
+              )}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <PackageBucket
+                title="将自动删除"
+                hint="这些包未被其他激活 Skill 和手动保留清单引用。"
+                items={uninstallPreview?.removablePackages || []}
+                emptyText="无可删除包。"
+                className="border-destructive/40 bg-destructive/5"
+              />
+              <ActiveSkillSourcesBucket
+                packageNames={uninstallPreview?.keptByActiveSkills || []}
+                sources={uninstallPreview?.keptByActiveSkillSources || []}
+              />
+              <PackageBucket
+                title="保留（手动保留清单）"
+                hint="这些包在 Python 运行环境中被标记为手动保留。"
+                items={uninstallPreview?.keptByManual || []}
+                emptyText="无此类保留包。"
+                className="border-amber-500/35 bg-amber-500/5"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-border/60 px-6 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleUninstallDialogOpenChange(false)}
+              disabled={Boolean(uninstallPreview && skillActionKey === `delete:${uninstallPreview.skillId}`)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmUninstall}
+              disabled={Boolean(
+                !uninstallPreview || skillActionKey === `delete:${uninstallPreview?.skillId || 0}`,
+              )}
+            >
+              {uninstallPreview && skillActionKey === `delete:${uninstallPreview.skillId}` ? '卸载中...' : '确认卸载 Skill'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

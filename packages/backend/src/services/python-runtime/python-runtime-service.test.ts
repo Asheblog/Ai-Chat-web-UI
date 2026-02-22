@@ -147,6 +147,21 @@ describe('PythonRuntimeService', () => {
     expect(service.uninstallPackages).toHaveBeenCalledWith(['scipy'])
     expect(result.removedSkillPackages).toEqual(['numpy', 'pandas', 'scipy'])
     expect(result.keptByActiveSkills).toEqual(['numpy'])
+    expect(result.keptByActiveSkillSources).toEqual([
+      {
+        packageName: 'numpy',
+        consumers: [
+          expect.objectContaining({
+            skillId: 2,
+            skillSlug: 'other',
+            skillDisplayName: 'Other',
+            versionId: 202,
+            version: '2.0.0',
+            requirement: 'numpy>=2.0',
+          }),
+        ],
+      },
+    ])
     expect(result.keptByManual).toEqual(['pandas'])
     expect(result.removablePackages).toEqual(['scipy'])
     expect(result.removedPackages).toEqual(['scipy'])
@@ -177,6 +192,21 @@ describe('PythonRuntimeService', () => {
     expect(uninstallSpy).not.toHaveBeenCalled()
     expect(plan.removedSkillPackages).toEqual(['numpy', 'pandas', 'scipy'])
     expect(plan.keptByActiveSkills).toEqual(['numpy'])
+    expect(plan.keptByActiveSkillSources).toEqual([
+      {
+        packageName: 'numpy',
+        consumers: [
+          expect.objectContaining({
+            skillId: 2,
+            skillSlug: 'other',
+            skillDisplayName: 'Other',
+            versionId: 202,
+            version: '2.0.0',
+            requirement: 'numpy>=2.0',
+          }),
+        ],
+      },
+    ])
     expect(plan.keptByManual).toEqual(['pandas'])
     expect(plan.removablePackages).toEqual(['scipy'])
   })

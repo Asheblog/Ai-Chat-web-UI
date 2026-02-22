@@ -476,6 +476,37 @@ export interface SkillVersionItem {
   manifest?: Record<string, unknown>;
 }
 
+export interface SkillUninstallDependencyConsumer {
+  skillId: number;
+  skillSlug: string;
+  skillDisplayName: string;
+  versionId: number;
+  version: string;
+  requirement: string;
+}
+
+export interface SkillUninstallDependencySource {
+  packageName: string;
+  consumers: SkillUninstallDependencyConsumer[];
+}
+
+export interface SkillUninstallCleanupPlan {
+  removedSkillPackages: string[];
+  keptByActiveSkills: string[];
+  keptByActiveSkillSources: SkillUninstallDependencySource[];
+  keptByManual: string[];
+  removablePackages: string[];
+}
+
+export interface SkillUninstallPreviewData {
+  skillId: number;
+  slug: string;
+  displayName: string;
+  removedRequirements: string[];
+  packagePaths: string[];
+  cleanupPlan: SkillUninstallCleanupPlan;
+}
+
 export interface SkillBindingItem {
   id: number;
   skillId: number;

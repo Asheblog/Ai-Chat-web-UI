@@ -383,6 +383,7 @@ export const createSkillsApi = () => {
 
       const cleanupPlan = await pythonRuntimeService.previewCleanupAfterSkillRemoval({
         removedRequirements,
+        excludeSkillIds: [skill.id],
       })
 
       return c.json<ApiResponse>({

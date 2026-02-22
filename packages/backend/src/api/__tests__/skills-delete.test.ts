@@ -148,6 +148,21 @@ describe('skills api - uninstall skill', () => {
     runtimeMock.previewCleanupAfterSkillRemoval.mockResolvedValue({
       removedSkillPackages: ['numpy', 'pandas'],
       keptByActiveSkills: ['numpy'],
+      keptByActiveSkillSources: [
+        {
+          packageName: 'numpy',
+          consumers: [
+            {
+              skillId: 88,
+              skillSlug: 'calc-agent',
+              skillDisplayName: 'Calc Agent',
+              versionId: 901,
+              version: '1.2.0',
+              requirement: 'numpy>=2.0',
+            },
+          ],
+        },
+      ],
       keptByManual: [],
       removablePackages: ['pandas'],
     })
@@ -163,8 +178,16 @@ describe('skills api - uninstall skill', () => {
     expect(body.success).toBe(true)
     expect(runtimeMock.previewCleanupAfterSkillRemoval).toHaveBeenCalledWith({
       removedRequirements: expect.arrayContaining(['numpy==2.1.0', 'pandas>=2.2']),
+      excludeSkillIds: [12],
     })
     expect(body.data.cleanupPlan.removablePackages).toEqual(['pandas'])
+    expect(body.data.cleanupPlan.keptByActiveSkillSources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          packageName: 'numpy',
+        }),
+      ]),
+    )
   })
 
   it('blocks uninstalling builtin skill', async () => {
