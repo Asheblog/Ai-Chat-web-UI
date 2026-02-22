@@ -302,7 +302,7 @@ export function SystemSkillsPage() {
     if (!source) {
       toast({
         title: '请输入仓库地址',
-        description: '格式：owner/repo@ref 或 owner/repo@ref:subdir',
+        description: '格式：owner/repo@ref[:subdir] 或 github.com/<owner>/<repo>/(tree|blob)/...',
         variant: 'destructive',
       })
       return

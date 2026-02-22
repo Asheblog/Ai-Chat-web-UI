@@ -8,6 +8,7 @@ import {
   parseGithubSkillSource,
   type GithubSkillSource,
 } from './skill-github-fetcher'
+import { buildAnthropicCompatManifest } from './skill-anthropic-compat'
 import type { SkillManifest } from './types'
 
 export interface SkillInstallerDeps {
@@ -54,7 +55,7 @@ function resolveSkillStorageRoot(): string {
   return path.resolve(process.cwd(), 'data', 'skills')
 }
 
-async function findManifestFile(extractedDir: string): Promise<{ path: string; content: string }> {
+async function findManifestFile(extractedDir: string): Promise<{ path: string; content: string } | null> {
   const candidates = ['manifest.yaml', 'manifest.yml', 'manifest.json']
   for (const candidate of candidates) {
     const fullPath = path.join(extractedDir, candidate)
@@ -65,7 +66,7 @@ async function findManifestFile(extractedDir: string): Promise<{ path: string; c
       // continue
     }
   }
-  throw new SkillInstallerError('Skill package missing manifest.yaml/yml/json')
+  return null
 }
 
 async function readSkillInstruction(extractedDir: string): Promise<string | null> {
@@ -119,6 +120,17 @@ function resolveVersionStatusByRisk(manifest: SkillManifest): string {
     : 'pending_validation'
 }
 
+function buildCompatVersionFromPackageHash(ref: string, packageHash: string): string {
+  const refPart = ref
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '')
+    .slice(0, 24) || 'main'
+  return `anthropic-${refPart}-${packageHash.slice(0, 12)}`.slice(0, 64)
+}
+
 async function persistInstalledPackage(params: {
   extractedDir: string
   slug: string
@@ -151,9 +163,30 @@ export class SkillInstaller {
 
     try {
       const manifestFile = await findManifestFile(extractedDir)
-      const manifest = parseSkillManifestText(manifestFile.content, manifestFile.path)
-      const instruction = await readSkillInstruction(extractedDir)
+      const instructionFromFile = await readSkillInstruction(extractedDir)
+      let manifest: SkillManifest
+      let instruction = instructionFromFile
+      let usedAnthropicCompat = false
+
+      if (manifestFile) {
+        manifest = parseSkillManifestText(manifestFile.content, manifestFile.path)
+      } else {
+        const compat = await buildAnthropicCompatManifest({ extractedDir, source })
+        if (!compat) {
+          throw new SkillInstallerError('Skill package missing manifest.yaml/yml/json and SKILL.md')
+        }
+        manifest = compat.manifest
+        instruction = compat.instruction
+        usedAnthropicCompat = true
+      }
+
       const packageHash = await computeDirectorySha256(extractedDir)
+      if (usedAnthropicCompat) {
+        manifest = {
+          ...manifest,
+          version: buildCompatVersionFromPackageHash(source.ref, packageHash),
+        }
+      }
 
       const status = resolveVersionStatusByRisk(manifest)
       const skill = await (this.prisma as any).skill.upsert({

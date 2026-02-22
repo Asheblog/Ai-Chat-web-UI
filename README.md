@@ -72,12 +72,14 @@ UI 展示为中文描述，但底层仍使用稳定的 slug/tool 名，便于 AP
 1. 在安装输入框填 GitHub 源：
    - `owner/repo@ref`
    - `owner/repo@ref:subdir`
-2. 点击安装后，系统会执行：
+   - `https://github.com/<owner>/<repo>/(tree|blob)/<ref>/<path>`
+2. 对仅包含 `SKILL.md`（无 `manifest.yaml/yml/json`）的 Anthropic 风格 Skill，系统会自动生成兼容 manifest 与运行入口。
+3. 点击安装后，系统会执行：
    - 拉取并解压 -> manifest 校验 -> 风险分级 -> 入库
-3. 对 `pending_approval` 版本先审批，再激活。
-4. 在“绑定管理”中绑定作用域（`system/user/session/battle_model`）。
-5. 支持卸载第三方 Skill：卸载后会自动尝试回收仅由该 Skill 使用、且未被其他激活 Skill/手动保留依赖占用的 Python 包。
-6. 卸载前支持 dry-run 预览：可先查看“将删除/将保留”的 Python 包清单，再确认真实卸载。
+4. 对 `pending_approval` 版本先审批，再激活。
+5. 在“绑定管理”中绑定作用域（`system/user/session/battle_model`）。
+6. 支持卸载第三方 Skill：卸载后会自动尝试回收仅由该 Skill 使用、且未被其他激活 Skill/手动保留依赖占用的 Python 包。
+7. 卸载前支持 dry-run 预览：可先查看“将删除/将保留”的 Python 包清单，再确认真实卸载。
 
 ### 6. 审批与审计
 

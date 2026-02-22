@@ -34,7 +34,8 @@ export function SkillInstallSection({
         <div>
           <CardTitle className="text-lg font-semibold tracking-tight">Skill 安装</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
-            支持 GitHub `owner/repo@ref[:subdir]`，例如 `aichat/skills-repo@main:skills/web-search`。
+            支持 GitHub `owner/repo@ref[:subdir]` 或 `github.com/.../(tree|blob)/...`，例如
+            `anthropics/skills@main:skills/pptx`。
           </CardDescription>
         </div>
       </div>
@@ -45,7 +46,7 @@ export function SkillInstallSection({
             <Input
               value={installSource}
               onChange={(event) => onInstallSourceChange(event.target.value)}
-              placeholder="owner/repo@ref[:subdir]"
+              placeholder="owner/repo@ref[:subdir] 或 github.com/.../SKILL.md"
             />
           </div>
           <div className="space-y-1">

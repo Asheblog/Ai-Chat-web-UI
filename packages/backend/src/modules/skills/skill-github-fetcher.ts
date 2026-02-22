@@ -23,22 +23,71 @@ export function parseGithubSkillSource(raw: string): GithubSkillSource {
     throw new GithubSkillSourceError('GitHub source is empty')
   }
 
-  const matched = value.match(/^([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)@([^:]+)(?::(.+))?$/)
-  if (!matched) {
-    throw new GithubSkillSourceError('GitHub source format must be owner/repo@ref[:subdir]')
+  const fromPlain = parsePlainSource(value)
+  const parsed = fromPlain ?? parseGithubTreeOrBlobUrl(value)
+  if (!parsed) {
+    throw new GithubSkillSourceError(
+      'GitHub source format must be owner/repo@ref[:subdir] or github.com/<owner>/<repo>/(tree|blob)/<ref>/<path>',
+    )
   }
-
-  const owner = matched[1]
-  const repo = matched[2]
-  const ref = matched[3]
-  const subdirRaw = matched[4]
-  const subdir = subdirRaw ? normalizeSubdir(subdirRaw) : undefined
+  const { owner, repo, ref, subdir } = parsed
 
   if (!owner || !repo || !ref) {
     throw new GithubSkillSourceError('GitHub source owner/repo/ref is invalid')
   }
 
   return { owner, repo, ref, subdir }
+}
+
+function parsePlainSource(value: string): GithubSkillSource | null {
+  const matched = value.match(/^([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)@([^:]+)(?::(.+))?$/)
+  if (!matched) return null
+  const owner = matched[1]
+  const repo = matched[2]
+  const ref = matched[3]
+  const subdirRaw = matched[4]
+  const subdir = subdirRaw ? normalizeSubdir(subdirRaw) : undefined
+  return { owner, repo, ref, subdir }
+}
+
+function parseGithubTreeOrBlobUrl(value: string): GithubSkillSource | null {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return null
+  }
+
+  const hostname = url.hostname.toLowerCase()
+  if (hostname !== 'github.com' && hostname !== 'www.github.com') {
+    return null
+  }
+
+  const segments = url.pathname.split('/').filter(Boolean)
+  if (segments.length < 4) return null
+
+  const owner = segments[0] || ''
+  const repo = segments[1] || ''
+  const mode = segments[2] || ''
+  if (mode !== 'tree' && mode !== 'blob') return null
+
+  const ref = segments[3] || ''
+  const pathSegments = segments.slice(4)
+  if (pathSegments.length === 0) {
+    return { owner, repo, ref, subdir: undefined }
+  }
+
+  const rawPath = pathSegments.join('/')
+  const looksLikeSkillFile = rawPath.toLowerCase() === 'skill.md' || rawPath.toLowerCase().endsWith('/skill.md')
+  if (mode === 'blob' || looksLikeSkillFile) {
+    const parent = path.posix.dirname(rawPath)
+    if (!parent || parent === '.') {
+      return { owner, repo, ref, subdir: undefined }
+    }
+    return { owner, repo, ref, subdir: normalizeSubdir(parent) }
+  }
+
+  return { owner, repo, ref, subdir: normalizeSubdir(rawPath) }
 }
 
 function normalizeSubdir(input: string): string {
