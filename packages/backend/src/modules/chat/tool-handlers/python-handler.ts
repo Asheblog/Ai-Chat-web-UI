@@ -29,14 +29,14 @@ export class PythonToolHandler implements IToolHandler {
       function: {
         name: 'python_runner',
         description:
-          'Execute Python code inside the isolated workspace sandbox. Save downloadable files to /workspace/artifacts.',
+          'Execute Python code inside the isolated workspace sandbox. Do NOT run pip install in user code. Import modules directly and let the runtime auto-install missing packages. Save downloadable files to /workspace/artifacts.',
         parameters: {
           type: 'object',
           properties: {
             code: {
               type: 'string',
               description:
-                'Python code to execute in sandbox. Use /workspace/artifacts for downloadable outputs.',
+                'Python code to execute in sandbox. Do not call pip install manually. Use /workspace/artifacts for downloadable outputs.',
             },
             input: {
               type: 'string',
