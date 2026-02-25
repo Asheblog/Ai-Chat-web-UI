@@ -309,7 +309,7 @@ export class WorkspacePythonRuntime {
         stdin: params.input,
         timeoutMs: params.timeoutMs,
         maxOutputChars: params.maxOutputChars,
-        networkMode: 'none',
+        networkMode: this.config.runNetworkMode,
         env: {
           PYTHONUNBUFFERED: '1',
         },

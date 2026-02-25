@@ -176,6 +176,7 @@ Artifact 下载策略：
 
 - 代码执行固定在 Docker（`--read-only` + `/workspace` 唯一可写卷）
 - 默认执行网络关闭（`--network none`），仅依赖安装阶段受控联网
+- 如需允许 Python 代码直接联网，可设置 `WORKSPACE_RUN_NETWORK_MODE=default`
 - 严格路径校验：禁止绝对路径、`..`、越界软链、非 `artifacts/` 发布
 - 超时/资源限制：CPU、内存、pids、执行超时全部强制
 

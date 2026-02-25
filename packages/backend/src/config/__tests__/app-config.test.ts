@@ -33,6 +33,7 @@ describe('app-config', () => {
     expect(cfg.workspace.maxArtifactsPerMessage).toBe(20)
     expect(cfg.workspace.runTimeoutMs).toBe(120_000)
     expect(cfg.workspace.dockerImage).toBe('python:3.11-slim')
+    expect(cfg.workspace.runNetworkMode).toBe('none')
   })
 
   it('parses overrides from env', () => {
@@ -67,6 +68,7 @@ describe('app-config', () => {
       WORKSPACE_READ_MAX_CHARS: '240000',
       WORKSPACE_GIT_CLONE_TIMEOUT_MS: '60000',
       WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS: '400000',
+      WORKSPACE_RUN_NETWORK_MODE: 'default',
     } satisfies NodeJS.ProcessEnv
 
     const cfg = loadAppConfig(env)
@@ -104,5 +106,6 @@ describe('app-config', () => {
     expect(cfg.workspace.readMaxChars).toBe(240_000)
     expect(cfg.workspace.gitCloneTimeoutMs).toBe(60_000)
     expect(cfg.workspace.pythonInstallTimeoutMs).toBe(400_000)
+    expect(cfg.workspace.runNetworkMode).toBe('default')
   })
 })

@@ -55,6 +55,7 @@ export interface WorkspaceConfig {
   readMaxChars: number
   gitCloneTimeoutMs: number
   pythonInstallTimeoutMs: number
+  runNetworkMode: 'none' | 'default'
 }
 
 export interface AppConfig {
@@ -150,6 +151,13 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig =
     const parsed = parseNumber(env.WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS, 300_000)
     return Math.max(10_000, Math.min(parsed, 30 * 60_000))
   })()
+  const runNetworkMode = (() => {
+    const normalized = (env.WORKSPACE_RUN_NETWORK_MODE || 'none').trim().toLowerCase()
+    if (['default', 'bridge', 'on', 'enabled', 'true', '1'].includes(normalized)) {
+      return 'default' as const
+    }
+    return 'none' as const
+  })()
 
   return {
     server: {
@@ -187,6 +195,7 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig =
       readMaxChars,
       gitCloneTimeoutMs,
       pythonInstallTimeoutMs,
+      runNetworkMode,
     },
   }
 }
