@@ -2,8 +2,11 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { getAppConfig, type WorkspaceConfig } from '../../config/app-config'
 import { WorkspaceServiceError } from './workspace-errors'
+import { createLogger } from '../../utils/logger'
 
 const DOCKER_CHECK_CACHE_MS = 30_000
+const DOCKER_MOUNT_CACHE_MS = 30_000
+const log = createLogger('WorkspaceDocker')
 
 const buildOutputCollector = (limit: number) => {
   const chunks: Buffer[] = []
@@ -60,6 +63,7 @@ export interface DockerExecutorDeps {
 export class DockerExecutor {
   private readonly config: WorkspaceConfig
   private dockerAvailableCache: { at: number; ok: boolean } | null = null
+  private mountCache: { at: number; mounts: DockerMountPoint[] } | null = null
 
   constructor(deps: DockerExecutorDeps = {}) {
     this.config = deps.workspaceConfig ?? getAppConfig().workspace
@@ -100,6 +104,7 @@ export class DockerExecutor {
     await this.assertDockerAvailable()
 
     const workspaceRoot = path.resolve(options.workspaceRoot)
+    const dockerWorkspaceRoot = await this.resolveDockerWorkspaceRoot(workspaceRoot)
     const maxOutputChars = Math.max(256, options.maxOutputChars)
     const args: string[] = [
       'run',
@@ -119,7 +124,7 @@ export class DockerExecutor {
       '--tmpfs',
       '/tmp:rw,noexec,nosuid,size=268435456',
       '--volume',
-      `${workspaceRoot}:/workspace`,
+      `${dockerWorkspaceRoot}:/workspace`,
     ]
 
     if (options.networkMode === 'none') {
@@ -150,6 +155,90 @@ export class DockerExecutor {
     }
 
     return result
+  }
+
+  private async resolveDockerWorkspaceRoot(workspaceRoot: string): Promise<string> {
+    const mounts = await this.loadCurrentContainerMounts()
+    if (mounts.length === 0) {
+      return workspaceRoot
+    }
+
+    const matched = mounts
+      .filter((item) => isPathWithin(workspaceRoot, item.destination))
+      .sort((a, b) => b.destination.length - a.destination.length)[0]
+    if (!matched) {
+      return workspaceRoot
+    }
+
+    const relative = path.relative(matched.destination, workspaceRoot)
+    if (!isSafeRelativePath(relative)) {
+      return workspaceRoot
+    }
+
+    const translated = path.resolve(matched.source, relative)
+    if (translated === workspaceRoot) {
+      return workspaceRoot
+    }
+
+    log.info('Translated workspace mount path for docker socket mode', {
+      workspaceRoot,
+      dockerWorkspaceRoot: translated,
+      destination: matched.destination,
+      source: matched.source,
+    })
+    return translated
+  }
+
+  private async loadCurrentContainerMounts(): Promise<DockerMountPoint[]> {
+    const now = Date.now()
+    if (this.mountCache && now - this.mountCache.at < DOCKER_MOUNT_CACHE_MS) {
+      return this.mountCache.mounts
+    }
+
+    const containerRef = (process.env.HOSTNAME || '').trim()
+    if (!containerRef) {
+      this.mountCache = { at: now, mounts: [] }
+      return []
+    }
+
+    const inspectResult = await this.execDocker(
+      ['inspect', '--format', '{{json .Mounts}}', containerRef],
+      {
+        timeoutMs: 5_000,
+        maxOutputChars: 64_000,
+      },
+    )
+
+    if (inspectResult.exitCode !== 0) {
+      this.mountCache = { at: now, mounts: [] }
+      return []
+    }
+
+    const raw = inspectResult.stdout.trim()
+    if (!raw || raw === 'null') {
+      this.mountCache = { at: now, mounts: [] }
+      return []
+    }
+
+    try {
+      const parsed = JSON.parse(raw)
+      const mounts = Array.isArray(parsed)
+        ? parsed
+            .map((item) => {
+              const source = typeof item?.Source === 'string' ? path.resolve(item.Source) : null
+              const destination =
+                typeof item?.Destination === 'string' ? path.resolve(item.Destination) : null
+              if (!source || !destination) return null
+              return { source, destination }
+            })
+            .filter((item): item is DockerMountPoint => item !== null)
+        : []
+      this.mountCache = { at: now, mounts }
+      return mounts
+    } catch {
+      this.mountCache = { at: now, mounts: [] }
+      return []
+    }
   }
 
   private async execDocker(
@@ -237,6 +326,23 @@ export class DockerExecutor {
       child.stdin.end()
     })
   }
+}
+
+interface DockerMountPoint {
+  source: string
+  destination: string
+}
+
+const isSafeRelativePath = (relativePath: string) => {
+  if (!relativePath || relativePath === '.') return true
+  if (path.isAbsolute(relativePath)) return false
+  const normalized = relativePath.replace(/\\/g, '/')
+  return !normalized.startsWith('../') && normalized !== '..'
+}
+
+const isPathWithin = (targetPath: string, parentPath: string) => {
+  const relative = path.relative(parentPath, targetPath)
+  return isSafeRelativePath(relative)
 }
 
 let dockerExecutor = new DockerExecutor()
