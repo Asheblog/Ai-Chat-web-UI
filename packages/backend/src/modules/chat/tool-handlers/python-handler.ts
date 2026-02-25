@@ -105,6 +105,7 @@ export class PythonToolHandler implements IToolHandler {
       const result = await runPythonSnippet({
         code: source,
         input: stdin,
+        actorUserId: context.actorUserId ?? null,
         timeoutMs: this.config.timeoutMs,
         maxOutputChars: this.config.maxOutputChars,
         maxSourceChars: this.config.maxSourceChars,
@@ -132,6 +133,9 @@ export class PythonToolHandler implements IToolHandler {
       if (result.truncated) {
         resultDetails.truncated = true
       }
+      if (Array.isArray(result.autoInstalledRequirements) && result.autoInstalledRequirements.length > 0) {
+        resultDetails.autoInstalledRequirements = result.autoInstalledRequirements
+      }
 
       context.sendToolEvent({
         id: callId,
@@ -154,6 +158,10 @@ export class PythonToolHandler implements IToolHandler {
             exit_code: result.exitCode,
             duration_ms: result.durationMs,
             truncated: result.truncated || undefined,
+            auto_installed_requirements:
+              Array.isArray(result.autoInstalledRequirements) && result.autoInstalledRequirements.length > 0
+                ? result.autoInstalledRequirements
+                : undefined,
           }),
         },
       }

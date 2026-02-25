@@ -210,6 +210,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
     extraIndexUrls: z.array(z.string().min(1).max(512)).max(64).optional(),
     trustedHosts: z.array(z.string().min(1).max(255)).max(64).optional(),
     autoInstallOnActivate: z.boolean().optional(),
+    autoInstallOnMissing: z.boolean().optional(),
   })
 
   const pythonRuntimeInstallSchema = z.object({

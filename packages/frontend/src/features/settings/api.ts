@@ -606,6 +606,7 @@ export const updatePythonRuntimeIndexes = async (payload: {
   extraIndexUrls?: string[]
   trustedHosts?: string[]
   autoInstallOnActivate?: boolean
+  autoInstallOnMissing?: boolean
 }) => {
   const response = await client.put<ApiResponse>('/settings/python-runtime/indexes', payload)
   return response.data

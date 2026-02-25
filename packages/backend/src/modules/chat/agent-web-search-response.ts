@@ -681,6 +681,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               {
                 sessionId,
                 actorIdentifier,
+                actorUserId: actorUserId ?? null,
                 messageId: activeAssistantMessageId,
                 emitReasoning,
                 sendToolEvent,

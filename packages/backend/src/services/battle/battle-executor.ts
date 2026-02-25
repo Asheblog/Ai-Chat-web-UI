@@ -651,6 +651,7 @@ export class BattleExecutor {
         return toolRegistry.handleToolCall(toolName, toolCall, args, {
           sessionId: 0,
           actorIdentifier: context.actorIdentifier || 'battle',
+          actorUserId: context.actorUserId ?? null,
           emitReasoning: () => {},
           sendToolEvent: () => {},
           sendStreamEvent: context.sendStreamEvent,

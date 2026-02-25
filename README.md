@@ -181,6 +181,7 @@ Skill 管理相关 API 一览：
 管理员可在“系统设置 -> Python 运行环境”进行在线管理：
 
 - 配置索引：`indexUrl` / `extraIndexUrls` / `trustedHosts`
+- 缺库自动安装开关：`autoInstallOnMissing`（默认开启，仅登录用户触发）
 - 手动安装：`POST /api/settings/python-runtime/install`
 - 手动卸载：`POST /api/settings/python-runtime/uninstall`（若被激活 Skill 依赖占用会阻断）
 - 运行一致性校验：`POST /api/settings/python-runtime/reconcile`
@@ -192,6 +193,10 @@ Skill 依赖声明与激活策略：
 - 激活 Skill 版本时会按策略自动安装依赖并执行 `pip check`
 - 失败即阻断激活（硬失败）
 - 仅允许 PyPI 包名与版本约束，不支持 `git/url/path`
+- 运行时缺库会按策略自动尝试补装（最多 3 轮）：
+  - `python_runner` -> 安装来源 `python_auto`
+  - `runtime.type=python` Skill -> 安装来源 `skill_auto`
+- 运行环境状态会返回来源标签：`manual` / `skill_manifest` / `skill_auto` / `python_auto`
 - Docker 镜像不再预装科学计算 Python 包，统一由受管 venv 安装与治理
 
 持久化要求（关键）：

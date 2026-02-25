@@ -32,6 +32,7 @@ export interface ToolLogDetails {
 export interface ToolCallContext {
   sessionId: number
   actorIdentifier?: string
+  actorUserId?: number | null
   messageId?: number | null
   battleRunId?: number | null
   emitReasoning: (content: string, meta?: Record<string, unknown>) => void

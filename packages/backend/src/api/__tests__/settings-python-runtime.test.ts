@@ -119,9 +119,11 @@ describe('settings python-runtime api', () => {
         extraIndexUrls: [],
         trustedHosts: [],
         autoInstallOnActivate: true,
+        autoInstallOnMissing: true,
       },
       manualPackages: [],
       installedPackages: [{ name: 'numpy', version: '2.1.0' }],
+      packageSources: [{ name: 'numpy', sources: ['manual'] }],
       activeDependencies: [],
       conflicts: [],
     })
@@ -192,5 +194,39 @@ describe('settings python-runtime api', () => {
     expect(body.data.details.blocked).toEqual(
       expect.arrayContaining([expect.objectContaining({ packageName: 'numpy' })]),
     )
+  })
+
+  it('PUT /python-runtime/indexes 支持 autoInstallOnMissing', async () => {
+    const runtime = createPythonRuntimeMock()
+    runtime.updateIndexes.mockResolvedValue({
+      indexUrl: 'https://pypi.org/simple',
+      extraIndexUrls: [],
+      trustedHosts: [],
+      autoInstallOnActivate: true,
+      autoInstallOnMissing: false,
+    })
+
+    const app = createSettingsApi({
+      settingsFacade: createFacadeMock(),
+      pythonRuntimeService: runtime,
+    })
+
+    const res = await app.request('http://localhost/python-runtime/indexes', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-role': 'ADMIN' },
+      body: JSON.stringify({
+        indexUrl: 'https://pypi.org/simple',
+        autoInstallOnMissing: false,
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(runtime.updateIndexes).toHaveBeenCalledWith({
+      indexUrl: 'https://pypi.org/simple',
+      autoInstallOnMissing: false,
+    })
+    const body = await res.json()
+    expect(body.success).toBe(true)
+    expect(body.data.autoInstallOnMissing).toBe(false)
   })
 })

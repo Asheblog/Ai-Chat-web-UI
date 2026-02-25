@@ -15,7 +15,7 @@ import {
   uninstallPythonRuntimePackages,
   updatePythonRuntimeIndexes,
 } from "@/features/settings/api"
-import type { PythonRuntimeStatus } from "@/types"
+import type { PythonRuntimePackageSourceTag, PythonRuntimeStatus } from "@/types"
 import { FlaskConical } from "lucide-react"
 
 const splitList = (raw: string) =>
@@ -23,6 +23,16 @@ const splitList = (raw: string) =>
     .split(/\r?\n|,/)
     .map((item) => item.trim())
     .filter(Boolean)
+
+const normalizePackageName = (value: string) => value.trim().toLowerCase().replace(/[-_.]+/g, "-")
+
+const SOURCE_ORDER: PythonRuntimePackageSourceTag[] = ["manual", "skill_manifest", "skill_auto", "python_auto"]
+const SOURCE_LABELS: Record<PythonRuntimePackageSourceTag, string> = {
+  manual: "手动",
+  skill_manifest: "Skill(清单)",
+  skill_auto: "Skill(自动)",
+  python_auto: "Python(自动)",
+}
 
 export function SystemPythonRuntimePage() {
   const { toast } = useToast()
@@ -34,9 +44,11 @@ export function SystemPythonRuntimePage() {
   const [extraIndexesDraft, setExtraIndexesDraft] = useState("")
   const [trustedHostsDraft, setTrustedHostsDraft] = useState("")
   const [autoInstallOnActivateDraft, setAutoInstallOnActivateDraft] = useState(true)
+  const [autoInstallOnMissingDraft, setAutoInstallOnMissingDraft] = useState(true)
 
   const [requirementsDraft, setRequirementsDraft] = useState("")
   const [uninstallDraft, setUninstallDraft] = useState("")
+  const [sourceFilter, setSourceFilter] = useState<"all" | "manual" | "skill" | "python_auto">("all")
 
   const [savingIndexes, setSavingIndexes] = useState(false)
   const [installing, setInstalling] = useState(false)
@@ -54,6 +66,7 @@ export function SystemPythonRuntimePage() {
       setExtraIndexesDraft((data.indexes.extraIndexUrls || []).join("\n"))
       setTrustedHostsDraft((data.indexes.trustedHosts || []).join("\n"))
       setAutoInstallOnActivateDraft(Boolean(data.indexes.autoInstallOnActivate))
+      setAutoInstallOnMissingDraft(Boolean(data.indexes.autoInstallOnMissing))
     } catch (err: any) {
       const message = err?.response?.data?.error || err?.message || "加载 Python 运行环境失败"
       setError(message)
@@ -72,15 +85,46 @@ export function SystemPythonRuntimePage() {
       indexUrlDraft.trim() !== (status.indexes.indexUrl || "") ||
       extraIndexesDraft.trim() !== (status.indexes.extraIndexUrls || []).join("\n") ||
       trustedHostsDraft.trim() !== (status.indexes.trustedHosts || []).join("\n") ||
-      autoInstallOnActivateDraft !== Boolean(status.indexes.autoInstallOnActivate)
+      autoInstallOnActivateDraft !== Boolean(status.indexes.autoInstallOnActivate) ||
+      autoInstallOnMissingDraft !== Boolean(status.indexes.autoInstallOnMissing)
     )
   }, [
     autoInstallOnActivateDraft,
+    autoInstallOnMissingDraft,
     extraIndexesDraft,
     indexUrlDraft,
     status,
     trustedHostsDraft,
   ])
+
+  const packageSourceMap = useMemo(() => {
+    const map = new Map<string, PythonRuntimePackageSourceTag[]>()
+    const entries = Array.isArray(status?.packageSources) ? status?.packageSources : []
+    for (const item of entries) {
+      const name = normalizePackageName(item?.name || "")
+      if (!name) continue
+      const sourceSet = new Set<PythonRuntimePackageSourceTag>()
+      const rawSources = Array.isArray(item?.sources) ? item.sources : []
+      for (const source of SOURCE_ORDER) {
+        if (rawSources.includes(source)) {
+          sourceSet.add(source)
+        }
+      }
+      map.set(name, SOURCE_ORDER.filter((source) => sourceSet.has(source)))
+    }
+    return map
+  }, [status?.packageSources])
+
+  const filteredInstalledPackages = useMemo(() => {
+    const list = status?.installedPackages || []
+    if (sourceFilter === "all") return list
+    return list.filter((pkg) => {
+      const sources = packageSourceMap.get(normalizePackageName(pkg.name)) || []
+      if (sourceFilter === "manual") return sources.includes("manual")
+      if (sourceFilter === "python_auto") return sources.includes("python_auto")
+      return sources.includes("skill_manifest") || sources.includes("skill_auto")
+    })
+  }, [packageSourceMap, sourceFilter, status?.installedPackages])
 
   const handleSaveIndexes = async () => {
     if (!indexChanged || savingIndexes) return
@@ -91,6 +135,7 @@ export function SystemPythonRuntimePage() {
         extraIndexUrls: splitList(extraIndexesDraft),
         trustedHosts: splitList(trustedHostsDraft),
         autoInstallOnActivate: autoInstallOnActivateDraft,
+        autoInstallOnMissing: autoInstallOnMissingDraft,
       })
       await loadStatus()
       toast({ title: "Python 索引配置已保存" })
@@ -270,6 +315,16 @@ export function SystemPythonRuntimePage() {
             {autoInstallOnActivateDraft ? "已开启" : "已关闭"}
           </Button>
         </div>
+        <div className="flex items-center justify-between gap-3">
+          <label className="text-sm">执行时报缺库时自动安装（仅登录用户）</label>
+          <Button
+            type="button"
+            variant={autoInstallOnMissingDraft ? "default" : "outline"}
+            onClick={() => setAutoInstallOnMissingDraft((v) => !v)}
+          >
+            {autoInstallOnMissingDraft ? "已开启" : "已关闭"}
+          </Button>
+        </div>
         <div className="flex justify-end">
           <Button onClick={handleSaveIndexes} disabled={!indexChanged || savingIndexes}>
             {savingIndexes ? "保存中..." : "保存索引配置"}
@@ -335,25 +390,78 @@ export function SystemPythonRuntimePage() {
       )}
 
       <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
-        <p className="text-sm font-medium">已安装包（前 200 项）</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-medium">已安装包（前 200 项）</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={sourceFilter === "all" ? "default" : "outline"}
+              onClick={() => setSourceFilter("all")}
+            >
+              全部
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={sourceFilter === "manual" ? "default" : "outline"}
+              onClick={() => setSourceFilter("manual")}
+            >
+              手动
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={sourceFilter === "skill" ? "default" : "outline"}
+              onClick={() => setSourceFilter("skill")}
+            >
+              Skill来源
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={sourceFilter === "python_auto" ? "default" : "outline"}
+              onClick={() => setSourceFilter("python_auto")}
+            >
+              Python自动
+            </Button>
+          </div>
+        </div>
         <div className="max-h-80 overflow-auto rounded-md border border-border/60">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-muted/80">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Package</th>
                 <th className="px-3 py-2 text-left font-medium">Version</th>
+                <th className="px-3 py-2 text-left font-medium">来源</th>
               </tr>
             </thead>
             <tbody>
-              {status.installedPackages.slice(0, 200).map((pkg) => (
+              {filteredInstalledPackages.slice(0, 200).map((pkg) => {
+                const sources = packageSourceMap.get(normalizePackageName(pkg.name)) || []
+                return (
                 <tr key={`${pkg.name}-${pkg.version}`} className="border-t border-border/50">
                   <td className="px-3 py-1.5 font-mono text-xs">{pkg.name}</td>
                   <td className="px-3 py-1.5 font-mono text-xs">{pkg.version}</td>
+                  <td className="px-3 py-1.5">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {sources.length > 0 ? (
+                        sources.map((source) => (
+                          <Badge key={`${pkg.name}-${source}`} variant="outline" className="text-[10px]">
+                            {SOURCE_LABELS[source]}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              ))}
-              {status.installedPackages.length === 0 && (
+                )
+              })}
+              {filteredInstalledPackages.length === 0 && (
                 <tr>
-                  <td className="px-3 py-3 text-muted-foreground" colSpan={2}>暂无已安装包</td>
+                  <td className="px-3 py-3 text-muted-foreground" colSpan={3}>暂无已安装包</td>
                 </tr>
               )}
             </tbody>

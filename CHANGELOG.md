@@ -7,6 +7,7 @@
 - BREAKING: 后端 Docker 镜像移除科学计算 Python 系统包预装，`python-runner` 默认依赖改为内置 Skill manifest 的 `python_packages` 并在容器启动时自动 reconcile；迁移策略为无迁移、直接替换。
 - 新增系统设置模块「Python 运行环境」：支持在线配置索引、安装/卸载依赖、冲突告警与 reconcile；Skill manifest 新增 `python_packages`，在版本激活时自动安装并执行 `pip check`，失败即阻断激活。
 - 新增 Skill 卸载接口与 dry-run 预览：删除第三方 Skill 时可先预览将删除/保留的 Python 包清单；执行卸载后自动清理安装包目录，并回收未被其他激活 Skill/手动保留依赖占用的 Python 包。
+- BREAKING: Python 运行环境新增“执行时报缺库自动安装”能力（默认开启）；覆盖 `python_runner` 与 `runtime.type=python` Skill，且仅登录用户可触发自动补装。新增来源治理标签 `manual | skill_manifest | skill_auto | python_auto` 并在系统设置页可筛选展示；迁移策略为无迁移、直接替换。
 
 ## v1.9.0 · 2026-02-19
 

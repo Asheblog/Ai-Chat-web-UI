@@ -9,6 +9,9 @@ export interface RuntimeExecutionOptions {
   packageRoot: string
   entry: string
   input: Record<string, unknown>
+  actorUserId?: number | null
+  skillId?: number
+  versionId?: number
   timeoutMs?: number
   maxOutputChars?: number
 }
@@ -19,7 +22,10 @@ export interface RuntimeExecutionResult {
   exitCode: number | null
   durationMs: number
   truncated: boolean
+  autoInstalledRequirements?: string[]
 }
+
+const MAX_AUTO_INSTALL_ROUNDS = 3
 
 function resolveExecutionCommand(runtime: SkillRuntimeManifest, entryFile: string): { command: string; args: string[] } {
   const runtimeArgs = Array.isArray(runtime.args) ? runtime.args : []
@@ -156,5 +162,61 @@ export async function executeSkillRuntime(options: RuntimeExecutionOptions): Pro
       child.stdin.end()
     })
 
-  return runOnce(cmd.command)
+  let result = await runOnce(cmd.command)
+
+  if (options.runtime.type !== 'python') {
+    return result
+  }
+
+  const canAutoInstall =
+    Boolean(options.actorUserId) && (await pythonRuntimeService.getAutoInstallOnMissing())
+  if (!canAutoInstall) {
+    return result
+  }
+
+  const autoInstalledRequirements: string[] = []
+  const installedRequirementSet = new Set<string>()
+  let installFailureReason = ''
+  let autoInstallRounds = 0
+
+  while ((result.exitCode ?? 1) !== 0 && autoInstallRounds < MAX_AUTO_INSTALL_ROUNDS) {
+    const requirements = pythonRuntimeService
+      .parseMissingRequirementsFromOutput(`${result.stderr}\n${result.stdout}`)
+      .filter((requirement) => !installedRequirementSet.has(requirement))
+    if (requirements.length === 0) {
+      break
+    }
+
+    try {
+      await pythonRuntimeService.installRequirements({
+        requirements,
+        source: 'skill_auto',
+        skillId: options.skillId,
+        versionId: options.versionId,
+      })
+      for (const requirement of requirements) {
+        installedRequirementSet.add(requirement)
+        autoInstalledRequirements.push(requirement)
+      }
+      autoInstallRounds += 1
+    } catch (error) {
+      installFailureReason = error instanceof Error ? error.message : String(error || 'unknown error')
+      break
+    }
+
+    result = await runOnce(cmd.command)
+  }
+
+  const stderrLines: string[] = []
+  const trimmedStderr = (result.stderr || '').trim()
+  if (trimmedStderr) stderrLines.push(trimmedStderr)
+  if (installFailureReason) {
+    stderrLines.push(`自动安装依赖失败：${installFailureReason}`)
+  }
+
+  return {
+    ...result,
+    stderr: stderrLines.join('\n').trim(),
+    autoInstalledRequirements: autoInstalledRequirements.length > 0 ? autoInstalledRequirements : undefined,
+  }
 }

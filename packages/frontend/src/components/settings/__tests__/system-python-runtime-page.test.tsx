@@ -38,11 +38,16 @@ const baseStatus: PythonRuntimeStatus = {
     extraIndexUrls: ["https://mirror.example/simple"],
     trustedHosts: ["mirror.example"],
     autoInstallOnActivate: true,
+    autoInstallOnMissing: true,
   },
   manualPackages: ["numpy"],
   installedPackages: [
     { name: "numpy", version: "2.1.0" },
     { name: "pandas", version: "2.2.2" },
+  ],
+  packageSources: [
+    { name: "numpy", sources: ["manual", "skill_manifest"] },
+    { name: "pandas", sources: ["skill_auto"] },
   ],
   activeDependencies: [
     {
@@ -84,6 +89,20 @@ describe("SystemPythonRuntimePage", () => {
     expect(screen.getByText("冲突 1")).toBeInTheDocument()
   })
 
+  test("显示包来源并支持来源筛选", async () => {
+    render(<SystemPythonRuntimePage />)
+    await screen.findByText("Python 运行环境")
+
+    expect(screen.getByText("Skill(自动)")).toBeInTheDocument()
+    expect(screen.getByText("Skill(清单)")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Python自动" }))
+    expect(screen.getByText("暂无已安装包")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "手动" }))
+    expect(screen.getAllByText("numpy").length).toBeGreaterThan(0)
+  })
+
   test("保存索引配置会发送规范化载荷", async () => {
     render(<SystemPythonRuntimePage />)
     await screen.findByText("Python 运行环境")
@@ -98,7 +117,8 @@ describe("SystemPythonRuntimePage", () => {
       target: { value: "mirror1\nmirror2" },
     })
 
-    await userEvent.click(screen.getByRole("button", { name: "已开启" }))
+    const enabledButtons = screen.getAllByRole("button", { name: "已开启" })
+    await userEvent.click(enabledButtons[0])
     await userEvent.click(screen.getByRole("button", { name: "保存索引配置" }))
 
     await waitFor(() => {
@@ -107,6 +127,7 @@ describe("SystemPythonRuntimePage", () => {
         extraIndexUrls: ["https://mirror1/simple", "https://mirror2/simple"],
         trustedHosts: ["mirror1", "mirror2"],
         autoInstallOnActivate: false,
+        autoInstallOnMissing: true,
       })
     })
   })

@@ -207,6 +207,9 @@ class InstalledSkillToolHandler implements IToolHandler {
         packageRoot: this.packagePath,
         entry: this.entry,
         input: requestPayload,
+        actorUserId: context.actorUserId ?? null,
+        skillId: this.skillId,
+        versionId: this.skillVersionId,
         timeoutMs: this.manifest.runtime.timeout_ms,
         maxOutputChars: this.manifest.runtime.max_output_chars,
       })
@@ -225,6 +228,7 @@ class InstalledSkillToolHandler implements IToolHandler {
             exitCode: runtimeResult.exitCode,
             durationMs: runtimeResult.durationMs,
             truncated: runtimeResult.truncated,
+            autoInstalledRequirements: runtimeResult.autoInstalledRequirements,
           },
         })
         await this.writeAudit({
@@ -253,6 +257,7 @@ class InstalledSkillToolHandler implements IToolHandler {
           exitCode: runtimeResult.exitCode,
           durationMs: runtimeResult.durationMs,
           truncated: runtimeResult.truncated,
+          autoInstalledRequirements: runtimeResult.autoInstalledRequirements,
         },
       })
 

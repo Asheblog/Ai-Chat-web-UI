@@ -339,11 +339,19 @@ export interface PythonRuntimeIndexes {
   extraIndexUrls: string[];
   trustedHosts: string[];
   autoInstallOnActivate: boolean;
+  autoInstallOnMissing: boolean;
 }
 
 export interface PythonRuntimeInstalledPackage {
   name: string;
   version: string;
+}
+
+export type PythonRuntimePackageSourceTag = 'manual' | 'skill_manifest' | 'skill_auto' | 'python_auto';
+
+export interface PythonRuntimePackageSourceItem {
+  name: string;
+  sources: PythonRuntimePackageSourceTag[];
 }
 
 export interface PythonRuntimeDependencyItem {
@@ -382,6 +390,7 @@ export interface PythonRuntimeStatus {
   indexes: PythonRuntimeIndexes;
   manualPackages: string[];
   installedPackages: PythonRuntimeInstalledPackage[];
+  packageSources: PythonRuntimePackageSourceItem[];
   activeDependencies: PythonRuntimeDependencyItem[];
   conflicts: PythonRuntimeConflictItem[];
 }

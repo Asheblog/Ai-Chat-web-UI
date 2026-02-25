@@ -5,10 +5,29 @@ import {
 } from './python-runtime-service'
 
 const createMockPrisma = () => ({
-  systemSetting: {
-    findMany: jest.fn(async () => []),
-    upsert: jest.fn(async () => ({})),
-  },
+  systemSetting: (() => {
+    const store = new Map<string, string>()
+    return {
+      findMany: jest.fn(async (args: any = {}) => {
+        const keys = Array.isArray(args?.where?.key?.in) ? args.where.key.in : []
+        if (keys.length === 0) return []
+        return keys
+          .filter((key: string) => store.has(key))
+          .map((key: string) => ({ key, value: store.get(key) || '' }))
+      }),
+      upsert: jest.fn(async (args: any) => {
+        const key = String(args?.where?.key || '')
+        const value =
+          typeof args?.update?.value === 'string'
+            ? args.update.value
+            : typeof args?.create?.value === 'string'
+              ? args.create.value
+              : ''
+        store.set(key, value)
+        return { key, value }
+      }),
+    }
+  })(),
   skill: {
     findMany: jest.fn(async () => []),
   },
@@ -93,6 +112,123 @@ describe('PythonRuntimeService', () => {
         source: 'manual',
       }),
     ).rejects.toThrow(PythonRuntimeServiceError)
+  })
+
+  it('defaults autoInstallOnMissing to true when setting is absent', async () => {
+    const prisma = createMockPrisma()
+    const service = new PythonRuntimeService({ prisma: prisma as any })
+    const indexes = await service.getIndexes()
+    expect(indexes.autoInstallOnMissing).toBe(true)
+  })
+
+  it('extracts safe requirements from missing module errors', () => {
+    const prisma = createMockPrisma()
+    const service = new PythonRuntimeService({ prisma: prisma as any })
+    const requirements = service.parseMissingRequirementsFromOutput(`
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+ModuleNotFoundError: No module named 'yaml'
+ModuleNotFoundError: No module named cv2
+ImportError: No module named 'dateutil.tz'
+No module named "unknown_module"
+`)
+
+    expect(requirements).toEqual(
+      expect.arrayContaining(['opencv-python', 'pyyaml', 'python-dateutil', 'unknown-module']),
+    )
+  })
+
+  it('includes packageSources in runtime status', async () => {
+    const prisma = createMockPrisma()
+    const service = new PythonRuntimeService({ prisma: prisma as any })
+
+    jest.spyOn(service, 'getIndexes').mockResolvedValue({
+      indexUrl: undefined,
+      extraIndexUrls: [],
+      trustedHosts: [],
+      autoInstallOnActivate: true,
+      autoInstallOnMissing: true,
+    })
+    jest.spyOn(service, 'getManualPackages').mockResolvedValue(['numpy'])
+    jest.spyOn(service, 'getPythonAutoPackages').mockResolvedValue(['pyyaml'])
+    jest.spyOn(service, 'getSkillAutoPackages').mockResolvedValue(['pandas'])
+    jest.spyOn(service, 'collectActiveDependencies').mockResolvedValue([
+      {
+        skillId: 1,
+        skillSlug: 'data-agent',
+        skillDisplayName: 'Data Agent',
+        versionId: 11,
+        version: '1.0.0',
+        requirement: 'numpy==2.1.0',
+        packageName: 'numpy',
+      },
+      {
+        skillId: 2,
+        skillSlug: 'sci-agent',
+        skillDisplayName: 'Sci Agent',
+        versionId: 22,
+        version: '2.0.0',
+        requirement: 'scipy>=1.13',
+        packageName: 'scipy',
+      },
+    ])
+    jest.spyOn(service, 'ensureManagedRuntime').mockResolvedValue(service.resolvePaths())
+    jest.spyOn(service, 'listInstalledPackages').mockResolvedValue([
+      { name: 'numpy', version: '2.1.0' },
+      { name: 'pandas', version: '2.2.2' },
+      { name: 'pyyaml', version: '6.0.1' },
+      { name: 'scipy', version: '1.13.1' },
+      { name: 'requests', version: '2.32.0' },
+    ])
+
+    const status = await service.getRuntimeStatus()
+    const sourceMap = new Map(status.packageSources.map((item) => [item.name, item.sources]))
+    expect(sourceMap.get('numpy')).toEqual(['manual', 'skill_manifest'])
+    expect(sourceMap.get('pandas')).toEqual(['skill_auto'])
+    expect(sourceMap.get('pyyaml')).toEqual(['python_auto'])
+    expect(sourceMap.get('scipy')).toEqual(['skill_manifest'])
+    expect(sourceMap.get('requests')).toEqual([])
+  })
+
+  it('tracks python_auto and skill_auto package sources after install and uninstall', async () => {
+    const prisma = createMockPrisma()
+    const service = new PythonRuntimeService({ prisma: prisma as any })
+    const paths = service.resolvePaths()
+
+    jest.spyOn(service, 'ensureManagedRuntime').mockResolvedValue(paths)
+    jest.spyOn(service, 'getIndexes').mockResolvedValue({
+      indexUrl: undefined,
+      extraIndexUrls: [],
+      trustedHosts: [],
+      autoInstallOnActivate: true,
+      autoInstallOnMissing: true,
+    })
+    jest.spyOn(service as any, 'runCommand').mockResolvedValue({
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      durationMs: 1,
+    })
+    jest.spyOn(service, 'listInstalledPackages').mockResolvedValue([])
+    jest.spyOn(service, 'collectActiveDependencies').mockResolvedValue([])
+
+    await service.installRequirements({
+      requirements: ['pyyaml'],
+      source: 'python_auto',
+    })
+    await service.installRequirements({
+      requirements: ['pandas'],
+      source: 'skill_auto',
+      skillId: 1,
+      versionId: 2,
+    })
+
+    expect(await service.getPythonAutoPackages()).toEqual(['pyyaml'])
+    expect(await service.getSkillAutoPackages()).toEqual(['pandas'])
+
+    await service.uninstallPackages(['pyyaml', 'pandas'])
+    expect(await service.getPythonAutoPackages()).toEqual([])
+    expect(await service.getSkillAutoPackages()).toEqual([])
   })
 
   it('blocks uninstall when packages are required by active skills', async () => {
@@ -224,6 +360,7 @@ describe('PythonRuntimeService', () => {
       extraIndexUrls: [],
       trustedHosts: [],
       autoInstallOnActivate: true,
+      autoInstallOnMissing: true,
     })
     jest.spyOn(service, 'getManualPackages').mockResolvedValue([])
     jest.spyOn(service, 'collectActiveDependencies').mockResolvedValue([])

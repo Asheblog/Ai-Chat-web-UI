@@ -10,24 +10,35 @@ const INDEX_KEY = 'python_runtime_index_url'
 const EXTRA_INDEXES_KEY = 'python_runtime_extra_index_urls'
 const TRUSTED_HOSTS_KEY = 'python_runtime_trusted_hosts'
 const AUTO_INSTALL_ON_ACTIVATE_KEY = 'python_runtime_auto_install_on_activate'
+const AUTO_INSTALL_ON_MISSING_KEY = 'python_runtime_auto_install_on_missing'
 const MANUAL_PACKAGES_KEY = 'python_runtime_manual_packages'
+const PYTHON_AUTO_PACKAGES_KEY = 'python_runtime_python_auto_packages'
+const SKILL_AUTO_PACKAGES_KEY = 'python_runtime_skill_auto_packages'
 
 const DEFAULT_OPERATION_TIMEOUT_MS = 120_000
 const DEFAULT_PIP_TIMEOUT_MS = 600_000
 const OUTPUT_LIMIT = 200_000
 
-export type PythonRuntimeInstallSource = 'manual' | 'skill'
+export type PythonRuntimeInstallSource = 'manual' | 'skill' | 'python_auto' | 'skill_auto'
 
 export interface PythonRuntimeIndexes {
   indexUrl?: string
   extraIndexUrls: string[]
   trustedHosts: string[]
   autoInstallOnActivate: boolean
+  autoInstallOnMissing: boolean
 }
 
 export interface PythonRuntimeInstalledPackage {
   name: string
   version: string
+}
+
+export type PythonRuntimePackageSourceTag = 'manual' | 'skill_manifest' | 'skill_auto' | 'python_auto'
+
+export interface PythonRuntimePackageSourceItem {
+  name: string
+  sources: PythonRuntimePackageSourceTag[]
 }
 
 export interface PythonRuntimeDependencyItem {
@@ -66,6 +77,7 @@ export interface PythonRuntimeStatus {
   indexes: PythonRuntimeIndexes
   manualPackages: string[]
   installedPackages: PythonRuntimeInstalledPackage[]
+  packageSources: PythonRuntimePackageSourceItem[]
   activeDependencies: PythonRuntimeDependencyItem[]
   conflicts: PythonRuntimeConflictItem[]
 }
@@ -286,6 +298,43 @@ const normalizePackageList = (items: string[] | undefined, max = 512): string[] 
   return Array.from(dedup).sort((a, b) => a.localeCompare(b))
 }
 
+const MISSING_MODULE_PACKAGE_MAP: Record<string, string> = {
+  cv2: 'opencv-python',
+  pil: 'Pillow',
+  yaml: 'PyYAML',
+  bs4: 'beautifulsoup4',
+  sklearn: 'scikit-learn',
+  crypto: 'pycryptodome',
+  dateutil: 'python-dateutil',
+  dotenv: 'python-dotenv',
+}
+
+const extractMissingModuleNames = (output: string): string[] => {
+  const source = (output || '').trim()
+  if (!source) return []
+  const found = new Set<string>()
+  const regex = /No module named ['"]?([A-Za-z0-9_.-]+)['"]?/gi
+  let matched: RegExpExecArray | null
+  while ((matched = regex.exec(source)) !== null) {
+    const value = (matched[1] || '').trim()
+    if (!value) continue
+    found.add(value)
+  }
+  return Array.from(found)
+}
+
+const moduleNameToRequirement = (moduleName: string): string | null => {
+  const raw = (moduleName || '').trim()
+  if (!raw) return null
+  const base = raw.split('.')[0] || raw
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(base)) return null
+  const mapped = MISSING_MODULE_PACKAGE_MAP[base.toLowerCase()] || base
+  const normalized = validatePackageName(mapped.replace(/_/g, '-'))
+  if (!normalized) return null
+  const parsed = parseRequirementSafe(normalized)
+  return parsed?.raw || null
+}
+
 const DEGRADED_RUNTIME_STATUS_CODES = new Set([
   'PYTHON_RUNTIME_PIP_UNAVAILABLE',
   'PYTHON_RUNTIME_CREATE_VENV_FAILED',
@@ -352,18 +401,27 @@ export class PythonRuntimeService {
   }
 
   async getIndexes(): Promise<PythonRuntimeIndexes> {
-    const map = await this.readSettings([INDEX_KEY, EXTRA_INDEXES_KEY, TRUSTED_HOSTS_KEY, AUTO_INSTALL_ON_ACTIVATE_KEY])
+    const map = await this.readSettings([
+      INDEX_KEY,
+      EXTRA_INDEXES_KEY,
+      TRUSTED_HOSTS_KEY,
+      AUTO_INSTALL_ON_ACTIVATE_KEY,
+      AUTO_INSTALL_ON_MISSING_KEY,
+    ])
     const indexUrl = ensureString(map.get(INDEX_KEY)) || undefined
     const extraIndexUrls = sanitizeList(parseJsonArray(map.get(EXTRA_INDEXES_KEY)))
     const trustedHosts = sanitizeList(parseJsonArray(map.get(TRUSTED_HOSTS_KEY)))
     const autoInstallRaw = (map.get(AUTO_INSTALL_ON_ACTIVATE_KEY) || '').trim().toLowerCase()
     const autoInstallOnActivate = autoInstallRaw ? autoInstallRaw === 'true' : true
+    const autoInstallMissingRaw = (map.get(AUTO_INSTALL_ON_MISSING_KEY) || '').trim().toLowerCase()
+    const autoInstallOnMissing = autoInstallMissingRaw ? autoInstallMissingRaw === 'true' : true
 
     return {
       indexUrl,
       extraIndexUrls,
       trustedHosts,
       autoInstallOnActivate,
+      autoInstallOnMissing,
     }
   }
 
@@ -372,11 +430,17 @@ export class PythonRuntimeService {
     return indexes.autoInstallOnActivate
   }
 
+  async getAutoInstallOnMissing(): Promise<boolean> {
+    const indexes = await this.getIndexes()
+    return indexes.autoInstallOnMissing
+  }
+
   async updateIndexes(input: {
     indexUrl?: string
     extraIndexUrls?: string[]
     trustedHosts?: string[]
     autoInstallOnActivate?: boolean
+    autoInstallOnMissing?: boolean
   }): Promise<PythonRuntimeIndexes> {
     const indexUrl = input.indexUrl !== undefined ? ensureString(input.indexUrl) : undefined
     const extraIndexUrls = input.extraIndexUrls !== undefined ? sanitizeList(input.extraIndexUrls) : undefined
@@ -394,34 +458,73 @@ export class PythonRuntimeService {
     if (typeof input.autoInstallOnActivate === 'boolean') {
       await this.upsertSetting(AUTO_INSTALL_ON_ACTIVATE_KEY, String(input.autoInstallOnActivate))
     }
+    if (typeof input.autoInstallOnMissing === 'boolean') {
+      await this.upsertSetting(AUTO_INSTALL_ON_MISSING_KEY, String(input.autoInstallOnMissing))
+    }
 
     return this.getIndexes()
   }
 
-  async getManualPackages(): Promise<string[]> {
-    const map = await this.readSettings([MANUAL_PACKAGES_KEY])
-    const rawList = parseJsonArray(map.get(MANUAL_PACKAGES_KEY))
+  private async getSourcePackages(settingKey: string): Promise<string[]> {
+    const map = await this.readSettings([settingKey])
+    const rawList = parseJsonArray(map.get(settingKey))
     return normalizePackageList(rawList)
   }
 
-  private async saveManualPackages(packages: string[]): Promise<void> {
+  private async saveSourcePackages(settingKey: string, packages: string[]): Promise<void> {
     const normalized = normalizePackageList(packages)
-    await this.upsertSetting(MANUAL_PACKAGES_KEY, JSON.stringify(normalized))
+    await this.upsertSetting(settingKey, JSON.stringify(normalized))
   }
 
-  private async addManualPackages(packages: string[]): Promise<void> {
-    const existing = await this.getManualPackages()
+  private async addSourcePackages(settingKey: string, packages: string[]): Promise<void> {
+    const existing = await this.getSourcePackages(settingKey)
     const merged = normalizePackageList([...existing, ...packages])
-    await this.saveManualPackages(merged)
+    await this.saveSourcePackages(settingKey, merged)
   }
 
-  private async removeManualPackages(packages: string[]): Promise<void> {
-    const existing = await this.getManualPackages()
+  private async removeSourcePackages(settingKey: string, packages: string[]): Promise<void> {
+    const existing = await this.getSourcePackages(settingKey)
     if (existing.length === 0) return
     const removeSet = new Set(normalizePackageList(packages))
     if (removeSet.size === 0) return
     const next = existing.filter((item) => !removeSet.has(item))
-    await this.saveManualPackages(next)
+    await this.saveSourcePackages(settingKey, next)
+  }
+
+  async getManualPackages(): Promise<string[]> {
+    return this.getSourcePackages(MANUAL_PACKAGES_KEY)
+  }
+
+  async getPythonAutoPackages(): Promise<string[]> {
+    return this.getSourcePackages(PYTHON_AUTO_PACKAGES_KEY)
+  }
+
+  async getSkillAutoPackages(): Promise<string[]> {
+    return this.getSourcePackages(SKILL_AUTO_PACKAGES_KEY)
+  }
+
+  private async addManualPackages(packages: string[]): Promise<void> {
+    await this.addSourcePackages(MANUAL_PACKAGES_KEY, packages)
+  }
+
+  private async addPythonAutoPackages(packages: string[]): Promise<void> {
+    await this.addSourcePackages(PYTHON_AUTO_PACKAGES_KEY, packages)
+  }
+
+  private async addSkillAutoPackages(packages: string[]): Promise<void> {
+    await this.addSourcePackages(SKILL_AUTO_PACKAGES_KEY, packages)
+  }
+
+  private async removeManualPackages(packages: string[]): Promise<void> {
+    await this.removeSourcePackages(MANUAL_PACKAGES_KEY, packages)
+  }
+
+  private async removePythonAutoPackages(packages: string[]): Promise<void> {
+    await this.removeSourcePackages(PYTHON_AUTO_PACKAGES_KEY, packages)
+  }
+
+  private async removeSkillAutoPackages(packages: string[]): Promise<void> {
+    await this.removeSourcePackages(SKILL_AUTO_PACKAGES_KEY, packages)
   }
 
   private async buildSkillCleanupPlan(input: {
@@ -779,6 +882,20 @@ export class PythonRuntimeService {
     return Array.from(dedup.values())
   }
 
+  parseMissingRequirementsFromOutput(output: string): string[] {
+    const modules = extractMissingModuleNames(output)
+    if (modules.length === 0) return []
+    const dedup = new Set<string>()
+    for (const moduleName of modules) {
+      const requirement = moduleNameToRequirement(moduleName)
+      if (!requirement) continue
+      const parsed = parseRequirementSafe(requirement)
+      if (!parsed) continue
+      dedup.add(parsed.raw)
+    }
+    return Array.from(dedup).sort((a, b) => a.localeCompare(b))
+  }
+
   async listInstalledPackages(): Promise<PythonRuntimeInstalledPackage[]> {
     const paths = await this.ensureManagedRuntime()
     const result = await this.runCommand(paths.pythonPath, ['-m', 'pip', 'list', '--format=json'], {
@@ -922,11 +1039,46 @@ export class PythonRuntimeService {
     return conflicts.sort((a, b) => a.packageName.localeCompare(b.packageName))
   }
 
+  private buildPackageSources(input: {
+    installedPackages: PythonRuntimeInstalledPackage[]
+    manualPackages: string[]
+    pythonAutoPackages: string[]
+    skillAutoPackages: string[]
+    dependencies: PythonRuntimeDependencyItem[]
+  }): PythonRuntimePackageSourceItem[] {
+    const sourceMap = new Map<string, Set<PythonRuntimePackageSourceTag>>()
+    const addSource = (packageName: string, source: PythonRuntimePackageSourceTag) => {
+      const normalized = normalizePackageName(packageName)
+      if (!normalized) return
+      const set = sourceMap.get(normalized) ?? new Set<PythonRuntimePackageSourceTag>()
+      set.add(source)
+      sourceMap.set(normalized, set)
+    }
+
+    for (const pkg of input.manualPackages) addSource(pkg, 'manual')
+    for (const pkg of input.pythonAutoPackages) addSource(pkg, 'python_auto')
+    for (const pkg of input.skillAutoPackages) addSource(pkg, 'skill_auto')
+    for (const dependency of input.dependencies) addSource(dependency.packageName, 'skill_manifest')
+
+    const sourceOrder: PythonRuntimePackageSourceTag[] = ['manual', 'skill_manifest', 'skill_auto', 'python_auto']
+    return input.installedPackages.map((pkg) => {
+      const normalized = normalizePackageName(pkg.name)
+      const sourceSet = sourceMap.get(normalized) ?? new Set<PythonRuntimePackageSourceTag>()
+      const sources = sourceOrder.filter((source) => sourceSet.has(source))
+      return {
+        name: normalized,
+        sources,
+      }
+    })
+  }
+
   async getRuntimeStatus(): Promise<PythonRuntimeStatus> {
     const paths = this.resolvePaths()
-    const [indexes, manualPackages, dependencies] = await Promise.all([
+    const [indexes, manualPackages, pythonAutoPackages, skillAutoPackages, dependencies] = await Promise.all([
       this.getIndexes(),
       this.getManualPackages(),
+      this.getPythonAutoPackages(),
+      this.getSkillAutoPackages(),
       this.collectActiveDependencies(),
     ])
 
@@ -934,6 +1086,13 @@ export class PythonRuntimeService {
     try {
       await this.ensureManagedRuntime()
       const installedPackages = await this.listInstalledPackages()
+      const packageSources = this.buildPackageSources({
+        installedPackages,
+        manualPackages,
+        pythonAutoPackages,
+        skillAutoPackages,
+        dependencies,
+      })
 
       return {
         dataRoot: paths.dataRoot,
@@ -944,6 +1103,7 @@ export class PythonRuntimeService {
         indexes,
         manualPackages,
         installedPackages,
+        packageSources,
         activeDependencies: dependencies,
         conflicts,
       }
@@ -969,6 +1129,7 @@ export class PythonRuntimeService {
           indexes,
           manualPackages,
           installedPackages: [],
+          packageSources: [],
           activeDependencies: dependencies,
           conflicts,
         }
@@ -1024,8 +1185,13 @@ export class PythonRuntimeService {
         )
       }
 
+      const packageNames = entries.map((item) => item.packageName)
       if (input.source === 'manual') {
-        await this.addManualPackages(entries.map((item) => item.packageName))
+        await this.addManualPackages(packageNames)
+      } else if (input.source === 'python_auto') {
+        await this.addPythonAutoPackages(packageNames)
+      } else if (input.source === 'skill_auto') {
+        await this.addSkillAutoPackages(packageNames)
       }
 
       logger.info('installed python requirements', {
@@ -1105,7 +1271,11 @@ export class PythonRuntimeService {
         )
       }
 
-      await this.removeManualPackages(normalized)
+      await Promise.all([
+        this.removeManualPackages(normalized),
+        this.removePythonAutoPackages(normalized),
+        this.removeSkillAutoPackages(normalized),
+      ])
 
       logger.info('uninstalled python packages', {
         packages: normalized,
