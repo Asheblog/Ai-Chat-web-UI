@@ -95,6 +95,7 @@ RUN apt-get update && \
         sqlite3 \
         curl \
         dumb-init \
+        docker.io \
         python3 \
         python3-venv \
         python3-pip \

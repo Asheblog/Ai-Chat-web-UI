@@ -13,8 +13,41 @@ LOG_DIR="/app/logs"
 DEFAULT_DB_NAME="app.db"
 IMAGE_DIR_DEFAULT="/app/storage/chat-images"
 RESTORE_USER_PROFILE_MIGRATION_NAME="20260222183000_restore_user_profile_columns"
+DOCKER_SOCKET_PATH="${DOCKER_SOCKET_PATH:-/var/run/docker.sock}"
 
 cd "$APP_ROOT"
+
+configure_docker_socket_access() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "[entrypoint] WARN: docker CLI 不存在，workspace 沙箱 Python 将不可用" >&2
+    return 0
+  fi
+
+  if [ ! -S "$DOCKER_SOCKET_PATH" ]; then
+    echo "[entrypoint] WARN: Docker socket 未挂载（$DOCKER_SOCKET_PATH），workspace 沙箱 Python 将不可用" >&2
+    return 0
+  fi
+
+  local socket_gid
+  socket_gid="$(stat -c '%g' "$DOCKER_SOCKET_PATH" 2>/dev/null || true)"
+  if [ -z "$socket_gid" ]; then
+    echo "[entrypoint] WARN: 无法读取 Docker socket gid，workspace 沙箱 Python 可能不可用" >&2
+    return 0
+  fi
+
+  local socket_group
+  socket_group="$(getent group "$socket_gid" | cut -d: -f1 || true)"
+  if [ -z "$socket_group" ]; then
+    socket_group="dockersock"
+    groupadd -g "$socket_gid" "$socket_group" >/dev/null 2>&1 || true
+  fi
+
+  if ! id -nG backend | tr ' ' '\n' | grep -Fxq "$socket_group"; then
+    usermod -a -G "$socket_group" backend >/dev/null 2>&1 || true
+  fi
+}
+
+configure_docker_socket_access
 
 if [ -z "${CHAT_IMAGE_DIR:-}" ]; then
   export CHAT_IMAGE_DIR="$IMAGE_DIR_DEFAULT"

@@ -179,6 +179,12 @@ Artifact 下载策略：
 - 严格路径校验：禁止绝对路径、`..`、越界软链、非 `artifacts/` 发布
 - 超时/资源限制：CPU、内存、pids、执行超时全部强制
 
+容器化部署前置条件（如 1Panel / Docker Compose）：
+
+- backend 容器内必须存在 `docker` CLI（官方 backend 镜像已内置）
+- backend 服务需要挂载宿主机 socket：`/var/run/docker.sock:/var/run/docker.sock`
+- 若未满足上述条件，`python_runner` 将返回 `WORKSPACE_DOCKER_UNAVAILABLE`（503）
+
 破坏性变更声明（无迁移、直接替换）：
 
 - 旧 `python_runner` 主机执行路径已下线
@@ -251,10 +257,13 @@ services:
       - DB_INIT_ON_START=true  # 首次部署后改为 false
       - PYTHON_RUNTIME_RECONCILE_ON_START=true  # 默认 true，建议保留开启
       - SKILL_STORAGE_ROOT=/app/data/skills
+      - WORKSPACE_TOOL_ENABLE=true
+      - WORKSPACE_ARTIFACT_SIGNING_SECRET=请改成强随机密码
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs
       - backend_images:/app/storage/chat-images
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "3556:8001"
     restart: unless-stopped
