@@ -103,8 +103,14 @@ export class UrlReaderToolHandler implements IToolHandler {
       id: callId,
       tool: 'read_url',
       stage: 'start',
+      query: url,
+      summary: likelySPA ? '检测到可能是动态网页，尝试提取正文' : '开始读取网页正文',
       url,
       warning: likelySPA ? 'possible_spa' : undefined,
+      details: {
+        url,
+        warning: likelySPA ? 'possible_spa' : undefined,
+      },
     })
 
     try {
@@ -122,8 +128,13 @@ export class UrlReaderToolHandler implements IToolHandler {
           id: callId,
           tool: 'read_url',
           stage: 'error',
+          query: url,
+          summary: '读取网页失败',
           url,
           error: result.error,
+          details: {
+            url,
+          },
         })
         return {
           toolCallId: callId,
@@ -150,12 +161,24 @@ export class UrlReaderToolHandler implements IToolHandler {
         id: callId,
         tool: 'read_url',
         stage: 'result',
+        query: url,
+        summary: result.title
+          ? `已读取：${result.title}`
+          : '网页读取完成',
         url,
         title: result.title,
         excerpt: result.excerpt,
         wordCount: result.wordCount,
         siteName: result.siteName,
         byline: result.byline,
+        details: {
+          url,
+          title: result.title,
+          excerpt: result.excerpt,
+          wordCount: result.wordCount,
+          siteName: result.siteName,
+          byline: result.byline,
+        },
       })
 
       const formatted = formatUrlContentForModel(result)
@@ -179,8 +202,13 @@ export class UrlReaderToolHandler implements IToolHandler {
         id: callId,
         tool: 'read_url',
         stage: 'error',
+        query: url,
+        summary: '读取网页失败',
         url,
         error: message,
+        details: {
+          url,
+        },
       })
       return {
         toolCallId: callId,

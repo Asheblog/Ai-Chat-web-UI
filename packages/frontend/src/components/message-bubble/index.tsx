@@ -85,11 +85,6 @@ function MessageBubbleComponent({
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
   const hasContent = content.length > 0
   const hasReasoningState = typeof meta.reasoningStatus === 'string'
-  const shouldShowReasoningSection =
-    !isUser &&
-    (reasoningText.length > 0 ||
-      (hasReasoningState && meta.reasoningStatus !== 'done') ||
-      (isStreaming && meta.role === 'assistant' && hasReasoningState))
   const shouldShowStreamingPlaceholder = Boolean(
     isStreaming && !hasContent && meta.role === 'assistant',
   )
@@ -98,6 +93,12 @@ function MessageBubbleComponent({
     messageId: meta.id,
     bodyEvents: body.toolEvents,
   })
+  const shouldShowReasoningSection =
+    !isUser &&
+    (reasoningText.length > 0 ||
+      toolTimeline.length > 0 ||
+      (hasReasoningState && meta.reasoningStatus !== 'done') ||
+      (isStreaming && meta.role === 'assistant' && hasReasoningState))
 
   // 缓存匹配逻辑：
   // 1. 严格匹配：版本完全相同
