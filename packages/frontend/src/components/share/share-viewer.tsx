@@ -12,6 +12,8 @@ interface ShareViewerProps {
   brandText?: string
 }
 
+const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-10'
+
 /** 格式化相对时间 */
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr)
@@ -157,20 +159,20 @@ function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessag
 export function ShareViewer({ share, brandText = 'AIChat' }: ShareViewerProps) {
   return (
     <div className="flex min-h-screen flex-col bg-[hsl(var(--background))] text-foreground">
-      <header className="mx-auto flex w-full max-w-[860px] items-center justify-between border-b border-border/80 px-6 py-5">
+      <header className={cn(SHARE_CONTAINER_CLASS, 'flex flex-col gap-3 border-b border-border/80 py-5 sm:flex-row sm:items-center sm:justify-between')}>
         <div className="flex items-center gap-3 font-semibold">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
             AI
           </span>
           {brandText} 分享
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 self-start text-xs text-muted-foreground sm:self-auto">
           <span className="rounded-md bg-[hsl(var(--surface-hover))] px-2.5 py-1">{share.messageCount} 条消息</span>
           <span>{formatRelativeTime(share.createdAt)}</span>
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[860px] flex-1 px-6 py-6">
+      <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-6 sm:py-8')}>
         <h1 className="mb-6 text-2xl font-semibold tracking-tight">{share.title || share.sessionTitle}</h1>
         <section>
           {share.messages.length === 0 ? (
@@ -186,7 +188,7 @@ export function ShareViewer({ share, brandText = 'AIChat' }: ShareViewerProps) {
       </div>
 
       <footer className="border-t border-border/80 py-4">
-        <div className="mx-auto w-full max-w-[860px] px-6 text-center text-xs text-muted-foreground">
+        <div className={cn(SHARE_CONTAINER_CLASS, 'text-center text-xs text-muted-foreground')}>
           本页面分享由 <span className="font-medium text-foreground">{brandText}</span> 系统生成
         </div>
       </footer>
