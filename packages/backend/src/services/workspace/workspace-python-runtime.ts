@@ -315,6 +315,9 @@ export class WorkspacePythonRuntime {
         },
       })
 
+      const detectedMissing = extractMissingModuleRequirements(`${runResult.stderr}\n${runResult.stdout}`)
+        .filter((name) => !installedSet.has(name))
+
       lastResult = {
         stdout: runResult.stdout,
         stderr: runResult.stderr,
@@ -322,7 +325,10 @@ export class WorkspacePythonRuntime {
         truncated: runResult.truncated,
       }
 
-      if ((runResult.exitCode ?? 1) === 0) {
+      // Some user snippets swallow ImportError and only print "No module named ...".
+      // Keep auto-install behavior deterministic by honoring detected missing modules
+      // even when the script exits with code 0.
+      if ((runResult.exitCode ?? 1) === 0 && detectedMissing.length === 0) {
         break
       }
 
@@ -330,14 +336,12 @@ export class WorkspacePythonRuntime {
         break
       }
 
-      const missing = extractMissingModuleRequirements(`${runResult.stderr}\n${runResult.stdout}`)
-        .filter((name) => !installedSet.has(name))
-      if (missing.length === 0) {
+      if (detectedMissing.length === 0) {
         break
       }
 
-      await this.installRequirements(params.workspaceRoot, missing)
-      for (const requirement of missing) {
+      await this.installRequirements(params.workspaceRoot, detectedMissing)
+      for (const requirement of detectedMissing) {
         installedSet.add(requirement)
         autoInstalledRequirements.push(requirement)
       }
@@ -385,6 +389,12 @@ export class WorkspacePythonRuntime {
         `自动安装依赖失败：${installResult.stderr || installResult.stdout || 'unknown error'}`,
         500,
         'WORKSPACE_PYTHON_DEP_INSTALL_FAILED',
+        {
+          requirements: safeRequirements,
+          exitCode: installResult.exitCode,
+          stdout: truncateText(installResult.stdout || '', PREVIEW_LIMIT),
+          stderr: truncateText(installResult.stderr || '', PREVIEW_LIMIT),
+        },
       )
     }
   }

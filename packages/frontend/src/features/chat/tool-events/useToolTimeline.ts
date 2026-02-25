@@ -26,6 +26,28 @@ const describeTool = (tool?: string | null) => {
   return tool
 }
 
+const resolveReasoningOffsetStart = (event: ToolEvent) => {
+  const details = event.details
+  if (!details || typeof details !== 'object') return null
+  const candidate =
+    typeof details.reasoningOffsetStart === 'number'
+      ? details.reasoningOffsetStart
+      : typeof details.reasoningOffset === 'number'
+        ? details.reasoningOffset
+        : null
+  return candidate != null && Number.isFinite(candidate) && candidate >= 0 ? Math.floor(candidate) : null
+}
+
+const compareToolEvents = (a: ToolEvent, b: ToolEvent) => {
+  const aOffset = resolveReasoningOffsetStart(a)
+  const bOffset = resolveReasoningOffsetStart(b)
+  if (aOffset != null && bOffset != null && aOffset !== bOffset) {
+    return aOffset - bOffset
+  }
+  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
+  return a.id.localeCompare(b.id)
+}
+
 export const useToolTimeline = ({ sessionId, messageId, bodyEvents }: UseToolTimelineOptions) => {
   const streamingEvents = useChatMessages((state) => state.toolEvents)
 
@@ -48,7 +70,7 @@ export const useToolTimeline = ({ sessionId, messageId, bodyEvents }: UseToolTim
     const merged = new Map<string, ToolEvent>()
     historicalEvents.forEach((event) => merged.set(event.id, event))
     relevantStreaming.forEach((event) => merged.set(event.id, event))
-    return Array.from(merged.values()).sort((a, b) => a.createdAt - b.createdAt)
+    return Array.from(merged.values()).sort(compareToolEvents)
   }, [historicalEvents, relevantStreaming])
 
   const summary: ToolTimelineSummary | null = useMemo(() => {

@@ -29,14 +29,14 @@ export class PythonToolHandler implements IToolHandler {
       function: {
         name: 'python_runner',
         description:
-          'Execute Python code inside the isolated workspace sandbox. Do NOT run pip install in user code. Import modules directly and let the runtime auto-install missing packages. Save downloadable files to /workspace/artifacts.',
+          'Execute Python code inside the isolated workspace sandbox. Do NOT run pip install in user code. Import modules directly (do not swallow ModuleNotFoundError/ImportError with try/except) and let the runtime auto-install missing packages. Save downloadable files to /workspace/artifacts.',
         parameters: {
           type: 'object',
           properties: {
             code: {
               type: 'string',
               description:
-                'Python code to execute in sandbox. Do not call pip install manually. Use /workspace/artifacts for downloadable outputs.',
+                'Python code to execute in sandbox. Do not call pip install manually, and do not swallow ModuleNotFoundError/ImportError with try/except. Use /workspace/artifacts for downloadable outputs.',
             },
             input: {
               type: 'string',
@@ -188,6 +188,10 @@ export class PythonToolHandler implements IToolHandler {
       const isRuntimeUnavailable =
         pythonError instanceof WorkspaceServiceError &&
         pythonError.code === 'WORKSPACE_DOCKER_UNAVAILABLE'
+      const workspaceErrorDetails =
+        pythonError instanceof WorkspaceServiceError && pythonError.details
+          ? pythonError.details
+          : undefined
       context.emitReasoning(`Python 执行失败：${message}`, {
         ...reasoningMetaBase,
         stage: 'error',
@@ -201,6 +205,7 @@ export class PythonToolHandler implements IToolHandler {
           ...baseDetails,
           code: pythonError instanceof WorkspaceServiceError ? pythonError.code : undefined,
           statusCode: pythonError instanceof WorkspaceServiceError ? pythonError.statusCode : undefined,
+          errorDetails: workspaceErrorDetails,
         },
       })
       return {
@@ -213,6 +218,9 @@ export class PythonToolHandler implements IToolHandler {
           content: JSON.stringify({
             error: message,
             unavailable: isRuntimeUnavailable || undefined,
+            error_code: pythonError instanceof WorkspaceServiceError ? pythonError.code : undefined,
+            status_code: pythonError instanceof WorkspaceServiceError ? pythonError.statusCode : undefined,
+            error_details: workspaceErrorDetails,
           }),
         },
       }

@@ -177,6 +177,30 @@ const extractDomain = (input?: string | null): string | null => {
 
 const normalizeReasoningSource = (reasoningRaw: string) => reasoningRaw.replace(/\r/g, '').trim()
 
+const resolveReasoningOffsetStart = (event: ToolEvent) => {
+  const details = event.details
+  if (!details || typeof details !== 'object') return null
+  const candidate =
+    typeof details.reasoningOffsetStart === 'number'
+      ? details.reasoningOffsetStart
+      : typeof details.reasoningOffset === 'number'
+        ? details.reasoningOffset
+        : null
+  return candidate != null && Number.isFinite(candidate) && candidate >= 0 ? Math.floor(candidate) : null
+}
+
+const compareToolTimelineEvents = (a: ToolEvent, b: ToolEvent) => {
+  const aOffset = resolveReasoningOffsetStart(a)
+  const bOffset = resolveReasoningOffsetStart(b)
+  if (aOffset != null && bOffset != null && aOffset !== bOffset) {
+    return aOffset - bOffset
+  }
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt - b.createdAt
+  }
+  return a.id.localeCompare(b.id)
+}
+
 const cleanReasoningChunk = (chunk: string) =>
   chunk
     .split('\n')
@@ -232,7 +256,7 @@ const splitByBoundaries = (text: string, boundaries: number[]): string[] => {
 const collectToolBoundaryMarkers = (events: ToolEvent[]): string[] => {
   const markers: string[] = []
   const seen = new Set<string>()
-  const sorted = events.slice().sort((a, b) => a.createdAt - b.createdAt)
+  const sorted = events.slice().sort(compareToolTimelineEvents)
 
   sorted.forEach((event) => {
     const candidates: string[] = []
@@ -327,7 +351,7 @@ const buildThoughtSegments = (
   const source = normalizeReasoningSource(reasoningRaw)
   if (!source) return []
 
-  const sortedTools = toolTimeline.slice().sort((a, b) => a.createdAt - b.createdAt)
+  const sortedTools = toolTimeline.slice().sort(compareToolTimelineEvents)
   const expectedSegments = Math.max(1, sortedTools.length + 1)
   let boundaries: number[] = []
 
@@ -524,7 +548,7 @@ function ReasoningPanelComponent({
 
   const activityItems = useMemo(() => {
     const items: ActivityItem[] = []
-    const sortedTools = toolTimeline.slice().sort((a, b) => a.createdAt - b.createdAt)
+    const sortedTools = toolTimeline.slice().sort(compareToolTimelineEvents)
 
     if (sortedTools.length === 0) {
       thoughtSegments.forEach((segment, index) => {
