@@ -175,9 +175,10 @@ const extractDomain = (input?: string | null): string | null => {
   }
 }
 
-const normalizeReasoningText = (reasoningRaw: string) =>
-  reasoningRaw
-    .replace(/\r/g, '')
+const normalizeReasoningSource = (reasoningRaw: string) => reasoningRaw.replace(/\r/g, '').trim()
+
+const cleanReasoningChunk = (chunk: string) =>
+  chunk
     .split('\n')
     .map((line) => line.replace(/^>\s?/, ''))
     .join('\n')
@@ -260,6 +261,31 @@ const collectToolBoundaryMarkers = (events: ToolEvent[]): string[] => {
   return markers
 }
 
+const collectBoundariesByReasoningOffsets = (events: ToolEvent[], textLength: number): number[] => {
+  if (textLength <= 1 || events.length === 0) return []
+  const boundaries: number[] = []
+  let cursor = 0
+
+  events.forEach((event) => {
+    const details = event.details
+    if (!details || typeof details !== 'object') return
+    const candidate =
+      typeof details.reasoningOffsetStart === 'number'
+        ? details.reasoningOffsetStart
+        : typeof details.reasoningOffset === 'number'
+          ? details.reasoningOffset
+          : null
+    if (candidate == null || !Number.isFinite(candidate)) return
+    const point = Math.floor(candidate)
+    if (point <= 0 || point >= textLength) return
+    if (point <= cursor) return
+    boundaries.push(point)
+    cursor = point
+  })
+
+  return boundaries
+}
+
 const findBoundariesByMarkers = (
   text: string,
   markers: string[],
@@ -298,30 +324,34 @@ const buildThoughtSegments = (
   reasoningRaw: string,
   toolTimeline: ToolEvent[],
 ): ThoughtSegment[] => {
-  const normalized = normalizeReasoningText(reasoningRaw)
-  if (!normalized) return []
+  const source = normalizeReasoningSource(reasoningRaw)
+  if (!source) return []
 
   const sortedTools = toolTimeline.slice().sort((a, b) => a.createdAt - b.createdAt)
   const expectedSegments = Math.max(1, sortedTools.length + 1)
   let boundaries: number[] = []
 
   if (sortedTools.length > 0) {
-    const markers = collectToolBoundaryMarkers(sortedTools)
-    boundaries = findBoundariesByMarkers(normalized, markers, expectedSegments - 1)
+    boundaries = collectBoundariesByReasoningOffsets(sortedTools, source.length)
 
-    // 工具数量与分段数量不一致时，回退为均匀切片，确保“每次工具调用后进入下一段”
+    // 历史消息可能没有 offset，回退到 marker/均匀切分兜底
     if (boundaries.length !== expectedSegments - 1) {
-      boundaries = buildEvenBoundaries(normalized.length, expectedSegments)
+      const markers = collectToolBoundaryMarkers(sortedTools)
+      boundaries = findBoundariesByMarkers(source, markers, expectedSegments - 1)
+    }
+
+    if (boundaries.length !== expectedSegments - 1) {
+      boundaries = buildEvenBoundaries(source.length, expectedSegments)
     }
   }
 
-  const chunks = splitByBoundaries(normalized, boundaries)
+  const chunks = splitByBoundaries(source, boundaries)
   const segments = chunks
-    .map((chunk) => chunk.trim())
+    .map((chunk) => cleanReasoningChunk(chunk))
     .filter((chunk) => chunk.length > 0)
     .map((chunk) => ({ text: chunk }))
   if (segments.length > 0) return segments
-  return [{ text: normalized }]
+  return [{ text: cleanReasoningChunk(source) }]
 }
 
 const uniqueDomains = (domains: ActivityDomain[]) => {

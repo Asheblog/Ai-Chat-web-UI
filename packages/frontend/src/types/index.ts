@@ -439,6 +439,9 @@ export interface ToolEventDetails {
   exitCode?: number;
   durationMs?: number;
   truncated?: boolean;
+  reasoningOffset?: number;
+  reasoningOffsetStart?: number;
+  reasoningOffsetEnd?: number;
   [key: string]: unknown;
 }
 

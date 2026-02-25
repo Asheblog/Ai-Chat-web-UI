@@ -546,12 +546,43 @@ export const createStreamSlice: ChatSliceCreator<
               evt.details && typeof evt.details === 'object'
                 ? (evt.details as import('@/types').ToolEvent['details'])
                 : undefined
+            const reasoningLengthAtEvent = Math.max(
+              0,
+              (active.reasoning?.length ?? 0) + (active.pendingReasoning?.length ?? 0),
+            )
+            const prevDetails = idx === -1 ? undefined : list[idx]?.details
+            const mergedDetails: import('@/types').ToolEvent['details'] = {
+              ...(prevDetails ?? {}),
+              ...(detailPayload ? { ...detailPayload } : {}),
+            }
+            const stage = (evt.stage as 'start' | 'result' | 'error') || 'start'
+            const hasStartOffset =
+              typeof mergedDetails?.reasoningOffsetStart === 'number' &&
+              Number.isFinite(mergedDetails.reasoningOffsetStart) &&
+              mergedDetails.reasoningOffsetStart >= 0
+            if (!hasStartOffset && (stage === 'start' || idx === -1)) {
+              mergedDetails.reasoningOffsetStart = reasoningLengthAtEvent
+            }
+            const hasEndOffset =
+              typeof mergedDetails?.reasoningOffsetEnd === 'number' &&
+              Number.isFinite(mergedDetails.reasoningOffsetEnd) &&
+              mergedDetails.reasoningOffsetEnd >= 0
+            if (!hasEndOffset && (stage === 'result' || stage === 'error')) {
+              mergedDetails.reasoningOffsetEnd = reasoningLengthAtEvent
+            }
+            if (
+              typeof mergedDetails.reasoningOffset !== 'number' ||
+              !Number.isFinite(mergedDetails.reasoningOffset) ||
+              mergedDetails.reasoningOffset < 0
+            ) {
+              mergedDetails.reasoningOffset = mergedDetails.reasoningOffsetStart
+            }
             const next: import('@/types').ToolEvent = {
               id: eventId,
               sessionId,
               messageId: active.assistantId,
               tool: (evt.tool as string) || 'web_search',
-              stage: (evt.stage as 'start' | 'result' | 'error') || 'start',
+              stage,
               status:
                 evt.stage === 'error'
                   ? 'error'
@@ -563,7 +594,7 @@ export const createStreamSlice: ChatSliceCreator<
               error: evt.error as string | undefined,
               summary: evt.summary as string | undefined,
               createdAt: idx === -1 ? Date.now() : list[idx].createdAt,
-              details: detailPayload ? { ...detailPayload } : list[idx]?.details,
+              details: Object.keys(mergedDetails ?? {}).length > 0 ? mergedDetails : undefined,
             }
             if (idx === -1) {
               list.push(next)
@@ -571,9 +602,7 @@ export const createStreamSlice: ChatSliceCreator<
               list[idx] = {
                 ...list[idx],
                 ...next,
-                details: detailPayload
-                  ? { ...(list[idx].details ?? {}), ...detailPayload }
-                  : list[idx].details,
+                details: next.details,
               }
             }
             runtime.snapshotDebug('tool:add', {
