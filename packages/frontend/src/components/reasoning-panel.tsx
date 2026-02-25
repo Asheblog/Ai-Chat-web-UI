@@ -34,21 +34,14 @@ interface ActivityDomain {
 }
 
 interface ThoughtSegment {
-  title: string
-  description?: string
+  text: string
 }
-
-const PLANNING_KEYWORDS = ['目标', '计划', '先', '首先', '为了', '需要', 'i need', 'plan', 'goal']
-const EXECUTION_KEYWORDS = ['搜索', '检索', '读取', '调用', '工具', '联网', 'search', 'query', 'tool', 'read']
-const FINDING_KEYWORDS = ['了解到', '发现', '结果', '关键信息', '要点', '数据', '证据', 'found', 'key']
-const SYNTHESIS_KEYWORDS = ['总结', '综合', '整理', '结论', '最终', '回答', 'synth', 'final', 'answer']
 
 type ActivityItem =
   | {
       id: string
       kind: 'thought'
-      title: string
-      description?: string
+      text: string
     }
   | {
       id: string
@@ -190,109 +183,145 @@ const normalizeReasoningText = (reasoningRaw: string) =>
     .join('\n')
     .trim()
 
-const splitReasoningSentences = (normalized: string): string[] =>
-  normalized
-    .split('\n')
-    .flatMap((line) => line.split(/(?<=[。！？.!?])\s+/))
-    .map((line) => line.replace(/\s+/g, ' ').trim())
-    .filter((line) => line.length > 0)
+const splitByBoundaries = (text: string, boundaries: number[]): string[] => {
+  if (!text.trim()) return []
+  const pickNaturalBoundary = (target: number) => {
+    const maxOffset = Math.min(80, Math.floor(text.length / 3))
+    const isBreakToken = (char: string) =>
+      char === '\n' ||
+      char === '。' ||
+      char === '！' ||
+      char === '？' ||
+      char === '.' ||
+      char === '!' ||
+      char === '?' ||
+      char === ';' ||
+      char === '；'
 
-const containsAnyKeyword = (sentence: string, keywords: string[]) => {
-  const lowered = sentence.toLowerCase()
-  return keywords.some((keyword) => lowered.includes(keyword))
-}
-
-const pickSentencesByKeywords = (sentences: string[], keywords: string[], limit = 2): string[] => {
-  const picked: string[] = []
-  for (const sentence of sentences) {
-    if (!containsAnyKeyword(sentence, keywords)) continue
-    if (picked.some((item) => item === sentence)) continue
-    picked.push(clampText(sentence, 120))
-    if (picked.length >= limit) break
+    for (let offset = 0; offset <= maxOffset; offset += 1) {
+      const right = target + offset
+      if (right > 0 && right < text.length && isBreakToken(text[right])) {
+        return right + 1
+      }
+      const left = target - offset
+      if (left > 1 && left < text.length && isBreakToken(text[left - 1])) {
+        return left
+      }
+    }
+    return target
   }
-  return picked
+
+  const points = Array.from(
+    new Set(boundaries.map((value) => pickNaturalBoundary(value)).filter((value) => value > 0 && value < text.length)),
+  ).sort((a, b) => a - b)
+  if (points.length === 0) return [text.trim()]
+
+  const chunks: string[] = []
+  let start = 0
+  points.forEach((point) => {
+    const chunk = text.slice(start, point).trim()
+    if (chunk) chunks.push(chunk)
+    start = point
+  })
+  const tail = text.slice(start).trim()
+  if (tail) chunks.push(tail)
+  return chunks
 }
 
-const createThoughtSegment = (title: string, source: string[]): ThoughtSegment => {
-  const cleanedTitle = clampText(title.replace(/[：:]\s*$/, '').trim(), 64)
-  const merged = source
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-    .join(' ')
-  return {
-    title: cleanedTitle,
-    description: merged.length > 0 ? clampText(merged, 240) : undefined,
+const collectToolBoundaryMarkers = (events: ToolEvent[]): string[] => {
+  const markers: string[] = []
+  const seen = new Set<string>()
+  const sorted = events.slice().sort((a, b) => a.createdAt - b.createdAt)
+
+  sorted.forEach((event) => {
+    const candidates: string[] = []
+    if (typeof event.query === 'string') candidates.push(event.query)
+    if (typeof event.summary === 'string') candidates.push(event.summary)
+    if (event.details && typeof event.details === 'object') {
+      const url = event.details.url
+      const title = event.details.title
+      const input = event.details.input
+      if (typeof url === 'string') candidates.push(url)
+      if (typeof title === 'string') candidates.push(title)
+      if (typeof input === 'string') candidates.push(input)
+    }
+
+    candidates.forEach((candidate) => {
+      const normalized = candidate.replace(/\s+/g, ' ').trim()
+      if (normalized.length < 4) return
+      const token = normalized.length > 48 ? normalized.slice(0, 48) : normalized
+      const lowered = token.toLowerCase()
+      if (seen.has(lowered)) return
+      seen.add(lowered)
+      markers.push(token)
+    })
+  })
+
+  return markers
+}
+
+const findBoundariesByMarkers = (
+  text: string,
+  markers: string[],
+  maxBoundaries: number,
+): number[] => {
+  if (markers.length === 0 || maxBoundaries <= 0) return []
+  const boundaries: number[] = []
+  let cursor = 0
+  const minGap = 36
+
+  for (const marker of markers) {
+    if (boundaries.length >= maxBoundaries) break
+    const index = text.indexOf(marker, cursor)
+    if (index < 0) continue
+    if (index - cursor < minGap) {
+      cursor = index + marker.length
+      continue
+    }
+    boundaries.push(index)
+    cursor = index + marker.length
   }
+  return boundaries
 }
 
-const extractHeadingSegment = (normalized: string): ThoughtSegment | null => {
-  const lines = normalized
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-  const headingLine = lines.find((line) => /[:：]$/.test(line) && line.length >= 8 && line.length <= 48)
-  if (!headingLine) return null
-  const heading = headingLine.replace(/[:：]\s*$/, '').trim()
-  const following = lines
-    .slice(lines.indexOf(headingLine) + 1)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return createThoughtSegment(heading, following ? [following] : [])
+const buildEvenBoundaries = (textLength: number, segmentCount: number): number[] => {
+  if (segmentCount <= 1 || textLength <= 1) return []
+  const boundaries = new Set<number>()
+  for (let i = 1; i < segmentCount; i += 1) {
+    const point = Math.floor((textLength * i) / segmentCount)
+    if (point > 0 && point < textLength) boundaries.add(point)
+  }
+  return Array.from(boundaries).sort((a, b) => a - b)
 }
 
 const buildThoughtSegments = (
   reasoningRaw: string,
   toolTimeline: ToolEvent[],
-  maxSegments = 4,
 ): ThoughtSegment[] => {
   const normalized = normalizeReasoningText(reasoningRaw)
   if (!normalized) return []
 
-  const sentences = splitReasoningSentences(normalized)
-  if (sentences.length === 0) return []
+  const sortedTools = toolTimeline.slice().sort((a, b) => a.createdAt - b.createdAt)
+  const expectedSegments = Math.max(1, sortedTools.length + 1)
+  let boundaries: number[] = []
 
-  const planning = pickSentencesByKeywords(sentences, PLANNING_KEYWORDS, 2)
-  const execution = pickSentencesByKeywords(sentences, EXECUTION_KEYWORDS, 2)
-  const findings = pickSentencesByKeywords(sentences, FINDING_KEYWORDS, 2)
-  const synthesis = pickSentencesByKeywords(sentences, SYNTHESIS_KEYWORDS, 1)
-  const headingSegment = extractHeadingSegment(normalized)
+  if (sortedTools.length > 0) {
+    const markers = collectToolBoundaryMarkers(sortedTools)
+    boundaries = findBoundariesByMarkers(normalized, markers, expectedSegments - 1)
 
-  const segments: ThoughtSegment[] = []
-
-  if (planning.length > 0) {
-    segments.push(createThoughtSegment('明确目标与策略', planning))
+    // 工具数量与分段数量不一致时，回退为均匀切片，确保“每次工具调用后进入下一段”
+    if (boundaries.length !== expectedSegments - 1) {
+      boundaries = buildEvenBoundaries(normalized.length, expectedSegments)
+    }
   }
 
-  if (execution.length > 0 || toolTimeline.length > 0) {
-    const webSearchCount = toolTimeline.filter((event) => event.tool === 'web_search').length
-    const title =
-      webSearchCount > 1
-        ? '并行检索多个来源'
-        : webSearchCount === 1
-          ? '检索关键来源'
-          : toolTimeline.length > 0
-            ? '调用工具收集信息'
-            : '执行信息收集'
-    const fallback = toolTimeline.length > 0 ? [`已触发 ${toolTimeline.length} 次工具调用，持续收集证据。`] : []
-    segments.push(createThoughtSegment(title, execution.length > 0 ? execution : fallback))
-  }
-
-  if (headingSegment) {
-    segments.push(headingSegment)
-  } else if (findings.length > 0) {
-    segments.push(createThoughtSegment('提炼关键发现', findings))
-  }
-
-  if (synthesis.length > 0) {
-    segments.push(createThoughtSegment('组织最终回答', synthesis))
-  }
-
-  if (segments.length === 0) {
-    segments.push(createThoughtSegment('整理思考过程', [sentences.slice(0, 3).join(' ')]))
-  }
-
-  return segments.slice(0, maxSegments)
+  const chunks = splitByBoundaries(normalized, boundaries)
+  const segments = chunks
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0)
+    .map((chunk) => ({ text: chunk }))
+  if (segments.length > 0) return segments
+  return [{ text: normalized }]
 }
 
 const uniqueDomains = (domains: ActivityDomain[]) => {
@@ -465,45 +494,55 @@ function ReasoningPanelComponent({
 
   const activityItems = useMemo(() => {
     const items: ActivityItem[] = []
+    const sortedTools = toolTimeline.slice().sort((a, b) => a.createdAt - b.createdAt)
 
-    if (thoughtSegments.length > 0) {
-      items.push({
-        id: 'thought-0',
-        kind: 'thought',
-        title: thoughtSegments[0].title,
-        description: thoughtSegments[0].description,
-      })
-    }
-
-    toolTimeline.forEach((event) => {
-      const pythonCall = event.tool === 'python_runner' ? pythonCallMap.get(event.id) : undefined
-      const item: ActivityItem = {
-        id: `tool-${event.id}`,
-        kind: 'tool',
-        tool: event.tool,
-        status: normalizeToolStatus(event),
-        title: resolveToolTitle(event, pythonCall),
-        description: resolveToolDescription(event, pythonCall),
-        domains: resolveDomainsForEvent(event),
-        canOpenPythonDetail: Boolean(
-          event.tool === 'python_runner' &&
-            pythonCall &&
-            (pythonCall.status === 'success' || pythonCall.status === 'error'),
-        ),
-        pythonCallId: pythonCall?.id,
-      }
-      items.push(item)
-    })
-
-    if (thoughtSegments.length > 1) {
-      thoughtSegments.slice(1).forEach((segment, index) => {
+    if (sortedTools.length === 0) {
+      thoughtSegments.forEach((segment, index) => {
         items.push({
-          id: `thought-tail-${index}`,
+          id: `thought-only-${index}`,
           kind: 'thought',
-          title: segment.title,
-          description: segment.description,
+          text: segment.text,
         })
       })
+    } else {
+      sortedTools.forEach((event, index) => {
+        const thought = thoughtSegments[index]
+        if (thought) {
+          items.push({
+            id: `thought-${index}`,
+            kind: 'thought',
+            text: thought.text,
+          })
+        }
+
+        const pythonCall = event.tool === 'python_runner' ? pythonCallMap.get(event.id) : undefined
+        const item: ActivityItem = {
+          id: `tool-${event.id}`,
+          kind: 'tool',
+          tool: event.tool,
+          status: normalizeToolStatus(event),
+          title: resolveToolTitle(event, pythonCall),
+          description: resolveToolDescription(event, pythonCall),
+          domains: resolveDomainsForEvent(event),
+          canOpenPythonDetail: Boolean(
+            event.tool === 'python_runner' &&
+              pythonCall &&
+              (pythonCall.status === 'success' || pythonCall.status === 'error'),
+          ),
+          pythonCallId: pythonCall?.id,
+        }
+        items.push(item)
+      })
+
+      if (thoughtSegments.length > sortedTools.length) {
+        thoughtSegments.slice(sortedTools.length).forEach((segment, index) => {
+          items.push({
+            id: `thought-tail-${index}`,
+            kind: 'thought',
+            text: segment.text,
+          })
+        })
+      }
     }
 
     if (items.length === 0) {
@@ -511,18 +550,16 @@ function ReasoningPanelComponent({
         items.push({
           id: 'thought-idle',
           kind: 'thought',
-          title: '正在思考当前问题',
-          description:
+          text:
             typeof idleMs === 'number' && idleMs > 0
-              ? `已静默 ${Math.round(idleMs / 1000)} 秒，模型仍在处理。`
-              : '模型正在组织答案。',
+              ? `正在思考当前问题（已静默 ${Math.round(idleMs / 1000)} 秒）`
+              : '正在思考当前问题',
         })
       } else if (status === 'streaming') {
         items.push({
           id: 'thought-streaming',
           kind: 'thought',
-          title: '正在整理输出结果',
-          description: '稍后将展示完整活动轨迹。',
+          text: '正在整理输出结果，稍后将展示完整活动轨迹。',
         })
       }
     }
@@ -600,10 +637,7 @@ function ReasoningPanelComponent({
                   <div key={item.id} role="listitem" className="reasoning-activity-item">
                     <div className="reasoning-activity-item__dot" aria-hidden="true" />
                     <div className="reasoning-activity-item__body">
-                      <p className="reasoning-activity-item__title">{item.title}</p>
-                      {item.description && (
-                        <p className="reasoning-activity-item__description">{item.description}</p>
-                      )}
+                      <p className="reasoning-activity-item__description">{item.text}</p>
                     </div>
                   </div>
                 )
