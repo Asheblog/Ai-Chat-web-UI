@@ -45,9 +45,39 @@ configure_docker_socket_access() {
   if ! id -nG backend | tr ' ' '\n' | grep -Fxq "$socket_group"; then
     usermod -a -G "$socket_group" backend >/dev/null 2>&1 || true
   fi
+
+  echo "[entrypoint] Docker socket group: gid=$socket_gid name=$socket_group"
+}
+
+verify_workspace_docker_ready() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ ! -S "$DOCKER_SOCKET_PATH" ]; then
+    return 0
+  fi
+
+  local verifier=""
+  if command -v su-exec >/dev/null 2>&1; then
+    verifier="su-exec backend"
+  elif command -v gosu >/dev/null 2>&1; then
+    verifier="gosu backend"
+  fi
+
+  if [ -z "$verifier" ]; then
+    echo "[entrypoint] WARN: 无法切换到 backend 用户验证 Docker 权限，请手动检查" >&2
+    return 0
+  fi
+
+  if sh -c "$verifier docker version --format '{{.Server.Version}}' >/dev/null 2>&1"; then
+    echo "[entrypoint] Workspace Docker readiness check passed"
+  else
+    echo "[entrypoint] WARN: backend 用户无法访问 Docker，请检查 /var/run/docker.sock 权限" >&2
+  fi
 }
 
 configure_docker_socket_access
+verify_workspace_docker_ready
 
 if [ -z "${CHAT_IMAGE_DIR:-}" ]; then
   export CHAT_IMAGE_DIR="$IMAGE_DIR_DEFAULT"
@@ -181,11 +211,11 @@ try_resolve_restore_user_profile_migration() {
 
 run_as_backend() {
   if command -v su-exec >/dev/null 2>&1; then
-    su-exec backend:nodejs "$@"
+    su-exec backend "$@"
     return 0
   fi
   if command -v gosu >/dev/null 2>&1; then
-    gosu backend:nodejs "$@"
+    gosu backend "$@"
     return 0
   fi
   "$@"
@@ -242,9 +272,9 @@ fi
 
 echo "[entrypoint] Starting backend service..."
 if command -v su-exec >/dev/null 2>&1; then
-  exec su-exec backend:nodejs node dist/index.js
+  exec su-exec backend node dist/index.js
 elif command -v gosu >/dev/null 2>&1; then
-  exec gosu backend:nodejs node dist/index.js
+  exec gosu backend node dist/index.js
 else
   echo "[entrypoint] WARN: su-exec/gosu not found, running as root" >&2
   exec node dist/index.js
