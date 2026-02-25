@@ -7,6 +7,7 @@ import { createLogger } from '../../utils/logger'
 const DOCKER_CHECK_CACHE_MS = 30_000
 const DOCKER_MOUNT_CACHE_MS = 30_000
 const log = createLogger('WorkspaceDocker')
+const runtimeContainerUser = resolveRuntimeContainerUser()
 
 const buildOutputCollector = (limit: number) => {
   const chunks: Buffer[] = []
@@ -126,6 +127,12 @@ export class DockerExecutor {
       '--volume',
       `${dockerWorkspaceRoot}:/workspace`,
     ]
+
+    // Keep file ownership/permissions consistent with the backend process user.
+    // This avoids venv init/write failures under userns-remap and rootless daemon setups.
+    if (runtimeContainerUser) {
+      args.push('--user', runtimeContainerUser)
+    }
 
     if (options.networkMode === 'none') {
       args.push('--network', 'none')
@@ -343,6 +350,24 @@ const isSafeRelativePath = (relativePath: string) => {
 const isPathWithin = (targetPath: string, parentPath: string) => {
   const relative = path.relative(parentPath, targetPath)
   return isSafeRelativePath(relative)
+}
+
+function resolveRuntimeContainerUser(): string | null {
+  const uidGetter = (process as NodeJS.Process & { getuid?: () => number }).getuid
+  const gidGetter = (process as NodeJS.Process & { getgid?: () => number }).getgid
+  if (typeof uidGetter !== 'function' || typeof gidGetter !== 'function') {
+    return null
+  }
+  try {
+    const uid = uidGetter.call(process)
+    const gid = gidGetter.call(process)
+    if (Number.isInteger(uid) && Number.isInteger(gid) && uid >= 0 && gid >= 0) {
+      return `${uid}:${gid}`
+    }
+  } catch {
+    return null
+  }
+  return null
 }
 
 let dockerExecutor = new DockerExecutor()
