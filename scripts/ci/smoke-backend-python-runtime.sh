@@ -54,6 +54,9 @@ if ! curl -fsS "${BASE_URL}/api/settings/health" >/dev/null; then
   exit 1
 fi
 
+echo "[smoke] verifying git availability in backend container"
+docker exec "$CONTAINER_NAME" git --version >/dev/null
+
 echo "[smoke] logging in with bootstrap admin"
 LOGIN_RESPONSE="$(curl -fsS \
   -X POST "${BASE_URL}/api/auth/login" \

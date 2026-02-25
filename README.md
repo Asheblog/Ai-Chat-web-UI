@@ -183,6 +183,7 @@ Artifact 下载策略：
 容器化部署前置条件（如 1Panel / Docker Compose）：
 
 - backend 容器内必须存在 `docker` CLI（官方 backend 镜像已内置）
+- backend 容器内必须存在 `git` CLI（用于 `workspace_git_clone`，官方 backend 镜像已内置）
 - backend 服务需要挂载宿主机 socket：`/var/run/docker.sock:/var/run/docker.sock`
 - 若未满足上述条件，`python_runner` 将返回 `WORKSPACE_DOCKER_UNAVAILABLE`（503）
 
