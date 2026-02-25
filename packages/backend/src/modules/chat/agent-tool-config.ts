@@ -44,6 +44,16 @@ export interface AgentUrlReaderConfig {
   maxContentLength: number;
 }
 
+/**
+ * Workspace 工具配置
+ */
+export interface AgentWorkspaceToolConfig {
+  enabled: boolean;
+  listMaxEntries: number;
+  readMaxChars: number;
+  gitCloneTimeoutMs: number;
+}
+
 const WEB_SEARCH_SCOPES = ['webpage', 'document', 'paper', 'image', 'video', 'podcast'] as const;
 
 /**
@@ -117,43 +127,38 @@ export const buildAgentWebSearchConfig = (
  * 构建 Python 工具配置
  */
 export const buildAgentPythonToolConfig = (
-  sysMap: Record<string, string>,
+  _sysMap: Record<string, string>,
   env: NodeJS.ProcessEnv = process.env
 ): AgentPythonToolConfig => {
-  const enabled = parseBooleanSetting(
-    sysMap.python_tool_enable ?? env.PYTHON_TOOL_ENABLE,
-    false
-  );
-
-  const getConfigValue = (sysValue: string | undefined, envKey: string): string | undefined => {
-    return sysValue ?? env[envKey];
-  };
+  // BREAKING: python_tool_* 旧配置不再作为聊天侧执行控制项；
+  // Python 执行统一走 workspace 沙箱。
+  const enabled = true;
 
   const timeoutMs = clampNumber(
     parseNumberSetting(
-      getConfigValue(sysMap.python_tool_timeout_ms, 'PYTHON_TOOL_TIMEOUT_MS'),
-      { fallback: 8000 }
+      env.WORKSPACE_RUN_TIMEOUT_MS,
+      { fallback: 120000 }
     ),
     1000,
-    60000
+    10 * 60 * 1000
   );
 
   const maxOutputChars = clampNumber(
     parseNumberSetting(
-      getConfigValue(sysMap.python_tool_max_output_chars, 'PYTHON_TOOL_MAX_OUTPUT_CHARS'),
-      { fallback: 4000 }
+      env.WORKSPACE_READ_MAX_CHARS,
+      { fallback: 120000 }
     ),
     256,
-    20000
+    2_000_000
   );
 
   const maxSourceChars = clampNumber(
     parseNumberSetting(
-      getConfigValue(sysMap.python_tool_max_source_chars, 'PYTHON_TOOL_MAX_SOURCE_CHARS'),
-      { fallback: 4000 }
+      env.WORKSPACE_READ_MAX_CHARS,
+      { fallback: 120000 }
     ),
     256,
-    20000
+    2_000_000
   );
 
   return {
@@ -192,5 +197,52 @@ export const buildAgentUrlReaderConfig = (
   return {
     timeout,
     maxContentLength,
+  };
+};
+
+/**
+ * 构建 Workspace 工具配置
+ */
+export const buildAgentWorkspaceToolConfig = (
+  sysMap: Record<string, string>,
+  env: NodeJS.ProcessEnv = process.env,
+): AgentWorkspaceToolConfig => {
+  const enabled = parseBooleanSetting(
+    sysMap.workspace_tool_enable ?? env.WORKSPACE_TOOL_ENABLE,
+    true,
+  );
+
+  const listMaxEntries = clampNumber(
+    parseNumberSetting(
+      env.WORKSPACE_LIST_MAX_ENTRIES,
+      { fallback: 500 },
+    ),
+    10,
+    5000,
+  );
+
+  const readMaxChars = clampNumber(
+    parseNumberSetting(
+      env.WORKSPACE_READ_MAX_CHARS,
+      { fallback: 120000 },
+    ),
+    1024,
+    2_000_000,
+  );
+
+  const gitCloneTimeoutMs = clampNumber(
+    parseNumberSetting(
+      env.WORKSPACE_GIT_CLONE_TIMEOUT_MS,
+      { fallback: 120000 },
+    ),
+    5000,
+    10 * 60_000,
+  );
+
+  return {
+    enabled,
+    listMaxEntries,
+    readMaxChars,
+    gitCloneTimeoutMs,
   };
 };

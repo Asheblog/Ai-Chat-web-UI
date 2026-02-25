@@ -74,6 +74,7 @@ function MessageBubbleComponent({
   const [editDraft, setEditDraft] = useState('')
   const [editApplying, setEditApplying] = useState(false)
   const reasoningRaw = body.reasoning || ''
+  const artifacts = body.artifacts ?? meta.artifacts ?? []
   const reasoningPlayedLength =
     typeof body.reasoningPlayedLength === 'number'
       ? body.reasoningPlayedLength
@@ -263,6 +264,12 @@ function MessageBubbleComponent({
 
   const shareBadgePosition = isUser ? 'right-3' : 'left-3'
   const canEdit = Boolean(isUser && canEditUserMessage && !shareModeActive && !isStreaming)
+  const formatBytes = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes < 0) return '--'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  }
 
   return (
     <div className={`relative ${selectionWrapperClass}`}>
@@ -303,6 +310,43 @@ function MessageBubbleComponent({
             isStreaming={Boolean(isStreaming)}
             isRendering={isRendering}
           />
+
+          {!isUser && artifacts.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {artifacts.map((artifact) => {
+                const expiresAt = artifact.expiresAt ? new Date(artifact.expiresAt) : null
+                const expired =
+                  Boolean(artifact.expired) ||
+                  (expiresAt ? expiresAt.getTime() <= Date.now() : false)
+                return (
+                  <div
+                    key={artifact.id}
+                    className="rounded-md border bg-muted/30 px-3 py-2 text-xs flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{artifact.fileName}</div>
+                      <div className="text-muted-foreground">
+                        {formatBytes(artifact.sizeBytes)} ·
+                        {expiresAt ? ` 过期于 ${formatDate(expiresAt.toISOString())}` : ' 无过期时间'}
+                      </div>
+                    </div>
+                    {expired ? (
+                      <span className="text-muted-foreground">已过期</span>
+                    ) : (
+                      <a
+                        className="text-primary hover:underline whitespace-nowrap"
+                        href={artifact.downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        下载
+                      </a>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <MessageHeader
             isUser={isUser}

@@ -14,6 +14,9 @@ import type {
 import { WebSearchToolHandler } from './web-search-handler'
 import { PythonToolHandler } from './python-handler'
 import { UrlReaderToolHandler } from './url-reader-handler'
+import { WorkspaceGitCloneToolHandler } from './workspace-git-clone-handler'
+import { WorkspaceListFilesToolHandler } from './workspace-list-files-handler'
+import { WorkspaceReadTextToolHandler } from './workspace-read-text-handler'
 import {
   DocumentToolHandlerAdapter,
   documentToolNames,
@@ -155,6 +158,13 @@ export function createToolHandlerRegistry(
   // 注册 Python 处理器
   if (params.python?.enabled) {
     registry.register(new PythonToolHandler(params.python))
+  }
+
+  // 注册 Workspace 工具处理器
+  if (params.workspace?.enabled) {
+    registry.register(new WorkspaceGitCloneToolHandler(params.workspace))
+    registry.register(new WorkspaceListFilesToolHandler(params.workspace))
+    registry.register(new WorkspaceReadTextToolHandler(params.workspace))
   }
 
   // 注册文档处理器

@@ -58,9 +58,13 @@ async function initSqliteCompatibility(): Promise<void> {
     // 使用 $queryRawUnsafe 因为 PRAGMA 会返回结果
     await prisma.$queryRawUnsafe(`PRAGMA journal_mode = ${journalMode}`)
     await prisma.$queryRawUnsafe(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`)
-    console.log(`[Prisma] SQLite PRAGMA applied (${journalMode}, busy_timeout=${SQLITE_BUSY_TIMEOUT_MS}ms)`)
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[Prisma] SQLite PRAGMA applied (${journalMode}, busy_timeout=${SQLITE_BUSY_TIMEOUT_MS}ms)`)
+    }
   } catch (e) {
-    console.warn('[Prisma] Failed to set SQLite PRAGMA:', (e as Error)?.message || e)
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[Prisma] Failed to set SQLite PRAGMA:', (e as Error)?.message || e)
+    }
   }
 }
 

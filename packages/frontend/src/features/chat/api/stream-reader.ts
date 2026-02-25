@@ -71,7 +71,7 @@ export async function* parseEventStream(
   }
 }
 
-const normalizeChunk = (payload: any): ChatStreamChunk | null => {
+export const normalizeChunk = (payload: any): ChatStreamChunk | null => {
   if (payload?.type === 'content' && payload.content) {
     return { type: 'content', content: payload.content }
   }
@@ -120,6 +120,13 @@ const normalizeChunk = (payload: any): ChatStreamChunk | null => {
     return {
       type: 'image',
       generatedImages: payload.generatedImages,
+      messageId: payload.messageId,
+    }
+  }
+  if (payload?.type === 'artifact' && Array.isArray(payload.artifacts)) {
+    return {
+      type: 'artifact',
+      artifacts: payload.artifacts,
       messageId: payload.messageId,
     }
   }

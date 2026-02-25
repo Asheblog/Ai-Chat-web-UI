@@ -26,6 +26,8 @@ import { getDocumentServices } from './services/document-services-factory';
 import { setRAGInitializerDeps, reloadRAGServices } from './services/rag-initializer';
 import { createSystemLogsApi } from './api/system-logs';
 import { createSkillsApi } from './api/skills';
+import { createArtifactsApi } from './api/artifacts';
+import { workspaceCleanupService } from './services/workspace/workspace-cleanup-service';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -100,6 +102,7 @@ app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 // 系统日志路由
 app.route('/api/system-logs', createSystemLogsApi());
 app.route('/api/skills', createSkillsApi());
+app.route('/api/artifacts', createArtifactsApi());
 
 app.route(
   '/v1',
@@ -162,6 +165,11 @@ app.get('/api', (c) => {
         'GET /api/chat/usage?sessionId={id}': '查询会话用量聚合',
         'GET /api/chat/sessions/usage': '查询当前用户所有会话用量聚合',
         'GET /api/chat/usage/daily?from&to&sessionId': '按日统计用量（导出报表）',
+        'GET /api/chat/sessions/:sessionId/artifacts?messageId=': '列出会话产物',
+        'DELETE /api/chat/sessions/:sessionId/workspace': '销毁会话 workspace',
+      },
+      artifacts: {
+        'GET /api/artifacts/:id/download?exp=&sig=': '下载会话产物（带签名与过期校验）',
       },
       settings: {
         'GET /api/settings/system': '获取系统设置（管理员）',
@@ -230,6 +238,7 @@ setModelCatalogTtlSeconds(appContext.config.modelCatalog.ttlSeconds);
 const stopCatalogRefresh = scheduleModelCatalogAutoRefresh({
   refreshIntervalMs: appContext.config.modelCatalog.refreshIntervalMs,
 });
+workspaceCleanupService.start();
 
 // 启动服务器
 // 端口解析：优先 PORT，其次兼容 BACKEND_PORT，最后回退 8001（统一本地/容器内行为）
@@ -259,6 +268,7 @@ process.on('SIGINT', async () => {
   console.log('\n🔄 Gracefully shutting down...');
   try { stopCatalogRefresh(); } catch {}
   try { getDocumentServices()?.cleanupScheduler.stop(); } catch {}
+  try { workspaceCleanupService.stop(); } catch {}
   process.exit(0);
 });
 
@@ -266,6 +276,7 @@ process.on('SIGTERM', async () => {
   console.log('\n🔄 Gracefully shutting down...');
   try { stopCatalogRefresh(); } catch {}
   try { getDocumentServices()?.cleanupScheduler.stop(); } catch {}
+  try { workspaceCleanupService.stop(); } catch {}
   process.exit(0);
 });
 

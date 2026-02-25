@@ -93,6 +93,7 @@ export interface ToolHandlerFactoryParams {
   document?: DocumentHandlerConfig | null
   knowledgeBase?: KnowledgeBaseHandlerConfig | null
   urlReader?: UrlReaderHandlerConfig | null
+  workspace?: WorkspaceHandlerConfig | null
 }
 
 /**
@@ -118,6 +119,16 @@ export interface PythonHandlerConfig {
   timeoutMs: number
   maxOutputChars: number
   maxSourceChars: number
+}
+
+/**
+ * Workspace 工具配置
+ */
+export interface WorkspaceHandlerConfig {
+  enabled: boolean
+  listMaxEntries: number
+  readMaxChars: number
+  gitCloneTimeoutMs: number
 }
 
 /**

@@ -679,6 +679,60 @@ export const createStreamSlice: ChatSliceCreator<
           continue
         }
 
+        if (evt?.type === 'artifact' && Array.isArray(evt.artifacts) && evt.artifacts.length > 0) {
+          set((state) => {
+            const assistantKey = messageKey(active.assistantId)
+            const mergeArtifacts = (
+              previous: import('@/types').WorkspaceArtifact[] | undefined,
+              incoming: import('@/types').WorkspaceArtifact[],
+            ) => {
+              const merged = new Map<number, import('@/types').WorkspaceArtifact>()
+              for (const item of previous || []) {
+                if (typeof item?.id === 'number') {
+                  merged.set(item.id, item)
+                }
+              }
+              for (const item of incoming) {
+                if (typeof item?.id === 'number') {
+                  merged.set(item.id, item)
+                }
+              }
+              return Array.from(merged.values())
+            }
+
+            const prevBody = state.messageBodies[assistantKey]
+            const nextArtifacts = mergeArtifacts(
+              prevBody?.artifacts,
+              evt.artifacts as import('@/types').WorkspaceArtifact[],
+            )
+
+            const metaIndex = state.messageMetas.findIndex((meta) => messageKey(meta.id) === assistantKey)
+            const nextMetas = metaIndex === -1 ? state.messageMetas : state.messageMetas.slice()
+            if (metaIndex !== -1) {
+              nextMetas[metaIndex] = {
+                ...nextMetas[metaIndex],
+                artifacts: nextArtifacts,
+              }
+            }
+
+            const nextBodies = prevBody
+              ? {
+                  ...state.messageBodies,
+                  [assistantKey]: {
+                    ...prevBody,
+                    artifacts: nextArtifacts,
+                  },
+                }
+              : state.messageBodies
+
+            return {
+              messageMetas: nextMetas,
+              messageBodies: nextBodies,
+            }
+          })
+          continue
+        }
+
         if (evt?.type === 'content' && evt.content) {
           if (!active.firstChunkAt) {
             active.firstChunkAt = Date.now()

@@ -451,12 +451,18 @@ export interface CreateSkillRegistryParams {
   sessionId: number
   actorUserId?: number | null
   battleRunId?: number | null
+  allowDynamicRuntime?: boolean
 }
 
 export async function createSkillRegistry(params: CreateSkillRegistryParams): Promise<ToolHandlerRegistry> {
   const prisma = params.prisma ?? defaultPrisma
   const requested = normalizeRequestedSkills(params.requestedSkills)
   const registry = createToolHandlerRegistry(params.builtins)
+  const allowDynamicRuntime = params.allowDynamicRuntime !== false
+
+  if (!allowDynamicRuntime) {
+    return registry
+  }
 
   const dynamicSkillSlugs = requested.enabled.filter((slug) => !isBuiltinSkill(slug))
   if (dynamicSkillSlugs.length === 0) {

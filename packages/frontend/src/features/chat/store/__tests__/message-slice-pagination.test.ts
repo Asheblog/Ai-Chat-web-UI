@@ -5,6 +5,7 @@ import type { ChatSession, Message } from '@/types'
 
 vi.mock('@/features/chat/api', () => ({
   getMessages: vi.fn(),
+  getSessionArtifacts: vi.fn(),
   updateUserMessage: vi.fn(),
 }))
 
@@ -33,6 +34,7 @@ const buildMessages = (start: number, end: number, sessionId = 1): Message[] =>
 describe('message slice pagination', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(chatApi.getSessionArtifacts).mockResolvedValue([])
   })
 
   it('fetchMessages should default to latest page and mark hasOlder', async () => {

@@ -149,7 +149,7 @@ export class ChatRequestBuilder {
       systemPrompts.push({
         role: 'system',
         content:
-          '只有在需要精确计算或表格/数组等结构化处理时，才调用 python_runner。请提供简短、确定性的 Python3 代码，并通过 print() 输出最终答案。避免执行危险操作或访问文件系统。若结果不足，可继续调用 python_runner。',
+          '你拥有会话级独立 workspace 工具链：python_runner、workspace_git_clone、workspace_list_files、workspace_read_text。生成可下载文件时请写入 /workspace/artifacts（例如 report.xlsx、report.pdf）。需要分析代码仓库时先用 workspace_git_clone 克隆到 /workspace/repos，再用 workspace_list_files / workspace_read_text 浏览。Python 运行在隔离沙箱中，优先使用简短、确定性代码，并通过 print() 输出关键信息。',
       })
     }
 

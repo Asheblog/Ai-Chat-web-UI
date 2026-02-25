@@ -1,4 +1,4 @@
-import { getMessages, updateUserMessage } from '@/features/chat/api'
+import { getMessages, getSessionArtifacts, updateUserMessage } from '@/features/chat/api'
 import type { Message } from '@/types'
 import type { MessageSlice } from '../types'
 import type { ChatSliceCreator, MessageId } from '../types'
@@ -121,7 +121,31 @@ export const createMessageSlice: ChatSliceCreator<
 
       const cache = get().messageImageCache
       const rawMessages = Array.isArray(response.data) ? response.data : []
-      const normalized = rawMessages.map((msg) => mergeImages(msg, cache))
+      const artifactGroups = new Map<number, import('@/types').WorkspaceArtifact[]>()
+      try {
+        const artifacts = await getSessionArtifacts(sessionId)
+        for (const artifact of artifacts) {
+          const messageId = typeof artifact.messageId === 'number' ? artifact.messageId : null
+          if (!messageId) continue
+          const list = artifactGroups.get(messageId) ?? []
+          list.push(artifact)
+          artifactGroups.set(messageId, list)
+        }
+      } catch {
+        // ignore artifact restore failures to avoid blocking message loading
+      }
+
+      const normalized = rawMessages.map((msg) => {
+        const merged = mergeImages(msg, cache)
+        const messageId = typeof merged.id === 'number' ? merged.id : null
+        if (!messageId) return merged
+        const artifacts = artifactGroups.get(messageId)
+        if (!artifacts || artifacts.length === 0) return merged
+        return {
+          ...merged,
+          artifacts,
+        }
+      })
 
       const nextCache = { ...cache }
       normalized.forEach((msg) => {

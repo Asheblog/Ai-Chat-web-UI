@@ -19,6 +19,7 @@ import {
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
   buildAgentUrlReaderConfig,
+  buildAgentWorkspaceToolConfig,
 } from '../../chat/agent-web-search-response';
 import { createImageGenerationResponse, checkImageGenerationCapability } from '../../chat/image-generation-response';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from '../../chat/assistant-message-service';
@@ -355,6 +356,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
       const pythonToolConfig = buildAgentPythonToolConfig(sysMap);
       const urlReaderConfig = buildAgentUrlReaderConfig(sysMap);
+      const workspaceToolConfig = buildAgentWorkspaceToolConfig(sysMap);
       const agentMaxToolIterations = (() => {
         const raw =
           sysMap.agent_max_tool_iterations ??
@@ -470,6 +472,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
         Boolean(agentWebSearchConfig.apiKey);
       const pythonToolActive =
         pythonSkillRequested && pythonToolConfig.enabled;
+      const workspaceToolsActive = pythonToolActive && workspaceToolConfig.enabled;
       const urlReaderActive = urlReaderSkillRequested;
       // 文档工具和知识库工具也需要进入 agent 模式
       const documentToolsActive = documentSkillRequested && hasSessionDocuments;
@@ -481,10 +484,34 @@ export const registerChatStreamRoutes = (router: Hono) => {
           BUILTIN_SKILL_SLUGS.DOCUMENT_SEARCH,
           BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH,
         ])
-      const dynamicSkillRequested = Array.from(requestedSkillSet).some((slug) => !builtinSkillSlugs.has(slug));
+      const dynamicSkillRequestedRaw = Array.from(requestedSkillSet).some((slug) => !builtinSkillSlugs.has(slug));
+      const dynamicSkillRequested = false;
+      const dynamicSkillDisabledMessage = '聊天侧动态 Skill 运行时已迁移，请使用 workspace 工具链（python_runner / workspace_*）';
+      if (dynamicSkillRequestedRaw) {
+        log.warn('[chat stream] dynamic skill runtime disabled in chat route', {
+          sessionId,
+          actor: actor.identifier,
+          requestedDynamicSkills: Array.from(requestedSkillSet).filter((slug) => !builtinSkillSlugs.has(slug)),
+        });
+      }
+      if (
+        dynamicSkillRequestedRaw &&
+        !agentWebSearchActive &&
+        !pythonToolActive &&
+        !workspaceToolsActive &&
+        !urlReaderActive &&
+        !documentToolsActive &&
+        !knowledgeBaseToolsActive
+      ) {
+        return c.json<ApiResponse>({
+          success: false,
+          error: dynamicSkillDisabledMessage,
+        }, 400);
+      }
       const agentToolsActive =
         agentWebSearchActive ||
         pythonToolActive ||
+        workspaceToolsActive ||
         urlReaderActive ||
         documentToolsActive ||
         knowledgeBaseToolsActive ||
@@ -529,6 +556,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
           connectionId: session.connectionId,
           skills: requestedSkills,
           agentWebSearchActive,
+          workspaceToolsActive,
           reasoningEnabled: effectiveReasoningEnabled,
           reasoningEffort: effectiveReasoningEffort,
           ollamaThink: effectiveOllamaThink,
@@ -610,11 +638,13 @@ export const registerChatStreamRoutes = (router: Hono) => {
           agentConfig: agentWebSearchConfig,
           pythonToolConfig,
           urlReaderConfig,
+          workspaceToolConfig,
           agentMaxToolIterations,
           requestedSkills,
           toolFlags: {
             webSearch: agentWebSearchActive,
             python: pythonToolActive,
+            workspace: workspaceToolsActive,
             urlReader: urlReaderActive,
             document: documentToolsActive,
             knowledgeBase: knowledgeBaseToolsActive,

@@ -20,6 +20,7 @@ export type {
   UrlReaderHandlerConfig,
   DocumentHandlerConfig,
   KnowledgeBaseHandlerConfig,
+  WorkspaceHandlerConfig,
   ToolLogDetails,
 } from './types'
 
@@ -27,6 +28,9 @@ export type {
 export { WebSearchToolHandler } from './web-search-handler'
 export { PythonToolHandler } from './python-handler'
 export { UrlReaderToolHandler } from './url-reader-handler'
+export { WorkspaceGitCloneToolHandler } from './workspace-git-clone-handler'
+export { WorkspaceListFilesToolHandler } from './workspace-list-files-handler'
+export { WorkspaceReadTextToolHandler } from './workspace-read-text-handler'
 export {
   DocumentToolHandlerAdapter,
   documentToolNames,

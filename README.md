@@ -154,55 +154,37 @@ Skill 管理相关 API 一览：
 - `GET /api/skills/approvals`
 - `POST /api/skills/approvals/:requestId/respond`
 
-### 9. Python 运行环境与在线依赖管理（BREAKING）
+### 9. Workspace Agent（会话级沙箱，BREAKING）
 
-系统已引入受管 Python 运行环境（持久化 venv），用于统一承载：
+聊天链路已切换为 **Workspace Agent 直替模式（无迁移、直接替换）**：
 
-- 内置 `python_runner`
-- 第三方 `runtime.type=python` Skill
+- 每个会话独立 workspace：`<APP_DATA_DIR>/workspaces/chat/<sessionId>/`
+- 目录固定：`input/`、`repos/`、`artifacts/`、`.venv/`、`.meta/`
+- `python_runner` 仅在 Docker 沙箱执行（无主机 fallback）
+- 内置 workspace 工具：`workspace_git_clone`、`workspace_list_files`、`workspace_read_text`
+- 生成可下载文件时写入 `/workspace/artifacts`，后端自动发布下载链接
 
-内置 Skill 依赖策略（无迁移、直接替换）：
+Artifact 下载策略：
 
-- `python-runner` 的默认科学计算依赖改为声明在内置 Skill manifest 的 `python_packages`
-- 容器启动时会自动同步内置 Skill 清单，并执行一次 Python runtime reconcile（可通过 `PYTHON_RUNTIME_RECONCILE_ON_START=false` 关闭）
-- 本地 `npm run start:dev` / `npm run start:prod` 也会执行一次同名 reconcile（同样受 `PYTHON_RUNTIME_RECONCILE_ON_START` 控制）
-- 首次冷启动可能因为依赖安装而变慢，具体耗时取决于网络与索引源速度
+- 下载接口：`GET /api/artifacts/:id/download?exp=&sig=`
+- 默认有效期 60 分钟（签名 + 过期校验）
+- 到期返回 `410 Gone`，清理器定时回收文件和记录
+- 会话可查询历史产物：`GET /api/chat/sessions/:sessionId/artifacts?messageId=`
+- 会话可手动销毁 workspace：`DELETE /api/chat/sessions/:sessionId/workspace`
 
-破坏性变更（无迁移、直接替换）：
+安全与隔离：
 
-- 移除并停用系统设置旧字段：`python_tool_command`、`python_tool_args`
-- Python 执行统一使用受管解释器，不再读取旧命令覆盖
+- 代码执行固定在 Docker（`--read-only` + `/workspace` 唯一可写卷）
+- 默认执行网络关闭（`--network none`），仅依赖安装阶段受控联网
+- 严格路径校验：禁止绝对路径、`..`、越界软链、非 `artifacts/` 发布
+- 超时/资源限制：CPU、内存、pids、执行超时全部强制
 
-受管运行环境路径：
+破坏性变更声明（无迁移、直接替换）：
 
-- `<APP_DATA_DIR|DATA_DIR|process.cwd()/data>/python-runtime/venv`
-- Docker 生产建议落在 `/app/data/python-runtime/venv`
-
-管理员可在“系统设置 -> Python 运行环境”进行在线管理：
-
-- 配置索引：`indexUrl` / `extraIndexUrls` / `trustedHosts`
-- 缺库自动安装开关：`autoInstallOnMissing`（默认开启，仅登录用户触发）
-- 手动安装：`POST /api/settings/python-runtime/install`
-- 手动卸载：`POST /api/settings/python-runtime/uninstall`（若被激活 Skill 依赖占用会阻断）
-- 运行一致性校验：`POST /api/settings/python-runtime/reconcile`
-- 状态查询：`GET /api/settings/python-runtime`
-
-Skill 依赖声明与激活策略：
-
-- Skill manifest 支持 `python_packages?: string[]`
-- 激活 Skill 版本时会按策略自动安装依赖并执行 `pip check`
-- 失败即阻断激活（硬失败）
-- 仅允许 PyPI 包名与版本约束，不支持 `git/url/path`
-- 运行时缺库会按策略自动尝试补装（最多 3 轮）：
-  - `python_runner` -> 安装来源 `python_auto`
-  - `runtime.type=python` Skill -> 安装来源 `skill_auto`
-- 运行环境状态会返回来源标签：`manual` / `skill_manifest` / `skill_auto` / `python_auto`
-- Docker 镜像不再预装科学计算 Python 包，统一由受管 venv 安装与治理
-
-持久化要求（关键）：
-
-- 必须保留 `/app/data` 持久卷，镜像重建后依赖仍可复用
-- 如果删除卷（如 `docker compose down -v`），受管 Python 环境与已安装包会一起丢失
+- 旧 `python_runner` 主机执行路径已下线
+- 旧 `python_tool_*` 主机执行配置（如 `python_tool_command`、`python_tool_args`）不再生效
+- 聊天侧动态第三方 Skill runtime 已禁用（请使用 workspace 工具链）
+- Battle 链路暂不接入 workspace，Battle 中 Python Skill 默认禁用
 
 ---
 

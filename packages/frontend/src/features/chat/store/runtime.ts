@@ -656,6 +656,7 @@ export const createChatStoreRuntime = (
 
   const applyServerMessageSnapshot = (message: Message) => {
     const normalizedToolEvents = normalizeToolEvents(message)
+    const normalizedArtifacts = Array.isArray(message.artifacts) ? message.artifacts : []
     const serverContentPayload = message.content || ''
     const reasoningPayload = message.reasoning ?? message.streamReasoning ?? ''
     const hasReasoningPayload = typeof reasoningPayload === 'string' && reasoningPayload.length > 0
@@ -693,6 +694,7 @@ export const createChatStoreRuntime = (
       const nextPlayedLength = hasReasoningPayload ? finalReasoningPayload.length : prevPlayedLength
       const playedChanged = nextPlayedLength !== prevPlayedLength
       const hasToolUpdates = normalizedToolEvents.length > 0
+      const hasArtifactUpdates = normalizedArtifacts.length > 0
 
       let nextBodies = state.messageBodies
       let nextRenderCache = state.messageRenderCache
@@ -734,7 +736,7 @@ export const createChatStoreRuntime = (
         return nextMetrics
       }
 
-      if (contentChanged || reasoningChanged || playedChanged || hasToolUpdates) {
+      if (contentChanged || reasoningChanged || playedChanged || hasToolUpdates || hasArtifactUpdates) {
         const bodies = ensureBodies()
         bodies[key] = {
           ...prevBody,
@@ -746,6 +748,7 @@ export const createChatStoreRuntime = (
           version: prevBody.version + (contentChanged ? 1 : 0),
           reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
           toolEvents: hasToolUpdates ? normalizedToolEvents : prevBody.toolEvents,
+          artifacts: hasArtifactUpdates ? normalizedArtifacts : prevBody.artifacts,
         }
         const cache = ensureRenderCache()
         delete cache[key]
@@ -790,6 +793,8 @@ export const createChatStoreRuntime = (
           nextReasoningStatus !== prevMeta.reasoningStatus ||
           nextReasoningDuration !== prevMeta.reasoningDurationSeconds ||
           nextReasoningIdle !== prevMeta.reasoningIdleMs ||
+          (hasArtifactUpdates &&
+            JSON.stringify(prevMeta.artifacts || []) !== JSON.stringify(normalizedArtifacts)) ||
           nextStableKey !== prevMeta.stableKey ||
           prevMeta.isPlaceholder ||
           prevMeta.pendingSync
@@ -802,6 +807,7 @@ export const createChatStoreRuntime = (
             reasoningStatus: nextReasoningStatus,
             reasoningDurationSeconds: nextReasoningDuration,
             reasoningIdleMs: nextReasoningIdle,
+            artifacts: hasArtifactUpdates ? normalizedArtifacts : prevMeta.artifacts,
             stableKey: nextStableKey,
             isPlaceholder: false,
             pendingSync: false,

@@ -150,8 +150,13 @@ export class BattleExecutor {
       webSearchConfig.enabled &&
       Boolean(webSearchConfig.apiKey)
     const pythonActive =
-      pythonRequested &&
-      pythonConfig.enabled
+      false
+    if (pythonRequested) {
+      this.logger?.warn?.('[battle] python skill is disabled in battle route', {
+        battleRunId: context.battleRunId,
+        modelKey: context.modelKey,
+      })
+    }
     const urlReaderActive = urlReaderRequested
     const builtinSkillSet = new Set<string>([
       BUILTIN_SKILL_SLUGS.WEB_SEARCH,

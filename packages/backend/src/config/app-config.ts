@@ -1,4 +1,5 @@
 import { loadStorageConfig, type StorageConfig } from './storage'
+import path from 'node:path'
 
 const parseBool = (value: string | undefined | null, defaultValue: boolean) => {
   if (value == null) return defaultValue
@@ -36,12 +37,33 @@ export interface ModelCatalogConfig {
   refreshIntervalMs: number
 }
 
+export interface WorkspaceConfig {
+  rootDir: string
+  artifactTtlMinutes: number
+  idleTtlMinutes: number
+  cleanupIntervalMs: number
+  maxWorkspaceBytes: number
+  maxArtifactBytes: number
+  maxArtifactsPerMessage: number
+  runTimeoutMs: number
+  dockerImage: string
+  dockerCpu: string
+  dockerMemory: string
+  dockerPidsLimit: number
+  artifactSigningSecret: string
+  listMaxEntries: number
+  readMaxChars: number
+  gitCloneTimeoutMs: number
+  pythonInstallTimeoutMs: number
+}
+
 export interface AppConfig {
   server: ServerConfig
   storage: StorageConfig
   chat: ChatConfig
   retry: RetryConfig
   modelCatalog: ModelCatalogConfig
+  workspace: WorkspaceConfig
 }
 
 export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
@@ -70,6 +92,65 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig =
     upstream5xxMs: 2_000,
   }
 
+  const appDataRoot = env.APP_DATA_DIR || env.DATA_DIR || path.resolve(process.cwd(), 'data')
+  const workspaceRootDir = path.resolve(
+    env.WORKSPACE_ROOT_DIR || path.join(appDataRoot, 'workspaces', 'chat'),
+  )
+  const artifactTtlMinutes = (() => {
+    const parsed = parseNumber(env.WORKSPACE_ARTIFACT_TTL_MINUTES, 60)
+    return Math.max(1, Math.min(parsed, 7 * 24 * 60))
+  })()
+  const idleTtlMinutes = (() => {
+    const parsed = parseNumber(env.WORKSPACE_IDLE_TTL_MINUTES, 1440)
+    return Math.max(5, Math.min(parsed, 30 * 24 * 60))
+  })()
+  const cleanupIntervalMs = (() => {
+    const parsed = parseNumber(env.WORKSPACE_CLEANUP_INTERVAL_MINUTES, 5)
+    return Math.max(1, parsed) * 60_000
+  })()
+  const maxWorkspaceBytes = (() => {
+    const parsed = parseNumber(env.WORKSPACE_MAX_BYTES, 1024 * 1024 * 1024)
+    return Math.max(1024 * 1024, parsed)
+  })()
+  const maxArtifactBytes = (() => {
+    const parsed = parseNumber(env.WORKSPACE_ARTIFACT_MAX_BYTES, 100 * 1024 * 1024)
+    return Math.max(1024 * 1024, parsed)
+  })()
+  const maxArtifactsPerMessage = (() => {
+    const parsed = parseNumber(env.WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE, 20)
+    return Math.max(1, Math.min(parsed, 100))
+  })()
+  const runTimeoutMs = (() => {
+    const parsed = parseNumber(env.WORKSPACE_RUN_TIMEOUT_MS, 120_000)
+    return Math.max(1000, Math.min(parsed, 10 * 60_000))
+  })()
+  const dockerImage = (env.WORKSPACE_DOCKER_IMAGE || 'python:3.11-slim').trim()
+  const dockerCpu = (env.WORKSPACE_DOCKER_CPUS || '1.0').trim() || '1.0'
+  const dockerMemory = (env.WORKSPACE_DOCKER_MEMORY || '1g').trim() || '1g'
+  const dockerPidsLimit = (() => {
+    const parsed = parseNumber(env.WORKSPACE_DOCKER_PIDS_LIMIT, 256)
+    return Math.max(32, Math.min(parsed, 8192))
+  })()
+  const artifactSigningSecret =
+    (env.WORKSPACE_ARTIFACT_SIGNING_SECRET || env.JWT_SECRET || '').trim() ||
+    'workspace-artifact-dev-secret-change-me'
+  const listMaxEntries = (() => {
+    const parsed = parseNumber(env.WORKSPACE_LIST_MAX_ENTRIES, 500)
+    return Math.max(10, Math.min(parsed, 5000))
+  })()
+  const readMaxChars = (() => {
+    const parsed = parseNumber(env.WORKSPACE_READ_MAX_CHARS, 120_000)
+    return Math.max(1024, Math.min(parsed, 2_000_000))
+  })()
+  const gitCloneTimeoutMs = (() => {
+    const parsed = parseNumber(env.WORKSPACE_GIT_CLONE_TIMEOUT_MS, 120_000)
+    return Math.max(5000, Math.min(parsed, 10 * 60_000))
+  })()
+  const pythonInstallTimeoutMs = (() => {
+    const parsed = parseNumber(env.WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS, 300_000)
+    return Math.max(10_000, Math.min(parsed, 30 * 60_000))
+  })()
+
   return {
     server: {
       port,
@@ -87,6 +168,25 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig =
     modelCatalog: {
       ttlSeconds,
       refreshIntervalMs,
+    },
+    workspace: {
+      rootDir: workspaceRootDir,
+      artifactTtlMinutes,
+      idleTtlMinutes,
+      cleanupIntervalMs,
+      maxWorkspaceBytes,
+      maxArtifactBytes,
+      maxArtifactsPerMessage,
+      runTimeoutMs,
+      dockerImage,
+      dockerCpu,
+      dockerMemory,
+      dockerPidsLimit,
+      artifactSigningSecret,
+      listMaxEntries,
+      readMaxChars,
+      gitCloneTimeoutMs,
+      pythonInstallTimeoutMs,
     },
   }
 }

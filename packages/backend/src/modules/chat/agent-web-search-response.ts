@@ -38,9 +38,11 @@ import {
   type AgentWebSearchConfig,
   type AgentPythonToolConfig,
   type AgentUrlReaderConfig,
+  type AgentWorkspaceToolConfig,
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
   buildAgentUrlReaderConfig,
+  buildAgentWorkspaceToolConfig,
 } from './agent-tool-config';
 import type { ProviderType } from '../../utils/providers';
 import { createSkillRegistry } from '../skills/skill-registry';
@@ -51,9 +53,11 @@ export {
   AgentWebSearchConfig,
   AgentPythonToolConfig,
   AgentUrlReaderConfig,
+  AgentWorkspaceToolConfig,
   buildAgentWebSearchConfig,
   buildAgentPythonToolConfig,
   buildAgentUrlReaderConfig,
+  buildAgentWorkspaceToolConfig,
 };
 
 type ChatSessionWithConnection = ChatSession & { connection: Connection | null };
@@ -72,6 +76,7 @@ export type AgentResponseParams = {
   agentConfig: AgentWebSearchConfig;
   pythonToolConfig: AgentPythonToolConfig;
   urlReaderConfig: AgentUrlReaderConfig;
+  workspaceToolConfig: AgentWorkspaceToolConfig;
   agentMaxToolIterations: number;
   toolFlags: {
     webSearch: boolean;
@@ -79,6 +84,7 @@ export type AgentResponseParams = {
     urlReader?: boolean;
     document?: boolean;
     knowledgeBase?: boolean;
+    workspace?: boolean;
   };
   requestedSkills: RequestedSkillsPayload;
   knowledgeBaseIds?: number[];
@@ -118,6 +124,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     agentConfig,
     pythonToolConfig,
     urlReaderConfig,
+    workspaceToolConfig,
     agentMaxToolIterations,
     toolFlags,
     requestedSkills,
@@ -154,6 +161,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       web_search: toolFlags.webSearch,
       python_runner: toolFlags.python,
       url_reader: Boolean(toolFlags.urlReader),
+      workspace_tools: Boolean(toolFlags.workspace),
       document_tools: Boolean(toolFlags.document),
       knowledge_base_tools: Boolean(toolFlags.knowledgeBase),
     },
@@ -523,6 +531,12 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             timeout: urlReaderConfig.timeout,
             maxContentLength: urlReaderConfig.maxContentLength,
           } : null,
+          workspace: toolFlags.workspace ? {
+            enabled: true,
+            listMaxEntries: workspaceToolConfig.listMaxEntries,
+            readMaxChars: workspaceToolConfig.readMaxChars,
+            gitCloneTimeoutMs: workspaceToolConfig.gitCloneTimeoutMs,
+          } : null,
           document: ragService && toolFlags.document
             ? { enabled: true, sessionId, ragService }
             : null,
@@ -530,6 +544,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             ? { enabled: true, knowledgeBaseIds, ragService }
             : null,
         },
+        allowDynamicRuntime: false,
       });
       const toolDefinitions = toolRegistry.getToolDefinitions();
       const allowedToolNames = toolRegistry.getAllowedToolNames();

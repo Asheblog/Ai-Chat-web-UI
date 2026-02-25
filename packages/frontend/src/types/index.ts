@@ -115,6 +115,17 @@ export interface GeneratedImage {
   height?: number;
 }
 
+export interface WorkspaceArtifact {
+  id: number;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  expiresAt: string | Date;
+  downloadUrl: string;
+  messageId?: number | null;
+  expired?: boolean;
+}
+
 export interface Message {
   id: number | string;
   sessionId: number;
@@ -137,6 +148,7 @@ export interface Message {
   images?: string[];
   // AI 生成的图片（生图模型输出）
   generatedImages?: GeneratedImage[];
+  artifacts?: WorkspaceArtifact[];
   toolEvents?: ToolEvent[];
   metrics?: MessageStreamMetrics | null;
 }
@@ -155,6 +167,7 @@ export interface MessageMeta {
   reasoningIdleMs?: number | null;
   images?: string[];
   generatedImages?: GeneratedImage[];
+  artifacts?: WorkspaceArtifact[];
   isPlaceholder?: boolean;
   streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
   streamError?: string | null;
@@ -171,6 +184,7 @@ export interface MessageBody {
   reasoningVersion: number;
   toolEvents?: ToolEvent[];
   generatedImages?: GeneratedImage[];
+  artifacts?: WorkspaceArtifact[];
 }
 
 export interface MessageRenderCacheEntry {
@@ -680,6 +694,7 @@ export interface ChatStreamChunk {
     | 'quota'
     | 'tool'
     | 'image'
+    | 'artifact'
     | 'skill_approval_request'
     | 'skill_approval_result';
   content?: string;
@@ -714,6 +729,7 @@ export interface ChatStreamChunk {
   };
   /** 生成的图片（type='image' 时） */
   generatedImages?: GeneratedImage[];
+  artifacts?: WorkspaceArtifact[];
   requestId?: number;
   skillId?: number;
   skillSlug?: string;

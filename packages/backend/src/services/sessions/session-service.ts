@@ -5,6 +5,8 @@ import { ensureAnonymousSession as defaultEnsureAnonymousSession } from '../../u
 import type { ModelResolverService } from '../catalog/model-resolver-service'
 import { modelResolverService as defaultModelResolverService } from '../catalog/model-resolver-service'
 import { cancelAllStreamsForSession } from '../../modules/chat/stream-state'
+import { artifactService } from '../workspace/artifact-service'
+import { workspaceService } from '../workspace/workspace-service'
 
 export class SessionServiceError extends Error {
   statusCode: number
@@ -295,6 +297,16 @@ export class SessionService {
     }
     // Cancel any active streams for this session before deleting
     cancelAllStreamsForSession(sessionId)
+    try {
+      await artifactService.cleanupArtifactsBySession(sessionId)
+      await workspaceService.destroyWorkspace(sessionId)
+    } catch (error) {
+      this.logger.error?.('Failed to cleanup workspace on session delete', {
+        sessionId,
+        error: error instanceof Error ? error.message : error,
+      })
+      throw new SessionServiceError('Failed to cleanup workspace', 500)
+    }
     await this.prisma.chatSession.delete({ where: { id: sessionId } })
   }
 

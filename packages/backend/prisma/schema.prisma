@@ -14,32 +14,32 @@ datasource db {
 
 // 1. 用户表
 model User {
-  id             Int      @id @default(autoincrement())
-  username       String   @unique
-  hashedPassword String
-  role           String   @default("USER") // 'ADMIN' or 'USER'
-  createdAt      DateTime @default(now())
-  status         String   @default("ACTIVE") // 'PENDING' | 'ACTIVE' | 'DISABLED'
-  approvedAt     DateTime?
-  approvedById   Int?
-  rejectedAt     DateTime?
-  rejectedById   Int?
-  rejectionReason String?
-  preferredModelId       String?
-  preferredConnectionId  Int?
-  preferredModelRawId    String?
-  avatarPath             String? @map("avatar_path")
-  personalPrompt         String?
+  id                    Int       @id @default(autoincrement())
+  username              String    @unique
+  hashedPassword        String
+  role                  String    @default("USER") // 'ADMIN' or 'USER'
+  createdAt             DateTime  @default(now())
+  status                String    @default("ACTIVE") // 'PENDING' | 'ACTIVE' | 'DISABLED'
+  approvedAt            DateTime?
+  approvedById          Int?
+  rejectedAt            DateTime?
+  rejectedById          Int?
+  rejectionReason       String?
+  preferredModelId      String?
+  preferredConnectionId Int?
+  preferredModelRawId   String?
+  avatarPath            String?   @map("avatar_path")
+  personalPrompt        String?
 
-  chatSessions   ChatSession[]
-  connections    Connection[]
-  usageQuotas    UsageQuota[]
-  chatShares     ChatShare[] @relation("UserChatShares")
-  battleRuns     BattleRun[] @relation("UserBattleRuns")
-  battleShares   BattleShare[] @relation("UserBattleShares")
-  documents      Document[]
-  knowledgeBases KnowledgeBase[]
-  createdSkills Skill[] @relation("UserCreatedSkills")
+  chatSessions          ChatSession[]
+  connections           Connection[]
+  usageQuotas           UsageQuota[]
+  chatShares            ChatShare[]            @relation("UserChatShares")
+  battleRuns            BattleRun[]            @relation("UserBattleRuns")
+  battleShares          BattleShare[]          @relation("UserBattleShares")
+  documents             Document[]
+  knowledgeBases        KnowledgeBase[]
+  createdSkills         Skill[]                @relation("UserCreatedSkills")
   decidedSkillApprovals SkillApprovalRequest[] @relation("UserDecidedSkillApprovals")
 
   @@index([status])
@@ -48,74 +48,144 @@ model User {
 
 // 2. 聊天会话表
 model ChatSession {
-  id              Int       @id @default(autoincrement())
-  userId          Int?
-  anonymousKey    String?
-  expiresAt       DateTime?
+  id               Int       @id @default(autoincrement())
+  userId           Int?
+  anonymousKey     String?
+  expiresAt        DateTime?
   // 连接为中心：使用 Connection + 原始模型ID
-  connectionId    Int?
-  modelRawId      String?   // 供应商原始模型ID（不含前缀）
-  title           String    // 可由首条消息自动生成
-  createdAt       DateTime  @default(now())
+  connectionId     Int?
+  modelRawId       String? // 供应商原始模型ID（不含前缀）
+  title            String // 可由首条消息自动生成
+  createdAt        DateTime  @default(now())
   // 可选置顶：非空表示置顶时间
-  pinnedAt        DateTime?
+  pinnedAt         DateTime?
   // 会话级推理默认：为空表示遵循系统设置
   reasoningEnabled Boolean?
-  reasoningEffort  String?   // 'low' | 'medium' | 'high'
+  reasoningEffort  String? // 'low' | 'medium' | 'high'
   ollamaThink      Boolean?
   // 会话级系统提示词：为空表示继承系统级
   systemPrompt     String?
 
-  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  connection  Connection?  @relation(fields: [connectionId], references: [id])
-  messages    Message[]
-  usageMetrics UsageMetric[]
-  taskTraces  TaskTrace[]
-  shares      ChatShare[]
-  sessionDocuments SessionDocument[]
+  user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection         Connection?         @relation(fields: [connectionId], references: [id])
+  messages           Message[]
+  usageMetrics       UsageMetric[]
+  taskTraces         TaskTrace[]
+  shares             ChatShare[]
+  sessionDocuments   SessionDocument[]
+  workspaceSession   WorkspaceSession?
+  workspaceArtifacts WorkspaceArtifact[]
 
   @@index([expiresAt])
   @@index([anonymousKey])
   @@index([userId, pinnedAt])
   @@index([anonymousKey, pinnedAt])
-
   @@map("chat_sessions")
 }
 
 // 4. 消息记录表
 model Message {
-  id        Int      @id @default(autoincrement())
-  sessionId Int
-  parentMessageId Int?
-  variantIndex Int? @default(1)
-  role      String   // 'user' or 'assistant'
-  content   String
+  id                       Int      @id @default(autoincrement())
+  sessionId                Int
+  parentMessageId          Int?
+  variantIndex             Int?     @default(1)
+  role                     String // 'user' or 'assistant'
+  content                  String
   // 客户端生成的幂等ID（可选）。与 sessionId 组成唯一键，用于避免重复写入
-  clientMessageId String?
+  clientMessageId          String?
   // 可选：保存推理(思维链)内容与持续时长（秒）。默认不启用保存，受系统设置控制。
-  reasoning               String?
+  reasoning                String?
   reasoningDurationSeconds Int?
-  toolLogsJson            String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  streamStatus String @default("done")
-  streamCursor Int @default(0)
-  streamReasoning String?
-  streamError String?
+  toolLogsJson             String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  streamStatus             String   @default("done")
+  streamCursor             Int      @default(0)
+  streamReasoning          String?
+  streamError              String?
 
-  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  attachments MessageAttachment[]
-  generatedImages GeneratedImage[]
-  usageMetrics UsageMetric[]
-  taskTraces TaskTrace[]
-  parent Message? @relation("MessageVariants", fields: [parentMessageId], references: [id])
-  variants Message[] @relation("MessageVariants")
+  session            ChatSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attachments        MessageAttachment[]
+  generatedImages    GeneratedImage[]
+  usageMetrics       UsageMetric[]
+  taskTraces         TaskTrace[]
+  parent             Message?            @relation("MessageVariants", fields: [parentMessageId], references: [id])
+  variants           Message[]           @relation("MessageVariants")
+  workspaceRuns      WorkspaceRun[]
+  workspaceArtifacts WorkspaceArtifact[]
 
   // 若提供了 clientMessageId，则 (sessionId, clientMessageId) 必须唯一；
   // clientMessageId 为空时不受限（SQLite 下 NULL 不参与唯一比较）。
   @@unique([sessionId, clientMessageId])
   @@index([parentMessageId])
   @@map("messages")
+}
+
+model WorkspaceSession {
+  id              Int       @id @default(autoincrement())
+  sessionId       Int       @unique
+  rootPath        String
+  status          String    @default("active") // active | disabled | error
+  sandboxProvider String    @default("docker")
+  lastUsedAt      DateTime  @default(now())
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  session   ChatSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  runs      WorkspaceRun[]
+  artifacts WorkspaceArtifact[]
+
+  @@index([status])
+  @@index([lastUsedAt])
+  @@map("workspace_sessions")
+}
+
+model WorkspaceRun {
+  id                 Int      @id @default(autoincrement())
+  workspaceSessionId Int
+  messageId          Int?
+  toolCallId         String?
+  toolName           String
+  status             String // running | success | error | timeout | cancelled
+  exitCode           Int?
+  stdoutPreview      String?
+  stderrPreview      String?
+  durationMs         Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  workspaceSession WorkspaceSession @relation(fields: [workspaceSessionId], references: [id], onDelete: Cascade)
+  message          Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceSessionId, createdAt])
+  @@index([messageId, createdAt])
+  @@map("workspace_runs")
+}
+
+model WorkspaceArtifact {
+  id                 Int       @id @default(autoincrement())
+  workspaceSessionId Int
+  sessionId          Int
+  messageId          Int?
+  relativePath       String
+  fileName           String
+  mimeType           String
+  sizeBytes          Int
+  sha256             String
+  expiresAt          DateTime
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspaceSession WorkspaceSession @relation(fields: [workspaceSessionId], references: [id], onDelete: Cascade)
+  session          ChatSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  message          Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, messageId, createdAt])
+  @@index([expiresAt, deletedAt])
+  @@index([workspaceSessionId, createdAt])
+  @@map("workspace_artifacts")
 }
 
 model MessageAttachment {
@@ -134,13 +204,13 @@ model MessageAttachment {
 model GeneratedImage {
   id            Int      @id @default(autoincrement())
   messageId     Int
-  url           String?  // 云端 URL
-  storagePath   String?  // 本地存储路径
-  base64        String?  // Base64 数据（可选缓存）
-  mime          String?  // MIME 类型 (image/png, image/jpeg)
+  url           String? // 云端 URL
+  storagePath   String? // 本地存储路径
+  base64        String? // Base64 数据（可选缓存）
+  mime          String? // MIME 类型 (image/png, image/jpeg)
   width         Int?
   height        Int?
-  revisedPrompt String?  // 模型修正后的提示词 (DALL-E 特有)
+  revisedPrompt String? // 模型修正后的提示词 (DALL-E 特有)
   createdAt     DateTime @default(now())
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
@@ -150,17 +220,17 @@ model GeneratedImage {
 }
 
 model ChatShare {
-  id                     Int      @id @default(autoincrement())
-  sessionId              Int
-  token                  String   @unique
-  title                  String
-  messageIdsJson         String   @default("[]")
-  payloadJson            String
-  createdByUserId        Int?
-  createdByAnonymousKey  String?
-  createdAt              DateTime @default(now())
-  expiresAt              DateTime?
-  revokedAt              DateTime?
+  id                    Int       @id @default(autoincrement())
+  sessionId             Int
+  token                 String    @unique
+  title                 String
+  messageIdsJson        String    @default("[]")
+  payloadJson           String
+  createdByUserId       Int?
+  createdByAnonymousKey String?
+  createdAt             DateTime  @default(now())
+  expiresAt             DateTime?
+  revokedAt             DateTime?
 
   session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   createdByUser User?       @relation("UserChatShares", fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -172,22 +242,22 @@ model ChatShare {
 
 // 3. 用量统计表（每轮生成一条，关联到 assistant 消息）
 model UsageMetric {
-  id               Int       @id @default(autoincrement())
-  sessionId        Int
-  messageId        Int?
-  model            String
-  provider         String?
-  promptTokens     Int       @default(0)
-  completionTokens Int       @default(0)
-  totalTokens      Int       @default(0)
+  id                  Int      @id @default(autoincrement())
+  sessionId           Int
+  messageId           Int?
+  model               String
+  provider            String?
+  promptTokens        Int      @default(0)
+  completionTokens    Int      @default(0)
+  totalTokens         Int      @default(0)
   firstTokenLatencyMs Int?
-  responseTimeMs   Int?
-  tokensPerSecond  Float?
-  contextLimit     Int?
-  createdAt        DateTime  @default(now())
+  responseTimeMs      Int?
+  tokensPerSecond     Float?
+  contextLimit        Int?
+  createdAt           DateTime @default(now())
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  message Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  message Message?    @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   @@index([sessionId])
   @@index([messageId])
@@ -210,17 +280,17 @@ model Skill {
   sourceType       String   @default("builtin") // builtin | github
   sourceUrl        String?
   status           String   @default("active") // active | disabled
-  defaultVersionId Int?      @unique
+  defaultVersionId Int?     @unique
   createdByUserId  Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  createdBy      User?                @relation("UserCreatedSkills", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdBy      User?                  @relation("UserCreatedSkills", fields: [createdByUserId], references: [id], onDelete: SetNull)
   versions       SkillVersion[]
   bindings       SkillBinding[]
   approvals      SkillApprovalRequest[]
   audits         SkillExecutionAudit[]
-  defaultVersion SkillVersion?        @relation("SkillDefaultVersion", fields: [defaultVersionId], references: [id], onDelete: SetNull)
+  defaultVersion SkillVersion?          @relation("SkillDefaultVersion", fields: [defaultVersionId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([createdByUserId])
@@ -228,14 +298,14 @@ model Skill {
 }
 
 model SkillVersion {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   skillId         Int
   version         String
-  status          String   @default("pending_validation") // pending_validation | pending_approval | active | rejected | deprecated
-  riskLevel       String   @default("low") // low | medium | high | critical
+  status          String    @default("pending_validation") // pending_validation | pending_approval | active | rejected | deprecated
+  riskLevel       String    @default("low") // low | medium | high | critical
   entry           String
   instruction     String?
-  manifestJson    String   @default("{}")
+  manifestJson    String    @default("{}")
   packageHash     String?
   packagePath     String?
   sourceRef       String?
@@ -243,11 +313,11 @@ model SkillVersion {
   approvedAt      DateTime?
   activatedAt     DateTime?
   createdByUserId Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  skill           Skill                 @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  defaultForSkill Skill?                @relation("SkillDefaultVersion")
+  skill           Skill                  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  defaultForSkill Skill?                 @relation("SkillDefaultVersion")
   bindings        SkillBinding[]
   approvals       SkillApprovalRequest[]
   audits          SkillExecutionAudit[]
@@ -262,7 +332,7 @@ model SkillBinding {
   id              Int      @id @default(autoincrement())
   skillId         Int
   versionId       Int?
-  scopeType       String   // system | user | session | battle_model
+  scopeType       String // system | user | session | battle_model
   scopeId         String
   enabled         Boolean  @default(true)
   policyJson      String   @default("{}")
@@ -271,8 +341,8 @@ model SkillBinding {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  skill     Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  version   SkillVersion?     @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  skill     Skill                  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version   SkillVersion?          @relation(fields: [versionId], references: [id], onDelete: SetNull)
   approvals SkillApprovalRequest[]
 
   @@unique([skillId, scopeType, scopeId])
@@ -282,7 +352,7 @@ model SkillBinding {
 }
 
 model SkillApprovalRequest {
-  id                 Int      @id @default(autoincrement())
+  id                 Int       @id @default(autoincrement())
   skillId            Int
   versionId          Int?
   bindingId          Int?
@@ -291,21 +361,21 @@ model SkillApprovalRequest {
   messageId          Int?
   toolName           String
   toolCallId         String?
-  status             String   @default("pending") // pending | approved | denied | expired
+  status             String    @default("pending") // pending | approved | denied | expired
   reason             String?
-  requestPayloadJson String   @default("{}")
+  requestPayloadJson String    @default("{}")
   decisionNote       String?
   requestedByActor   String
-  requestedAt        DateTime @default(now())
+  requestedAt        DateTime  @default(now())
   decidedAt          DateTime?
   decidedByUserId    Int?
   expiresAt          DateTime?
 
-  skill          Skill               @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  version        SkillVersion?       @relation(fields: [versionId], references: [id], onDelete: SetNull)
-  binding        SkillBinding?       @relation(fields: [bindingId], references: [id], onDelete: SetNull)
-  decidedBy      User?               @relation("UserDecidedSkillApprovals", fields: [decidedByUserId], references: [id], onDelete: SetNull)
-  audits         SkillExecutionAudit[]
+  skill     Skill                 @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version   SkillVersion?         @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  binding   SkillBinding?         @relation(fields: [bindingId], references: [id], onDelete: SetNull)
+  decidedBy User?                 @relation("UserDecidedSkillApprovals", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  audits    SkillExecutionAudit[]
 
   @@index([status, expiresAt])
   @@index([sessionId])
@@ -333,8 +403,8 @@ model SkillExecutionAudit {
   error               String?
   createdAt           DateTime @default(now())
 
-  skill           Skill                @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  version         SkillVersion?        @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  skill           Skill                 @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version         SkillVersion?         @relation(fields: [versionId], references: [id], onDelete: SetNull)
   approvalRequest SkillApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
 
   @@index([sessionId, createdAt])
@@ -362,49 +432,49 @@ model UsageQuota {
 
 // 5. 连接（系统或用户直连）
 model Connection {
-  id             Int       @id @default(autoincrement())
-  ownerUserId    Int?      // null=系统级；非空=用户级直连
-  provider       String    // 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'
-  vendor         String?
-  baseUrl        String
-  enable         Boolean   @default(true)
-  authType       String    @default("bearer") // 'bearer' | 'none' | 预留：'session' | 'system_oauth' | 'microsoft_entra_id'
-  apiKey         String    @default("")      // 加密存储；none 时为空
-  headersJson    String    @default("")      // 额外HTTP头（JSON字符串）
-  azureApiVersion String?  // 仅 provider=azure_openai 时必填
-  prefixId       String?
-  tagsJson       String    @default("[]")
-  modelIdsJson   String    @default("[]")
-  defaultCapabilitiesJson String @default("{}")
-  connectionType String    @default("external") // 'external' | 'local'
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                      Int      @id @default(autoincrement())
+  ownerUserId             Int? // null=系统级；非空=用户级直连
+  provider                String // 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'
+  vendor                  String?
+  baseUrl                 String
+  enable                  Boolean  @default(true)
+  authType                String   @default("bearer") // 'bearer' | 'none' | 预留：'session' | 'system_oauth' | 'microsoft_entra_id'
+  apiKey                  String   @default("") // 加密存储；none 时为空
+  headersJson             String   @default("") // 额外HTTP头（JSON字符串）
+  azureApiVersion         String? // 仅 provider=azure_openai 时必填
+  prefixId                String?
+  tagsJson                String   @default("[]")
+  modelIdsJson            String   @default("[]")
+  defaultCapabilitiesJson String   @default("{}")
+  connectionType          String   @default("external") // 'external' | 'local'
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  owner          User?     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  sessions       ChatSession[]
-  catalogs       ModelCatalog[]
+  owner    User?          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  sessions ChatSession[]
+  catalogs ModelCatalog[]
 
   @@map("connections")
 }
 
 // 6. 模型目录缓存（由连接聚合生成）
 model ModelCatalog {
-  id             Int       @id @default(autoincrement())
-  connectionId   Int
-  modelId        String    // 对外展示ID（含 prefix）
-  rawId          String    // 供应商原始ID（不含前缀）
-  name           String
-  provider       String
-  connectionType String
-  modelType      String    @default("chat") // 'chat' | 'embedding' | 'both'
-  tagsJson       String    @default("[]")
-  metaJson       String    @default("{}")
-  capabilitiesJson String  @default("{}")
-  manualOverride Boolean   @default(false)
-  lastFetchedAt  DateTime  @default(now())
-  expiresAt      DateTime
+  id               Int      @id @default(autoincrement())
+  connectionId     Int
+  modelId          String // 对外展示ID（含 prefix）
+  rawId            String // 供应商原始ID（不含前缀）
+  name             String
+  provider         String
+  connectionType   String
+  modelType        String   @default("chat") // 'chat' | 'embedding' | 'both'
+  tagsJson         String   @default("[]")
+  metaJson         String   @default("{}")
+  capabilitiesJson String   @default("{}")
+  manualOverride   Boolean  @default(false)
+  lastFetchedAt    DateTime @default(now())
+  expiresAt        DateTime
 
-  connection     Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@unique([connectionId, modelId])
   @@index([connectionId])
@@ -427,9 +497,9 @@ model TaskTrace {
   eventCount      Int       @default(0)
   logFilePath     String?
 
-  session ChatSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  message Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  events  TaskTraceEvent[]
+  session    ChatSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  message    Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  events     TaskTraceEvent[]
   latexTrace LatexTrace?
 
   @@index([sessionId])
@@ -477,36 +547,36 @@ model LatexTrace {
 
 // 文档表 - 存储上传的文档元数据
 model Document {
-  id              Int       @id @default(autoincrement())
-  userId          Int?
-  anonymousKey    String?
-  filename        String    // 存储文件名 (UUID.ext)
-  originalName    String    // 原始文件名
-  mimeType        String
-  fileSize        Int       // 字节数
-  filePath        String    // 存储路径
-  status          String    @default("pending") // pending | processing | ready | error
-  processingStage String?   @default("pending") // parsing | chunking | embedding | storing | done | error
-  processingProgress Int    @default(0) // 0-100
-  processingStartedAt DateTime?
+  id                    Int       @id @default(autoincrement())
+  userId                Int?
+  anonymousKey          String?
+  filename              String // 存储文件名 (UUID.ext)
+  originalName          String // 原始文件名
+  mimeType              String
+  fileSize              Int // 字节数
+  filePath              String // 存储路径
+  status                String    @default("pending") // pending | processing | ready | error
+  processingStage       String?   @default("pending") // parsing | chunking | embedding | storing | done | error
+  processingProgress    Int       @default(0) // 0-100
+  processingStartedAt   DateTime?
   processingHeartbeatAt DateTime?
-  processingFinishedAt DateTime?
-  errorMessage    String?
-  contentHash     String?   // 用于去重
-  chunkCount      Int       @default(0)
-  collectionName  String?   // 向量数据库 collection 名称
-  metadata        String    @default("{}") // JSON: 页数、字数等
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  expiresAt       DateTime? // 自动清理时间
-  lastAccessedAt  DateTime? // 最后访问时间
-  accessCount     Int       @default(0)
+  processingFinishedAt  DateTime?
+  errorMessage          String?
+  contentHash           String? // 用于去重
+  chunkCount            Int       @default(0)
+  collectionName        String? // 向量数据库 collection 名称
+  metadata              String    @default("{}") // JSON: 页数、字数等
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  expiresAt             DateTime? // 自动清理时间
+  lastAccessedAt        DateTime? // 最后访问时间
+  accessCount           Int       @default(0)
 
-  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chunks           DocumentChunk[]
-  sections         DocumentSection[]
-  sessionDocuments SessionDocument[]
-  processingJob    DocumentProcessingJob?
+  user                   User?                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks                 DocumentChunk[]
+  sections               DocumentSection[]
+  sessionDocuments       SessionDocument[]
+  processingJob          DocumentProcessingJob?
   knowledgeBaseDocuments KnowledgeBaseDocument[]
 
   @@index([userId])
@@ -519,17 +589,17 @@ model Document {
 
 // 文档处理任务表 - Worker 队列
 model DocumentProcessingJob {
-  id          Int      @id @default(autoincrement())
-  documentId  Int      @unique
-  status      String   @default("pending") // pending | running | retrying | failed | canceled | done
-  attempts    Int      @default(0)
-  maxAttempts Int      @default(2)
+  id          Int       @id @default(autoincrement())
+  documentId  Int       @unique
+  status      String    @default("pending") // pending | running | retrying | failed | canceled | done
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(2)
   nextRunAt   DateTime?
   workerId    String?
   lockedAt    DateTime?
   lastError   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
@@ -540,18 +610,18 @@ model DocumentProcessingJob {
 
 // 文档块表 - 存储分块后的文档内容
 model DocumentChunk {
-  id          Int      @id @default(autoincrement())
-  documentId  Int
-  chunkIndex  Int
-  content     String
-  tokenCount  Int      @default(0)
-  pageNumber  Int?
-  pageStart   Int?
-  pageEnd     Int?
-  metadata    String   @default("{}") // JSON: 页码、标题等
-  vectorId    String?  // 向量数据库中的ID
-  sectionId   Int?     // 关联的章节ID
-  createdAt   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  documentId Int
+  chunkIndex Int
+  content    String
+  tokenCount Int      @default(0)
+  pageNumber Int?
+  pageStart  Int?
+  pageEnd    Int?
+  metadata   String   @default("{}") // JSON: 页码、标题等
+  vectorId   String? // 向量数据库中的ID
+  sectionId  Int? // 关联的章节ID
+  createdAt  DateTime @default(now())
 
   document Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
   section  DocumentSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
@@ -569,14 +639,14 @@ model DocumentChunk {
 model DocumentSection {
   id              Int      @id @default(autoincrement())
   documentId      Int
-  parentId        Int?     // 父章节ID，支持嵌套结构
+  parentId        Int? // 父章节ID，支持嵌套结构
   level           Int      @default(1) // 层级: 1=章, 2=节, 3=小节
-  title           String   // 章节标题
-  path            String   // 路径如 "1", "1.2", "1.2.3"
-  startPage       Int?     // 起始页码
-  endPage         Int?     // 结束页码
-  startChunk      Int?     // 起始chunk索引
-  endChunk        Int?     // 结束chunk索引
+  title           String // 章节标题
+  path            String // 路径如 "1", "1.2", "1.2.3"
+  startPage       Int? // 起始页码
+  endPage         Int? // 结束页码
+  startChunk      Int? // 起始chunk索引
+  endChunk        Int? // 结束chunk索引
   detectionMethod String   @default("heuristic") // 检测方法: pdf_outline | heuristic
   confidence      Float    @default(1.0) // 检测置信度 0-1
   metadata        String   @default("{}") // JSON: 额外元数据
@@ -615,16 +685,16 @@ model SessionDocument {
 
 // 知识库表 - 存储持久化的知识库
 model KnowledgeBase {
-  id            Int       @id @default(autoincrement())
-  name          String    // 知识库名称
-  description   String?   // 描述
-  ownerId       Int?      // null=系统级公共知识库，非空=用户私有
-  isPublic      Boolean   @default(true) // 是否对所有用户可见
-  status        String    @default("active") // active | disabled
-  documentCount Int       @default(0)
-  totalChunks   Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id            Int      @id @default(autoincrement())
+  name          String // 知识库名称
+  description   String? // 描述
+  ownerId       Int? // null=系统级公共知识库，非空=用户私有
+  isPublic      Boolean  @default(true) // 是否对所有用户可见
+  status        String   @default("active") // active | disabled
+  documentCount Int      @default(0)
+  totalChunks   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   owner     User?                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   documents KnowledgeBaseDocument[]
@@ -656,27 +726,27 @@ model KnowledgeBaseDocument {
 // ============================================
 
 model BattleRun {
-  id              Int       @id @default(autoincrement())
-  userId          Int?
-  anonymousKey    String?
-  title           String
-  prompt          String
-  expectedAnswer  String
-  promptImagesJson String   @default("[]")
-  expectedAnswerImagesJson String @default("[]")
-  judgeModelId    String
-  judgeConnectionId Int?
-  judgeRawId      String?
-  judgeThreshold  Float     @default(0.8)
-  runsPerModel    Int       @default(1)
-  passK           Int       @default(1)
-  status          String    @default("pending") // pending | running | completed | error | cancelled
-  configJson      String    @default("{}") // JSON: 模型配置与运行参数
-  summaryJson     String    @default("{}") // JSON: 汇总统计
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                       Int      @id @default(autoincrement())
+  userId                   Int?
+  anonymousKey             String?
+  title                    String
+  prompt                   String
+  expectedAnswer           String
+  promptImagesJson         String   @default("[]")
+  expectedAnswerImagesJson String   @default("[]")
+  judgeModelId             String
+  judgeConnectionId        Int?
+  judgeRawId               String?
+  judgeThreshold           Float    @default(0.8)
+  runsPerModel             Int      @default(1)
+  passK                    Int      @default(1)
+  status                   String   @default("pending") // pending | running | completed | error | cancelled
+  configJson               String   @default("{}") // JSON: 模型配置与运行参数
+  summaryJson              String   @default("{}") // JSON: 汇总统计
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
-  user    User?         @relation("UserBattleRuns", fields: [userId], references: [id], onDelete: Cascade)
+  user    User?          @relation("UserBattleRuns", fields: [userId], references: [id], onDelete: Cascade)
   results BattleResult[]
   shares  BattleShare[]
 
@@ -688,28 +758,28 @@ model BattleRun {
 }
 
 model BattleResult {
-  id              Int       @id @default(autoincrement())
-  battleRunId     Int
-  modelId         String
-  connectionId    Int?
-  rawId           String?
-  attemptIndex    Int
-  featuresJson    String    @default("{}") // JSON: 工具开关等
-  customBodyJson  String    @default("{}") // JSON: 自定义请求体摘要
-  customHeadersJson String  @default("[]") // JSON: 自定义请求头摘要
-  output          String    @default("")
-  reasoning       String    @default("")
-  usageJson       String    @default("{}")
-  durationMs      Int?
-  error           String?
-  judgeStatus     String    @default("unknown") // unknown | running | success | error | skipped
-  judgeError      String?
-  judgePass       Boolean?
-  judgeScore      Float?
-  judgeReason     String?
-  judgeFallbackUsed Boolean @default(false)
-  judgeRawJson    String    @default("{}")
-  createdAt       DateTime  @default(now())
+  id                Int      @id @default(autoincrement())
+  battleRunId       Int
+  modelId           String
+  connectionId      Int?
+  rawId             String?
+  attemptIndex      Int
+  featuresJson      String   @default("{}") // JSON: 工具开关等
+  customBodyJson    String   @default("{}") // JSON: 自定义请求体摘要
+  customHeadersJson String   @default("[]") // JSON: 自定义请求头摘要
+  output            String   @default("")
+  reasoning         String   @default("")
+  usageJson         String   @default("{}")
+  durationMs        Int?
+  error             String?
+  judgeStatus       String   @default("unknown") // unknown | running | success | error | skipped
+  judgeError        String?
+  judgePass         Boolean?
+  judgeScore        Float?
+  judgeReason       String?
+  judgeFallbackUsed Boolean  @default(false)
+  judgeRawJson      String   @default("{}")
+  createdAt         DateTime @default(now())
 
   battleRun BattleRun @relation(fields: [battleRunId], references: [id], onDelete: Cascade)
 
@@ -721,16 +791,16 @@ model BattleResult {
 }
 
 model BattleShare {
-  id                     Int      @id @default(autoincrement())
-  battleRunId            Int
-  token                  String   @unique
-  title                  String
-  payloadJson            String
-  createdByUserId        Int?
-  createdByAnonymousKey  String?
-  createdAt              DateTime @default(now())
-  expiresAt              DateTime?
-  revokedAt              DateTime?
+  id                    Int       @id @default(autoincrement())
+  battleRunId           Int
+  token                 String    @unique
+  title                 String
+  payloadJson           String
+  createdByUserId       Int?
+  createdByAnonymousKey String?
+  createdAt             DateTime  @default(now())
+  expiresAt             DateTime?
+  revokedAt             DateTime?
 
   battleRun BattleRun @relation(fields: [battleRunId], references: [id], onDelete: Cascade)
   user      User?     @relation("UserBattleShares", fields: [createdByUserId], references: [id], onDelete: SetNull)

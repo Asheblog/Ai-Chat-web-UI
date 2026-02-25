@@ -202,6 +202,7 @@ export const createMeta = (message: Message, overrides: Partial<MessageMeta> = {
     reasoningDurationSeconds: message.reasoningDurationSeconds ?? null,
     reasoningIdleMs: message.reasoningIdleMs ?? null,
     images: message.images,
+    artifacts: message.artifacts,
     isPlaceholder: false,
     streamStatus: message.streamStatus ?? 'done',
     streamError: message.streamError ?? null,
@@ -226,6 +227,7 @@ export const createBody = (message: Message, stableKeyOverride?: string | null):
     version: message.content ? 1 : 0,
     reasoningVersion: message.reasoning || message.streamReasoning ? 1 : 0,
     toolEvents: normalizeToolEvents(message),
+    artifacts: message.artifacts,
   }
 }
 

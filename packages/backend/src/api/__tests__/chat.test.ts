@@ -16,6 +16,9 @@ jest.mock('../../modules/chat/routes/control', () => ({
 jest.mock('../../modules/chat/routes/usage', () => ({
   registerChatUsageRoutes: jest.fn(),
 }))
+jest.mock('../../modules/chat/routes/workspace', () => ({
+  registerChatWorkspaceRoutes: jest.fn(),
+}))
 
 import { createChatApi } from '../chat'
 import { registerChatStreamRoutes } from '../../modules/chat/routes/stream'
