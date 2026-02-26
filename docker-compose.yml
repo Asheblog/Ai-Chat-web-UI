@@ -1,66 +1,68 @@
 version: '3.8'
 
 services:
-  # 后端服务 (Hono API)
   backend:
-    build:
-      # 使用仓库根目录作为构建上下文，确保可访问根级的 pnpm-lock/package.json 等工作区文件
-      context: .
-      dockerfile: packages/backend/Dockerfile
-      target: production
+    image: ghcr.io/asheblog/aichat-backend:latest
     container_name: ai-chat-web-ui-backend
-    ports:
-      - "${BACKEND_PORT:-8001}:8001"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_ENV=production
       - PORT=8001
       - DATABASE_URL=file:/app/data/app.db
-      - JWT_SECRET=${JWT_SECRET:-aichat-super-secret-jwt-key-2025-production-change-me}
-      - DEFAULT_REGISTRATION_ENABLED=${DEFAULT_REGISTRATION_ENABLED:-true}
-      - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-4000}
-      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
-      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin123456}
-      - ENABLE_CORS=${ENABLE_CORS:-true}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:${FRONTEND_PORT:-3000}}
+      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
+      - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-120000}
+      - ENABLE_CORS=${ENABLE_CORS:-false}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DB_INIT_ON_START=${DB_INIT_ON_START:-false}
+      - PYTHON_RUNTIME_RECONCILE_ON_START=${PYTHON_RUNTIME_RECONCILE_ON_START:-true}
       - SKILL_STORAGE_ROOT=/app/data/skills
+      - WORKSPACE_TOOL_ENABLE=${WORKSPACE_TOOL_ENABLE:-true}
+      - WORKSPACE_ROOT_DIR=${WORKSPACE_ROOT_DIR:-/app/data/workspaces/chat}
+      - WORKSPACE_ARTIFACT_TTL_MINUTES=${WORKSPACE_ARTIFACT_TTL_MINUTES:-60}
+      - WORKSPACE_IDLE_TTL_MINUTES=${WORKSPACE_IDLE_TTL_MINUTES:-1440}
+      - WORKSPACE_CLEANUP_INTERVAL_MINUTES=${WORKSPACE_CLEANUP_INTERVAL_MINUTES:-5}
+      - WORKSPACE_MAX_BYTES=${WORKSPACE_MAX_BYTES:-1073741824}
+      - WORKSPACE_ARTIFACT_MAX_BYTES=${WORKSPACE_ARTIFACT_MAX_BYTES:-104857600}
+      - WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE=${WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE:-20}
+      - WORKSPACE_RUN_TIMEOUT_MS=${WORKSPACE_RUN_TIMEOUT_MS:-120000}
+      - WORKSPACE_RUN_NETWORK_MODE=${WORKSPACE_RUN_NETWORK_MODE:-none}
+      - WORKSPACE_DOCKER_IMAGE=${WORKSPACE_DOCKER_IMAGE:-python:3.11-slim}
+      - WORKSPACE_DOCKER_CPUS=${WORKSPACE_DOCKER_CPUS:-1.0}
+      - WORKSPACE_DOCKER_MEMORY=${WORKSPACE_DOCKER_MEMORY:-1g}
+      - WORKSPACE_DOCKER_PIDS_LIMIT=${WORKSPACE_DOCKER_PIDS_LIMIT:-256}
+      - WORKSPACE_ARTIFACT_SIGNING_SECRET=${WORKSPACE_ARTIFACT_SIGNING_SECRET:-replace-with-strong-secret}
+      - WORKSPACE_LIST_MAX_ENTRIES=${WORKSPACE_LIST_MAX_ENTRIES:-500}
+      - WORKSPACE_READ_MAX_CHARS=${WORKSPACE_READ_MAX_CHARS:-120000}
+      - WORKSPACE_GIT_CLONE_TIMEOUT_MS=${WORKSPACE_GIT_CLONE_TIMEOUT_MS:-120000}
+      - WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS=${WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS:-300000}
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs
       - backend_images:/app/storage/chat-images
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${BACKEND_PORT:-8001}:8001"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/api/settings/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
-      - ai-chat-web-ui-network
-    # 资源限制，确保内存占用 < 500MB
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.1'
+      ai-chat-web-ui-network:
+        aliases:
+          - backend
 
-  # 文档解析 Worker（复用 backend 镜像，独立跑重任务）
   rag-worker:
-    build:
-      context: .
-      dockerfile: packages/backend/Dockerfile
-      target: production
+    image: ghcr.io/asheblog/aichat-backend:latest
     container_name: ai-chat-web-ui-rag-worker
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_ENV=production
       - DATABASE_URL=file:/app/data/app.db
-      - JWT_SECRET=${JWT_SECRET:-aichat-super-secret-jwt-key-2025-production-change-me}
+      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      # Worker 需要更大的堆内存，默认 1024MB，可按需调整
-      - NODE_OPTIONS=${RAG_WORKER_NODE_OPTIONS:-"--max-old-space-size=1024"}
+      - NODE_OPTIONS=--max-old-space-size=1024
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs
@@ -73,40 +75,20 @@ services:
       - ai-chat-web-ui-network
     working_dir: /app/packages/backend
     command: ["node", "dist/workers/document-worker.js"]
-    deploy:
-      resources:
-        limits:
-          memory: 1536M
-          cpus: '1.0'
-        reservations:
-          memory: 256M
-          cpus: '0.2'
 
-  # 前端服务 (Next.js)
   frontend:
-    build:
-      # 同样使用根构建上下文，避免无法访问 lock 文件导致依赖缺失
-      context: .
-      dockerfile: packages/frontend/Dockerfile
-      target: runner
-      args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
-        - BACKEND_HOST=${BACKEND_HOST:-backend}
-        - BACKEND_INTERNAL_PORT=${BACKEND_INTERNAL_PORT:-8001}
-        - NODE_ENV=${NODE_ENV:-production}
+    image: ghcr.io/asheblog/aichat-frontend:latest
     container_name: ai-chat-web-ui-frontend
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
-      - BACKEND_HOST=${BACKEND_HOST:-backend}
-      - BACKEND_INTERNAL_PORT=${BACKEND_INTERNAL_PORT:-8001}
-      # 稳定的 Server Actions 加密密钥，避免重新构建后旧客户端调用失败
-      - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:-aichat-stable-server-actions-key-2025}
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=/api
+      - BACKEND_HOST=backend
+      - BACKEND_INTERNAL_PORT=8001
     depends_on:
       backend:
         condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
@@ -116,26 +98,14 @@ services:
       start_period: 30s
     networks:
       - ai-chat-web-ui-network
-    # 资源限制
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.3'
-        reservations:
-          memory: 64M
-          cpus: '0.05'
 
 volumes:
-  # SQLite数据库数据持久化
   backend_data:
     driver: local
     name: ai_chat_web_ui_db_data
-  # 应用日志持久化
   backend_logs:
     driver: local
     name: ai_chat_web_ui_logs
-  # 聊天图片/头像持久化
   backend_images:
     driver: local
     name: ai_chat_web_ui_images

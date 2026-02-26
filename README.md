@@ -7,118 +7,226 @@
 
 ---
 
-## 项目定位
+## 第一次部署（先看这个）
 
-AI Chat 面向「可私有化部署 + 可持续扩展」场景，核心设计目标：
+如果你是第一次部署，直接按下面 5 步走：
 
-- **轻量可运维**：SQLite + Docker Compose，单机即可稳定运行
-- **多模型统一接入**：OpenAI / Azure OpenAI / Ollama / Google 等
-- **工具化增强**：Skill 插件系统 + Workspace Agent
-- **安全可审计**：审批流、调用审计、可回溯产物下载
-
----
-
-## 最近推送重点（2026-02-25 ~ 2026-02-26）
-
-- **Workspace Python 执行网络模式可配置**：新增 `WORKSPACE_RUN_NETWORK_MODE=none|default`，默认 `none`
-- **backend 镜像增强**：官方 backend 镜像内置 `docker` + `git` CLI，支持 `workspace_git_clone`
-- **容器权限与挂载路径增强**：自动处理 backend 用户访问 Docker socket；支持根据当前容器挂载动态解析 workspace 根路径
-- **Python 缺库自动补装增强**：在 workspace 沙箱中检测 `No module named ...` 并受控自动安装后重试
-- **推理面板时间线优化**：工具事件展示顺序与可读性提升
+1. 准备 Docker / Docker Compose
+2. 使用仓库默认 `docker-compose.yml`
+3. 创建 `.env` 并修改关键密钥
+4. 执行构建/启动命令
+5. 打开健康检查和页面完成首登
 
 ---
 
-## 核心能力
+## 方式 A：按默认 `docker-compose.yml` 首次部署（推荐）
 
-| 模块 | 能力 |
-| --- | --- |
-| 聊天 | SSE 流式输出、Markdown/代码高亮、LaTeX、图片上传 |
-| 模型 | 多连接管理、模型目录聚合与刷新、模型标签与覆盖策略 |
-| Skill | 内置 Skill + GitHub 第三方 Skill 安装、审批、激活、绑定、审计 |
-| Workspace Agent | 会话级隔离沙箱、`python_runner`、代码仓库克隆与读取、artifact 下载 |
-| Python Runtime | 受管 venv、启动 reconcile、依赖来源治理、缺库自动安装 |
-| Battle | 多模型对战、评分与分享、历史清理 |
-| 治理 | 注册审批、角色权限、配额、调用链追踪 |
+### 1) 创建 `docker-compose.yml`（已去个人配置，改为默认值）
 
----
+```yaml
+version: '3.8'
 
-## 架构与目录
+services:
+  backend:
+    image: ghcr.io/asheblog/aichat-backend:latest
+    container_name: ai-chat-web-ui-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=8001
+      - DATABASE_URL=file:/app/data/app.db
+      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
+      - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-120000}
+      - ENABLE_CORS=${ENABLE_CORS:-false}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DB_INIT_ON_START=${DB_INIT_ON_START:-false}
+      - PYTHON_RUNTIME_RECONCILE_ON_START=${PYTHON_RUNTIME_RECONCILE_ON_START:-true}
+      - SKILL_STORAGE_ROOT=/app/data/skills
+      - WORKSPACE_TOOL_ENABLE=${WORKSPACE_TOOL_ENABLE:-true}
+      - WORKSPACE_ROOT_DIR=${WORKSPACE_ROOT_DIR:-/app/data/workspaces/chat}
+      - WORKSPACE_ARTIFACT_TTL_MINUTES=${WORKSPACE_ARTIFACT_TTL_MINUTES:-60}
+      - WORKSPACE_IDLE_TTL_MINUTES=${WORKSPACE_IDLE_TTL_MINUTES:-1440}
+      - WORKSPACE_CLEANUP_INTERVAL_MINUTES=${WORKSPACE_CLEANUP_INTERVAL_MINUTES:-5}
+      - WORKSPACE_MAX_BYTES=${WORKSPACE_MAX_BYTES:-1073741824}
+      - WORKSPACE_ARTIFACT_MAX_BYTES=${WORKSPACE_ARTIFACT_MAX_BYTES:-104857600}
+      - WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE=${WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE:-20}
+      - WORKSPACE_RUN_TIMEOUT_MS=${WORKSPACE_RUN_TIMEOUT_MS:-120000}
+      - WORKSPACE_RUN_NETWORK_MODE=${WORKSPACE_RUN_NETWORK_MODE:-none}
+      - WORKSPACE_DOCKER_IMAGE=${WORKSPACE_DOCKER_IMAGE:-python:3.11-slim}
+      - WORKSPACE_DOCKER_CPUS=${WORKSPACE_DOCKER_CPUS:-1.0}
+      - WORKSPACE_DOCKER_MEMORY=${WORKSPACE_DOCKER_MEMORY:-1g}
+      - WORKSPACE_DOCKER_PIDS_LIMIT=${WORKSPACE_DOCKER_PIDS_LIMIT:-256}
+      - WORKSPACE_ARTIFACT_SIGNING_SECRET=${WORKSPACE_ARTIFACT_SIGNING_SECRET:-replace-with-strong-secret}
+      - WORKSPACE_LIST_MAX_ENTRIES=${WORKSPACE_LIST_MAX_ENTRIES:-500}
+      - WORKSPACE_READ_MAX_CHARS=${WORKSPACE_READ_MAX_CHARS:-120000}
+      - WORKSPACE_GIT_CLONE_TIMEOUT_MS=${WORKSPACE_GIT_CLONE_TIMEOUT_MS:-120000}
+      - WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS=${WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS:-300000}
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/app/logs
+      - backend_images:/app/storage/chat-images
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${BACKEND_PORT:-8001}:8001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      ai-chat-web-ui-network:
+        aliases:
+          - backend
 
-```text
-aichat/
-├── packages/
-│   ├── backend/      # Hono API + Prisma + SQLite
-│   ├── frontend/     # Next.js 14 UI
-│   └── shared/       # 前后端共享类型/工具
-├── scripts/          # 本地开发、CI、工具脚本
-├── docs/             # 架构与部署文档
-├── docker-compose.yml
-├── docker-compose.dev.yml
-├── start.sh          # Linux / WSL 一键脚本
-└── start.bat         # Windows 一键脚本
+  rag-worker:
+    image: ghcr.io/asheblog/aichat-backend:latest
+    container_name: ai-chat-web-ui-rag-worker
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/app.db
+      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NODE_OPTIONS=--max-old-space-size=1024
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/app/logs
+      - backend_images:/app/storage/chat-images
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai-chat-web-ui-network
+    working_dir: /app/packages/backend
+    command: ["node", "dist/workers/document-worker.js"]
+
+  frontend:
+    image: ghcr.io/asheblog/aichat-frontend:latest
+    container_name: ai-chat-web-ui-frontend
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=/api
+      - BACKEND_HOST=backend
+      - BACKEND_INTERNAL_PORT=8001
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ai-chat-web-ui-network
+
+volumes:
+  backend_data:
+    driver: local
+    name: ai_chat_web_ui_db_data
+  backend_logs:
+    driver: local
+    name: ai_chat_web_ui_logs
+  backend_images:
+    driver: local
+    name: ai_chat_web_ui_images
+
+networks:
+  ai-chat-web-ui-network:
+    driver: bridge
+    name: ai_chat_web_ui_network
 ```
 
----
-
-## 快速开始
-
-### 1) Docker Compose（推荐）
-
-前置要求：
-
-- Docker / Docker Compose
-- 生产环境请准备强随机密钥：`JWT_SECRET`、`ENCRYPTION_KEY`、`WORKSPACE_ARTIFACT_SIGNING_SECRET`
-
-```bash
-# 1. 克隆项目
-git clone <your-repo-url>
-cd aichat
-
-# 2. 复制环境变量模板
-cp .env.example .env
-
-# 3. 启动（生产 compose）
-docker compose up -d --build
-```
-
-Windows PowerShell 可用：
-
-```powershell
-Copy-Item .env.example .env
-docker compose up -d --build
-```
-
-> 若要启用 Workspace Python 沙箱（`python_runner`），backend 服务必须满足：
->
-> - 可访问 Docker（挂载 `/var/run/docker.sock:/var/run/docker.sock`）
-> - 容器内存在 `docker` 与 `git` CLI（官方 backend 镜像已内置）
-
-健康检查：
-
-- 前端：`/api/health`
-- 后端：`/api/settings/health`
-
----
-
-### 2) 一键脚本（跨平台）
+### 2) 创建 `.env`（首次部署至少配置密钥）
 
 Linux / WSL：
 
 ```bash
-./start.sh dev
-./start.sh prod
+cp .env.example .env
 ```
 
-Windows：
+Windows PowerShell：
 
-```bat
-start.bat dev
-start.bat prod
+```powershell
+Copy-Item .env.example .env
+```
+
+至少确认以下变量（强烈建议显式设置）：
+
+| 变量 | 说明 |
+| --- | --- |
+| `JWT_SECRET` | 必改，登录态签名密钥 |
+| `ENCRYPTION_KEY` | 建议设置，连接密钥加密 |
+| `WORKSPACE_ARTIFACT_SIGNING_SECRET` | 建议设置，artifact 下载签名 |
+| `CORS_ORIGIN` | 改成你的实际访问地址 |
+
+### 3) 启动部署
+
+```bash
+docker compose up -d
+```
+
+首次部署建议查看日志（会自动初始化 DB / 同步 builtin skills / reconcile Python runtime）：
+
+```bash
+docker compose logs -f backend
+```
+
+### 4) 验证服务
+
+- 前端健康检查：`http://<你的地址>:3000/api/health`
+- 后端健康检查：`http://<你的地址>:8001/api/settings/health`
+- 页面入口：`http://<你的地址>:3000`
+
+### 5) 首次登录
+
+- 默认允许注册时：第一个注册用户会成为管理员
+- 若你关闭了注册，请使用你配置的管理员账号登录
+
+---
+
+## 构建命令速查（你要的）
+
+### 启动 / 停止 / 日志
+
+```bash
+# 启动
+docker compose up -d
+
+# 查看状态
+docker compose ps
+
+# 查看日志
+docker compose logs -f backend
+docker compose logs -f frontend
+
+# 停止
+docker compose down
+```
+
+### 更新到最新镜像
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### 使用源码构建（仅当 compose 配置了 `build` 字段）
+
+```bash
+docker compose up -d --build
 ```
 
 ---
 
-### 3) 本地开发（不走 Docker）
+## 方式 B：从源码本地开发运行（非 Docker）
+
+Linux / WSL：
 
 ```bash
 pnpm install
@@ -138,26 +246,43 @@ npm run start:dev
 
 ---
 
-## Workspace Agent（重点）
+## 项目特色（部署后你会用到）
 
-聊天链路已切换到会话级 workspace 模式（直接替换）：
-
-- 每个会话独立目录：`<APP_DATA_DIR>/workspaces/chat/<sessionId>/`
-- 固定子目录：`input/`、`repos/`、`artifacts/`、`.venv/`、`.meta/`
-- 内置工具：`python_runner`、`workspace_git_clone`、`workspace_list_files`、`workspace_read_text`
-- 产物下载：`GET /api/artifacts/:id/download?exp=&sig=`（签名 + 过期校验）
-- 执行安全：只读根文件系统、路径越界拦截、CPU/内存/pids/超时限制
-
-网络策略：
-
-- 默认执行网络关闭：`WORKSPACE_RUN_NETWORK_MODE=none`
-- 若确需 Python 代码直连网络：`WORKSPACE_RUN_NETWORK_MODE=default`
+- **Skill 插件系统**：内置 Skill + GitHub 第三方 Skill 安装、审批、激活、绑定、审计
+- **Workspace Agent**：会话级隔离沙箱，内置 `python_runner`、`workspace_git_clone`、`workspace_list_files`、`workspace_read_text`
+- **Python Runtime 受管环境**：启动自动 reconcile，支持缺库自动安装
+- **Artifact 下载链路**：`GET /api/artifacts/:id/download?exp=&sig=`（签名 + 过期校验）
 
 ---
 
-## Skill 协议与破坏性变更（无向后兼容）
+## Workspace 部署前置条件（必须满足）
 
-### 统一请求字段：`skills`
+要启用 `python_runner` 与 workspace 工具链，backend 容器必须满足：
+
+- 容器内有 `docker` CLI（官方镜像已内置）
+- 容器内有 `git` CLI（`workspace_git_clone` 依赖，官方镜像已内置）
+- 挂载 Docker socket：`/var/run/docker.sock:/var/run/docker.sock`
+
+默认 `docker-compose.yml` 若未挂载 socket，请在 backend 的 `volumes` 中补充：
+
+```yaml
+- /var/run/docker.sock:/var/run/docker.sock
+```
+
+网络策略：
+
+- 默认 `WORKSPACE_RUN_NETWORK_MODE=none`（执行代码不直连外网）
+- 需要 Python 代码联网时，改为 `WORKSPACE_RUN_NETWORK_MODE=default`
+
+---
+
+## BREAKING 变更（无向后兼容，直接替换）
+
+- 聊天/Battle 请求字段统一为 `skills`，旧 `features` 已移除
+- 旧主机执行配置 `python_tool_command`、`python_tool_args` 已下线
+- 聊天侧动态第三方 Skill runtime 已禁用，请改用 workspace 工具链
+
+请求示例：
 
 ```json
 {
@@ -172,57 +297,23 @@ npm run start:dev
 }
 ```
 
-### BREAKING（迁移策略：无迁移，直接替换）
-
-- 聊天/Battle 的旧 `features` 字段已移除，必须改为 `skills`
-- 旧主机执行配置 `python_tool_command`、`python_tool_args` 已下线
-- 聊天侧动态第三方 Skill runtime 已禁用，请改用 workspace 工具链
-
 ---
 
-## 关键环境变量
+## 目录结构
 
-| 变量 | 说明 |
-| --- | --- |
-| `JWT_SECRET` | JWT 签名密钥（生产必须修改） |
-| `ENCRYPTION_KEY` | 连接密钥加密密钥（建议必配） |
-| `DB_INIT_ON_START` | 首次初始化建议 `true`，完成后改 `false` |
-| `PYTHON_RUNTIME_RECONCILE_ON_START` | 启动时自动对齐 Python 受管依赖（默认 `true`） |
-| `SKILL_STORAGE_ROOT` | Skill 安装包目录（建议落在持久卷） |
-| `WORKSPACE_TOOL_ENABLE` | 是否启用 workspace 工具链（默认 `true`） |
-| `WORKSPACE_RUN_NETWORK_MODE` | Python 执行网络策略：`none` / `default` |
-| `WORKSPACE_ARTIFACT_SIGNING_SECRET` | artifact 下载签名密钥（生产建议独立配置） |
-
----
-
-## 常用命令
-
-```bash
-# 启动开发环境
-npm run start:dev
-
-# 启动生产模式（本地）
-npm run start:prod
-
-# 数据库迁移部署
-pnpm --filter backend db:deploy
-
-# 测试
-pnpm --filter backend test
-
-# 构建
-pnpm --filter backend build
+```text
+aichat/
+├── packages/
+│   ├── backend/
+│   ├── frontend/
+│   └── shared/
+├── docs/
+├── scripts/
+├── docker-compose.yml
+├── docker-compose.dev.yml
+├── start.sh
+└── start.bat
 ```
-
----
-
-## 升级说明
-
-- 以 **正确性优先于兼容性** 为原则，README 所述新链路均为当前主线行为
-- 若你仍在使用旧 `features` / 旧 Python 主机执行配置，请按本文直接替换
-- 版本升级涉及 Prisma 迁移时，执行：
-  - `pnpm --filter backend prisma migrate deploy`
-  - `pnpm --filter backend prisma generate`
 
 ---
 
