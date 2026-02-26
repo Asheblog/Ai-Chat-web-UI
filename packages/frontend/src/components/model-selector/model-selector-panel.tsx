@@ -30,6 +30,7 @@ export function ModelSelector({
   dropdownDirection = "auto",
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectorView, setSelectorView] = useState<SelectorView>("all")
   const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>("all")
@@ -38,6 +39,7 @@ export function ModelSelector({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   const { models: allModels, isLoading: loading, fetchAll } = useModelsStore()
   const modelsCount = allModels.length
@@ -65,6 +67,30 @@ export function ModelSelector({
     return () => {
       window.clearTimeout(timer)
     }
+  }, [open])
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined") {
+      return
+    }
+
+    let current: HTMLElement | null = triggerRef.current
+    let nearestScrollable: HTMLElement | null = null
+
+    while (current) {
+      const style = window.getComputedStyle(current)
+      const overflowY = style.overflowY
+      const canScrollY = overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay"
+
+      if (canScrollY && current.scrollHeight > current.clientHeight) {
+        nearestScrollable = current
+        break
+      }
+
+      current = current.parentElement
+    }
+
+    setPortalContainer(nearestScrollable)
   }, [open])
 
   const selected = useMemo(() => {
@@ -217,6 +243,7 @@ export function ModelSelector({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <ModelSelectorTrigger
+          ref={triggerRef}
           open={open}
           selected={selected}
           disabled={disabled}
@@ -225,6 +252,7 @@ export function ModelSelector({
         />
       </PopoverTrigger>
       <PopoverContent
+        portalContainer={portalContainer}
         side={forceBottomDropdown ? "bottom" : undefined}
         align={forceBottomDropdown ? "start" : undefined}
         sideOffset={forceBottomDropdown ? 8 : undefined}

@@ -38,7 +38,7 @@ export function ModelSelectorGroupList({
   return (
     <CommandList
       className={cn(
-        "overscroll-contain",
+        "overscroll-auto",
         forceBottomDropdown ? "max-h-none min-h-0 flex-1" : "max-h-[min(62dvh,520px)]"
       )}
     >
