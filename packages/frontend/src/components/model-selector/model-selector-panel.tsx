@@ -82,7 +82,7 @@ export function ModelSelector({
       const overflowY = style.overflowY
       const canScrollY = overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay"
 
-      if (canScrollY && current.scrollHeight > current.clientHeight) {
+      if (canScrollY) {
         nearestScrollable = current
         break
       }
@@ -256,7 +256,11 @@ export function ModelSelector({
         side={forceBottomDropdown ? "bottom" : undefined}
         align={forceBottomDropdown ? "start" : undefined}
         sideOffset={forceBottomDropdown ? 8 : undefined}
-        avoidCollisions={forceBottomDropdown ? false : undefined}
+        style={
+          forceBottomDropdown
+            ? { height: "min(var(--radix-popover-content-available-height, 78dvh), 680px)" }
+            : undefined
+        }
         className={cn(
           "w-[min(96vw,520px)] overflow-hidden rounded-xl border border-border/70 p-0 shadow-xl",
           forceBottomDropdown
