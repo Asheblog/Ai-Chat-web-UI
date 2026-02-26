@@ -1446,7 +1446,17 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
 	                // 提取AI响应内容
 	                const deltaContent: string | undefined = parsed.choices?.[0]?.delta?.content;
-	                const deltaReasoning: string | undefined = parsed.choices?.[0]?.delta?.reasoning_content;
+	                const deltaReasoning: string | undefined =
+	                  parsed?.choices?.[0]?.delta?.reasoning_content ??
+	                  parsed?.choices?.[0]?.delta?.reasoning ??
+	                  parsed?.choices?.[0]?.delta?.thinking ??
+	                  parsed?.choices?.[0]?.delta?.analysis ??
+	                  parsed?.delta?.reasoning_content ??
+	                  parsed?.delta?.reasoning ??
+	                  parsed?.message?.reasoning_content ??
+	                  parsed?.message?.reasoning ??
+	                  parsed?.reasoning ??
+	                  parsed?.analysis;
 
                 // 供应商原生 reasoning_content（OpenAI 等）
                 if (REASONING_ENABLED && deltaReasoning) {

@@ -593,9 +593,28 @@ export class StreamOrchestrator {
               }
 
               // 提取内容
-              const choices = parsed.choices as Array<{ delta?: { content?: string; reasoning_content?: string }; finish_reason?: string }> | undefined
+              const choices = parsed.choices as Array<{
+                delta?: {
+                  content?: string
+                  reasoning_content?: string
+                  reasoning?: string
+                  thinking?: string
+                  analysis?: string
+                }
+                finish_reason?: string
+              }> | undefined
               const deltaContent = choices?.[0]?.delta?.content
-              const deltaReasoning = choices?.[0]?.delta?.reasoning_content
+              const deltaReasoning =
+                choices?.[0]?.delta?.reasoning_content ??
+                choices?.[0]?.delta?.reasoning ??
+                choices?.[0]?.delta?.thinking ??
+                choices?.[0]?.delta?.analysis ??
+                (parsed as any)?.delta?.reasoning_content ??
+                (parsed as any)?.delta?.reasoning ??
+                (parsed as any)?.message?.reasoning_content ??
+                (parsed as any)?.message?.reasoning ??
+                (parsed as any)?.reasoning ??
+                (parsed as any)?.analysis
 
               // 处理推理内容
               if (reasoning.enabled && deltaReasoning) {
