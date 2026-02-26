@@ -245,6 +245,7 @@ export function RejudgeDialog({
                 connectionId: model.connectionId ?? null,
                 rawId: model.rawId ?? null,
               })}
+              dropdownDirection="bottom"
               disabled={isRejudging}
               className="w-full justify-between"
             />

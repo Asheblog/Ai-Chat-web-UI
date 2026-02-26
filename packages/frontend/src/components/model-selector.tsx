@@ -17,6 +17,7 @@ interface ModelSelectorProps {
   disabled?: boolean
   className?: string
   variant?: "default" | "inline"
+  dropdownDirection?: "auto" | "bottom"
 }
 
 type CapabilityFilter = "all" | "vision" | "web_search" | "code_interpreter" | "image_generation"
@@ -34,7 +35,14 @@ const CAPABILITY_ICONS = {
   code_interpreter: { icon: Terminal, label: "Code", title: "代码执行" },
 }
 
-export function ModelSelector({ selectedModelId, onModelChange, disabled, className, variant = "default" }: ModelSelectorProps) {
+export function ModelSelector({
+  selectedModelId,
+  onModelChange,
+  disabled,
+  className,
+  variant = "default",
+  dropdownDirection = "auto",
+}: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>("all")
@@ -44,6 +52,7 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
 
   const { models: allModels, isLoading: loading, fetchAll } = useModelsStore()
   const modelsCount = allModels.length
+  const forceBottomDropdown = dropdownDirection === "bottom"
 
   // 初始化：获取模型数据和本地存储数据
   useEffect(() => {
@@ -323,8 +332,17 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent className="p-0 w-[360px]">
-        <Command shouldFilter={false}>
+      <PopoverContent
+        side={forceBottomDropdown ? "bottom" : undefined}
+        align={forceBottomDropdown ? "start" : undefined}
+        sideOffset={forceBottomDropdown ? 6 : undefined}
+        avoidCollisions={forceBottomDropdown ? false : undefined}
+        className={cn(
+          "p-0 w-[360px] max-w-[min(92vw,360px)]",
+          forceBottomDropdown && "max-h-[var(--radix-popover-content-available-height)] overflow-hidden"
+        )}
+      >
+        <Command shouldFilter={false} className={cn(forceBottomDropdown && "h-full")}>
           {/* 搜索和筛选区域 */}
           <div className="border-b px-3 py-3 space-y-3">
             <div className="flex gap-2">
@@ -428,7 +446,7 @@ export function ModelSelector({ selectedModelId, onModelChange, disabled, classN
             </div>
           )}
 
-          <CommandList className="max-h-[400px]">
+          <CommandList className={cn(forceBottomDropdown ? "max-h-none min-h-0 flex-1" : "max-h-[400px]")}>
             {loading && (
               <div className="p-2 space-y-2">
                 {Array.from({ length: 5 }).map((_, i) => (
