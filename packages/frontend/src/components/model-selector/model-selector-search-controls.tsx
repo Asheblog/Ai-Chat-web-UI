@@ -3,10 +3,7 @@ import { Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { CapabilityFilter, SelectorView } from "./model-selector-types"
-import {
-  CAPABILITY_FILTER_OPTIONS,
-  VIEW_FILTER_OPTIONS,
-} from "./model-selector-types"
+import { CAPABILITY_FILTER_OPTIONS, VIEW_FILTER_OPTIONS } from "./model-selector-types"
 
 interface ModelSelectorSearchControlsProps {
   searchTerm: string
@@ -28,7 +25,7 @@ export function ModelSelectorSearchControls({
   searchInputRef,
 }: ModelSelectorSearchControlsProps) {
   return (
-    <div className="space-y-3 border-b border-border/60 bg-muted/20 px-3 py-3">
+    <div className="space-y-2 border-b border-border/60 bg-background/95 px-2.5 py-2.5">
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -36,7 +33,7 @@ export function ModelSelectorSearchControls({
           value={searchTerm}
           onChange={(event) => onSearchTermChange(event.target.value)}
           placeholder="搜索模型 / 厂商 / 能力"
-          className="h-10 rounded-lg bg-background pl-9 pr-8"
+          className="h-9 rounded-md bg-background pl-9 pr-8 text-sm"
         />
         {searchTerm && (
           <button
@@ -50,14 +47,14 @@ export function ModelSelectorSearchControls({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
         {VIEW_FILTER_OPTIONS.map((option) => (
           <Button
             key={option.id}
             type="button"
             size="sm"
             variant={selectorView === option.id ? "default" : "outline"}
-            className="h-7 rounded-full px-3 text-xs"
+            className="h-7 shrink-0 rounded-full px-2.5 text-xs"
             onClick={() => onSelectorViewChange(option.id)}
           >
             {option.label}
@@ -65,8 +62,7 @@ export function ModelSelectorSearchControls({
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] text-muted-foreground">能力</span>
+      <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
         {CAPABILITY_FILTER_OPTIONS.map((option) => {
           const Icon = option.icon
           return (
@@ -75,11 +71,11 @@ export function ModelSelectorSearchControls({
               type="button"
               size="sm"
               variant={capabilityFilter === option.id ? "default" : "outline"}
-              className="h-7 rounded-full px-2.5 text-xs"
+              className="h-7 shrink-0 rounded-full px-2.5 text-xs"
               onClick={() => onCapabilityFilterChange(option.id)}
             >
               {Icon && <Icon className="mr-1 h-3 w-3" />}
-              {option.label}
+              <span className="sm:inline">{option.label}</span>
             </Button>
           )
         })}

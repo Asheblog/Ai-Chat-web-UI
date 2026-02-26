@@ -21,7 +21,10 @@ export function ModelSelectorCapabilityBadges({
     return (
       <Badge
         variant="secondary"
-        className="h-5 rounded-full border border-border/60 bg-muted/55 px-1.5 text-[10px] text-muted-foreground"
+        className={compact
+          ? "h-5 w-5 rounded-full border border-border/70 bg-muted/55 p-0 text-muted-foreground"
+          : "h-5 rounded-full border border-border/60 bg-muted/55 px-1.5 text-[10px] text-muted-foreground"
+        }
         title="通用对话"
       >
         <MessageCircle className="h-3 w-3" />
@@ -41,7 +44,10 @@ export function ModelSelectorCapabilityBadges({
           <Badge
             key={key}
             variant="secondary"
-            className="h-5 rounded-full border border-border/60 bg-muted/55 px-1.5 text-[10px] text-muted-foreground"
+            className={compact
+              ? "h-5 w-5 rounded-full border border-border/70 bg-muted/55 p-0 text-muted-foreground"
+              : "h-5 rounded-full border border-border/60 bg-muted/55 px-1.5 text-[10px] text-muted-foreground"
+            }
             title={config.title}
           >
             <Icon className="h-3 w-3" />

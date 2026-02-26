@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
+import { cn } from "@/lib/utils"
 import type { ModelItem } from "@/store/models-store"
 import { useModelsStore } from "@/store/models-store"
 import { modelKeyFor } from "@/store/model-preference-store"
@@ -10,17 +11,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   FAVORITE_MODELS_KEY,
   RECENT_MODELS_KEY,
+  type CapabilityFilter,
   type ModelSelectorProps,
+  type SelectorView,
 } from "./model-selector-types"
-import {
-  buildModelCollections,
-  isModelSelected,
-  parseStoredModelIds,
-} from "./model-selector-utils"
-import { ModelSelectorTrigger } from "./model-selector-trigger"
-import { ModelSelectorSearchControls } from "./model-selector-search-controls"
-import { ModelSelectorQuickGrid } from "./model-selector-quick-grid"
+import { buildModelCollections, isModelSelected, parseStoredModelIds } from "./model-selector-utils"
 import { ModelSelectorGroupList } from "./model-selector-group-list"
+import { ModelSelectorQuickGrid } from "./model-selector-quick-grid"
+import { ModelSelectorSearchControls } from "./model-selector-search-controls"
+import { ModelSelectorTrigger } from "./model-selector-trigger"
 
 export function ModelSelector({
   selectedModelId,
@@ -32,10 +31,8 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectorView, setSelectorView] = useState<"all" | "favorites" | "recent">("all")
-  const [capabilityFilter, setCapabilityFilter] = useState<
-    "all" | "vision" | "web_search" | "code_interpreter" | "image_generation"
-  >("all")
+  const [selectorView, setSelectorView] = useState<SelectorView>("all")
+  const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>("all")
   const [recentModels, setRecentModels] = useState<string[]>([])
   const [favoriteModels, setFavoriteModels] = useState<string[]>([])
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -73,6 +70,11 @@ export function ModelSelector({
   const selected = useMemo(() => {
     return allModels.find((model) => isModelSelected(model, selectedModelId))
   }, [allModels, selectedModelId])
+
+  const isSelected = useCallback(
+    (model: ModelItem) => isModelSelected(model, selectedModelId),
+    [selectedModelId]
+  )
 
   const handleSelectModel = useCallback(
     (model: ModelItem) => {
@@ -112,7 +114,7 @@ export function ModelSelector({
     })
   }, [])
 
-  const collections = useMemo(() => {
+  const { groupedModels, quickModels, visibleCount, favoriteModelKeys } = useMemo(() => {
     return buildModelCollections({
       allModels,
       searchTerm,
@@ -132,12 +134,7 @@ export function ModelSelector({
     selectedModelId,
   ])
 
-  const { groupedModels, quickModels, visibleCount, favoriteModelKeys } = collections
-
-  const isSelected = useCallback(
-    (model: ModelItem) => isModelSelected(model, selectedModelId),
-    [selectedModelId]
-  )
+  const groupNames = useMemo(() => Object.keys(groupedModels), [groupedModels])
 
   useEffect(() => {
     setCollapsedGroups((current) => {
@@ -145,7 +142,7 @@ export function ModelSelector({
         return current
       }
 
-      const availableGroups = new Set(Object.keys(groupedModels))
+      const availableGroups = new Set(groupNames)
       const next = new Set<string>()
 
       for (const group of current) {
@@ -156,9 +153,22 @@ export function ModelSelector({
 
       return next.size === current.size ? current : next
     })
-  }, [groupedModels])
+  }, [groupNames])
 
-  const groupNames = Object.keys(groupedModels)
+  useEffect(() => {
+    if (!open || groupNames.length === 0) {
+      return
+    }
+
+    const selectedGroup = groupNames.find((group) =>
+      groupedModels[group]?.some((model) => isModelSelected(model, selectedModelId))
+    )
+    const defaultOpenGroup = selectedGroup ?? groupNames[0]
+    const collapsed = new Set(groupNames.filter((group) => group !== defaultOpenGroup))
+
+    setCollapsedGroups(collapsed)
+  }, [open, groupNames, groupedModels, selectedModelId])
+
   const allGroupsCollapsed =
     groupNames.length > 0 && groupNames.every((groupName) => collapsedGroups.has(groupName))
 
@@ -197,6 +207,12 @@ export function ModelSelector({
     return "暂无可用模型"
   }, [searchTerm, selectorView, capabilityFilter])
 
+  const showQuickModels =
+    quickModels.length > 0 &&
+    !searchTerm &&
+    selectorView === "all" &&
+    capabilityFilter === "all"
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -213,9 +229,14 @@ export function ModelSelector({
         align={forceBottomDropdown ? "start" : undefined}
         sideOffset={forceBottomDropdown ? 8 : undefined}
         avoidCollisions={forceBottomDropdown ? false : undefined}
-        className="w-[420px] max-w-[min(95vw,420px)] overflow-hidden rounded-xl border border-border/70 p-0 shadow-xl"
+        className={cn(
+          "w-[min(96vw,520px)] overflow-hidden rounded-xl border border-border/70 p-0 shadow-xl",
+          forceBottomDropdown
+            ? "max-h-[var(--radix-popover-content-available-height)]"
+            : "max-h-[min(78dvh,680px)]"
+        )}
       >
-        <Command shouldFilter={false} className={forceBottomDropdown ? "h-full border-0" : "border-0"}>
+        <Command shouldFilter={false} className={cn("border-0", forceBottomDropdown && "h-full")}>
           <ModelSelectorSearchControls
             searchTerm={searchTerm}
             onSearchTermChange={setSearchTerm}
@@ -226,25 +247,22 @@ export function ModelSelector({
             searchInputRef={searchInputRef}
           />
 
-          {quickModels.length > 0 &&
-            !searchTerm &&
-            selectorView === "all" &&
-            capabilityFilter === "all" && (
-              <ModelSelectorQuickGrid
-                quickModels={quickModels}
-                isModelSelected={isSelected}
-                onSelectModel={handleSelectModel}
-              />
-            )}
+          {showQuickModels && (
+            <ModelSelectorQuickGrid
+              quickModels={quickModels}
+              isModelSelected={isSelected}
+              onSelectModel={handleSelectModel}
+            />
+          )}
 
-          <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+          <div className="flex items-center justify-between border-b border-border/60 px-2.5 py-1.5">
             <div className="text-[11px] text-muted-foreground">{visibleCount} 个模型</div>
             {groupNames.length > 1 && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 rounded-md px-2 text-xs text-muted-foreground"
+                className="h-6 rounded-md px-2 text-[11px] text-muted-foreground"
                 onClick={handleToggleAllGroups}
               >
                 {allGroupsCollapsed ? "展开全部" : "折叠全部"}

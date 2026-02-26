@@ -44,10 +44,10 @@ export const CAPABILITY_FILTER_OPTIONS: Array<{
   icon?: (typeof CAPABILITY_ICONS)[CapabilityKey]["icon"]
 }> = [
   { id: "all", label: "全部" },
-  { id: "vision", label: "多模态", icon: Eye },
+  { id: "vision", label: "视觉", icon: Eye },
   { id: "web_search", label: "联网", icon: Globe },
   { id: "image_generation", label: "绘图", icon: Palette },
-  { id: "code_interpreter", label: "编程", icon: Terminal },
+  { id: "code_interpreter", label: "代码", icon: Terminal },
 ]
 
 export const PRIORITY_GROUP_ORDER = [
