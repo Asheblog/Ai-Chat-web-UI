@@ -1,399 +1,239 @@
 # AI Chat 聊天平台
 
-轻量级 AI 聊天平台，后端基于 Hono + SQLite，前端基于 Next.js 14。
+轻量级、多模型、可扩展的 AI Chat 平台。  
+前端基于 Next.js 14，后端基于 Hono + Prisma + SQLite，采用 Monorepo 架构。
 
-🌐 示例网站：https://aichat.asheblog.org
-
----
-
-## 📖 项目简介
-
-AI Chat 是一个支持多模型接入的现代化 AI 聊天平台，具备完整的用户管理、会话管理、实时流式对话等功能。项目采用 monorepo 架构，前后端分离部署，支持 Docker 容器化部署。
+🌐 在线示例：https://aichat.asheblog.org
 
 ---
 
-## ✨ 主要功能
+## 项目定位
 
-| 功能模块 | 说明 |
+AI Chat 面向「可私有化部署 + 可持续扩展」场景，核心设计目标：
+
+- **轻量可运维**：SQLite + Docker Compose，单机即可稳定运行
+- **多模型统一接入**：OpenAI / Azure OpenAI / Ollama / Google 等
+- **工具化增强**：Skill 插件系统 + Workspace Agent
+- **安全可审计**：审批流、调用审计、可回溯产物下载
+
+---
+
+## 最近推送重点（2026-02-25 ~ 2026-02-26）
+
+- **Workspace Python 执行网络模式可配置**：新增 `WORKSPACE_RUN_NETWORK_MODE=none|default`，默认 `none`
+- **backend 镜像增强**：官方 backend 镜像内置 `docker` + `git` CLI，支持 `workspace_git_clone`
+- **容器权限与挂载路径增强**：自动处理 backend 用户访问 Docker socket；支持根据当前容器挂载动态解析 workspace 根路径
+- **Python 缺库自动补装增强**：在 workspace 沙箱中检测 `No module named ...` 并受控自动安装后重试
+- **推理面板时间线优化**：工具事件展示顺序与可读性提升
+
+---
+
+## 核心能力
+
+| 模块 | 能力 |
 | --- | --- |
-| **流式聊天** | SSE 实时对话、Markdown 渲染、代码高亮、LaTeX 公式、图片上传 |
-| **多模型接入** | 支持 OpenAI、Azure OpenAI、Ollama、Google Generative AI 等多种 AI 服务 |
-| **会话管理** | 多会话、会话置顶、会话分享、历史消息、消息重试 |
-| **用户系统** | 注册审批、角色管理（管理员/用户）、匿名访客支持、每日配额 |
-| **知识库** | 文档上传解析、RAG 检索增强生成（开发中） |
-| **Skill 插件系统** | 统一 `skills` 协议、GitHub Skill 安装、审批/激活/绑定、调用审计 |
-| **模型大乱斗** | 多模型同时对比评测、自动评分 |
-| **任务追踪** | 全链路请求追踪、工具调用日志、导出功能 |
-| **系统设置** | 品牌定制、连接管理、模型配置、配额管理 |
+| 聊天 | SSE 流式输出、Markdown/代码高亮、LaTeX、图片上传 |
+| 模型 | 多连接管理、模型目录聚合与刷新、模型标签与覆盖策略 |
+| Skill | 内置 Skill + GitHub 第三方 Skill 安装、审批、激活、绑定、审计 |
+| Workspace Agent | 会话级隔离沙箱、`python_runner`、代码仓库克隆与读取、artifact 下载 |
+| Python Runtime | 受管 venv、启动 reconcile、依赖来源治理、缺库自动安装 |
+| Battle | 多模型对战、评分与分享、历史清理 |
+| 治理 | 注册审批、角色权限、配额、调用链追踪 |
 
 ---
 
-## 🔧 Skill 功能使用说明（无向后兼容）
+## 架构与目录
 
-### 1. 协议变更（必须）
+```text
+aichat/
+├── packages/
+│   ├── backend/      # Hono API + Prisma + SQLite
+│   ├── frontend/     # Next.js 14 UI
+│   └── shared/       # 前后端共享类型/工具
+├── scripts/          # 本地开发、CI、工具脚本
+├── docs/             # 架构与部署文档
+├── docker-compose.yml
+├── docker-compose.dev.yml
+├── start.sh          # Linux / WSL 一键脚本
+└── start.bat         # Windows 一键脚本
+```
 
-- 聊天与 Battle 已从 `features` 完全切换为 `skills`。
-- 旧字段 `features` 会被后端直接拒绝，并返回升级提示。
-- 新字段结构：
-  - `skills.enabled: string[]`
-  - `skills.overrides?: Record<string, Record<string, unknown>>`
+---
 
-### 2. 内置预设与第三方 Skill
+## 快速开始
 
-当前 UI 已分为两类：
+### 1) Docker Compose（推荐）
 
-- `内置预设`（系统内置能力）
-  - 联网搜索（slug: `web-search`，tool: `web_search`）
-  - Python 工具（slug: `python-runner`，tool: `python_runner`）
-  - 网页读取（slug: `url-reader`，tool: `read_url`）
-  - 会话文档检索（slug: `document-search`）
-  - 知识库检索（slug: `knowledge-base-search`）
-- `第三方安装`（从 GitHub 安装后显示）
+前置要求：
 
-UI 展示为中文描述，但底层仍使用稳定的 slug/tool 名，便于 API 与审计对齐。
+- Docker / Docker Compose
+- 生产环境请准备强随机密钥：`JWT_SECRET`、`ENCRYPTION_KEY`、`WORKSPACE_ARTIFACT_SIGNING_SECRET`
 
-### 3. 聊天中如何使用 Skill
+```bash
+# 1. 克隆项目
+git clone <your-repo-url>
+cd aichat
 
-1. 在输入框左侧 `+` 菜单点击“打开技能面板”。
-2. 在“内置预设”中打开联网搜索/Python工具，或打开已安装的第三方技能。
-3. 发送消息后，模型会按需调用 Skill；工具时间线可看到调用过程。
-4. 高风险 Skill 会触发审批弹窗（管理员批准后继续）。
+# 2. 复制环境变量模板
+cp .env.example .env
 
-### 4. Battle 中如何使用 Skill
+# 3. 启动（生产 compose）
+docker compose up -d --build
+```
 
-1. 在 Battle 模型配置中为每个模型单独配置 `skills.enabled`。
-2. 同一场 Battle 的不同模型可启用不同 Skill 组合。
-3. 审批策略与审计记录与聊天侧共享同一套 Skill 运行时。
+Windows PowerShell 可用：
 
-### 5. 管理员如何安装第三方 Skill（GitHub）
+```powershell
+Copy-Item .env.example .env
+docker compose up -d --build
+```
 
-进入“系统设置 -> Skill 管理”：
+> 若要启用 Workspace Python 沙箱（`python_runner`），backend 服务必须满足：
+>
+> - 可访问 Docker（挂载 `/var/run/docker.sock:/var/run/docker.sock`）
+> - 容器内存在 `docker` 与 `git` CLI（官方 backend 镜像已内置）
 
-1. 在安装输入框填 GitHub 源：
-   - `owner/repo@ref`
-   - `owner/repo@ref:subdir`
-   - `https://github.com/<owner>/<repo>/(tree|blob)/<ref>/<path>`
-2. 对仅包含 `SKILL.md`（无 `manifest.yaml/yml/json`）的 Anthropic 风格 Skill，系统会自动生成兼容 manifest 与运行入口。
-3. 点击安装后，系统会执行：
-   - 拉取并解压 -> manifest 校验 -> 风险分级 -> 入库
-4. 对 `pending_approval` 版本先审批，再激活。
-5. 在“绑定管理”中绑定作用域（`system/user/session/battle_model`）。
-6. 支持卸载第三方 Skill：卸载后会自动尝试回收仅由该 Skill 使用、且未被其他激活 Skill/手动保留依赖占用的 Python 包。
-7. 卸载前支持 dry-run 预览：可先查看“将删除/将保留”的 Python 包清单，再确认真实卸载。
+健康检查：
 
-### 6. 审批与审计
+- 前端：`/api/health`
+- 后端：`/api/settings/health`
 
-- 审批队列：`GET /api/skills/approvals`
-- 审批响应：`POST /api/skills/approvals/:requestId/respond`
-- 审计查询：`GET /api/skills/audits`
+---
 
-内置/第三方 Skill 调用都会写入审计日志（请求摘要、输出摘要、耗时、审批结果、错误等）。
+### 2) 一键脚本（跨平台）
 
-### 7. API 示例
+Linux / WSL：
 
-聊天请求：
+```bash
+./start.sh dev
+./start.sh prod
+```
+
+Windows：
+
+```bat
+start.bat dev
+start.bat prod
+```
+
+---
+
+### 3) 本地开发（不走 Docker）
+
+```bash
+pnpm install
+cp .env.example .env
+pnpm --filter backend db:push
+npm run start:dev
+```
+
+Windows PowerShell：
+
+```powershell
+pnpm install
+Copy-Item .env.example .env
+pnpm --filter backend db:push
+npm run start:dev
+```
+
+---
+
+## Workspace Agent（重点）
+
+聊天链路已切换到会话级 workspace 模式（直接替换）：
+
+- 每个会话独立目录：`<APP_DATA_DIR>/workspaces/chat/<sessionId>/`
+- 固定子目录：`input/`、`repos/`、`artifacts/`、`.venv/`、`.meta/`
+- 内置工具：`python_runner`、`workspace_git_clone`、`workspace_list_files`、`workspace_read_text`
+- 产物下载：`GET /api/artifacts/:id/download?exp=&sig=`（签名 + 过期校验）
+- 执行安全：只读根文件系统、路径越界拦截、CPU/内存/pids/超时限制
+
+网络策略：
+
+- 默认执行网络关闭：`WORKSPACE_RUN_NETWORK_MODE=none`
+- 若确需 Python 代码直连网络：`WORKSPACE_RUN_NETWORK_MODE=default`
+
+---
+
+## Skill 协议与破坏性变更（无向后兼容）
+
+### 统一请求字段：`skills`
 
 ```json
 {
   "sessionId": 1,
-  "content": "请联网搜索今天的 NVIDIA 新闻并做汇总",
+  "content": "请搜索今天的 NVIDIA 新闻并汇总",
   "skills": {
     "enabled": ["web-search", "url-reader", "python-runner"],
     "overrides": {
-      "web-search": {
-        "scope": "webpage"
-      }
+      "web-search": { "scope": "webpage" }
     }
   }
 }
 ```
 
-Battle 模型配置片段：
+### BREAKING（迁移策略：无迁移，直接替换）
 
-```json
-{
-  "models": [
-    {
-      "modelId": "gpt-4.1",
-      "skills": {
-        "enabled": ["web-search", "url-reader"]
-      }
-    }
-  ]
-}
-```
-
-### 8. Skill 存储与持久化（重要）
-
-Skill 包目录优先级：
-
-1. `SKILL_STORAGE_ROOT`（显式配置，优先级最高）
-2. `APP_DATA_DIR/skills`
-3. `process.cwd()/data/skills`（本地开发默认）
-
-生产环境建议显式配置：
-
-- `SKILL_STORAGE_ROOT=/app/data/skills`
-
-并确保 `/app/data` 挂载持久卷。这样即使升级/删除镜像后重建容器，Skill 包仍保留。
-
-注意：如果执行 `docker compose down -v` 或手动删除 `backend_data` 卷，`/app/data/skills` 也会被一并删除。
-
-Skill 管理相关 API 一览：
-
-- `GET /api/skills/catalog`
-- `POST /api/skills/install`
-- `GET /api/skills/:skillId/uninstall-plan`
-- `DELETE /api/skills/:skillId`
-- `POST /api/skills/:skillId/versions/:versionId/approve`
-- `POST /api/skills/:skillId/versions/:versionId/activate`
-- `POST /api/skills/bindings`
-- `GET /api/skills/bindings`
-- `DELETE /api/skills/bindings/:bindingId`
-- `GET /api/skills/audits`
-- `GET /api/skills/approvals`
-- `POST /api/skills/approvals/:requestId/respond`
-
-### 9. Workspace Agent（会话级沙箱，BREAKING）
-
-聊天链路已切换为 **Workspace Agent 直替模式（无迁移、直接替换）**：
-
-- 每个会话独立 workspace：`<APP_DATA_DIR>/workspaces/chat/<sessionId>/`
-- 目录固定：`input/`、`repos/`、`artifacts/`、`.venv/`、`.meta/`
-- `python_runner` 仅在 Docker 沙箱执行（无主机 fallback）
-- 内置 workspace 工具：`workspace_git_clone`、`workspace_list_files`、`workspace_read_text`
-- 生成可下载文件时写入 `/workspace/artifacts`，后端自动发布下载链接
-
-Artifact 下载策略：
-
-- 下载接口：`GET /api/artifacts/:id/download?exp=&sig=`
-- 默认有效期 60 分钟（签名 + 过期校验）
-- 到期返回 `410 Gone`，清理器定时回收文件和记录
-- 会话可查询历史产物：`GET /api/chat/sessions/:sessionId/artifacts?messageId=`
-- 会话可手动销毁 workspace：`DELETE /api/chat/sessions/:sessionId/workspace`
-
-安全与隔离：
-
-- 代码执行固定在 Docker（`--read-only` + `/workspace` 唯一可写卷）
-- 默认执行网络关闭（`--network none`），仅依赖安装阶段受控联网
-- 如需允许 Python 代码直接联网，可设置 `WORKSPACE_RUN_NETWORK_MODE=default`
-- 严格路径校验：禁止绝对路径、`..`、越界软链、非 `artifacts/` 发布
-- 超时/资源限制：CPU、内存、pids、执行超时全部强制
-
-容器化部署前置条件（如 1Panel / Docker Compose）：
-
-- backend 容器内必须存在 `docker` CLI（官方 backend 镜像已内置）
-- backend 容器内必须存在 `git` CLI（用于 `workspace_git_clone`，官方 backend 镜像已内置）
-- backend 服务需要挂载宿主机 socket：`/var/run/docker.sock:/var/run/docker.sock`
-- 若未满足上述条件，`python_runner` 将返回 `WORKSPACE_DOCKER_UNAVAILABLE`（503）
-
-破坏性变更声明（无迁移、直接替换）：
-
-- 旧 `python_runner` 主机执行路径已下线
-- 旧 `python_tool_*` 主机执行配置（如 `python_tool_command`、`python_tool_args`）不再生效
-- 聊天侧动态第三方 Skill runtime 已禁用（请使用 workspace 工具链）
-- Battle 链路暂不接入 workspace，Battle 中 Python Skill 默认禁用
+- 聊天/Battle 的旧 `features` 字段已移除，必须改为 `skills`
+- 旧主机执行配置 `python_tool_command`、`python_tool_args` 已下线
+- 聊天侧动态第三方 Skill runtime 已禁用，请改用 workspace 工具链
 
 ---
 
-## 📁 项目结构
-
-```
-aichat/
-├── packages/
-│   ├── backend/                 # 后端 (Hono + Prisma + SQLite)
-│   │   ├── src/
-│   │   │   ├── api/             # API 路由
-│   │   │   ├── modules/         # 业务模块
-│   │   │   ├── services/        # 服务层
-│   │   │   ├── middleware/      # 中间件
-│   │   │   └── utils/           # 工具函数
-│   │   ├── prisma/              # 数据库 Schema
-│   │   └── Dockerfile
-│   ├── frontend/                # 前端 (Next.js 14)
-│   │   ├── src/
-│   │   │   ├── app/             # 页面路由
-│   │   │   ├── components/      # UI 组件
-│   │   │   ├── features/        # 功能模块
-│   │   │   ├── lib/             # 工具库
-│   │   │   └── store/           # 状态管理
-│   │   └── Dockerfile
-│   └── shared/                  # 共享代码
-├── docker-compose.yml           # 生产部署 Compose
-├── docker-compose.dev.yml       # 开发环境 Compose
-├── scripts/                     # 辅助脚本
-├── docs/                        # 项目文档
-└── start.sh / start.bat         # 快速启动脚本
-```
-
----
-
-## 🚀 部署方式
-
-### 方式一：Docker Compose 部署（推荐）
-
-**前提条件**
-- 已安装 Docker 和 Docker Compose
-- 镜像已推送到 GHCR：
-  - 后端：`ghcr.io/asheblog/aichat-backend:latest`
-  - 前端：`ghcr.io/asheblog/aichat-frontend:latest`
-
-**部署步骤**
-
-1. 创建 `docker-compose.yml` 文件（或使用 1Panel 编排）：
-
-```yaml
-version: '3.8'
-
-services:
-  backend:
-    image: ghcr.io/asheblog/aichat-backend:latest
-    container_name: ai-chat-backend
-    environment:
-      - NODE_ENV=production
-      - PORT=8001
-      - DATABASE_URL=file:/app/data/app.db
-      - JWT_SECRET=请改成强随机密码
-      - ENCRYPTION_KEY=请改成强随机密码
-      - CORS_ORIGIN=http://你的IP或域名:3555
-      - DB_INIT_ON_START=true  # 首次部署后改为 false
-      - PYTHON_RUNTIME_RECONCILE_ON_START=true  # 默认 true，建议保留开启
-      - SKILL_STORAGE_ROOT=/app/data/skills
-      - WORKSPACE_TOOL_ENABLE=true
-      - WORKSPACE_ARTIFACT_SIGNING_SECRET=请改成强随机密码
-    volumes:
-      - backend_data:/app/data
-      - backend_logs:/app/logs
-      - backend_images:/app/storage/chat-images
-      - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "3556:8001"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    networks:
-      - ai-chat-network
-
-  frontend:
-    image: ghcr.io/asheblog/aichat-frontend:latest
-    container_name: ai-chat-frontend
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=/api
-      - BACKEND_HOST=backend
-      - BACKEND_INTERNAL_PORT=8001
-    depends_on:
-      backend:
-        condition: service_healthy
-    ports:
-      - "3555:3000"
-    restart: unless-stopped
-    networks:
-      - ai-chat-network
-
-volumes:
-  backend_data:
-  backend_logs:
-  backend_images:
-
-networks:
-  ai-chat-network:
-    driver: bridge
-```
-
-2. 启动服务：
-```bash
-docker-compose up -d
-```
-
-3. 访问 `http://你的IP或域名:3555`，注册第一个账号（自动成为管理员）
-
-**关键配置说明**
+## 关键环境变量
 
 | 变量 | 说明 |
 | --- | --- |
-| `JWT_SECRET` | JWT 签名密钥，务必设置为 32 位以上强密码 |
-| `ENCRYPTION_KEY` | API Key 加密密钥，修改后需重新填写连接密钥 |
-| `CORS_ORIGIN` | 前端访问地址（含协议+端口） |
-| `DB_INIT_ON_START` | 首次部署设为 `true`，完成后改为 `false` |
-| `PYTHON_RUNTIME_RECONCILE_ON_START` | 启动时是否自动执行 Python runtime reconcile，默认 `true`，建议保留开启 |
-| `BATTLE_RETENTION_DAYS` | 乱斗历史自动清理天数，默认 `15`；设为 `0` 表示关闭自动清理 |
-| `SKILL_STORAGE_ROOT` | Skill 安装包目录，建议固定为 `/app/data/skills`（需落在持久卷内） |
-| `/app/data/python-runtime` | 受管 Python 运行环境目录，在线安装的包会持久化到该卷内 |
-
-**健康检查**
-- 前端：`http://你的IP或域名:3555/api/health`
-- 后端：`http://你的IP或域名:3556/api/settings/health`
-
-**版本更新**
-- 拉取最新镜像后重启容器即可
-- 如涉及数据库更新，请参阅 [CHANGELOG.md](./CHANGELOG.md)
+| `JWT_SECRET` | JWT 签名密钥（生产必须修改） |
+| `ENCRYPTION_KEY` | 连接密钥加密密钥（建议必配） |
+| `DB_INIT_ON_START` | 首次初始化建议 `true`，完成后改 `false` |
+| `PYTHON_RUNTIME_RECONCILE_ON_START` | 启动时自动对齐 Python 受管依赖（默认 `true`） |
+| `SKILL_STORAGE_ROOT` | Skill 安装包目录（建议落在持久卷） |
+| `WORKSPACE_TOOL_ENABLE` | 是否启用 workspace 工具链（默认 `true`） |
+| `WORKSPACE_RUN_NETWORK_MODE` | Python 执行网络策略：`none` / `default` |
+| `WORKSPACE_ARTIFACT_SIGNING_SECRET` | artifact 下载签名密钥（生产建议独立配置） |
 
 ---
 
-### 方式二：本地运行（开发环境）
+## 常用命令
 
-**前提条件**
-- Node.js ≥ 18
-- pnpm ≥ 8
-
-**运行步骤**
-
-1. 安装依赖：
 ```bash
-pnpm install
-```
-
-2. 复制环境变量配置：
-```bash
-cp .env.example .env
-```
-
-3. 初始化数据库：
-```bash
-pnpm --filter backend db:push
-```
-
-4. 启动开发服务：
-```bash
-# 开发模式（热更新）
+# 启动开发环境
 npm run start:dev
 
-# 生产模式
+# 启动生产模式（本地）
 npm run start:prod
-```
 
-5. 访问 `http://localhost:3000`
+# 数据库迁移部署
+pnpm --filter backend db:deploy
+
+# 测试
+pnpm --filter backend test
+
+# 构建
+pnpm --filter backend build
+```
 
 ---
 
-## 🖼️ 示例截图
+## 升级说明
 
-<img width="1920" alt="聊天界面" src="https://github.com/user-attachments/assets/26757bae-78de-4cf4-9e6a-584c4b2101db" />
-<img width="1920" alt="设置界面" src="https://github.com/user-attachments/assets/48179c04-afda-46e4-b74f-ffd29431934d" />
-<img width="1920" alt="模型管理" src="https://github.com/user-attachments/assets/13d407f8-40df-4fb4-9140-af068a2cd850" />
+- 以 **正确性优先于兼容性** 为原则，README 所述新链路均为当前主线行为
+- 若你仍在使用旧 `features` / 旧 Python 主机执行配置，请按本文直接替换
+- 版本升级涉及 Prisma 迁移时，执行：
+  - `pnpm --filter backend prisma migrate deploy`
+  - `pnpm --filter backend prisma generate`
 
 ---
 
-## 📄 开源协议
+## 更多文档
 
-本项目基于 [MIT License](./LICENSE) 开源。
+- 架构说明：[`docs/Architecture.md`](docs/Architecture.md)
+- 部署指南：[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- 变更日志：[`CHANGELOG.md`](CHANGELOG.md)
 
-```
-MIT License
+---
 
-Copyright (c) 2025 PanXmad
+## License
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+[MIT](LICENSE)
