@@ -205,7 +205,7 @@ export function ModelSelector({
           selected={selected}
           disabled={disabled}
           className={className}
-          variant={variant}
+          displayVariant={variant}
         />
       </PopoverTrigger>
       <PopoverContent
