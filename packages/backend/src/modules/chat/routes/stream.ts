@@ -1600,13 +1600,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
             // 保存AI完整回复延后到完成阶段，以便与 usage 绑定
 
+            // 始终计算兜底 completion tokens：即使关闭 usage 事件，也需要用于 metrics 与落库
+            try {
+              completionTokensFallback = await Tokenizer.countTokens(aiResponseContent);
+            } catch (_) {
+              completionTokensFallback = 0;
+            }
+
             // 在完成前透出兜底 usage（若未收到厂商 usage，或未设置仅透传）
             if (USAGE_EMIT && (!USAGE_PROVIDER_ONLY || !providerUsageSeen)) {
-              try {
-                completionTokensFallback = await Tokenizer.countTokens(aiResponseContent);
-              } catch (_) {
-                completionTokensFallback = 0;
-              }
               const fallbackUsagePayload = {
                 prompt_tokens: promptTokens,
                 completion_tokens: completionTokensFallback,

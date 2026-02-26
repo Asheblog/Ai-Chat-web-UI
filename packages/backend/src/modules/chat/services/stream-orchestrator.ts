@@ -689,13 +689,15 @@ export class StreamOrchestrator {
             reasoningDoneEmitted = true
           }
 
+          // 始终计算兜底 completion tokens：即使关闭 usage 事件，也需要用于 metrics 与落库
+          try {
+            completionTokensFallback = await Tokenizer.countTokens(aiResponseContent)
+          } catch {
+            completionTokensFallback = 0
+          }
+
           // 兜底 usage
           if (config.usageEmit && (!config.usageProviderOnly || !providerUsageSeen)) {
-            try {
-              completionTokensFallback = await Tokenizer.countTokens(aiResponseContent)
-            } catch {
-              completionTokensFallback = 0
-            }
             const fallbackUsagePayload = {
               prompt_tokens: promptTokens,
               completion_tokens: completionTokensFallback,
