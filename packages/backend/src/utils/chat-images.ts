@@ -120,6 +120,29 @@ const ensureProtocol = (proto: string | null | undefined, fallback: 'http' | 'ht
   return lower === 'https' ? 'https' : 'http'
 }
 
+const readFirstHeaderValue = (value: string | null) => {
+  if (!value) return ''
+  return value.split(',')[0]?.trim() || ''
+}
+
+const hostHasExplicitPort = (host: string) => {
+  if (!host) return false
+  if (host.startsWith('[')) {
+    return /\]:\d+$/.test(host)
+  }
+  return /:\d+$/.test(host)
+}
+
+const parseHostInfo = (protocol: 'http' | 'https', host: string) => {
+  try {
+    const parsed = new URL(`${protocol}://${host}`)
+    return { hostname: parsed.hostname, port: parsed.port }
+  } catch {
+    const [hostname = host, port = ''] = host.split(':')
+    return { hostname, port }
+  }
+}
+
 export function determineChatImageBaseUrl(options: { request: Request; siteBaseUrl?: string | null }): string {
   const candidate = sanitizeBaseUrl(options.siteBaseUrl) || sanitizeBaseUrl(CHAT_IMAGE_BASE_URL)
   if (candidate) return candidate
@@ -128,26 +151,25 @@ export function determineChatImageBaseUrl(options: { request: Request; siteBaseU
   const headers = req.headers
   const url = new URL(req.url)
 
-  const hostHeader = headers.get('host')
-  if (hostHeader) {
-    const protoFromUrl = url.protocol === 'https:' ? 'https' : 'http'
-    return `${protoFromUrl}://${hostHeader}`.replace(/\/+/g, '/').replace(/\/+$/, '')
-  }
+  const forwardedProto = readFirstHeaderValue(headers.get('x-forwarded-proto'))
+  const forwardedHost = readFirstHeaderValue(headers.get('x-forwarded-host'))
+  const forwardedPort = readFirstHeaderValue(headers.get('x-forwarded-port'))
+  const hostHeader = readFirstHeaderValue(headers.get('host'))
 
-  const forwardedProto = headers.get('x-forwarded-proto')
-  const forwardedHost = headers.get('x-forwarded-host')
-  const forwardedPort = headers.get('x-forwarded-port')
+  const fallbackProtocol = url.protocol === 'https:' ? 'https' : 'http'
+  const protocol = ensureProtocol(forwardedProto, fallbackProtocol)
+  let host = forwardedHost || hostHeader || url.host
 
-  let protocol = ensureProtocol(forwardedProto, url.protocol === 'https:' ? 'https' : 'http')
-  let host = forwardedHost || url.host
-
-  if (forwardedPort) {
-    const bareHost = host ? host.split(':')[0] : ''
-    host = bareHost ? `${bareHost}:${forwardedPort}` : host
+  if (host && forwardedPort && !hostHasExplicitPort(host)) {
+    const normalizedPort = forwardedPort.replace(/[^0-9]/g, '')
+    if (normalizedPort) {
+      host = `${host}:${normalizedPort}`
+    }
   }
 
   if (host) {
-    const bareHost = host.split(':')[0]
+    const hostInfo = parseHostInfo(protocol, host)
+    const bareHost = hostInfo.hostname
     const shouldSwapToLan =
       !bareHost ||
       bareHost === 'localhost' ||
@@ -156,9 +178,7 @@ export function determineChatImageBaseUrl(options: { request: Request; siteBaseU
     if (shouldSwapToLan) {
       const lan = pickLanIPv4()
       if (lan) {
-        const portPart =
-          (host.includes(':') ? host.split(':')[1] : url.port) ||
-          (protocol === 'https' ? '443' : '80')
+        const portPart = hostInfo.port || url.port || (protocol === 'https' ? '443' : '80')
         host = portPart ? `${lan}:${portPart}` : lan
       }
     }
