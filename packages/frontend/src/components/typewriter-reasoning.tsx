@@ -28,9 +28,9 @@ export function TypewriterReasoning({
   text,
   isStreaming,
   initialPlayedLength = 0,
-  speed = 20,
-  longTextThreshold = 500,
-  batchSize = 3,
+  speed = 30,
+  longTextThreshold = 240,
+  batchSize = 8,
 }: TypewriterReasoningProps) {
   const clampedInitial = useMemo(
     () => Math.max(0, Math.min(Math.floor(initialPlayedLength), text.length)),
@@ -74,12 +74,16 @@ export function TypewriterReasoning({
 
     // 打字机动画逻辑
     const animate = (timestamp: number) => {
+      if (lastTimeRef.current === 0) {
+        lastTimeRef.current = timestamp
+      }
       // 控制显示速度
-      if (timestamp - lastTimeRef.current >= speed) {
+      const elapsed = timestamp - lastTimeRef.current
+      if (elapsed >= speed) {
         const currentIndex = indexRef.current
         if (currentIndex < text.length) {
-          // 批量或逐字显示
-          const nextIndex = Math.min(currentIndex + charsPerFrame, text.length)
+          const steps = Math.max(1, Math.floor(elapsed / speed))
+          const nextIndex = Math.min(currentIndex + charsPerFrame * steps, text.length)
           indexRef.current = nextIndex
           setDisplayText(text.slice(0, nextIndex))
         }
@@ -93,6 +97,7 @@ export function TypewriterReasoning({
     }
 
     // 启动动画
+    lastTimeRef.current = 0
     rafRef.current = requestAnimationFrame(animate)
 
     // 清理函数

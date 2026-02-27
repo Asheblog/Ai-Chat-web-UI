@@ -2,6 +2,7 @@
 
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
+import { shallow } from 'zustand/shallow'
 import { useToast } from '@/components/ui/use-toast'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -17,6 +18,7 @@ import {
   useDocumentAttachments,
 } from '@/features/chat/composer'
 import type { ComposerImage, AttachedDocument } from '@/features/chat/composer'
+import { messageKey as toMessageKey } from '@/features/chat/store/utils'
 
 export type { AttachedDocument }
 
@@ -97,7 +99,26 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     error,
     assistantVariantSelections,
     updateSessionPrefs,
-  } = useChatStore()
+  } = useChatStore(
+    (state) => ({
+      currentSession: state.currentSession,
+      messageMetas: state.messageMetas,
+      messageBodies: state.messageBodies,
+      messageRenderCache: state.messageRenderCache,
+      messagePaginationBySession: state.messagePaginationBySession,
+      isMessagesLoading: state.isMessagesLoading,
+      isStreaming: state.isStreaming,
+      activeStreamCount: state.activeStreamCount,
+      streamMessage: state.streamMessage,
+      stopStreaming: state.stopStreaming,
+      loadOlderMessages: state.loadOlderMessages,
+      clearError: state.clearError,
+      error: state.error,
+      assistantVariantSelections: state.assistantVariantSelections,
+      updateSessionPrefs: state.updateSessionPrefs,
+    }),
+    shallow,
+  )
 
   const sessionMessageMetas = useMemo(() => {
     if (!currentSession) return []
@@ -493,10 +514,21 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     scrollToBottom()
   }, [sessionMessageMetas.length, scrollToBottom])
 
+  const streamScrollAnchor = useMemo(() => {
+    if (!isStreaming || sessionMessageMetas.length === 0) return 'idle'
+    const lastMeta = sessionMessageMetas[sessionMessageMetas.length - 1]
+    if (!lastMeta || lastMeta.role !== 'assistant') {
+      return `stream:${sessionMessageMetas.length}`
+    }
+    const key = toMessageKey(lastMeta.id)
+    const body = messageBodies[key]
+    return `stream:${key}:${body?.version ?? 0}:${body?.reasoningVersion ?? 0}`
+  }, [isStreaming, messageBodies, sessionMessageMetas])
+
   useEffect(() => {
     if (!isStreaming) return
     scrollToBottom()
-  }, [isStreaming, messageBodies, scrollToBottom])
+  }, [isStreaming, scrollToBottom, streamScrollAnchor])
 
   useEffect(() => {
     if (!textareaRef.current) return

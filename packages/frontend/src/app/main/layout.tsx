@@ -21,7 +21,7 @@ export default function MainLayout({
   children: React.ReactNode
 }) {
   const { theme, setTheme, sidebarCollapsed, setSidebarCollapsed, fetchSystemSettings } = useSettingsStore()
-  const { currentSession } = useChatStore()
+  const currentSession = useChatStore((state) => state.currentSession)
   const actorState = useAuthStore((state) => state.actorState)
   const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
   const [mounted, setMounted] = useState(false)

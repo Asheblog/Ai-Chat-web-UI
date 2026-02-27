@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
+import { shallow } from 'zustand/shallow'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { ChatInterface } from '@/components/chat-interface'
 import { useChatStore } from '@/store/chat-store'
@@ -21,14 +22,20 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
   const router = useRouter()
   const pathname = usePathname()
   const redirectedRef = useRef<string | null>(null)
-  const { currentSession, fetchSessions } = useChatStore((state) => ({
-    currentSession: state.currentSession,
-    fetchSessions: state.fetchSessions,
-  }))
-  const { fetchSystemSettings, hasSystemSettings } = useSettingsStore((state) => ({
-    fetchSystemSettings: state.fetchSystemSettings,
-    hasSystemSettings: Boolean(state.systemSettings),
-  }))
+  const { currentSession, fetchSessions } = useChatStore(
+    (state) => ({
+      currentSession: state.currentSession,
+      fetchSessions: state.fetchSessions,
+    }),
+    shallow,
+  )
+  const { fetchSystemSettings, hasSystemSettings } = useSettingsStore(
+    (state) => ({
+      fetchSystemSettings: state.fetchSystemSettings,
+      hasSystemSettings: Boolean(state.systemSettings),
+    }),
+    shallow,
+  )
 
   const normalizedSessionId =
     typeof initialSessionId === 'number' && Number.isFinite(initialSessionId)

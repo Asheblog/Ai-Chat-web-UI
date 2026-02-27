@@ -13,7 +13,10 @@ import type {
 import type { ModelItem } from '@/store/models-store'
 import type { MessageId } from '../types'
 
-export const STREAM_FLUSH_INTERVAL = 0
+// 以固定帧率批量刷新流式内容，避免每个 chunk 都触发一次重渲染
+export const STREAM_FLUSH_INTERVAL = 48
+// 本地快照写盘节流间隔，降低 localStorage JSON 读写压力
+export const STREAM_SNAPSHOT_PERSIST_INTERVAL = 400
 export const STREAM_SNAPSHOT_STORAGE_KEY = 'aichat:stream-completions'
 export const STREAM_SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 

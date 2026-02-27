@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { MutableRefObject } from 'react'
+import { shallow } from 'zustand/shallow'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MessageList } from '@/components/message-list'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
@@ -53,14 +54,17 @@ export function ChatMessageViewport({
     setShareSelection,
     clearShareSelection,
     exitShareSelectionMode,
-  } = useChatStore((state) => ({
-    shareSelection: state.shareSelection,
-    enterShareSelectionMode: state.enterShareSelectionMode,
-    toggleShareSelection: state.toggleShareSelection,
-    setShareSelection: state.setShareSelection,
-    clearShareSelection: state.clearShareSelection,
-    exitShareSelectionMode: state.exitShareSelectionMode,
-  }))
+  } = useChatStore(
+    (state) => ({
+      shareSelection: state.shareSelection,
+      enterShareSelectionMode: state.enterShareSelectionMode,
+      toggleShareSelection: state.toggleShareSelection,
+      setShareSelection: state.setShareSelection,
+      clearShareSelection: state.clearShareSelection,
+      exitShareSelectionMode: state.exitShareSelectionMode,
+    }),
+    shallow,
+  )
   const messageMetrics = useChatStore((state) => state.messageMetrics || {})
   const messageBodiesMap = useChatMessages((state) => state.messageBodies)
   const shareModeActive = shareSelection.enabled && shareSelection.sessionId === sessionId

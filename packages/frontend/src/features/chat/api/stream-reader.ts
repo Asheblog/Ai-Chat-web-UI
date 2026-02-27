@@ -1,5 +1,8 @@
 import type { ChatStreamChunk } from '@/types'
 
+const STREAM_DEBUG_ENABLED =
+  process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_DEBUG_STREAM === '1'
+
 export async function* parseEventStream(
   response: Response,
   streamKey: string,
@@ -22,7 +25,7 @@ export async function* parseEventStream(
       if (value) {
         const decoded = decoder.decode(value, { stream: true })
         buffer += decoded
-        if (process.env.NODE_ENV !== 'production') {
+        if (STREAM_DEBUG_ENABLED) {
           console.debug('[streamChat] chunk', decoded.slice(0, 120))
         }
         while (true) {
@@ -50,7 +53,7 @@ export async function* parseEventStream(
               yield chunk
             }
           } catch (error) {
-            if (process.env.NODE_ENV !== 'production') {
+            if (STREAM_DEBUG_ENABLED) {
               console.debug('[streamChat] JSON parse ignore:', error)
             }
           }

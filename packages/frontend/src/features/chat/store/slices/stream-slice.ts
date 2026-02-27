@@ -384,6 +384,7 @@ export const createStreamSlice: ChatSliceCreator<
       completedAt: null,
       streamKey,
       stopRequested: false,
+      lastSnapshotPersistedAt: 0,
     }
     runtime.registerActiveStream(streamEntry)
 

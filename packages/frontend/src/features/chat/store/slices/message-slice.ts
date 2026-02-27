@@ -121,30 +121,11 @@ export const createMessageSlice: ChatSliceCreator<
 
       const cache = get().messageImageCache
       const rawMessages = Array.isArray(response.data) ? response.data : []
-      const artifactGroups = new Map<number, import('@/types').WorkspaceArtifact[]>()
-      try {
-        const artifacts = await getSessionArtifacts(sessionId)
-        for (const artifact of artifacts) {
-          const messageId = typeof artifact.messageId === 'number' ? artifact.messageId : null
-          if (!messageId) continue
-          const list = artifactGroups.get(messageId) ?? []
-          list.push(artifact)
-          artifactGroups.set(messageId, list)
-        }
-      } catch {
-        // ignore artifact restore failures to avoid blocking message loading
-      }
+      const artifactsPromise = getSessionArtifacts(sessionId).catch(() => [])
 
       const normalized = rawMessages.map((msg) => {
         const merged = mergeImages(msg, cache)
-        const messageId = typeof merged.id === 'number' ? merged.id : null
-        if (!messageId) return merged
-        const artifacts = artifactGroups.get(messageId)
-        if (!artifacts || artifacts.length === 0) return merged
-        return {
-          ...merged,
-          artifacts,
-        }
+        return merged
       })
 
       const nextCache = { ...cache }
@@ -337,6 +318,82 @@ export const createMessageSlice: ChatSliceCreator<
         runtime.recomputeStreamingState()
       }
       runtime.applyBufferedSnapshots(sessionId)
+
+      // 异步补齐附件，避免切会话时被额外请求阻塞首屏消息渲染。
+      void artifactsPromise
+        .then((artifacts) => {
+          if (currentController.signal.aborted) return
+          if (!Array.isArray(artifacts) || artifacts.length === 0) return
+
+          const byMessageId = new Map<number, import('@/types').WorkspaceArtifact[]>()
+          for (const artifact of artifacts) {
+            const messageId = typeof artifact.messageId === 'number' ? artifact.messageId : null
+            if (!messageId) continue
+            const list = byMessageId.get(messageId) ?? []
+            list.push(artifact)
+            byMessageId.set(messageId, list)
+          }
+          if (byMessageId.size === 0) return
+
+          set((state) => {
+            let metasMutated = false
+            let bodiesMutated = false
+            let cacheMutated = false
+            const nextMetas = state.messageMetas.slice()
+            const nextBodies = { ...state.messageBodies }
+            const nextRenderCache = { ...state.messageRenderCache }
+
+            const sameArtifacts = (
+              prev: import('@/types').WorkspaceArtifact[] | undefined,
+              next: import('@/types').WorkspaceArtifact[],
+            ) => {
+              if (!Array.isArray(prev)) return false
+              if (prev.length !== next.length) return false
+              for (let i = 0; i < next.length; i += 1) {
+                const prevId = typeof prev[i]?.id === 'number' ? prev[i].id : null
+                const nextId = typeof next[i]?.id === 'number' ? next[i].id : null
+                if (prevId !== nextId) return false
+              }
+              return true
+            }
+
+            byMessageId.forEach((artifactList, messageId) => {
+              const key = messageKey(messageId)
+              const body = nextBodies[key]
+              if (body && !sameArtifacts(body.artifacts, artifactList)) {
+                nextBodies[key] = { ...body, artifacts: artifactList }
+                bodiesMutated = true
+                if (nextRenderCache[key]) {
+                  delete nextRenderCache[key]
+                  cacheMutated = true
+                }
+              }
+
+              const metaIndex = nextMetas.findIndex(
+                (meta) => meta.sessionId === sessionId && messageKey(meta.id) === key,
+              )
+              if (metaIndex !== -1) {
+                const meta = nextMetas[metaIndex]
+                if (!sameArtifacts(meta.artifacts, artifactList)) {
+                  nextMetas[metaIndex] = { ...meta, artifacts: artifactList }
+                  metasMutated = true
+                }
+              }
+            })
+
+            if (!metasMutated && !bodiesMutated && !cacheMutated) {
+              return state
+            }
+
+            return {
+              ...(metasMutated ? { messageMetas: nextMetas } : {}),
+              ...(bodiesMutated ? { messageBodies: nextBodies } : {}),
+              ...(cacheMutated ? { messageRenderCache: nextRenderCache } : {}),
+              ...(metasMutated ? { assistantVariantSelections: buildVariantSelections(nextMetas) } : {}),
+            }
+          })
+        })
+        .catch(() => {})
     } catch (error: any) {
       // 如果是请求被取消，静默处理，不显示错误
       if (error?.name === 'AbortError' || error?.name === 'CanceledError' || currentController.signal.aborted) {

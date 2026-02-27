@@ -17,6 +17,7 @@ import {
   messageKey,
   normalizeToolEvents,
   STREAM_FLUSH_INTERVAL,
+  STREAM_SNAPSHOT_PERSIST_INTERVAL,
   STREAM_SNAPSHOT_STORAGE_KEY,
   STREAM_SNAPSHOT_TTL_MS,
 } from './utils'
@@ -45,26 +46,16 @@ const getSnapshotStorages = (): Storage[] => {
   return storages
 }
 
-const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
-  if (typeof window === 'undefined') return []
-  const storages = getSnapshotStorages()
-  if (storages.length === 0) return []
+let snapshotCache: StreamCompletionSnapshot[] = []
+let snapshotCacheLoaded = false
+let snapshotWriteTimer: ReturnType<typeof setTimeout> | null = null
+let lastSnapshotPruneAt = 0
+const SNAPSHOT_PRUNE_INTERVAL_MS = 30 * 1000
+
+const sanitizeCompletionSnapshots = (parsed: any[]): StreamCompletionSnapshot[] => {
+  const now = Date.now()
   try {
-    const targetStorage = storages[0] ?? null
-    let parsed: any[] | null = null
-    let sourceStorage: Storage | null = null
-    for (const storage of storages) {
-      const raw = storage.getItem(STREAM_SNAPSHOT_STORAGE_KEY)
-      if (raw) {
-        parsed = JSON.parse(raw)
-        sourceStorage = storage
-        break
-      }
-    }
-    if (!parsed) return []
-    if (!Array.isArray(parsed)) return []
-    const now = Date.now()
-    const sanitized = parsed
+    return parsed
       .map((item) => {
         if (!item || typeof item !== 'object') return null
         const sessionId = Number((item as any).sessionId)
@@ -83,13 +74,13 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
         const metrics =
           metricsRaw && typeof metricsRaw === 'object'
             ? ({
-              firstTokenLatencyMs: normalizeMetricNumber((metricsRaw as any).firstTokenLatencyMs),
-              responseTimeMs: normalizeMetricNumber((metricsRaw as any).responseTimeMs),
-              tokensPerSecond: normalizeMetricNumber((metricsRaw as any).tokensPerSecond),
-              promptTokens: normalizeMetricNumber((metricsRaw as any).promptTokens),
-              completionTokens: normalizeMetricNumber((metricsRaw as any).completionTokens),
-              totalTokens: normalizeMetricNumber((metricsRaw as any).totalTokens),
-            } satisfies MessageStreamMetrics)
+                firstTokenLatencyMs: normalizeMetricNumber((metricsRaw as any).firstTokenLatencyMs),
+                responseTimeMs: normalizeMetricNumber((metricsRaw as any).responseTimeMs),
+                tokensPerSecond: normalizeMetricNumber((metricsRaw as any).tokensPerSecond),
+                promptTokens: normalizeMetricNumber((metricsRaw as any).promptTokens),
+                completionTokens: normalizeMetricNumber((metricsRaw as any).completionTokens),
+                totalTokens: normalizeMetricNumber((metricsRaw as any).totalTokens),
+              } satisfies MessageStreamMetrics)
             : null
         const hasMetricValue = metrics
           ? Object.values(metrics).some((value) => typeof value === 'number')
@@ -100,15 +91,17 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
             typeof (item as any).messageId === 'number' && Number.isFinite((item as any).messageId)
               ? Number((item as any).messageId)
               : null,
-          clientMessageId: typeof (item as any).clientMessageId === 'string'
-            ? (item as any).clientMessageId
-            : null,
+          clientMessageId:
+            typeof (item as any).clientMessageId === 'string'
+              ? (item as any).clientMessageId
+              : null,
           content: typeof (item as any).content === 'string' ? (item as any).content : '',
           reasoning: reasoningText,
           reasoningPlayedLength,
-          usage: (item as any).usage && typeof (item as any).usage === 'object'
-            ? ((item as any).usage as StreamCompletionSnapshot['usage'])
-            : undefined,
+          usage:
+            (item as any).usage && typeof (item as any).usage === 'object'
+              ? ((item as any).usage as StreamCompletionSnapshot['usage'])
+              : undefined,
           toolEvents: Array.isArray((item as any).toolEvents)
             ? ((item as any).toolEvents as ToolEvent[])
             : undefined,
@@ -124,7 +117,32 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
           metrics: hasMetricValue ? metrics : null,
         } as StreamCompletionSnapshot
       })
-      .filter((item): item is StreamCompletionSnapshot => Boolean(item && now - item.completedAt <= STREAM_SNAPSHOT_TTL_MS))
+      .filter(
+        (item): item is StreamCompletionSnapshot =>
+          Boolean(item && now - item.completedAt <= STREAM_SNAPSHOT_TTL_MS),
+      )
+  } catch {
+    return []
+  }
+}
+
+const loadCompletionSnapshotsFromStorage = (): StreamCompletionSnapshot[] => {
+  if (typeof window === 'undefined') return []
+  const storages = getSnapshotStorages()
+  if (storages.length === 0) return []
+  try {
+    const targetStorage = storages[0] ?? null
+    let parsed: any[] | null = null
+    let sourceStorage: Storage | null = null
+    for (const storage of storages) {
+      const raw = storage.getItem(STREAM_SNAPSHOT_STORAGE_KEY)
+      if (!raw) continue
+      parsed = JSON.parse(raw)
+      sourceStorage = storage
+      break
+    }
+    if (!parsed || !Array.isArray(parsed)) return []
+    const sanitized = sanitizeCompletionSnapshots(parsed)
     if (sanitized.length !== parsed.length && sourceStorage) {
       sourceStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(sanitized))
     }
@@ -137,20 +155,62 @@ const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
   }
 }
 
-const writeCompletionSnapshots = (records: StreamCompletionSnapshot[]) => {
+const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
+  if (typeof window === 'undefined') return []
+  if (!snapshotCacheLoaded) {
+    snapshotCache = loadCompletionSnapshotsFromStorage()
+    snapshotCacheLoaded = true
+    lastSnapshotPruneAt = Date.now()
+  } else if (snapshotCache.length > 0 && Date.now() - lastSnapshotPruneAt >= SNAPSHOT_PRUNE_INTERVAL_MS) {
+    snapshotCache = sanitizeCompletionSnapshots(snapshotCache as any[])
+    lastSnapshotPruneAt = Date.now()
+  }
+  return snapshotCache
+}
+
+const flushSnapshotWriteQueue = () => {
   if (typeof window === 'undefined') return
   const storages = getSnapshotStorages()
   const storage = storages[0]
   if (!storage) return
   try {
-    storage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(records))
+    storage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshotCache))
   } catch {
     // ignore quota errors
   }
 }
 
+const scheduleSnapshotWrite = () => {
+  if (snapshotWriteTimer != null) return
+  snapshotWriteTimer = setTimeout(() => {
+    snapshotWriteTimer = null
+    flushSnapshotWriteQueue()
+  }, STREAM_SNAPSHOT_PERSIST_INTERVAL)
+}
+
+const writeCompletionSnapshots = (records: StreamCompletionSnapshot[], immediate = false) => {
+  if (typeof window === 'undefined') return
+  snapshotCache = records
+  snapshotCacheLoaded = true
+  lastSnapshotPruneAt = Date.now()
+  if (immediate) {
+    if (snapshotWriteTimer != null) {
+      clearTimeout(snapshotWriteTimer)
+      snapshotWriteTimer = null
+    }
+    flushSnapshotWriteQueue()
+    return
+  }
+  scheduleSnapshotWrite()
+}
+
 export const snapshotDebug = (...args: any[]) => {
-  if (process.env.NODE_ENV === 'production') return
+  if (
+    process.env.NODE_ENV === 'production' ||
+    process.env.NEXT_PUBLIC_DEBUG_STREAM !== '1'
+  ) {
+    return
+  }
   // eslint-disable-next-line no-console
   console.debug('[snapshot]', ...args)
 }
@@ -205,7 +265,9 @@ const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
       reasoningPlayedLength: entries[index].reasoningPlayedLength,
     })
   }
-  writeCompletionSnapshots(entries)
+  const terminalSnapshot =
+    snapshot.streamStatus != null && snapshot.streamStatus !== 'streaming'
+  writeCompletionSnapshots(entries, terminalSnapshot)
 }
 
 const removeCompletionSnapshot = (
@@ -230,7 +292,7 @@ const removeCompletionSnapshot = (
     return true
   })
   if (filtered.length !== entries.length) {
-    writeCompletionSnapshots(filtered)
+    writeCompletionSnapshots(filtered, true)
   }
 }
 
@@ -1051,7 +1113,12 @@ export const createChatStoreRuntime = (
 
       return partial
     })
-    persistSnapshotForStream(active)
+    const now = Date.now()
+    const lastPersistedAt = active.lastSnapshotPersistedAt ?? 0
+    if (force || now - lastPersistedAt >= STREAM_SNAPSHOT_PERSIST_INTERVAL) {
+      persistSnapshotForStream(active)
+      active.lastSnapshotPersistedAt = now
+    }
   }
 
   const scheduleFlush = (stream: ActiveStreamEntry | null) => {

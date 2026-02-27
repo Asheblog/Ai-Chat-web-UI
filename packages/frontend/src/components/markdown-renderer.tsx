@@ -131,6 +131,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     if (/(^|\n)(?:\t| {4,})\S/.test(fallback)) return true
     return false
   }, [fallback])
+  const preferPlainStreamingFallback = useMemo(() => {
+    if (!isStreaming || !fallback) return false
+    return fallback.length > 1200 || fallbackHasCodeBlocks || needsMathSupport
+  }, [fallback, fallbackHasCodeBlocks, isStreaming, needsMathSupport])
 
   const handleCopyCode = async (code: string) => {
     try {
@@ -359,6 +363,18 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   }
 
   if (trimmedHtml.length === 0) {
+    if (preferPlainStreamingFallback) {
+      return (
+        <pre
+          className={cn(
+            'my-0 max-w-full whitespace-pre-wrap break-words rounded-lg bg-muted/20 px-3 py-2 text-sm',
+            (isStreaming || isRendering) && 'typing-cursor',
+          )}
+        >
+          {fallback}
+        </pre>
+      )
+    }
     return renderFallback()
   }
 

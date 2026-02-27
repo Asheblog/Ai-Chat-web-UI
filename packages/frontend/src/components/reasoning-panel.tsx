@@ -522,7 +522,10 @@ function ReasoningPanelComponent({
   const [activePythonCallId, setActivePythonCallId] = useState<string | null>(null)
   const [rawReasoningOpen, setRawReasoningOpen] = useState(false)
 
-  const pythonCalls = useMemo(() => aggregatePythonCalls(toolTimeline), [toolTimeline])
+  const pythonCalls = useMemo(
+    () => (expanded ? aggregatePythonCalls(toolTimeline) : []),
+    [expanded, toolTimeline],
+  )
   const pythonCallMap = useMemo(() => {
     const map = new Map<string, PythonToolCallItem>()
     pythonCalls.forEach((call) => map.set(call.id, call))
@@ -542,11 +545,12 @@ function ReasoningPanelComponent({
   }, [activePythonCallId, pythonCallMap])
 
   const thoughtSegments = useMemo(
-    () => buildThoughtSegments(reasoningRaw, toolTimeline),
-    [reasoningRaw, toolTimeline],
+    () => (expanded ? buildThoughtSegments(reasoningRaw, toolTimeline) : []),
+    [expanded, reasoningRaw, toolTimeline],
   )
 
   const activityItems = useMemo(() => {
+    if (!expanded) return [] as ActivityItem[]
     const items: ActivityItem[] = []
     const sortedTools = toolTimeline.slice().sort(compareToolTimelineEvents)
 
@@ -619,7 +623,7 @@ function ReasoningPanelComponent({
     }
 
     return items
-  }, [idleMs, pythonCallMap, status, thoughtSegments, toolTimeline])
+  }, [expanded, idleMs, pythonCallMap, status, thoughtSegments, toolTimeline])
 
   const hasReasoning = reasoningRaw.trim().length > 0 || Boolean(reasoningHtml)
 

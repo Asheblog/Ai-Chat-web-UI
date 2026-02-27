@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
 import { useRouter } from 'next/navigation'
+import { shallow } from 'zustand/shallow'
 import { useToast } from '@/components/ui/use-toast'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -28,7 +29,13 @@ const BUILTIN_SKILL_SLUGS = new Set([
 export const useWelcomeScreenViewModel = () => {
   const router = useRouter()
   const { toast } = useToast()
-  const { createSession, streamMessage } = useChatStore()
+  const { createSession, streamMessage } = useChatStore(
+    (state) => ({
+      createSession: state.createSession,
+      streamMessage: state.streamMessage,
+    }),
+    shallow,
+  )
   const { systemSettings, publicBrandText } = useSettingsStore()
   const { models, fetchAll } = useModelsStore()
   const { actorState, quota, actor } = useAuthStore((state) => ({

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { shallow } from 'zustand/shallow'
 import type { ChatStore } from './types'
 import { createChatStoreRuntime } from './runtime'
 import { createSessionSlice } from './slices/session-slice'
@@ -28,12 +29,12 @@ const buildSelector =
     selector(state)
 
 export const useChatSessions = <TSelected,>(selector: (slice: Pick<ChatStore, 'sessions' | 'currentSession' | 'isSessionsLoading' | 'error' | 'fetchSessions' | 'createSession' | 'selectSession' | 'deleteSession' | 'updateSessionTitle' | 'switchSessionModel' | 'updateSessionPrefs' | 'toggleSessionPin'>) => TSelected) =>
-  useChatStore(buildSelector(selector))
+  useChatStore(buildSelector(selector), shallow)
 
 export const useChatMessages = <TSelected,>(selector: (slice: Pick<ChatStore, 'messageMetas' | 'messageBodies' | 'messageRenderCache' | 'messageImageCache' | 'messagesHydrated' | 'messagePaginationBySession' | 'isMessagesLoading' | 'toolEvents' | 'assistantVariantSelections' | 'fetchMessages' | 'loadOlderMessages' | 'addMessage' | 'applyRenderedContent' | 'invalidateRenderedContent' | 'editLastUserMessage' | 'regenerateAssistantMessage' | 'cycleAssistantVariant'>) => TSelected) =>
-  useChatStore(buildSelector(selector))
+  useChatStore(buildSelector(selector), shallow)
 
 export const useChatStreaming = <TSelected,>(selector: (slice: Pick<ChatStore, 'isStreaming' | 'activeStreamSessionId' | 'activeStreamCount' | 'streamingSessions' | 'sendMessage' | 'streamMessage' | 'stopStreaming'>) => TSelected) =>
-  useChatStore(buildSelector(selector))
+  useChatStore(buildSelector(selector), shallow)
 
 export type { ChatStore }

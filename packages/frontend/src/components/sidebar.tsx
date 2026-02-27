@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Github, Pin, PinOff, Plus, Settings, Trash2, Trophy } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { shallow } from 'zustand/shallow'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -23,7 +23,6 @@ import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
-import { sessionItemVariants, sessionListVariants } from '@/lib/animations/sidebar'
 import { APP_VERSION, PROJECT_URL } from '@/lib/app-meta'
 
 const formatUsageLine = (usage?: UsageTotals) => {
@@ -56,7 +55,6 @@ export function Sidebar() {
   const {
     sessions,
     currentSession,
-    messageMetas,
     fetchSessions,
     selectSession,
     deleteSession,
@@ -64,7 +62,20 @@ export function Sidebar() {
     toggleSessionPin,
     sessionUsageTotalsMap,
     isSessionsLoading,
-  } = useChatStore()
+  } = useChatStore(
+    (state) => ({
+      sessions: state.sessions,
+      currentSession: state.currentSession,
+      fetchSessions: state.fetchSessions,
+      selectSession: state.selectSession,
+      deleteSession: state.deleteSession,
+      createSession: state.createSession,
+      toggleSessionPin: state.toggleSessionPin,
+      sessionUsageTotalsMap: state.sessionUsageTotalsMap,
+      isSessionsLoading: state.isSessionsLoading,
+    }),
+    shallow,
+  )
   const {
     systemSettings,
     sidebarCollapsed,
@@ -175,7 +186,9 @@ export function Sidebar() {
         !cur.title || cur.title.trim() === '' || cur.title === '新的对话' || cur.title === 'New Chat'
       )
       const serverCount = cur ? (sessions.find(s => s.id === cur.id)?._count?.messages ?? null) : null
-      const localCount = cur ? messageMetas.filter((meta) => meta.sessionId === cur.id).length : 0
+      const localCount = cur
+        ? useChatStore.getState().messageMetas.filter((meta) => meta.sessionId === cur.id).length
+        : 0
       const definitelyEmpty = Boolean(cur && isDefaultTitle && localCount === 0 && (serverCount === null || serverCount === 0))
       if (definitelyEmpty) {
         // 直接返回，复用当前空白会话
@@ -345,87 +358,76 @@ export function Sidebar() {
             </div>
           )}
 
-          <motion.div variants={sessionListVariants} initial={false} animate="animate">
-            <AnimatePresence mode="popLayout">
-              {sessions.map((session) => (
-                <motion.div
-                  key={session.id}
-                  variants={sessionItemVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  layout
-                  className={cn(
-                    "group relative flex cursor-pointer items-center justify-between rounded-xl border border-transparent p-3 transition-colors hover:bg-[hsl(var(--sidebar-hover))]",
-                    currentSession?.id === session.id && "border-primary/20 bg-primary/10"
+          {sessions.map((session) => (
+            <div
+              key={session.id}
+              className={cn(
+                "group relative flex cursor-pointer items-center justify-between rounded-xl border border-transparent p-3 transition-colors hover:bg-[hsl(var(--sidebar-hover))]",
+                currentSession?.id === session.id && "border-primary/20 bg-primary/10"
+              )}
+              onClick={() => handleSessionClick(session.id)}
+            >
+              <div className="min-w-0 flex-1 pr-1">
+                <p className="truncate text-sm font-medium flex items-center gap-1" title={session.title}>
+                  {session.pinnedAt ? (
+                    <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
+                  ) : null}
+                  <span className="truncate">{clipTitle(session.title, 10)}</span>
+                </p>
+                <p className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
+                  <span className="truncate">{formatSidebarDate(session.createdAt)}</span>
+                  {sessionUsageTotalsMap?.[session.id] && (
+                    <>
+                      <span className="opacity-60 shrink-0">·</span>
+                      <span className="shrink-0">{formatUsageLine(sessionUsageTotalsMap[session.id])}</span>
+                    </>
                   )}
-                  onClick={() => handleSessionClick(session.id)}
-                  whileHover={{ x: 4 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                >
-                  <div className="min-w-0 flex-1 pr-1">
-                    <p className="truncate text-sm font-medium flex items-center gap-1" title={session.title}>
-                      {session.pinnedAt ? (
-                        <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
-                      ) : null}
-                      <span className="truncate">{clipTitle(session.title, 10)}</span>
-                    </p>
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
-                      <span className="truncate">{formatSidebarDate(session.createdAt)}</span>
-                      {sessionUsageTotalsMap?.[session.id] && (
-                        <>
-                          <span className="opacity-60 shrink-0">·</span>
-                          <span className="shrink-0">{formatUsageLine(sessionUsageTotalsMap[session.id])}</span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-amber-500/80 opacity-70 transition hover:bg-amber-500/10 hover:text-amber-500 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleSessionPin(session.id, !session.pinnedAt)
-                            }}
-                            aria-label={session.pinnedAt ? '取消置顶' : '置顶会话'}
-                          >
-                            {session.pinnedAt ? (
-                              <PinOff className="h-4 w-4" />
-                            ) : (
-                              <Pin className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{session.pinnedAt ? '取消置顶' : '置顶'}</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-amber-500/80 opacity-70 transition hover:bg-amber-500/10 hover:text-amber-500 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleSessionPin(session.id, !session.pinnedAt)
+                        }}
+                        aria-label={session.pinnedAt ? '取消置顶' : '置顶会话'}
+                      >
+                        {session.pinnedAt ? (
+                          <PinOff className="h-4 w-4" />
+                        ) : (
+                          <Pin className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{session.pinnedAt ? '取消置顶' : '置顶'}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
 
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-destructive/80 opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
-                            onClick={(e) => requestDeleteSession(session.id, e)}
-                            aria-label="删除会话"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>删除会话</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive/80 opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                        onClick={(e) => requestDeleteSession(session.id, e)}
+                        aria-label="删除会话"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>删除会话</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+          ))}
         </div>
       </ScrollArea>
 
