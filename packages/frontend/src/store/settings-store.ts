@@ -6,19 +6,11 @@ import {
   getSystemSettings as fetchSystemSettingsApi,
   updateSystemSettings as updateSystemSettingsApi,
 } from '@/features/settings/api'
-
-const avatarReadyCache = new Map<string, boolean>()
-const preloadImage = (url: string): Promise<boolean> => {
-  if (typeof window === 'undefined') return Promise.resolve(false)
-  if (!url || typeof url !== 'string') return Promise.resolve(false)
-  return new Promise((resolve) => {
-    const img = new window.Image()
-    img.decoding = 'async'
-    img.onload = () => resolve(true)
-    img.onerror = () => resolve(false)
-    img.src = url
-  })
-}
+import {
+  isAvatarImageLoaded,
+  normalizeAvatarUrl,
+  preloadAvatarImage,
+} from '@/lib/avatar-image-cache'
 
 type AvatarUploadPayload = { data: string; mime: string }
 type SystemSettingsUpdatePayload = Partial<SystemSettings> & {
@@ -63,7 +55,7 @@ export const useSettingsStore = create<SettingsStore>()(
     (set, get) => {
       const ensureAssistantAvatarReady = (url?: string | null) => {
         if (typeof window === 'undefined') return
-        const normalized = typeof url === 'string' ? url.trim() : ''
+        const normalized = normalizeAvatarUrl(url)
         if (!normalized) {
           set((state) => {
             if (!state.assistantAvatarReady && state.assistantAvatarReadyFor === null) {
@@ -82,7 +74,7 @@ export const useSettingsStore = create<SettingsStore>()(
           }
           return { ...state, assistantAvatarReady: false, assistantAvatarReadyFor: normalized }
         })
-        if (avatarReadyCache.has(normalized)) {
+        if (isAvatarImageLoaded(normalized)) {
           set((state) => {
             if (state.assistantAvatarReadyFor !== normalized) return state
             if (state.assistantAvatarReady) return state
@@ -90,10 +82,7 @@ export const useSettingsStore = create<SettingsStore>()(
           })
           return
         }
-        preloadImage(normalized).then((success) => {
-          if (success) {
-            avatarReadyCache.set(normalized, true)
-          }
+        preloadAvatarImage(normalized).then((success) => {
           set((state) => {
             if (state.assistantAvatarReadyFor !== normalized) return state
             if (state.assistantAvatarReady === success) return state

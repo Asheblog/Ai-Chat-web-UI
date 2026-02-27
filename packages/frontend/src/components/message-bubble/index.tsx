@@ -9,6 +9,8 @@ import { useChatStore } from '@/store/chat-store'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { useSettingsStore } from '@/store/settings-store'
 import { useAuthStore } from '@/store/auth-store'
+import { useAvatarImageReady } from '@/hooks/use-avatar-image-ready'
+import { syncAvatarLoadingStatus } from '@/lib/avatar-image-cache'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
 import { ExpandEditorDialog } from '@/components/chat/expand-editor-dialog'
 import { ReasoningSection } from './reasoning-section'
@@ -211,7 +213,16 @@ function MessageBubbleComponent({
   const avatarFallbackText = isUser
     ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
     : 'A'
-  const assistantFallbackHidden = !isUser && assistantAvatarReady && Boolean(assistantAvatarUrl)
+  const avatarImageReady = useAvatarImageReady(avatarSrc)
+  const assistantImageReady = !isUser && assistantAvatarReady && Boolean(assistantAvatarUrl)
+  const avatarReady = avatarImageReady || assistantImageReady
+  const avatarFallbackHidden = avatarHasImage && avatarReady
+  const handleAvatarLoadingStatusChange = useCallback(
+    (status: 'idle' | 'loading' | 'loaded' | 'error') => {
+      syncAvatarLoadingStatus(avatarSrc, status)
+    },
+    [avatarSrc],
+  )
   const showVariantControls = Boolean(variantInfo)
   const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
   const shareableMessageId = typeof meta.id === 'number' ? meta.id : null
@@ -275,13 +286,17 @@ function MessageBubbleComponent({
     <div className={`relative ${selectionWrapperClass}`}>
       <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
         <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted mt-1.5'}`}>
-          <AvatarImage src={avatarSrc} alt={isUser ? '用户头像' : 'AI 头像'} />
+          <AvatarImage
+            src={avatarSrc}
+            alt={isUser ? '用户头像' : 'AI 头像'}
+            onLoadingStatusChange={handleAvatarLoadingStatusChange}
+          />
           <AvatarFallback
-            delayMs={avatarHasImage ? 180 : 0}
+            delayMs={avatarHasImage && !avatarReady ? 180 : 0}
             className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
-              assistantFallbackHidden ? 'opacity-0' : ''
+              avatarFallbackHidden ? 'opacity-0' : ''
             }`}
-            aria-hidden={assistantFallbackHidden ? 'true' : undefined}
+            aria-hidden={avatarFallbackHidden ? 'true' : undefined}
           >
             {avatarFallbackText}
           </AvatarFallback>

@@ -72,6 +72,13 @@ app.use(
     root: CHAT_IMAGE_STORAGE_ROOT,
     rewriteRequestPath: (path) =>
       path.replace(new RegExp(`^${escapeRegex(CHAT_IMAGE_PUBLIC_PATH)}`), ''),
+    onFound: (servedPath, c) => {
+      // 头像文件名为时间戳+UUID，内容更新会更换路径，可安全使用 immutable 缓存。
+      const normalized = servedPath.replace(/\\/g, '/')
+      if (/(^|\/)profiles\//.test(normalized)) {
+        c.header('Cache-Control', 'public, max-age=604800, immutable')
+      }
+    },
   }),
 );
 
