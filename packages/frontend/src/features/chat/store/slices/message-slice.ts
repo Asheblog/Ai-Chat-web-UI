@@ -16,7 +16,8 @@ import {
 
 // 用于取消消息加载请求的 AbortController
 let messagesAbortController: AbortController | null = null
-const DEFAULT_MESSAGE_PAGE_LIMIT = 50
+// 切换会话优先保证首屏响应，默认仅拉取较小分页，历史消息按需上滑加载。
+const DEFAULT_MESSAGE_PAGE_LIMIT = 20
 
 export const createMessageSlice: ChatSliceCreator<
   MessageSlice & {

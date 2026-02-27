@@ -82,7 +82,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
             oldestLoadedPage: 1,
             newestLoadedPage: 1,
             totalPages: 1,
-            limit: 50,
+            limit: 20,
             hasOlder: false,
             isLoadingOlder: false,
           },

@@ -10,6 +10,7 @@ import { getServerBranding } from '@/lib/server-branding'
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
+  preload: false,
   variable: '--font-inter',
 })
 
@@ -17,6 +18,7 @@ const notoSansSC = Noto_Sans_SC({
   weight: ['400', '500', '600', '700'],
   subsets: ['latin'],
   display: 'swap',
+  preload: false,
   variable: '--font-noto-sc',
   fallback: [
     'PingFang SC',

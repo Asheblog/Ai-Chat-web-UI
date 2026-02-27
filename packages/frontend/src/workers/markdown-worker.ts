@@ -7,7 +7,6 @@ import rehypeRaw from 'rehype-raw'
 import rehypeStringify from 'rehype-stringify'
 import rehypeKatex from 'rehype-katex'
 import { visit } from 'unist-util-visit'
-import 'katex/contrib/mhchem'
 import {
   remarkKatexTokenizer,
   defaultRemarkMathOptions,
@@ -130,12 +129,40 @@ const createProcessor = () => {
   return processor
 }
 
+let mhchemReady = false
+let mhchemLoading: Promise<void> | null = null
+
+const ensureMhchem = async () => {
+  if (mhchemReady) return
+  if (mhchemLoading) {
+    await mhchemLoading
+    return
+  }
+  mhchemLoading = import('katex/contrib/mhchem')
+    .then(() => {
+      mhchemReady = true
+    })
+    .catch((error) => {
+      // Worker 环境下个别打包/运行时会触发 document 相关错误，降级为不启用 mhchem。
+      if (typeof console !== 'undefined') {
+        // eslint-disable-next-line no-console
+        console.warn('[markdown-worker] mhchem unavailable, continue without chemistry extension', error)
+      }
+    })
+    .finally(() => {
+      mhchemLoading = null
+    })
+
+  await mhchemLoading
+}
+
 const renderMarkdown = async (markdown: string): Promise<{ html: string }> => {
   const trimmed = markdown.trim()
   if (trimmed.length === 0) {
     return { html: '' }
   }
   try {
+    await ensureMhchem()
     const processor = createProcessor()
     const prepared = encodeLatexPlaceholders(trimmed)
     const file = await processor.process(prepared)
