@@ -848,6 +848,12 @@ export const createChatStoreRuntime = (
         const nextReasoningDuration =
           serverMeta.reasoningDurationSeconds ?? prevMeta.reasoningDurationSeconds
         const nextReasoningIdle = serverMeta.reasoningIdleMs ?? prevMeta.reasoningIdleMs
+        const nextReasoningUnavailableCode =
+          serverMeta.reasoningUnavailableCode ?? prevMeta.reasoningUnavailableCode
+        const nextReasoningUnavailableReason =
+          serverMeta.reasoningUnavailableReason ?? prevMeta.reasoningUnavailableReason
+        const nextReasoningUnavailableSuggestion =
+          serverMeta.reasoningUnavailableSuggestion ?? prevMeta.reasoningUnavailableSuggestion
         const nextStableKey = prevMeta.stableKey || serverMeta.stableKey
         const metaNeedsUpdate =
           nextStreamStatus !== prevMeta.streamStatus ||
@@ -855,6 +861,9 @@ export const createChatStoreRuntime = (
           nextReasoningStatus !== prevMeta.reasoningStatus ||
           nextReasoningDuration !== prevMeta.reasoningDurationSeconds ||
           nextReasoningIdle !== prevMeta.reasoningIdleMs ||
+          nextReasoningUnavailableCode !== prevMeta.reasoningUnavailableCode ||
+          nextReasoningUnavailableReason !== prevMeta.reasoningUnavailableReason ||
+          nextReasoningUnavailableSuggestion !== prevMeta.reasoningUnavailableSuggestion ||
           (hasArtifactUpdates &&
             JSON.stringify(prevMeta.artifacts || []) !== JSON.stringify(normalizedArtifacts)) ||
           nextStableKey !== prevMeta.stableKey ||
@@ -869,6 +878,9 @@ export const createChatStoreRuntime = (
             reasoningStatus: nextReasoningStatus,
             reasoningDurationSeconds: nextReasoningDuration,
             reasoningIdleMs: nextReasoningIdle,
+            reasoningUnavailableCode: nextReasoningUnavailableCode,
+            reasoningUnavailableReason: nextReasoningUnavailableReason,
+            reasoningUnavailableSuggestion: nextReasoningUnavailableSuggestion,
             artifacts: hasArtifactUpdates ? normalizedArtifacts : prevMeta.artifacts,
             stableKey: nextStableKey,
             isPlaceholder: false,
@@ -1068,6 +1080,15 @@ export const createChatStoreRuntime = (
       }
       if (Object.prototype.hasOwnProperty.call(metaPatch, 'reasoningDurationSeconds')) {
         applyMetaField('reasoningDurationSeconds', metaPatch.reasoningDurationSeconds ?? null)
+      }
+      if (Object.prototype.hasOwnProperty.call(metaPatch, 'reasoningUnavailableCode')) {
+        applyMetaField('reasoningUnavailableCode', metaPatch.reasoningUnavailableCode ?? null)
+      }
+      if (Object.prototype.hasOwnProperty.call(metaPatch, 'reasoningUnavailableReason')) {
+        applyMetaField('reasoningUnavailableReason', metaPatch.reasoningUnavailableReason ?? null)
+      }
+      if (Object.prototype.hasOwnProperty.call(metaPatch, 'reasoningUnavailableSuggestion')) {
+        applyMetaField('reasoningUnavailableSuggestion', metaPatch.reasoningUnavailableSuggestion ?? null)
       }
 
       const contentChanged = prevBody.content !== active.content

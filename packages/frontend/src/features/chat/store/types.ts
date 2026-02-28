@@ -70,7 +70,17 @@ export interface StreamAccumulator {
   reasoningPlayedLength: number
   pendingContent: string
   pendingReasoning: string
-  pendingMeta: Partial<Pick<MessageMeta, 'reasoningStatus' | 'reasoningIdleMs' | 'reasoningDurationSeconds'>>
+  pendingMeta: Partial<
+    Pick<
+      MessageMeta,
+      | 'reasoningStatus'
+      | 'reasoningIdleMs'
+      | 'reasoningDurationSeconds'
+      | 'reasoningUnavailableCode'
+      | 'reasoningUnavailableReason'
+      | 'reasoningUnavailableSuggestion'
+    >
+  >
   flushTimer: ReturnType<typeof setTimeout> | null
   reasoningDesired: boolean
   reasoningActivated: boolean

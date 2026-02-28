@@ -104,6 +104,19 @@ export const normalizeChunk = (payload: any): ChatStreamChunk | null => {
     }
     return null
   }
+  if (payload?.type === 'reasoning_unavailable') {
+    return {
+      type: 'reasoning_unavailable',
+      unavailableCode: typeof payload.code === 'string' ? payload.code : undefined,
+      unavailableReason: typeof payload.reason === 'string' ? payload.reason : undefined,
+      unavailableSuggestion: typeof payload.suggestion === 'string' ? payload.suggestion : undefined,
+      reasoningProtocol:
+        payload.protocol === 'responses' || payload.protocol === 'chat_completions'
+          ? payload.protocol
+          : undefined,
+      reasoningDecision: typeof payload.decision === 'string' ? payload.decision : undefined,
+    }
+  }
   if (payload?.type === 'tool') {
     return {
       type: 'tool',

@@ -140,6 +140,9 @@ export interface Message {
   reasoningDurationSeconds?: number | null;
   reasoningStatus?: 'idle' | 'streaming' | 'done';
   reasoningIdleMs?: number | null;
+  reasoningUnavailableCode?: string | null;
+  reasoningUnavailableReason?: string | null;
+  reasoningUnavailableSuggestion?: string | null;
   streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
   streamCursor?: number;
   streamReasoning?: string | null;
@@ -165,6 +168,9 @@ export interface MessageMeta {
   reasoningStatus?: 'idle' | 'streaming' | 'done';
   reasoningDurationSeconds?: number | null;
   reasoningIdleMs?: number | null;
+  reasoningUnavailableCode?: string | null;
+  reasoningUnavailableReason?: string | null;
+  reasoningUnavailableSuggestion?: string | null;
   images?: string[];
   generatedImages?: GeneratedImage[];
   artifacts?: WorkspaceArtifact[];
@@ -691,6 +697,7 @@ export interface ChatStreamChunk {
     | 'complete'
     | 'error'
     | 'reasoning'
+    | 'reasoning_unavailable'
     | 'quota'
     | 'tool'
     | 'image'
@@ -738,6 +745,11 @@ export interface ChatStreamChunk {
   reason?: string;
   decision?: 'approved' | 'denied' | 'expired';
   expiresAt?: string | Date;
+  unavailableCode?: string;
+  unavailableReason?: string;
+  unavailableSuggestion?: string;
+  reasoningProtocol?: 'chat_completions' | 'responses';
+  reasoningDecision?: string;
 }
 
 /** API 错误类型 */

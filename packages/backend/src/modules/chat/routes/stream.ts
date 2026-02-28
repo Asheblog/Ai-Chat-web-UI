@@ -5,7 +5,8 @@ import { prisma } from '../../../db';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../types';
 import { AuthUtils } from '../../../utils/auth';
-import { convertOpenAIReasoningPayload, type ProviderType } from '../../../utils/providers';
+import type { ProviderType } from '../../../utils/providers';
+import { buildChatProviderRequest } from '../../../utils/chat-provider';
 import { Tokenizer } from '../../../utils/tokenizer';
 import { cleanupExpiredChatImages, loadPersistedChatImages, determineChatImageBaseUrl } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
@@ -42,6 +43,11 @@ import {
   deletePendingStreamCancelKey,
 } from '../../chat/stream-state';
 import { chatRequestBuilder } from '../services/chat-request-builder';
+import {
+  reasoningCompatibilityService,
+  type AttemptTracker,
+  type ReasoningProtocol,
+} from '../services/reasoning-compatibility-service';
 import type { AgentStreamMeta } from '../../chat/stream-state';
 import { BackendLogger as log } from '../../../utils/logger';
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers';
@@ -338,12 +344,18 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const sysMap = preparedRequest.systemSettings;
       const messagesPayload = preparedRequest.messagesPayload;
       const requestData: any = JSON.parse(JSON.stringify(preparedRequest.baseRequestBody));
-      const providerRequest = preparedRequest.providerRequest;
+      let providerRequest = preparedRequest.providerRequest;
       const provider = providerRequest.providerLabel as ProviderType;
       const baseUrl = session.connection.baseUrl.replace(/\/+$/, '');
       const authHeader = providerRequest.authHeader;
       const extraHeaders = providerRequest.extraHeaders;
       const providerHost = providerRequest.providerHost;
+      let activeReasoningProtocol: ReasoningProtocol =
+        provider === 'openai_responses' ? 'responses' : 'chat_completions';
+      let reasoningProtocolDecisionReason = 'initial_provider_default';
+      let reasoningCompatibilityProfile: Awaited<
+        ReturnType<typeof reasoningCompatibilityService.decideProtocol>
+      >['profile'] | null = null;
 
       log.debug('Chat stream request', { sessionId, actor: actor.identifier, provider, baseUrl, model: session.modelRawId })
 
@@ -435,6 +447,35 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const effectiveReasoningEnabled = preparedRequest.reasoning.enabled
       const effectiveReasoningEffort = preparedRequest.reasoning.effort
       const effectiveOllamaThink = preparedRequest.reasoning.ollamaThink
+      if (effectiveReasoningEnabled) {
+        const protocolDecision = await reasoningCompatibilityService.decideProtocol({
+          provider,
+          connectionId: session.connectionId,
+          modelRawId: session.modelRawId!,
+          reasoningEnabled: effectiveReasoningEnabled,
+        })
+        activeReasoningProtocol = protocolDecision.protocol
+        reasoningProtocolDecisionReason = protocolDecision.reason
+        reasoningCompatibilityProfile = protocolDecision.profile
+
+        if (provider === 'openai' && protocolDecision.protocol === 'responses') {
+          const responsesRequest = buildChatProviderRequest({
+            provider: 'openai_responses',
+            baseUrl,
+            rawModelId: session.modelRawId!,
+            body: requestData,
+            stream: true,
+          })
+          providerRequest = {
+            ...providerRequest,
+            url: responsesRequest.url,
+            body: responsesRequest.body,
+          }
+        }
+      } else {
+        activeReasoningProtocol = provider === 'openai_responses' ? 'responses' : 'chat_completions'
+        reasoningProtocolDecisionReason = 'reasoning_disabled'
+      }
 
       const defaultReasoningSaveToDb = (sysMap.reasoning_save_to_db ?? (process.env.REASONING_SAVE_TO_DB ?? 'true'))
         .toString()
@@ -560,6 +601,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
           reasoningEnabled: effectiveReasoningEnabled,
           reasoningEffort: effectiveReasoningEffort,
           ollamaThink: effectiveOllamaThink,
+          reasoningProtocol: activeReasoningProtocol,
+          reasoningProtocolDecision: reasoningProtocolDecisionReason,
           contextLimit,
         },
         maxEvents: traceDecision.config.maxEvents,
@@ -701,7 +744,13 @@ export const registerChatStreamRoutes = (router: Hono) => {
       let traceErrorMessage: string | null = null;
       let latexTraceRecorder: LatexTraceRecorder | null = null;
       let latexAuditSummary: { matched: number; unmatched: number } | null = null;
-      traceRecorder.log('stream:started', { mode: 'standard', provider, baseUrl });
+      traceRecorder.log('stream:started', {
+        mode: 'standard',
+        provider,
+        baseUrl,
+        reasoningProtocol: activeReasoningProtocol,
+        reasoningProtocolDecision: reasoningProtocolDecisionReason,
+      });
 
       let aiResponseContent = '';
       // 推理相关累积
@@ -771,6 +820,111 @@ export const registerChatStreamRoutes = (router: Hono) => {
         } catch { }
         return null;
       })();
+      const reasoningCompatibilityEnabled = REASONING_ENABLED && effectiveReasoningEnabled;
+      const detectChatReasoningSignal = (
+        payload: any,
+      ):
+        | 'delta.reasoning_content'
+        | 'delta.reasoning'
+        | 'delta.thinking'
+        | 'delta.analysis'
+        | null => {
+        if (typeof payload?.choices?.[0]?.delta?.reasoning_content === 'string') {
+          return 'delta.reasoning_content';
+        }
+        if (typeof payload?.choices?.[0]?.delta?.reasoning === 'string') {
+          return 'delta.reasoning';
+        }
+        if (typeof payload?.choices?.[0]?.delta?.thinking === 'string') {
+          return 'delta.thinking';
+        }
+        if (typeof payload?.choices?.[0]?.delta?.analysis === 'string') {
+          return 'delta.analysis';
+        }
+        if (typeof payload?.delta?.reasoning_content === 'string') {
+          return 'delta.reasoning_content';
+        }
+        if (typeof payload?.delta?.reasoning === 'string') {
+          return 'delta.reasoning';
+        }
+        if (typeof payload?.message?.reasoning_content === 'string') {
+          return 'delta.reasoning_content';
+        }
+        if (typeof payload?.message?.reasoning === 'string') {
+          return 'delta.reasoning';
+        }
+        if (typeof payload?.reasoning === 'string') {
+          return 'delta.reasoning';
+        }
+        if (typeof payload?.analysis === 'string') {
+          return 'delta.analysis';
+        }
+        return null;
+      };
+      const buildProtocolRequest = (protocol: ReasoningProtocol) => {
+        if (protocol === 'responses' && provider === 'openai') {
+          const next = buildChatProviderRequest({
+            provider: 'openai_responses',
+            baseUrl,
+            rawModelId: session.modelRawId!,
+            body: requestData,
+            stream: true,
+          });
+          return {
+            ...providerRequest,
+            url: next.url,
+            body: next.body,
+          };
+        }
+        if (protocol === 'chat_completions' && provider === 'openai') {
+          const next = buildChatProviderRequest({
+            provider: 'openai',
+            baseUrl,
+            rawModelId: session.modelRawId!,
+            body: requestData,
+            stream: true,
+          });
+          return {
+            ...providerRequest,
+            url: next.url,
+            body: next.body,
+          };
+        }
+        return providerRequest;
+      };
+      const responsesFallbackEnabled =
+        (sysMap.reasoning_responses_fallback_enabled ?? (process.env.REASONING_RESPONSES_FALLBACK_ENABLED ?? 'true'))
+          .toString()
+          .toLowerCase() !== 'false';
+      const isResponsesUnsupportedFallback = (statusCode: number, bodyText: string) => {
+        if (statusCode === 404 || statusCode === 405 || statusCode === 501) return true;
+        if (statusCode !== 400) return false;
+        const message = bodyText.toLowerCase();
+        return (
+          message.includes('/responses') ||
+          message.includes('responses') ||
+          message.includes('unknown endpoint') ||
+          message.includes('not found')
+        );
+      };
+      const createReasoningAttempt = (
+        protocol: ReasoningProtocol,
+        decisionReason: string,
+      ): AttemptTracker | null => {
+        if (!reasoningCompatibilityEnabled) return null;
+        return reasoningCompatibilityService.createAttempt({
+          provider,
+          connectionId: session.connectionId,
+          modelRawId: session.modelRawId!,
+          protocol,
+          reasoningEnabled: reasoningCompatibilityEnabled,
+          decisionReason,
+        });
+      };
+      let activeReasoningAttempt: AttemptTracker | null = createReasoningAttempt(
+        activeReasoningProtocol,
+        reasoningProtocolDecisionReason,
+      );
       const STREAM_DELTA_CHUNK_SIZE = Math.max(1, parseInt(sysMap.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'));
       const streamDeltaFlushIntervalMs = Math.max(
         0,
@@ -952,6 +1106,67 @@ export const registerChatStreamRoutes = (router: Hono) => {
             }
             return delivered
           }
+          const finalizeReasoningAttempt = async (params?: {
+            statusCode?: number | null
+            error?: string | null
+            emitUnavailableNotice?: boolean
+          }) => {
+            if (!activeReasoningAttempt) return reasoningCompatibilityProfile
+            const attempt = activeReasoningAttempt
+            const profile = await reasoningCompatibilityService.finalizeAttempt(attempt, {
+              statusCode: params?.statusCode,
+              error: params?.error,
+            })
+            activeReasoningAttempt = null
+            traceMetadataExtras.reasoningProtocol = attempt.protocol
+            traceMetadataExtras.reasoningProtocolDecision = attempt.decisionReason
+            traceMetadataExtras.reasoningSignals = Array.from(attempt.signals.values())
+            traceMetadataExtras.reasoningObserved = attempt.sawReasoning
+            if (profile) {
+              reasoningCompatibilityProfile = profile
+            }
+
+            if (params?.emitUnavailableNotice) {
+              const notice = reasoningCompatibilityService.buildUnavailableNotice({
+                attempt,
+                profile: reasoningCompatibilityProfile,
+              })
+              if (notice) {
+                const markedProfile = await reasoningCompatibilityService.markUnavailable(
+                  {
+                    provider,
+                    connectionId: session.connectionId,
+                    modelRawId: session.modelRawId!,
+                  },
+                  notice,
+                )
+                reasoningCompatibilityProfile = markedProfile
+                traceMetadataExtras.reasoningUnavailable = {
+                  code: notice.code,
+                  reason: notice.reason,
+                }
+                traceRecorder.log('reasoning:unavailable', {
+                  ...streamLogBase(),
+                  protocol: attempt.protocol,
+                  code: notice.code,
+                  reason: notice.reason,
+                  suggestion: notice.suggestion,
+                })
+                safeEnqueue(
+                  `data: ${JSON.stringify({
+                    type: 'reasoning_unavailable',
+                    code: notice.code,
+                    reason: notice.reason,
+                    suggestion: notice.suggestion,
+                    protocol: attempt.protocol,
+                    decision: attempt.decisionReason,
+                  })}\n\n`,
+                )
+              }
+            }
+
+            return reasoningCompatibilityProfile
+          }
           const completeWithNonStreamingFallback = async (
             origin: 'stream_error' | 'reasoning_only',
           ): Promise<boolean> => {
@@ -966,6 +1181,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
               if (!value) return;
               const trimmed = value.trim();
               if (!trimmed) return;
+              reasoningCompatibilityService.markReasoningObserved(activeReasoningAttempt);
               reasoningBuffer = reasoningBuffer
                 ? `${reasoningBuffer}${reasoningBuffer.endsWith('\n') ? '' : '\n'}${trimmed}`
                 : trimmed;
@@ -1103,6 +1319,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
               });
             }
 
+            await finalizeReasoningAttempt({
+              statusCode: 200,
+              emitUnavailableNotice: true,
+            });
             return true;
           };
 
@@ -1164,11 +1384,15 @@ export const registerChatStreamRoutes = (router: Hono) => {
             }
 
             // 调用第三方AI API（带退避）
-            const response = await providerRequestWithBackoff();
+            let response = await providerRequestWithBackoff();
 
-            log.debug('AI provider response', { status: response.status, ok: response.ok })
+            log.debug('AI provider response', {
+              status: response.status,
+              ok: response.ok,
+              protocol: activeReasoningProtocol,
+            })
             if (!response.ok) {
-              const errorText = await response.text().catch(() => '')
+              let errorText = await response.text().catch(() => '')
               traceRecorder.log('http:provider_error_body', {
                 route: '/api/chat/stream',
                 provider,
@@ -1177,17 +1401,87 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 statusText: response.statusText,
                 headers: redactHeadersForTrace(response.headers),
                 bodyPreview: truncateString(errorText, 500),
+                protocol: activeReasoningProtocol,
               })
-              // 解析上游错误并生成友好的错误消息
-              const parsedError = parseApiError({
-                status: response.status,
-                message: errorText,
-                error: errorText
-              });
-              const friendlyMessage = parsedError.suggestion
-                ? `${parsedError.message}。${parsedError.suggestion}`
-                : parsedError.message;
-              throw new Error(friendlyMessage);
+
+              const shouldFallbackToChat =
+                reasoningCompatibilityEnabled &&
+                provider === 'openai' &&
+                activeReasoningProtocol === 'responses' &&
+                responsesFallbackEnabled &&
+                isResponsesUnsupportedFallback(response.status, errorText)
+
+              if (shouldFallbackToChat) {
+                await finalizeReasoningAttempt({
+                  statusCode: response.status,
+                  error: errorText || `HTTP_${response.status}`,
+                  emitUnavailableNotice: false,
+                })
+                activeReasoningProtocol = 'chat_completions'
+                reasoningProtocolDecisionReason = 'responses_http_unsupported_fallback_chat'
+                providerRequest = buildProtocolRequest('chat_completions')
+                activeReasoningAttempt = createReasoningAttempt(
+                  activeReasoningProtocol,
+                  reasoningProtocolDecisionReason,
+                )
+                traceRecorder.log('reasoning:protocol_fallback', {
+                  ...streamLogBase(),
+                  from: 'responses',
+                  to: 'chat_completions',
+                  status: response.status,
+                  reason: 'responses_endpoint_unsupported',
+                })
+
+                response = await providerRequestWithBackoff()
+                log.debug('AI provider fallback response', {
+                  status: response.status,
+                  ok: response.ok,
+                  protocol: activeReasoningProtocol,
+                })
+                if (!response.ok) {
+                  errorText = await response.text().catch(() => '')
+                  traceRecorder.log('http:provider_error_body', {
+                    route: '/api/chat/stream',
+                    provider,
+                    sessionId,
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: redactHeadersForTrace(response.headers),
+                    bodyPreview: truncateString(errorText, 500),
+                    protocol: activeReasoningProtocol,
+                  })
+                  await finalizeReasoningAttempt({
+                    statusCode: response.status,
+                    error: errorText || `HTTP_${response.status}`,
+                    emitUnavailableNotice: false,
+                  })
+                  const parsedError = parseApiError({
+                    status: response.status,
+                    message: errorText,
+                    error: errorText,
+                  });
+                  const friendlyMessage = parsedError.suggestion
+                    ? `${parsedError.message}。${parsedError.suggestion}`
+                    : parsedError.message;
+                  throw new Error(friendlyMessage);
+                }
+              } else {
+                await finalizeReasoningAttempt({
+                  statusCode: response.status,
+                  error: errorText || `HTTP_${response.status}`,
+                  emitUnavailableNotice: false,
+                })
+                // 解析上游错误并生成友好的错误消息
+                const parsedError = parseApiError({
+                  status: response.status,
+                  message: errorText,
+                  error: errorText
+                });
+                const friendlyMessage = parsedError.suggestion
+                  ? `${parsedError.message}。${parsedError.suggestion}`
+                  : parsedError.message;
+                throw new Error(friendlyMessage);
+              }
             }
 
             // 处理流式响应
@@ -1375,6 +1669,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
 	                    const deltaContent = responsesEvent.contentDelta
 
 	                    if (REASONING_ENABLED && deltaReasoning) {
+                        const signal =
+                          parsed?.type === 'response.reasoning_summary_text.delta'
+                            ? 'responses.reasoning_summary_text.delta'
+                            : 'responses.reasoning_text.delta'
+                        reasoningCompatibilityService.markSignal(activeReasoningAttempt, signal)
 	                      if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
 	                      pendingReasoningDelta += deltaReasoning
 	                      reasoningDeltaCount += 1
@@ -1394,6 +1693,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
 	                        const { visibleDelta, reasoningDelta } = extractByTags(deltaContent, tags, reasoningState)
 	                        visible = visibleDelta
 	                        if (reasoningDelta) {
+                            reasoningCompatibilityService.markSignal(activeReasoningAttempt, 'tag.reasoning')
+                            reasoningCompatibilityService.markReasoningObserved(activeReasoningAttempt)
 	                          if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
 	                          pendingReasoningDelta += reasoningDelta
 	                          reasoningDeltaCount += 1
@@ -1460,6 +1761,12 @@ export const registerChatStreamRoutes = (router: Hono) => {
 
                 // 供应商原生 reasoning_content（OpenAI 等）
                 if (REASONING_ENABLED && deltaReasoning) {
+                  const signal = detectChatReasoningSignal(parsed)
+                  if (signal) {
+                    reasoningCompatibilityService.markSignal(activeReasoningAttempt, signal)
+                  } else {
+                    reasoningCompatibilityService.markReasoningObserved(activeReasoningAttempt)
+                  }
                   if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
                   pendingReasoningDelta += deltaReasoning;
                   reasoningDeltaCount += 1;
@@ -1476,6 +1783,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
                     const { visibleDelta, reasoningDelta } = extractByTags(deltaContent, tags, reasoningState);
                     visible = visibleDelta;
                     if (reasoningDelta) {
+                      reasoningCompatibilityService.markSignal(activeReasoningAttempt, 'tag.reasoning')
+                      reasoningCompatibilityService.markReasoningObserved(activeReasoningAttempt)
                       if (!reasoningState.startedAt) reasoningState.startedAt = Date.now();
                       pendingReasoningDelta += reasoningDelta;
                       reasoningDeltaCount += 1;
@@ -1553,6 +1862,8 @@ export const registerChatStreamRoutes = (router: Hono) => {
               ...streamLogBase(),
               provider,
               baseUrl,
+              protocol: activeReasoningProtocol,
+              protocolDecision: reasoningProtocolDecisionReason,
               firstChunkAt,
               firstChunkDelayMs: firstChunkAt ? firstChunkAt - requestStartedAt : null,
               firstDeltaDelayMs: providerFirstDeltaAt ? providerFirstDeltaAt - requestStartedAt : null,
@@ -1593,6 +1904,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
                   status: 'error',
                   errorMessage,
                 });
+                await finalizeReasoningAttempt({
+                  statusCode: 200,
+                  error: errorMessage,
+                  emitUnavailableNotice: false,
+                });
                 return;
               }
             }
@@ -1607,6 +1923,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
               safeEnqueue(reasoningDoneEvent);
               reasoningDoneEmitted = true;
             }
+            await finalizeReasoningAttempt({
+              statusCode: 200,
+              emitUnavailableNotice: true,
+            });
 
             // 保存AI完整回复延后到完成阶段，以便与 usage 绑定
 
@@ -1737,6 +2057,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 status: 'cancelled',
                 errorMessage: 'Cancelled by user',
               });
+              await finalizeReasoningAttempt({
+                error: 'cancelled_by_user',
+                emitUnavailableNotice: false,
+              });
               traceStatus = 'cancelled';
               traceRecorder.log('stream:cancelled', { sessionId, assistantMessageId });
               return;
@@ -1771,6 +2095,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
               status: 'error',
               errorMessage,
             });
+            await finalizeReasoningAttempt({
+              error: errorMessage,
+              emitUnavailableNotice: false,
+            });
           } finally {
             if (requestSignal) {
               try {
@@ -1804,6 +2132,10 @@ export const registerChatStreamRoutes = (router: Hono) => {
             if (latexAuditSummary) {
               traceMetadataExtras.latexAudit = latexAuditSummary;
             }
+            await finalizeReasoningAttempt({
+              error: traceErrorMessage,
+              emitUnavailableNotice: false,
+            });
             const finalMetadata = {
               ...traceMetadataExtras,
               messageId: assistantMessageId,

@@ -754,6 +754,9 @@ export const createStreamSlice: ChatSliceCreator<
           if (!active.reasoningActivated) {
             active.reasoningActivated = true
             active.pendingMeta.reasoningStatus = 'idle'
+            active.pendingMeta.reasoningUnavailableCode = null
+            active.pendingMeta.reasoningUnavailableReason = null
+            active.pendingMeta.reasoningUnavailableSuggestion = null
           }
 
           if (evt.keepalive) {
@@ -767,6 +770,9 @@ export const createStreamSlice: ChatSliceCreator<
             active.pendingReasoning += evt.content
             active.pendingMeta.reasoningStatus = 'streaming'
             active.pendingMeta.reasoningIdleMs = null
+            active.pendingMeta.reasoningUnavailableCode = null
+            active.pendingMeta.reasoningUnavailableReason = null
+            active.pendingMeta.reasoningUnavailableSuggestion = null
           }
 
           if (evt.done) {
@@ -776,6 +782,18 @@ export const createStreamSlice: ChatSliceCreator<
             }
           }
 
+          runtime.scheduleFlush(active)
+          continue
+        }
+
+        if (evt?.type === 'reasoning_unavailable') {
+          if (!active.reasoningDesired) continue
+          active.reasoningActivated = true
+          active.pendingMeta.reasoningStatus = 'done'
+          active.pendingMeta.reasoningIdleMs = null
+          active.pendingMeta.reasoningUnavailableCode = evt.unavailableCode ?? null
+          active.pendingMeta.reasoningUnavailableReason = evt.unavailableReason ?? null
+          active.pendingMeta.reasoningUnavailableSuggestion = evt.unavailableSuggestion ?? null
           runtime.scheduleFlush(active)
           continue
         }

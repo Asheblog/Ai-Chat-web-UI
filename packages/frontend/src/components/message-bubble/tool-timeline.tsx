@@ -36,6 +36,9 @@ export function ToolTimeline({
       reasoningHtml={reasoningHtml}
       reasoningPlayedLength={reasoningPlayedLength}
       isStreaming={meta.reasoningStatus === 'streaming'}
+      reasoningUnavailableCode={meta.reasoningUnavailableCode}
+      reasoningUnavailableReason={meta.reasoningUnavailableReason}
+      reasoningUnavailableSuggestion={meta.reasoningUnavailableSuggestion}
       toolSummary={summary}
       toolTimeline={timeline}
     />

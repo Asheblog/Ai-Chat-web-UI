@@ -496,6 +496,9 @@ interface ReasoningPanelProps {
   reasoningHtml?: string
   reasoningPlayedLength?: number
   isStreaming: boolean
+  reasoningUnavailableCode?: string | null
+  reasoningUnavailableReason?: string | null
+  reasoningUnavailableSuggestion?: string | null
   toolSummary: { total: number; summaryText: string; label: string } | null
   toolTimeline: ToolEvent[]
 }
@@ -516,6 +519,9 @@ function ReasoningPanelComponent({
   reasoningHtml,
   reasoningPlayedLength,
   isStreaming,
+  reasoningUnavailableCode,
+  reasoningUnavailableReason,
+  reasoningUnavailableSuggestion,
   toolSummary,
   toolTimeline,
 }: ReasoningPanelProps) {
@@ -548,6 +554,9 @@ function ReasoningPanelComponent({
     () => (expanded ? buildThoughtSegments(reasoningRaw, toolTimeline) : []),
     [expanded, reasoningRaw, toolTimeline],
   )
+  const hasReasoning = reasoningRaw.trim().length > 0 || Boolean(reasoningHtml)
+  const hasUnavailableReasoning =
+    typeof reasoningUnavailableReason === 'string' && reasoningUnavailableReason.trim().length > 0
 
   const activityItems = useMemo(() => {
     if (!expanded) return [] as ActivityItem[]
@@ -619,13 +628,38 @@ function ReasoningPanelComponent({
           kind: 'thought',
           text: '正在整理输出结果，稍后将展示完整活动轨迹。',
         })
+      } else if (hasUnavailableReasoning) {
+        const reasonText =
+          typeof reasoningUnavailableReason === 'string' ? reasoningUnavailableReason.trim() : ''
+        const suggestionText =
+          typeof reasoningUnavailableSuggestion === 'string' && reasoningUnavailableSuggestion.trim()
+            ? ` ${reasoningUnavailableSuggestion.trim()}`
+            : ''
+        const codeText =
+          typeof reasoningUnavailableCode === 'string' && reasoningUnavailableCode.trim()
+            ? `（${reasoningUnavailableCode.trim()}）`
+            : ''
+        items.push({
+          id: 'thought-unavailable',
+          kind: 'thought',
+          text: `${reasonText}${codeText}${suggestionText}`.trim(),
+        })
       }
     }
 
     return items
-  }, [expanded, idleMs, pythonCallMap, status, thoughtSegments, toolTimeline])
-
-  const hasReasoning = reasoningRaw.trim().length > 0 || Boolean(reasoningHtml)
+  }, [
+    expanded,
+    hasUnavailableReasoning,
+    idleMs,
+    pythonCallMap,
+    reasoningUnavailableCode,
+    reasoningUnavailableReason,
+    reasoningUnavailableSuggestion,
+    status,
+    thoughtSegments,
+    toolTimeline,
+  ])
 
   // 当 reasoningStatus 已完成但打字机尚未播放完时，保持“处理中”状态
   const typewriterStillPlaying = useMemo(() => {
@@ -659,9 +693,12 @@ function ReasoningPanelComponent({
     if (toolSummary?.summaryText) return toolSummary.summaryText
     if (displayStatus === 'idle') return '模型正在思考'
     if (displayStatus === 'streaming') return '模型正在处理'
+    if (!hasReasoning && hasUnavailableReasoning) {
+      return reasoningUnavailableReason?.trim() || '模型未返回可展示推理内容'
+    }
     if (hasReasoning) return '查看思考与工具调用轨迹'
     return '暂无活动详情'
-  }, [displayStatus, hasReasoning, toolSummary?.summaryText])
+  }, [displayStatus, hasReasoning, hasUnavailableReasoning, reasoningUnavailableReason, toolSummary?.summaryText])
 
   return (
     <div className={`reasoning-panel${expanded ? ' reasoning-panel--expanded' : ''}`}>
