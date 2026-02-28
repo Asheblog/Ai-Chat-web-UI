@@ -7,7 +7,7 @@ import { Send, Square, Brain, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
@@ -124,154 +124,152 @@ export function MobileComposer({
 
   return (
     <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
-      <div className="rounded-3xl border bg-card shadow-sm px-3 py-3 space-y-3">
-        <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} />
-        <div className="flex flex-col gap-2">
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <div className="overflow-hidden rounded-2xl">
-                <Textarea
-                  ref={textareaRef}
-                  placeholder={placeholder}
-                  value={input}
-                  onChange={(e) => onInputChange(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  onPaste={onPaste}
-                  onCompositionStart={onCompositionStart}
-                  onCompositionEnd={onCompositionEnd}
-                  className="h-auto min-h-[40px] max-h-[200px] w-full resize-none border-0 bg-muted/40 px-4 py-2 text-sm leading-[1.45] transition-[height] duration-150 ease-out focus-visible:ring-0 focus-visible:ring-offset-0"
-                  rows={1}
-                  disabled={isStreaming}
-                />
-              </div>
-            </div>
+      <div className="space-y-3 rounded-[1.75rem] border border-border/70 bg-[hsl(var(--surface))/0.9] px-3 py-3 shadow-[0_16px_40px_hsl(var(--background)/0.24)] backdrop-blur-md">
+        <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-0" />
 
-            <motion.div
-              variants={sendButtonVariants}
-              animate={isStreaming ? 'sending' : 'idle'}
-              whileHover={!isStreaming ? 'hover' : undefined}
-              whileTap={!isStreaming ? 'tap' : undefined}
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={`h-10 rounded-full px-2 pr-3 transition-colors ${
+              thinkingEnabled
+                ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                : 'border-border/70 bg-[hsl(var(--surface))/0.75] text-muted-foreground hover:bg-[hsl(var(--surface-hover))]'
+            }`}
+            onClick={() => onToggleThinking(!thinkingEnabled)}
+            aria-pressed={thinkingEnabled}
+            aria-label={thinkingEnabled ? '关闭思考模式' : '开启思考模式'}
+          >
+            <span
+              className={`mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full ${
+                thinkingEnabled ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+              }`}
             >
+              <Brain className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-xs font-medium">思考</span>
+          </Button>
+
+          <Sheet open={plusOpen} onOpenChange={setPlusOpen}>
+            <SheetTrigger asChild>
               <Button
                 type="button"
-                className={`h-12 w-12 shrink-0 rounded-full ${isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
-                  }`}
-                onClick={() => {
-                  if (isStreaming) {
-                    onStop()
-                  } else {
-                    onSend()
-                  }
-                }}
-                disabled={isStreaming ? false : disabled}
-                title={!isStreaming && sendLocked && sendLockedReason ? sendLockedReason : undefined}
-                aria-label={isStreaming ? '停止' : '发送'}
+                variant="outline"
+                className={`h-10 rounded-full px-3 text-xs font-medium transition-colors ${
+                  plusOpen
+                    ? 'border-primary/45 bg-primary/10 text-primary'
+                    : 'border-border/70 bg-[hsl(var(--surface))/0.75] text-muted-foreground hover:bg-[hsl(var(--surface-hover))]'
+                }`}
+                aria-label="更多操作"
               >
-                {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+                <Plus className="mr-1.5 h-4 w-4" />
+                更多
               </Button>
-            </motion.div>
+            </SheetTrigger>
+            <SheetContent
+              side="bottom"
+              dialogTitle="更多操作"
+              className="rounded-t-3xl border-border/80 bg-card/95 pb-[calc(env(safe-area-inset-bottom)+20px)]"
+            >
+              <div className="px-4 pt-4 pb-2">
+                <h3 className="text-base font-semibold text-foreground">更多操作</h3>
+                <p className="mt-1 text-xs text-muted-foreground">在这里配置技能、请求头与会话提示词。</p>
+              </div>
+              <div className="max-h-[70vh] overflow-y-auto px-4 pb-2">
+                <PlusMenuContent
+                  thinkingEnabled={thinkingEnabled}
+                  onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+                  webSearchEnabled={webSearchEnabled}
+                  onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+                  canUseWebSearch={canUseWebSearch}
+                  showWebSearchScope={showWebSearchScope}
+                  webSearchScope={webSearchScope}
+                  onWebSearchScopeChange={onWebSearchScopeChange}
+                  webSearchDisabledNote={webSearchDisabledNote}
+                  pythonToolEnabled={pythonToolEnabled}
+                  onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+                  canUsePythonTool={canUsePythonTool}
+                  pythonToolDisabledNote={pythonToolDisabledNote}
+                  skillOptions={skillOptions}
+                  onToggleSkillOption={onToggleSkillOption}
+                  onOpenSkillPanel={openSkillPanelFromMenu}
+                  canUseTrace={canUseTrace}
+                  traceEnabled={traceEnabled}
+                  onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
+                  showThinkingToggle={false}
+                  showWebSearchToggle={false}
+                  onOpenAdvanced={onOpenAdvanced}
+                  onOpenSessionPrompt={onOpenSessionPrompt}
+                  container="plain"
+                  onActionComplete={() => setPlusOpen(false)}
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <div className="ml-auto">
+            <AttachmentMenu
+              onPickImages={pickImages}
+              onPickDocuments={pickDocuments}
+              disableImages={isStreaming || !isVisionEnabled}
+              disableDocuments={isStreaming || !pickDocuments}
+              hasImages={selectedImages.length > 0}
+              hasDocuments={hasDocuments}
+              onOpenManager={onOpenAttachmentManager}
+              manageDisabled={!hasDocuments && selectedImages.length === 0}
+              manageCount={attachmentsCount}
+              ariaLabel="上传附件"
+              className="h-10 w-10 rounded-full"
+              menuMode="sheet"
+              onOpenKnowledgeBase={onOpenKnowledgeBase}
+              knowledgeBaseEnabled={knowledgeBaseEnabled}
+              knowledgeBaseCount={knowledgeBaseCount}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-end gap-2">
+          <div className="flex-1 overflow-hidden rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.82] focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40">
+            <Textarea
+              ref={textareaRef}
+              placeholder={placeholder}
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              onCompositionStart={onCompositionStart}
+              onCompositionEnd={onCompositionEnd}
+              className="h-auto min-h-[44px] max-h-[200px] w-full resize-none border-0 bg-transparent px-4 py-2.5 text-sm leading-[1.45] transition-[height] duration-150 ease-out focus-visible:ring-0 focus-visible:ring-offset-0"
+              rows={1}
+              disabled={isStreaming}
+            />
           </div>
 
-          <div className="flex items-center gap-2">
+          <motion.div
+            variants={sendButtonVariants}
+            animate={isStreaming ? 'sending' : 'idle'}
+            whileHover={!isStreaming ? 'hover' : undefined}
+            whileTap={!isStreaming ? 'tap' : undefined}
+          >
             <Button
               type="button"
-              variant="outline"
-              className={`h-10 rounded-full px-2 pr-3 flex items-center gap-2 transition-colors ${thinkingEnabled
-                  ? 'bg-primary/10 border-primary text-primary hover:bg-primary/20'
-                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
-                }`}
-              onClick={() => onToggleThinking(!thinkingEnabled)}
-              aria-pressed={thinkingEnabled}
-              aria-label={thinkingEnabled ? '关闭思考模式' : '开启思考模式'}
-            >
-              <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full ${thinkingEnabled ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground'
-                  }`}
-              >
-                <Brain className="h-3.5 w-3.5" />
-              </span>
-              <span className="text-xs font-medium">思考</span>
-            </Button>
-
-            <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={`h-10 rounded-full px-3 pr-3 flex items-center gap-2 transition-colors ${plusOpen
-                      ? 'bg-muted border-border text-foreground'
-                      : 'bg-background border-border text-muted-foreground hover:bg-muted'
-                    }`}
-                  aria-label="更多操作"
-                >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <Plus className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="text-xs font-medium">更多</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <PlusMenuContent
-                thinkingEnabled={thinkingEnabled}
-                onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
-                webSearchEnabled={webSearchEnabled}
-                onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-                canUseWebSearch={canUseWebSearch}
-                showWebSearchScope={showWebSearchScope}
-                webSearchScope={webSearchScope}
-                onWebSearchScopeChange={(value) => {
-                  onWebSearchScopeChange(value)
-                  setPlusOpen(false)
-                }}
-                webSearchDisabledNote={webSearchDisabledNote}
-                pythonToolEnabled={pythonToolEnabled}
-                onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-                canUsePythonTool={canUsePythonTool}
-                pythonToolDisabledNote={pythonToolDisabledNote}
-                skillOptions={skillOptions}
-                onToggleSkillOption={onToggleSkillOption}
-                onOpenSkillPanel={openSkillPanelFromMenu}
-                canUseTrace={canUseTrace}
-                traceEnabled={traceEnabled}
-                onToggleTrace={(checked) => {
-                  onToggleTrace(Boolean(checked))
-                  setPlusOpen(false)
-                }}
-                showThinkingToggle={false}
-                showWebSearchToggle={false}
-                onOpenAdvanced={() => {
-                  setPlusOpen(false)
-                  onOpenAdvanced()
-                }}
-                onOpenSessionPrompt={
-                  onOpenSessionPrompt
-                    ? () => {
-                      setPlusOpen(false)
-                      onOpenSessionPrompt()
-                    }
-                    : undefined
+              className={`h-12 w-12 shrink-0 rounded-2xl shadow-[0_10px_24px_hsl(var(--background)/0.24)] ${
+                isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
+              }`}
+              onClick={() => {
+                if (isStreaming) {
+                  onStop()
+                } else {
+                  onSend()
                 }
-              />
-            </DropdownMenu>
-
-            <div className="ml-auto">
-              <AttachmentMenu
-                onPickImages={pickImages}
-                onPickDocuments={pickDocuments}
-                disableImages={isStreaming || !isVisionEnabled}
-                disableDocuments={isStreaming || !pickDocuments}
-                hasImages={selectedImages.length > 0}
-                hasDocuments={hasDocuments}
-                onOpenManager={onOpenAttachmentManager}
-                manageDisabled={!hasDocuments && selectedImages.length === 0}
-                manageCount={attachmentsCount}
-                ariaLabel="上传附件"
-                className="h-10 w-10"
-                onOpenKnowledgeBase={onOpenKnowledgeBase}
-                knowledgeBaseEnabled={knowledgeBaseEnabled}
-                knowledgeBaseCount={knowledgeBaseCount}
-              />
-            </div>
-          </div>
+              }}
+              disabled={isStreaming ? false : disabled}
+              title={!isStreaming && sendLocked && sendLockedReason ? sendLockedReason : undefined}
+              aria-label={isStreaming ? '停止' : '发送'}
+            >
+              {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+            </Button>
+          </motion.div>
         </div>
       </div>
 

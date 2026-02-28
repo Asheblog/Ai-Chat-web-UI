@@ -797,7 +797,9 @@ export function ChatComposerPanel({
         onApply={applyExpand}
       />
       {sendLocked && sendLockedReason ? (
-        <p className="text-center text-xs text-muted-foreground pb-3">{sendLockedReason}</p>
+        <p className="mx-auto mb-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm">
+          {sendLockedReason}
+        </p>
       ) : null}
     </div>
   )

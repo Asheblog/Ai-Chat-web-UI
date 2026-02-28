@@ -152,10 +152,10 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-lg border',
-        'bg-muted/50',
-        document.status === 'error' && 'border-red-300 bg-red-50 dark:bg-red-950/20',
-        document.status === 'ready' && 'border-green-300 bg-green-50 dark:bg-green-950/20'
+        'flex items-center gap-2 rounded-xl border px-3 py-2.5',
+        'border-border/70 bg-[hsl(var(--surface))/0.72]',
+        document.status === 'error' && 'border-red-300/80 bg-red-50/80 dark:bg-red-950/20',
+        document.status === 'ready' && 'border-green-300/80 bg-green-50/80 dark:bg-green-950/20',
       )}
     >
       {showCheckbox && (
@@ -166,18 +166,18 @@ const DocumentPreviewItem: React.FC<DocumentPreviewItemProps> = ({
       )}
       {getFileIcon(document.mimeType)}
 
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate" title={document.originalName}>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium" title={document.originalName}>
           {document.originalName}
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>{formatFileSize(document.fileSize)}</span>
-          <span className="flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5">
             {getStatusIcon(document.status)}
             {progress != null ? `${stageText} ${progress}%` : stageText}
           </span>
           {document.errorMessage && (
-            <span className="text-red-500 truncate" title={document.errorMessage}>
+            <span className="truncate text-red-500" title={document.errorMessage}>
               {document.errorMessage}
             </span>
           )}
@@ -220,7 +220,7 @@ export const DocumentPreviewList: React.FC<DocumentPreviewListProps> = ({
   if (documents.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-2 p-2 border-t">
+    <div className="flex flex-col gap-2 border-t border-border/60 p-2">
       {documents.map((doc) => (
         <DocumentPreviewItem
           key={doc.id}
@@ -310,15 +310,18 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
         side="bottom"
         showCloseButton
         dialogTitle={title}
-        className="max-h-[70vh] flex flex-col"
+        className="flex max-h-[72vh] flex-col rounded-t-3xl border-border/80 bg-card/95"
       >
-        <div className="p-4 space-y-3 flex flex-col min-h-0">
-          <div className="flex items-center justify-between flex-shrink-0">
-            <div className="text-sm font-medium">{title}</div>
+        <div className="flex min-h-0 flex-col space-y-3 p-4">
+          <div className="flex shrink-0 items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{title}</p>
+              <p className="mt-1 text-xs text-muted-foreground">查看文档状态并执行删除或批量管理。</p>
+            </div>
             <div className="flex items-center gap-2">
               {batchMode ? (
                 <>
-                  <Button variant="ghost" size="sm" onClick={exitBatchMode}>
+                  <Button variant="outline" size="sm" onClick={exitBatchMode}>
                     取消
                   </Button>
                   <Button
@@ -332,7 +335,7 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
                   </Button>
                 </>
               ) : (
-                <Button variant="ghost" size="sm" onClick={() => setBatchMode(true)}>
+                <Button variant="outline" size="sm" onClick={() => setBatchMode(true)}>
                   批量管理
                 </Button>
               )}
@@ -340,7 +343,7 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
           </div>
 
           {batchMode && (
-            <div className="flex items-center gap-2 py-2 border-b flex-shrink-0">
+            <div className="flex shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
               <Checkbox
                 checked={selectedIds.size === documents.length && documents.length > 0}
                 onCheckedChange={toggleSelectAll}
@@ -351,7 +354,7 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
             </div>
           )}
 
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="flex flex-col gap-2 p-2">
               {documents.map((doc) => (
                 <DocumentPreviewItem
@@ -367,7 +370,7 @@ export const AttachmentTray: React.FC<AttachmentTrayProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end flex-shrink-0">
+          <div className="flex shrink-0 justify-end">
             <SheetClose asChild>
               <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
                 关闭
