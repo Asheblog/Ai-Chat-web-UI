@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import type { ChatShare, ToolEvent } from '@/types'
+import type { ApiResponse, ChatShare, ShareMessage, ShareMessagesPage, ToolEvent } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { ReasoningPanel } from '@/components/reasoning-panel'
 import { cn, formatDate } from '@/lib/utils'
@@ -9,6 +9,14 @@ import { User, Bot } from 'lucide-react'
 
 interface ShareViewerProps {
   share: ChatShare
+  token: string
+  initialMessages: ShareMessage[]
+  initialPagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
   brandText?: string
 }
 
@@ -147,6 +155,7 @@ function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessag
                 src={src}
                 alt="分享图片"
                 className="max-h-48 w-full rounded-lg border border-border/70 bg-[hsl(var(--surface))] object-contain"
+                loading="lazy"
               />
             ))}
           </div>
@@ -156,7 +165,37 @@ function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessag
   )
 }
 
-export function ShareViewer({ share, brandText = 'AIChat' }: ShareViewerProps) {
+export function ShareViewer({
+  share,
+  token,
+  initialMessages,
+  initialPagination,
+  brandText = 'AIChat',
+}: ShareViewerProps) {
+  const [messages, setMessages] = useState<ShareMessage[]>(initialMessages)
+  const [pagination, setPagination] = useState(initialPagination)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const hasMore = pagination.page < pagination.totalPages
+
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const nextPage = pagination.page + 1
+      const response = await fetch(`/api/shares/${encodeURIComponent(token)}/messages?page=${nextPage}&limit=${pagination.limit}`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      })
+      if (!response.ok) return
+      const payload = (await response.json()) as ApiResponse<ShareMessagesPage>
+      if (!payload.success || !payload.data) return
+      setMessages((prev) => [...prev, ...payload.data!.messages])
+      setPagination(payload.data.pagination)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-[hsl(var(--background))] text-foreground">
       <header className={cn(SHARE_CONTAINER_CLASS, 'flex flex-col gap-3 border-b border-border/80 py-5 sm:flex-row sm:items-center sm:justify-between')}>
@@ -175,16 +214,28 @@ export function ShareViewer({ share, brandText = 'AIChat' }: ShareViewerProps) {
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-6 sm:py-8')}>
         <h1 className="mb-6 text-2xl font-semibold tracking-tight">{share.title || share.sessionTitle}</h1>
         <section>
-          {share.messages.length === 0 ? (
+          {messages.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-muted-foreground">
               分享中暂无可展示的内容
             </div>
           ) : (
-            share.messages.map((msg) => (
+            messages.map((msg) => (
               <ShareMessageItem key={`${msg.id}-${msg.createdAt}`} msg={msg} defaultReasoningExpanded={false} />
             ))
           )}
         </section>
+        {hasMore && (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-4 py-2 text-sm hover:bg-[hsl(var(--surface-hover))]"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+            >
+              {loadingMore ? '加载中...' : '加载更多'}
+            </button>
+          </div>
+        )}
       </div>
 
       <footer className="border-t border-border/80 py-4">

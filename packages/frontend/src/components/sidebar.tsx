@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Github, Pin, PinOff, Plus, Settings, Trash2, Trophy } from 'lucide-react'
@@ -46,12 +46,21 @@ const formatSidebarDate = (date: string | Date): string => {
   }).format(new Date(date))
 }
 
+const normalizeSearchText = (value: string) => value.trim().toLowerCase()
+
+const isRecentWithinDays = (date: string | Date, days: number) => {
+  const target = new Date(date).getTime()
+  if (!Number.isFinite(target)) return false
+  return Date.now() - target <= days * 24 * 60 * 60 * 1000
+}
+
 export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   // 修复：新建会话并发点击导致重复创建与延迟弹出（添加本地创建中锁）
   const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [sessionSearch, setSessionSearch] = useState('')
   const {
     sessions,
     currentSession,
@@ -232,13 +241,49 @@ export function Sidebar() {
     setDeleteTargetId(sessionId)
   }
 
-  // 将标题限制在 10 个字符以内（按 Unicode 码点计数），超出添加省略号
-  const clipTitle = (s: string, max = 10) => {
+  // 将标题限制在 28 个字符以内（按 Unicode 码点计数），超出添加省略号
+  const clipTitle = (s: string, max = 28) => {
     try {
       const arr = Array.from(s || '')
       return arr.length > max ? arr.slice(0, max).join('') + '…' : s
     } catch { return s }
   }
+
+  const groupedSessions = useMemo(() => {
+    const keyword = normalizeSearchText(sessionSearch)
+    const visible = sessions.filter((session) => {
+      if (!keyword) return true
+      const title = normalizeSearchText(session.title || '')
+      const preview = normalizeSearchText(session.lastMessagePreview || '')
+      return title.includes(keyword) || preview.includes(keyword)
+    })
+
+    const groups: Array<{ key: string; label: string; sessions: typeof visible }> = [
+      { key: 'today', label: '今天', sessions: [] },
+      { key: 'week', label: '近 7 天', sessions: [] },
+      { key: 'earlier', label: '更早', sessions: [] },
+    ]
+
+    visible.forEach((session) => {
+      const anchor = session.lastMessageAt || session.createdAt
+      const date = new Date(anchor)
+      const sameDay =
+        date.getFullYear() === new Date().getFullYear() &&
+        date.getMonth() === new Date().getMonth() &&
+        date.getDate() === new Date().getDate()
+      if (sameDay) {
+        groups[0].sessions.push(session)
+        return
+      }
+      if (isRecentWithinDays(anchor, 7)) {
+        groups[1].sessions.push(session)
+        return
+      }
+      groups[2].sessions.push(session)
+    })
+
+    return groups.filter((group) => group.sessions.length > 0)
+  }, [sessionSearch, sessions])
 
   const sidebarContent = (
     <div className="flex h-full w-full flex-col border-r border-border/70 bg-[hsl(var(--sidebar-bg))] text-foreground lg:w-72">
@@ -333,9 +378,18 @@ export function Sidebar() {
       <div className="px-4 pb-4">
         <div className="border-t border-border/70" />
       </div>
+      <div className="px-4 pb-3">
+        <input
+          value={sessionSearch}
+          onChange={(e) => setSessionSearch(e.target.value)}
+          placeholder="搜索会话标题或摘要..."
+          className="h-9 w-full rounded-lg border border-border/70 bg-[hsl(var(--surface))/0.6] px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="搜索会话"
+        />
+      </div>
       {/* 会话列表 */}
       <ScrollArea className="flex-1 px-4 overflow-hidden">
-        <div className="space-y-2">
+        <div className="space-y-3">
           {/* 加载骨架 */}
           {isSessionsLoading && sessions.length === 0 && (
             <>
@@ -358,74 +412,93 @@ export function Sidebar() {
             </div>
           )}
 
-          {sessions.map((session) => (
-            <div
-              key={session.id}
-              className={cn(
-                "group relative flex cursor-pointer items-center justify-between rounded-xl border border-transparent p-3 transition-colors hover:bg-[hsl(var(--sidebar-hover))]",
-                currentSession?.id === session.id && "border-primary/20 bg-primary/10"
-              )}
-              onClick={() => handleSessionClick(session.id)}
-            >
-              <div className="min-w-0 flex-1 pr-1">
-                <p className="truncate text-sm font-medium flex items-center gap-1" title={session.title}>
-                  {session.pinnedAt ? (
-                    <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
-                  ) : null}
-                  <span className="truncate">{clipTitle(session.title, 10)}</span>
-                </p>
-                <p className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
-                  <span className="truncate">{formatSidebarDate(session.createdAt)}</span>
-                  {sessionUsageTotalsMap?.[session.id] && (
-                    <>
-                      <span className="opacity-60 shrink-0">·</span>
-                      <span className="shrink-0">{formatUsageLine(sessionUsageTotalsMap[session.id])}</span>
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-amber-500/80 opacity-70 transition hover:bg-amber-500/10 hover:text-amber-500 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleSessionPin(session.id, !session.pinnedAt)
-                        }}
-                        aria-label={session.pinnedAt ? '取消置顶' : '置顶会话'}
-                      >
-                        {session.pinnedAt ? (
-                          <PinOff className="h-4 w-4" />
-                        ) : (
-                          <Pin className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{session.pinnedAt ? '取消置顶' : '置顶'}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+          {!isSessionsLoading && sessions.length > 0 && groupedSessions.length === 0 && (
+            <div className="text-center text-muted-foreground py-6 text-sm">
+              <p>没有匹配结果</p>
+            </div>
+          )}
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-destructive/80 opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
-                        onClick={(e) => requestDeleteSession(session.id, e)}
-                        aria-label="删除会话"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>删除会话</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+          {groupedSessions.map((group) => (
+            <div key={group.key} className="space-y-2">
+              <div className="px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+                {group.label}
               </div>
+              {group.sessions.map((session) => (
+                <div
+                  key={session.id}
+                  className={cn(
+                    "group relative flex items-center justify-between rounded-xl border border-transparent p-2 transition-colors hover:bg-[hsl(var(--sidebar-hover))]",
+                    currentSession?.id === session.id && "border-primary/20 bg-primary/10"
+                  )}
+                >
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 pr-2 text-left"
+                    onClick={() => handleSessionClick(session.id)}
+                  >
+                    <p className="truncate text-sm font-medium flex items-center gap-1" title={session.title}>
+                      {session.pinnedAt ? (
+                        <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
+                      ) : null}
+                      <span className="truncate">{clipTitle(session.title, 28)}</span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground mt-1" title={session.lastMessagePreview || ''}>
+                      {session.lastMessagePreview?.trim() || '暂无消息摘要'}
+                    </p>
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground min-w-0 mt-1">
+                      <span className="truncate">{formatSidebarDate(session.lastMessageAt || session.createdAt)}</span>
+                      {sessionUsageTotalsMap?.[session.id] && (
+                        <>
+                          <span className="opacity-60 shrink-0">·</span>
+                          <span className="shrink-0">{formatUsageLine(sessionUsageTotalsMap[session.id])}</span>
+                        </>
+                      )}
+                    </p>
+                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-amber-500/80 opacity-70 transition hover:bg-amber-500/10 hover:text-amber-500 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleSessionPin(session.id, !session.pinnedAt)
+                            }}
+                            aria-label={session.pinnedAt ? '取消置顶' : '置顶会话'}
+                          >
+                            {session.pinnedAt ? (
+                              <PinOff className="h-4 w-4" />
+                            ) : (
+                              <Pin className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{session.pinnedAt ? '取消置顶' : '置顶'}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-destructive/80 opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                            onClick={(e) => requestDeleteSession(session.id, e)}
+                            aria-label="删除会话"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>删除会话</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>

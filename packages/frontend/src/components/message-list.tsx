@@ -113,15 +113,19 @@ function MessageListComponent({
     return groups
   }, [metas])
 
-  const displayMetas = metas.filter((meta) => {
-    if (!variantSelections || meta.role !== 'assistant' || meta.parentMessageId == null) {
-      return true
-    }
-    const parentKey = messageKey(meta.parentMessageId)
-    const selected = variantSelections[parentKey]
-    if (selected == null) return false
-    return messageKey(selected) === messageKey(meta.id)
-  })
+  const displayMetas = useMemo(
+    () =>
+      metas.filter((meta) => {
+        if (!variantSelections || meta.role !== 'assistant' || meta.parentMessageId == null) {
+          return true
+        }
+        const parentKey = messageKey(meta.parentMessageId)
+        const selected = variantSelections[parentKey]
+        if (selected == null) return false
+        return messageKey(selected) === messageKey(meta.id)
+      }),
+    [metas, variantSelections],
+  )
 
   const shareSelectionState = shareSelection ?? { enabled: false, sessionId: null, selectedMessageIds: [] }
   const shareSelectedKeys = useMemo(() => {
@@ -147,11 +151,32 @@ function MessageListComponent({
     },
     [autoScrollEnabled, isStreaming, lastDisplayIndex],
   )
+  const estimateRowHeight = useCallback(
+    (index: number) => {
+      const meta = displayMetas[index]
+      if (!meta) return 180
+      const body = bodies[messageKey(meta.id)]
+      if (!body) return 150
+
+      const contentLen = body.content?.length ?? 0
+      const reasoningLen = body.reasoning?.length ?? 0
+      const imageCount = meta.images?.length ?? 0
+      const artifactCount = (body.artifacts ?? meta.artifacts ?? []).length
+      let estimated = 110
+      estimated += Math.min(600, Math.ceil(contentLen / 90) * 22)
+      estimated += Math.min(240, Math.ceil(reasoningLen / 180) * 18)
+      estimated += imageCount * 70
+      estimated += artifactCount * 44
+      if (meta.role === 'user') estimated -= 14
+      return Math.max(100, estimated)
+    },
+    [bodies, displayMetas],
+  )
 
   const virtualizer = useVirtualizer({
     count: displayMetas.length,
     getScrollElement: () => scrollElement,
-    estimateSize: () => 180,
+    estimateSize: estimateRowHeight,
     overscan: 8,
     paddingStart: 0,
     paddingEnd: 16,
@@ -159,6 +184,15 @@ function MessageListComponent({
     ...({ shouldAdjustScrollPositionOnItemSizeChange } as Record<string, unknown>),
   })
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldAdjustScrollPositionOnItemSizeChange as any
+
+  const lastMeta = displayMetas[displayMetas.length - 1]
+  const lastUserMeta = useMemo(() => {
+    for (let i = displayMetas.length - 1; i >= 0; i -= 1) {
+      const candidate = displayMetas[i]
+      if (candidate?.role === 'user') return candidate
+    }
+    return null
+  }, [displayMetas])
 
   if (isLoading && displayMetas.length === 0) {
     return (
@@ -184,14 +218,6 @@ function MessageListComponent({
     )
   }
 
-  const lastMeta = displayMetas[displayMetas.length - 1]
-  const lastUserMeta = (() => {
-    for (let i = displayMetas.length - 1; i >= 0; i -= 1) {
-      const candidate = displayMetas[i]
-      if (candidate?.role === 'user') return candidate
-    }
-    return null
-  })()
   const virtualItems = virtualizer.getVirtualItems()
   const virtualSize = virtualizer.getTotalSize()
   const indicatorVisible = isStreaming && (!lastMeta || lastMeta.role !== 'assistant')

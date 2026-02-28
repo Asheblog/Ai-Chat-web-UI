@@ -81,13 +81,32 @@ export const createSharesApi = (deps: SharesApiDeps = {}) => {
       if (!token) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid share token' }, 400)
       }
-      const record = await svc.getShareByToken(token)
+      const includeMessages = c.req.query('includeMessages') !== '0'
+      const record = await svc.getShareByToken(token, { includeMessages })
       if (!record) {
         return c.json<ApiResponse>({ success: false, error: 'Share link not found' }, 404)
       }
       return c.json<ApiResponse<typeof record>>({ success: true, data: record })
     } catch (error) {
       return handleError(c, error, 'Failed to fetch share link')
+    }
+  })
+
+  router.get('/:token/messages', async (c) => {
+    try {
+      const token = (c.req.param('token') || '').trim()
+      if (!token) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid share token' }, 400)
+      }
+      const page = parsePagination(c.req.query('page'), 1)
+      const limit = parsePagination(c.req.query('limit'), 50)
+      const result = await svc.listShareMessagesByToken(token, { page, limit })
+      if (!result) {
+        return c.json<ApiResponse>({ success: false, error: 'Share link not found' }, 404)
+      }
+      return c.json<ApiResponse<typeof result>>({ success: true, data: result })
+    } catch (error) {
+      return handleError(c, error, 'Failed to fetch share messages')
     }
   })
 

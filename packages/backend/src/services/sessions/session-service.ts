@@ -39,8 +39,17 @@ const sessionSelect = {
   reasoningEffort: true,
   ollamaThink: true,
   systemPrompt: true,
+  knowledgeBaseIdsJson: true,
   connection: {
     select: { id: true, provider: true, baseUrl: true, prefixId: true },
+  },
+  messages: {
+    select: {
+      content: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
   },
   _count: {
     select: {
@@ -82,6 +91,37 @@ const normalizeEffort = (value?: string | null) => {
   return null
 }
 
+const parseKnowledgeBaseIds = (value?: string | null): number[] => {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return Array.from(
+      new Set(
+        parsed
+          .map((entry) => Number(entry))
+          .filter((entry) => Number.isFinite(entry) && entry > 0)
+          .map((entry) => Math.floor(entry)),
+      ),
+    ).slice(0, 10)
+  } catch {
+    return []
+  }
+}
+
+const stringifyKnowledgeBaseIds = (value?: number[]): string => {
+  if (!Array.isArray(value) || value.length === 0) return '[]'
+  const ids = Array.from(
+    new Set(
+      value
+        .map((entry) => Number(entry))
+        .filter((entry) => Number.isFinite(entry) && entry > 0)
+        .map((entry) => Math.floor(entry)),
+    ),
+  ).slice(0, 10)
+  return JSON.stringify(ids)
+}
+
 const sessionOwnershipClause = (actor: Actor) =>
   actor.type === 'user' ? { userId: actor.id } : { anonymousKey: actor.key }
 
@@ -121,11 +161,17 @@ export class SessionService {
     ])
 
     return {
-      sessions: sessions.map((s) => ({
-        ...s,
-        reasoningEffort: normalizeEffort(s.reasoningEffort),
-        modelLabel: composeModelLabel(s.modelRawId, s.connection?.prefixId || null) || undefined,
-      })),
+      sessions: sessions.map((s) => {
+        const { knowledgeBaseIdsJson, messages, ...rest } = s
+        return {
+          ...rest,
+          knowledgeBaseIds: parseKnowledgeBaseIds(knowledgeBaseIdsJson),
+          reasoningEffort: normalizeEffort(rest.reasoningEffort),
+          modelLabel: composeModelLabel(rest.modelRawId, rest.connection?.prefixId || null) || undefined,
+          lastMessagePreview: messages?.[0]?.content?.slice(0, 240) || null,
+          lastMessageAt: messages?.[0]?.createdAt?.toISOString?.() || null,
+        }
+      }),
       pagination: {
         page,
         limit,
@@ -146,6 +192,7 @@ export class SessionService {
       reasoningEffort?: string
       ollamaThink?: boolean
       systemPrompt?: string | null
+      knowledgeBaseIds?: number[]
     },
   ) {
     const resolution = await this.resolveModelSelection(actor, payload)
@@ -169,6 +216,7 @@ export class SessionService {
         reasoningEffort: payload.reasoningEffort,
         ollamaThink: payload.ollamaThink,
         systemPrompt: payload.systemPrompt,
+        knowledgeBaseIdsJson: stringifyKnowledgeBaseIds(payload.knowledgeBaseIds),
       },
       select: sessionSelect,
     })
@@ -182,10 +230,12 @@ export class SessionService {
       })
     }
 
+    const { knowledgeBaseIdsJson, ...rest } = session
     return {
-      ...session,
+      ...rest,
+      knowledgeBaseIds: parseKnowledgeBaseIds(knowledgeBaseIdsJson),
       modelLabel:
-        payload.modelId || composeModelLabel(session.modelRawId, session.connection?.prefixId || null),
+        payload.modelId || composeModelLabel(rest.modelRawId, rest.connection?.prefixId || null),
     }
   }
 
@@ -199,9 +249,11 @@ export class SessionService {
       throw new SessionServiceError('Chat session not found', 404)
     }
 
+    const { knowledgeBaseIdsJson, ...rest } = session
     return {
-      ...session,
-      modelLabel: composeModelLabel(session.modelRawId, session.connection?.prefixId || null),
+      ...rest,
+      knowledgeBaseIds: parseKnowledgeBaseIds(knowledgeBaseIdsJson),
+      modelLabel: composeModelLabel(rest.modelRawId, rest.connection?.prefixId || null),
     }
   }
 
@@ -215,6 +267,7 @@ export class SessionService {
       reasoningEffort?: string
       ollamaThink?: boolean
       systemPrompt?: string | null
+      knowledgeBaseIds?: number[]
     },
   ) {
     const existing = await this.prisma.chatSession.findFirst({
@@ -242,11 +295,18 @@ export class SessionService {
         ...(Object.prototype.hasOwnProperty.call(updates, 'systemPrompt')
           ? { systemPrompt: updates.systemPrompt ?? null }
           : {}),
+        ...(Object.prototype.hasOwnProperty.call(updates, 'knowledgeBaseIds')
+          ? { knowledgeBaseIdsJson: stringifyKnowledgeBaseIds(updates.knowledgeBaseIds) }
+          : {}),
       },
       select: sessionSelect,
     })
 
-    return updated
+    const { knowledgeBaseIdsJson, ...rest } = updated
+    return {
+      ...rest,
+      knowledgeBaseIds: parseKnowledgeBaseIds(knowledgeBaseIdsJson),
+    }
   }
 
   async switchSessionModel(
@@ -282,8 +342,10 @@ export class SessionService {
       })
     }
 
+    const { knowledgeBaseIdsJson, ...rest } = updated
     return {
-      ...updated,
+      ...rest,
+      knowledgeBaseIds: parseKnowledgeBaseIds(knowledgeBaseIdsJson),
       modelLabel: payload.modelId,
     }
   }

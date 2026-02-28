@@ -93,6 +93,9 @@ export interface ChatSession {
   reasoningEffort?: 'low' | 'medium' | 'high' | null;
   ollamaThink?: boolean | null;
   systemPrompt?: string | null;
+  knowledgeBaseIds?: number[];
+  lastMessagePreview?: string | null;
+  lastMessageAt?: string | null;
   messages?: Message[];
   _count?: {
     messages: number;
@@ -227,6 +230,29 @@ export interface ChatShare {
   createdAt: string;
   expiresAt?: string | null;
   revokedAt?: string | null;
+}
+
+export interface ShareMessagesPage {
+  token: string;
+  sessionId: number;
+  messages: ShareMessage[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface PromptTemplate {
+  id: number;
+  userId: number;
+  title: string;
+  content: string;
+  variables: string[];
+  pinnedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ChatShareSummary {

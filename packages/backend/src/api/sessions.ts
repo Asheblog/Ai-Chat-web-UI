@@ -16,6 +16,7 @@ const createSessionSchema = z.object({
   reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),
   systemPrompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).optional(),
+  knowledgeBaseIds: z.array(z.number().int().positive()).max(10).optional(),
 })
 
 const updateSessionSchema = z.object({
@@ -25,6 +26,7 @@ const updateSessionSchema = z.object({
   reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   ollamaThink: z.boolean().optional(),
   systemPrompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).nullable().optional(),
+  knowledgeBaseIds: z.array(z.number().int().positive()).max(10).optional(),
 })
 
 const switchModelSchema = z.object({

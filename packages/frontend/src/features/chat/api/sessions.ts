@@ -22,6 +22,7 @@ export const createSessionByModelId = async (
   connectionId?: number,
   rawId?: string,
   systemPrompt?: string | null,
+  knowledgeBaseIds?: number[],
 ) => {
   const payload: Record<string, unknown> = { modelId }
   if (title) payload.title = title
@@ -31,6 +32,9 @@ export const createSessionByModelId = async (
   }
   if (typeof systemPrompt === 'string') {
     payload.systemPrompt = systemPrompt
+  }
+  if (Array.isArray(knowledgeBaseIds)) {
+    payload.knowledgeBaseIds = knowledgeBaseIds
   }
   const response = await client.post<ApiResponse<any>>('/sessions', payload)
   return response.data
@@ -49,6 +53,7 @@ export const updateSession = async (
     reasoningEffort: 'low' | 'medium' | 'high'
     ollamaThink: boolean
     systemPrompt: string | null
+    knowledgeBaseIds: number[]
   }>,
 ) => {
   const response = await client.put<ApiResponse<any>>(

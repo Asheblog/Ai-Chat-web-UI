@@ -128,6 +128,7 @@ const createProcessor = () => {
     .use(rehypeStringify)
   return processor
 }
+let cachedProcessor: ReturnType<typeof createProcessor> | null = null
 
 let mhchemReady = false
 let mhchemLoading: Promise<void> | null = null
@@ -163,7 +164,10 @@ const renderMarkdown = async (markdown: string): Promise<{ html: string }> => {
   }
   try {
     await ensureMhchem()
-    const processor = createProcessor()
+    if (!cachedProcessor) {
+      cachedProcessor = createProcessor()
+    }
+    const processor = cachedProcessor
     const prepared = encodeLatexPlaceholders(trimmed)
     const file = await processor.process(prepared)
     return { html: String(file) }
@@ -174,11 +178,35 @@ const renderMarkdown = async (markdown: string): Promise<{ html: string }> => {
   }
 }
 
-self.addEventListener('message', async (event: MessageEvent<WorkerRequest>) => {
-  const payload = event.data
-  if (!payload || typeof payload.jobId !== 'string') {
+const BATCH_WINDOW_MS = 36
+const pendingByMessage = new Map<string, WorkerRequest>()
+const deferredByMessage = new Map<string, WorkerRequest>()
+const processingMessages = new Set<string>()
+let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+const scheduleFlush = () => {
+  if (flushTimer) return
+  flushTimer = setTimeout(() => {
+    flushTimer = null
+    const jobs = Array.from(pendingByMessage.values())
+    pendingByMessage.clear()
+    jobs.forEach((job) => {
+      void processJob(job)
+    })
+  }, BATCH_WINDOW_MS)
+}
+
+const queueJob = (payload: WorkerRequest) => {
+  pendingByMessage.set(payload.messageId, payload)
+  scheduleFlush()
+}
+
+const processJob = async (payload: WorkerRequest) => {
+  if (processingMessages.has(payload.messageId)) {
+    deferredByMessage.set(payload.messageId, payload)
     return
   }
+  processingMessages.add(payload.messageId)
 
   const { jobId, messageId, content, reasoning, contentVersion, reasoningVersion } = payload
 
@@ -212,5 +240,20 @@ self.addEventListener('message', async (event: MessageEvent<WorkerRequest>) => {
       response.reasoningHtml = `<pre>${escapeHtml(reasoning)}</pre>`
     }
     self.postMessage(response)
+  } finally {
+    processingMessages.delete(messageId)
+    const deferred = deferredByMessage.get(messageId)
+    if (deferred) {
+      deferredByMessage.delete(messageId)
+      queueJob(deferred)
+    }
   }
+}
+
+self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
+  const payload = event.data
+  if (!payload || typeof payload.jobId !== 'string' || typeof payload.messageId !== 'string') {
+    return
+  }
+  queueJob(payload)
 })

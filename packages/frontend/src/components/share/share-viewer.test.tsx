@@ -14,6 +14,20 @@ vi.mock('@/components/reasoning-panel', () => ({
 describe("ShareViewer", () => {
   it("renders shared messages with simplified header", () => {
     const now = new Date().toISOString()
+    const initialMessages = [
+      {
+        id: 1,
+        role: "user" as const,
+        content: "请解释一下量子隧穿",
+        createdAt: now,
+      },
+      {
+        id: 2,
+        role: "assistant" as const,
+        content: "量子隧穿是一种在经典力学中无法出现的现象。",
+        createdAt: now,
+      },
+    ]
     render(
       <ShareViewer
         share={{
@@ -26,21 +40,11 @@ describe("ShareViewer", () => {
           createdAt: now,
           expiresAt: null,
           revokedAt: null,
-          messages: [
-            {
-              id: 1,
-              role: "user",
-              content: "请解释一下量子隧穿",
-              createdAt: now,
-            },
-            {
-              id: 2,
-              role: "assistant",
-              content: "量子隧穿是一种在经典力学中无法出现的现象。",
-              createdAt: now,
-            },
-          ],
+          messages: initialMessages,
         }}
+        token="abc"
+        initialMessages={initialMessages}
+        initialPagination={{ page: 1, limit: 50, total: 2, totalPages: 1 }}
         brandText="TestBrand"
       />,
     )
@@ -61,6 +65,15 @@ describe("ShareViewer", () => {
 
   it("renders reasoning panel for assistant messages with reasoning", () => {
     const now = new Date().toISOString()
+    const initialMessages = [
+      {
+        id: 1,
+        role: "assistant" as const,
+        content: "这是回答内容",
+        reasoning: "这是思维链内容",
+        createdAt: now,
+      },
+    ]
     render(
       <ShareViewer
         share={{
@@ -73,16 +86,11 @@ describe("ShareViewer", () => {
           createdAt: now,
           expiresAt: null,
           revokedAt: null,
-          messages: [
-            {
-              id: 1,
-              role: "assistant",
-              content: "这是回答内容",
-              reasoning: "这是思维链内容",
-              createdAt: now,
-            },
-          ],
+          messages: initialMessages,
         }}
+        token="abc"
+        initialMessages={initialMessages}
+        initialPagination={{ page: 1, limit: 50, total: 1, totalPages: 1 }}
       />,
     )
 
@@ -93,6 +101,25 @@ describe("ShareViewer", () => {
 
   it("renders tool summary when toolEvents are present", () => {
     const now = new Date().toISOString()
+    const initialMessages = [
+      {
+        id: 1,
+        role: "assistant" as const,
+        content: "搜索完成",
+        createdAt: now,
+        toolEvents: [
+          {
+            id: "t1",
+            sessionId: 10,
+            messageId: 1,
+            tool: "web_search",
+            stage: "result",
+            status: "success",
+            createdAt: Date.now(),
+          },
+        ],
+      } as any,
+    ]
     render(
       <ShareViewer
         share={{
@@ -105,26 +132,11 @@ describe("ShareViewer", () => {
           createdAt: now,
           expiresAt: null,
           revokedAt: null,
-          messages: [
-            {
-              id: 1,
-              role: "assistant",
-              content: "搜索完成",
-              createdAt: now,
-              toolEvents: [
-                {
-                  id: "t1",
-                  sessionId: 10,
-                  messageId: 1,
-                  tool: "web_search",
-                  stage: "result",
-                  status: "success",
-                  createdAt: Date.now(),
-                },
-              ],
-            } as any,
-          ],
+          messages: initialMessages,
         }}
+        token="abc"
+        initialMessages={initialMessages as any}
+        initialPagination={{ page: 1, limit: 50, total: 1, totalPages: 1 }}
       />,
     )
 
@@ -147,6 +159,9 @@ describe("ShareViewer", () => {
           revokedAt: null,
           messages: [],
         }}
+        token="abc"
+        initialMessages={[]}
+        initialPagination={{ page: 1, limit: 50, total: 0, totalPages: 1 }}
       />,
     )
 

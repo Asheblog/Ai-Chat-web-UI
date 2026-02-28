@@ -121,6 +121,7 @@ export interface SessionSlice {
       reasoningEffort: 'low' | 'medium' | 'high'
       ollamaThink: boolean
       systemPrompt: string | null
+      knowledgeBaseIds: number[]
     }>,
   ) => Promise<boolean>
   toggleSessionPin: (sessionId: number, pinned: boolean) => Promise<boolean>

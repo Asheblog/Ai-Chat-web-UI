@@ -81,7 +81,10 @@ describe('SessionService', () => {
       reasoningEnabled: null,
       reasoningEffort: null,
       ollamaThink: null,
+      systemPrompt: null,
+      knowledgeBaseIdsJson: '[1,2,2]',
       connection,
+      messages: [],
     })
     prisma.user.update.mockResolvedValue({})
 
@@ -90,6 +93,7 @@ describe('SessionService', () => {
       title: 'Hello',
       connectionId: 22,
       rawId: 'gpt-4o',
+      knowledgeBaseIds: [3, 5, 5, -1],
     })
 
     expect(modelResolverService.resolveModelForRequest).toHaveBeenCalledWith({
@@ -106,6 +110,7 @@ describe('SessionService', () => {
           connectionId: 22,
           modelRawId: 'gpt-4o',
           title: 'Hello',
+          knowledgeBaseIdsJson: JSON.stringify([3, 5]),
         }),
       }),
     )
@@ -118,6 +123,7 @@ describe('SessionService', () => {
       },
     })
     expect(result.modelLabel).toBe('openai.gpt-4o')
+    expect(result.knowledgeBaseIds).toEqual([1, 2])
   })
 
   it('creates anonymous session using catalog fallback', async () => {
@@ -154,7 +160,10 @@ describe('SessionService', () => {
       reasoningEnabled: true,
       reasoningEffort: 'low',
       ollamaThink: false,
+      systemPrompt: null,
+      knowledgeBaseIdsJson: '[]',
       connection,
+      messages: [],
     })
 
     const result = await service.createSession(actor, {
@@ -225,7 +234,15 @@ describe('SessionService', () => {
         reasoningEnabled: null,
         reasoningEffort: 'weird',
         ollamaThink: null,
+        systemPrompt: null,
+        knowledgeBaseIdsJson: '[4,6,6,0]',
         connection: { id: 1, provider: 'openai', baseUrl: 'https://api', prefixId: 'openai' },
+        messages: [
+          {
+            content: '最后一条消息内容',
+            createdAt: new Date('2024-01-01T00:05:00.000Z'),
+          },
+        ],
       },
     ])
     prisma.chatSession.count.mockResolvedValue(1)
@@ -241,6 +258,9 @@ describe('SessionService', () => {
     )
     expect(result.sessions[0].modelLabel).toBe('openai.gpt-4o')
     expect(result.sessions[0].reasoningEffort).toBeNull()
+    expect(result.sessions[0].knowledgeBaseIds).toEqual([4, 6])
+    expect(result.sessions[0].lastMessagePreview).toBe('最后一条消息内容')
+    expect(result.sessions[0].lastMessageAt).toBe('2024-01-01T00:05:00.000Z')
     expect(result.pagination).toEqual({
       page: 1,
       limit: 20,

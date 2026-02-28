@@ -5,6 +5,7 @@
 
 'use client'
 
+import { useMemo, useState } from 'react'
 import { BookOpen, Check, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +17,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import type { KnowledgeBaseItem } from '@/hooks/use-knowledge-base'
@@ -48,8 +50,27 @@ export function KnowledgeBaseSelector({
     onClearAll,
     onRefresh,
 }: KnowledgeBaseSelectorProps) {
+    const [search, setSearch] = useState('')
+    const [sortBy, setSortBy] = useState<'name' | 'docs' | 'chunks'>('name')
     const selectedCount = selectedKbIds.length
     const allSelected = availableKbs.length > 0 && selectedCount === availableKbs.length
+    const normalizedSearch = search.trim().toLowerCase()
+    const visibleKbs = useMemo(() => {
+        const filtered = availableKbs.filter((kb) => {
+            if (!normalizedSearch) return true
+            return (
+                kb.name.toLowerCase().includes(normalizedSearch) ||
+                (kb.description || '').toLowerCase().includes(normalizedSearch)
+            )
+        })
+        const sorted = [...filtered]
+        sorted.sort((a, b) => {
+            if (sortBy === 'docs') return b.documentCount - a.documentCount
+            if (sortBy === 'chunks') return b.totalChunks - a.totalChunks
+            return a.name.localeCompare(b.name, 'zh-CN')
+        })
+        return sorted
+    }, [availableKbs, normalizedSearch, sortBy])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,6 +110,24 @@ export function KnowledgeBaseSelector({
                             </Button>
                         </div>
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                        <Input
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="搜索知识库名称或描述"
+                            aria-label="搜索知识库"
+                        />
+                        <select
+                            value={sortBy}
+                            onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+                            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                            aria-label="知识库排序"
+                        >
+                            <option value="name">按名称</option>
+                            <option value="docs">按文档数</option>
+                            <option value="chunks">按分块数</option>
+                        </select>
+                    </div>
 
                     {/* 知识库列表 */}
                     <div className="max-h-[300px] overflow-y-auto space-y-2">
@@ -115,24 +154,30 @@ export function KnowledgeBaseSelector({
                                 <p>暂无可用知识库</p>
                                 <p className="text-sm">请联系管理员创建知识库</p>
                             </div>
+                        ) : visibleKbs.length === 0 ? (
+                            <div className="text-center py-6 text-muted-foreground text-sm">
+                                未找到匹配的知识库
+                            </div>
                         ) : (
-                            availableKbs.map((kb) => {
+                            visibleKbs.map((kb) => {
                                 const isSelected = selectedKbIds.includes(kb.id)
                                 return (
-                                    <div
+                                    <button
+                                        type="button"
                                         key={kb.id}
                                         className={cn(
-                                            'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                                            'flex w-full items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors text-left',
                                             isSelected
                                                 ? 'border-primary bg-primary/5'
                                                 : 'border-border hover:border-primary/50'
                                         )}
                                         onClick={() => onToggle(kb.id)}
+                                        aria-pressed={isSelected}
                                     >
                                         <Checkbox
                                             checked={isSelected}
-                                            onCheckedChange={() => onToggle(kb.id)}
-                                            className="mt-0.5"
+                                            className="mt-0.5 pointer-events-none"
+                                            aria-hidden="true"
                                         />
                                         <div className="flex-1 min-w-0">
                                             <div className="font-medium truncate">{kb.name}</div>
@@ -148,7 +193,7 @@ export function KnowledgeBaseSelector({
                                         {isSelected && (
                                             <Check className="h-4 w-4 text-primary shrink-0" />
                                         )}
-                                    </div>
+                                    </button>
                                 )
                             })
                         )}

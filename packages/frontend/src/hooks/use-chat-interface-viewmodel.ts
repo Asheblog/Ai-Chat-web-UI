@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useChatComposer } from '@/hooks/use-chat-composer'
 import { useTextareaAutoResize } from '@/hooks/use-textarea-auto-resize'
 import { useChatSessionControls } from '@/hooks/use-chat-session-controls'
@@ -7,6 +8,7 @@ import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 import type { ChatToolbarProps } from '@/components/chat/chat-toolbar'
 import type { ChatComposerPanelProps } from '@/components/chat/chat-composer-panel'
 import type { ChatMessageViewportProps } from '@/components/chat/chat-message-viewport'
+import { useChatStore } from '@/store/chat-store'
 
 export interface ChatInterfaceViewModel {
   toolbar: ChatToolbarProps
@@ -16,8 +18,9 @@ export interface ChatInterfaceViewModel {
 }
 
 export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewModel | null {
+  const activeSessionId = useChatStore((state) => state.currentSession?.id ?? null)
   // 知识库 - 需要先于 useChatComposer 调用，以便传递 selectedKbIds
-  const knowledgeBase = useKnowledgeBase()
+  const knowledgeBase = useKnowledgeBase({ sessionId: activeSessionId })
 
   const {
     input,
@@ -108,6 +111,57 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     setWebSearchEnabled,
     setEffort,
   })
+  const kbSyncInFlightRef = useRef(false)
+  const kbHydratingFromSessionRef = useRef(false)
+  const pendingPushKbKeyRef = useRef<string | null>(null)
+  const selectedKnowledgeBaseIds = knowledgeBase.selectedKbIds
+  const setSelectedKnowledgeBaseIds = knowledgeBase.setSelectedKbIds
+  const normalizedSessionKbIds = Array.isArray(currentSession?.knowledgeBaseIds)
+    ? currentSession.knowledgeBaseIds
+    : []
+  const normalizedSelectedKbIds = selectedKnowledgeBaseIds
+  const sessionKbKey = normalizedSessionKbIds.slice().sort((a, b) => a - b).join(',')
+  const selectedKbKey = normalizedSelectedKbIds.slice().sort((a, b) => a - b).join(',')
+
+  useEffect(() => {
+    if (!currentSession) return
+    if (kbSyncInFlightRef.current) return
+    if (sessionKbKey === selectedKbKey) {
+      if (kbHydratingFromSessionRef.current) {
+        kbHydratingFromSessionRef.current = false
+      }
+      return
+    }
+    kbHydratingFromSessionRef.current = true
+    const nextSessionKbIds = Array.isArray(currentSession.knowledgeBaseIds)
+      ? currentSession.knowledgeBaseIds
+      : []
+    setSelectedKnowledgeBaseIds(nextSessionKbIds)
+  }, [currentSession, sessionKbKey, selectedKbKey, setSelectedKnowledgeBaseIds])
+
+  useEffect(() => {
+    if (!currentSession) return
+    if (sessionKbKey === selectedKbKey) {
+      if (kbHydratingFromSessionRef.current) {
+        kbHydratingFromSessionRef.current = false
+      }
+      if (pendingPushKbKeyRef.current === selectedKbKey) {
+        pendingPushKbKeyRef.current = null
+      }
+      return
+    }
+    if (kbSyncInFlightRef.current) return
+    if (kbHydratingFromSessionRef.current) return
+    if (pendingPushKbKeyRef.current === selectedKbKey) return
+    kbSyncInFlightRef.current = true
+    pendingPushKbKeyRef.current = selectedKbKey
+    void useChatStore
+      .getState()
+      .updateSessionPrefs(currentSession.id, { knowledgeBaseIds: normalizedSelectedKbIds })
+      .finally(() => {
+        kbSyncInFlightRef.current = false
+      })
+  }, [currentSession, normalizedSelectedKbIds, selectedKbKey, sessionKbKey])
 
   if (!currentSession) {
     return null

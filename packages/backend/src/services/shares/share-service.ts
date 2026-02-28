@@ -60,6 +60,18 @@ export interface ShareDetail {
   revokedAt: string | null
 }
 
+export interface ShareMessagePageResult {
+  token: string
+  sessionId: number
+  messages: ShareMessageSnapshot[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
 export interface ShareSummary {
   id: number
   sessionId: number
@@ -306,39 +318,53 @@ export class ShareService {
     return this.mapShareSummary(updated)
   }
 
-  async getShareByToken(token: string): Promise<ShareDetail | null> {
-    if (!token || token.trim().length === 0) {
-      return null
-    }
-    const record = await this.prisma.chatShare.findFirst({
-      where: {
-        token,
-      },
-    })
-    if (!record) return null
-    if (record.revokedAt) return null
-    if (record.expiresAt && record.expiresAt.getTime() < Date.now()) {
-      return null
-    }
-    let payload: SharePayload | null = null
-    try {
-      payload = JSON.parse(record.payloadJson) as SharePayload
-    } catch (error) {
-      this.logger.error?.('[ShareService] Failed to parse payloadJson', { id: record.id, error })
-      return null
-    }
-    if (!payload) return null
+  async getShareByToken(
+    token: string,
+    options?: { includeMessages?: boolean },
+  ): Promise<ShareDetail | null> {
+    const result = await this.findActiveShareByToken(token)
+    if (!result) return null
+    const { record, payload } = result
+    const includeMessages = options?.includeMessages !== false
+    const payloadMessages = Array.isArray(payload.messages) ? payload.messages : []
     return {
       id: record.id,
       sessionId: record.sessionId,
       token: record.token,
       title: record.title,
       sessionTitle: payload.sessionTitle || record.title,
-      messages: payload.messages || [],
-      messageCount: Array.isArray(payload.messages) ? payload.messages.length : 0,
+      messages: includeMessages ? payloadMessages : [],
+      messageCount: payloadMessages.length,
       createdAt: record.createdAt.toISOString(),
       expiresAt: record.expiresAt ? record.expiresAt.toISOString() : null,
       revokedAt: record.revokedAt ? record.revokedAt.toISOString() : null,
+    }
+  }
+
+  async listShareMessagesByToken(
+    token: string,
+    params: { page?: number; limit?: number } = {},
+  ): Promise<ShareMessagePageResult | null> {
+    const result = await this.findActiveShareByToken(token)
+    if (!result) return null
+    const { record, payload } = result
+    const { page, limit } = this.normalizePagination(params)
+    const allMessages = Array.isArray(payload.messages) ? payload.messages : []
+    const total = allMessages.length
+    const totalPages = Math.max(1, Math.ceil(total / limit))
+    const safePage = Math.min(page, totalPages)
+    const start = (safePage - 1) * limit
+    const end = start + limit
+    return {
+      token: record.token,
+      sessionId: record.sessionId,
+      messages: allMessages.slice(start, end),
+      pagination: {
+        page: safePage,
+        limit,
+        total,
+        totalPages,
+      },
     }
   }
 
@@ -474,6 +500,46 @@ export class ShareService {
     const limit =
       typeof params?.limit === 'number' && params.limit > 0 ? Math.min(Math.trunc(params.limit), 100) : 20
     return { page, limit }
+  }
+
+  private async findActiveShareByToken(token: string): Promise<{
+    record: {
+      id: number
+      sessionId: number
+      token: string
+      title: string
+      payloadJson: string
+      createdAt: Date
+      expiresAt: Date | null
+      revokedAt: Date | null
+    }
+    payload: SharePayload
+  } | null> {
+    if (!token || token.trim().length === 0) {
+      return null
+    }
+    const record = await this.prisma.chatShare.findFirst({
+      where: { token },
+    })
+    if (!record) return null
+    if (record.revokedAt) return null
+    if (record.expiresAt && record.expiresAt.getTime() < Date.now()) {
+      return null
+    }
+    const payload = this.parseSharePayload(record.payloadJson, record.id)
+    if (!payload) return null
+    return { record, payload }
+  }
+
+  private parseSharePayload(payloadJson: string, shareId: number): SharePayload | null {
+    try {
+      const parsed = JSON.parse(payloadJson) as SharePayload
+      if (!parsed || typeof parsed !== 'object') return null
+      return parsed
+    } catch (error) {
+      this.logger.error?.('[ShareService] Failed to parse payloadJson', { id: shareId, error })
+      return null
+    }
   }
 
   private async generateToken(): Promise<string> {

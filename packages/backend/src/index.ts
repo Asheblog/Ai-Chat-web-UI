@@ -27,6 +27,7 @@ import { setRAGInitializerDeps, reloadRAGServices } from './services/rag-initial
 import { createSystemLogsApi } from './api/system-logs';
 import { createSkillsApi } from './api/skills';
 import { createArtifactsApi } from './api/artifacts';
+import { createPromptTemplatesApi } from './api/prompt-templates';
 import { workspaceCleanupService } from './services/workspace/workspace-cleanup-service';
 
 // 导入中间件
@@ -110,6 +111,7 @@ app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 app.route('/api/system-logs', createSystemLogsApi());
 app.route('/api/skills', createSkillsApi());
 app.route('/api/artifacts', createArtifactsApi());
+app.route('/api/prompt-templates', createPromptTemplatesApi());
 
 app.route(
   '/v1',
@@ -161,6 +163,12 @@ app.get('/api', (c) => {
         'PUT /api/sessions/:id': '更新会话标题',
         'DELETE /api/sessions/:id': '删除会话',
         'DELETE /api/sessions/:id/messages': '清空会话消息',
+      },
+      promptTemplates: {
+        'GET /api/prompt-templates': '获取当前用户提示词模板',
+        'POST /api/prompt-templates': '创建提示词模板',
+        'PUT /api/prompt-templates/:id': '更新提示词模板',
+        'DELETE /api/prompt-templates/:id': '删除提示词模板',
       },
       chat: {
         'GET /api/chat/sessions/:sessionId/messages': '获取会话消息',

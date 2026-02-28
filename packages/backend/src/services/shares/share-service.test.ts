@@ -189,4 +189,69 @@ describe('ShareService', () => {
     )
     expect(result.revokedAt).toBeTruthy()
   })
+
+  it('returns share metadata without messages when includeMessages=false', async () => {
+    const { service, prisma } = createService()
+    prisma.chatShare.findFirst.mockResolvedValue({
+      id: 77,
+      sessionId: 11,
+      token: 'token-meta',
+      title: 'Share Meta',
+      payloadJson: JSON.stringify({
+        sessionTitle: 'Session A',
+        messages: [
+          { id: 1, role: 'user', content: 'hello', createdAt: baseDate.toISOString() },
+          { id: 2, role: 'assistant', content: 'world', createdAt: baseDate.toISOString() },
+        ],
+      }),
+      createdAt: baseDate,
+      expiresAt: null,
+      revokedAt: null,
+    })
+
+    const result = await service.getShareByToken('token-meta', { includeMessages: false })
+
+    expect(result).toMatchObject({
+      id: 77,
+      messageCount: 2,
+      messages: [],
+      sessionTitle: 'Session A',
+    })
+  })
+
+  it('lists share messages with pagination', async () => {
+    const { service, prisma } = createService()
+    prisma.chatShare.findFirst.mockResolvedValue({
+      id: 88,
+      sessionId: 12,
+      token: 'token-page',
+      title: 'Share Page',
+      payloadJson: JSON.stringify({
+        sessionTitle: 'Session B',
+        messages: [
+          { id: 1, role: 'user', content: 'm1', createdAt: baseDate.toISOString() },
+          { id: 2, role: 'assistant', content: 'm2', createdAt: baseDate.toISOString() },
+          { id: 3, role: 'assistant', content: 'm3', createdAt: baseDate.toISOString() },
+        ],
+      }),
+      createdAt: baseDate,
+      expiresAt: null,
+      revokedAt: null,
+    })
+
+    const result = await service.listShareMessagesByToken('token-page', { page: 2, limit: 2 })
+
+    expect(result).toMatchObject({
+      token: 'token-page',
+      sessionId: 12,
+      pagination: {
+        page: 2,
+        limit: 2,
+        total: 3,
+        totalPages: 2,
+      },
+    })
+    expect(result?.messages).toHaveLength(1)
+    expect(result?.messages[0]?.content).toBe('m3')
+  })
 })

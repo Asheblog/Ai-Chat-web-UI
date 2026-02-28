@@ -1,22 +1,72 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import dynamic from 'next/dynamic'
 import { BookOpen, Cpu, Settings2, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { SystemGeneralPage } from "@/features/settings/pages/system-general"
-import { SystemModelsPage } from "@/features/settings/pages/system-models"
-import { SystemNetworkPage } from "@/components/settings/pages/SystemNetwork"
-import { SystemReasoningPage } from "@/components/settings/pages/SystemReasoning"
-import { SystemWebSearchPage } from "@/components/settings/pages/SystemWebSearch"
-import { SystemRAGPage } from "@/components/settings/pages/SystemRAG"
-import { SystemKnowledgeBasePage } from "@/components/settings/pages/SystemKnowledgeBase"
-import { SystemConnectionsPage } from "@/components/settings/pages/SystemConnections"
-import { SystemSkillsPage } from "@/components/settings/pages/SystemSkills"
-import { SystemSkillAuditsPage } from "@/components/settings/pages/SystemSkillAudits"
-import { SystemUsersPage } from "@/components/settings/pages/SystemUsers"
-import { SystemModelAccessPage } from "@/components/settings/pages/SystemModelAccess"
-import { SystemMonitoringPage } from "@/components/settings/pages/SystemMonitoring"
-import { SystemPythonRuntimePage } from "@/components/settings/pages/SystemPythonRuntime"
+
+const pageLoading = () => (
+  <div className="rounded-2xl border border-border/80 bg-card/60 p-6 text-sm text-muted-foreground">
+    正在加载设置模块...
+  </div>
+)
+
+const SystemGeneralPage = dynamic(
+  () => import('@/features/settings/pages/system-general').then((m) => m.SystemGeneralPage),
+  { loading: pageLoading },
+)
+const SystemModelsPage = dynamic(
+  () => import('@/features/settings/pages/system-models').then((m) => m.SystemModelsPage),
+  { loading: pageLoading },
+)
+const SystemNetworkPage = dynamic(
+  () => import('@/components/settings/pages/SystemNetwork').then((m) => m.SystemNetworkPage),
+  { loading: pageLoading },
+)
+const SystemReasoningPage = dynamic(
+  () => import('@/components/settings/pages/SystemReasoning').then((m) => m.SystemReasoningPage),
+  { loading: pageLoading },
+)
+const SystemWebSearchPage = dynamic(
+  () => import('@/components/settings/pages/SystemWebSearch').then((m) => m.SystemWebSearchPage),
+  { loading: pageLoading },
+)
+const SystemRAGPage = dynamic(
+  () => import('@/components/settings/pages/SystemRAG').then((m) => m.SystemRAGPage),
+  { loading: pageLoading },
+)
+const SystemKnowledgeBasePage = dynamic(
+  () => import('@/components/settings/pages/SystemKnowledgeBase').then((m) => m.SystemKnowledgeBasePage),
+  { loading: pageLoading },
+)
+const SystemConnectionsPage = dynamic(
+  () => import('@/components/settings/pages/SystemConnections').then((m) => m.SystemConnectionsPage),
+  { loading: pageLoading },
+)
+const SystemSkillsPage = dynamic(
+  () => import('@/components/settings/pages/SystemSkills').then((m) => m.SystemSkillsPage),
+  { loading: pageLoading },
+)
+const SystemSkillAuditsPage = dynamic(
+  () => import('@/components/settings/pages/SystemSkillAudits').then((m) => m.SystemSkillAuditsPage),
+  { loading: pageLoading },
+)
+const SystemUsersPage = dynamic(
+  () => import('@/components/settings/pages/SystemUsers').then((m) => m.SystemUsersPage),
+  { loading: pageLoading },
+)
+const SystemModelAccessPage = dynamic(
+  () => import('@/components/settings/pages/SystemModelAccess').then((m) => m.SystemModelAccessPage),
+  { loading: pageLoading },
+)
+const SystemMonitoringPage = dynamic(
+  () => import('@/components/settings/pages/SystemMonitoring').then((m) => m.SystemMonitoringPage),
+  { loading: pageLoading },
+)
+const SystemPythonRuntimePage = dynamic(
+  () => import('@/components/settings/pages/SystemPythonRuntime').then((m) => m.SystemPythonRuntimePage),
+  { loading: pageLoading },
+)
 
 type WorkspaceModule = {
   key: string
