@@ -1,4 +1,8 @@
-import { StreamUsageService, resolveCompletionTokensForMetrics } from '../stream-usage-service'
+import {
+  StreamUsageService,
+  computeStreamMetrics,
+  resolveCompletionTokensForMetrics,
+} from '../stream-usage-service'
 
 const build = () => {
   const persistAssistantFinalResponse = jest.fn(async () => 10)
@@ -33,6 +37,34 @@ const baseParams = () => ({
 })
 
 describe('StreamUsageService', () => {
+  it('returns null latency when first chunk timestamp is missing', () => {
+    const metrics = computeStreamMetrics({
+      timing: {
+        requestStartedAt: 1000,
+        firstChunkAt: null,
+        completedAt: 2200,
+      },
+      completionTokens: 24,
+    })
+    expect(metrics.firstTokenLatencyMs).toBeNull()
+    expect(metrics.responseTimeMs).toBe(1200)
+    expect(metrics.tokensPerSecond).toBeCloseTo(20, 5)
+  })
+
+  it('clamps first chunk timestamp to completedAt when provider clock drifts', () => {
+    const metrics = computeStreamMetrics({
+      timing: {
+        requestStartedAt: 1000,
+        firstChunkAt: 5000,
+        completedAt: 1600,
+      },
+      completionTokens: 6,
+    })
+    expect(metrics.firstTokenLatencyMs).toBe(600)
+    expect(metrics.responseTimeMs).toBe(600)
+    expect(metrics.tokensPerSecond).toBeCloseTo(10, 5)
+  })
+
   it('uses provider completion tokens for metrics when fallback tokens are zero', () => {
     const completion = resolveCompletionTokensForMetrics({
       providerUsageSeen: true,

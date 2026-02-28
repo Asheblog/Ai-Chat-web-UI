@@ -1384,6 +1384,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
             }
 
             // 调用第三方AI API（带退避）
+            const requestStartedAt = Date.now();
             let response = await providerRequestWithBackoff();
 
             log.debug('AI provider response', {
@@ -1494,7 +1495,6 @@ export const registerChatStreamRoutes = (router: Hono) => {
             const decoder = new TextDecoder();
             let buffer = '';
 
-            const requestStartedAt = Date.now();
             let firstChunkAt: number | null = null;
             let lastChunkAt: number | null = null;
             let lastKeepaliveSentAt = 0;
@@ -1962,10 +1962,11 @@ export const registerChatStreamRoutes = (router: Hono) => {
               completionTokensFallback,
             });
             const completedAt = Date.now();
+            const firstTokenAt = providerFirstDeltaAt ?? firstChunkAt;
             const streamMetrics = computeStreamMetrics({
               timing: {
                 requestStartedAt,
-                firstChunkAt,
+                firstChunkAt: firstTokenAt,
                 completedAt,
               },
               completionTokens: completionTokensForMetrics,
@@ -2011,7 +2012,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
                 traceRecorder,
                 timing: {
                   requestStartedAt,
-                  firstChunkAt,
+                  firstChunkAt: firstTokenAt,
                   completedAt,
                 },
                 precomputedMetrics: streamMetrics,

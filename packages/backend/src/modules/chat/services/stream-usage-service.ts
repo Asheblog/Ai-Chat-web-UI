@@ -78,7 +78,7 @@ export const resolveCompletionTokensForMetrics = (params: {
 }
 
 export interface StreamMetrics {
-  firstTokenLatencyMs: number
+  firstTokenLatencyMs: number | null
   responseTimeMs: number
   tokensPerSecond: number
 }
@@ -98,11 +98,17 @@ export interface ComputeMetricsParams {
 export const computeStreamMetrics = (params: ComputeMetricsParams): StreamMetrics => {
   const { timing, completionTokens } = params
   const startedAt = Math.max(0, Number(timing.requestStartedAt) || Date.now())
-  const firstChunkAt = Math.max(0, Number(timing.firstChunkAt ?? startedAt) || startedAt)
   const completedAt = Math.max(0, Number(timing.completedAt) || Date.now())
-  const firstTokenLatencyMs = Math.max(0, Math.round(firstChunkAt - startedAt))
+  const firstChunkCandidate = Number(timing.firstChunkAt)
+  const firstChunkAt =
+    Number.isFinite(firstChunkCandidate) && firstChunkCandidate >= startedAt
+      ? Math.min(firstChunkCandidate, completedAt)
+      : null
+  const firstTokenLatencyMs =
+    firstChunkAt != null ? Math.max(0, Math.round(firstChunkAt - startedAt)) : null
   const responseTimeMs = Math.max(0, Math.round(completedAt - startedAt))
-  const speedWindowMs = Math.max(1, completedAt - firstChunkAt || completedAt - startedAt || 1)
+  const speedAnchorAt = firstChunkAt ?? startedAt
+  const speedWindowMs = Math.max(1, completedAt - speedAnchorAt || completedAt - startedAt || 1)
   const tokensPerSecond = completionTokens > 0 ? completionTokens / (speedWindowMs / 1000) : 0
 
   return {
@@ -151,7 +157,7 @@ export class StreamUsageService {
           },
           completionTokens: finalUsage.completion,
         })
-      : { firstTokenLatencyMs: 0, responseTimeMs: 0, tokensPerSecond: 0 })
+      : { firstTokenLatencyMs: null, responseTimeMs: 0, tokensPerSecond: 0 })
 
     const { firstTokenLatencyMs, responseTimeMs, tokensPerSecond } = metrics
 

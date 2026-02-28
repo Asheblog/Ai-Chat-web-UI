@@ -369,6 +369,7 @@ export class StreamOrchestrator {
           }
 
           // 调用 Provider
+          const requestStartedAt = Date.now()
           const response = await this.deps.providerRequester.requestWithBackoff({
             request: {
               url: preparedRequest.url,
@@ -422,8 +423,8 @@ export class StreamOrchestrator {
 
           const decoder = new TextDecoder()
           let buffer = ''
-          const requestStartedAt = Date.now()
           let firstChunkAt: number | null = null
+          let firstDeltaAt: number | null = null
           let lastChunkAt: number | null = null
           let providerDone = false
           let pendingVisibleDelta = ''
@@ -513,6 +514,7 @@ export class StreamOrchestrator {
                   const deltaContent = responsesEvent.contentDelta
 
                   if (reasoning.enabled && deltaReasoning) {
+                    if (!firstDeltaAt) firstDeltaAt = now
                     if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
                     pendingReasoningDelta += deltaReasoning
                     if (pendingReasoningDelta.length >= config.streamDeltaChunkSize) {
@@ -525,6 +527,7 @@ export class StreamOrchestrator {
                   }
 
                   if (deltaContent) {
+                    if (!firstDeltaAt) firstDeltaAt = now
                     let visible = deltaContent
                     if (reasoning.enabled && config.reasoningTagsMode !== 'off') {
                       const tags =
@@ -618,6 +621,7 @@ export class StreamOrchestrator {
 
               // 处理推理内容
               if (reasoning.enabled && deltaReasoning) {
+                if (!firstDeltaAt) firstDeltaAt = now
                 if (!reasoningState.startedAt) reasoningState.startedAt = Date.now()
                 pendingReasoningDelta += deltaReasoning
                 if (pendingReasoningDelta.length >= config.streamDeltaChunkSize) {
@@ -631,6 +635,7 @@ export class StreamOrchestrator {
 
               // 处理可见内容
               if (deltaContent) {
+                if (!firstDeltaAt) firstDeltaAt = now
                 let visible = deltaContent
                 if (reasoning.enabled && config.reasoningTagsMode !== 'off') {
                   const tags = config.reasoningTagsMode === 'custom' && config.reasoningCustomTags
@@ -732,10 +737,11 @@ export class StreamOrchestrator {
 
           // 完成事件
           const completedAt = Date.now()
+          const firstTokenAt = firstDeltaAt ?? firstChunkAt
           const completeEvent = `data: ${JSON.stringify({
             type: 'complete',
             metrics: {
-              firstTokenLatencyMs: firstChunkAt ? firstChunkAt - requestStartedAt : null,
+              firstTokenLatencyMs: firstTokenAt != null ? firstTokenAt - requestStartedAt : null,
               responseTimeMs: completedAt - requestStartedAt,
             },
           })}\n\n`
@@ -764,7 +770,7 @@ export class StreamOrchestrator {
               reasoningSaveToDb: reasoning.saveToDb,
               assistantReplyHistoryLimit: config.assistantReplyHistoryLimit,
               traceRecorder,
-              timing: { requestStartedAt, firstChunkAt, completedAt },
+              timing: { requestStartedAt, firstChunkAt: firstTokenAt, completedAt },
               precomputedMetrics: undefined,
             })
             assistantMessageId = usageResult.assistantMessageId
