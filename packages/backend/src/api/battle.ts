@@ -607,6 +607,12 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
                 payload: event.payload ?? {},
               })
               break
+            case 'attempt_tool_call':
+              send({
+                type: 'attempt_tool_call',
+                payload: event.payload ?? {},
+              })
+              break
             default:
               break
           }

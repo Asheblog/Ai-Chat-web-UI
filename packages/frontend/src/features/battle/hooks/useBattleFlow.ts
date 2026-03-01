@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ModelItem } from '@/store/models-store'
 import { useSettingsStore } from '@/store/settings-store'
-import type { BattleContent, BattleResult, BattleRunSummary, BattleUploadImage } from '@/types'
+import type { BattleContent, BattleResult, BattleRunSummary, BattleToolCallEvent, BattleUploadImage, ToolEvent } from '@/types'
 import {
   cancelBattleAttempt,
   cancelBattleRun,
@@ -42,6 +42,7 @@ export interface NodeState {
   output?: string
   reasoning?: string
   error?: string | null
+  toolEvents?: ToolEvent[]
   judgeStatus?: BattleResult['judgeStatus']
   judgeError?: string | null
   judgePass?: boolean | null
@@ -60,6 +61,7 @@ export type LiveAttempt = {
   reasoning?: string | null
   durationMs?: number | null
   error?: string | null
+  toolEvents?: BattleToolCallEvent[] | ToolEvent[] | null
 }
 
 export interface JudgeConfig {
@@ -336,6 +338,224 @@ const normalizeBattleContent = (raw: unknown): BattleContent => {
   return { text, images }
 }
 
+const TOOL_CALL_PHASES = [
+  'arguments_streaming',
+  'pending_approval',
+  'executing',
+  'result',
+  'error',
+  'rejected',
+  'aborted',
+] as const
+
+const TOOL_CALL_STATUSES = ['running', 'success', 'error', 'pending', 'rejected', 'aborted'] as const
+
+const TOOL_CALL_SOURCES = ['builtin', 'plugin', 'mcp', 'workspace', 'system'] as const
+
+const TOOL_CALL_STAGES = ['start', 'result', 'error'] as const
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+
+const pickString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.length > 0) return trimmed
+    }
+  }
+  return null
+}
+
+const asTimestamp = (value: unknown, fallback: number) => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value)
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number.parseInt(value, 10)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return fallback
+}
+
+const normalizeToolCallSource = (value: unknown): ToolEvent['source'] => {
+  if (typeof value === 'string' && TOOL_CALL_SOURCES.includes(value as (typeof TOOL_CALL_SOURCES)[number])) {
+    return value as ToolEvent['source']
+  }
+  return undefined
+}
+
+const normalizeToolCallPhase = (
+  phase: unknown,
+  status: unknown,
+  stage: unknown,
+): ToolEvent['phase'] => {
+  if (typeof phase === 'string' && TOOL_CALL_PHASES.includes(phase as (typeof TOOL_CALL_PHASES)[number])) {
+    return phase as ToolEvent['phase']
+  }
+  if (status === 'pending') return 'pending_approval'
+  if (status === 'success') return 'result'
+  if (status === 'rejected') return 'rejected'
+  if (status === 'aborted') return 'aborted'
+  if (status === 'error') return 'error'
+  if (status === 'running') return 'executing'
+  if (stage === 'result') return 'result'
+  if (stage === 'error') return 'error'
+  if (stage === 'start') return 'executing'
+  return undefined
+}
+
+const normalizeToolCallStatus = (
+  status: unknown,
+  phase: ToolEvent['phase'],
+  stage: unknown,
+): ToolEvent['status'] => {
+  if (typeof status === 'string' && TOOL_CALL_STATUSES.includes(status as (typeof TOOL_CALL_STATUSES)[number])) {
+    return status as ToolEvent['status']
+  }
+  if (phase === 'pending_approval') return 'pending'
+  if (phase === 'result') return 'success'
+  if (phase === 'rejected') return 'rejected'
+  if (phase === 'aborted') return 'aborted'
+  if (phase === 'error') return 'error'
+  if (stage === 'result') return 'success'
+  if (stage === 'error') return 'error'
+  return 'running'
+}
+
+const normalizeToolCallStage = (
+  stage: unknown,
+  phase: ToolEvent['phase'],
+): ToolEvent['stage'] => {
+  if (typeof stage === 'string' && TOOL_CALL_STAGES.includes(stage as (typeof TOOL_CALL_STAGES)[number])) {
+    return stage as ToolEvent['stage']
+  }
+  if (phase === 'result') return 'result'
+  if (phase === 'error' || phase === 'rejected' || phase === 'aborted') return 'error'
+  return 'start'
+}
+
+export const normalizeBattleToolEvent = (raw: unknown): ToolEvent | null => {
+  const event = asRecord(raw)
+  if (!event) return null
+
+  const details = asRecord(event.details) || undefined
+  const now = Date.now()
+  const createdAt = asTimestamp(event.createdAt, now)
+  const updatedAt = asTimestamp(event.updatedAt, createdAt)
+  const phase = normalizeToolCallPhase(event.phase, event.status, event.stage)
+  const status = normalizeToolCallStatus(event.status, phase, event.stage)
+  const stage = normalizeToolCallStage(event.stage, phase)
+  const id = pickString(event.id, event.callId) || `tool-${createdAt}`
+  const callId = pickString(event.callId, event.id) || undefined
+  const identifier = pickString(event.identifier, event.tool, event.apiName) || undefined
+  const apiName = pickString(event.apiName, event.identifier, event.tool) || identifier
+  const tool = pickString(event.tool, identifier, apiName) || 'tool'
+  const source = normalizeToolCallSource(event.source)
+  const query = pickString(event.query) || undefined
+  const argumentsText = pickString(event.argumentsText, details?.argumentsText, details?.input, details?.code) || undefined
+  const argumentsPatch = pickString(event.argumentsPatch, details?.argumentsPatch) || undefined
+  const resultText = pickString(event.resultText, details?.resultText, details?.stdout, details?.excerpt) || undefined
+  const error = pickString(event.error) || undefined
+  const summary = pickString(event.summary) || undefined
+
+  const normalized: ToolEvent = {
+    id,
+    sessionId: 0,
+    messageId: 0,
+    tool,
+    stage,
+    status,
+    createdAt,
+    updatedAt,
+    ...(callId ? { callId } : {}),
+    ...(source ? { source } : {}),
+    ...(identifier ? { identifier } : {}),
+    ...(apiName ? { apiName } : {}),
+    ...(phase ? { phase } : {}),
+    ...(query ? { query } : {}),
+    ...(Array.isArray(event.hits) ? { hits: event.hits as ToolEvent['hits'] } : {}),
+    ...(argumentsText ? { argumentsText } : {}),
+    ...(argumentsPatch ? { argumentsPatch } : {}),
+    ...(resultText ? { resultText } : {}),
+    ...(typeof event.resultJson !== 'undefined' ? { resultJson: event.resultJson } : {}),
+    ...(error ? { error } : {}),
+    ...(summary ? { summary } : {}),
+    ...(details ? { details: details as ToolEvent['details'] } : {}),
+    ...(asRecord(event.intervention) ? { intervention: event.intervention as ToolEvent['intervention'] } : {}),
+    ...(typeof event.thoughtSignature === 'string' || event.thoughtSignature === null
+      ? { thoughtSignature: event.thoughtSignature as ToolEvent['thoughtSignature'] }
+      : {}),
+  }
+
+  return normalized
+}
+
+const buildToolEventKey = (event: ToolEvent) => {
+  const callId = pickString(event.callId)
+  if (callId) return `call:${callId}`
+  const id = pickString(event.id)
+  if (id) return `id:${id}`
+  return `fallback:${event.createdAt}`
+}
+
+const mergeToolEvent = (previous: ToolEvent, incoming: ToolEvent): ToolEvent => ({
+  ...previous,
+  ...incoming,
+  id: incoming.id || previous.id,
+  callId: incoming.callId || previous.callId,
+  tool: incoming.tool || incoming.identifier || previous.tool,
+  identifier: incoming.identifier || previous.identifier,
+  apiName: incoming.apiName || previous.apiName,
+  createdAt: Math.min(previous.createdAt, incoming.createdAt),
+  updatedAt: Math.max(previous.updatedAt ?? previous.createdAt, incoming.updatedAt ?? incoming.createdAt),
+  details:
+    previous.details || incoming.details
+      ? { ...(previous.details || {}), ...(incoming.details || {}) }
+      : undefined,
+})
+
+const compareToolEvent = (a: ToolEvent, b: ToolEvent) => {
+  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
+  const aUpdated = a.updatedAt ?? a.createdAt
+  const bUpdated = b.updatedAt ?? b.createdAt
+  if (aUpdated !== bUpdated) return aUpdated - bUpdated
+  return buildToolEventKey(a).localeCompare(buildToolEventKey(b))
+}
+
+export const normalizeBattleToolEventList = (events: unknown): ToolEvent[] => {
+  if (!Array.isArray(events) || events.length === 0) return []
+  const merged = new Map<string, ToolEvent>()
+  let fallbackIndex = 0
+  for (const item of events) {
+    const normalized = normalizeBattleToolEvent(item)
+    if (!normalized) continue
+    const key = buildToolEventKey(normalized) || `fallback:${fallbackIndex++}`
+    const existing = merged.get(key)
+    if (!existing) {
+      merged.set(key, normalized)
+    } else {
+      merged.set(key, mergeToolEvent(existing, normalized))
+    }
+  }
+  return Array.from(merged.values()).sort(compareToolEvent)
+}
+
+export const appendBattleToolEvent = (timeline: ToolEvent[] | undefined, incoming: ToolEvent): ToolEvent[] => {
+  const current = Array.isArray(timeline) ? timeline : []
+  const key = buildToolEventKey(incoming)
+  const index = current.findIndex((item) => buildToolEventKey(item) === key)
+  if (index < 0) {
+    return [...current, incoming].sort(compareToolEvent)
+  }
+  const next = [...current]
+  next[index] = mergeToolEvent(next[index], incoming)
+  next.sort(compareToolEvent)
+  return next
+}
+
 export const buildNodeStatesFromRun = (
   models: BattleNodeModel[],
   runsPerModel: number,
@@ -388,6 +608,7 @@ export const buildNodeStatesFromRun = (
       }
       const index = live.attemptIndex - 1
       if (index >= 0 && index < attempts.length) {
+        const liveToolEvents = normalizeBattleToolEventList(live.toolEvents)
         attempts[index] = {
           ...attempts[index],
           status: live.status,
@@ -395,6 +616,7 @@ export const buildNodeStatesFromRun = (
           output: live.output ?? attempts[index].output,
           reasoning: live.reasoning ?? attempts[index].reasoning,
           error: live.error ?? null,
+          ...(liveToolEvents.length > 0 ? { toolEvents: liveToolEvents } : {}),
         }
       }
       map.set(key, attempts)
@@ -440,6 +662,7 @@ export const buildNodeStatesFromRun = (
         output: result.output,
         reasoning: attempts[index].reasoning,
         error: result.error,
+        toolEvents: attempts[index].toolEvents,
         judgeStatus: result.judgeStatus,
         judgeError: result.judgeError,
         judgePass: result.judgePass,
@@ -590,6 +813,40 @@ export function useBattleFlow() {
           attemptIndex,
           output: delta || '',
           reasoning: reasoning || '',
+        })
+      }
+      newAttempts.sort((a, b) => a.attemptIndex - b.attemptIndex)
+      next.set(modelKey, newAttempts)
+      return next
+    })
+  }, [])
+
+  const appendNodeToolEvent = useCallback((
+    modelKey: string,
+    attemptIndex: number,
+    event: ToolEvent,
+  ) => {
+    setNodeStates((prev) => {
+      const next = new Map(prev)
+      const attempts = next.get(modelKey) || []
+      let updated = false
+      const newAttempts = attempts.map((attempt) => {
+        if (attempt.attemptIndex !== attemptIndex) return attempt
+        updated = true
+        return {
+          ...attempt,
+          status: attempt.status === 'pending' ? 'running' : attempt.status,
+          toolEvents: appendBattleToolEvent(attempt.toolEvents, event),
+        }
+      })
+      if (!updated) {
+        const modelLabel = attempts[0]?.modelLabel || modelKey
+        newAttempts.push({
+          modelKey,
+          modelLabel,
+          status: 'running',
+          attemptIndex,
+          toolEvents: [event],
         })
       }
       newAttempts.sort((a, b) => a.attemptIndex - b.attemptIndex)
@@ -833,6 +1090,30 @@ export function useBattleFlow() {
           }
         }
 
+        if (event.type === 'attempt_tool_call') {
+          const payload = event.payload as {
+            modelKey?: string
+            modelId?: string
+            connectionId?: number | null
+            rawId?: string | null
+            attemptIndex?: number
+            event?: unknown
+          } | undefined
+          const attemptIndex = payload?.attemptIndex
+          const modelKey = payload?.modelKey
+            || (payload?.modelId
+              ? buildModelKey({
+                modelId: payload.modelId,
+                connectionId: payload.connectionId ?? null,
+                rawId: payload.rawId ?? null,
+              })
+              : null)
+          const toolEvent = normalizeBattleToolEvent(payload?.event)
+          if (modelKey && attemptIndex && toolEvent) {
+            appendNodeToolEvent(modelKey, attemptIndex, toolEvent)
+          }
+        }
+
         if (event.type === 'attempt_complete') {
           const result = event.payload?.result as BattleResult | undefined
           if (result) {
@@ -958,6 +1239,7 @@ export function useBattleFlow() {
     initializeNodeStates,
     updateNodeState,
     appendNodeOutput,
+    appendNodeToolEvent,
     cancelBattleRun,
     promptImages,
     expectedAnswerImages,
@@ -1041,6 +1323,7 @@ export function useBattleFlow() {
       reasoning: '',
       durationMs: null,
       error: null,
+      toolEvents: [],
       judgeStatus: 'unknown',
       judgeError: null,
       judgePass: null,

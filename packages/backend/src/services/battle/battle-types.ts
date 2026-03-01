@@ -1,6 +1,7 @@
 import type {
   BattleContent,
   BattleContentInput,
+  BattleToolCallEvent,
   BattleRunStatus,
 } from '@aichat/shared/battle-contract'
 
@@ -183,6 +184,7 @@ export interface BattleSharePayload {
       reasoning?: string | null
       durationMs?: number | null
       error?: string | null
+      toolEvents?: BattleToolCallEvent[]
     }>
   }
   createdAt: string

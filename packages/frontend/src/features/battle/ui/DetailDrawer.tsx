@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
     Dialog,
@@ -10,9 +10,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
+import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
 import { useToast } from '@/components/ui/use-toast'
 import { Check, X, Clock, AlertCircle, Scale, ChevronDown, ChevronRight, Copy } from 'lucide-react'
-import type { BattleResult } from '@/types'
+import type { BattleResult, ToolEvent } from '@/types'
 import type { NodeStatus } from '../hooks/useBattleFlow'
 
 interface DetailDrawerProps {
@@ -29,7 +30,7 @@ interface DetailDrawerProps {
     retryingJudgeId?: number | null
 }
 
-export type BattleAttemptDetail =| (BattleResult & { isLive?: false; status?: NodeStatus; modelKey: string })
+export type BattleAttemptDetail =| (BattleResult & { isLive?: false; status?: NodeStatus; modelKey: string; toolEvents?: ToolEvent[] })
   | {
       isLive: true
       modelKey: string
@@ -47,7 +48,9 @@ export type BattleAttemptDetail =| (BattleResult & { isLive?: false; status?: No
       judgePass?: boolean | null
       judgeScore?: number | null
       judgeReason?: string | null
-      judgeFallbackUsed?: boolean}
+      judgeFallbackUsed?: boolean
+      toolEvents?: ToolEvent[]
+    }
 
 const statusBadgeLabel = (status: NodeStatus) => {
     switch (status) {
@@ -84,6 +87,10 @@ export function DetailDrawer({
     const title = detail?.modelLabel || detail?.modelId || ''
     const usage = detail?.usage || {}
     const reasoning = (detail?.reasoning || '').trim()
+    const toolEvents = useMemo(
+      () => (Array.isArray(detail?.toolEvents) ? detail.toolEvents : []),
+      [detail?.toolEvents],
+    )
     const reasoningHeavy = reasoning.length >= 4000
     const detailSignature = detail ? `${detail.modelId}:${detail.attemptIndex}:${detail.isLive ?'live' : 'static'}` : ''
     const [renderReasoning, setRenderReasoning] = useState(!reasoningHeavy)
@@ -132,6 +139,11 @@ export function DetailDrawer({
     const currentRetrying = !isLive && retryingJudgeId != null && (detail as any).id === retryingJudgeId
     const judgeFailed = judgeStatus === 'error'
     const judgeUnknown = !judgeStatus || judgeStatus === 'unknown' || judgeStatus === 'skipped'
+    const metaStub = {
+      id: `battle:${detail.modelKey}:${detail.attemptIndex}`,
+      stableKey: `battle:${detail.modelKey}:${detail.attemptIndex}`,
+      clientMessageId: null,
+    }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -268,6 +280,15 @@ export function DetailDrawer({
                                     </div>
                                 )}
                             </div>
+                        )}
+
+                        {toolEvents.length > 0 && (
+                            <ToolCallsSection
+                                meta={metaStub}
+                                timeline={toolEvents}
+                                summary={null}
+                                defaultExpanded={true}
+                            />
                         )}
 
                         {/* Model Output */}

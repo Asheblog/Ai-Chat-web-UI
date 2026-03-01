@@ -90,7 +90,7 @@ const expandReducer = (state: ExpandState, action: ExpandAction): ExpandState =>
 }
 
 interface ToolCallsSectionProps {
-  meta: MessageMeta
+  meta: Pick<MessageMeta, 'stableKey' | 'id' | 'clientMessageId'>
   timeline: ToolEvent[]
   summary: ToolTimelineSummary | null
   defaultExpanded: boolean

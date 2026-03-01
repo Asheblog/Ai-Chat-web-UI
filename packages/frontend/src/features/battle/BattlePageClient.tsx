@@ -131,6 +131,8 @@ export function BattlePageClient() {
     if (!selectedNode) return null
     const { modelKey, attemptIndex } = selectedNode
     const parsed = parseModelKey(modelKey)
+    const attempts = flow.nodeStates.get(modelKey) || []
+    const attemptState = attempts.find((item) => item.attemptIndex === attemptIndex)
     const matched = flow.results.find((item) => {
       if (item.attemptIndex !== attemptIndex) return false
       return buildModelKey({
@@ -139,23 +141,28 @@ export function BattlePageClient() {
         rawId: item.rawId,
       }) === modelKey
     })
-    if (matched) return { ...matched, modelKey }
+    if (matched) {
+      return {
+        ...matched,
+        modelKey,
+        toolEvents: attemptState?.toolEvents,
+      }
+    }
 
-    const attempts = flow.nodeStates.get(modelKey) || []
-    const attempt = attempts.find((item) => item.attemptIndex === attemptIndex)
-    if (!attempt) return null
+    if (!attemptState) return null
     const modelId = parsed?.type === 'global' ? parsed.modelId : parsed?.rawId || modelKey
     return {
       isLive: true,
       modelKey,
       modelId,
-      modelLabel: attempt.modelLabel,
+      modelLabel: attemptState.modelLabel,
       attemptIndex,
-      output: attempt.output || '',
-      reasoning: attempt.reasoning || '',
-      durationMs: attempt.durationMs ?? null,
-      error: attempt.error ?? null,
-      status: attempt.status,
+      output: attemptState.output || '',
+      reasoning: attemptState.reasoning || '',
+      durationMs: attemptState.durationMs ?? null,
+      error: attemptState.error ?? null,
+      status: attemptState.status,
+      toolEvents: attemptState.toolEvents,
     }
   }, [selectedNode, flow.results, flow.nodeStates, parseModelKey])
 

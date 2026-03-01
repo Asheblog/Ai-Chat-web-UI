@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import type { BattleShare, BattleResult } from '@/types'
+import type { BattleShare, BattleResult, ToolEvent } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/utils'
@@ -12,7 +12,14 @@ import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
 import { FlowGraph } from '@/features/battle/ui/FlowGraph'
 import { DetailDrawer, type BattleAttemptDetail } from '@/features/battle/ui/DetailDrawer'
 import { BattleContentBlock } from '@/features/battle/ui/BattleContentBlock'
-import { buildNodeStatesFromRun, type BattleNodeModel, type LiveAttempt, type NodeState } from '@/features/battle/hooks/useBattleFlow'
+import {
+  appendBattleToolEvent,
+  buildNodeStatesFromRun,
+  normalizeBattleToolEvent,
+  type BattleNodeModel,
+  type LiveAttempt,
+  type NodeState,
+} from '@/features/battle/hooks/useBattleFlow'
 import { buildModelKey } from '@/features/battle/utils/model-key'
 import { getBattleShare } from '@/features/battle/api'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
@@ -74,6 +81,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null)
   const [liveDeltas, setLiveDeltas] = useState<Map<string, { output: string; reasoning: string }>>(new Map())
+  const [liveToolEvents, setLiveToolEvents] = useState<Map<string, ToolEvent[]>>(new Map())
   const isLive = payload.status === 'running' || payload.status === 'pending'
   const isLiveRef = useRef(isLive)
   const resultsRef = useRef<HTMLDivElement | null>(null)
@@ -97,6 +105,33 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
         const latestShare = res.data
         setShareState(latestShare)
         setLiveDeltas((prev) => {
+          if (prev.size === 0) return prev
+          const activeKeys = new Set<string>()
+          const liveAttempts = latestShare.payload.live?.attempts || []
+          for (const attempt of liveAttempts) {
+            const key = buildModelKey({
+              modelId: attempt.modelId,
+              connectionId: attempt.connectionId ?? null,
+              rawId: attempt.rawId ?? null,
+            })
+            activeKeys.add(`${key}#${attempt.attemptIndex}`)
+          }
+          const results = latestShare.payload.results || []
+          for (const result of results) {
+            const key = buildModelKey({
+              modelId: result.modelId,
+              connectionId: result.connectionId ?? null,
+              rawId: result.rawId ?? null,
+            })
+            activeKeys.add(`${key}#${result.attemptIndex}`)
+          }
+          const next = new Map(prev)
+          for (const key of Array.from(activeKeys)) {
+            next.delete(key)
+          }
+          return next
+        })
+        setLiveToolEvents((prev) => {
           if (prev.size === 0) return prev
           const activeKeys = new Set<string>()
           const liveAttempts = latestShare.payload.live?.attempts || []
@@ -178,7 +213,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           rawId: data.rawId ?? null,
         })
         const attemptIndex = Number(data.attemptIndex)
-        if (!modelKey || !Number.isFinite(attemptIndex)) return
+        if (!modelKey || !Number.isFinite(attemptIndex) || attemptIndex <= 0) return
         const deltaKey = `${modelKey}#${attemptIndex}`
         const outputDelta = typeof data.delta === 'string' ? data.delta : ''
         const reasoningDelta = typeof data.reasoning === 'string' ? data.reasoning : ''
@@ -198,6 +233,32 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
             ...prev,
             output: `${prev.output || ''}${outputDelta}`,
             reasoning: `${prev.reasoning || ''}${reasoningDelta}`,
+          } as BattleAttemptDetail
+        })
+      }
+      if (eventPayload.type === 'attempt_tool_call') {
+        const data = eventPayload.payload || {}
+        const modelKey = data.modelKey || buildModelKey({
+          modelId: data.modelId,
+          connectionId: data.connectionId ?? null,
+          rawId: data.rawId ?? null,
+        })
+        const attemptIndex = Number(data.attemptIndex)
+        if (!modelKey || !Number.isFinite(attemptIndex) || attemptIndex <= 0) return
+        const toolEvent = normalizeBattleToolEvent(data.event)
+        if (!toolEvent) return
+        const deltaKey = `${modelKey}#${attemptIndex}`
+        setLiveToolEvents((prev) => {
+          const next = new Map(prev)
+          const timeline = appendBattleToolEvent(next.get(deltaKey), toolEvent)
+          next.set(deltaKey, timeline)
+          return next
+        })
+        setSelectedDetail((prev) => {
+          if (!prev || prev.modelKey !== modelKey || prev.attemptIndex !== attemptIndex) return prev
+          return {
+            ...prev,
+            toolEvents: appendBattleToolEvent(prev.toolEvents, toolEvent),
           } as BattleAttemptDetail
         })
       }
@@ -297,22 +358,30 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   }, [isLive, payload.models, payload.summary?.runsPerModel, payload.live?.attempts, normalizedResults])
 
   const mergedNodeStates = useMemo(() => {
-    if (liveDeltas.size === 0) return nodeStates
+    if (liveDeltas.size === 0 && liveToolEvents.size === 0) return nodeStates
     const next = new Map<string, NodeState[]>()
     nodeStates.forEach((attempts, modelKey) => {
       const updated = attempts.map((attempt) => {
         const delta = liveDeltas.get(`${modelKey}#${attempt.attemptIndex}`)
-        if (!delta) return attempt
+        const liveTools = liveToolEvents.get(`${modelKey}#${attempt.attemptIndex}`)
+        if (!delta && (!liveTools || liveTools.length === 0)) return attempt
+        let mergedTools = attempt.toolEvents
+        if (liveTools && liveTools.length > 0) {
+          for (const toolEvent of liveTools) {
+            mergedTools = appendBattleToolEvent(mergedTools, toolEvent)
+          }
+        }
         return {
           ...attempt,
-          output: `${attempt.output || ''}${delta.output}`,
-          reasoning: `${attempt.reasoning || ''}${delta.reasoning}`,
+          output: `${attempt.output || ''}${delta?.output || ''}`,
+          reasoning: `${attempt.reasoning || ''}${delta?.reasoning || ''}`,
+          ...(mergedTools && mergedTools.length > 0 ? { toolEvents: mergedTools } : {}),
         }
       })
       next.set(modelKey, updated)
     })
     return next
-  }, [liveDeltas, nodeStates])
+  }, [liveDeltas, liveToolEvents, nodeStates])
 
   const progressPercentage = useMemo(() => {
     if (!payload.progress?.totalAttempts) return 0
@@ -379,6 +448,9 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
       connectionId: attempt.connectionId ?? null,
       rawId: attempt.rawId ?? null,
     })
+    const nodeAttempt = mergedNodeStates
+      .get(modelKey)
+      ?.find((item) => item.attemptIndex === attempt.attemptIndex)
     const detail: BattleAttemptDetail = {
       ...attempt,
       id: normalizedResults.find((item) => item.modelId === attempt.modelId
@@ -388,6 +460,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
       battleRunId: shareState.battleRunId,
       modelKey,
       isLive: false,
+      toolEvents: nodeAttempt?.toolEvents,
     }
     setSelectedNodeKey(`${modelKey}-${attempt.attemptIndex}`)
     setSelectedDetail(detail)
@@ -411,6 +484,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
         ...matchedResult,
         modelKey,
         isLive: false,
+        toolEvents: attempt.toolEvents,
       })
     } else {
       setSelectedDetail({
@@ -429,6 +503,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
         judgePass: attempt.judgePass,
         judgeScore: attempt.judgeScore,
         judgeReason: attempt.judgeReason,
+        toolEvents: attempt.toolEvents,
       })
     }
     setSelectedNodeKey(`${modelKey}-${attemptIndex}`)

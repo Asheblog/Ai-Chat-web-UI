@@ -19,6 +19,7 @@ import type { BattleModelInput, BattleModelSkills } from './battle-types'
 import { safeParseJson } from './battle-serialization'
 import { createSkillRegistry } from '../../modules/skills/skill-registry'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../modules/skills/types'
+import { createLogger } from '../../utils/logger'
 
 export interface BattleExecutionContext {
   checkRunCancelled: () => void
@@ -30,6 +31,12 @@ export interface BattleExecutionContext {
   actorUserId?: number | null
   actorIdentifier?: string
   sendStreamEvent?: (payload: Record<string, unknown>) => void
+  sendToolEvent?: (payload: Record<string, unknown>) => void
+  modelId?: string
+  connectionId?: number | null
+  rawId?: string | null
+  modelKey?: string
+  attemptIndex?: number
 }
 
 export interface BattleExecutorDeps {
@@ -89,6 +96,7 @@ const buildUsage = (json: any, context: { promptTokens: number; contextLimit: nu
 export class BattleExecutor {
   private requestBuilder: ChatRequestBuilder
   private requester: ProviderRequester
+  private logger = createLogger('BattleExecutor')
 
   constructor(deps: BattleExecutorDeps = {}) {
     this.requestBuilder = deps.requestBuilder ?? defaultChatRequestBuilder
@@ -658,7 +666,9 @@ export class BattleExecutor {
           actorIdentifier: context.actorIdentifier || 'battle',
           actorUserId: context.actorUserId ?? null,
           emitReasoning: () => {},
-          sendToolEvent: () => {},
+          sendToolEvent: (payload) => {
+            context.sendToolEvent?.(payload)
+          },
           sendStreamEvent: context.sendStreamEvent,
           battleRunId: context.battleRunId ?? null,
         })

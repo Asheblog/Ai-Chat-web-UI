@@ -954,6 +954,7 @@ export type {
   BattleSummaryStats,
   BattleRunSummary,
   BattleResult,
+  BattleToolCallEvent,
   BattleRunDetail,
   BattleRunListResponse,
   BattleSharePayload,

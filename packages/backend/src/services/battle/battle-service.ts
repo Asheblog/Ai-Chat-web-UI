@@ -15,6 +15,7 @@ import type {
   BattleContentInput,
   BattleRunStatus,
   BattleStreamEvent,
+  BattleToolCallEvent,
   BattleUploadImage,
   RejudgeExpectedAnswerInput,
   RejudgeStreamEvent,
@@ -37,6 +38,7 @@ import type {
   BattleResultRecord,
 } from './battle-types'
 import { BUILTIN_SKILL_SLUGS } from '../../modules/skills/types'
+import { normalizeToolCallEventPayload } from '../../modules/chat/tool-call-event'
 
 type BattleRunControl = {
   runId: number
@@ -79,6 +81,7 @@ type LiveAttemptState = {
   reasoning: string
   durationMs: number | null
   error: string | null
+  toolEvents: BattleToolCallEvent[]
 }
 
 type AttemptTask = {
@@ -351,6 +354,152 @@ const isBattleContentEmpty = (content: BattleContentInput) => {
   const text = normalizeBattleText(content.text)
   const hasImages = Array.isArray(content.images) && content.images.length > 0
   return !text && !hasImages
+}
+
+const TOOL_EVENT_STATUS_VALUES = new Set([
+  'running',
+  'success',
+  'error',
+  'pending',
+  'rejected',
+  'aborted',
+])
+
+const TOOL_EVENT_PHASE_VALUES = new Set([
+  'arguments_streaming',
+  'pending_approval',
+  'executing',
+  'result',
+  'error',
+  'rejected',
+  'aborted',
+])
+
+const TOOL_EVENT_SOURCE_VALUES = new Set(['builtin', 'plugin', 'mcp', 'workspace', 'system'])
+
+const TOOL_EVENT_STAGE_VALUES = new Set(['start', 'result', 'error'])
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+
+const pickString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.length > 0) return trimmed
+    }
+  }
+  return null
+}
+
+const toTimestamp = (value: unknown, fallback: number) => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value)
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number.parseInt(value, 10)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return fallback
+}
+
+const normalizeBattleToolCallEvent = (payload: Record<string, unknown>): BattleToolCallEvent | null => {
+  const normalized = normalizeToolCallEventPayload(payload)
+  const details = asRecord(normalized.details) || undefined
+  const now = Date.now()
+  const createdAt = toTimestamp(normalized.createdAt, now)
+  const updatedAt = toTimestamp(normalized.updatedAt, createdAt)
+
+  const callId = pickString(normalized.callId, normalized.id)
+  const id = pickString(normalized.id, normalized.callId) || `tool-${createdAt}`
+  if (!id) return null
+
+  const status = TOOL_EVENT_STATUS_VALUES.has(String(normalized.status))
+    ? (normalized.status as BattleToolCallEvent['status'])
+    : 'running'
+  const phase = TOOL_EVENT_PHASE_VALUES.has(String(normalized.phase))
+    ? (normalized.phase as BattleToolCallEvent['phase'])
+    : undefined
+  const source = TOOL_EVENT_SOURCE_VALUES.has(String(normalized.source))
+    ? (normalized.source as BattleToolCallEvent['source'])
+    : undefined
+  const stage = TOOL_EVENT_STAGE_VALUES.has(String(normalized.stage))
+    ? (normalized.stage as BattleToolCallEvent['stage'])
+    : undefined
+  const identifier = pickString(normalized.identifier, normalized.tool) || undefined
+  const apiName = pickString(normalized.apiName, normalized.identifier, normalized.tool) || undefined
+  const tool = pickString(normalized.tool, normalized.identifier) || undefined
+  const query = pickString(normalized.query) || undefined
+  const argumentsText = pickString(normalized.argumentsText, details?.argumentsText, details?.input, details?.code) || undefined
+  const argumentsPatch = pickString(normalized.argumentsPatch, details?.argumentsPatch) || undefined
+  const resultText = pickString(normalized.resultText, details?.resultText, details?.stdout, details?.excerpt) || undefined
+  const error = pickString(normalized.error) || undefined
+  const summary = pickString(normalized.summary) || undefined
+
+  const event: BattleToolCallEvent = {
+    id,
+    status,
+    createdAt,
+    updatedAt,
+    ...(callId ? { callId } : {}),
+    ...(source ? { source } : {}),
+    ...(stage ? { stage } : {}),
+    ...(phase ? { phase } : {}),
+    ...(identifier ? { identifier } : {}),
+    ...(apiName ? { apiName } : {}),
+    ...(tool ? { tool } : {}),
+    ...(query ? { query } : {}),
+    ...(Array.isArray(normalized.hits) ? { hits: normalized.hits as BattleToolCallEvent['hits'] } : {}),
+    ...(argumentsText ? { argumentsText } : {}),
+    ...(argumentsPatch ? { argumentsPatch } : {}),
+    ...(resultText ? { resultText } : {}),
+    ...(typeof normalized.resultJson !== 'undefined' ? { resultJson: normalized.resultJson } : {}),
+    ...(error ? { error } : {}),
+    ...(summary ? { summary } : {}),
+    ...(details ? { details: details as BattleToolCallEvent['details'] } : {}),
+    ...(asRecord(normalized.intervention)
+      ? { intervention: normalized.intervention as BattleToolCallEvent['intervention'] }
+      : {}),
+    ...(typeof normalized.thoughtSignature === 'string' || normalized.thoughtSignature === null
+      ? { thoughtSignature: normalized.thoughtSignature as string | null }
+      : {}),
+  }
+
+  return event
+}
+
+const buildToolEventKey = (event: BattleToolCallEvent) => {
+  const callId = pickString(event.callId)
+  if (callId) return `call:${callId}`
+  const id = pickString(event.id)
+  if (id) return `id:${id}`
+  return `fallback:${event.createdAt}`
+}
+
+const mergeToolEvent = (
+  previous: BattleToolCallEvent,
+  incoming: BattleToolCallEvent,
+): BattleToolCallEvent => ({
+  ...previous,
+  ...incoming,
+  id: incoming.id || previous.id,
+  callId: incoming.callId || previous.callId,
+  createdAt: Math.min(previous.createdAt, incoming.createdAt),
+  updatedAt: Math.max(previous.updatedAt ?? previous.createdAt, incoming.updatedAt ?? incoming.createdAt),
+  details:
+    previous.details || incoming.details
+      ? { ...(previous.details || {}), ...(incoming.details || {}) }
+      : undefined,
+})
+
+const compareToolEvents = (a: BattleToolCallEvent, b: BattleToolCallEvent) => {
+  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
+  const aUpdated = a.updatedAt ?? a.createdAt
+  const bUpdated = b.updatedAt ?? b.createdAt
+  if (aUpdated !== bUpdated) return aUpdated - bUpdated
+  return buildToolEventKey(a).localeCompare(buildToolEventKey(b))
 }
 
 export class BattleService {
@@ -802,6 +951,7 @@ export class BattleService {
       reasoning: '',
       durationMs: null,
       error: null,
+      toolEvents: [],
     })
     runControl.traceRecorder?.log('battle:attempt_retry', {
       ...this.buildAttemptTraceContext(runControl, attemptKey, {
@@ -2423,6 +2573,13 @@ export class BattleService {
       attemptIndex?: number
     },
   ): BattleExecutionContext {
+    const battleRunId = streamMeta?.battleRunId ?? runControl?.runId ?? null
+    const modelId = streamMeta?.modelId
+    const connectionId = streamMeta?.connectionId ?? null
+    const rawId = streamMeta?.rawId ?? null
+    const modelKey = streamMeta?.modelKey
+    const attemptIndex = streamMeta?.attemptIndex
+
     return {
       checkRunCancelled: () => this.throwIfRunCancelled(runControl),
       checkAttemptCancelled: () => {
@@ -2433,9 +2590,14 @@ export class BattleService {
       buildAbortHandlers: () => this.buildAbortHandlers(runControl, attemptKey),
       traceRecorder: runControl?.traceRecorder ?? null,
       buildTraceContext: (extra) => this.buildAttemptTraceContext(runControl, attemptKey, extra),
-      battleRunId: streamMeta?.battleRunId ?? runControl?.runId ?? null,
+      battleRunId,
       actorUserId: runControl?.actorUserId ?? null,
       actorIdentifier: runControl?.actorIdentifier || 'battle',
+      modelId,
+      connectionId,
+      rawId,
+      modelKey,
+      attemptIndex,
       sendStreamEvent: (payload) => {
         if (!payload || typeof payload !== 'object') return
         const payloadType = (payload as Record<string, unknown>).type
@@ -2446,12 +2608,40 @@ export class BattleService {
           type: payloadType,
           payload: {
             ...payload,
-            battleRunId: streamMeta?.battleRunId ?? runControl?.runId ?? null,
-            modelId: streamMeta?.modelId ?? null,
-            connectionId: streamMeta?.connectionId ?? null,
-            rawId: streamMeta?.rawId ?? null,
-            modelKey: streamMeta?.modelKey ?? null,
-            attemptIndex: streamMeta?.attemptIndex ?? null,
+            battleRunId,
+            modelId: modelId ?? null,
+            connectionId,
+            rawId,
+            modelKey: modelKey ?? null,
+            attemptIndex: attemptIndex ?? null,
+          },
+        })
+      },
+      sendToolEvent: (payload) => {
+        if (!payload || typeof payload !== 'object') return
+        if (!runControl || !modelKey || !modelId || typeof attemptIndex !== 'number') return
+        const normalized = normalizeBattleToolCallEvent(payload)
+        if (!normalized) return
+
+        const mergedEvents = this.upsertLiveAttemptToolEvent(runControl, {
+          modelId,
+          connectionId,
+          rawId,
+          attemptIndex,
+          event: normalized,
+        })
+
+        runControl.emitEvent?.({
+          type: 'attempt_tool_call',
+          payload: {
+            battleRunId,
+            modelId,
+            connectionId,
+            rawId,
+            modelKey,
+            attemptIndex,
+            event: normalized,
+            timeline: mergedEvents,
           },
         })
       },
@@ -2470,6 +2660,7 @@ export class BattleService {
       reasoning?: string
       durationMs?: number | null
       error?: string | null
+      toolEvents?: BattleToolCallEvent[] | null
     },
   ) {
     const modelKey = buildModelKey(params.modelId, params.connectionId, params.rawId)
@@ -2487,6 +2678,7 @@ export class BattleService {
         reasoning: params.reasoning ?? existing.reasoning,
         durationMs: params.durationMs !== undefined ? params.durationMs : existing.durationMs,
         error: params.error !== undefined ? params.error : existing.error,
+        toolEvents: Array.isArray(params.toolEvents) ? params.toolEvents : existing.toolEvents,
       }
       attempts.set(params.attemptIndex, next)
       return next
@@ -2501,6 +2693,7 @@ export class BattleService {
       reasoning: params.reasoning ?? '',
       durationMs: params.durationMs ?? null,
       error: params.error ?? null,
+      toolEvents: Array.isArray(params.toolEvents) ? params.toolEvents : [],
     }
     attempts.set(params.attemptIndex, record)
     return record
@@ -2587,6 +2780,36 @@ export class BattleService {
     if (params.reasoning) {
       record.reasoning = `${record.reasoning}${params.reasoning}`
     }
+  }
+
+  private upsertLiveAttemptToolEvent(
+    runControl: BattleRunControl,
+    params: {
+      modelId: string
+      connectionId: number | null
+      rawId: string | null
+      attemptIndex: number
+      event: BattleToolCallEvent
+    },
+  ) {
+    const record = this.ensureLiveAttempt(runControl, {
+      modelId: params.modelId,
+      connectionId: params.connectionId,
+      rawId: params.rawId,
+      attemptIndex: params.attemptIndex,
+      status: 'running',
+    })
+    const next = [...record.toolEvents]
+    const key = buildToolEventKey(params.event)
+    const index = next.findIndex((item) => buildToolEventKey(item) === key)
+    if (index >= 0) {
+      next[index] = mergeToolEvent(next[index], params.event)
+    } else {
+      next.push(params.event)
+    }
+    next.sort(compareToolEvents)
+    record.toolEvents = next
+    return next
   }
 
   private collectLiveAttempts(runId: number, connectionMap: Map<number, LabelConnection>) {
@@ -2789,6 +3012,7 @@ export class BattleService {
           reasoning: attempt.reasoning,
           durationMs: attempt.durationMs,
           error: attempt.error,
+          ...(attempt.toolEvents.length > 0 ? { toolEvents: attempt.toolEvents } : {}),
         })),
       }
       : undefined
