@@ -109,6 +109,10 @@ export interface WebSearchHandlerConfig {
   scope?: string
   includeSummary?: boolean
   includeRawContent?: boolean
+  autoReadAfterSearch?: boolean
+  autoReadTopK?: number
+  autoReadTimeoutMs?: number
+  autoReadMaxContentLength?: number
 }
 
 /**

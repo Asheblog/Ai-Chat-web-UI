@@ -8,6 +8,23 @@ import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 import { BackendLogger as log } from './logger'
 
+export type UrlReadErrorCode =
+  | 'INVALID_URL'
+  | 'DISALLOWED_URL'
+  | 'HTTP_403'
+  | 'HTTP_404'
+  | 'HTTP_4XX'
+  | 'HTTP_5XX'
+  | 'HTTP_ERROR'
+  | 'JS_CHALLENGE'
+  | 'ROBOTS_DENIED'
+  | 'UNSUPPORTED_CONTENT_TYPE'
+  | 'EMPTY_CONTENT'
+  | 'PARSE_EMPTY'
+  | 'TIMEOUT'
+  | 'FETCH_FAILED'
+  | 'UNKNOWN'
+
 export interface UrlReadResult {
   title: string
   url: string
@@ -20,6 +37,8 @@ export interface UrlReadResult {
   publishedTime?: string
   wordCount?: number
   error?: string
+  errorCode?: UrlReadErrorCode
+  httpStatus?: number
 }
 
 export interface UrlReaderOptions {
@@ -31,6 +50,15 @@ export interface UrlReaderOptions {
 const DEFAULT_TIMEOUT = 30000
 const DEFAULT_MAX_CONTENT_LENGTH = 100000
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (compatible; AIChat/1.0; +https://github.com/Asheblog/aichat)'
+const JS_CHALLENGE_PATTERNS: RegExp[] = [
+  /cf-chl/i,
+  /cloudflare/i,
+  /captcha/i,
+  /enable javascript/i,
+  /attention required/i,
+  /just a moment/i,
+  /verify you are human/i,
+]
 
 /**
  * 验证 URL 格式和安全性
@@ -78,6 +106,51 @@ function validateUrl(url: string): string {
   }
 }
 
+function detectJsChallenge(html: string): boolean {
+  const normalized = (html || '').toLowerCase()
+  if (!normalized) return false
+  return JS_CHALLENGE_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+function classifyHttpErrorCode(status: number, bodySnippet: string): UrlReadErrorCode {
+  if (status === 403) {
+    if (/robots/i.test(bodySnippet)) return 'ROBOTS_DENIED'
+    return 'HTTP_403'
+  }
+  if (status === 404) return 'HTTP_404'
+  if (status >= 400 && status < 500) return 'HTTP_4XX'
+  if (status >= 500) return 'HTTP_5XX'
+  return 'HTTP_ERROR'
+}
+
+function classifyThrownError(error: unknown): { message: string; errorCode: UrlReadErrorCode } {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return { message: error.message, errorCode: 'TIMEOUT' }
+    }
+    const message = error.message || 'Unknown error occurred'
+    if (message.includes('Invalid URL format')) return { message, errorCode: 'INVALID_URL' }
+    if (message.includes('not allowed')) return { message, errorCode: 'DISALLOWED_URL' }
+    if (message.includes('Only HTTP and HTTPS URLs are supported')) {
+      return { message, errorCode: 'INVALID_URL' }
+    }
+    if (message.includes('Unsupported content type')) {
+      return { message, errorCode: 'UNSUPPORTED_CONTENT_TYPE' }
+    }
+    if (message.includes('Page content is empty or too short')) {
+      return { message, errorCode: 'EMPTY_CONTENT' }
+    }
+    if (message.includes('Failed to extract article content')) {
+      return { message, errorCode: 'PARSE_EMPTY' }
+    }
+    if (message.toLowerCase().includes('fetch failed')) {
+      return { message, errorCode: 'FETCH_FAILED' }
+    }
+    return { message, errorCode: 'UNKNOWN' }
+  }
+  return { message: 'Unknown error occurred', errorCode: 'UNKNOWN' }
+}
+
 /**
  * 使用 @mozilla/readability 提取网页正文内容
  */
@@ -85,17 +158,18 @@ export async function readUrlContent(
   url: string,
   opts: UrlReaderOptions = {}
 ): Promise<UrlReadResult> {
-  const validatedUrl = validateUrl(url)
+  let validatedUrl = url.trim()
   const timeout = opts.timeout || DEFAULT_TIMEOUT
   const maxContentLength = opts.maxContentLength || DEFAULT_MAX_CONTENT_LENGTH
   const userAgent = opts.userAgent || DEFAULT_USER_AGENT
-
-  log.debug('url reader: fetching', { url: validatedUrl })
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
   try {
+    validatedUrl = validateUrl(url)
+    log.debug('url reader: fetching', { url: validatedUrl })
+
     const response = await fetch(validatedUrl, {
       headers: {
         'User-Agent': userAgent,
@@ -107,21 +181,76 @@ export async function readUrlContent(
       signal: controller.signal,
       redirect: 'follow',
     })
-    clearTimeout(timeoutId)
+    const status = response.status
+    const statusText = response.statusText || 'Request failed'
+    const responseBody = await response.text()
+    const bodySnippet = responseBody.slice(0, 2000)
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      const errorCode = classifyHttpErrorCode(status, bodySnippet)
+      const blockedByChallenge = detectJsChallenge(bodySnippet)
+      const finalCode = blockedByChallenge ? 'JS_CHALLENGE' : errorCode
+      const message =
+        finalCode === 'ROBOTS_DENIED'
+          ? `HTTP ${status}: ${statusText} (robots denied)`
+          : `HTTP ${status}: ${statusText}`
+
+      log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: finalCode, httpStatus: status })
+      return {
+        title: '',
+        url: validatedUrl,
+        content: '',
+        textContent: '',
+        error: message,
+        errorCode: finalCode,
+        httpStatus: status,
+      }
     }
 
     const contentType = response.headers.get('content-type') || ''
     if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
-      throw new Error(`Unsupported content type: ${contentType}. Only HTML pages are supported.`)
+      const message = `Unsupported content type: ${contentType}. Only HTML pages are supported.`
+      log.error('url reader: failed', {
+        url: validatedUrl,
+        error: message,
+        errorCode: 'UNSUPPORTED_CONTENT_TYPE',
+      })
+      return {
+        title: '',
+        url: validatedUrl,
+        content: '',
+        textContent: '',
+        error: message,
+        errorCode: 'UNSUPPORTED_CONTENT_TYPE',
+      }
     }
 
-    const html = await response.text()
+    const html = responseBody
+
+    if (detectJsChallenge(html)) {
+      const message = 'The page appears to be protected by a JavaScript challenge or anti-bot verification'
+      log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'JS_CHALLENGE' })
+      return {
+        title: '',
+        url: validatedUrl,
+        content: '',
+        textContent: '',
+        error: message,
+        errorCode: 'JS_CHALLENGE',
+      }
+    }
 
     if (!html || html.length < 100) {
-      throw new Error('Page content is empty or too short')
+      const message = 'Page content is empty or too short'
+      log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'EMPTY_CONTENT' })
+      return {
+        title: '',
+        url: validatedUrl,
+        content: '',
+        textContent: '',
+        error: message,
+        errorCode: 'EMPTY_CONTENT',
+      }
     }
 
     log.debug('url reader: parsing', { url: validatedUrl, htmlLength: html.length })
@@ -139,7 +268,16 @@ export async function readUrlContent(
     const article = reader.parse()
 
     if (!article) {
-      throw new Error('Failed to extract article content. The page structure may not be suitable for reading mode.')
+      const message = 'Failed to extract article content. The page structure may not be suitable for reading mode.'
+      log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'PARSE_EMPTY' })
+      return {
+        title: '',
+        url: validatedUrl,
+        content: '',
+        textContent: '',
+        error: message,
+        errorCode: 'PARSE_EMPTY',
+      }
     }
 
     let textContent = article.textContent || ''
@@ -173,20 +311,13 @@ export async function readUrlContent(
       wordCount,
     }
   } catch (error) {
-    clearTimeout(timeoutId)
+    const classified = classifyThrownError(error)
+    const message =
+      classified.errorCode === 'TIMEOUT'
+        ? `Request timeout after ${timeout / 1000} seconds`
+        : classified.message
 
-    let message: string
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        message = `Request timeout after ${timeout / 1000} seconds`
-      } else {
-        message = error.message
-      }
-    } else {
-      message = 'Unknown error occurred'
-    }
-
-    log.error('url reader: failed', { url: validatedUrl, error: message })
+    log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: classified.errorCode })
 
     return {
       title: '',
@@ -194,7 +325,10 @@ export async function readUrlContent(
       content: '',
       textContent: '',
       error: message,
+      errorCode: classified.errorCode,
     }
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -203,7 +337,15 @@ export async function readUrlContent(
  */
 export function formatUrlContentForModel(result: UrlReadResult): string {
   if (result.error) {
-    return `无法读取网页 "${result.url}"：${result.error}`
+    const suffix = [
+      result.errorCode ? `错误码: ${result.errorCode}` : null,
+      typeof result.httpStatus === 'number' ? `HTTP: ${result.httpStatus}` : null,
+    ]
+      .filter(Boolean)
+      .join('，')
+    return suffix
+      ? `无法读取网页 "${result.url}"：${result.error}（${suffix}）`
+      : `无法读取网页 "${result.url}"：${result.error}`
   }
 
   const parts: string[] = []

@@ -71,6 +71,20 @@ const pickString = (...values: unknown[]) => {
   return null
 }
 
+const resolveDiagnosticText = (event: ToolEvent) => {
+  const errorCode = pickString(event.details?.errorCode, event.details?.code)
+  const httpStatus =
+    typeof event.details?.httpStatus === 'number' && Number.isFinite(event.details.httpStatus)
+      ? event.details.httpStatus
+      : null
+  const fallbackUsed = pickString(event.details?.fallbackUsed)
+  const parts: string[] = []
+  if (errorCode) parts.push(`错误码: ${errorCode}`)
+  if (httpStatus != null) parts.push(`HTTP: ${httpStatus}`)
+  if (fallbackUsed) parts.push(`回退: ${fallbackUsed}`)
+  return parts.join(' · ')
+}
+
 const formatClock = (timestamp: number) => {
   if (!Number.isFinite(timestamp) || timestamp <= 0) return ''
   return new Date(timestamp).toLocaleTimeString('zh-CN', {
@@ -100,6 +114,7 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
     event.details?.resultText,
     event.details?.stdout,
   )
+  const diagnosticText = resolveDiagnosticText(event)
   const eventUrl = pickString(event.details?.url)
   const eventTitle = pickString(event.details?.title) || eventUrl
 
@@ -116,6 +131,11 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
         <span className="shrink-0 text-[11px] text-muted-foreground">{formatClock(event.updatedAt ?? event.createdAt)}</span>
       </div>
       <p className="mt-1 break-words text-xs text-muted-foreground">{primaryText}</p>
+      {diagnosticText && (
+        <p className="mt-1 break-words rounded bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
+          诊断: {diagnosticText}
+        </p>
+      )}
       {argumentText && (
         <p className="mt-1 break-words rounded bg-background/80 px-2 py-1 font-mono text-[11px] text-muted-foreground">
           参数: {argumentText}

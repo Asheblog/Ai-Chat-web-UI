@@ -7,7 +7,6 @@ import {
   parseBooleanSetting,
   parseDomainListSetting,
   parseNumberSetting,
-  parseEnumSetting,
   clampNumber,
 } from '../../utils/parsers';
 
@@ -24,6 +23,10 @@ export interface AgentWebSearchConfig {
   scope?: string;
   includeSummary?: boolean;
   includeRawContent?: boolean;
+  autoReadAfterSearch?: boolean;
+  autoReadTopK?: number;
+  autoReadTimeoutMs?: number;
+  autoReadMaxContentLength?: number;
 }
 
 /**
@@ -110,6 +113,38 @@ export const buildAgentWebSearchConfig = (
     false
   );
 
+  const autoReadAfterSearch = parseBooleanSetting(
+    sysMap.web_search_auto_read ?? env.WEB_SEARCH_AUTO_READ,
+    true
+  );
+
+  const autoReadTopK = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_auto_read_top_k ?? env.WEB_SEARCH_AUTO_READ_TOP_K,
+      { fallback: 2 }
+    ),
+    0,
+    3
+  );
+
+  const autoReadTimeoutMs = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_auto_read_timeout_ms ?? env.WEB_SEARCH_AUTO_READ_TIMEOUT_MS,
+      { fallback: 18000 }
+    ),
+    3000,
+    120000
+  );
+
+  const autoReadMaxContentLength = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_auto_read_max_content_length ?? env.WEB_SEARCH_AUTO_READ_MAX_CONTENT_LENGTH,
+      { fallback: 24000 }
+    ),
+    2000,
+    300000
+  );
+
   return {
     enabled,
     engine,
@@ -120,6 +155,10 @@ export const buildAgentWebSearchConfig = (
     scope,
     includeSummary,
     includeRawContent,
+    autoReadAfterSearch,
+    autoReadTopK,
+    autoReadTimeoutMs,
+    autoReadMaxContentLength,
   };
 };
 

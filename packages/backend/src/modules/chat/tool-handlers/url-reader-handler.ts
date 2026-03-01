@@ -120,20 +120,28 @@ export class UrlReaderToolHandler implements IToolHandler {
       })
 
       if (result.error) {
-        context.emitReasoning(`读取网页失败：${result.error}`, {
+        const errorLabel = result.errorCode
+          ? `${result.error}（${result.errorCode}${typeof result.httpStatus === 'number' ? ` / HTTP ${result.httpStatus}` : ''}）`
+          : result.error
+        context.emitReasoning(`读取网页失败：${errorLabel}`, {
           ...reasoningMetaBase,
           stage: 'error',
+          errorCode: result.errorCode,
+          httpStatus: result.httpStatus,
         })
         context.sendToolEvent({
           id: callId,
           tool: 'read_url',
           stage: 'error',
           query: url,
-          summary: '读取网页失败',
+          summary: result.errorCode ? `读取网页失败（${result.errorCode}）` : '读取网页失败',
           url,
           error: result.error,
           details: {
             url,
+            errorCode: result.errorCode,
+            httpStatus: result.httpStatus,
+            fallbackUsed: 'none',
           },
         })
         return {
@@ -143,7 +151,12 @@ export class UrlReaderToolHandler implements IToolHandler {
             role: 'tool',
             tool_call_id: toolCall.id,
             name: 'read_url',
-            content: JSON.stringify({ url, error: result.error }),
+            content: JSON.stringify({
+              url,
+              error: result.error,
+              errorCode: result.errorCode,
+              httpStatus: result.httpStatus,
+            }),
           },
         }
       }

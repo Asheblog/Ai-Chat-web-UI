@@ -524,6 +524,13 @@ export interface ToolEventDetails {
   requestedLimit?: number | null;
   appliedLimit?: number | null;
   warning?: string;
+  errorCode?: string;
+  httpStatus?: number;
+  fallbackUsed?: string;
+  autoTriggered?: boolean;
+  parentTool?: string;
+  parentCallId?: string;
+  rank?: number;
   code?: string;
   input?: string;
   stdout?: string;
