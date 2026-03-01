@@ -55,6 +55,9 @@ export function SystemGeneralPage() {
   const [brandTextDraft, setBrandTextDraft] = useState("")
   const [, setIsIMEComposing] = useState(false)
   const [chatSystemPromptDraft, setChatSystemPromptDraft] = useState('')
+  const [contextCompressionEnabledDraft, setContextCompressionEnabledDraft] = useState(true)
+  const [contextCompressionThresholdRatioDraft, setContextCompressionThresholdRatioDraft] = useState('0.5')
+  const [contextCompressionTailMessagesDraft, setContextCompressionTailMessagesDraft] = useState('12')
   const [retentionDraft, setRetentionDraft] = useState('30')
   const [replyHistoryLimitDraft, setReplyHistoryLimitDraft] = useState('5')
   const [siteBaseDraft, setSiteBaseDraft] = useState('')
@@ -82,6 +85,9 @@ export function SystemGeneralPage() {
     setAllowRegistrationDraft(Boolean(systemSettings.allowRegistration))
     setBrandTextDraft(systemSettings.brandText || '')
     setChatSystemPromptDraft(systemSettings.chatSystemPrompt || '')
+    setContextCompressionEnabledDraft(Boolean(systemSettings.contextCompressionEnabled ?? true))
+    setContextCompressionThresholdRatioDraft(String(systemSettings.contextCompressionThresholdRatio ?? 0.5))
+    setContextCompressionTailMessagesDraft(String(systemSettings.contextCompressionTailMessages ?? 12))
     setRetentionDraft(String(systemSettings.chatImageRetentionDays ?? 30))
     setReplyHistoryLimitDraft(String(systemSettings.assistantReplyHistoryLimit ?? 5))
     setSiteBaseDraft(systemSettings.siteBaseUrl || '')
@@ -205,6 +211,9 @@ export function SystemGeneralPage() {
         battleRetentionDays: String(systemSettings.battleRetentionDays ?? 15),
         brandText: systemSettings.brandText || '',
         chatSystemPrompt: systemSettings.chatSystemPrompt || '',
+        contextCompressionEnabled: Boolean(systemSettings.contextCompressionEnabled ?? true),
+        contextCompressionThresholdRatio: String(systemSettings.contextCompressionThresholdRatio ?? 0.5),
+        contextCompressionTailMessages: String(systemSettings.contextCompressionTailMessages ?? 12),
         siteBaseUrl: (systemSettings.siteBaseUrl || '').trim(),
         chatImageRetentionDays: String(systemSettings.chatImageRetentionDays ?? 30),
         assistantReplyHistoryLimit: String(systemSettings.assistantReplyHistoryLimit ?? 5),
@@ -228,6 +237,9 @@ export function SystemGeneralPage() {
       battleRetentionDraft !== normalizedInitials.battleRetentionDays ||
       brandTextDraft !== normalizedInitials.brandText ||
       chatSystemPromptDraft !== normalizedInitials.chatSystemPrompt ||
+      contextCompressionEnabledDraft !== normalizedInitials.contextCompressionEnabled ||
+      contextCompressionThresholdRatioDraft !== normalizedInitials.contextCompressionThresholdRatio ||
+      contextCompressionTailMessagesDraft !== normalizedInitials.contextCompressionTailMessages ||
       siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
       retentionDraft !== normalizedInitials.chatImageRetentionDays ||
       replyHistoryLimitDraft !== normalizedInitials.assistantReplyHistoryLimit ||
@@ -279,6 +291,16 @@ export function SystemGeneralPage() {
       toast({ title: '输入无效', description: '匿名访客数据保留天数需在 0 到 15 之间', variant: 'destructive' })
       return
     }
+    const parsedCompressionRatio = Number.parseFloat(contextCompressionThresholdRatioDraft)
+    if (!Number.isFinite(parsedCompressionRatio) || parsedCompressionRatio < 0.2 || parsedCompressionRatio > 0.9) {
+      toast({ title: '输入无效', description: '上下文压缩阈值需在 0.2 到 0.9 之间', variant: 'destructive' })
+      return
+    }
+    const parsedCompressionTail = Number.parseInt(contextCompressionTailMessagesDraft, 10)
+    if (!Number.isFinite(parsedCompressionTail) || parsedCompressionTail < 4 || parsedCompressionTail > 50) {
+      toast({ title: '输入无效', description: '上下文压缩尾部消息数需在 4 到 50 之间', variant: 'destructive' })
+      return
+    }
 
     setSaving(true)
     try {
@@ -293,6 +315,9 @@ export function SystemGeneralPage() {
         battleRetentionDays: parsedBattleRetentionDays,
         brandText: brandTextDraft,
         chatSystemPrompt: chatSystemPromptDraft,
+        contextCompressionEnabled: contextCompressionEnabledDraft,
+        contextCompressionThresholdRatio: parsedCompressionRatio,
+        contextCompressionTailMessages: parsedCompressionTail,
         siteBaseUrl: siteBaseDraft.trim(),
         chatImageRetentionDays: parsedRetention,
         assistantReplyHistoryLimit: parsedReplyHistoryLimit,
@@ -541,6 +566,61 @@ export function SystemGeneralPage() {
             <p className="text-xs text-muted-foreground">
               {'生效顺序：会话 > 个人 > 全局；支持使用 {day time}（将替换为服务器当前时间）。三层均为空时默认提示词为“今天日期是{day time}”。'}
             </p>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title={(
+            <div className="flex items-center gap-2">
+              上下文压缩
+              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">推荐</Badge>
+            </div>
+          )}
+          description="达到阈值后自动将较早消息压缩为摘要，减少长会话上下文占用"
+        >
+          <Switch
+            id="contextCompressionEnabled"
+            checked={contextCompressionEnabledDraft}
+            disabled={!isAdmin}
+            onCheckedChange={(checked) => setContextCompressionEnabledDraft(Boolean(checked))}
+          />
+        </SettingRow>
+
+        <SettingRow
+          title="压缩触发阈值（上下文比例）"
+          description="按模型上下文窗口动态计算阈值，默认 0.5（范围 0.2-0.9）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="contextCompressionThresholdRatio"
+              type="text"
+              inputMode="decimal"
+              value={contextCompressionThresholdRatioDraft}
+              onChange={(e) => setContextCompressionThresholdRatioDraft(e.target.value)}
+              className="w-full sm:w-28 text-right"
+              disabled={!isAdmin || !contextCompressionEnabledDraft}
+            />
+            <span className="text-sm text-muted-foreground">比例</span>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="压缩后保留最近消息数"
+          description="压缩时强制保留末尾消息，避免影响当前轮上下文（范围 4-50）"
+          align="start"
+        >
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              id="contextCompressionTailMessages"
+              type="text"
+              inputMode="numeric"
+              value={contextCompressionTailMessagesDraft}
+              onChange={(e) => setContextCompressionTailMessagesDraft(e.target.value)}
+              className="w-full sm:w-28 text-right"
+              disabled={!isAdmin || !contextCompressionEnabledDraft}
+            />
+            <span className="text-sm text-muted-foreground">条</span>
           </div>
         </SettingRow>
 

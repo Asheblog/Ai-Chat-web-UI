@@ -65,7 +65,7 @@ export const registerChatMessageRoutes = (router: Hono) => {
       await extendAnonymousSession(actor, sessionId);
 
       return c.json<ApiResponse<{
-        messages: Array<{ id: number; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date; images?: string[]; toolEvents?: ToolLogEntry[]; metrics?: any }>;
+        messages: Array<{ id: number | string; sessionId: number; role: string; content: string; clientMessageId: string | null; createdAt: Date; images?: string[]; toolEvents?: ToolLogEntry[]; metrics?: any }>;
         pagination: {
           page: number;
           limit: number;

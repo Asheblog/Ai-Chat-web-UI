@@ -5,8 +5,10 @@ const buildService = () => {
   const prisma = {
     message: {
       findMany: jest.fn(),
-      count: jest.fn(),
       findFirst: jest.fn(),
+    },
+    messageGroup: {
+      findMany: jest.fn(),
     },
     systemSetting: {
       findUnique: jest.fn(),
@@ -51,6 +53,7 @@ describe('ChatMessageQueryService', () => {
       {
         id: 10,
         sessionId: 5,
+        messageGroupId: null,
         role: 'assistant',
         content: 'hi',
         parentMessageId: null,
@@ -66,9 +69,10 @@ describe('ChatMessageQueryService', () => {
         streamCursor: null,
         streamReasoning: null,
         streamError: null,
+        usageMetrics: [],
       },
     ])
-    prisma.message.count.mockResolvedValue(3)
+    prisma.messageGroup.findMany.mockResolvedValue([])
     prisma.systemSetting.findUnique.mockResolvedValue({ value: 'https://cdn.example.com' })
 
     const result = await service.listMessages({
@@ -82,8 +86,6 @@ describe('ChatMessageQueryService', () => {
     expect(prisma.message.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { sessionId: 5 },
-        skip: 0,
-        take: 2,
       }),
     )
     expect(determineChatImageBaseUrl).toHaveBeenCalledWith({
@@ -94,7 +96,7 @@ describe('ChatMessageQueryService', () => {
     expect(parseToolLogsJson).toHaveBeenCalled()
     expect(result.messages[0].images).toEqual(['https://cdn.example.com/img/a.png'])
     expect(result.messages[0].toolEvents).toEqual([{ level: 'info', message: 'tool-event' }])
-    expect(result.pagination).toEqual({ page: 1, limit: 2, total: 3, totalPages: 2 })
+    expect(result.pagination).toEqual({ page: 1, limit: 2, total: 1, totalPages: 1 })
   })
 
   it('gets message by id respecting ownership', async () => {
@@ -102,6 +104,7 @@ describe('ChatMessageQueryService', () => {
     prisma.message.findFirst.mockResolvedValue({
       id: 20,
       sessionId: 7,
+      messageGroupId: null,
       role: 'assistant',
       content: 'ok',
       parentMessageId: 1,
@@ -117,6 +120,7 @@ describe('ChatMessageQueryService', () => {
       streamCursor: 0,
       streamReasoning: null,
       streamError: null,
+      usageMetrics: [],
     })
     prisma.systemSetting.findUnique.mockResolvedValue({ value: null })
 

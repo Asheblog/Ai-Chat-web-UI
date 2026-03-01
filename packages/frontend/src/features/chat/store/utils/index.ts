@@ -187,6 +187,7 @@ export const createMeta = (message: Message, overrides: Partial<MessageMeta> = {
     { id: message.id, clientMessageId: message.clientMessageId ?? null, stableKey: message.stableKey ?? null },
     overrides.stableKey,
   )
+  const isCompressedGroup = message.role === 'compressedGroup'
   return {
     id: message.id,
     sessionId: message.sessionId,
@@ -210,9 +211,14 @@ export const createMeta = (message: Message, overrides: Partial<MessageMeta> = {
     images: message.images,
     artifacts: message.artifacts,
     isPlaceholder: false,
-    streamStatus: message.streamStatus ?? 'done',
+    streamStatus: isCompressedGroup ? undefined : message.streamStatus ?? 'done',
     streamError: message.streamError ?? null,
     pendingSync: false,
+    messageGroupId: typeof message.messageGroupId === 'number' ? message.messageGroupId : null,
+    compressedMessages: Array.isArray(message.compressedMessages) ? message.compressedMessages : [],
+    lastMessageId: typeof message.lastMessageId === 'number' ? message.lastMessageId : null,
+    expanded: typeof message.expanded === 'boolean' ? message.expanded : false,
+    metadata: message.metadata ?? null,
     ...overrides,
     stableKey: overrides.stableKey ?? stableKey,
   }
@@ -223,7 +229,8 @@ export const createBody = (message: Message, stableKeyOverride?: string | null):
     { id: message.id, clientMessageId: message.clientMessageId ?? null, stableKey: message.stableKey ?? null },
     stableKeyOverride,
   )
-  const reasoningText = message.reasoning ?? message.streamReasoning ?? ''
+  const isCompressedGroup = message.role === 'compressedGroup'
+  const reasoningText = isCompressedGroup ? '' : (message.reasoning ?? message.streamReasoning ?? '')
   return {
     id: message.id,
     stableKey,
@@ -234,6 +241,9 @@ export const createBody = (message: Message, stableKeyOverride?: string | null):
     reasoningVersion: message.reasoning || message.streamReasoning ? 1 : 0,
     toolEvents: normalizeToolEvents(message),
     artifacts: message.artifacts,
+    compressedMessages: Array.isArray(message.compressedMessages) ? message.compressedMessages : [],
+    expanded: typeof message.expanded === 'boolean' ? message.expanded : false,
+    metadata: message.metadata ?? null,
   }
 }
 

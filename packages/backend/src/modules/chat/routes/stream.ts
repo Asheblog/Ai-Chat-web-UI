@@ -76,6 +76,7 @@ import {
 } from '../services/stream-usage-service';
 import { streamTraceService } from '../services/stream-trace-service';
 import { streamSseService } from '../services/stream-sse-service';
+import { conversationCompressionService } from '../services/conversation-compression-service';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
@@ -323,6 +324,26 @@ export const registerChatStreamRoutes = (router: Hono) => {
         log.warn('RAG enhancement failed, continuing without', {
           sessionId,
           error: ragError instanceof Error ? ragError.message : ragError,
+        });
+      }
+
+      let compressionAppliedPayload: import('../services/conversation-compression-service').CompressionAppliedPayload | null = null;
+      try {
+        if (payload?.contextEnabled !== false) {
+          const compressionResult = await conversationCompressionService.compressIfNeeded({
+            session,
+            actorContent: content,
+            protectedMessageId: userMessageRecord?.id ?? null,
+            historyUpperBound: userMessageRecord?.createdAt ?? null,
+          });
+          if (compressionResult.applied && compressionResult.payload) {
+            compressionAppliedPayload = compressionResult.payload;
+          }
+        }
+      } catch (compressionError) {
+        log.warn('[chat stream] context compression failed, fallback to normal flow', {
+          sessionId,
+          error: compressionError instanceof Error ? compressionError.message : compressionError,
         });
       }
 
@@ -1359,6 +1380,14 @@ export const registerChatStreamRoutes = (router: Hono) => {
               assistantClientMessageId,
             })}\n\n`;
             safeEnqueue(startEvent);
+
+            if (compressionAppliedPayload) {
+              const compressionEvent = `data: ${JSON.stringify({
+                type: 'compression_applied',
+                compression: compressionAppliedPayload,
+              })}\n\n`;
+              safeEnqueue(compressionEvent);
+            }
 
             if (quotaSnapshot) {
               const quotaEvent = `data: ${JSON.stringify({

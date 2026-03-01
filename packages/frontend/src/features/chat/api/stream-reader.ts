@@ -261,6 +261,12 @@ export const normalizeChunk = (payload: any): ChatStreamChunk | null => {
       messageId: payload.messageId,
     }
   }
+  if (payload?.type === 'compression_applied' && payload.compression) {
+    return {
+      type: 'compression_applied',
+      compression: payload.compression,
+    }
+  }
   if (payload?.type === 'start') {
     const normalizedMessageId =
       typeof payload.messageId === 'number'

@@ -69,3 +69,25 @@ export const updateUserMessage = async (
   }>>(`/chat/sessions/${sessionId}/messages/${messageId}`, { content })
   return response.data
 }
+
+export const updateCompressionGroupState = async (
+  sessionId: number,
+  groupId: number,
+  expanded: boolean,
+) => {
+  const response = await client.patch<ApiResponse<{ groupId: number; expanded: boolean }>>(
+    `/chat/sessions/${sessionId}/compression/${groupId}`,
+    { expanded },
+  )
+  return response.data
+}
+
+export const cancelCompressionGroup = async (
+  sessionId: number,
+  groupId: number,
+) => {
+  const response = await client.post<ApiResponse<{ groupId: number; releasedCount: number }>>(
+    `/chat/sessions/${sessionId}/compression/${groupId}/cancel`,
+  )
+  return response.data
+}

@@ -249,6 +249,24 @@ export class SettingsService {
       usage_emit: this.parseBoolean(settingsObj.usage_emit, process.env.USAGE_EMIT),
       usage_provider_only: this.parseBoolean(settingsObj.usage_provider_only, process.env.USAGE_PROVIDER_ONLY),
       chat_system_prompt: settingsObj.chat_system_prompt || process.env.CHAT_SYSTEM_PROMPT || '',
+      context_compression_enabled: this.parseBoolean(settingsObj.context_compression_enabled, process.env.CONTEXT_COMPRESSION_ENABLED || 'true'),
+      context_compression_threshold_ratio: Math.max(
+        0.2,
+        Math.min(
+          0.9,
+          this.parseFloat(
+            settingsObj.context_compression_threshold_ratio,
+            Number.parseFloat(process.env.CONTEXT_COMPRESSION_THRESHOLD_RATIO || '0.5'),
+          ),
+        ),
+      ),
+      context_compression_tail_messages: this.parseIntInRange(
+        settingsObj.context_compression_tail_messages,
+        process.env.CONTEXT_COMPRESSION_TAIL_MESSAGES || '12',
+        4,
+        50,
+        12,
+      ),
       reasoning_enabled: this.parseBoolean(settingsObj.reasoning_enabled, process.env.REASONING_ENABLED || 'true'),
       reasoning_default_expand: this.parseBoolean(settingsObj.reasoning_default_expand, process.env.REASONING_DEFAULT_EXPAND || 'false'),
       reasoning_save_to_db: this.parseBoolean(settingsObj.reasoning_save_to_db, process.env.REASONING_SAVE_TO_DB || 'false'),
@@ -405,6 +423,9 @@ export class SettingsService {
         python_tool_enable: formatted.python_tool_enable,
         assistant_avatar_url: formatted.assistant_avatar_url,
         chat_system_prompt: formatted.chat_system_prompt,
+        context_compression_enabled: formatted.context_compression_enabled,
+        context_compression_threshold_ratio: formatted.context_compression_threshold_ratio,
+        context_compression_tail_messages: formatted.context_compression_tail_messages,
         chat_max_concurrent_streams: formatted.chat_max_concurrent_streams,
         // 标题总结设置（所有用户可见）
         title_summary_enabled: formatted.title_summary_enabled,
@@ -451,6 +472,8 @@ export class SettingsService {
     assignIfNumber('stream_reasoning_flush_interval_ms', payload.stream_reasoning_flush_interval_ms)
     assignIfNumber('stream_keepalive_interval_ms', payload.stream_keepalive_interval_ms)
     assignIfNumber('stream_delta_chunk_size', payload.stream_delta_chunk_size)
+    assignIfNumber('context_compression_threshold_ratio', payload.context_compression_threshold_ratio)
+    assignIfNumber('context_compression_tail_messages', payload.context_compression_tail_messages)
     assignIfNumber('chat_image_retention_days', payload.chat_image_retention_days)
     assignIfNumber('assistant_reply_history_limit', payload.assistant_reply_history_limit)
     assignIfNumber('web_search_result_limit', payload.web_search_result_limit)
@@ -480,6 +503,7 @@ export class SettingsService {
     const boolFields = [
       'usage_emit',
       'usage_provider_only',
+      'context_compression_enabled',
       'reasoning_enabled',
       'reasoning_default_expand',
       'reasoning_save_to_db',

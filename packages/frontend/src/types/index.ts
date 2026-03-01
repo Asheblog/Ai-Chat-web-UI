@@ -129,13 +129,20 @@ export interface WorkspaceArtifact {
   expired?: boolean;
 }
 
+export interface CompressedGroupMessage {
+  id: number;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface Message {
   id: number | string;
   sessionId: number;
   stableKey?: string | null;
   parentMessageId?: number | string | null;
   variantIndex?: number | null;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'compressedGroup';
   content: string;
   createdAt: string;
   clientMessageId?: string | null;
@@ -157,6 +164,11 @@ export interface Message {
   artifacts?: WorkspaceArtifact[];
   toolEvents?: ToolEvent[];
   metrics?: MessageStreamMetrics | null;
+  messageGroupId?: number | null;
+  compressedMessages?: CompressedGroupMessage[];
+  lastMessageId?: number | null;
+  expanded?: boolean;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface MessageMeta {
@@ -165,7 +177,7 @@ export interface MessageMeta {
   stableKey: string;
   parentMessageId?: number | string | null;
   variantIndex?: number | null;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'compressedGroup';
   createdAt: string;
   clientMessageId?: string | null;
   reasoningStatus?: 'idle' | 'streaming' | 'done';
@@ -181,6 +193,11 @@ export interface MessageMeta {
   streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
   streamError?: string | null;
   pendingSync?: boolean;
+  messageGroupId?: number | null;
+  compressedMessages?: CompressedGroupMessage[];
+  lastMessageId?: number | null;
+  expanded?: boolean;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface MessageBody {
@@ -194,6 +211,9 @@ export interface MessageBody {
   toolEvents?: ToolEvent[];
   generatedImages?: GeneratedImage[];
   artifacts?: WorkspaceArtifact[];
+  compressedMessages?: CompressedGroupMessage[];
+  expanded?: boolean;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface MessageRenderCacheEntry {
@@ -297,6 +317,9 @@ export interface SystemSettings {
   reasoningKeepaliveIntervalMs?: number;
   usageEmit?: boolean;
   usageProviderOnly?: boolean;
+  contextCompressionEnabled?: boolean;
+  contextCompressionThresholdRatio?: number;
+  contextCompressionTailMessages?: number;
   // 推理链相关（可选）
   reasoningEnabled?: boolean;
   reasoningDefaultExpand?: boolean;
@@ -773,6 +796,7 @@ export interface ChatStreamChunk {
     | 'tool_call'
     | 'image'
     | 'artifact'
+    | 'compression_applied'
     | 'skill_approval_request'
     | 'skill_approval_result';
   content?: string;
@@ -833,6 +857,14 @@ export interface ChatStreamChunk {
   unavailableSuggestion?: string;
   reasoningProtocol?: 'chat_completions' | 'responses';
   reasoningDecision?: string;
+  compression?: {
+    groupId: number;
+    compressedCount: number;
+    thresholdTokens: number;
+    beforeTokens: number;
+    afterTokens: number;
+    tailMessages: number;
+  };
 }
 
 /** API 错误类型 */

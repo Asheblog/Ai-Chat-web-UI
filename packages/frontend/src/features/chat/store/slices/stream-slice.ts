@@ -760,6 +760,11 @@ export const createStreamSlice: ChatSliceCreator<
           continue
         }
 
+        if (evt?.type === 'compression_applied') {
+          get().fetchMessages(sessionId, { page: 'latest', mode: 'replace' }).catch(() => {})
+          continue
+        }
+
         if (evt?.type === 'error') {
           const fallback =
             typeof evt.error === 'string' && evt.error.trim()

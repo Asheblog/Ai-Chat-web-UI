@@ -22,4 +22,30 @@ describe('stream-reader artifact event', () => {
     })
     expect(chunk?.artifacts?.[0]?.fileName).toBe('report.xlsx')
   })
+
+  it('normalizes compression applied chunk', () => {
+    const chunk = normalizeChunk({
+      type: 'compression_applied',
+      compression: {
+        groupId: 18,
+        compressedCount: 9,
+        thresholdTokens: 8192,
+        beforeTokens: 10240,
+        afterTokens: 5140,
+        tailMessages: 12,
+      },
+    })
+
+    expect(chunk).toMatchObject({
+      type: 'compression_applied',
+      compression: {
+        groupId: 18,
+        compressedCount: 9,
+        thresholdTokens: 8192,
+        beforeTokens: 10240,
+        afterTokens: 5140,
+        tailMessages: 12,
+      },
+    })
+  })
 })

@@ -22,6 +22,7 @@ import {
   nonStreamChatService,
   type NonStreamChatService,
 } from '../services/non-stream-chat-service';
+import { conversationCompressionService } from '../services/conversation-compression-service';
 
 export const registerChatCompletionRoutes = (
   router: Hono,
@@ -103,6 +104,7 @@ export const registerChatCompletionRoutes = (
       })
 
       let quotaSnapshot: UsageQuotaSnapshot | null = null;
+      let userMessageRecord: { id: number; createdAt: Date } | null = null;
 
       try {
         const result = await createUserMessageWithQuota({
@@ -114,6 +116,10 @@ export const registerChatCompletionRoutes = (
           now,
         });
         quotaSnapshot = result.quotaSnapshot;
+        userMessageRecord = {
+          id: Number((result.userMessage as any)?.id),
+          createdAt: (result.userMessage as any)?.createdAt as Date,
+        };
       } catch (error) {
         if (error instanceof QuotaExceededError) {
           traceStatus = 'error'
@@ -140,6 +146,22 @@ export const registerChatCompletionRoutes = (
       if (actor.type === 'anonymous') {
         cleanupAnonymousSessions({ activeSessionId: sessionId }).catch((error) => {
           log.debug('Anonymous cleanup error', error);
+        });
+      }
+
+      try {
+        if (payload?.contextEnabled !== false) {
+          await conversationCompressionService.compressIfNeeded({
+            session: session as any,
+            actorContent: content,
+            protectedMessageId: userMessageRecord?.id ?? null,
+            historyUpperBound: userMessageRecord?.createdAt ?? null,
+          });
+        }
+      } catch (compressionError) {
+        log.warn('[chat completion] context compression failed, fallback to normal flow', {
+          sessionId,
+          error: compressionError instanceof Error ? compressionError.message : compressionError,
         });
       }
 

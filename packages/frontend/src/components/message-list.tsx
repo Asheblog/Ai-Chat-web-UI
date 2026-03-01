@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { MessageBubble } from './message-bubble'
+import { CompressedGroupCard } from './compressed-group-card'
 import { TypingIndicator } from './typing-indicator'
 import { useChatMessages } from '@/store/chat-store'
 
@@ -159,6 +160,9 @@ function MessageListComponent({
       if (!body) return 150
 
       const contentLen = body.content?.length ?? 0
+      if (meta.role === 'compressedGroup') {
+        return Math.max(140, Math.min(360, 140 + Math.ceil(contentLen / 120) * 20))
+      }
       const reasoningLen = body.reasoning?.length ?? 0
       const imageCount = meta.images?.length ?? 0
       const artifactCount = (body.artifacts ?? meta.artifacts ?? []).length
@@ -257,7 +261,10 @@ function MessageListComponent({
           messageKey(lastMeta.id) === storageKey
         const shareModeActive =
           shareSelectionState.enabled && shareSelectionState.sessionId === meta.sessionId
-        const shareSelectable = typeof meta.id === 'number' && !meta.pendingSync
+        const shareSelectable =
+          meta.role !== 'compressedGroup' &&
+          typeof meta.id === 'number' &&
+          !meta.pendingSync
         const shareSelected =
           shareModeActive && shareSelectable && shareSelectedKeys.has(messageKey(meta.id))
         const canEditUserMessage =
@@ -281,36 +288,40 @@ function MessageListComponent({
               paddingBottom: 16,
             }}
           >
-            <MessageBubble
-              meta={meta}
-              body={body}
-              renderCache={cache}
-              isStreaming={streamingForMessage}
-              metrics={metricEntry}
-              canEditUserMessage={canEditUserMessage}
-              variantInfo={variantInfo}
-              shareSelection={
-                shareSelectable || shareModeActive
-                  ? {
-                      active: shareModeActive,
-                      selectable: shareSelectable,
-                      selected: shareSelected,
-                      onToggle:
-                        shareModeActive && shareSelectable && onShareToggle
-                          ? () => onShareToggle(Number(meta.id))
-                          : undefined,
-                      onStart: shareSelectable && onShareStart ? () => onShareStart(Number(meta.id)) : undefined,
-                    }
-                  : shareSelectable && onShareStart
-                  ? {
-                      active: false,
-                      selectable: shareSelectable,
-                      selected: false,
-                      onStart: () => onShareStart(Number(meta.id)),
-                    }
-                  : undefined
-              }
-            />
+            {meta.role === 'compressedGroup' ? (
+              <CompressedGroupCard meta={meta} body={body} />
+            ) : (
+              <MessageBubble
+                meta={meta}
+                body={body}
+                renderCache={cache}
+                isStreaming={streamingForMessage}
+                metrics={metricEntry}
+                canEditUserMessage={canEditUserMessage}
+                variantInfo={variantInfo}
+                shareSelection={
+                  shareSelectable || shareModeActive
+                    ? {
+                        active: shareModeActive,
+                        selectable: shareSelectable,
+                        selected: shareSelected,
+                        onToggle:
+                          shareModeActive && shareSelectable && onShareToggle
+                            ? () => onShareToggle(Number(meta.id))
+                            : undefined,
+                        onStart: shareSelectable && onShareStart ? () => onShareStart(Number(meta.id)) : undefined,
+                      }
+                    : shareSelectable && onShareStart
+                    ? {
+                        active: false,
+                        selectable: shareSelectable,
+                        selected: false,
+                        onStart: () => onShareStart(Number(meta.id)),
+                      }
+                    : undefined
+                }
+              />
+            )}
           </div>
         )
       })}

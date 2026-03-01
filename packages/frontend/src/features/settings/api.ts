@@ -36,6 +36,29 @@ export const getSystemSettings = async () => {
   const reasoningKeepaliveIntervalMs = Number(raw.reasoning_keepalive_interval_ms ?? 0)
   const usageEmit = (raw.usage_emit ?? true) as boolean
   const usageProviderOnly = (raw.usage_provider_only ?? false) as boolean
+  const contextCompressionEnabled = Boolean(raw.context_compression_enabled ?? true)
+  const contextCompressionThresholdRatio = (() => {
+    const value = raw.context_compression_threshold_ratio
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0.2, Math.min(0.9, value))
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number.parseFloat(value)
+      if (Number.isFinite(parsed)) return Math.max(0.2, Math.min(0.9, parsed))
+    }
+    return 0.5
+  })()
+  const contextCompressionTailMessages = (() => {
+    const value = raw.context_compression_tail_messages
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(4, Math.min(50, Math.floor(value)))
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number.parseInt(value, 10)
+      if (Number.isFinite(parsed)) return Math.max(4, Math.min(50, parsed))
+    }
+    return 12
+  })()
   const reasoningEnabled = (raw.reasoning_enabled ?? true) as boolean
   const reasoningDefaultExpand = (raw.reasoning_default_expand ?? false) as boolean
   const reasoningSaveToDb = (raw.reasoning_save_to_db ?? true) as boolean
@@ -283,6 +306,9 @@ export const getSystemSettings = async () => {
       reasoningKeepaliveIntervalMs,
       usageEmit,
       usageProviderOnly,
+      contextCompressionEnabled,
+      contextCompressionThresholdRatio,
+      contextCompressionTailMessages,
       reasoningEnabled,
       reasoningDefaultExpand,
       reasoningSaveToDb,
@@ -433,6 +459,9 @@ export const updateSystemSettings = async (
   if (typeof rest.reasoningKeepaliveIntervalMs === 'number') payload.reasoning_keepalive_interval_ms = rest.reasoningKeepaliveIntervalMs
   if (typeof rest.usageEmit === 'boolean') payload.usage_emit = !!rest.usageEmit
   if (typeof rest.usageProviderOnly === 'boolean') payload.usage_provider_only = !!rest.usageProviderOnly
+  if (typeof rest.contextCompressionEnabled === 'boolean') payload.context_compression_enabled = !!rest.contextCompressionEnabled
+  if (typeof rest.contextCompressionThresholdRatio === 'number') payload.context_compression_threshold_ratio = rest.contextCompressionThresholdRatio
+  if (typeof rest.contextCompressionTailMessages === 'number') payload.context_compression_tail_messages = rest.contextCompressionTailMessages
   if (typeof rest.chatSystemPrompt === 'string') payload.chat_system_prompt = rest.chatSystemPrompt
   if (typeof rest.reasoningEnabled === 'boolean') payload.reasoning_enabled = !!rest.reasoningEnabled
   if (typeof rest.reasoningDefaultExpand === 'boolean') payload.reasoning_default_expand = !!rest.reasoningDefaultExpand

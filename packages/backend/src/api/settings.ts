@@ -124,6 +124,9 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
     usage_emit: z.boolean().optional(),
     usage_provider_only: z.boolean().optional(),
     chat_system_prompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).optional(),
+    context_compression_enabled: z.boolean().optional(),
+    context_compression_threshold_ratio: z.number().min(0.2).max(0.9).optional(),
+    context_compression_tail_messages: z.number().int().min(4).max(50).optional(),
     // 推理链（思维链）相关
     reasoning_enabled: z.boolean().optional(),
     reasoning_default_expand: z.boolean().optional(),

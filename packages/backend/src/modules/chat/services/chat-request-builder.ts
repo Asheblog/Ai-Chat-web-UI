@@ -257,24 +257,124 @@ export class ChatRequestBuilder {
 
     let truncatedConversation: Array<{ role: string; content: string }>
     if (params.contextEnabled) {
-      const recent = await this.prisma.message.findMany({
-        where: {
-          sessionId: params.sessionId,
-          ...(params.historyUpperBound
-            ? { createdAt: { lte: params.historyUpperBound } }
-            : {}),
-        },
-        select: {
-          role: true,
-          content: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      })
-      const conversation = recent
+      const messageWhere: Record<string, unknown> = {
+        sessionId: params.sessionId,
+        ...(params.historyUpperBound ? { createdAt: { lte: params.historyUpperBound } } : {}),
+      }
+
+      const [ungroupedMessages, groupedMessageRefs] = await Promise.all([
+        (this.prisma as any).message.findMany({
+          where: {
+            ...messageWhere,
+            messageGroupId: null,
+          },
+          select: {
+            id: true,
+            role: true,
+            content: true,
+            createdAt: true,
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }) as Promise<Array<{ id: number; role: string; content: string; createdAt: Date }>>,
+        (this.prisma as any).message.findMany({
+          where: {
+            ...messageWhere,
+            messageGroupId: { not: null },
+          },
+          select: {
+            id: true,
+            messageGroupId: true,
+            createdAt: true,
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }) as Promise<Array<{ id: number; messageGroupId: number | null; createdAt: Date }>>,
+      ])
+
+      const conversationItems: Array<{
+        role: string
+        content: string
+        createdAt: Date
+        sortKey: string
+      }> = ungroupedMessages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+        createdAt: msg.createdAt,
+        sortKey: `m:${msg.id}`,
+      }))
+
+      if (groupedMessageRefs.length > 0) {
+        const groupedIds = Array.from(
+          new Set(
+            groupedMessageRefs
+              .map((item) => (typeof item.messageGroupId === 'number' ? item.messageGroupId : null))
+              .filter((id): id is number => id != null),
+          ),
+        )
+        if (groupedIds.length > 0) {
+          const groups = (await (this.prisma as any).messageGroup.findMany({
+            where: {
+              id: { in: groupedIds },
+              cancelledAt: null,
+            },
+            select: {
+              id: true,
+              summary: true,
+              metadataJson: true,
+            },
+          })) as Array<{ id: number; summary: string; metadataJson?: string | null }>
+
+          const groupById = new Map(groups.map((group) => [group.id, group]))
+          const groupedStats = new Map<number, { count: number; lastCreatedAt: Date; lastMessageId: number }>()
+
+          for (const item of groupedMessageRefs) {
+            if (typeof item.messageGroupId !== 'number') continue
+            if (!groupById.has(item.messageGroupId)) continue
+            const previous = groupedStats.get(item.messageGroupId)
+            if (!previous) {
+              groupedStats.set(item.messageGroupId, {
+                count: 1,
+                lastCreatedAt: item.createdAt,
+                lastMessageId: item.id,
+              })
+              continue
+            }
+            groupedStats.set(item.messageGroupId, {
+              count: previous.count + 1,
+              lastCreatedAt:
+                item.createdAt.getTime() >= previous.lastCreatedAt.getTime()
+                  ? item.createdAt
+                  : previous.lastCreatedAt,
+              lastMessageId: Math.max(previous.lastMessageId, item.id),
+            })
+          }
+
+          for (const [groupId, stats] of groupedStats.entries()) {
+            const group = groupById.get(groupId)
+            if (!group?.summary?.trim()) continue
+            const countFromMetadata = this.parseCompressedCountFromMetadata(group.metadataJson)
+            const compressedCount =
+              typeof countFromMetadata === 'number' && countFromMetadata > 0
+                ? countFromMetadata
+                : stats.count
+            conversationItems.push({
+              role: 'system',
+              content: this.buildCompressionSummaryMessage(group.summary, compressedCount),
+              createdAt: stats.lastCreatedAt,
+              sortKey: `g:${groupId}:${stats.lastMessageId}`,
+            })
+          }
+        }
+      }
+
+      const conversation = conversationItems
+        .sort((a, b) => {
+          const timeDiff = a.createdAt.getTime() - b.createdAt.getTime()
+          if (timeDiff !== 0) return timeDiff
+          return a.sortKey.localeCompare(b.sortKey)
+        })
+        .map((item) => ({ role: item.role, content: item.content }))
         .filter((msg) => msg.role !== 'user' || msg.content !== params.actorContent)
-        .reverse()
+
       const toTruncate = conversation.concat([{ role: 'user', content: params.actorContent }])
       truncatedConversation = await this.tokenizer.truncateMessages(
         toTruncate,
@@ -334,6 +434,23 @@ export class ChatRequestBuilder {
       }
     }
     return payload
+  }
+
+  private buildCompressionSummaryMessage(summary: string, compressedCount: number) {
+    const safeCount = Number.isFinite(compressedCount) && compressedCount > 0 ? compressedCount : 1
+    return `[历史对话压缩摘要，共 ${safeCount} 条消息]\n${summary.trim()}`
+  }
+
+  private parseCompressedCountFromMetadata(raw?: string | null): number | null {
+    if (!raw || typeof raw !== 'string') return null
+    try {
+      const parsed = JSON.parse(raw)
+      const count = Number((parsed as any)?.compressedCount)
+      if (Number.isFinite(count) && count > 0) {
+        return Math.floor(count)
+      }
+    } catch {}
+    return null
   }
 
   private buildPromptVariables(now: Date) {

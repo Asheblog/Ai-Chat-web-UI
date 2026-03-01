@@ -72,6 +72,7 @@ model ChatSession {
   user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
   connection         Connection?         @relation(fields: [connectionId], references: [id])
   messages           Message[]
+  messageGroups      MessageGroup[]
   usageMetrics       UsageMetric[]
   taskTraces         TaskTrace[]
   shares             ChatShare[]
@@ -107,6 +108,7 @@ model PromptTemplate {
 model Message {
   id                       Int      @id @default(autoincrement())
   sessionId                Int
+  messageGroupId           Int?
   parentMessageId          Int?
   variantIndex             Int?     @default(1)
   role                     String // 'user' or 'assistant'
@@ -125,6 +127,7 @@ model Message {
   streamError              String?
 
   session            ChatSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageGroup       MessageGroup?       @relation(fields: [messageGroupId], references: [id], onDelete: SetNull)
   attachments        MessageAttachment[]
   generatedImages    GeneratedImage[]
   usageMetrics       UsageMetric[]
@@ -137,8 +140,34 @@ model Message {
   // 若提供了 clientMessageId，则 (sessionId, clientMessageId) 必须唯一；
   // clientMessageId 为空时不受限（SQLite 下 NULL 不参与唯一比较）。
   @@unique([sessionId, clientMessageId])
+  @@index([sessionId, messageGroupId])
+  @@index([messageGroupId])
   @@index([parentMessageId])
   @@map("messages")
+}
+
+model MessageGroup {
+  id                     Int       @id @default(autoincrement())
+  sessionId              Int
+  type                   String    @default("compression")
+  summary                String
+  compressedMessagesJson String    @default("[]")
+  startMessageId         Int?
+  endMessageId           Int?
+  lastMessageId          Int?
+  expanded               Boolean   @default(false)
+  metadataJson           String?
+  cancelledAt            DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  session  ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([sessionId, createdAt])
+  @@index([sessionId, cancelledAt, createdAt])
+  @@index([sessionId, expanded])
+  @@map("message_groups")
 }
 
 model WorkspaceSession {

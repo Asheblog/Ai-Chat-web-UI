@@ -117,6 +117,18 @@ async function initSystemSettings() {
       value: process.env.DEFAULT_USER_DAILY_QUOTA || '200',
     },
     {
+      key: 'context_compression_enabled',
+      value: process.env.CONTEXT_COMPRESSION_ENABLED === 'false' ? 'false' : 'true',
+    },
+    {
+      key: 'context_compression_threshold_ratio',
+      value: process.env.CONTEXT_COMPRESSION_THRESHOLD_RATIO || '0.5',
+    },
+    {
+      key: 'context_compression_tail_messages',
+      value: process.env.CONTEXT_COMPRESSION_TAIL_MESSAGES || '12',
+    },
+    {
       key: 'battle_allow_anonymous',
       value: process.env.BATTLE_ALLOW_ANONYMOUS === 'false' ? 'false' : 'true',
     },
