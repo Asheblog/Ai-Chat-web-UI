@@ -1,20 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ReasoningSection } from '@/components/message-bubble/reasoning-section'
-import type { MessageMeta, ToolEvent } from '@/types'
-
-const toolTimelineMock = vi.hoisted(() => vi.fn())
-
-vi.mock('@/components/message-bubble/tool-timeline', () => ({
-  ToolTimeline: (props: any) => {
-    toolTimelineMock(props)
-    return (
-      <div data-testid="timeline" data-expanded={props.expanded} onClick={props.onToggle}>
-        timeline
-      </div>
-    )
-  },
-}))
+import type { MessageMeta } from '@/types'
 
 const createMeta = (override: Partial<MessageMeta> = {}): MessageMeta => ({
   id: 'm-1',
@@ -25,21 +12,10 @@ const createMeta = (override: Partial<MessageMeta> = {}): MessageMeta => ({
   ...override,
 })
 
-const sampleTimeline: ToolEvent[] = [
-  {
-    id: 't1',
-    sessionId: 1,
-    messageId: 'm-1',
-    createdAt: Date.now(),
-    tool: 'web_search',
-    stage: 'start',
-    status: 'running',
-  },
-]
+const getToggleButton = () => screen.getByRole('button')
 
 describe('ReasoningSection 展开逻辑', () => {
   beforeEach(() => {
-    toolTimelineMock.mockClear()
     localStorage.clear()
   })
 
@@ -48,8 +24,6 @@ describe('ReasoningSection 展开逻辑', () => {
       <ReasoningSection
         meta={createMeta({ reasoningStatus: undefined })}
         reasoningRaw=""
-        timeline={[]}
-        summary={null}
         defaultExpanded={false}
       />,
     )
@@ -61,28 +35,12 @@ describe('ReasoningSection 展开逻辑', () => {
       <ReasoningSection
         meta={createMeta({ reasoningStatus: 'streaming' })}
         reasoningRaw=""
-        timeline={[]}
-        summary={null}
         defaultExpanded={false}
       />,
     )
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline')).toHaveAttribute('data-expanded', 'true')
-    })
-  })
 
-  it('assistant 出现工具事件时自动展开', async () => {
-    render(
-      <ReasoningSection
-        meta={createMeta({ reasoningStatus: undefined })}
-        reasoningRaw=""
-        timeline={sampleTimeline}
-        summary={null}
-        defaultExpanded={false}
-      />,
-    )
     await waitFor(() => {
-      expect(screen.getByTestId('timeline')).toHaveAttribute('data-expanded', 'true')
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
     })
   })
 
@@ -91,26 +49,22 @@ describe('ReasoningSection 展开逻辑', () => {
       <ReasoningSection
         meta={createMeta({ reasoningStatus: undefined })}
         reasoningRaw="some reasoning"
-        timeline={sampleTimeline}
-        summary={null}
         defaultExpanded={true}
       />,
     )
-    fireEvent.click(screen.getByTestId('timeline'))
-    expect(screen.getByTestId('timeline')).toHaveAttribute('data-expanded', 'false')
+    fireEvent.click(getToggleButton())
+    expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
 
     rerender(
       <ReasoningSection
         meta={createMeta({ reasoningStatus: 'streaming' })}
         reasoningRaw="some reasoning"
-        timeline={sampleTimeline}
-        summary={null}
         defaultExpanded={true}
       />,
     )
 
     await waitFor(() => {
-      expect(screen.getByTestId('timeline')).toHaveAttribute('data-expanded', 'false')
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
     })
   })
 
@@ -126,14 +80,12 @@ describe('ReasoningSection 展开逻辑', () => {
       <ReasoningSection
         meta={createMeta({ stableKey: 'stable-persist', reasoningStatus: 'done' })}
         reasoningRaw="reasoning"
-        timeline={[]}
-        summary={null}
         defaultExpanded={false}
       />,
     )
 
     await waitFor(() => {
-      expect(screen.getByTestId('timeline')).toHaveAttribute('data-expanded', 'true')
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
     })
   })
 })

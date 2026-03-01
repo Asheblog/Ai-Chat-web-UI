@@ -140,7 +140,7 @@ function MessageListComponent({
       if (Math.abs(delta) > 240) return false
       if (typeof document !== 'undefined') {
         const active = document.activeElement
-        if (active instanceof Element && active.closest('.reasoning-panel')) {
+        if (active instanceof Element && active.closest('[data-message-panel="interactive"]')) {
           return false
         }
       }

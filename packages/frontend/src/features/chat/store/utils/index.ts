@@ -257,6 +257,60 @@ export const inferToolStatus = (stage: ToolEvent['stage']): ToolEvent['status'] 
   return 'running'
 }
 
+const TOOL_CALL_PHASES = new Set([
+  'arguments_streaming',
+  'pending_approval',
+  'executing',
+  'result',
+  'error',
+  'rejected',
+  'aborted',
+])
+
+const TOOL_CALL_SOURCES = new Set(['builtin', 'plugin', 'mcp', 'workspace', 'system'])
+
+const inferToolPhase = (
+  phase: unknown,
+  status: unknown,
+  stage: ToolEvent['stage'],
+): ToolEvent['phase'] => {
+  if (typeof phase === 'string' && TOOL_CALL_PHASES.has(phase)) {
+    return phase as ToolEvent['phase']
+  }
+  if (status === 'pending') return 'pending_approval'
+  if (status === 'success') return 'result'
+  if (status === 'rejected') return 'rejected'
+  if (status === 'aborted') return 'aborted'
+  if (status === 'error') return 'error'
+  if (status === 'running') return 'executing'
+  if (stage === 'result') return 'result'
+  if (stage === 'error') return 'error'
+  return 'executing'
+}
+
+const inferToolStatusFromPayload = (
+  status: unknown,
+  phase: ToolEvent['phase'],
+  stage: ToolEvent['stage'],
+): ToolEvent['status'] => {
+  if (
+    status === 'running' ||
+    status === 'success' ||
+    status === 'error' ||
+    status === 'pending' ||
+    status === 'rejected' ||
+    status === 'aborted'
+  ) {
+    return status
+  }
+  if (phase === 'pending_approval') return 'pending'
+  if (phase === 'result') return 'success'
+  if (phase === 'rejected') return 'rejected'
+  if (phase === 'aborted') return 'aborted'
+  if (phase === 'error') return 'error'
+  return inferToolStatus(stage)
+}
+
 export const normalizeToolEvents = (message: Message): ToolEvent[] => {
   if (!Array.isArray(message.toolEvents) || message.toolEvents.length === 0) return []
   const baseTimestamp = (() => {
@@ -304,19 +358,39 @@ export const normalizeToolEvents = (message: Message): ToolEvent[] => {
   }
 
   return message.toolEvents.map((evt, idx) => {
+    const rawPhase =
+      typeof (evt as any).phase === 'string' ? ((evt as any).phase as string) : undefined
     const stage =
       evt.stage === 'start' || evt.stage === 'result' || evt.stage === 'error'
         ? evt.stage
+        : rawPhase === 'result'
+          ? 'result'
+          : rawPhase === 'error' || rawPhase === 'rejected' || rawPhase === 'aborted'
+            ? 'error'
         : 'start'
     const createdAt =
       typeof (evt as any).createdAt === 'number' && Number.isFinite((evt as any).createdAt)
         ? ((evt as any).createdAt as number)
         : baseTimestamp + idx
-    const tool = evt.tool || 'web_search'
+    const phase = inferToolPhase(rawPhase, (evt as any).status, stage)
+    const status = inferToolStatusFromPayload((evt as any).status, phase, stage)
+    const identifier =
+      typeof (evt as any).identifier === 'string' ? ((evt as any).identifier as string) : undefined
+    const apiName =
+      typeof (evt as any).apiName === 'string' ? ((evt as any).apiName as string) : undefined
+    const tool = evt.tool || identifier || apiName || 'web_search'
     const key = buildKey(tool, typeof evt.query === 'string' ? evt.query : undefined)
+    const callId =
+      typeof (evt as any).callId === 'string'
+        ? ((evt as any).callId as string)
+        : typeof evt.id === 'string'
+          ? evt.id
+          : undefined
     const id =
       typeof evt.id === 'string' && evt.id.trim().length > 0
         ? evt.id.trim()
+        : callId && callId.trim().length > 0
+          ? callId.trim()
         : allocateLegacyId(key, stage, createdAt)
     return {
       id,
@@ -324,12 +398,45 @@ export const normalizeToolEvents = (message: Message): ToolEvent[] => {
       messageId: message.id,
       tool,
       stage,
-      status: inferToolStatus(stage),
+      status,
       query: evt.query,
       summary: typeof evt.summary === 'string' ? evt.summary : undefined,
       hits: Array.isArray(evt.hits) ? evt.hits : undefined,
       error: evt.error,
       createdAt,
+      callId: callId || id,
+      identifier: identifier ?? tool,
+      apiName: apiName ?? identifier ?? tool,
+      source:
+        typeof (evt as any).source === 'string' && TOOL_CALL_SOURCES.has((evt as any).source)
+          ? ((evt as any).source as ToolEvent['source'])
+          : undefined,
+      phase,
+      argumentsText:
+        typeof (evt as any).argumentsText === 'string'
+          ? ((evt as any).argumentsText as string)
+          : undefined,
+      argumentsPatch:
+        typeof (evt as any).argumentsPatch === 'string'
+          ? ((evt as any).argumentsPatch as string)
+          : undefined,
+      resultText:
+        typeof (evt as any).resultText === 'string'
+          ? ((evt as any).resultText as string)
+          : undefined,
+      resultJson: typeof (evt as any).resultJson !== 'undefined' ? (evt as any).resultJson : undefined,
+      intervention:
+        (evt as any).intervention && typeof (evt as any).intervention === 'object'
+          ? { ...((evt as any).intervention as Record<string, unknown>) }
+          : undefined,
+      thoughtSignature:
+        typeof (evt as any).thoughtSignature === 'string' || (evt as any).thoughtSignature === null
+          ? ((evt as any).thoughtSignature as string | null)
+          : undefined,
+      updatedAt:
+        typeof (evt as any).updatedAt === 'number' && Number.isFinite((evt as any).updatedAt)
+          ? ((evt as any).updatedAt as number)
+          : createdAt,
       details:
         evt && typeof (evt as any).details === 'object'
           ? { ...(evt as any).details }

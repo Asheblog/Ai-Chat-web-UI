@@ -3,6 +3,79 @@ import type { ChatStreamChunk } from '@/types'
 const STREAM_DEBUG_ENABLED =
   process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_DEBUG_STREAM === '1'
 
+const TOOL_CALL_PHASES = [
+  'arguments_streaming',
+  'pending_approval',
+  'executing',
+  'result',
+  'error',
+  'rejected',
+  'aborted',
+] as const
+
+const TOOL_CALL_SOURCES = ['builtin', 'plugin', 'mcp', 'workspace', 'system'] as const
+
+const TOOL_CALL_STATUSES = ['running', 'success', 'error', 'pending', 'rejected', 'aborted'] as const
+
+const normalizeToolCallSource = (value: unknown) =>
+  typeof value === 'string' && TOOL_CALL_SOURCES.includes(value as (typeof TOOL_CALL_SOURCES)[number])
+    ? (value as (typeof TOOL_CALL_SOURCES)[number])
+    : undefined
+
+const normalizeToolCallPhase = (
+  phase: unknown,
+  status: unknown,
+  stage: unknown,
+): import('@/types').ToolCallPhase | undefined => {
+  if (
+    typeof phase === 'string' &&
+    TOOL_CALL_PHASES.includes(phase as (typeof TOOL_CALL_PHASES)[number])
+  ) {
+    return phase as import('@/types').ToolCallPhase
+  }
+  if (status === 'pending') return 'pending_approval'
+  if (status === 'success') return 'result'
+  if (status === 'rejected') return 'rejected'
+  if (status === 'aborted') return 'aborted'
+  if (status === 'error') return 'error'
+  if (status === 'running') return 'executing'
+  if (stage === 'result') return 'result'
+  if (stage === 'error') return 'error'
+  if (stage === 'start') return 'executing'
+  return undefined
+}
+
+const normalizeToolCallStatus = (
+  status: unknown,
+  phase: import('@/types').ToolCallPhase | undefined,
+  stage: unknown,
+): import('@/types').ChatStreamChunk['status'] => {
+  if (
+    typeof status === 'string' &&
+    TOOL_CALL_STATUSES.includes(status as (typeof TOOL_CALL_STATUSES)[number])
+  ) {
+    return status as import('@/types').ChatStreamChunk['status']
+  }
+  if (phase === 'result') return 'success'
+  if (phase === 'error') return 'error'
+  if (phase === 'rejected') return 'rejected'
+  if (phase === 'aborted') return 'aborted'
+  if (phase === 'pending_approval') return 'pending'
+  if (stage === 'result') return 'success'
+  if (stage === 'error') return 'error'
+  return 'running'
+}
+
+const normalizeLegacyStage = (
+  stage: unknown,
+  phase: import('@/types').ToolCallPhase | undefined,
+): 'start' | 'result' | 'error' => {
+  if (stage === 'start' || stage === 'result' || stage === 'error') return stage
+  if (phase === 'result') return 'result'
+  if (phase === 'error' || phase === 'rejected' || phase === 'aborted') return 'error'
+  return 'start'
+}
+
 export async function* parseEventStream(
   response: Response,
   streamKey: string,
@@ -117,17 +190,59 @@ export const normalizeChunk = (payload: any): ChatStreamChunk | null => {
       reasoningDecision: typeof payload.decision === 'string' ? payload.decision : undefined,
     }
   }
-  if (payload?.type === 'tool') {
+  if (payload?.type === 'tool_call') {
+    const phase = normalizeToolCallPhase(payload.phase, payload.status, payload.stage)
+    const status = normalizeToolCallStatus(payload.status, phase, payload.stage)
+    const stage = normalizeLegacyStage(payload.stage, phase)
+    const identifier =
+      typeof payload.identifier === 'string' && payload.identifier.trim().length > 0
+        ? payload.identifier
+        : typeof payload.tool === 'string' && payload.tool.trim().length > 0
+          ? payload.tool
+          : undefined
+    const apiName =
+      typeof payload.apiName === 'string' && payload.apiName.trim().length > 0
+        ? payload.apiName
+        : identifier
+    const callId =
+      typeof payload.callId === 'string' && payload.callId.trim().length > 0
+        ? payload.callId
+        : typeof payload.id === 'string' && payload.id.trim().length > 0
+          ? payload.id
+          : undefined
+
     return {
-      type: 'tool',
-      tool: payload.tool,
-      stage: payload.stage,
-      id: payload.id,
-      query: payload.query,
-      hits: payload.hits,
-      error: payload.error,
-      summary: payload.summary,
+      type: 'tool_call',
+      callId,
+      source: normalizeToolCallSource(payload.source),
+      identifier,
+      apiName,
+      phase,
+      status,
+      id:
+        typeof payload.id === 'string' && payload.id.trim().length > 0
+          ? payload.id
+          : callId,
+      stage,
+      query: typeof payload.query === 'string' ? payload.query : undefined,
+      hits: Array.isArray(payload.hits) ? payload.hits : undefined,
+      argumentsText:
+        typeof payload.argumentsText === 'string' ? payload.argumentsText : undefined,
+      argumentsPatch:
+        typeof payload.argumentsPatch === 'string' ? payload.argumentsPatch : undefined,
+      resultText: typeof payload.resultText === 'string' ? payload.resultText : undefined,
+      resultJson: payload.resultJson,
+      error: typeof payload.error === 'string' ? payload.error : undefined,
+      summary: typeof payload.summary === 'string' ? payload.summary : undefined,
       details: payload.details,
+      intervention:
+        payload.intervention && typeof payload.intervention === 'object'
+          ? payload.intervention
+          : undefined,
+      thoughtSignature:
+        typeof payload.thoughtSignature === 'string' || payload.thoughtSignature === null
+          ? payload.thoughtSignature
+          : undefined,
       meta: payload.meta,
     }
   }

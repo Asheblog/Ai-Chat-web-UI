@@ -1,15 +1,5 @@
 import { render, screen } from "@testing-library/react"
-import { vi } from "vitest"
 import { ShareViewer } from "./share-viewer"
-
-// Mock ReasoningPanel to avoid complex dependency chain
-vi.mock('@/components/reasoning-panel', () => ({
-  ReasoningPanel: ({ expanded, onToggle, toolSummary }: any) => (
-    <div data-testid="reasoning-panel" data-expanded={expanded} onClick={onToggle}>
-      {toolSummary && <span data-testid="tool-summary">{toolSummary.label}</span>}
-    </div>
-  ),
-}))
 
 describe("ShareViewer", () => {
   it("renders shared messages with simplified header", () => {
@@ -63,7 +53,7 @@ describe("ShareViewer", () => {
     expect(screen.getByText(/本页面分享由/)).toBeInTheDocument()
   })
 
-  it("renders reasoning panel for assistant messages with reasoning", () => {
+  it("renders reasoning section for assistant messages with reasoning", () => {
     const now = new Date().toISOString()
     const initialMessages = [
       {
@@ -94,9 +84,9 @@ describe("ShareViewer", () => {
       />,
     )
 
-    const reasoningPanel = screen.getByTestId("reasoning-panel")
-    expect(reasoningPanel).toBeInTheDocument()
-    expect(reasoningPanel).toHaveAttribute("data-expanded", "false")
+    const reasoningButton = screen.getByRole('button', { name: /思考完成/ })
+    expect(reasoningButton).toBeInTheDocument()
+    expect(reasoningButton).toHaveAttribute("aria-expanded", "false")
   })
 
   it("renders tool summary when toolEvents are present", () => {
@@ -140,7 +130,8 @@ describe("ShareViewer", () => {
       />,
     )
 
-    expect(screen.getByTestId("tool-summary")).toHaveTextContent("联网搜索 1 次")
+    expect(screen.getByText("工具调用 (1)")).toBeInTheDocument()
+    expect(screen.getByText("完成 1 次")).toBeInTheDocument()
   })
 
   it("uses default brand text when not provided", () => {

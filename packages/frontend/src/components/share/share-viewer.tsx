@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import type { ApiResponse, ChatShare, ShareMessage, ShareMessagesPage, ToolEvent } from '@/types'
+import { useMemo, useState } from 'react'
+import type { ApiResponse, ChatShare, MessageMeta, ShareMessage, ShareMessagesPage, ToolEvent } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { ReasoningPanel } from '@/components/reasoning-panel'
+import { ReasoningSection } from '@/components/message-bubble/reasoning-section'
+import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
 import { cn, formatDate } from '@/lib/utils'
 import { User, Bot } from 'lucide-react'
 
@@ -43,38 +44,65 @@ function formatRelativeTime(dateStr: string): string {
 function buildToolSummary(toolEvents?: ToolEvent[]) {
   if (!toolEvents || toolEvents.length === 0) return null
 
+  const normalizeStatus = (event: ToolEvent): ToolEvent['status'] => {
+    if (
+      event.status === 'running' ||
+      event.status === 'success' ||
+      event.status === 'error' ||
+      event.status === 'pending' ||
+      event.status === 'rejected' ||
+      event.status === 'aborted'
+    ) {
+      return event.status
+    }
+    if (event.phase === 'pending_approval') return 'pending'
+    if (event.phase === 'result') return 'success'
+    if (event.phase === 'error') return 'error'
+    if (event.phase === 'rejected') return 'rejected'
+    if (event.phase === 'aborted') return 'aborted'
+    if (event.stage === 'result') return 'success'
+    if (event.stage === 'error') return 'error'
+    return 'running'
+  }
+
   const toolCounts = new Map<string, number>()
-  let success = 0
-  let running = 0
-  let error = 0
+  let successCount = 0
+  let runningCount = 0
+  let pendingCount = 0
+  let errorCount = 0
+  let rejectedCount = 0
+  let abortedCount = 0
 
   toolEvents.forEach((event) => {
-    toolCounts.set(event.tool, (toolCounts.get(event.tool) || 0) + 1)
-    if (event.status === 'success') success++
-    else if (event.status === 'running') running++
-    else if (event.status === 'error') error++
+    const status = normalizeStatus(event)
+    const toolName = event.identifier || event.apiName || event.tool
+    toolCounts.set(toolName, (toolCounts.get(toolName) || 0) + 1)
+    if (status === 'success') successCount += 1
+    else if (status === 'pending') pendingCount += 1
+    else if (status === 'rejected') rejectedCount += 1
+    else if (status === 'aborted') abortedCount += 1
+    else if (status === 'error') errorCount += 1
+    else runningCount += 1
   })
-
-  const parts: string[] = []
-  if (success > 0) parts.push(`完成 ${success} 次`)
-  if (running > 0) parts.push(`进行中 ${running} 次`)
-  if (error > 0) parts.push(`失败 ${error} 次`)
 
   const describeTool = (tool: string) => {
     if (tool === 'web_search') return '联网搜索'
     if (tool === 'python_runner') return 'Python 工具'
+    if (tool === 'read_url') return '网页读取'
     if (tool === 'document_list') return '文档列表'
     if (tool === 'document_search') return '文档搜索'
-    if (tool === 'document_get_content') return '文档内容'
-    if (tool === 'document_get_toc') return '文档目录'
-    if (tool === 'document_get_section') return '文档章节'
     if (tool === 'kb_search') return '知识库搜索'
-    if (tool === 'kb_get_documents') return '知识库文档列表'
-    if (tool === 'kb_get_document_content') return '知识库文档内容'
-    if (tool === 'kb_get_toc') return '知识库目录'
-    if (tool === 'kb_get_section') return '知识库章节'
+    if (tool.startsWith('workspace_')) return '工作区工具'
     return tool
   }
+
+  const parts: string[] = []
+  if (successCount > 0) parts.push(`完成 ${successCount} 次`)
+  if (runningCount > 0) parts.push(`进行中 ${runningCount} 次`)
+  if (pendingCount > 0) parts.push(`待审批 ${pendingCount} 次`)
+  if (rejectedCount > 0) parts.push(`拒绝 ${rejectedCount} 次`)
+  if (abortedCount > 0) parts.push(`中止 ${abortedCount} 次`)
+  if (errorCount > 0) parts.push(`失败 ${errorCount} 次`)
 
   const labelParts = Array.from(toolCounts.entries()).map(
     ([tool, count]) => `${describeTool(tool)} ${count} 次`
@@ -84,21 +112,75 @@ function buildToolSummary(toolEvents?: ToolEvent[]) {
     total: toolEvents.length,
     summaryText: parts.join(' · ') || '等待工具结果',
     label: labelParts.length > 0 ? labelParts.join(' / ') : '工具调用',
+    successCount,
+    runningCount,
+    pendingCount,
+    errorCount,
+    rejectedCount,
+    abortedCount,
   }
 }
 
 interface ShareMessageItemProps {
   msg: ChatShare['messages'][number]
+  sessionId: number
   defaultReasoningExpanded?: boolean
 }
 
-function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessageItemProps) {
-  const [reasoningExpanded, setReasoningExpanded] = useState(defaultReasoningExpanded)
-
+function ShareMessageItem({
+  msg,
+  sessionId,
+  defaultReasoningExpanded = false,
+}: ShareMessageItemProps) {
   const hasReasoning = msg.reasoning && msg.reasoning.trim().length > 0
   const toolEvents = (msg as { toolEvents?: ToolEvent[] }).toolEvents
-  const toolSummary = useMemo(() => buildToolSummary(toolEvents), [toolEvents])
-  const hasReasoningSection = hasReasoning || (toolEvents && toolEvents.length > 0)
+  const normalizedToolEvents = useMemo(() => {
+    if (!toolEvents || toolEvents.length === 0) return []
+    const merged = new Map<string, ToolEvent>()
+    let fallbackIndex = 0
+    for (const event of toolEvents) {
+      const key =
+        typeof event.callId === 'string' && event.callId.trim().length > 0
+          ? `call:${event.callId}`
+          : typeof event.id === 'string' && event.id.trim().length > 0
+            ? `id:${event.id}`
+            : `fallback:${fallbackIndex++}`
+      const existing = merged.get(key)
+      if (!existing) {
+        merged.set(key, event)
+        continue
+      }
+      merged.set(key, {
+        ...existing,
+        ...event,
+        createdAt: Math.min(existing.createdAt, event.createdAt),
+        updatedAt: Math.max(
+          existing.updatedAt ?? existing.createdAt,
+          event.updatedAt ?? event.createdAt,
+        ),
+        details:
+          existing.details || event.details
+            ? { ...(existing.details ?? {}), ...(event.details ?? {}) }
+            : undefined,
+      })
+    }
+    return Array.from(merged.values()).sort((a, b) => a.createdAt - b.createdAt)
+  }, [toolEvents])
+  const toolSummary = useMemo(() => buildToolSummary(normalizedToolEvents), [normalizedToolEvents])
+  const hasReasoningSection = hasReasoning || normalizedToolEvents.length > 0
+  const meta = useMemo<MessageMeta>(() => ({
+    id: msg.id,
+    sessionId,
+    stableKey: `share-${msg.id}-${msg.createdAt}`,
+    role: msg.role,
+    createdAt: msg.createdAt,
+    reasoningStatus: hasReasoning ? 'done' : undefined,
+    reasoningDurationSeconds: null,
+    reasoningIdleMs: null,
+    reasoningUnavailableCode: null,
+    reasoningUnavailableReason: null,
+    reasoningUnavailableSuggestion: null,
+  }), [hasReasoning, msg.createdAt, msg.id, msg.role, sessionId])
 
   const isUser = msg.role === 'user'
 
@@ -121,18 +203,25 @@ function ShareMessageItem({ msg, defaultReasoningExpanded = false }: ShareMessag
         </div>
 
         {!isUser && hasReasoningSection && (
-          <ReasoningPanel
-            status="done"
-            durationSeconds={null}
-            idleMs={null}
-            expanded={reasoningExpanded}
-            onToggle={() => setReasoningExpanded(!reasoningExpanded)}
-            reasoningRaw={msg.reasoning || ''}
-            reasoningHtml={undefined}
-            isStreaming={false}
-            toolSummary={toolSummary}
-            toolTimeline={toolEvents || []}
-          />
+          <>
+            {hasReasoning && (
+              <ReasoningSection
+                meta={meta}
+                reasoningRaw={msg.reasoning || ''}
+                reasoningHtml={undefined}
+                reasoningPlayedLength={msg.reasoning?.length || 0}
+                defaultExpanded={defaultReasoningExpanded}
+              />
+            )}
+            {normalizedToolEvents.length > 0 && (
+              <ToolCallsSection
+                meta={meta}
+                timeline={normalizedToolEvents}
+                summary={toolSummary}
+                defaultExpanded={false}
+              />
+            )}
+          </>
         )}
 
         <div
@@ -220,7 +309,12 @@ export function ShareViewer({
             </div>
           ) : (
             messages.map((msg) => (
-              <ShareMessageItem key={`${msg.id}-${msg.createdAt}`} msg={msg} defaultReasoningExpanded={false} />
+              <ShareMessageItem
+                key={`${msg.id}-${msg.createdAt}`}
+                msg={msg}
+                sessionId={share.sessionId}
+                defaultReasoningExpanded={false}
+              />
             ))
           )}
         </section>

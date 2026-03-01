@@ -6,6 +6,7 @@
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder } from '../../utils/task-trace';
 import type { ToolLogManager } from './tool-log-manager';
+import { normalizeToolCallEventPayload } from './tool-call-event';
 
 export interface StreamEventEmitterOptions {
   encoder: InstanceType<typeof TextEncoder>;
@@ -102,11 +103,11 @@ export class StreamEventEmitter {
    * 发送工具事件
    */
   emitToolEvent(payload: Record<string, unknown>): void {
-    const enriched = { type: 'tool', ...payload };
+    const enriched = normalizeToolCallEventPayload(payload);
     this.enqueue(enriched);
 
     // 记录到工具日志管理器
-    this.toolLogManager?.record(payload);
+    this.toolLogManager?.record(enriched);
     this.traceRecorder.log('tool:event', summarizeSsePayload(enriched));
   }
 

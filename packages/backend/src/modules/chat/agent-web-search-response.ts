@@ -25,7 +25,7 @@ import {
 } from './stream-state';
 import type { RAGService } from '../../services/document/rag-service';
 import { ToolLogManager } from './tool-log-manager';
-import { StreamEventEmitter } from './stream-event-emitter';
+import { normalizeToolCallEventPayload } from './tool-call-event';
 import {
   sendUnsupportedToolError,
 } from './tool-handlers';
@@ -450,9 +450,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       };
 
       const sendToolEvent = (payload: Record<string, unknown>) => {
-        const enriched = { type: 'tool', ...payload };
+        const enriched = normalizeToolCallEventPayload(payload);
         safeEnqueue(enriched);
-        recordToolLog(payload);
+        recordToolLog(enriched);
         traceRecorder.log('tool:event', summarizeSsePayload(enriched));
       };
 

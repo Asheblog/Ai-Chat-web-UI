@@ -14,6 +14,7 @@ import { syncAvatarLoadingStatus } from '@/lib/avatar-image-cache'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
 import { ExpandEditorDialog } from '@/components/chat/expand-editor-dialog'
 import { ReasoningSection } from './reasoning-section'
+import { ToolCallsSection } from './tool-calls-section'
 import { MessageBodyContent } from './message-body-content'
 import { MessageHeader } from './message-header'
 import { ShareBadge } from './share-badge'
@@ -99,9 +100,9 @@ function MessageBubbleComponent({
   const shouldShowReasoningSection =
     !isUser &&
     (reasoningText.length > 0 ||
-      toolTimeline.length > 0 ||
       (hasReasoningState && meta.reasoningStatus !== 'done') ||
       (isStreaming && meta.role === 'assistant' && hasReasoningState))
+  const shouldShowToolCallsSection = !isUser && toolTimeline.length > 0
 
   // 缓存匹配逻辑：
   // 1. 严格匹配：版本完全相同
@@ -259,6 +260,13 @@ function MessageBubbleComponent({
     if (reasoningText.length === 0) return false
     return reasoningDefaultExpand
   }, [meta.reasoningStatus, meta.role, reasoningDefaultExpand, reasoningText])
+  const defaultShouldShowToolCalls = useMemo(
+    () =>
+      toolTimeline.some(
+        (event) => event.status === 'running' || event.status === 'pending',
+      ),
+    [toolTimeline],
+  )
 
   const normalizeLatency = (value?: number | null) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return null
@@ -309,9 +317,15 @@ function MessageBubbleComponent({
               reasoningRaw={reasoningRaw}
               reasoningHtml={reasoningHtml || undefined}
               reasoningPlayedLength={reasoningPlayedLength}
+              defaultExpanded={defaultShouldShowReasoning}
+            />
+          )}
+          {!isUser && shouldShowToolCallsSection && (
+            <ToolCallsSection
+              meta={meta}
               timeline={toolTimeline}
               summary={toolSummary}
-              defaultExpanded={defaultShouldShowReasoning}
+              defaultExpanded={defaultShouldShowToolCalls}
             />
           )}
 

@@ -75,6 +75,79 @@ const computeStreamMetrics = (
   return hasValue ? metrics : null
 }
 
+const TOOL_CALL_PHASES = [
+  'arguments_streaming',
+  'pending_approval',
+  'executing',
+  'result',
+  'error',
+  'rejected',
+  'aborted',
+] as const
+
+const TOOL_CALL_SOURCES = ['builtin', 'plugin', 'mcp', 'workspace', 'system'] as const
+
+const TOOL_CALL_STATUSES = ['running', 'success', 'error', 'pending', 'rejected', 'aborted'] as const
+
+const resolveToolPhase = (
+  phase: unknown,
+  status: unknown,
+  stage: unknown,
+): import('@/types').ToolCallPhase | undefined => {
+  if (
+    typeof phase === 'string' &&
+    TOOL_CALL_PHASES.includes(phase as (typeof TOOL_CALL_PHASES)[number])
+  ) {
+    return phase as import('@/types').ToolCallPhase
+  }
+  if (status === 'pending') return 'pending_approval'
+  if (status === 'success') return 'result'
+  if (status === 'rejected') return 'rejected'
+  if (status === 'aborted') return 'aborted'
+  if (status === 'error') return 'error'
+  if (status === 'running') return 'executing'
+  if (stage === 'result') return 'result'
+  if (stage === 'error') return 'error'
+  if (stage === 'start') return 'executing'
+  return undefined
+}
+
+const resolveToolStage = (
+  stage: unknown,
+  phase: import('@/types').ToolCallPhase | undefined,
+): 'start' | 'result' | 'error' => {
+  if (stage === 'start' || stage === 'result' || stage === 'error') return stage
+  if (phase === 'result') return 'result'
+  if (phase === 'error' || phase === 'rejected' || phase === 'aborted') return 'error'
+  return 'start'
+}
+
+const resolveToolStatus = (
+  status: unknown,
+  phase: import('@/types').ToolCallPhase | undefined,
+  stage: 'start' | 'result' | 'error',
+): import('@/types').ToolEvent['status'] => {
+  if (
+    typeof status === 'string' &&
+    TOOL_CALL_STATUSES.includes(status as (typeof TOOL_CALL_STATUSES)[number])
+  ) {
+    return status as import('@/types').ToolEvent['status']
+  }
+  if (phase === 'pending_approval') return 'pending'
+  if (phase === 'result') return 'success'
+  if (phase === 'rejected') return 'rejected'
+  if (phase === 'aborted') return 'aborted'
+  if (phase === 'error') return 'error'
+  if (stage === 'result') return 'success'
+  if (stage === 'error') return 'error'
+  return 'running'
+}
+
+const resolveToolSource = (source: unknown): import('@/types').ToolCallSource | undefined =>
+  typeof source === 'string' && TOOL_CALL_SOURCES.includes(source as (typeof TOOL_CALL_SOURCES)[number])
+    ? (source as import('@/types').ToolCallSource)
+    : undefined
+
 export const createStreamSlice: ChatSliceCreator<
   StreamSlice & {
     isStreaming: boolean
@@ -538,25 +611,44 @@ export const createStreamSlice: ChatSliceCreator<
           continue
         }
 
-        if (evt?.type === 'tool') {
+        if (evt?.type === 'tool_call') {
           set((state) => {
             const list = state.toolEvents.slice()
-            const eventId = (evt.id as string) || `${sessionId}-${Date.now()}`
-            const idx = list.findIndex((item) => item.id === eventId && item.sessionId === sessionId)
+            const nowMs = Date.now()
+            const rawCallId =
+              typeof evt.callId === 'string' && evt.callId.trim().length > 0
+                ? evt.callId.trim()
+                : typeof evt.id === 'string' && evt.id.trim().length > 0
+                  ? evt.id.trim()
+                  : ''
+            const eventId = rawCallId || `tool:${sessionId}:${nowMs}`
+            const idx = list.findIndex((item) => {
+              if (item.sessionId !== sessionId) return false
+              if (rawCallId && item.callId === rawCallId) return true
+              return item.id === eventId
+            })
+            const previous = idx === -1 ? null : list[idx]
             const detailPayload =
               evt.details && typeof evt.details === 'object'
                 ? (evt.details as import('@/types').ToolEvent['details'])
                 : undefined
+            const phase = resolveToolPhase(evt.phase, evt.status, evt.stage)
+            const stage = resolveToolStage(evt.stage, phase)
+            const status = resolveToolStatus(evt.status, phase, stage)
+            const source = resolveToolSource(evt.source)
             const reasoningLengthAtEvent = Math.max(
               0,
               (active.reasoning?.length ?? 0) + (active.pendingReasoning?.length ?? 0),
             )
-            const prevDetails = idx === -1 ? undefined : list[idx]?.details
+            const prevDetails = previous?.details
             const mergedDetails: import('@/types').ToolEvent['details'] = {
               ...(prevDetails ?? {}),
               ...(detailPayload ? { ...detailPayload } : {}),
             }
-            const stage = (evt.stage as 'start' | 'result' | 'error') || 'start'
+            if (typeof evt.argumentsText === 'string') mergedDetails.argumentsText = evt.argumentsText
+            if (typeof evt.argumentsPatch === 'string') mergedDetails.argumentsPatch = evt.argumentsPatch
+            if (typeof evt.resultText === 'string') mergedDetails.resultText = evt.resultText
+            if (typeof evt.resultJson !== 'undefined') mergedDetails.resultJson = evt.resultJson
             const hasStartOffset =
               typeof mergedDetails?.reasoningOffsetStart === 'number' &&
               Number.isFinite(mergedDetails.reasoningOffsetStart) &&
@@ -578,32 +670,67 @@ export const createStreamSlice: ChatSliceCreator<
             ) {
               mergedDetails.reasoningOffset = mergedDetails.reasoningOffsetStart
             }
+            const identifier =
+              typeof evt.identifier === 'string' && evt.identifier.trim().length > 0
+                ? evt.identifier.trim()
+                : typeof evt.apiName === 'string' && evt.apiName.trim().length > 0
+                  ? evt.apiName.trim()
+                  : previous?.identifier
+            const toolName = identifier || previous?.tool || 'web_search'
+            const apiName =
+              typeof evt.apiName === 'string' && evt.apiName.trim().length > 0
+                ? evt.apiName.trim()
+                : previous?.apiName || identifier || toolName
             const next: import('@/types').ToolEvent = {
               id: eventId,
               sessionId,
               messageId: active.assistantId,
-              tool: (evt.tool as string) || 'web_search',
+              tool: toolName,
               stage,
-              status:
-                evt.stage === 'error'
-                  ? 'error'
-                  : evt.stage === 'result'
-                    ? 'success'
-                    : 'running',
-              query: evt.query as string | undefined,
-              hits: (Array.isArray(evt.hits) ? evt.hits : undefined) as import('@/types').ToolEvent['hits'],
-              error: evt.error as string | undefined,
-              summary: evt.summary as string | undefined,
-              createdAt: idx === -1 ? Date.now() : list[idx].createdAt,
+              status,
+              query:
+                typeof evt.query === 'string' ? evt.query : previous?.query,
+              hits:
+                (Array.isArray(evt.hits) ? evt.hits : previous?.hits) as import('@/types').ToolEvent['hits'],
+              error:
+                typeof evt.error === 'string' ? evt.error : previous?.error,
+              summary:
+                typeof evt.summary === 'string' ? evt.summary : previous?.summary,
+              createdAt: previous?.createdAt ?? nowMs,
               details: Object.keys(mergedDetails ?? {}).length > 0 ? mergedDetails : undefined,
+              callId: rawCallId || previous?.callId || eventId,
+              identifier: identifier || undefined,
+              apiName: apiName || undefined,
+              source: source ?? previous?.source,
+              phase: phase ?? previous?.phase,
+              argumentsText:
+                typeof evt.argumentsText === 'string'
+                  ? evt.argumentsText
+                  : previous?.argumentsText,
+              argumentsPatch:
+                typeof evt.argumentsPatch === 'string'
+                  ? evt.argumentsPatch
+                  : previous?.argumentsPatch,
+              resultText:
+                typeof evt.resultText === 'string' ? evt.resultText : previous?.resultText,
+              resultJson:
+                typeof evt.resultJson !== 'undefined' ? evt.resultJson : previous?.resultJson,
+              intervention:
+                evt.intervention && typeof evt.intervention === 'object'
+                  ? (evt.intervention as import('@/types').ToolInterventionState)
+                  : previous?.intervention,
+              thoughtSignature:
+                typeof evt.thoughtSignature === 'string' || evt.thoughtSignature === null
+                  ? evt.thoughtSignature
+                  : previous?.thoughtSignature,
+              updatedAt: nowMs,
             }
             if (idx === -1) {
               list.push(next)
             } else {
               list[idx] = {
-                ...list[idx],
+                ...previous,
                 ...next,
-                details: next.details,
               }
             }
             runtime.snapshotDebug('tool:add', {

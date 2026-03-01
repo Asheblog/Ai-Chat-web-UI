@@ -132,6 +132,7 @@ npm run dev
   - `{ "type": "usage", "usage": { "prompt_tokens": 123, "completion_tokens": 45, "total_tokens": 168, "context_limit": 4000, "context_remaining": 3877 } }`
   - 若上游厂商在流中返回 `usage` 字段，会被原样透出；否则在开始时发送一次基于上下文估算的 `usage`，在结束前补齐 `completion_tokens` 与 `total_tokens`（估算）。
 - `reasoning`：推理链事件，包含 `content`（增量文本）、`done`（推理结束）、`duration`（秒），以及 `keepalive`（仅保活提示，表示模型仍在思考，可配合 `idle_ms` 展示静默时长）。
+- `tool_call`：工具调用事件。统一输出 `callId/identifier/apiName/source/phase/status`，同时保留 `id/tool/stage` 兼容字段用于历史渲染。
 - `end`：上游流结束（如收到 `[DONE]`）
 - `complete`：服务端完成收尾
 - `stop`：可选的结束原因（如 `finish_reason`）

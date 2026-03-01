@@ -45,4 +45,22 @@ describe('stream-event-emitter reasoning deltas', () => {
     expect(chunks[0]).toContain('"content":"  step-1"')
     expect(emitter.getReasoningBuffer()).toBe('  step-1')
   })
+
+  test('normalizes legacy tool payload to tool_call event', () => {
+    const { emitter, chunks } = createEmitter()
+
+    emitter.emitToolEvent({
+      id: 'call-1',
+      tool: 'web_search',
+      stage: 'start',
+      query: 'lobehub cot',
+    })
+
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toContain('"type":"tool_call"')
+    expect(chunks[0]).toContain('"callId":"call-1"')
+    expect(chunks[0]).toContain('"identifier":"web_search"')
+    expect(chunks[0]).toContain('"phase":"executing"')
+    expect(chunks[0]).toContain('"status":"running"')
+  })
 })

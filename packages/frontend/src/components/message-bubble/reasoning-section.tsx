@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useReducer } from 'react'
-import type { MessageMeta, ToolEvent } from '@/types'
-import type { ToolTimelineSummary } from '@/features/chat/tool-events/useToolTimeline'
-import { ToolTimeline } from './tool-timeline'
+import { AlertTriangle, Brain, ChevronDown, Loader2 } from 'lucide-react'
+import type { MessageMeta } from '@/types'
+import { TypewriterReasoning } from '@/components/typewriter-reasoning'
 
 const REASONING_VISIBILITY_STORAGE_KEY = 'aichat.reasoning_visibility'
 const REASONING_VISIBILITY_LIMIT = 200
@@ -49,16 +49,6 @@ const persistVisibility = (key: string, expanded: boolean) => {
   }
 }
 
-interface ReasoningSectionProps {
-  meta: MessageMeta
-  reasoningRaw: string
-  reasoningHtml?: string
-  reasoningPlayedLength?: number
-  timeline: ToolEvent[]
-  summary: ToolTimelineSummary | null
-  defaultExpanded: boolean
-}
-
 type ExpandSource = 'user' | 'auto' | 'default'
 
 interface ExpandState {
@@ -98,13 +88,25 @@ const expandReducer = (state: ExpandState, action: ExpandAction): ExpandState =>
   }
 }
 
+const statusTextMap: Record<'idle' | 'streaming' | 'done', string> = {
+  idle: '正在思考',
+  streaming: '正在思考',
+  done: '思考完成',
+}
+
+interface ReasoningSectionProps {
+  meta: MessageMeta
+  reasoningRaw: string
+  reasoningHtml?: string
+  reasoningPlayedLength?: number
+  defaultExpanded: boolean
+}
+
 export function ReasoningSection({
   meta,
   reasoningRaw,
   reasoningHtml,
   reasoningPlayedLength,
-  timeline,
-  summary,
   defaultExpanded,
 }: ReasoningSectionProps) {
   const persistenceKey = useMemo(() => {
@@ -113,17 +115,29 @@ export function ReasoningSection({
     if (meta.clientMessageId) return `msg:${meta.clientMessageId}`
     return ''
   }, [meta.clientMessageId, meta.id, meta.stableKey])
+
   const reasoningTextLength = useMemo(() => reasoningRaw.trim().length, [reasoningRaw])
   const hasReasoningState = typeof meta.reasoningStatus === 'string'
-  const [{ expanded: showReasoning }, dispatch] = useReducer(
+  const hasUnavailableReason =
+    Boolean(meta.reasoningUnavailableCode) ||
+    Boolean(meta.reasoningUnavailableReason) ||
+    Boolean(meta.reasoningUnavailableSuggestion)
+  const [{ expanded }, dispatch] = useReducer(
     expandReducer,
     { expanded: defaultExpanded, source: 'default' },
     () => expandReducer({ expanded: false, source: 'default' }, { type: 'init', defaultExpanded }),
   )
-  const hasAnyContent = hasReasoningState || reasoningTextLength > 0 || timeline.length > 0
+
+  const hasAnyContent = hasReasoningState || reasoningTextLength > 0 || hasUnavailableReason
   const isAssistant = meta.role === 'assistant'
   const isActiveReasoning =
     isAssistant && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming')
+  const statusText = meta.reasoningStatus ? statusTextMap[meta.reasoningStatus] : '思考轨迹'
+  const showStreamingIndicator = meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming'
+  const durationText =
+    typeof meta.reasoningDurationSeconds === 'number' && Number.isFinite(meta.reasoningDurationSeconds)
+      ? `${meta.reasoningDurationSeconds.toFixed(1)}s`
+      : null
 
   useEffect(() => {
     if (!persistenceKey) return
@@ -143,36 +157,70 @@ export function ReasoningSection({
     if (isActiveReasoning) dispatch({ type: 'auto-expand' })
   }, [isActiveReasoning])
 
-  useEffect(() => {
-    if (!isAssistant) return
-    if (timeline.length === 0) return
-    dispatch({ type: 'auto-expand' })
-  }, [isAssistant, timeline.length])
-
-  if (
-    reasoningTextLength === 0 &&
-    !hasReasoningState &&
-    (timeline == null || timeline.length === 0)
-  ) {
+  if (!hasAnyContent) {
     return null
   }
 
   return (
-    <div className="mb-3">
-      <ToolTimeline
-        meta={meta}
-        reasoningRaw={reasoningRaw}
-        reasoningHtml={reasoningHtml}
-        reasoningPlayedLength={reasoningPlayedLength}
-        summary={summary}
-        timeline={timeline}
-        expanded={showReasoning}
-        onToggle={() => {
+    <div className="mb-3 rounded-lg border border-border/70 bg-muted/20" data-message-panel="interactive">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+        onClick={() => {
           dispatch({ type: 'toggle' })
-          const next = !showReasoning
+          const next = !expanded
           if (persistenceKey) persistVisibility(persistenceKey, next)
         }}
-      />
+        aria-expanded={expanded}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+            <Brain className="h-4 w-4" />
+            <span>{statusText}</span>
+            {showStreamingIndicator && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            {durationText && <span className="text-xs text-muted-foreground">· {durationText}</span>}
+          </div>
+          {meta.reasoningUnavailableReason && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta.reasoningUnavailableReason}</p>
+          )}
+        </div>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="space-y-2 border-t border-border/60 px-3 py-2">
+          {hasUnavailableReason && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+              <div className="flex items-center gap-1 font-medium">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>{meta.reasoningUnavailableCode || '推理不可用'}</span>
+              </div>
+              {meta.reasoningUnavailableReason && <p className="mt-1">{meta.reasoningUnavailableReason}</p>}
+              {meta.reasoningUnavailableSuggestion && (
+                <p className="mt-1 text-amber-700 dark:text-amber-300">{meta.reasoningUnavailableSuggestion}</p>
+              )}
+            </div>
+          )}
+          {reasoningTextLength > 0 ? (
+            !showStreamingIndicator && reasoningHtml ? (
+              <div
+                className="markdown-body markdown-body--reasoning text-sm"
+                dangerouslySetInnerHTML={{ __html: reasoningHtml }}
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                <TypewriterReasoning
+                  text={reasoningRaw}
+                  isStreaming={showStreamingIndicator}
+                  initialPlayedLength={reasoningPlayedLength}
+                  speed={20}
+                />
+              </div>
+            )
+          ) : (
+            <p className="text-sm text-muted-foreground">暂无可展示的思考内容。</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

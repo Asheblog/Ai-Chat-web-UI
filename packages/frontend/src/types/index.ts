@@ -487,6 +487,20 @@ export interface WebSearchHit {
 }
 
 export interface ToolEventDetails {
+  // 通用工具调用字段（ToolCall V2）
+  argumentsText?: string;
+  argumentsPatch?: string;
+  resultText?: string;
+  resultJson?: unknown;
+  url?: string;
+  title?: string;
+  excerpt?: string;
+  wordCount?: number;
+  siteName?: string;
+  byline?: string;
+  requestedLimit?: number | null;
+  appliedLimit?: number | null;
+  warning?: string;
   code?: string;
   input?: string;
   stdout?: string;
@@ -500,19 +514,50 @@ export interface ToolEventDetails {
   [key: string]: unknown;
 }
 
+export type ToolCallPhase =
+  | 'arguments_streaming'
+  | 'pending_approval'
+  | 'executing'
+  | 'result'
+  | 'error'
+  | 'rejected'
+  | 'aborted';
+
+export type ToolCallSource = 'builtin' | 'plugin' | 'mcp' | 'workspace' | 'system';
+
+export interface ToolInterventionState {
+  status?: 'pending' | 'approved' | 'rejected' | 'aborted' | 'none';
+  rejectedReason?: string;
+  approvalMode?: 'auto-run' | 'allow-list' | 'manual';
+}
+
 export interface ToolEvent {
+  // 兼容字段（旧链路）
   id: string;
   sessionId: number;
   messageId: number | string;
   tool: string;
   stage: 'start' | 'result' | 'error';
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'pending' | 'rejected' | 'aborted';
   query?: string;
   hits?: WebSearchHit[];
   error?: string;
   summary?: string;
   createdAt: number;
   details?: ToolEventDetails;
+  // ToolCall V2
+  callId?: string;
+  identifier?: string;
+  apiName?: string;
+  source?: ToolCallSource;
+  phase?: ToolCallPhase;
+  argumentsText?: string;
+  argumentsPatch?: string;
+  resultText?: string;
+  resultJson?: unknown;
+  intervention?: ToolInterventionState;
+  thoughtSignature?: string | null;
+  updatedAt?: number;
 }
 
 export interface SkillCatalogItem {
@@ -725,7 +770,7 @@ export interface ChatStreamChunk {
     | 'reasoning'
     | 'reasoning_unavailable'
     | 'quota'
-    | 'tool'
+    | 'tool_call'
     | 'image'
     | 'artifact'
     | 'skill_approval_request'
@@ -745,15 +790,27 @@ export interface ChatStreamChunk {
   keepalive?: boolean;
   idleMs?: number;
   quota?: ActorQuota;
+  callId?: string;
+  source?: ToolCallSource;
+  identifier?: string;
+  apiName?: string;
   tool?: string;
+  phase?: ToolCallPhase;
   id?: string;
   stage?: 'start' | 'result' | 'error';
+  status?: 'running' | 'success' | 'error' | 'pending' | 'rejected' | 'aborted';
   query?: string;
   hits?: WebSearchHit[];
+  argumentsText?: string;
+  argumentsPatch?: string;
+  resultText?: string;
+  resultJson?: unknown;
   /** 工具执行摘要 */
   summary?: string;
   meta?: Record<string, unknown>;
   details?: ToolEventDetails;
+  intervention?: ToolInterventionState;
+  thoughtSignature?: string | null;
   /** 后端计算的性能指标（仅在 complete 事件中） */
   metrics?: {
     firstTokenLatencyMs?: number | null;
