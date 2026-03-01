@@ -72,11 +72,11 @@ export function AdvancedOptions({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-10 w-10 rounded-full text-muted-foreground"
+            className="h-10 w-10 rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
             disabled={disabled}
             aria-label="更多操作"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-[18px] w-[18px]" />
           </Button>
         </DropdownMenuTrigger>
         <PlusMenuContent
@@ -108,6 +108,7 @@ export function AdvancedOptions({
           }}
           contentClassName="rounded-2xl"
           bodyClassName="text-sm"
+          onActionComplete={() => setPlusOpen(false)}
         />
       </DropdownMenu>
 

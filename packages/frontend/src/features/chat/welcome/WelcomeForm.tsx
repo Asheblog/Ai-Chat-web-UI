@@ -2,7 +2,7 @@ import { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject, useState } from 
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Maximize2 } from 'lucide-react'
+import { Loader2, Maximize2, Send } from 'lucide-react'
 import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { AdvancedOptions } from './AdvancedOptions'
 import { ImagePreviewList } from './ImagePreviewList'
@@ -122,6 +122,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     textareaRef,
     basePlaceholder,
     creationDisabled,
+    isCreating,
     showExpand,
     onTextareaChange,
     onKeyDown,
@@ -136,31 +137,18 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
   } = form
 
   return (
-    <div className="w-full max-w-3xl">
-      <div className="flex min-h-14 items-center gap-2 rounded-[1.6rem] border border-border/80 bg-[hsl(var(--background-alt))/0.9] px-3 py-2 shadow-[0_18px_42px_hsl(var(--background)/0.22)] transition focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-ring/60 sm:px-4">
-        <AdvancedOptions {...advancedOptions} />
-        <div className="flex-1">
-          <Textarea
-            ref={textareaRef}
-            value={query}
-            placeholder={basePlaceholder}
-            disabled={creationDisabled}
-            onChange={(event) => onTextareaChange(event.target.value)}
-            onKeyDown={onKeyDown}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onPaste={attachments.onPaste}
-            className="h-auto min-h-[40px] resize-none border-0 bg-transparent px-3 py-2 text-left leading-[1.4] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 sm:px-4"
-            rows={1}
-          />
-        </div>
-        <div className="flex items-center gap-1 sm:gap-2">
+    <div className="w-full max-w-4xl">
+      <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
+
+      <div className="flex items-end gap-2">
+        <div className="flex h-14 items-center gap-1 rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.78] px-2 shadow-[0_10px_24px_hsl(var(--background)/0.16)] backdrop-blur-sm">
+          <AdvancedOptions {...advancedOptions} />
           {showExpand && (
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-10 w-10 rounded-full border border-border/70 bg-[hsl(var(--surface))/0.45] hover:bg-[hsl(var(--surface-hover))]"
+              className="h-10 w-10 rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
               onClick={onOpenExpand}
               disabled={creationDisabled}
               aria-label="全屏编辑"
@@ -175,7 +163,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             disableDocuments={creationDisabled}
             hasImages={attachments.selectedImages.length > 0}
             hasDocuments={attachments.documents.length > 0}
-            className="h-10 w-10"
+            className="h-10 w-10 rounded-xl border-0 bg-transparent"
             ariaLabel="添加附件"
             onOpenManager={() => setAttachmentViewerOpen(true)}
             manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
@@ -185,9 +173,44 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
           />
         </div>
+
+        <div className="flex-1 overflow-hidden rounded-[1.7rem] border border-border/70 bg-[hsl(var(--surface))/0.9] shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background">
+          <Textarea
+            ref={textareaRef}
+            value={query}
+            placeholder={basePlaceholder}
+            disabled={creationDisabled}
+            onChange={(event) => onTextareaChange(event.target.value)}
+            onKeyDown={onKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            onPaste={attachments.onPaste}
+            className="h-auto min-h-[56px] max-h-[240px] resize-none border-0 bg-transparent px-5 py-4 text-left leading-[1.45] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+            rows={1}
+          />
+        </div>
+
+        <Button
+          type="button"
+          onClick={onSubmit}
+          disabled={creationDisabled}
+          className="h-14 w-14 rounded-2xl p-0 shadow-[0_12px_26px_hsl(var(--background)/0.24)]"
+          aria-label={isCreating ? '正在创建会话' : '发送'}
+        >
+          {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+        </Button>
       </div>
 
-      <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
+      {creationDisabled && basePlaceholder ? (
+        <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm">
+          {basePlaceholder}
+        </p>
+      ) : null}
+      {query.trim() === '' && !creationDisabled ? (
+        <p className="mx-auto mt-3 max-w-3xl text-center text-xs text-muted-foreground">
+          直接发送可创建新会话，或先输入内容后发送
+        </p>
+      ) : null}
       <input
         ref={attachments.fileInputRef}
         type="file"

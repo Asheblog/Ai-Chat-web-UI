@@ -51,11 +51,13 @@ export function SkillPanelSheet({
 }: SkillPanelSheetProps) {
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
+    if (typeof window.matchMedia !== 'function') return false
     return window.matchMedia('(min-width: 768px)').matches
   })
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(min-width: 768px)')
     const update = () => setIsDesktop(mq.matches)
     update()
