@@ -259,12 +259,18 @@ export function Sidebar() {
     })
 
     const groups: Array<{ key: string; label: string; sessions: typeof visible }> = [
+      { key: 'pinned', label: '置顶', sessions: [] },
       { key: 'today', label: '今天', sessions: [] },
       { key: 'week', label: '近 7 天', sessions: [] },
       { key: 'earlier', label: '更早', sessions: [] },
     ]
 
     visible.forEach((session) => {
+      if (session.pinnedAt) {
+        groups[0].sessions.push(session)
+        return
+      }
+
       const anchor = session.lastMessageAt || session.createdAt
       const date = new Date(anchor)
       const sameDay =
@@ -272,14 +278,14 @@ export function Sidebar() {
         date.getMonth() === new Date().getMonth() &&
         date.getDate() === new Date().getDate()
       if (sameDay) {
-        groups[0].sessions.push(session)
-        return
-      }
-      if (isRecentWithinDays(anchor, 7)) {
         groups[1].sessions.push(session)
         return
       }
-      groups[2].sessions.push(session)
+      if (isRecentWithinDays(anchor, 7)) {
+        groups[2].sessions.push(session)
+        return
+      }
+      groups[3].sessions.push(session)
     })
 
     return groups.filter((group) => group.sessions.length > 0)
