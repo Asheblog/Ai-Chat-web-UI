@@ -104,7 +104,7 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
               if (typeof hit.content === 'string') normalized.content = hit.content;
               return normalized;
             })
-            .filter((hit): hit is WebSearchHit => Boolean(hit));
+            .filter((hit: WebSearchHit | null): hit is WebSearchHit => Boolean(hit));
         }
         if (typeof entry.error === 'string' && entry.error.trim()) {
           log.error = entry.error;

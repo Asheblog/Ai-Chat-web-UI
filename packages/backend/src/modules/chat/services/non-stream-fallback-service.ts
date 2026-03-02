@@ -8,8 +8,9 @@ import type { GeneratedImage } from '../../../services/image-generation'
 import type { TaskTraceRecorder } from '../../../utils/task-trace'
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers'
 import { truncateString } from '../../../utils/task-trace'
+import type { ProviderType } from '../../../utils/providers'
 
-type Provider = 'openai' | 'openai_responses' | 'azure_openai' | 'ollama'
+type Provider = Extract<ProviderType, 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'>
 
 export interface NonStreamFallbackParams {
   provider: Provider
@@ -63,6 +64,9 @@ export class NonStreamFallbackService {
         ...params.extraHeaders,
       }
       if (params.provider === 'openai') {
+        body = convertOpenAIReasoningPayload(body)
+        url = `${params.baseUrl}/chat/completions`
+      } else if (params.provider === 'google_genai') {
         body = convertOpenAIReasoningPayload(body)
         url = `${params.baseUrl}/chat/completions`
       } else if (params.provider === 'openai_responses') {

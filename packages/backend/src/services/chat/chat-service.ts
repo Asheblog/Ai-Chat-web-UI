@@ -18,6 +18,11 @@ export interface ChatServiceDeps {
 }
 
 type SessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
+type SessionWithResolvedConnection = Omit<SessionWithConnection, 'connectionId' | 'modelRawId' | 'connection'> & {
+  connectionId: number
+  modelRawId: string
+  connection: NonNullable<SessionWithConnection['connection']>
+}
 
 const buildSessionOwnershipWhere = (actor: Actor): Prisma.ChatSessionWhereInput =>
   actor.type === 'user'
@@ -49,7 +54,7 @@ export class ChatService {
     })
   }
 
-  async getSessionWithConnection(actor: Actor, sessionId: number): Promise<SessionWithConnection> {
+  async getSessionWithConnection(actor: Actor, sessionId: number): Promise<SessionWithResolvedConnection> {
     const session = await this.findSessionWithConnection(actor, sessionId)
     if (!session) {
       throw new ChatServiceError('Chat session not found', 404)
@@ -57,7 +62,7 @@ export class ChatService {
     if (!session.connectionId || !session.connection || !session.modelRawId) {
       throw new ChatServiceError('Session model not selected', 400)
     }
-    return session
+    return session as SessionWithResolvedConnection
   }
 
   async ensureSessionAccess(actor: Actor, sessionId: number): Promise<{ id: number }> {

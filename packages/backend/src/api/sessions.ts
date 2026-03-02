@@ -35,7 +35,7 @@ const switchModelSchema = z.object({
   rawId: z.string().min(1).optional(),
 })
 
-const parsePagination = (value: string | null, fallback: number) => {
+const parsePagination = (value: string | null | undefined, fallback: number) => {
   const parsed = parseInt(value || '', 10)
   if (Number.isFinite(parsed) && parsed > 0) {
     return parsed
@@ -50,10 +50,10 @@ const handleServiceError = (
   logLabel: string,
 ) => {
   if (error instanceof SessionServiceError) {
-    return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+    return c.json({ success: false, error: error.message }, error.statusCode)
   }
   console.error(logLabel, error)
-  return c.json<ApiResponse>({ success: false, error: fallbackMessage }, 500)
+  return c.json({ success: false, error: fallbackMessage }, 500)
 }
 
 export interface SessionsApiDeps {

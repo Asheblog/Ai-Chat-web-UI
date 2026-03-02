@@ -200,7 +200,7 @@ export class TaskTraceService {
     }
   }
 
-  async getLatexTrace(taskTraceId: number): Promise<LatexTrace & { metadata: Record<string, any> | null } | null> {
+  async getLatexTrace(taskTraceId: number): Promise<(Omit<LatexTrace, 'metadata'> & { metadata: Record<string, any> | null }) | null> {
     const latex = await this.prisma.latexTrace.findUnique({
       where: { taskTraceId },
       select: {
@@ -218,7 +218,7 @@ export class TaskTraceService {
     if (!latex) return null
     return {
       ...latex,
-      metadata: parseJsonColumn(latex.metadata),
+      metadata: parseJsonColumn<Record<string, any>>(latex.metadata),
     }
   }
 

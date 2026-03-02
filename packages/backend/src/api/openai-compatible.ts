@@ -694,9 +694,12 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
     zValidator('json', responsesSchema),
     async (c) => {
       const user = c.get('user')!; // requireUserActor 已确保 user 存在
+      const actor = c.get('actor') as Actor
       const body = c.req.valid('json');
 
-      const resolved = await resolveModel(user.id, body.model);
+      const resolved = deps.modelResolverService
+        ? await deps.modelResolverService.resolveModelForRequest({ actor, userId: user.id, modelId: body.model })
+        : await resolveModelForActor({ actor, modelId: body.model });
       if (!resolved) {
         return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
       }
@@ -896,7 +899,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
       await messageService.ensureSessionOwnedByUser(user.id, sessionId);
     } catch (error) {
       if (error instanceof OpenAICompatMessageServiceError) {
-        return c.json({ error: 'not_found', message: error.message }, error.statusCode);
+        return c.json({ error: 'not_found', message: error.message }, error.statusCode as any);
       }
       throw error;
     }
@@ -929,7 +932,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
         await messageService.ensureSessionOwnedByUser(user.id, body.session_id);
       } catch (error) {
         if (error instanceof OpenAICompatMessageServiceError) {
-          return c.json({ error: 'not_found', message: error.message }, error.statusCode);
+          return c.json({ error: 'not_found', message: error.message }, error.statusCode as any);
         }
         throw error;
       }

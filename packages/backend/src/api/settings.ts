@@ -31,10 +31,10 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
     logLabel: string,
   ) => {
     if (error instanceof SettingsServiceError) {
-      return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode);
+      return c.json({ success: false, error: error.message }, error.statusCode);
     }
     console.error(logLabel, error);
-    return c.json<ApiResponse>({ success: false, error: fallbackMessage }, 500);
+    return c.json({ success: false, error: fallbackMessage }, 500);
   };
 
   settings.get('/branding', async (c) => {
@@ -320,7 +320,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
       if (error instanceof PythonRuntimeServiceError) {
         return c.json<ApiResponse>(
           { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
-          error.statusCode,
+          error.statusCode as any,
         )
       }
       console.error('Get python runtime status error:', error)
@@ -343,7 +343,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
         if (error instanceof PythonRuntimeServiceError) {
           return c.json<ApiResponse>(
             { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
-            error.statusCode,
+            error.statusCode as any,
           )
         }
         console.error('Update python runtime indexes error:', error)
@@ -372,7 +372,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
         if (error instanceof PythonRuntimeServiceError) {
           return c.json<ApiResponse>(
             { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
-            error.statusCode,
+            error.statusCode as any,
           )
         }
         console.error('Install python requirements error:', error)
@@ -396,7 +396,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
         if (error instanceof PythonRuntimeServiceError) {
           return c.json<ApiResponse>(
             { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
-            error.statusCode,
+            error.statusCode as any,
           )
         }
         console.error('Uninstall python packages error:', error)
@@ -418,7 +418,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
         if (error instanceof PythonRuntimeServiceError) {
           return c.json<ApiResponse>(
             { success: false, error: error.message, data: error.details ? { code: error.code, details: error.details } : { code: error.code } },
-            error.statusCode,
+            error.statusCode as any,
           )
         }
         console.error('Reconcile python runtime error:', error)
@@ -495,7 +495,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
       return c.json<ApiResponse>({
         success: false,
         error: message,
-      }, status);
+      }, status as any);
     }
   });
 
@@ -541,7 +541,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
         success: false,
         data: healthInfo,
         error: 'Service is unhealthy',
-      }, status);
+      }, status as any);
     }
   });
 

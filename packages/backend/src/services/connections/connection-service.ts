@@ -3,7 +3,8 @@ import { prisma as defaultPrisma } from '../../db'
 import {
   PrismaConnectionRepository,
   type ConnectionRepository,
-  type ConnectionWriteData,
+  type ConnectionCreateData,
+  type ConnectionUpdateData,
 } from '../../repositories/connection-repository'
 import { normalizeCapabilityFlags } from '../../utils/capabilities'
 import { fetchModelsForConnection as defaultFetchModelsForConnection, type CatalogItem, type ConnectionConfig, type AuthType, type ProviderType } from '../../utils/providers'
@@ -91,7 +92,7 @@ export class ConnectionService {
 
   async createSystemConnection(payload: ConnectionPayload) {
     const connection = await this.repository.createSystemConnection(
-      this.buildConnectionData(payload),
+      this.buildConnectionData(payload) as ConnectionCreateData,
     )
     await this.refreshCatalogSafe(connection, 'create')
     return connection
@@ -102,7 +103,7 @@ export class ConnectionService {
     if (!existing) {
       throw new ConnectionServiceError('Connection not found', 404)
     }
-    const updates = this.buildConnectionData(payload, true)
+    const updates = this.buildConnectionData(payload, true) as ConnectionUpdateData
     const connection = await this.repository.updateSystemConnection(id, updates)
     await this.refreshCatalogSafe(connection, 'update')
     return connection
@@ -177,8 +178,8 @@ export class ConnectionService {
   private buildConnectionData(
     payload: Partial<ConnectionPayload>,
     isPartial = false,
-  ): ConnectionWriteData {
-    const data: ConnectionWriteData = {
+  ): ConnectionCreateData | ConnectionUpdateData {
+    const data: ConnectionCreateData | ConnectionUpdateData = {
       ownerUserId: null,
     }
     if (!isPartial || payload.provider) {

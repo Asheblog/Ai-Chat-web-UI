@@ -11,7 +11,7 @@ export interface TraceMetadataExtras {
 
 export interface HandleLatexParams {
   traceRecorder: TaskTraceRecorder
-  latexTraceRecorder: InstanceType<typeof DefaultLatexTraceRecorder> | null
+  latexTraceRecorder: DefaultLatexTraceRecorder | null
   content: string
   assistantMessageId: number | null
   assistantClientMessageId?: string | null
@@ -19,19 +19,19 @@ export interface HandleLatexParams {
 }
 
 export interface HandleLatexResult {
-  latexTraceRecorder: InstanceType<typeof DefaultLatexTraceRecorder> | null
+  latexTraceRecorder: DefaultLatexTraceRecorder | null
   latexAuditSummary: { matched: number; unmatched: number } | null
 }
 
 export interface StreamTraceServiceDeps {
   analyzeLatexBlocks?: typeof defaultAnalyze
-  LatexTraceRecorder?: typeof DefaultLatexTraceRecorder
+  LatexTraceRecorder?: Pick<typeof DefaultLatexTraceRecorder, 'create'>
   logger?: Pick<typeof console, 'warn'>
 }
 
 export class StreamTraceService {
   private analyzeLatexBlocks: typeof defaultAnalyze
-  private LatexTraceRecorder: typeof DefaultLatexTraceRecorder
+  private LatexTraceRecorder: Pick<typeof DefaultLatexTraceRecorder, 'create'>
   private logger: Pick<typeof console, 'warn'>
 
   constructor(deps: StreamTraceServiceDeps = {}) {

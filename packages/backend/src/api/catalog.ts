@@ -57,10 +57,10 @@ const handleServiceError = (
   logLabel: string,
 ) => {
   if (error instanceof ModelCatalogServiceError) {
-    return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+    return c.json({ success: false, error: error.message }, error.statusCode)
   }
   console.error(logLabel, error)
-  return c.json<ApiResponse>({ success: false, error: fallbackMessage }, 500)
+  return c.json({ success: false, error: fallbackMessage }, 500)
 }
 
 catalog.get('/models', async (c) => {

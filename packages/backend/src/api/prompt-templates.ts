@@ -46,10 +46,10 @@ const parseTemplateId = (raw: string): number | null => {
 
 const handleError = (c: any, error: unknown, fallback: string) => {
   if (error instanceof PromptTemplateServiceError) {
-    return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+    return c.json({ success: false, error: error.message }, error.statusCode)
   }
   console.error('[prompt-templates] unexpected error', error)
-  return c.json<ApiResponse>({ success: false, error: fallback }, 500)
+  return c.json({ success: false, error: fallback }, 500)
 }
 
 export const createPromptTemplatesApi = (deps: PromptTemplatesApiDeps = {}) => {

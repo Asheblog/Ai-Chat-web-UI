@@ -272,6 +272,7 @@ export class KBToolHandler {
     success: boolean
     result: unknown
     error?: string
+    suggestion?: string
   }> {
     try {
       switch (toolName) {
@@ -352,6 +353,7 @@ export class KBToolHandler {
     success: boolean
     result: unknown
     error?: string
+    suggestion?: string
   }> {
     if (!kbId || !this.knowledgeBaseIds.includes(kbId)) {
       return {
@@ -397,6 +399,7 @@ export class KBToolHandler {
     success: boolean
     result: unknown
     error?: string
+    suggestion?: string
   }> {
     const query = (args.query as string) || ''
     if (!query.trim()) {
@@ -519,6 +522,7 @@ export class KBToolHandler {
     success: boolean
     result: unknown
     error?: string
+    suggestion?: string
   }> {
     const documentId = args.document_id as number
     if (!documentId) {
@@ -566,6 +570,7 @@ export class KBToolHandler {
     success: boolean
     result: unknown
     error?: string
+    suggestion?: string
   }> {
     if (!documentId) {
       return { success: false, result: null, error: 'document_id 不能为空' }
@@ -611,6 +616,7 @@ export class KBToolHandler {
     success: boolean
     result: unknown
     error?: string
+    suggestion?: string
   }> {
     if (!documentId || !sectionPath) {
       return { success: false, result: null, error: 'document_id 与 section_path 不能为空' }

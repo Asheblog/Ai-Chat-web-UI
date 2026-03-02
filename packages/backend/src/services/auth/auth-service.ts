@@ -32,6 +32,11 @@ export interface AuthServiceDeps {
   now?: () => Date
 }
 
+type AuthServiceUtils = Pick<
+  typeof defaultAuthUtils,
+  'validateUsername' | 'validatePassword' | 'hashPassword' | 'verifyPassword' | 'generateToken'
+>
+
 type SimpleUser = {
   id: number
   username: string
@@ -66,7 +71,7 @@ export interface ActorContextResult {
 
 export class AuthService {
   private prisma: PrismaClient
-  private authUtils: Required<AuthServiceDeps['authUtils']>
+  private authUtils: AuthServiceUtils
   private inspectActorQuota: typeof defaultInspectActorQuota
   private determineProfileImageBaseUrl: typeof defaultDetermineProfileImageBaseUrl
   private resolveProfileImageUrl: typeof defaultResolveProfileImageUrl
@@ -215,6 +220,7 @@ export class AuthService {
       id: user.id,
       username: user.username,
       role: summaryUser.role,
+      status: summaryUser.status,
       identifier: `user:${user.id}`,
     })
 

@@ -39,19 +39,6 @@ const ensureAnonCookie = (c: Context, key: string, retentionDays: number, secure
   setCookie(c, ANON_COOKIE_KEY, key, cookieOptions)
 }
 
-// 扩展Hono Context类型
-declare module 'hono' {
-  interface ContextVariableMap {
-    actor: Actor;
-    user?: {
-      id: number;
-      username: string;
-      role: 'ADMIN' | 'USER';
-      status: 'PENDING' | 'ACTIVE' | 'DISABLED';
-    };
-  }
-}
-
 export const createAuthMiddleware = (deps: AuthMiddlewareDeps = {}) => {
   const appConfig = deps.config ?? getAppConfig()
   const ctxSvc = deps.authContextService ?? defaultAuthContextService

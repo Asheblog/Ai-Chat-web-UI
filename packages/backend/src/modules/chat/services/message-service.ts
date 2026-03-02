@@ -134,12 +134,13 @@ export const createUserMessageWithQuota = async (
   if (!userMessageRecord) {
     throw new Error('Failed to persist user message')
   }
+  const persistedUserMessage = userMessageRecord as PrismaMessage
 
   if (images && images.length > 0 && !messageWasReused) {
     const userId = actor.type === 'user' ? actor.id : 0
     await deps.persistChatImages(images, {
       sessionId,
-      messageId: userMessageRecord.id,
+      messageId: persistedUserMessage.id,
       userId,
       clientMessageId,
       skipValidation: true,
@@ -147,7 +148,7 @@ export const createUserMessageWithQuota = async (
   }
 
   return {
-    userMessage: userMessageRecord,
+    userMessage: persistedUserMessage,
     messageWasReused,
     quotaSnapshot,
   }

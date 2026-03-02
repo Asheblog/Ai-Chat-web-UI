@@ -1,14 +1,13 @@
 import type { Connection, Prisma, PrismaClient } from '@prisma/client'
 
-export type ConnectionWriteData =
-  | Prisma.ConnectionUncheckedCreateInput
-  | Prisma.ConnectionUncheckedUpdateInput
+export type ConnectionCreateData = Prisma.ConnectionUncheckedCreateInput
+export type ConnectionUpdateData = Prisma.ConnectionUncheckedUpdateInput
 
 export interface ConnectionRepository {
   listSystemConnections(): Promise<Connection[]>
-  createSystemConnection(data: ConnectionWriteData): Promise<Connection>
+  createSystemConnection(data: ConnectionCreateData): Promise<Connection>
   findSystemConnectionById(id: number): Promise<Connection | null>
-  updateSystemConnection(id: number, data: ConnectionWriteData): Promise<Connection>
+  updateSystemConnection(id: number, data: ConnectionUpdateData): Promise<Connection>
   deleteSystemConnection(id: number): Promise<void>
   deleteModelCatalogByConnectionId(connectionId: number): Promise<void>
 }
@@ -26,7 +25,7 @@ export class PrismaConnectionRepository implements ConnectionRepository {
     })
   }
 
-  createSystemConnection(data: ConnectionWriteData) {
+  createSystemConnection(data: ConnectionCreateData) {
     return this.prisma.connection.create({ data })
   }
 
@@ -34,7 +33,7 @@ export class PrismaConnectionRepository implements ConnectionRepository {
     return this.prisma.connection.findUnique({ where: { id } })
   }
 
-  updateSystemConnection(id: number, data: ConnectionWriteData) {
+  updateSystemConnection(id: number, data: ConnectionUpdateData) {
     return this.prisma.connection.update({ where: { id }, data })
   }
 
@@ -42,7 +41,7 @@ export class PrismaConnectionRepository implements ConnectionRepository {
     await this.prisma.connection.delete({ where: { id } })
   }
 
-  deleteModelCatalogByConnectionId(connectionId: number) {
-    return this.prisma.modelCatalog.deleteMany({ where: { connectionId } })
+  async deleteModelCatalogByConnectionId(connectionId: number) {
+    await this.prisma.modelCatalog.deleteMany({ where: { connectionId } })
   }
 }

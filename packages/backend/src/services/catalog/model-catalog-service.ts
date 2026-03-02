@@ -1,8 +1,9 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import type { Connection, Prisma, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import { hasDefinedCapability, parseCapabilityEnvelope as defaultParseCapabilityEnvelope } from '../../utils/capabilities'
-import type { CapabilityFlags } from '../../utils/capabilities'
+import type { CapabilityEnvelope, CapabilityFlags } from '../../utils/capabilities'
 import type { Actor } from '../../types'
+import type { ProviderType } from '../../utils/providers'
 import {
   decideModelAccessForActor,
   getModelAccessDefaults as defaultGetModelAccessDefaults,
@@ -15,12 +16,12 @@ import {
 } from '../../utils/model-access-policy'
 
 type RefreshAllFn = () => Promise<unknown>
-type RefreshForConnectionsFn = (connections: Array<{ id: number } & Record<string, any>>) => Promise<unknown>
+type RefreshForConnectionsFn = (connections: Connection[]) => Promise<unknown>
 type RefreshByIdFn = (connectionId: number) => Promise<unknown>
 type ComputeCapabilitiesFn = (rawId: string, tags?: Array<{ name: string }>) => CapabilityFlags
-type DeriveChannelNameFn = (provider: string, baseUrl?: string) => string
-type NormalizeCapabilityFlagsFn = (input: unknown) => CapabilityFlags | undefined
-type SerializeCapabilityEnvelopeFn = (input: { flags: CapabilityFlags; source: string }) => string
+type DeriveChannelNameFn = (provider: ProviderType, baseUrl?: string) => string
+type NormalizeCapabilityFlagsFn = (input?: Record<string, any> | null) => CapabilityFlags | undefined
+type SerializeCapabilityEnvelopeFn = (input?: CapabilityEnvelope | null) => string
 type InvalidateCacheFn = (connectionId: number, rawId: string) => void
 type GetModelAccessDefaultsFn = () => Promise<ModelAccessDefaults>
 type ResolveModelAccessPolicyFn = (params: {
@@ -319,7 +320,7 @@ export class ModelCatalogService {
     const tags = hasTagsPayload ? this.normalizeTags(payload.tagsInput as any[]) : undefined
     const hasCapabilitiesPayload = payload.capabilitiesInput != null
     const capabilityFlags = hasCapabilitiesPayload
-      ? this.normalizeCapabilityFlags(payload.capabilitiesInput)
+      ? this.normalizeCapabilityFlags(payload.capabilitiesInput as Record<string, any> | null | undefined)
       : undefined
     const capabilitiesJson = hasCapabilitiesPayload
       ? this.serializeCapabilityEnvelopeFn({ flags: capabilityFlags || {}, source: 'manual' })

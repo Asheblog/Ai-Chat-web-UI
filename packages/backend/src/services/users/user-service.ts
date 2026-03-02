@@ -69,11 +69,16 @@ export interface UserServiceDeps {
   logger?: Pick<typeof console, 'warn' | 'error'>
 }
 
+type UserServiceAuthUtils = Pick<
+  typeof defaultAuthUtils,
+  'validateUsername' | 'validatePassword' | 'hashPassword'
+>
+
 const ensurePositive = (value: number) => (Number.isFinite(value) && value > 0 ? value : 0)
 
 export class UserService {
   private prisma: PrismaClient
-  private authUtils: Required<UserServiceDeps['authUtils']>
+  private authUtils: UserServiceAuthUtils
   private inspectActorQuota: typeof defaultInspectActorQuota
   private now: () => Date
   private logger: Pick<typeof console, 'warn' | 'error'>
@@ -165,7 +170,7 @@ export class UserService {
   async getUserQuota(id: number): Promise<{ user: { id: number; username: string; role: 'ADMIN' | 'USER' }; quota: UsageQuotaSnapshot }> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, username: true, role: true },
+      select: { id: true, username: true, role: true, status: true },
     })
     if (!user) {
       throw new UserServiceError('User not found', 404)
@@ -175,6 +180,7 @@ export class UserService {
       id: user.id,
       username: user.username,
       role: user.role as 'ADMIN' | 'USER',
+      status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
       identifier: `user:${user.id}`,
     })
     return {
@@ -395,6 +401,7 @@ export class UserService {
       id: targetUser.id,
       username: targetUser.username,
       role: targetUser.role as 'ADMIN' | 'USER',
+      status: targetUser.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
       identifier,
     })
 

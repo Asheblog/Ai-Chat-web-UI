@@ -67,7 +67,7 @@ export const createAuthApi = (deps: AuthApiDeps = {}) => {
       });
     } catch (error) {
       if (error instanceof AuthServiceError) {
-        return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode);
+        return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any);
       }
       console.error('Registration error:', error);
       return c.json<ApiResponse>({ success: false, error: 'Registration failed' }, 500);
@@ -113,7 +113,7 @@ export const createAuthApi = (deps: AuthApiDeps = {}) => {
         if (error.details) {
           payload.data = error.details as any
         }
-        return c.json(payload, error.statusCode);
+        return c.json(payload, error.statusCode as any);
       }
       console.error('Login error:', error);
       return c.json<ApiResponse>({ success: false, error: 'Login failed' }, 500);
@@ -186,7 +186,7 @@ export const createAuthApi = (deps: AuthApiDeps = {}) => {
       });
     } catch (error) {
       if (error instanceof AuthServiceError) {
-        return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode);
+        return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any);
       }
       console.error('Password update error:', error);
       return c.json<ApiResponse>({ success: false, error: 'Password update failed' }, 500);

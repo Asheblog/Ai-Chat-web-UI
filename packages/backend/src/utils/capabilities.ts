@@ -51,7 +51,9 @@ export const createCapabilityEnvelope = (flags?: CapabilityFlags | null, source?
   return { flags, source }
 }
 
-export const mergeCapabilityLayers = (layers: Array<{ flags?: CapabilityFlags | null; source?: CapabilitySource }>): CapabilityEnvelope | null => {
+export const mergeCapabilityLayers = (
+  layers: Array<{ flags?: CapabilityFlags | null; source?: CapabilitySource | null }>,
+): CapabilityEnvelope | null => {
   let merged: CapabilityFlags = {}
   let mergedSource: CapabilitySource | null | undefined = null
   let touched = false

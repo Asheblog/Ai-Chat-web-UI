@@ -366,15 +366,15 @@ export const createSkillsApi = () => {
         return c.json<ApiResponse>({ success: false, error: 'Builtin skill cannot be uninstalled' }, 400)
       }
 
-      const removedRequirements = Array.from(
-        new Set(
+      const removedRequirements: string[] = Array.from(
+        new Set<string>(
           (skill.versions || []).flatMap((version: any) =>
             collectPythonRequirementsFromManifest(version.manifestJson),
           ),
         ),
       )
-      const packagePaths = Array.from(
-        new Set(
+      const packagePaths: string[] = Array.from(
+        new Set<string>(
           (skill.versions || [])
             .map((version: any) => (typeof version.packagePath === 'string' ? version.packagePath.trim() : ''))
             .filter(Boolean),
@@ -405,7 +405,7 @@ export const createSkillsApi = () => {
             error: error.message,
             data: error.details ? { code: error.code, details: error.details } : { code: error.code },
           },
-          error.statusCode,
+          error.statusCode as any,
         )
       }
       return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Load uninstall plan failed' }, 500)
@@ -443,15 +443,15 @@ export const createSkillsApi = () => {
         return c.json<ApiResponse>({ success: false, error: 'Builtin skill cannot be uninstalled' }, 400)
       }
 
-      const removedRequirements = Array.from(
-        new Set(
+      const removedRequirements: string[] = Array.from(
+        new Set<string>(
           (skill.versions || []).flatMap((version: any) =>
             collectPythonRequirementsFromManifest(version.manifestJson),
           ),
         ),
       )
-      const packagePaths = Array.from(
-        new Set(
+      const packagePaths: string[] = Array.from(
+        new Set<string>(
           (skill.versions || [])
             .map((version: any) => (typeof version.packagePath === 'string' ? version.packagePath.trim() : ''))
             .filter(Boolean),
@@ -622,7 +622,7 @@ export const createSkillsApi = () => {
                       ? { code: error.code, details: error.details }
                       : { code: error.code },
                   },
-                  error.statusCode,
+                  error.statusCode as any,
                 )
               }
               throw error

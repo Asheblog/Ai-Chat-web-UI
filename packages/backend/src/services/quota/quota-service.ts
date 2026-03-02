@@ -51,7 +51,7 @@ const startOfUtcDay = (date: Date): Date => {
 }
 
 const toSnapshot = (
-  record: { scope: UsageQuotaScope; identifier: string; usedCount: number; lastResetAt: Date | null; customDailyLimit: number | null },
+  record: { scope: string; identifier: string; usedCount: number; lastResetAt: Date | null; customDailyLimit: number | null },
   effectiveLimit: number,
   now: Date,
   customLimit: number | null,
@@ -60,7 +60,7 @@ const toSnapshot = (
   const unlimited = effectiveLimit < 0
   const remaining = unlimited ? null : Math.max(0, effectiveLimit - record.usedCount)
   return {
-    scope: record.scope,
+    scope: record.scope === 'USER' ? 'USER' : 'ANON',
     identifier: record.identifier,
     dailyLimit: effectiveLimit,
     usedCount: record.usedCount,

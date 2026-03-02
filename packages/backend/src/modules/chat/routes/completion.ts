@@ -168,7 +168,7 @@ export const registerChatCompletionRoutes = (
       let completionResult;
       try {
         completionResult = await nonStreamService.execute({
-          session,
+          session: session as any,
           payload,
           content,
           images,
@@ -185,10 +185,10 @@ export const registerChatCompletionRoutes = (
             direction: 'inbound',
             sessionId,
             actor: actor.identifier,
-            status: error.statusCode,
+            status: error.statusCode as any,
             error: error.message,
           })
-          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode);
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any);
         }
         throw error;
       }

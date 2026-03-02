@@ -20,9 +20,14 @@ import { providerRequester, type ProviderRequester } from './provider-requester'
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 
 type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
+type ChatSessionWithResolvedConnection = Omit<ChatSessionWithConnection, 'connectionId' | 'modelRawId' | 'connection'> & {
+  connectionId: number
+  modelRawId: string
+  connection: NonNullable<ChatSessionWithConnection['connection']>
+}
 
 interface NonStreamChatRequest {
-  session: ChatSessionWithConnection
+  session: ChatSessionWithResolvedConnection
   payload: SendMessagePayload
   content: string
   images?: Array<{ data: string; mime: string }>

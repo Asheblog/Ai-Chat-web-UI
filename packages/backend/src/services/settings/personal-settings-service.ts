@@ -1,5 +1,4 @@
 import type { PrismaClient } from '@prisma/client'
-import type { Request } from 'undici'
 import { prisma as defaultPrisma } from '../../db'
 import { AuthUtils } from '../../utils/auth'
 import {

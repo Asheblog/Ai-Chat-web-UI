@@ -20,6 +20,11 @@ import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/type
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
+type ChatSessionWithResolvedConnection = Omit<ChatSessionWithConnection, 'connectionId' | 'modelRawId' | 'connection'> & {
+  connectionId: number
+  modelRawId: string
+  connection: NonNullable<ChatSessionWithConnection['connection']>
+}
 
 export interface PreparedChatRequest {
   promptTokens: number
@@ -51,7 +56,7 @@ export interface PreparedChatRequest {
 }
 
 export interface PrepareChatRequestParams {
-  session: ChatSessionWithConnection
+  session: ChatSessionWithResolvedConnection
   payload: SendMessagePayload
   content: string
   images?: Array<{ data: string; mime: string }>
@@ -407,7 +412,7 @@ export class ChatRequestBuilder {
   }
 
   private buildMessagesPayload(
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>,
     content: string,
     images: Array<{ data: string; mime: string }>,
   ) {
@@ -540,7 +545,7 @@ export class ChatRequestBuilder {
   }
 
   private async buildProviderRequest(params: {
-    session: ChatSessionWithConnection
+    session: ChatSessionWithResolvedConnection
     baseRequestBody: any
     messagesPayload: any[]
     systemSettings: Record<string, string>

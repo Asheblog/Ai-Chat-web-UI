@@ -26,7 +26,7 @@ export const registerChatMessageRoutes = (router: Hono) => {
         await chatService.ensureSessionAccess(actor, sessionId)
       } catch (error) {
         if (error instanceof ChatServiceError) {
-          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any)
         }
         throw error
       }
@@ -111,7 +111,7 @@ export const registerChatMessageRoutes = (router: Hono) => {
           await chatService.ensureSessionAccess(actor, sessionId)
         } catch (error) {
           if (error instanceof ChatServiceError) {
-            return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+            return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any)
           }
           throw error
         }
@@ -208,7 +208,7 @@ export const registerChatMessageRoutes = (router: Hono) => {
         await chatService.ensureSessionAccess(actor, sessionId)
       } catch (error) {
         if (error instanceof ChatServiceError) {
-          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any)
         }
         throw error
       }
@@ -251,7 +251,7 @@ export const registerChatMessageRoutes = (router: Hono) => {
         await chatService.ensureSessionAccess(actor, sessionId);
       } catch (error) {
         if (error instanceof ChatServiceError) {
-          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode);
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any);
         }
         throw error;
       }

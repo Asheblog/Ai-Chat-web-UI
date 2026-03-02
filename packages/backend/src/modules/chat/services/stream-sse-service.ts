@@ -10,7 +10,7 @@ export interface StreamLogBase {
 
 export interface StreamEmitterParams {
   controller: ReadableStreamDefaultController<Uint8Array>
-  encoder: TextEncoder
+  encoder: { encode(input?: string): Uint8Array }
   requestSignal: AbortSignal
   traceRecorder: TaskTraceRecorder
   streamLogBase: () => StreamLogBase

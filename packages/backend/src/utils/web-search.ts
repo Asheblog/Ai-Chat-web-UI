@@ -163,7 +163,7 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
     const text = await response.text()
     throw new Error(`Tavily search failed: ${response.status} ${text}`)
   }
-  const data = await response.json()
+  const data = await response.json() as any
   const results = Array.isArray(data?.results) ? data.results : []
   return results.map((item: any) => ({
     title: item?.title || item?.url || 'Untitled',
@@ -194,7 +194,7 @@ const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<We
     const text = await response.text()
     throw new Error(`Brave search failed: ${response.status} ${text}`)
   }
-  const data = await response.json()
+  const data = await response.json() as any
   const results = Array.isArray(data?.web?.results) ? data.web.results : []
   return results.map((item: any) => ({
     title: item?.title || item?.url || 'Untitled',
@@ -241,7 +241,7 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     const text = await response.text()
     throw new Error(`Metaso search failed: ${response.status} ${text}`)
   }
-  const data = await response.json()
+  const data = await response.json() as any
   const scopeCandidates: Record<string, any[] | undefined> = {
     webpage: data?.results || data?.data?.results,
     document: data?.documents || data?.data?.documents,

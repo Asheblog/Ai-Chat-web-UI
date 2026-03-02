@@ -24,10 +24,10 @@ export interface SharesApiDeps {
 
 const handleError = (c: any, error: unknown, fallback: string) => {
   if (error instanceof ShareServiceError) {
-    return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+    return c.json({ success: false, error: error.message }, error.statusCode)
   }
   console.error('[shares] unexpected error', error)
-  return c.json<ApiResponse>({ success: false, error: fallback }, 500)
+  return c.json({ success: false, error: fallback }, 500)
 }
 
 const parsePositiveInt = (value: string | null | undefined): number | undefined => {

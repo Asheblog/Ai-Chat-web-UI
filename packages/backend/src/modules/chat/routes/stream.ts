@@ -85,9 +85,13 @@ import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/type
 
 export const registerChatStreamRoutes = (router: Hono) => {
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
-    let traceRecorder: TaskTraceRecorder | null = null
+    let traceRecorder!: TaskTraceRecorder
     try {
       const actor = c.get('actor') as Actor;
+      traceRecorder = await TaskTraceRecorder.create({
+        enabled: false,
+        actorIdentifier: actor.identifier,
+      })
       const payload = c.req.valid('json') as any;
       const { sessionId } = payload;
       const replyToMessageId =
@@ -115,7 +119,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
               actor: actor.identifier,
             })
           }
-          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode)
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any)
         }
         throw error
       }
@@ -631,9 +635,6 @@ export const registerChatStreamRoutes = (router: Hono) => {
         },
         maxEvents: traceDecision.config.maxEvents,
       });
-      if (!traceRecorder) {
-        throw new Error('Trace recorder not initialized')
-      }
       traceRecorder.log('request:init', {
         sessionId,
         clientMessageId,
@@ -766,7 +767,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
       const traceMetadataExtras: Record<string, unknown> = {};
       let traceStatus: TaskTraceStatus = 'running';
       let traceErrorMessage: string | null = null;
-      let latexTraceRecorder: LatexTraceRecorder | null = null;
+      let latexTraceRecorder: Awaited<ReturnType<typeof streamTraceService.handleLatexTrace>>['latexTraceRecorder'] = null;
       let latexAuditSummary: { matched: number; unmatched: number } | null = null;
       traceRecorder.log('stream:started', {
         mode: 'standard',
@@ -2139,7 +2140,7 @@ export const registerChatStreamRoutes = (router: Hono) => {
               } catch { }
             }
             try {
-              stopHeartbeat();
+              stopHeartbeat?.();
               controller.close();
             } catch { }
             if (idleWatchTimer) {

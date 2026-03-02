@@ -24,9 +24,11 @@ export interface AuthContextServiceDeps {
   now?: () => Date
 }
 
+type AuthContextUtils = Pick<typeof defaultAuthUtils, 'extractTokenFromHeader' | 'verifyToken'>
+
 export class AuthContextService {
   private prisma: PrismaClient
-  private authUtils: Required<AuthContextServiceDeps['authUtils']>
+  private authUtils: AuthContextUtils
   private getQuotaPolicy: typeof defaultGetQuotaPolicy
   private randomBytesFn: typeof randomBytes
   private now: () => Date
@@ -40,7 +42,7 @@ export class AuthContextService {
   }
 
   resolveToken(header?: string | null, cookie?: string | null) {
-    return this.authUtils.extractTokenFromHeader(header) || cookie || null
+    return this.authUtils.extractTokenFromHeader(header ?? undefined) || cookie || null
   }
 
   async resolveActor(params: {

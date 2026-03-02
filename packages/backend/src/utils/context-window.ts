@@ -1,7 +1,5 @@
 import {
   contextWindowService,
-  guessKnownContextWindow as guessKnownContextWindowService,
-  guessKnownCompletionLimit as guessKnownCompletionLimitService,
 } from '../services/context/context-window-service'
 
 type Provider = 'openai' | 'azure_openai' | 'ollama' | 'google_genai' | string | null | undefined
