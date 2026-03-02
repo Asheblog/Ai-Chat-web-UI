@@ -155,7 +155,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
   traceRecorder.log('agent:activated', {
     provider,
     baseUrl,
-    engine: agentConfig.engine,
+    engines: agentConfig.engines,
     model: session.modelRawId,
     tools: {
       web_search: toolFlags.webSearch,

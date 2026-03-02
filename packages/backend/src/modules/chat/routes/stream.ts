@@ -528,10 +528,13 @@ export const registerChatStreamRoutes = (router: Hono) => {
         requestedSkillSet.has(BUILTIN_SKILL_SLUGS.DOCUMENT_SEARCH) || hasSessionDocuments;
       const knowledgeBaseSkillRequested =
         requestedSkillSet.has(BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH) || hasKnowledgeBases;
+      const webSearchEnginesWithKeys = (agentWebSearchConfig.engines || []).filter((engine) =>
+        Boolean(agentWebSearchConfig.apiKeys?.[engine]),
+      );
       const agentWebSearchActive =
         webSearchSkillRequested &&
         agentWebSearchConfig.enabled &&
-        Boolean(agentWebSearchConfig.apiKey);
+        webSearchEnginesWithKeys.length > 0;
       const pythonToolActive =
         pythonSkillRequested && pythonToolConfig.enabled;
       const workspaceToolsActive = pythonToolActive && workspaceToolConfig.enabled;

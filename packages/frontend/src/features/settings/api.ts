@@ -1,5 +1,12 @@
 import { apiHttpClient } from '@/lib/api'
-import type { ApiResponse, PythonRuntimeStatus, SystemSettings } from '@/types'
+import type {
+  ApiResponse,
+  PythonRuntimeStatus,
+  SystemSettings,
+  WebSearchBilingualMode,
+  WebSearchEngine,
+  WebSearchMergeStrategy,
+} from '@/types'
 
 const client = apiHttpClient
 
@@ -23,6 +30,47 @@ export const getSystemSettings = async () => {
       if (Number.isFinite(parsed)) return parsed
     }
     return undefined
+  }
+
+  const parseWebSearchEngineList = (
+    value: unknown,
+    fallback: WebSearchEngine[],
+  ): WebSearchEngine[] => {
+    const normalize = (item: unknown): WebSearchEngine | null => {
+      if (typeof item !== 'string') return null
+      const lowered = item.trim().toLowerCase()
+      if (lowered === 'tavily' || lowered === 'brave' || lowered === 'metaso') {
+        return lowered
+      }
+      return null
+    }
+
+    let source: unknown[] = []
+    if (Array.isArray(value)) {
+      source = value
+    } else if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          if (Array.isArray(parsed)) source = parsed
+        } catch {
+          source = []
+        }
+      } else if (trimmed.length > 0) {
+        source = trimmed.split(/[,\n]/)
+      }
+    }
+
+    const normalized = Array.from(
+      new Set(
+        source
+          .map((item) => normalize(item))
+          .filter((item): item is WebSearchEngine => item !== null),
+      ),
+    )
+    if (normalized.length === 0) return [...fallback]
+    return normalized
   }
 
   const raw: any = settingsRes.data.data || {}
@@ -172,7 +220,18 @@ export const getSystemSettings = async () => {
     raw.model_access_default_user === 'deny' ? 'deny' : 'allow'
   const siteBaseUrl = typeof raw.site_base_url === 'string' ? raw.site_base_url : ''
   const webSearchAgentEnable = Boolean(raw.web_search_agent_enable ?? false)
-  const webSearchDefaultEngine = raw.web_search_default_engine || 'tavily'
+  const webSearchEnabledEngines = parseWebSearchEngineList(
+    raw.web_search_enabled_engines,
+    ['tavily'],
+  )
+  const webSearchEngineOrderRaw = parseWebSearchEngineList(
+    raw.web_search_engine_order,
+    webSearchEnabledEngines,
+  )
+  const webSearchEngineOrder = [
+    ...webSearchEngineOrderRaw.filter((engine) => webSearchEnabledEngines.includes(engine)),
+    ...webSearchEnabledEngines.filter((engine) => !webSearchEngineOrderRaw.includes(engine)),
+  ]
   const webSearchResultLimit = Number(raw.web_search_result_limit ?? 4)
   const webSearchDomainFilter = Array.isArray(raw.web_search_domain_filter)
     ? (raw.web_search_domain_filter as string[])
@@ -189,6 +248,31 @@ export const getSystemSettings = async () => {
       : 'webpage'
   const webSearchIncludeSummary = Boolean(raw.web_search_include_summary ?? false)
   const webSearchIncludeRaw = Boolean(raw.web_search_include_raw ?? false)
+  const webSearchParallelMaxEngines = (() => {
+    const parsed = parseOptionalInt(raw.web_search_parallel_max_engines)
+    return typeof parsed === 'number' ? Math.max(1, Math.min(3, parsed)) : 3
+  })()
+  const webSearchParallelMaxQueriesPerCall = (() => {
+    const parsed = parseOptionalInt(raw.web_search_parallel_max_queries_per_call)
+    return typeof parsed === 'number' ? Math.max(1, Math.min(3, parsed)) : 2
+  })()
+  const webSearchParallelTimeoutMs = (() => {
+    const parsed = parseOptionalInt(raw.web_search_parallel_timeout_ms)
+    return typeof parsed === 'number' ? Math.max(1000, Math.min(120000, parsed)) : 12000
+  })()
+  const webSearchParallelMergeStrategy: WebSearchMergeStrategy =
+    raw.web_search_parallel_merge_strategy === 'hybrid_score_v1'
+      ? 'hybrid_score_v1'
+      : 'hybrid_score_v1'
+  const webSearchAutoBilingual = Boolean(raw.web_search_auto_bilingual ?? true)
+  const webSearchAutoBilingualMode: WebSearchBilingualMode =
+    raw.web_search_auto_bilingual_mode === 'off' || raw.web_search_auto_bilingual_mode === 'always'
+      ? raw.web_search_auto_bilingual_mode
+      : 'conditional'
+  const webSearchAutoReadParallelism = (() => {
+    const parsed = parseOptionalInt(raw.web_search_auto_read_parallelism)
+    return typeof parsed === 'number' ? Math.max(1, Math.min(4, parsed)) : 2
+  })()
   const pythonToolEnable = Boolean(raw.python_tool_enable ?? false)
   const pythonToolTimeoutMs = (() => {
     const v = raw.python_tool_timeout_ms
@@ -336,7 +420,8 @@ export const getSystemSettings = async () => {
       modelAccessDefaultAnonymous,
       modelAccessDefaultUser,
       webSearchAgentEnable,
-      webSearchDefaultEngine,
+      webSearchEnabledEngines,
+      webSearchEngineOrder,
       webSearchResultLimit,
       webSearchDomainFilter,
       webSearchHasApiKey: aggregatedHasKey,
@@ -346,6 +431,13 @@ export const getSystemSettings = async () => {
       webSearchScope,
       webSearchIncludeSummary,
       webSearchIncludeRaw,
+      webSearchParallelMaxEngines,
+      webSearchParallelMaxQueriesPerCall,
+      webSearchParallelTimeoutMs,
+      webSearchParallelMergeStrategy,
+      webSearchAutoBilingual,
+      webSearchAutoBilingualMode,
+      webSearchAutoReadParallelism,
       pythonToolEnable,
       pythonToolTimeoutMs,
       pythonToolMaxOutputChars,
@@ -503,12 +595,26 @@ export const updateSystemSettings = async (
     payload.model_access_default_anonymous = rest.modelAccessDefaultAnonymous
   if (typeof rest.modelAccessDefaultUser === 'string') payload.model_access_default_user = rest.modelAccessDefaultUser
   if (typeof rest.webSearchAgentEnable === 'boolean') payload.web_search_agent_enable = rest.webSearchAgentEnable
-  if (typeof rest.webSearchDefaultEngine === 'string') payload.web_search_default_engine = rest.webSearchDefaultEngine
+  if (Array.isArray(rest.webSearchEnabledEngines)) payload.web_search_enabled_engines = rest.webSearchEnabledEngines
+  if (Array.isArray(rest.webSearchEngineOrder)) payload.web_search_engine_order = rest.webSearchEngineOrder
   if (typeof rest.webSearchResultLimit === 'number') payload.web_search_result_limit = rest.webSearchResultLimit
   if (Array.isArray(rest.webSearchDomainFilter)) payload.web_search_domain_filter = rest.webSearchDomainFilter
   if (typeof rest.webSearchScope === 'string') payload.web_search_scope = rest.webSearchScope
   if (typeof rest.webSearchIncludeSummary === 'boolean') payload.web_search_include_summary = rest.webSearchIncludeSummary
   if (typeof rest.webSearchIncludeRaw === 'boolean') payload.web_search_include_raw = rest.webSearchIncludeRaw
+  if (typeof rest.webSearchParallelMaxEngines === 'number') payload.web_search_parallel_max_engines = rest.webSearchParallelMaxEngines
+  if (typeof rest.webSearchParallelMaxQueriesPerCall === 'number') {
+    payload.web_search_parallel_max_queries_per_call = rest.webSearchParallelMaxQueriesPerCall
+  }
+  if (typeof rest.webSearchParallelTimeoutMs === 'number') payload.web_search_parallel_timeout_ms = rest.webSearchParallelTimeoutMs
+  if (typeof rest.webSearchParallelMergeStrategy === 'string') {
+    payload.web_search_parallel_merge_strategy = rest.webSearchParallelMergeStrategy
+  }
+  if (typeof rest.webSearchAutoBilingual === 'boolean') payload.web_search_auto_bilingual = rest.webSearchAutoBilingual
+  if (typeof rest.webSearchAutoBilingualMode === 'string') payload.web_search_auto_bilingual_mode = rest.webSearchAutoBilingualMode
+  if (typeof rest.webSearchAutoReadParallelism === 'number') {
+    payload.web_search_auto_read_parallelism = rest.webSearchAutoReadParallelism
+  }
   if (typeof rest.pythonToolEnable === 'boolean') payload.python_tool_enable = rest.pythonToolEnable
   if (typeof rest.pythonToolTimeoutMs === 'number') payload.python_tool_timeout_ms = rest.pythonToolTimeoutMs
   if (typeof rest.pythonToolMaxOutputChars === 'number') payload.python_tool_max_output_chars = rest.pythonToolMaxOutputChars

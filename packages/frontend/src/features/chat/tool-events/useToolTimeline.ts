@@ -16,6 +16,9 @@ export interface ToolTimelineSummary {
   errorCount: number
   rejectedCount: number
   abortedCount: number
+  searchEngineCount: number
+  searchQueryCount: number
+  readTaskCount: number
 }
 
 interface UseToolTimelineOptions {
@@ -171,6 +174,9 @@ export const useToolTimeline = ({ sessionId, messageId, bodyEvents }: UseToolTim
     let rejectedCount = 0
     let abortedCount = 0
     const toolCounts = new Map<string, number>()
+    const searchEngines = new Set<string>()
+    const searchQueries = new Set<string>()
+    let readTaskCount = 0
 
     timeline.forEach((event) => {
       const status = resolveEventStatus(event)
@@ -182,6 +188,25 @@ export const useToolTimeline = ({ sessionId, messageId, bodyEvents }: UseToolTim
       else runningCount += 1
       const toolName = event.identifier || event.apiName || event.tool
       toolCounts.set(toolName, (toolCounts.get(toolName) || 0) + 1)
+
+      const taskType =
+        typeof event.details?.taskType === 'string' ? event.details.taskType : null
+      if (taskType === 'search') {
+        if (typeof event.details?.engine === 'string' && event.details.engine.trim()) {
+          searchEngines.add(event.details.engine.trim())
+        }
+        const queryCandidate =
+          typeof event.details?.expandedQuery === 'string'
+            ? event.details.expandedQuery
+            : typeof event.query === 'string'
+              ? event.query
+              : ''
+        if (queryCandidate.trim()) {
+          searchQueries.add(queryCandidate.trim())
+        }
+      } else if (taskType === 'read_url') {
+        readTaskCount += 1
+      }
     })
 
     const parts: string[] = []
@@ -191,6 +216,12 @@ export const useToolTimeline = ({ sessionId, messageId, bodyEvents }: UseToolTim
     if (rejectedCount > 0) parts.push(`拒绝 ${rejectedCount} 次`)
     if (abortedCount > 0) parts.push(`中止 ${abortedCount} 次`)
     if (errorCount > 0) parts.push(`失败 ${errorCount} 次`)
+    if (searchEngines.size > 0 || searchQueries.size > 0) {
+      parts.push(`并行搜索 ${searchEngines.size} 引擎/${searchQueries.size} 查询`)
+    }
+    if (readTaskCount > 0) {
+      parts.push(`自动读取 ${readTaskCount} 次`)
+    }
     const labelParts = Array.from(toolCounts.entries()).map(
       ([tool, count]) => `${describeTool(tool)} ${count} 次`,
     )
@@ -205,6 +236,9 @@ export const useToolTimeline = ({ sessionId, messageId, bodyEvents }: UseToolTim
       errorCount,
       rejectedCount,
       abortedCount,
+      searchEngineCount: searchEngines.size,
+      searchQueryCount: searchQueries.size,
+      readTaskCount,
     }
   }, [timeline])
 

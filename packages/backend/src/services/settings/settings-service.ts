@@ -58,6 +58,8 @@ export interface SettingsServiceDeps {
 }
 
 const BRAND_TEXT_CACHE_TTL_MS = 30_000
+const WEB_SEARCH_ENGINES = ['tavily', 'brave', 'metaso'] as const
+type WebSearchEngine = (typeof WEB_SEARCH_ENGINES)[number]
 
 export class SettingsService {
   private prisma: PrismaClient
@@ -234,6 +236,36 @@ export class SettingsService {
     }
 
     const settingsObj = Object.fromEntries(map.entries())
+    const webSearchEnabledEngines = this.parseWebSearchEngineList(
+      settingsObj.web_search_enabled_engines ?? process.env.WEB_SEARCH_ENABLED_ENGINES,
+      ['tavily'],
+    )
+    const webSearchEngineOrder = this.parseWebSearchEngineList(
+      settingsObj.web_search_engine_order ?? process.env.WEB_SEARCH_ENGINE_ORDER,
+      webSearchEnabledEngines,
+    )
+    const normalizedWebSearchEngineOrder = [
+      ...webSearchEngineOrder.filter((engine) => webSearchEnabledEngines.includes(engine)),
+      ...webSearchEnabledEngines.filter((engine) => !webSearchEngineOrder.includes(engine)),
+    ]
+    const webSearchHasApiKeyTavily = Boolean(
+      settingsObj.web_search_api_key_tavily || process.env.WEB_SEARCH_API_KEY_TAVILY || '',
+    )
+    const webSearchHasApiKeyBrave = Boolean(
+      settingsObj.web_search_api_key_brave || process.env.WEB_SEARCH_API_KEY_BRAVE || '',
+    )
+    const webSearchHasApiKeyMetaso = Boolean(
+      settingsObj.web_search_api_key_metaso || process.env.WEB_SEARCH_API_KEY_METASO || '',
+    )
+    const webSearchHasApiKey =
+      webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso
+    const webSearchParallelMergeStrategy = this.parseWebSearchMergeStrategy(
+      settingsObj.web_search_parallel_merge_strategy ?? process.env.WEB_SEARCH_PARALLEL_MERGE_STRATEGY,
+    )
+    const webSearchAutoBilingualMode = this.parseWebSearchBilingualMode(
+      settingsObj.web_search_auto_bilingual_mode ?? process.env.WEB_SEARCH_AUTO_BILINGUAL_MODE,
+    )
+
     const formatted = {
       brand_text: read('brand_text', process.env.BRAND_TEXT || 'AIChat'),
       registration_enabled: (read('registration_enabled', process.env.REGISTRATION_ENABLED || 'true') || 'true') === 'true',
@@ -290,32 +322,48 @@ export class SettingsService {
       battle_user_daily_quota: battlePolicy.userDailyQuota,
       battle_retention_days: this.parseIntInRange(settingsObj.battle_retention_days, process.env.BATTLE_RETENTION_DAYS, 0, 3650, 15),
       web_search_agent_enable: this.parseBoolean(settingsObj.web_search_agent_enable, process.env.WEB_SEARCH_AGENT_ENABLE || 'false'),
-      web_search_default_engine: settingsObj.web_search_default_engine || process.env.WEB_SEARCH_DEFAULT_ENGINE || 'tavily',
+      web_search_enabled_engines: webSearchEnabledEngines,
+      web_search_engine_order: normalizedWebSearchEngineOrder,
       web_search_result_limit: this.parseIntInRange(settingsObj.web_search_result_limit, process.env.WEB_SEARCH_RESULT_LIMIT, 1, 10, 4),
       web_search_domain_filter: this.parseDomainFilter(settingsObj.web_search_domain_filter),
-      web_search_has_api_key_tavily: Boolean(
-        settingsObj.web_search_api_key_tavily ||
-          process.env.WEB_SEARCH_API_KEY_TAVILY ||
-          '',
-      ),
-      web_search_has_api_key_brave: Boolean(
-        settingsObj.web_search_api_key_brave ||
-          process.env.WEB_SEARCH_API_KEY_BRAVE ||
-          '',
-      ),
-      web_search_has_api_key_metaso: Boolean(
-        settingsObj.web_search_api_key_metaso ||
-          process.env.WEB_SEARCH_API_KEY_METASO ||
-          '',
-      ),
-      web_search_has_api_key: Boolean(
-        (settingsObj.web_search_api_key_tavily || process.env.WEB_SEARCH_API_KEY_TAVILY) ||
-        (settingsObj.web_search_api_key_brave || process.env.WEB_SEARCH_API_KEY_BRAVE) ||
-        (settingsObj.web_search_api_key_metaso || process.env.WEB_SEARCH_API_KEY_METASO),
-      ),
+      web_search_has_api_key_tavily: webSearchHasApiKeyTavily,
+      web_search_has_api_key_brave: webSearchHasApiKeyBrave,
+      web_search_has_api_key_metaso: webSearchHasApiKeyMetaso,
+      web_search_has_api_key: webSearchHasApiKey,
       web_search_scope: settingsObj.web_search_scope || process.env.WEB_SEARCH_SCOPE || 'webpage',
       web_search_include_summary: this.parseBoolean(settingsObj.web_search_include_summary, process.env.WEB_SEARCH_INCLUDE_SUMMARY || 'false'),
       web_search_include_raw: this.parseBoolean(settingsObj.web_search_include_raw, process.env.WEB_SEARCH_INCLUDE_RAW || 'false'),
+      web_search_parallel_max_engines: this.parseIntInRange(
+        settingsObj.web_search_parallel_max_engines,
+        process.env.WEB_SEARCH_PARALLEL_MAX_ENGINES,
+        1,
+        3,
+        3,
+      ),
+      web_search_parallel_max_queries_per_call: this.parseIntInRange(
+        settingsObj.web_search_parallel_max_queries_per_call,
+        process.env.WEB_SEARCH_PARALLEL_MAX_QUERIES_PER_CALL,
+        1,
+        3,
+        2,
+      ),
+      web_search_parallel_timeout_ms: this.parseIntInRange(
+        settingsObj.web_search_parallel_timeout_ms,
+        process.env.WEB_SEARCH_PARALLEL_TIMEOUT_MS,
+        1000,
+        120000,
+        12000,
+      ),
+      web_search_parallel_merge_strategy: webSearchParallelMergeStrategy,
+      web_search_auto_bilingual: this.parseBoolean(settingsObj.web_search_auto_bilingual, process.env.WEB_SEARCH_AUTO_BILINGUAL || 'true'),
+      web_search_auto_bilingual_mode: webSearchAutoBilingualMode,
+      web_search_auto_read_parallelism: this.parseIntInRange(
+        settingsObj.web_search_auto_read_parallelism,
+        process.env.WEB_SEARCH_AUTO_READ_PARALLELISM,
+        1,
+        4,
+        2,
+      ),
       agent_max_tool_iterations: this.parseIntInRange(
         settingsObj.agent_max_tool_iterations,
         process.env.AGENT_MAX_TOOL_ITERATIONS,
@@ -410,16 +458,24 @@ export class SettingsService {
         model_access_default_anonymous: formatted.model_access_default_anonymous,
         model_access_default_user: formatted.model_access_default_user,
         web_search_agent_enable: formatted.web_search_agent_enable,
-        web_search_default_engine: formatted.web_search_default_engine,
+        web_search_enabled_engines: formatted.web_search_enabled_engines,
+        web_search_engine_order: formatted.web_search_engine_order,
         web_search_result_limit: formatted.web_search_result_limit,
         web_search_domain_filter: formatted.web_search_domain_filter,
-      web_search_has_api_key: formatted.web_search_has_api_key,
-      web_search_has_api_key_tavily: formatted.web_search_has_api_key_tavily,
-      web_search_has_api_key_brave: formatted.web_search_has_api_key_brave,
-      web_search_has_api_key_metaso: formatted.web_search_has_api_key_metaso,
+        web_search_has_api_key: formatted.web_search_has_api_key,
+        web_search_has_api_key_tavily: formatted.web_search_has_api_key_tavily,
+        web_search_has_api_key_brave: formatted.web_search_has_api_key_brave,
+        web_search_has_api_key_metaso: formatted.web_search_has_api_key_metaso,
         web_search_scope: formatted.web_search_scope,
         web_search_include_summary: formatted.web_search_include_summary,
         web_search_include_raw: formatted.web_search_include_raw,
+        web_search_parallel_max_engines: formatted.web_search_parallel_max_engines,
+        web_search_parallel_max_queries_per_call: formatted.web_search_parallel_max_queries_per_call,
+        web_search_parallel_timeout_ms: formatted.web_search_parallel_timeout_ms,
+        web_search_parallel_merge_strategy: formatted.web_search_parallel_merge_strategy,
+        web_search_auto_bilingual: formatted.web_search_auto_bilingual,
+        web_search_auto_bilingual_mode: formatted.web_search_auto_bilingual_mode,
+        web_search_auto_read_parallelism: formatted.web_search_auto_read_parallelism,
         python_tool_enable: formatted.python_tool_enable,
         assistant_avatar_url: formatted.assistant_avatar_url,
         chat_system_prompt: formatted.chat_system_prompt,
@@ -477,6 +533,10 @@ export class SettingsService {
     assignIfNumber('chat_image_retention_days', payload.chat_image_retention_days)
     assignIfNumber('assistant_reply_history_limit', payload.assistant_reply_history_limit)
     assignIfNumber('web_search_result_limit', payload.web_search_result_limit)
+    assignIfNumber('web_search_parallel_max_engines', payload.web_search_parallel_max_engines)
+    assignIfNumber('web_search_parallel_max_queries_per_call', payload.web_search_parallel_max_queries_per_call)
+    assignIfNumber('web_search_parallel_timeout_ms', payload.web_search_parallel_timeout_ms)
+    assignIfNumber('web_search_auto_read_parallelism', payload.web_search_auto_read_parallelism)
     assignIfNumber('agent_max_tool_iterations', payload.agent_max_tool_iterations)
     assignIfNumber('python_tool_timeout_ms', payload.python_tool_timeout_ms)
     assignIfNumber('python_tool_max_output_chars', payload.python_tool_max_output_chars)
@@ -513,6 +573,7 @@ export class SettingsService {
       'web_search_agent_enable',
       'web_search_include_summary',
       'web_search_include_raw',
+      'web_search_auto_bilingual',
       'python_tool_enable',
       'task_trace_enabled',
       'task_trace_default_on',
@@ -548,12 +609,13 @@ export class SettingsService {
       { key: 'openai_reasoning_effort', value: payload.openai_reasoning_effort },
       { key: 'site_base_url', value: payload.site_base_url },
       { key: 'chat_system_prompt', value: payload.chat_system_prompt },
-      { key: 'web_search_default_engine', value: payload.web_search_default_engine },
       { key: 'web_search_api_key_tavily', value: payload.web_search_api_key_tavily },
       { key: 'web_search_api_key_brave', value: payload.web_search_api_key_brave },
       { key: 'web_search_api_key_metaso', value: payload.web_search_api_key_metaso },
       { key: 'web_search_domain_filter', value: Array.isArray(payload.web_search_domain_filter) ? JSON.stringify(payload.web_search_domain_filter) : undefined },
       { key: 'web_search_scope', value: payload.web_search_scope },
+      { key: 'web_search_parallel_merge_strategy', value: payload.web_search_parallel_merge_strategy },
+      { key: 'web_search_auto_bilingual_mode', value: payload.web_search_auto_bilingual_mode },
       { key: 'task_trace_env', value: payload.task_trace_env },
       { key: 'title_summary_model_source', value: payload.title_summary_model_source },
       { key: 'title_summary_model_id', value: payload.title_summary_model_id },
@@ -564,6 +626,13 @@ export class SettingsService {
         updates.push(upsert(key, value))
       }
     })
+
+    if (Array.isArray(payload.web_search_enabled_engines)) {
+      updates.push(upsert('web_search_enabled_engines', JSON.stringify(payload.web_search_enabled_engines)))
+    }
+    if (Array.isArray(payload.web_search_engine_order)) {
+      updates.push(upsert('web_search_engine_order', JSON.stringify(payload.web_search_engine_order)))
+    }
 
     // RAG embedding connection ID (需要特殊处理 null 值)
     if (typeof payload.rag_embedding_connection_id === 'number') {
@@ -683,6 +752,68 @@ export class SettingsService {
       } catch {}
     }
     return []
+  }
+
+  private parseWebSearchEngineList(raw: unknown, fallback: WebSearchEngine[]): WebSearchEngine[] {
+    const normalize = (value: unknown): WebSearchEngine | null => {
+      if (typeof value !== 'string') return null
+      const lowered = value.trim().toLowerCase()
+      return WEB_SEARCH_ENGINES.includes(lowered as WebSearchEngine)
+        ? (lowered as WebSearchEngine)
+        : null
+    }
+
+    const collectFromString = (value: string): string[] => {
+      const trimmed = value.trim()
+      if (!trimmed) return []
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map((item) => (typeof item === 'string' ? item.trim() : ''))
+              .filter(Boolean)
+          }
+        } catch {
+          // ignore and fallback to CSV parsing
+        }
+      }
+      return trimmed
+        .split(/[,\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    }
+
+    const source = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'string'
+        ? collectFromString(raw)
+        : []
+
+    const normalized = Array.from(
+      new Set(
+        source
+          .map((item) => normalize(item))
+          .filter((item): item is WebSearchEngine => item !== null),
+      ),
+    )
+    if (normalized.length === 0) {
+      return [...fallback]
+    }
+    return normalized
+  }
+
+  private parseWebSearchMergeStrategy(value: unknown): 'hybrid_score_v1' {
+    return typeof value === 'string' && value.trim().toLowerCase() === 'hybrid_score_v1'
+      ? 'hybrid_score_v1'
+      : 'hybrid_score_v1'
+  }
+
+  private parseWebSearchBilingualMode(value: unknown): 'off' | 'conditional' | 'always' {
+    if (typeof value !== 'string') return 'conditional'
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'off' || normalized === 'always') return normalized
+    return 'conditional'
   }
 
   private parseTaskTraceEnv(value?: string | null) {

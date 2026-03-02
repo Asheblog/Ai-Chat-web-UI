@@ -101,16 +101,24 @@ export interface ToolHandlerFactoryParams {
  */
 export interface WebSearchHandlerConfig {
   enabled: boolean
-  engine: string
-  apiKey?: string
+  engines: string[]
+  engineOrder: string[]
+  apiKeys: Partial<Record<string, string>>
   resultLimit: number
   domains: string[]
   endpoint?: string
   scope?: string
   includeSummary?: boolean
   includeRawContent?: boolean
+  parallelMaxEngines?: number
+  parallelMaxQueriesPerCall?: number
+  parallelTimeoutMs?: number
+  mergeStrategy?: string
+  autoBilingual?: boolean
+  autoBilingualMode?: 'off' | 'conditional' | 'always'
   autoReadAfterSearch?: boolean
   autoReadTopK?: number
+  autoReadParallelism?: number
   autoReadTimeoutMs?: number
   autoReadMaxContentLength?: number
 }

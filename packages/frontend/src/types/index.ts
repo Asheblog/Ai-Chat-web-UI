@@ -303,6 +303,10 @@ export interface SystemSetting {
   value: string;
 }
 
+export type WebSearchEngine = 'tavily' | 'brave' | 'metaso';
+export type WebSearchBilingualMode = 'off' | 'conditional' | 'always';
+export type WebSearchMergeStrategy = 'hybrid_score_v1';
+
 export interface SystemSettings {
   allowRegistration: boolean;
   brandText?: string;
@@ -349,7 +353,8 @@ export interface SystemSettings {
   modelAccessDefaultAnonymous?: 'allow' | 'deny';
   modelAccessDefaultUser?: 'allow' | 'deny';
   webSearchAgentEnable?: boolean;
-  webSearchDefaultEngine?: string;
+  webSearchEnabledEngines?: WebSearchEngine[];
+  webSearchEngineOrder?: WebSearchEngine[];
   webSearchResultLimit?: number;
   webSearchDomainFilter?: string[];
   webSearchHasApiKey?: boolean;
@@ -359,6 +364,13 @@ export interface SystemSettings {
   webSearchScope?: string;
   webSearchIncludeSummary?: boolean;
   webSearchIncludeRaw?: boolean;
+  webSearchParallelMaxEngines?: number;
+  webSearchParallelMaxQueriesPerCall?: number;
+  webSearchParallelTimeoutMs?: number;
+  webSearchParallelMergeStrategy?: WebSearchMergeStrategy;
+  webSearchAutoBilingual?: boolean;
+  webSearchAutoBilingualMode?: WebSearchBilingualMode;
+  webSearchAutoReadParallelism?: number;
   pythonToolEnable?: boolean;
   pythonToolTimeoutMs?: number;
   pythonToolMaxOutputChars?: number;
@@ -524,6 +536,23 @@ export interface ToolEventDetails {
   requestedLimit?: number | null;
   appliedLimit?: number | null;
   warning?: string;
+  groupId?: string;
+  taskType?: 'search' | 'read_url' | string;
+  engine?: string;
+  queryLanguage?: 'zh' | 'en' | 'unknown' | string;
+  originalQuery?: string;
+  expandedQuery?: string;
+  queryIndex?: number;
+  engineCount?: number;
+  queryCount?: number;
+  hitsCount?: number;
+  searchTaskTotal?: number;
+  searchTaskSucceeded?: number;
+  searchTaskFailed?: number;
+  autoReadEnabled?: boolean;
+  autoReadRequested?: number;
+  autoReadSucceeded?: number;
+  autoReadFailed?: number;
   errorCode?: string;
   httpStatus?: number;
   fallbackUsed?: string;

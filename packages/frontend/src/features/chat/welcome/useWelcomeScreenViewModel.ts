@@ -236,7 +236,10 @@ export const useWelcomeScreenViewModel = () => {
     return undefined
   }, [pythonToolCapable, systemSettings?.pythonToolEnable])
 
-  const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
+  const isMetasoEngine = Boolean(
+    systemSettings?.webSearchEnabledEngines?.includes('metaso') &&
+    systemSettings?.webSearchHasApiKeyMetaso,
+  )
   const showWebSearchScope = canUseWebSearch && isMetasoEngine
 
   useEffect(() => {

@@ -96,6 +96,13 @@ interface ToolCallsSectionProps {
   defaultExpanded: boolean
 }
 
+const pickString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
 export function ToolCallsSection({
   meta,
   timeline,
@@ -118,6 +125,32 @@ export function ToolCallsSection({
   const hasActiveCalls = timeline.some(
     (item) => item.status === 'running' || item.status === 'pending',
   )
+  const groupedTimeline = useMemo(() => {
+    const groups: Array<{ key: string; label: string | null; events: ToolEvent[] }> = []
+    const indexByKey = new Map<string, number>()
+    timeline.forEach((event, idx) => {
+      const key =
+        pickString(
+          event.details?.groupId,
+          event.details?.parentCallId,
+          event.callId,
+          event.id,
+        ) || `fallback:${idx}`
+      const existingIndex = indexByKey.get(key)
+      if (typeof existingIndex === 'number') {
+        groups[existingIndex].events.push(event)
+        return
+      }
+      const labelQuery = pickString(event.details?.originalQuery, event.query)
+      groups.push({
+        key,
+        label: labelQuery ? `任务组：${labelQuery}` : null,
+        events: [event],
+      })
+      indexByKey.set(key, groups.length - 1)
+    })
+    return groups
+  }, [timeline])
 
   useEffect(() => {
     if (!persistenceKey) return
@@ -166,8 +199,18 @@ export function ToolCallsSection({
       </button>
       {expanded && (
         <div className="space-y-2 border-t border-border/60 px-2 py-2">
-          {timeline.map((event) => (
-            <ToolCallCard key={`${event.callId ?? event.id}-${event.updatedAt ?? event.createdAt}`} event={event} />
+          {groupedTimeline.map((group) => (
+            <div key={group.key} className="space-y-1.5">
+              {group.events.length > 1 && group.label && (
+                <p className="px-1 text-[11px] text-muted-foreground">{group.label}</p>
+              )}
+              {group.events.map((event) => (
+                <ToolCallCard
+                  key={`${event.callId ?? event.id}-${event.updatedAt ?? event.createdAt}`}
+                  event={event}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}

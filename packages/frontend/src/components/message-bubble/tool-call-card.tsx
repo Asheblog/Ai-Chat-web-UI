@@ -85,6 +85,14 @@ const resolveDiagnosticText = (event: ToolEvent) => {
   return parts.join(' · ')
 }
 
+const toLanguageLabel = (value: string | null) => {
+  if (!value) return null
+  if (value === 'zh') return '中文'
+  if (value === 'en') return 'English'
+  if (value === 'unknown') return '未知语言'
+  return value
+}
+
 const formatClock = (timestamp: number) => {
   if (!Number.isFinite(timestamp) || timestamp <= 0) return ''
   return new Date(timestamp).toLocaleTimeString('zh-CN', {
@@ -117,6 +125,16 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
   const diagnosticText = resolveDiagnosticText(event)
   const eventUrl = pickString(event.details?.url)
   const eventTitle = pickString(event.details?.title) || eventUrl
+  const engine = pickString(event.details?.engine)
+  const language = toLanguageLabel(pickString(event.details?.queryLanguage))
+  const taskType = pickString(event.details?.taskType)
+  const expandedQuery = pickString(event.details?.expandedQuery)
+  const contextTags = [
+    engine ? `引擎: ${engine}` : null,
+    language ? `语言: ${language}` : null,
+    taskType ? `任务: ${taskType}` : null,
+    expandedQuery ? `查询: ${expandedQuery}` : null,
+  ].filter((item): item is string => Boolean(item))
 
   return (
     <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
@@ -131,6 +149,11 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
         <span className="shrink-0 text-[11px] text-muted-foreground">{formatClock(event.updatedAt ?? event.createdAt)}</span>
       </div>
       <p className="mt-1 break-words text-xs text-muted-foreground">{primaryText}</p>
+      {contextTags.length > 0 && (
+        <p className="mt-1 break-words rounded bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
+          {contextTags.join(' · ')}
+        </p>
+      )}
       {diagnosticText && (
         <p className="mt-1 break-words rounded bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
           诊断: {diagnosticText}

@@ -71,7 +71,10 @@ export const useComposerFeatureFlags = ({
     return undefined
   }, [pythonToolCapable, systemSettings?.pythonToolEnable])
 
-  const isMetasoEngine = (systemSettings?.webSearchDefaultEngine || '').toLowerCase() === 'metaso'
+  const isMetasoEngine = Boolean(
+    systemSettings?.webSearchEnabledEngines?.includes('metaso') &&
+    systemSettings?.webSearchHasApiKeyMetaso,
+  )
   const canUseTrace = Boolean(isAdmin && systemSettings?.taskTraceEnabled)
 
   useEffect(() => {

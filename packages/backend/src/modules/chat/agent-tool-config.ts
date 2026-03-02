@@ -13,18 +13,30 @@ import {
 /**
  * Web 搜索配置
  */
+export type AgentWebSearchEngine = 'tavily' | 'brave' | 'metaso'
+export type AgentWebSearchMergeStrategy = 'hybrid_score_v1'
+export type AgentWebSearchBilingualMode = 'off' | 'conditional' | 'always'
+
 export interface AgentWebSearchConfig {
   enabled: boolean;
-  engine: string;
-  apiKey?: string;
+  engines: AgentWebSearchEngine[];
+  engineOrder: AgentWebSearchEngine[];
+  apiKeys: Partial<Record<AgentWebSearchEngine, string>>;
   resultLimit: number;
   domains: string[];
   endpoint?: string;
   scope?: string;
   includeSummary?: boolean;
   includeRawContent?: boolean;
+  parallelMaxEngines: number;
+  parallelMaxQueriesPerCall: number;
+  parallelTimeoutMs: number;
+  mergeStrategy: AgentWebSearchMergeStrategy;
+  autoBilingual: boolean;
+  autoBilingualMode: AgentWebSearchBilingualMode;
   autoReadAfterSearch?: boolean;
   autoReadTopK?: number;
+  autoReadParallelism?: number;
   autoReadTimeoutMs?: number;
   autoReadMaxContentLength?: number;
 }
@@ -58,6 +70,20 @@ export interface AgentWorkspaceToolConfig {
 }
 
 const WEB_SEARCH_SCOPES = ['webpage', 'document', 'paper', 'image', 'video', 'podcast'] as const;
+const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso'];
+
+const parseEngineList = (
+  raw: string | undefined | null,
+  fallback: AgentWebSearchEngine[]
+): AgentWebSearchEngine[] => {
+  const parsed = parseDomainListSetting(raw)
+    .map((item) => item.trim().toLowerCase())
+    .filter((item): item is AgentWebSearchEngine =>
+      WEB_SEARCH_ENGINES.includes(item as AgentWebSearchEngine)
+    );
+  if (parsed.length === 0) return [...fallback];
+  return Array.from(new Set(parsed));
+};
 
 /**
  * 构建 Web 搜索配置
@@ -71,17 +97,28 @@ export const buildAgentWebSearchConfig = (
     false
   );
 
-  const engine = (
-    sysMap.web_search_default_engine ||
-    env.WEB_SEARCH_DEFAULT_ENGINE ||
-    'tavily'
-  ).toLowerCase();
+  const engines = parseEngineList(
+    sysMap.web_search_enabled_engines ?? env.WEB_SEARCH_ENABLED_ENGINES,
+    ['tavily']
+  );
 
-  const engineUpper = engine.toUpperCase();
-  const apiKey =
-    sysMap[`web_search_api_key_${engine}`] ||
-    env[`WEB_SEARCH_API_KEY_${engineUpper}`] ||
-    '';
+  const parsedOrder = parseEngineList(
+    sysMap.web_search_engine_order ?? env.WEB_SEARCH_ENGINE_ORDER,
+    engines
+  );
+  const engineOrder = [
+    ...parsedOrder.filter((engine) => engines.includes(engine)),
+    ...engines.filter((engine) => !parsedOrder.includes(engine)),
+  ];
+
+  const apiKeys: Partial<Record<AgentWebSearchEngine, string>> = {};
+  for (const engine of WEB_SEARCH_ENGINES) {
+    const envName = `WEB_SEARCH_API_KEY_${engine.toUpperCase()}` as keyof NodeJS.ProcessEnv;
+    const value = (sysMap[`web_search_api_key_${engine}`] || env[envName] || '').trim();
+    if (value) {
+      apiKeys[engine] = value;
+    }
+  }
 
   const resultLimit = clampNumber(
     parseNumberSetting(
@@ -113,6 +150,60 @@ export const buildAgentWebSearchConfig = (
     false
   );
 
+  const parallelMaxEngines = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_parallel_max_engines ?? env.WEB_SEARCH_PARALLEL_MAX_ENGINES,
+      { fallback: 3 }
+    ),
+    1,
+    3
+  );
+
+  const parallelMaxQueriesPerCall = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_parallel_max_queries_per_call ?? env.WEB_SEARCH_PARALLEL_MAX_QUERIES_PER_CALL,
+      { fallback: 2 }
+    ),
+    1,
+    3
+  );
+
+  const parallelTimeoutMs = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_parallel_timeout_ms ?? env.WEB_SEARCH_PARALLEL_TIMEOUT_MS,
+      { fallback: 12000 }
+    ),
+    1000,
+    120000
+  );
+
+  const rawMergeStrategy = (
+    sysMap.web_search_parallel_merge_strategy ??
+    env.WEB_SEARCH_PARALLEL_MERGE_STRATEGY ??
+    'hybrid_score_v1'
+  )
+    .trim()
+    .toLowerCase();
+  const mergeStrategy: AgentWebSearchMergeStrategy =
+    rawMergeStrategy === 'hybrid_score_v1' ? 'hybrid_score_v1' : 'hybrid_score_v1';
+
+  const autoBilingual = parseBooleanSetting(
+    sysMap.web_search_auto_bilingual ?? env.WEB_SEARCH_AUTO_BILINGUAL,
+    true
+  );
+
+  const rawBilingualMode = (
+    sysMap.web_search_auto_bilingual_mode ??
+    env.WEB_SEARCH_AUTO_BILINGUAL_MODE ??
+    'conditional'
+  )
+    .trim()
+    .toLowerCase();
+  const autoBilingualMode: AgentWebSearchBilingualMode =
+    rawBilingualMode === 'always' || rawBilingualMode === 'off'
+      ? rawBilingualMode
+      : 'conditional';
+
   const autoReadAfterSearch = parseBooleanSetting(
     sysMap.web_search_auto_read ?? env.WEB_SEARCH_AUTO_READ,
     true
@@ -125,6 +216,15 @@ export const buildAgentWebSearchConfig = (
     ),
     0,
     3
+  );
+
+  const autoReadParallelism = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_auto_read_parallelism ?? env.WEB_SEARCH_AUTO_READ_PARALLELISM,
+      { fallback: 2 }
+    ),
+    1,
+    4
   );
 
   const autoReadTimeoutMs = clampNumber(
@@ -147,16 +247,24 @@ export const buildAgentWebSearchConfig = (
 
   return {
     enabled,
-    engine,
-    apiKey,
+    engines,
+    engineOrder,
+    apiKeys,
     resultLimit,
     domains,
     endpoint,
     scope,
     includeSummary,
     includeRawContent,
+    parallelMaxEngines,
+    parallelMaxQueriesPerCall,
+    parallelTimeoutMs,
+    mergeStrategy,
+    autoBilingual,
+    autoBilingualMode,
     autoReadAfterSearch,
     autoReadTopK,
+    autoReadParallelism,
     autoReadTimeoutMs,
     autoReadMaxContentLength,
   };

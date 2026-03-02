@@ -153,10 +153,13 @@ export class BattleExecutor {
     const pythonRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
     const urlReaderRequested =
       requestedSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchRequested
+    const webSearchEnginesWithKeys = (webSearchConfig.engines || []).filter((engine) =>
+      Boolean(webSearchConfig.apiKeys?.[engine]),
+    )
     const webSearchActive =
       webSearchRequested &&
       webSearchConfig.enabled &&
-      Boolean(webSearchConfig.apiKey)
+      webSearchEnginesWithKeys.length > 0
     const pythonActive =
       false
     if (pythonRequested) {

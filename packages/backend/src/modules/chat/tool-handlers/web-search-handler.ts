@@ -3,7 +3,11 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { runWebSearch, formatHitsForModel } from '../../../utils/web-search'
+import {
+  runWebSearchParallel,
+  formatHitsForModel,
+  type WebSearchParallelQuery,
+} from '../../../utils/web-search'
 import { truncateText } from '../../../utils/parsers'
 import { readUrlContent, type UrlReadErrorCode } from '../../../utils/url-reader'
 import type {
@@ -34,7 +38,43 @@ interface AutoReadEvidenceItem {
 const DEFAULT_AUTO_READ_TOP_K = 2
 const DEFAULT_AUTO_READ_TIMEOUT_MS = 18000
 const DEFAULT_AUTO_READ_MAX_CONTENT_LENGTH = 24000
+const DEFAULT_AUTO_READ_PARALLELISM = 2
 const DEFAULT_MODEL_EVIDENCE_CHARS = 2200
+const DEFAULT_PARALLEL_MAX_ENGINES = 3
+const DEFAULT_PARALLEL_MAX_QUERIES = 2
+const DEFAULT_PARALLEL_TIMEOUT_MS = 12000
+
+const CHINESE_CHAR_RE = /[\u3400-\u9FFF]/
+const ENGLISH_WORD_RE = /[A-Za-z]{3,}/
+const BILINGUAL_TOPIC_RE = new RegExp(
+  [
+    'openai',
+    'google',
+    'microsoft',
+    'github',
+    'cloud',
+    'release',
+    'api',
+    'security',
+    'cve',
+    'llm',
+    'ai',
+    'model',
+    'framework',
+    'research',
+    'paper',
+    'benchmark',
+    '跨境',
+    '海外',
+    '国际',
+    '论文',
+    '芯片',
+    '开源',
+    '发布',
+    '漏洞',
+  ].join('|'),
+  'i',
+)
 
 const parseRequestedLimit = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -112,10 +152,90 @@ const classifyWebSearchErrorCode = (message: string): string => {
   return 'SEARCH_ERROR'
 }
 
+const detectQueryLanguage = (query: string): 'zh' | 'en' | 'unknown' => {
+  if (CHINESE_CHAR_RE.test(query)) return 'zh'
+  if (ENGLISH_WORD_RE.test(query)) return 'en'
+  return 'unknown'
+}
+
+const shouldExpandBilingual = (
+  query: string,
+  language: 'zh' | 'en' | 'unknown',
+  mode: 'off' | 'conditional' | 'always',
+  enabled: boolean,
+): boolean => {
+  if (!enabled || mode === 'off') return false
+  if (mode === 'always') return true
+  if (language === 'unknown') return true
+  return BILINGUAL_TOPIC_RE.test(query)
+}
+
+const buildBilingualQueries = (
+  query: string,
+  config: WebSearchHandlerConfig,
+): WebSearchParallelQuery[] => {
+  const queryLanguage = detectQueryLanguage(query)
+  const bilingualMode = config.autoBilingualMode || 'conditional'
+  const maxQueries = clampPositiveInt(
+    config.parallelMaxQueriesPerCall,
+    DEFAULT_PARALLEL_MAX_QUERIES,
+    1,
+    3,
+  )
+  const useBilingual = shouldExpandBilingual(
+    query,
+    queryLanguage,
+    bilingualMode,
+    config.autoBilingual !== false,
+  )
+
+  const queries: WebSearchParallelQuery[] = [{ query, queryLanguage }]
+  if (useBilingual && maxQueries > 1) {
+    let altQuery = ''
+    if (queryLanguage === 'zh') {
+      altQuery = `${query} English sources`
+    } else if (queryLanguage === 'en') {
+      altQuery = `${query} 中文 资料`
+    } else {
+      altQuery = `${query} bilingual sources 中文`
+    }
+    queries.push({
+      query: altQuery,
+      queryLanguage: queryLanguage === 'zh' ? 'en' : 'zh',
+    })
+  }
+
+  const deduped = new Map<string, WebSearchParallelQuery>()
+  for (const item of queries) {
+    const key = item.query.trim().toLowerCase()
+    if (!key || deduped.has(key)) continue
+    deduped.set(key, item)
+  }
+  return Array.from(deduped.values()).slice(0, maxQueries)
+}
+
+const pickActiveEngines = (config: WebSearchHandlerConfig): string[] => {
+  const order = Array.from(
+    new Set(
+      [...(config.engineOrder || []), ...(config.engines || [])]
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  )
+  const withKeys = order.filter((engine) => Boolean(config.apiKeys?.[engine]))
+  const maxEngines = clampPositiveInt(
+    config.parallelMaxEngines,
+    DEFAULT_PARALLEL_MAX_ENGINES,
+    1,
+    3,
+  )
+  return withKeys.slice(0, maxEngines)
+}
+
 const buildSummaryForModel = (
   query: string,
   hits: Array<{ title: string; url: string; snippet?: string; content?: string }>,
-  autoReadEvidence: AutoReadEvidenceItem[]
+  autoReadEvidence: AutoReadEvidenceItem[],
 ): string => {
   const base = formatHitsForModel(query, hits)
   if (autoReadEvidence.length === 0) {
@@ -132,7 +252,7 @@ const buildSummaryForModel = (
       const fallbackSuffix =
         item.fallbackUsed === 'search_snippet' ? '，已回退为搜索摘要' : '，无可用回退正文'
       lines.push(
-        `${item.rank}. 读取失败：${item.url} | ${item.errorCode || 'UNKNOWN'}${typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}${fallbackSuffix}`
+        `${item.rank}. 读取失败：${item.url} | ${item.errorCode || 'UNKNOWN'}${typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}${fallbackSuffix}`,
       )
       if (item.content) {
         lines.push(`   回退摘要：${truncateText(item.content, 600)}`)
@@ -153,6 +273,29 @@ const buildSummaryForModel = (
   return `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
 }
 
+async function mapWithConcurrency<TItem, TResult>(
+  items: TItem[],
+  concurrency: number,
+  mapper: (item: TItem, index: number) => Promise<TResult>,
+): Promise<TResult[]> {
+  if (items.length === 0) return []
+  const limit = Math.max(1, Math.floor(concurrency))
+  const results = new Array<TResult>(items.length)
+  let nextIndex = 0
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const current = nextIndex
+      nextIndex += 1
+      if (current >= items.length) return
+      results[current] = await mapper(items[current], current)
+    }
+  })
+
+  await Promise.all(workers)
+  return results
+}
+
 export class WebSearchToolHandler implements IToolHandler {
   readonly toolName = 'web_search'
   private config: WebSearchHandlerConfig
@@ -167,7 +310,7 @@ export class WebSearchToolHandler implements IToolHandler {
       function: {
         name: 'web_search',
         description:
-          'Use this tool to search the live web for up-to-date information before responding. Return queries in the same language as the conversation.',
+          'Use this tool to search the live web for up-to-date information before responding. Prioritize the conversation language and actively use both Chinese and English queries when cross-language evidence is needed.',
         parameters: {
           type: 'object',
           properties: {
@@ -189,7 +332,7 @@ export class WebSearchToolHandler implements IToolHandler {
   async handle(
     toolCall: ToolCall,
     args: Record<string, unknown>,
-    context: ToolCallContext
+    context: ToolCallContext,
   ): Promise<ToolHandlerResult> {
     const query = ((args.query as string) || '').trim()
     const callId = toolCall.id || randomUUID()
@@ -221,11 +364,16 @@ export class WebSearchToolHandler implements IToolHandler {
 
     const modelRequestedLimit = parseRequestedLimit(args.num_results)
     const appliedLimit = this.config.resultLimit
+    const expandedQueries = buildBilingualQueries(query, this.config)
+    const activeEngines = pickActiveEngines(this.config)
 
-    context.emitReasoning(`联网搜索：${query}（目标 ${appliedLimit} 条）`, {
-      ...reasoningMetaBase,
-      stage: 'start',
-    })
+    context.emitReasoning(
+      `联网搜索：${query}（引擎 ${activeEngines.length}，查询 ${expandedQueries.length}，目标 ${appliedLimit} 条）`,
+      {
+        ...reasoningMetaBase,
+        stage: 'start',
+      },
+    )
     context.sendToolEvent({
       id: callId,
       tool: 'web_search',
@@ -234,23 +382,131 @@ export class WebSearchToolHandler implements IToolHandler {
       details: {
         requestedLimit: modelRequestedLimit,
         appliedLimit,
+        groupId: callId,
+        engineCount: activeEngines.length,
+        queryCount: expandedQueries.length,
       },
     })
 
+    if (activeEngines.length === 0) {
+      const message = 'No search engines with valid API keys are configured'
+      return {
+        toolCallId: callId,
+        toolName: this.toolName,
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: 'web_search',
+          content: JSON.stringify({ query, error: message, errorCode: 'NO_ACTIVE_ENGINE' }),
+        },
+      }
+    }
+
+    const plannedSearchTaskCount = activeEngines.length * expandedQueries.length
+    for (let queryIndex = 0; queryIndex < expandedQueries.length; queryIndex += 1) {
+      const queryItem = expandedQueries[queryIndex]
+      for (let engineIndex = 0; engineIndex < activeEngines.length; engineIndex += 1) {
+        const engine = activeEngines[engineIndex]
+        const taskIndex = queryIndex * activeEngines.length + engineIndex
+        context.sendToolEvent({
+          id: `${callId}:search:${taskIndex + 1}`,
+          tool: 'web_search',
+          stage: 'start',
+          query: queryItem.query,
+          summary: `并行搜索中：${engine} / ${queryItem.queryLanguage || 'unknown'}`,
+          details: {
+            groupId: callId,
+            parentTool: 'web_search',
+            parentCallId: callId,
+            taskType: 'search',
+            engine,
+            queryLanguage: queryItem.queryLanguage || 'unknown',
+            originalQuery: query,
+            expandedQuery: queryItem.query,
+            queryIndex,
+          },
+        })
+      }
+    }
+
     try {
-      const hits = await runWebSearch(query, {
-        engine: this.config.engine,
-        apiKey: this.config.apiKey,
+      const parallelTimeoutMs = clampPositiveInt(
+        this.config.parallelTimeoutMs,
+        DEFAULT_PARALLEL_TIMEOUT_MS,
+        1000,
+        120000,
+      )
+      const searchResult = await runWebSearchParallel({
+        engines: activeEngines,
+        engineOrder: this.config.engineOrder,
+        apiKeys: this.config.apiKeys || {},
+        queries: expandedQueries,
         limit: appliedLimit,
         domains: this.config.domains,
         endpoint: this.config.endpoint,
         scope: this.config.scope,
         includeSummary: this.config.includeSummary,
         includeRawContent: this.config.includeRawContent,
+        timeoutMs: parallelTimeoutMs,
+        parallelMaxEngines: this.config.parallelMaxEngines,
+        mergeStrategy: this.config.mergeStrategy,
       })
 
+      for (const taskResult of searchResult.tasks) {
+        const taskId = `${callId}:search:${taskResult.task.taskIndex + 1}`
+        if (taskResult.status === 'error') {
+          context.sendToolEvent({
+            id: taskId,
+            tool: 'web_search',
+            stage: 'error',
+            query: taskResult.task.query,
+            error: taskResult.error || 'Search task failed',
+            summary: `并行搜索失败：${taskResult.task.engine} / ${taskResult.task.queryLanguage}`,
+            details: {
+              groupId: callId,
+              parentTool: 'web_search',
+              parentCallId: callId,
+              taskType: 'search',
+              engine: taskResult.task.engine,
+              queryLanguage: taskResult.task.queryLanguage,
+              originalQuery: query,
+              expandedQuery: taskResult.task.query,
+              queryIndex: taskResult.task.queryIndex,
+            },
+          })
+          continue
+        }
+        context.sendToolEvent({
+          id: taskId,
+          tool: 'web_search',
+          stage: 'result',
+          query: taskResult.task.query,
+          hits: taskResult.hits,
+          summary: `并行搜索完成：${taskResult.task.engine} 命中 ${taskResult.hits.length} 条`,
+          details: {
+            groupId: callId,
+            parentTool: 'web_search',
+            parentCallId: callId,
+            taskType: 'search',
+            engine: taskResult.task.engine,
+            queryLanguage: taskResult.task.queryLanguage,
+            originalQuery: query,
+            expandedQuery: taskResult.task.query,
+            queryIndex: taskResult.task.queryIndex,
+            hitsCount: taskResult.hits.length,
+          },
+        })
+      }
+
+      const hits = searchResult.hits
       const autoReadEnabled = this.config.autoReadAfterSearch !== false
       const autoReadTopK = clampAutoReadTopK(this.config.autoReadTopK)
+      const autoReadParallelism = clampPositiveInt(
+        this.config.autoReadParallelism,
+        DEFAULT_AUTO_READ_PARALLELISM,
+        1,
+        4,
+      )
       const autoReadTimeoutMs = clampPositiveInt(
         this.config.autoReadTimeoutMs,
         DEFAULT_AUTO_READ_TIMEOUT_MS,
@@ -265,160 +521,172 @@ export class WebSearchToolHandler implements IToolHandler {
       )
 
       const autoReadTargets = autoReadEnabled ? dedupeSearchUrls(hits, autoReadTopK) : []
-      const autoReadEvidence: AutoReadEvidenceItem[] = []
-
-      for (const [index, targetUrl] of autoReadTargets.entries()) {
-        const rank = index + 1
-        const readCallId = `${callId}:read:${rank}`
-        context.emitReasoning(`搜索后自动读取网页（${rank}/${autoReadTargets.length}）：${targetUrl}`, {
-          ...reasoningMetaBase,
-          stage: 'start',
-          subTool: 'read_url',
-          subCallId: readCallId,
-          url: targetUrl,
-          rank,
-        })
-        context.sendToolEvent({
-          id: readCallId,
-          tool: 'read_url',
-          stage: 'start',
-          query: targetUrl,
-          summary: '基于搜索结果自动读取网页正文',
-          url: targetUrl,
-          details: {
+      const autoReadEvidence = await mapWithConcurrency(
+        autoReadTargets,
+        autoReadParallelism,
+        async (targetUrl, index): Promise<AutoReadEvidenceItem> => {
+          const rank = index + 1
+          const readCallId = `${callId}:read:${rank}`
+          context.emitReasoning(`搜索后自动读取网页（${rank}/${autoReadTargets.length}）：${targetUrl}`, {
+            ...reasoningMetaBase,
+            stage: 'start',
+            subTool: 'read_url',
+            subCallId: readCallId,
             url: targetUrl,
             rank,
-            autoTriggered: true,
-            parentTool: 'web_search',
-            parentCallId: callId,
-          },
-        })
+          })
+          context.sendToolEvent({
+            id: readCallId,
+            tool: 'read_url',
+            stage: 'start',
+            query: targetUrl,
+            summary: '基于搜索结果自动读取网页正文',
+            url: targetUrl,
+            details: {
+              groupId: callId,
+              url: targetUrl,
+              rank,
+              autoTriggered: true,
+              parentTool: 'web_search',
+              parentCallId: callId,
+              taskType: 'read_url',
+            },
+          })
 
-        const readResult = await readUrlContent(targetUrl, {
-          timeout: autoReadTimeoutMs,
-          maxContentLength: autoReadMaxContentLength,
-        })
-        if (readResult.error) {
-          const fallbackSnippet =
-            hits.find((hit) => hit.url === targetUrl)?.content ||
-            hits.find((hit) => hit.url === targetUrl)?.snippet ||
-            ''
-          const fallbackText = truncateText(fallbackSnippet, DEFAULT_MODEL_EVIDENCE_CHARS)
+          const readResult = await readUrlContent(targetUrl, {
+            timeout: autoReadTimeoutMs,
+            maxContentLength: autoReadMaxContentLength,
+          })
+          if (readResult.error) {
+            const fallbackSnippet =
+              hits.find((hit) => hit.url === targetUrl)?.content ||
+              hits.find((hit) => hit.url === targetUrl)?.snippet ||
+              ''
+            const fallbackText = truncateText(fallbackSnippet, DEFAULT_MODEL_EVIDENCE_CHARS)
+            const evidenceItem: AutoReadEvidenceItem = {
+              url: targetUrl,
+              error: readResult.error,
+              errorCode: readResult.errorCode,
+              httpStatus: readResult.httpStatus,
+              content: fallbackText || undefined,
+              fallbackUsed: fallbackText ? 'search_snippet' : 'none',
+              rank,
+            }
+
+            const details: ToolLogDetails = {
+              groupId: callId,
+              url: targetUrl,
+              rank,
+              autoTriggered: true,
+              parentTool: 'web_search',
+              parentCallId: callId,
+              taskType: 'read_url',
+              errorCode: readResult.errorCode,
+              httpStatus: readResult.httpStatus,
+              fallbackUsed: evidenceItem.fallbackUsed,
+            }
+            if (fallbackText) {
+              details.resultText = fallbackText
+            }
+
+            context.emitReasoning(
+              `网页读取失败：${targetUrl}（${readResult.errorCode || 'UNKNOWN'}${typeof readResult.httpStatus === 'number' ? ` / HTTP ${readResult.httpStatus}` : ''}）`,
+              {
+                ...reasoningMetaBase,
+                stage: 'error',
+                subTool: 'read_url',
+                subCallId: readCallId,
+                url: targetUrl,
+                rank,
+                errorCode: readResult.errorCode,
+                httpStatus: readResult.httpStatus,
+                fallbackUsed: evidenceItem.fallbackUsed,
+              },
+            )
+            context.sendToolEvent({
+              id: readCallId,
+              tool: 'read_url',
+              stage: 'error',
+              query: targetUrl,
+              summary:
+                evidenceItem.fallbackUsed === 'search_snippet'
+                  ? '网页读取失败，已回退到搜索摘要'
+                  : '网页读取失败且无可用摘要回退',
+              url: targetUrl,
+              error: readResult.error,
+              details,
+            })
+            return evidenceItem
+          }
+
           const evidenceItem: AutoReadEvidenceItem = {
             url: targetUrl,
-            error: readResult.error,
-            errorCode: readResult.errorCode,
-            httpStatus: readResult.httpStatus,
-            content: fallbackText || undefined,
-            fallbackUsed: fallbackText ? 'search_snippet' : 'none',
+            title: readResult.title || undefined,
+            excerpt: readResult.excerpt || undefined,
+            siteName: readResult.siteName || undefined,
+            byline: readResult.byline || undefined,
+            wordCount: readResult.wordCount,
+            content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
+            fallbackUsed: 'none',
             rank,
           }
-          autoReadEvidence.push(evidenceItem)
-
-          const details: ToolLogDetails = {
-            url: targetUrl,
-            rank,
-            autoTriggered: true,
-            parentTool: 'web_search',
-            parentCallId: callId,
-            errorCode: readResult.errorCode,
-            httpStatus: readResult.httpStatus,
-            fallbackUsed: evidenceItem.fallbackUsed,
-          }
-          if (fallbackText) {
-            details.resultText = fallbackText
-          }
-
           context.emitReasoning(
-            `网页读取失败：${targetUrl}（${readResult.errorCode || 'UNKNOWN'}${typeof readResult.httpStatus === 'number' ? ` / HTTP ${readResult.httpStatus}` : ''}）`,
+            `网页读取成功：${readResult.title || targetUrl}（约 ${readResult.wordCount || 0} 词）`,
             {
               ...reasoningMetaBase,
-              stage: 'error',
+              stage: 'result',
               subTool: 'read_url',
               subCallId: readCallId,
               url: targetUrl,
               rank,
-              errorCode: readResult.errorCode,
-              httpStatus: readResult.httpStatus,
-              fallbackUsed: evidenceItem.fallbackUsed,
+              title: readResult.title,
+              wordCount: readResult.wordCount,
             },
           )
           context.sendToolEvent({
             id: readCallId,
             tool: 'read_url',
-            stage: 'error',
-            query: targetUrl,
-            summary:
-              evidenceItem.fallbackUsed === 'search_snippet'
-                ? '网页读取失败，已回退到搜索摘要'
-                : '网页读取失败且无可用摘要回退',
-            url: targetUrl,
-            error: readResult.error,
-            details,
-          })
-          continue
-        }
-
-        const evidenceItem: AutoReadEvidenceItem = {
-          url: targetUrl,
-          title: readResult.title || undefined,
-          excerpt: readResult.excerpt || undefined,
-          siteName: readResult.siteName || undefined,
-          byline: readResult.byline || undefined,
-          wordCount: readResult.wordCount,
-          content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
-          fallbackUsed: 'none',
-          rank,
-        }
-        autoReadEvidence.push(evidenceItem)
-        context.emitReasoning(
-          `网页读取成功：${readResult.title || targetUrl}（约 ${readResult.wordCount || 0} 词）`,
-          {
-            ...reasoningMetaBase,
             stage: 'result',
-            subTool: 'read_url',
-            subCallId: readCallId,
+            query: targetUrl,
+            summary: readResult.title ? `已读取：${readResult.title}` : '网页读取完成',
             url: targetUrl,
-            rank,
-            title: readResult.title,
-            wordCount: readResult.wordCount,
-          },
-        )
-        context.sendToolEvent({
-          id: readCallId,
-          tool: 'read_url',
-          stage: 'result',
-          query: targetUrl,
-          summary: readResult.title ? `已读取：${readResult.title}` : '网页读取完成',
-          url: targetUrl,
-          title: readResult.title,
-          excerpt: readResult.excerpt,
-          wordCount: readResult.wordCount,
-          siteName: readResult.siteName,
-          byline: readResult.byline,
-          details: {
-            url: targetUrl,
-            rank,
-            autoTriggered: true,
-            parentTool: 'web_search',
-            parentCallId: callId,
             title: readResult.title,
             excerpt: readResult.excerpt,
             wordCount: readResult.wordCount,
             siteName: readResult.siteName,
             byline: readResult.byline,
-          },
-        })
-      }
+            details: {
+              groupId: callId,
+              url: targetUrl,
+              rank,
+              autoTriggered: true,
+              parentTool: 'web_search',
+              parentCallId: callId,
+              taskType: 'read_url',
+              title: readResult.title,
+              excerpt: readResult.excerpt,
+              wordCount: readResult.wordCount,
+              siteName: readResult.siteName,
+              byline: readResult.byline,
+            },
+          })
+          return evidenceItem
+        },
+      )
 
       const autoReadSucceeded = autoReadEvidence.filter((item) => !item.error).length
       const autoReadFailed = autoReadEvidence.length - autoReadSucceeded
+      const taskSucceeded = searchResult.tasks.filter((item) => item.status === 'success').length
+      const taskFailed = searchResult.tasks.length - taskSucceeded
       const summary = buildSummaryForModel(query, hits, autoReadEvidence)
 
       context.emitReasoning(`获得 ${hits.length} 条结果，自动读取正文成功 ${autoReadSucceeded} 条。`, {
         ...reasoningMetaBase,
         stage: 'result',
         hits: hits.length,
+        searchTaskTotal: searchResult.tasks.length,
+        searchTaskSucceeded: taskSucceeded,
+        searchTaskFailed: taskFailed,
         autoReadRequested: autoReadTargets.length,
         autoReadSucceeded,
         autoReadFailed,
@@ -436,6 +704,12 @@ export class WebSearchToolHandler implements IToolHandler {
         details: {
           requestedLimit: modelRequestedLimit,
           appliedLimit,
+          groupId: callId,
+          engineCount: activeEngines.length,
+          queryCount: expandedQueries.length,
+          searchTaskTotal: searchResult.tasks.length,
+          searchTaskSucceeded: taskSucceeded,
+          searchTaskFailed: taskFailed,
           autoReadEnabled,
           autoReadRequested: autoReadTargets.length,
           autoReadSucceeded,
@@ -452,9 +726,17 @@ export class WebSearchToolHandler implements IToolHandler {
           name: 'web_search',
           content: JSON.stringify({
             query,
+            expandedQueries,
+            engines: activeEngines,
             hits,
+            taskResults: searchResult.tasks,
             summary,
             autoReadEvidence,
+            taskStats: {
+              total: plannedSearchTaskCount,
+              succeeded: taskSucceeded,
+              failed: taskFailed,
+            },
             autoReadStats: {
               enabled: autoReadEnabled,
               requested: autoReadTargets.length,
@@ -481,6 +763,7 @@ export class WebSearchToolHandler implements IToolHandler {
         details: {
           errorCode,
           fallbackUsed: 'none',
+          groupId: callId,
         },
       })
       return {
