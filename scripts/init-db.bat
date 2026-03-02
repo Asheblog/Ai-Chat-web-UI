@@ -159,7 +159,7 @@ echo                 value: defaultContextTokenLimit.toString^(^) >> temp_init_d
 echo             }, >> temp_init_data.js
 echo             { >> temp_init_data.js
 echo                 key: 'SYSTEM_VERSION', >> temp_init_data.js
-echo                 value: '1.0.0' >> temp_init_data.js
+echo                 value: '2.1.0' >> temp_init_data.js
 echo             }, >> temp_init_data.js
 echo             { >> temp_init_data.js
 echo                 key: 'INITIALIZED', >> temp_init_data.js

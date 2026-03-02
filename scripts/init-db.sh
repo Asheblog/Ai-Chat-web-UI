@@ -146,7 +146,7 @@ async function main() {
             },
             {
                 key: 'SYSTEM_VERSION',
-                value: '1.0.0'
+                value: '2.1.0'
             },
             {
                 key: 'INITIALIZED',

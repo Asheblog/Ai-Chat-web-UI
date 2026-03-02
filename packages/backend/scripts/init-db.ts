@@ -102,7 +102,7 @@ async function initSystemSettings() {
     },
     {
       key: 'app_version',
-      value: '1.9.0',
+      value: '2.1.0',
     },
     {
       key: 'anonymous_retention_days',

@@ -125,7 +125,7 @@ app.get('/', (c) => {
   return c.json({
     success: true,
     message: 'AI Chat Platform Backend API',
-    version: 'v1.9.0',
+    version: 'v2.1.0',
     docs: '/api/settings/health',
   });
 });
