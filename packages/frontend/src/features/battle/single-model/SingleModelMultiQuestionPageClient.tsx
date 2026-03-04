@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Play, Square, Trash2, ListChecks } from 'lucide-react'
+import { ArrowLeft, Plus, Play, Square, Trash2, ListChecks, History, RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,8 +12,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
-import { cancelBattleRun, streamBattle } from '@/features/battle/api'
-import type { BattleResult, BattleRunSummary } from '@/types'
+import { formatDate } from '@/lib/utils'
+import { cancelBattleRun, getBattleRun, listBattleRuns, streamBattle } from '@/features/battle/api'
+import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
 
 type QuestionDraft = {
   localId: string
@@ -50,6 +51,30 @@ const normalizeInt = (value: string, min: number, max: number, fallback: number)
   return Math.min(max, Math.max(min, parsed))
 }
 
+const clampPassSettings = (runsPerQuestion: number, passK: number) => {
+  const nextRuns = Math.min(3, Math.max(1, Math.floor(runsPerQuestion)))
+  const nextPass = Math.min(nextRuns, Math.max(1, Math.floor(passK)))
+  return { runsPerQuestion: nextRuns, passK: nextPass }
+}
+
+const normalizeSingleRunStatus = (status?: string) => {
+  if (status === 'pending') return 'pending' as const
+  if (status === 'running') return 'running' as const
+  if (status === 'completed') return 'completed' as const
+  if (status === 'cancelled') return 'cancelled' as const
+  if (status === 'error') return 'error' as const
+  return 'idle' as const
+}
+
+const toStatusLabel = (status?: string) => {
+  if (status === 'pending') return '排队中'
+  if (status === 'running') return '运行中'
+  if (status === 'completed') return '已完成'
+  if (status === 'cancelled') return '已取消'
+  if (status === 'error') return '失败'
+  return '未开始'
+}
+
 export function SingleModelMultiQuestionPageClient() {
   const { toast } = useToast()
   const { models } = useModelsStore()
@@ -63,16 +88,174 @@ export function SingleModelMultiQuestionPageClient() {
   const [isRunning, setIsRunning] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [runId, setRunId] = useState<number | null>(null)
-  const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'completed' | 'error' | 'cancelled'>('idle')
+  const [runStatus, setRunStatus] = useState<'idle' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled'>('idle')
   const [results, setResults] = useState<BattleResult[]>([])
   const [liveAttempts, setLiveAttempts] = useState<Map<string, LiveAttempt>>(new Map())
   const [summary, setSummary] = useState<BattleRunSummary['summary'] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<BattleRunSummary[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyLoadingRunId, setHistoryLoadingRunId] = useState<number | null>(null)
+  const [sourceRunId, setSourceRunId] = useState<number | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
 
   const selectedModel = useMemo(() => models.find((item) => modelSelectKey(item) === modelKey) || null, [models, modelKey])
   const selectedJudge = useMemo(() => models.find((item) => modelSelectKey(item) === judgeKey) || null, [models, judgeKey])
+
+  const buildAttemptKey = useCallback((questionIndex: number, attemptIndex: number) => `${questionIndex}#${attemptIndex}`, [])
+
+  const clearExecutionState = useCallback((nextStatus: 'idle' | 'cancelled' = 'idle') => {
+    setIsRunning(false)
+    setIsStreaming(false)
+    setRunId(null)
+    setRunStatus(nextStatus)
+    setResults([])
+    setLiveAttempts(new Map())
+    setSummary(null)
+    setError(null)
+  }, [])
+
+  const resolveModelSelectKey = useCallback((params?: { modelId?: string | null; connectionId?: number | null; rawId?: string | null }) => {
+    if (!params) return ''
+    const rawId = (params.rawId || '').trim()
+    if (params.connectionId != null && rawId) {
+      const matched = models.find((item) => item.connectionId === params.connectionId && item.rawId === rawId)
+      return matched ? modelSelectKey(matched) : ''
+    }
+    const modelId = (params.modelId || '').trim()
+    if (!modelId) return ''
+    const matched = models.find((item) => item.id === modelId)
+    return matched ? modelSelectKey(matched) : ''
+  }, [models])
+
+  const buildQuestionsFromRunDetail = useCallback((detail: BattleRunDetail): QuestionDraft[] => {
+    const fromConfig = Array.isArray(detail.config?.questions) ? detail.config?.questions : []
+    if (fromConfig && fromConfig.length > 0) {
+      return fromConfig.map((item, index) => {
+        const { runsPerQuestion, passK } = clampPassSettings(item.runsPerQuestion ?? 1, item.passK ?? 1)
+        return {
+          localId: `q-history-${detail.id}-${index + 1}-${Math.random().toString(36).slice(2, 8)}`,
+          questionId: item.questionId || '',
+          title: item.title || '',
+          prompt: item.prompt?.text || '',
+          expectedAnswer: item.expectedAnswer?.text || '',
+          runsPerQuestion,
+          passK,
+        }
+      })
+    }
+    const { runsPerQuestion, passK } = clampPassSettings(detail.runsPerModel ?? 1, detail.passK ?? 1)
+    return [{
+      localId: `q-history-${detail.id}-fallback-${Math.random().toString(36).slice(2, 8)}`,
+      questionId: '',
+      title: '',
+      prompt: detail.prompt?.text || '',
+      expectedAnswer: detail.expectedAnswer?.text || '',
+      runsPerQuestion,
+      passK,
+    }]
+  }, [])
+
+  const applyHistoryRun = useCallback((detail: BattleRunDetail, asNewTask: boolean) => {
+    const modelConfig = detail.config?.model || detail.results?.[0] || null
+    const nextModelKey = resolveModelSelectKey({
+      modelId: modelConfig?.modelId || null,
+      connectionId: modelConfig?.connectionId ?? null,
+      rawId: modelConfig?.rawId ?? null,
+    })
+    const nextJudgeKey = resolveModelSelectKey({
+      modelId: detail.judgeModelId || null,
+      connectionId: detail.judgeConnectionId ?? null,
+      rawId: detail.judgeRawId ?? null,
+    })
+
+    setModelKey(nextModelKey)
+    setJudgeKey(nextJudgeKey)
+    setJudgeThreshold(String(detail.judgeThreshold ?? 0.8))
+    setQuestions(buildQuestionsFromRunDetail(detail))
+    setSourceRunId(detail.id)
+
+    const missingTargets: string[] = []
+    if (!nextModelKey) missingTargets.push('参赛模型')
+    if (!nextJudgeKey) missingTargets.push('裁判模型')
+    if (missingTargets.length > 0) {
+      toast({
+        title: `历史记录中的${missingTargets.join('、')}已不在当前模型目录，请重新选择`,
+        variant: 'destructive',
+      })
+    }
+
+    if (asNewTask) {
+      clearExecutionState('idle')
+      return
+    }
+
+    const orderedResults = [...(detail.results || [])].sort((a, b) => {
+      if (a.questionIndex !== b.questionIndex) return a.questionIndex - b.questionIndex
+      return a.attemptIndex - b.attemptIndex
+    })
+    const nextLiveAttempts = new Map<string, LiveAttempt>()
+    for (const item of detail.live?.attempts || []) {
+      const questionIndex = Number(item.questionIndex ?? 1)
+      const attemptIndex = Number(item.attemptIndex)
+      if (!Number.isFinite(questionIndex) || !Number.isFinite(attemptIndex)) continue
+      nextLiveAttempts.set(buildAttemptKey(questionIndex, attemptIndex), {
+        status: item.status,
+        output: item.output || '',
+        reasoning: item.reasoning || '',
+        error: item.error ?? null,
+      })
+    }
+
+    setRunId(detail.id)
+    setRunStatus(normalizeSingleRunStatus(detail.status))
+    setResults(orderedResults)
+    setLiveAttempts(nextLiveAttempts)
+    setSummary(detail.summary || null)
+    setError(null)
+    setIsRunning(false)
+    setIsStreaming(false)
+  }, [buildAttemptKey, buildQuestionsFromRunDetail, clearExecutionState, resolveModelSelectKey, toast])
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const res = await listBattleRuns({ page: 1, limit: 30 })
+      if (res?.success && res.data) {
+        setHistory(res.data.runs.filter((item) => item.mode === 'single_model_multi_question'))
+      }
+    } catch (err: any) {
+      toast({ title: err?.message || '加载历史记录失败', variant: 'destructive' })
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [toast])
+
+  const handleLoadHistory = useCallback(async (targetRunId: number, asNewTask: boolean) => {
+    setHistoryLoadingRunId(targetRunId)
+    try {
+      const res = await getBattleRun(targetRunId)
+      if (!res?.success || !res.data) {
+        toast({ title: res?.error || '加载记录失败', variant: 'destructive' })
+        return
+      }
+      const detail = res.data as BattleRunDetail
+      if (detail.mode !== 'single_model_multi_question') {
+        toast({ title: '该记录不属于单模型多问题模式', variant: 'destructive' })
+        return
+      }
+      applyHistoryRun(detail, asNewTask)
+    } catch (err: any) {
+      toast({ title: err?.message || '加载记录失败', variant: 'destructive' })
+    } finally {
+      setHistoryLoadingRunId(null)
+    }
+  }, [applyHistoryRun, toast])
+
+  useEffect(() => {
+    void refreshHistory()
+  }, [refreshHistory])
 
   const updateQuestion = (localId: string, updater: (current: QuestionDraft) => QuestionDraft) => {
     setQuestions((prev) => prev.map((item) => (item.localId === localId ? updater(item) : item)))
@@ -98,8 +281,6 @@ export function SingleModelMultiQuestionPageClient() {
     }
     return null
   }
-
-  const buildAttemptKey = (questionIndex: number, attemptIndex: number) => `${questionIndex}#${attemptIndex}`
 
   const handleStart = async () => {
     const validationError = validate()
@@ -226,6 +407,7 @@ export function SingleModelMultiQuestionPageClient() {
           const nextSummary = event.payload?.summary as BattleRunSummary['summary'] | undefined
           if (nextSummary) setSummary(nextSummary)
           setRunStatus('completed')
+          void refreshHistory()
         }
 
         if (event.type === 'run_cancelled') {
@@ -233,6 +415,7 @@ export function SingleModelMultiQuestionPageClient() {
           if (nextSummary) setSummary(nextSummary)
           setRunStatus('cancelled')
           setIsRunning(false)
+          void refreshHistory()
         }
 
         if (event.type === 'error') {
@@ -258,6 +441,7 @@ export function SingleModelMultiQuestionPageClient() {
     } finally {
       setIsStreaming(false)
       if (abortRef.current === controller) abortRef.current = null
+      void refreshHistory()
     }
   }
 
@@ -276,7 +460,12 @@ export function SingleModelMultiQuestionPageClient() {
     setIsRunning(false)
     setIsStreaming(false)
     setRunStatus('cancelled')
+    void refreshHistory()
   }
+
+  const handleNewTask = useCallback(() => {
+    clearExecutionState('idle')
+  }, [clearExecutionState])
 
   const questionViews = useMemo(() => {
     return questions.map((question, idx) => {
@@ -329,10 +518,75 @@ export function SingleModelMultiQuestionPageClient() {
             <h1 className="text-2xl font-semibold tracking-tight">单模型多问题大乱斗</h1>
             <p className="text-sm text-muted-foreground">给一个模型批量出题，观察按题通过率稳定性</p>
           </div>
-          <Badge variant={runStatus === 'running' ? 'default' : runStatus === 'error' ? 'destructive' : 'secondary'}>
-            {runStatus === 'idle' ? '未开始' : runStatus === 'running' ? '运行中' : runStatus === 'completed' ? '已完成' : runStatus === 'cancelled' ? '已取消' : '失败'}
+          <Badge variant={runStatus === 'running' || runStatus === 'pending' ? 'default' : runStatus === 'error' ? 'destructive' : 'secondary'}>
+            {runStatus === 'idle'
+              ? '未开始'
+              : runStatus === 'pending'
+                ? '排队中'
+                : runStatus === 'running'
+                  ? '运行中'
+                  : runStatus === 'completed'
+                    ? '已完成'
+                    : runStatus === 'cancelled'
+                      ? '已取消'
+                      : '失败'}
           </Badge>
         </div>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2"><History className="h-4 w-4" />历史记录</CardTitle>
+              <CardDescription>进入记录查看结果，或直接复用模型配置与题目创建新任务</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void refreshHistory()} disabled={historyLoading || isRunning}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${historyLoading ? 'animate-spin' : ''}`} />
+              刷新
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {history.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">暂无单模型多问题历史记录</div>
+            ) : (
+              history.map((item) => (
+                <div key={`history-single-${item.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 p-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">{item.title || `任务 #${item.id}`}</div>
+                    <div className="text-xs text-muted-foreground">
+                      #{item.id} · {formatDate(item.createdAt)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={item.status === 'completed' ? 'default' : item.status === 'error' ? 'destructive' : 'secondary'}>
+                      {toStatusLabel(item.status)}
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleLoadHistory(item.id, false)}
+                      disabled={isRunning || historyLoadingRunId === item.id}
+                    >
+                      查看记录
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => void handleLoadHistory(item.id, true)}
+                      disabled={isRunning || historyLoadingRunId === item.id}
+                    >
+                      复用为新任务
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {sourceRunId ? (
+          <div className="rounded-lg border border-border/70 bg-[hsl(var(--surface))/0.5] px-3 py-2 text-sm text-muted-foreground">
+            已加载历史记录 #{sourceRunId} 的模型配置与题目。点击“新任务”可清空执行结果并直接重跑。
+          </div>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -495,6 +749,9 @@ export function SingleModelMultiQuestionPageClient() {
           </Button>
           <Button variant="outline" onClick={handleCancel} disabled={!isRunning || !isStreaming}>
             <Square className="mr-2 h-4 w-4" />取消
+          </Button>
+          <Button variant="outline" onClick={handleNewTask} disabled={isRunning}>
+            <RefreshCw className="mr-2 h-4 w-4" />新任务
           </Button>
           {error ? <span className="text-sm text-destructive">{error}</span> : null}
         </div>
