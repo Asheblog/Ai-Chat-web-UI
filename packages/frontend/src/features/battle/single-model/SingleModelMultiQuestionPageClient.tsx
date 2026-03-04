@@ -15,6 +15,11 @@ import { useModelsStore, type ModelItem } from '@/store/models-store'
 import { formatDate } from '@/lib/utils'
 import { cancelBattleRun, getBattleRun, listBattleRuns, streamBattle } from '@/features/battle/api'
 import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
+import { DetailDrawer, type BattleAttemptDetail } from '../ui/DetailDrawer'
+import {
+  QuestionTrajectoryGraph,
+  type SingleAttemptNodeStatus,
+} from './QuestionTrajectoryGraph'
 
 type QuestionDraft = {
   localId: string
@@ -97,6 +102,7 @@ export function SingleModelMultiQuestionPageClient() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyLoadingRunId, setHistoryLoadingRunId] = useState<number | null>(null)
   const [sourceRunId, setSourceRunId] = useState<number | null>(null)
+  const [selectedAttempt, setSelectedAttempt] = useState<{ questionIndex: number; attemptIndex: number } | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
 
@@ -114,6 +120,7 @@ export function SingleModelMultiQuestionPageClient() {
     setLiveAttempts(new Map())
     setSummary(null)
     setError(null)
+    setSelectedAttempt(null)
   }, [])
 
   const resolveModelSelectKey = useCallback((params?: { modelId?: string | null; connectionId?: number | null; rawId?: string | null }) => {
@@ -175,6 +182,7 @@ export function SingleModelMultiQuestionPageClient() {
     setJudgeThreshold(String(detail.judgeThreshold ?? 0.8))
     setQuestions(buildQuestionsFromRunDetail(detail))
     setSourceRunId(detail.id)
+    setSelectedAttempt(null)
 
     const missingTargets: string[] = []
     if (!nextModelKey) missingTargets.push('参赛模型')
@@ -310,6 +318,7 @@ export function SingleModelMultiQuestionPageClient() {
     setResults([])
     setLiveAttempts(new Map())
     setError(null)
+    setSelectedAttempt(null)
 
     try {
       const payload = {
@@ -467,6 +476,14 @@ export function SingleModelMultiQuestionPageClient() {
     clearExecutionState('idle')
   }, [clearExecutionState])
 
+  useEffect(() => {
+    if (!selectedAttempt) return
+    const targetQuestion = questions[selectedAttempt.questionIndex - 1]
+    if (!targetQuestion || selectedAttempt.attemptIndex > targetQuestion.runsPerQuestion) {
+      setSelectedAttempt(null)
+    }
+  }, [questions, selectedAttempt])
+
   const questionViews = useMemo(() => {
     return questions.map((question, idx) => {
       const questionIndex = idx + 1
@@ -475,9 +492,17 @@ export function SingleModelMultiQuestionPageClient() {
         const result = results.find((item) => item.questionIndex === questionIndex && item.attemptIndex === attemptIndex)
         const live = liveAttempts.get(buildAttemptKey(questionIndex, attemptIndex))
         const passed = result?.judgePass === true
-        const status = result
+        const status: SingleAttemptNodeStatus = result
           ? (result.error ? 'error' : (result.judgeStatus === 'error' ? 'judge_error' : 'done'))
-          : live?.status || 'pending'
+          : live?.status === 'running'
+            ? 'running'
+            : live?.status === 'judging'
+              ? 'judging'
+              : live?.status === 'error'
+                ? 'error'
+                : live?.status === 'success'
+                  ? 'done'
+                  : 'pending'
         return {
           attemptIndex,
           status,
@@ -498,7 +523,47 @@ export function SingleModelMultiQuestionPageClient() {
         attempts,
       }
     })
-  }, [questions, results, liveAttempts])
+  }, [questions, results, liveAttempts, buildAttemptKey])
+
+  const selectedNodeKey = selectedAttempt ? `${selectedAttempt.questionIndex}#${selectedAttempt.attemptIndex}` : null
+
+  const selectedDetail = useMemo<BattleAttemptDetail | null>(() => {
+    if (!selectedAttempt) return null
+    const question = questions[selectedAttempt.questionIndex - 1]
+    if (!question) return null
+
+    const questionTitle = question.title.trim() || `问题 ${selectedAttempt.questionIndex}`
+    const modelLabel = selectedModel?.name || selectedModel?.rawId || '参赛模型'
+    const detailLabel = `${questionTitle} · ${modelLabel}`
+    const modelKey = `question-${selectedAttempt.questionIndex}`
+
+    const matchedResult = results.find(
+      (item) =>
+        item.questionIndex === selectedAttempt.questionIndex &&
+        item.attemptIndex === selectedAttempt.attemptIndex,
+    )
+    if (matchedResult) {
+      return {
+        ...matchedResult,
+        modelKey,
+        modelLabel: detailLabel,
+      }
+    }
+
+    const live = liveAttempts.get(buildAttemptKey(selectedAttempt.questionIndex, selectedAttempt.attemptIndex))
+    return {
+      isLive: true,
+      modelKey,
+      modelId: selectedModel?.id || 'single-model',
+      modelLabel: detailLabel,
+      attemptIndex: selectedAttempt.attemptIndex,
+      output: live?.output || '',
+      reasoning: live?.reasoning || '',
+      durationMs: null,
+      error: live?.error ?? null,
+      status: live?.status || 'pending',
+    }
+  }, [selectedAttempt, questions, selectedModel, results, liveAttempts, buildAttemptKey])
 
   const computedStability = useMemo(() => {
     if (questionViews.length === 0) return 0
@@ -747,7 +812,11 @@ export function SingleModelMultiQuestionPageClient() {
           <Button onClick={handleStart} disabled={isRunning}>
             <Play className="mr-2 h-4 w-4" />开始评测
           </Button>
-          <Button variant="outline" onClick={handleCancel} disabled={!isRunning || !isStreaming}>
+          <Button
+            variant="outline"
+            onClick={handleCancel}
+            disabled={!runId || (runStatus !== 'running' && runStatus !== 'pending')}
+          >
             <Square className="mr-2 h-4 w-4" />取消
           </Button>
           <Button variant="outline" onClick={handleNewTask} disabled={isRunning}>
@@ -766,38 +835,25 @@ export function SingleModelMultiQuestionPageClient() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {questionViews.map((item) => (
-              <div key={`result-question-${item.questionIndex}`} className="rounded-lg border border-border/70 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="font-medium">{item.title}</div>
-                  <Badge variant={item.passed ? 'default' : 'secondary'}>
-                    {item.passCount}/{item.runsPerQuestion} 通过（K={item.passK}）
-                  </Badge>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {item.attempts.map((attempt) => (
-                    <Badge
-                      key={`attempt-${item.questionIndex}-${attempt.attemptIndex}`}
-                      variant={attempt.passed ? 'default' : (attempt.status === 'error' || attempt.status === 'judge_error') ? 'destructive' : 'secondary'}
-                    >
-                      #{attempt.attemptIndex}
-                      {attempt.status === 'running' || attempt.status === 'judging'
-                        ? ' 运行中'
-                        : attempt.passed
-                          ? ` ✓ ${attempt.score != null ? attempt.score.toFixed(2) : '--'}`
-                          : attempt.status === 'done' || attempt.status === 'judge_error'
-                            ? ` ✗ ${attempt.score != null ? attempt.score.toFixed(2) : '--'}`
-                            : attempt.status === 'error'
-                              ? ' 失败'
-                              : ' 待执行'}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            ))}
+            <p className="text-xs text-muted-foreground">轨迹节点可点击，弹窗可查看实时输出、推理与裁判结果。</p>
+            <QuestionTrajectoryGraph
+              questions={questionViews}
+              selectedNodeKey={selectedNodeKey}
+              onNodeClick={(questionIndex, attemptIndex) => setSelectedAttempt({ questionIndex, attemptIndex })}
+              isRunning={isRunning}
+            />
           </CardContent>
         </Card>
       </div>
+
+      <DetailDrawer
+        open={selectedDetail !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedAttempt(null)
+        }}
+        detail={selectedDetail}
+        isRunning={isRunning}
+      />
     </div>
   )
 }
