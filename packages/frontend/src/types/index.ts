@@ -1014,6 +1014,7 @@ export interface ModelSelectorProps {
 }
 
 export type {
+  BattleMode,
   BattleContent,
   BattleContentInput,
   BattleUploadImage,

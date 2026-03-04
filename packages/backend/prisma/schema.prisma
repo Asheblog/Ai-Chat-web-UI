@@ -778,6 +778,7 @@ model BattleRun {
   id                       Int      @id @default(autoincrement())
   userId                   Int?
   anonymousKey             String?
+  mode                     String   @default("multi_model") // multi_model | single_model_multi_question
   title                    String
   prompt                   String
   expectedAnswer           String
@@ -809,6 +810,9 @@ model BattleRun {
 model BattleResult {
   id                Int      @id @default(autoincrement())
   battleRunId       Int
+  questionIndex     Int      @default(1)
+  questionId        String?
+  questionTitle     String?
   modelId           String
   connectionId      Int?
   rawId             String?
@@ -833,6 +837,7 @@ model BattleResult {
   battleRun BattleRun @relation(fields: [battleRunId], references: [id], onDelete: Cascade)
 
   @@index([battleRunId])
+  @@index([battleRunId, questionIndex, attemptIndex])
   @@index([modelId])
   @@index([connectionId])
   @@index([judgeStatus])

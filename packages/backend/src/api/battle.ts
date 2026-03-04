@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { ApiResponse, Actor } from '../types'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import { battleService, BattleService } from '../services/battle/battle-service'
+import type { BattleRunCreateInput } from '../services/battle/battle-types'
 import { prisma } from '../db'
 
 export interface BattleApiDeps {
@@ -53,6 +54,17 @@ const battleModelSchema = z.object({
   }
 })
 
+const battleQuestionSchema = z.object({
+  questionId: z.string().min(1).max(128).optional(),
+  title: z.string().max(200).optional(),
+  prompt: z.lazy(() => battleContentInputSchema),
+  expectedAnswer: z.lazy(() => battleContentInputSchema),
+  runsPerQuestion: z.number().int().min(1).max(3),
+  passK: z.number().int().min(1).max(3),
+}).refine((value) => value.passK <= value.runsPerQuestion, {
+  message: 'question passK must be <= runsPerQuestion',
+})
+
 const BATTLE_TEXT_MAX = 128 * 1024
 const BATTLE_TEXT_MAX_LABEL = '128K'
 const buildTextLimitMessage = (field: string) =>
@@ -93,28 +105,45 @@ const rejudgeExpectedAnswerInputSchema = z.object({
   message: '答案图片最多 4 张',
 })
 
-const battleStreamSchema = z.object({
+const battleJudgeSchema = z.object({
+  modelId: z.string().min(1),
+  connectionId: z.number().int().positive().optional(),
+  rawId: z.string().min(1).optional(),
+})
+
+const multiModelBattleSchema = z.object({
+  mode: z.literal('multi_model'),
   title: z.string().max(200).optional(),
   prompt: battleContentInputSchema,
   expectedAnswer: battleContentInputSchema,
-  judge: z.object({
-    modelId: z.string().min(1),
-    connectionId: z.number().int().positive().optional(),
-    rawId: z.string().min(1).optional(),
-  }),
+  judge: battleJudgeSchema,
   judgeThreshold: z.number().min(0).max(1).optional(),
   runsPerModel: z.number().int().min(1).max(3),
   passK: z.number().int().min(1).max(3),
   models: z.array(battleModelSchema).min(1).max(8),
   maxConcurrency: z.number().int().min(1).max(6).optional(),
-}).refine((value) => value.passK <= value.runsPerModel, {
-  message: 'passK must be <= runsPerModel',
 })
+
+const singleModelMultiQuestionBattleSchema = z.object({
+  mode: z.literal('single_model_multi_question'),
+  title: z.string().max(200).optional(),
+  judge: battleJudgeSchema,
+  judgeThreshold: z.number().min(0).max(1).optional(),
+  model: battleModelSchema,
+  questions: z.array(battleQuestionSchema).min(1).max(50),
+  maxConcurrency: z.number().int().min(1).max(6).optional(),
+})
+
+const battleStreamSchema = z.discriminatedUnion('mode', [
+  multiModelBattleSchema,
+  singleModelMultiQuestionBattleSchema,
+])
 
 const attemptActionSchema = z.object({
   modelId: z.string().min(1).optional(),
   connectionId: z.number().int().positive().optional(),
   rawId: z.string().min(1).optional(),
+  questionIndex: z.number().int().min(1).optional(),
   attemptIndex: z.number().int().min(1),
 }).refine((value) => Boolean(value.modelId || (value.connectionId && value.rawId)), {
   message: 'modelId or connectionId+rawId is required',
@@ -132,6 +161,7 @@ const judgeRetrySchema = z.object({
 const rejudgeSchema = z.object({
   expectedAnswer: rejudgeExpectedAnswerInputSchema,
   resultIds: z.array(z.number().int().positive()).max(200).optional(),
+  questionIndices: z.array(z.number().int().min(1)).max(200).optional(),
   judge: z.object({
     modelId: z.string().min(1),
     connectionId: z.number().int().positive().optional(),
@@ -177,7 +207,13 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
 
   router.post('/stream', actorMiddleware, zValidator('json', battleStreamSchema), async (c) => {
     const actor = c.get('actor') as Actor
-    const payload = c.req.valid('json')
+    const payload = c.req.valid('json') as BattleRunCreateInput
+    if (payload.mode === 'multi_model' && payload.passK > payload.runsPerModel) {
+      return c.json<ApiResponse>({
+        success: false,
+        error: 'passK must be <= runsPerModel',
+      }, 400)
+    }
     const requestSignal = c.req.raw.signal
 
     const sseHeaders: Record<string, string> = {
@@ -461,6 +497,7 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
               runId,
               expectedAnswer: payload.expectedAnswer,
               resultIds: payload.resultIds || null,
+              questionIndices: payload.questionIndices || null,
               judge: payload.judge,
               judgeThreshold: payload.judgeThreshold,
             },

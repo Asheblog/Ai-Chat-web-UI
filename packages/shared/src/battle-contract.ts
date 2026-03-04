@@ -1,4 +1,5 @@
 export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
+export type BattleMode = 'multi_model' | 'single_model_multi_question'
 
 export interface BattleContent {
   text: string
@@ -28,6 +29,23 @@ export interface BattleSummaryStats {
   judgeThreshold: number
   passModelCount: number
   accuracy: number
+  mode?: BattleMode
+  totalQuestions?: number
+  passedQuestions?: number
+  stabilityScore?: number
+  questionStats?: Array<{
+    questionIndex: number
+    questionId?: string | null
+    questionTitle?: string | null
+    runsPerQuestion: number
+    passK: number
+    passAtK: boolean
+    passCount: number
+    accuracy: number
+    judgedCount?: number
+    totalAttempts?: number
+    judgeErrorCount?: number
+  }>
   modelStats: Array<{
     modelId: string
     connectionId: number | null
@@ -43,6 +61,7 @@ export interface BattleSummaryStats {
 
 export interface BattleRunSummary {
   id: number
+  mode: BattleMode
   title: string
   prompt: BattleContent
   expectedAnswer: BattleContent
@@ -61,6 +80,9 @@ export interface BattleRunSummary {
 export interface BattleResult {
   id: number
   battleRunId: number
+  questionIndex: number
+  questionId?: string | null
+  questionTitle?: string | null
   modelId: string
   modelLabel?: string | null
   connectionId?: number | null
@@ -170,7 +192,8 @@ export interface BattleModelSkills {
 export interface BattleRunDetail extends BattleRunSummary {
   judgeModelLabel?: string | null
   config?: {
-    models: Array<{
+    mode?: BattleMode
+    models?: Array<{
       modelId: string
       connectionId: number | null
       rawId: string | null
@@ -182,9 +205,33 @@ export interface BattleRunDetail extends BattleRunSummary {
       reasoningEffort?: 'low' | 'medium' | 'high' | null
       ollamaThink?: boolean | null
     }>
+    model?: {
+      modelId: string
+      connectionId: number | null
+      rawId: string | null
+      skills?: BattleModelSkills
+      extraPrompt?: string | null
+      customHeaders?: Array<{ name: string; value: string }>
+      customBody?: Record<string, any> | null
+      reasoningEnabled?: boolean | null
+      reasoningEffort?: 'low' | 'medium' | 'high' | null
+      ollamaThink?: boolean | null
+    }
+    questions?: Array<{
+      questionIndex: number
+      questionId?: string | null
+      title?: string | null
+      prompt: BattleContent
+      expectedAnswer: BattleContent
+      runsPerQuestion: number
+      passK: number
+    }>
   }
   live?: {
     attempts: Array<{
+      questionIndex?: number
+      questionId?: string | null
+      questionTitle?: string | null
       modelId: string
       modelLabel?: string | null
       connectionId: number | null
@@ -213,6 +260,7 @@ export interface BattleRunListResponse {
 
 export interface BattleSharePayload {
   title: string
+  mode: BattleMode
   prompt: BattleContent
   expectedAnswer: BattleContent
   judge: {
@@ -235,8 +283,20 @@ export interface BattleSharePayload {
     connectionId: number | null
     rawId: string | null
   }>
+  questions?: Array<{
+    questionIndex: number
+    questionId?: string | null
+    title?: string | null
+    prompt: BattleContent
+    expectedAnswer: BattleContent
+    runsPerQuestion: number
+    passK: number
+  }>
   summary: BattleRunSummary['summary']
   results: Array<{
+    questionIndex: number
+    questionId?: string | null
+    questionTitle?: string | null
     modelId: string
     modelLabel: string | null
     connectionId: number | null
@@ -256,6 +316,9 @@ export interface BattleSharePayload {
   }>
   live?: {
     attempts: Array<{
+      questionIndex?: number
+      questionId?: string | null
+      questionTitle?: string | null
       modelId: string
       modelLabel: string | null
       connectionId: number | null
@@ -306,6 +369,7 @@ export interface RejudgeStreamEvent {
     completed?: number
     total?: number
     resultId?: number
+    questionIndex?: number
     expectedAnswer?: BattleContent
   }
   error?: string

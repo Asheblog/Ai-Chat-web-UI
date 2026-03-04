@@ -2,6 +2,9 @@
 
 ## 未发布
 
+- BREAKING: 模型大乱斗改为统一入口下的双模式选择（`多模型大乱斗` / `单模型多问题大乱斗`）；`/battle/stream` 入参改为强制判别联合，必须显式传递 `mode`；迁移策略为无迁移、直接替换。
+- 新增单模型多问题评测能力：支持单模型批量题目、每题独立 `runsPerQuestion/passK`（最多 3）、按题稳定性统计（`stabilityScore`/`questionStats`）、按题维度的 SSE 与结果持久化字段。
+- 升级指引：执行 `pnpm --filter backend prisma migrate deploy` 应用 `20260304120000_add_battle_mode_and_questions`（新增 `battle_runs.mode` 与 `battle_results.questionIndex/questionId/questionTitle`），随后执行 `pnpm --filter backend prisma generate`。
 - BREAKING: 系统设置导航从 13 个子页收敛为单一「配置中心」入口，模块改为页内二级分组切换（基础运行、模型与工具、知识与文档、治理与审计）；迁移策略为无迁移、直接替换。
 - BREAKING: Python 工具链路切换为受管运行环境（持久化 venv），`python_runner` 与 Python Skill 统一使用受管解释器；移除并停用系统设置旧字段 `python_tool_command`、`python_tool_args`；迁移策略为无迁移、直接替换。
 - BREAKING: 后端 Docker 镜像移除科学计算 Python 系统包预装，`python-runner` 默认依赖改为内置 Skill manifest 的 `python_packages` 并在容器启动时自动 reconcile；迁移策略为无迁移、直接替换。

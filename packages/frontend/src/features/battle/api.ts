@@ -14,7 +14,33 @@ import type {
 
 const client = apiHttpClient
 
-export interface BattleStreamPayload {
+interface BattleModelPayload {
+  modelId: string
+  connectionId?: number
+  rawId?: string
+  skills?: {
+    enabled: string[]
+    overrides?: Record<string, Record<string, unknown>>
+  }
+  extraPrompt?: string
+  custom_body?: Record<string, any>
+  custom_headers?: Array<{ name: string; value: string }>
+  reasoningEnabled?: boolean
+  reasoningEffort?: 'low' | 'medium' | 'high'
+  ollamaThink?: boolean
+}
+
+export interface SingleBattleQuestionPayload {
+  questionId?: string
+  title?: string
+  prompt: BattleContentInput
+  expectedAnswer: BattleContentInput
+  runsPerQuestion: number
+  passK: number
+}
+
+export interface MultiModelBattleStreamPayload {
+  mode: 'multi_model'
   title?: string
   prompt: BattleContentInput
   expectedAnswer: BattleContentInput
@@ -26,23 +52,27 @@ export interface BattleStreamPayload {
   judgeThreshold?: number
   runsPerModel: number
   passK: number
-  models: Array<{
+  models: BattleModelPayload[]
+  maxConcurrency?: number
+}
+
+export interface SingleModelMultiQuestionBattleStreamPayload {
+  mode: 'single_model_multi_question'
+  title?: string
+  judge: {
     modelId: string
     connectionId?: number
     rawId?: string
-    skills?: {
-      enabled: string[]
-      overrides?: Record<string, Record<string, unknown>>
-    }
-    extraPrompt?: string
-    custom_body?: Record<string, any>
-    custom_headers?: Array<{ name: string; value: string }>
-    reasoningEnabled?: boolean
-    reasoningEffort?: 'low' | 'medium' | 'high'
-    ollamaThink?: boolean
-  }>
+  }
+  judgeThreshold?: number
+  model: BattleModelPayload
+  questions: SingleBattleQuestionPayload[]
   maxConcurrency?: number
 }
+
+export type BattleStreamPayload =
+  | MultiModelBattleStreamPayload
+  | SingleModelMultiQuestionBattleStreamPayload
 
 const buildValidationMessage = (payload: any): string | null => {
   if (!payload) return null
@@ -203,6 +233,7 @@ export interface BattleAttemptActionPayload {
   modelId?: string
   connectionId?: number
   rawId?: string
+  questionIndex?: number
   attemptIndex: number
 }
 
@@ -239,6 +270,7 @@ export const getBattleShare = async (token: string) => {
 export interface RejudgePayload {
   expectedAnswer: RejudgeExpectedAnswerInput
   resultIds?: number[]
+  questionIndices?: number[]
   judge?: {
     modelId: string
     connectionId?: number

@@ -1,4 +1,5 @@
 import type {
+  BattleMode,
   BattleContent,
   BattleContentInput,
   BattleToolCallEvent,
@@ -29,17 +30,41 @@ export type BattleJudgeInput = {
   rawId?: string
 }
 
-export interface BattleRunCreateInput {
+export interface BattleQuestionInput {
+  questionId?: string
   title?: string
   prompt: BattleContentInput
   expectedAnswer: BattleContentInput
+  runsPerQuestion: number
+  passK: number
+}
+
+interface BattleRunCreateInputBase {
+  title?: string
+  mode: BattleMode
   judge: BattleJudgeInput
+  maxConcurrency?: number
   judgeThreshold?: number
+}
+
+export interface BattleRunCreateMultiModelInput extends BattleRunCreateInputBase {
+  mode: 'multi_model'
+  prompt: BattleContentInput
+  expectedAnswer: BattleContentInput
   runsPerModel: number
   passK: number
   models: BattleModelInput[]
-  maxConcurrency?: number
 }
+
+export interface BattleRunCreateSingleModelInput extends BattleRunCreateInputBase {
+  mode: 'single_model_multi_question'
+  model: BattleModelInput
+  questions: BattleQuestionInput[]
+}
+
+export type BattleRunCreateInput =
+  | BattleRunCreateMultiModelInput
+  | BattleRunCreateSingleModelInput
 
 export interface BattleRunSummary {
   totalModels: number
@@ -48,6 +73,23 @@ export interface BattleRunSummary {
   judgeThreshold: number
   passModelCount: number
   accuracy: number
+  mode?: BattleMode
+  totalQuestions?: number
+  passedQuestions?: number
+  stabilityScore?: number
+  questionStats?: Array<{
+    questionIndex: number
+    questionId?: string | null
+    questionTitle?: string | null
+    runsPerQuestion: number
+    passK: number
+    passAtK: boolean
+    passCount: number
+    accuracy: number
+    judgedCount?: number
+    totalAttempts?: number
+    judgeErrorCount?: number
+  }>
   modelStats: Array<{
     modelId: string
     connectionId: number | null
@@ -74,13 +116,29 @@ export interface BattleRunConfigModel {
   ollamaThink?: boolean | null
 }
 
+export interface BattleRunQuestionConfig {
+  questionIndex: number
+  questionId?: string | null
+  title?: string | null
+  prompt: BattleContent
+  expectedAnswer: BattleContent
+  runsPerQuestion: number
+  passK: number
+}
+
 export interface BattleRunConfig {
-  models: BattleRunConfigModel[]
+  mode?: BattleMode
+  models?: BattleRunConfigModel[]
+  model?: BattleRunConfigModel
+  questions?: BattleRunQuestionConfig[]
 }
 
 export interface BattleResultRecord {
   id: number
   battleRunId: number
+  questionIndex: number
+  questionId: string | null
+  questionTitle: string | null
   modelId: string
   connectionId: number | null
   rawId: string | null
@@ -100,6 +158,7 @@ export interface BattleResultRecord {
 
 export interface BattleRunRecord {
   id: number
+  mode: string
   title: string
   prompt: string
   expectedAnswer: string
@@ -131,6 +190,7 @@ export interface BattleShareDetail {
 
 export interface BattleSharePayload {
   title: string
+  mode: BattleMode
   prompt: BattleContent
   expectedAnswer: BattleContent
   judge: {
@@ -153,8 +213,20 @@ export interface BattleSharePayload {
     connectionId: number | null
     rawId: string | null
   }>
+  questions?: Array<{
+    questionIndex: number
+    questionId?: string | null
+    title?: string | null
+    prompt: BattleContent
+    expectedAnswer: BattleContent
+    runsPerQuestion: number
+    passK: number
+  }>
   summary: BattleRunSummary
   results: Array<{
+    questionIndex: number
+    questionId?: string | null
+    questionTitle?: string | null
     modelId: string
     modelLabel: string | null
     connectionId: number | null
@@ -174,6 +246,9 @@ export interface BattleSharePayload {
   }>
   live?: {
     attempts: Array<{
+      questionIndex?: number
+      questionId?: string | null
+      questionTitle?: string | null
       modelId: string
       modelLabel: string | null
       connectionId: number | null

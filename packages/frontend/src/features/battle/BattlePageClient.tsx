@@ -73,7 +73,7 @@ export function BattlePageClient() {
     try {
       const res = await listBattleRuns({ page: 1, limit: 20 })
       if (res?.success && res.data) {
-        setHistory(res.data.runs)
+        setHistory(res.data.runs.filter((run) => run.mode === 'multi_model'))
       }
     } catch (error: any) {
       toast({ title: error?.message || '加载乱斗历史失败', variant: 'destructive' })
@@ -236,6 +236,10 @@ export function BattlePageClient() {
   const handleLoadRun = async (runId: number) => {
     const detail = await fetchRunDetail(runId)
     if (!detail) return
+    if (detail.mode !== 'multi_model') {
+      toast({ title: '该记录属于“单模型多问题大乱斗”，请在对应模式查看', variant: 'destructive' })
+      return
+    }
     if (typeof window !== 'undefined') {
       window.sessionStorage.setItem(LAST_VIEWED_RUN_KEY, String(runId))
     }

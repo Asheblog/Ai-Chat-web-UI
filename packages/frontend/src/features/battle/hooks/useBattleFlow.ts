@@ -9,7 +9,7 @@ import {
   cancelBattleRun,
   retryBattleAttempt,
   streamBattle,
-  type BattleStreamPayload,
+  type MultiModelBattleStreamPayload,
 } from '../api'
 import { buildModelKey, modelKeyFor, parseModelKey } from '../utils/model-key'
 
@@ -858,7 +858,7 @@ export function useBattleFlow() {
   // Validate and build payload
   const validateAndBuildPayload = useCallback((): {
     valid: boolean;
-    payload?: BattleStreamPayload;
+    payload?: MultiModelBattleStreamPayload;
     error?: string;
     updatedConfigs?: ModelConfigState[];
   } => {
@@ -900,7 +900,7 @@ export function useBattleFlow() {
       return { valid: false, error: '答案包含图片时，裁判模型必须支持 Vision' }
     }
 
-    const modelPayloads: BattleStreamPayload['models'] = []
+    const modelPayloads: MultiModelBattleStreamPayload['models'] = []
     let hasError = false
     const updatedConfigs: ModelConfigState[] = []
 
@@ -952,7 +952,7 @@ export function useBattleFlow() {
       }
     }
 
-    const promptPayload: BattleStreamPayload['prompt'] = {}
+    const promptPayload: MultiModelBattleStreamPayload['prompt'] = {}
     if (promptText) {
       promptPayload.text = promptText
     }
@@ -961,7 +961,7 @@ export function useBattleFlow() {
       promptPayload.images = promptUploadImages
     }
 
-    const expectedAnswerPayload: BattleStreamPayload['expectedAnswer'] = {}
+    const expectedAnswerPayload: MultiModelBattleStreamPayload['expectedAnswer'] = {}
     if (expectedAnswerText) {
       expectedAnswerPayload.text = expectedAnswerText
     }
@@ -970,7 +970,8 @@ export function useBattleFlow() {
       expectedAnswerPayload.images = expectedAnswerUploadImages
     }
 
-    const payload: BattleStreamPayload = {
+    const payload: MultiModelBattleStreamPayload = {
+      mode: 'multi_model',
       prompt: promptPayload,
       expectedAnswer: expectedAnswerPayload,
       judge: {
@@ -1271,6 +1272,7 @@ export function useBattleFlow() {
     if (!parsed) return null
     return {
       attemptIndex,
+      questionIndex: 1,
       modelId: parsed.type === 'global' ? parsed.modelId : undefined,
       connectionId: parsed.type === 'connection' ? parsed.connectionId : undefined,
       rawId: parsed.type === 'connection' ? parsed.rawId : undefined,
@@ -1370,7 +1372,7 @@ export function useBattleFlow() {
     id: number
     status: BattleRunSummary['status']
     config?: {
-      models: Array<{
+      models?: Array<{
         modelId: string
         connectionId: number | null
         rawId: string | null

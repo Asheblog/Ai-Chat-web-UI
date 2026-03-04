@@ -11,6 +11,7 @@ import {
   parseCapabilityEnvelope,
 } from '../../utils/capabilities'
 import type {
+  BattleMode,
   BattleContent,
   BattleContentInput,
   BattleRunStatus,
@@ -26,11 +27,14 @@ import { battleImageService as defaultBattleImageService, type BattleImageServic
 import { BattleRetentionCleanupService } from './battle-retention-cleanup-service'
 import { createLogger } from '../../utils/logger'
 import type {
+  BattleQuestionInput,
   BattleModelSkills,
   BattleModelInput,
   BattleRunConfig,
   BattleRunConfigModel,
+  BattleRunQuestionConfig,
   BattleRunCreateInput,
+  BattleRunCreateSingleModelInput,
   BattleRunRecord,
   BattleRunSummary,
   BattleShareDetail,
@@ -49,29 +53,39 @@ type BattleRunControl = {
   attemptControllers: Map<string, Set<AbortController>>
   cancelledAttempts: Set<string>
   attemptEpochs: Map<string, number>
-  liveAttempts: Map<string, Map<number, LiveAttemptState>>
+  liveAttempts: Map<string, Map<string, LiveAttemptState>>
   taskGroups: Map<string, { queue: AttemptTask[]; running: boolean }>
   traceRecorder?: TaskTraceRecorder | null
   scheduler?: {
-    enqueue: (modelKey: string, task: AttemptTask) => boolean
+    enqueue: (taskGroupKey: string, task: AttemptTask) => boolean
     isClosed: () => boolean
   }
   emitEvent?: (event: BattleStreamEvent) => void
   eventListeners: Set<(event: BattleStreamEvent) => void>
   runContext?: {
+    mode: BattleMode
     prompt: string
     expectedAnswer: string
     promptImages: BattleUploadImage[]
     expectedAnswerImages: BattleUploadImage[]
+    promptImagePaths?: string[]
+    expectedAnswerImagePaths?: string[]
     judgeThreshold: number
     judgeModel: { connection: Connection; rawModelId: string }
     systemSettings: Record<string, string>
+    singleModel?: {
+      model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }
+      questions: BattleRunQuestionConfig[]
+    }
   }
   resolvedModels?: Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>
   cancelled: boolean
 }
 
 type LiveAttemptState = {
+  questionIndex: number
+  questionId: string | null
+  questionTitle: string | null
   modelId: string
   connectionId: number | null
   rawId: string | null
@@ -85,8 +99,12 @@ type LiveAttemptState = {
 }
 
 type AttemptTask = {
+  taskGroupKey: string
   modelKey: string
   attemptKey: string
+  questionIndex: number
+  questionId: string | null
+  questionTitle: string | null
   attemptIndex: number
   attemptEpoch: number
   run: () => Promise<void>
@@ -239,6 +257,32 @@ const normalizeSummary = (
     : totalModels > 0
       ? passModelCount / totalModels
       : 0
+  const mode = normalizeBattleMode(data.mode) || undefined
+  const totalQuestions = isFiniteNumber(data.totalQuestions) ? Math.max(0, Math.floor(data.totalQuestions)) : undefined
+  const passedQuestions = isFiniteNumber(data.passedQuestions) ? Math.max(0, Math.floor(data.passedQuestions)) : undefined
+  const stabilityScore = isFiniteNumber(data.stabilityScore) ? clamp(data.stabilityScore, 0, 1) : undefined
+  const rawQuestionStats = Array.isArray(data.questionStats) ? data.questionStats : []
+  const questionStats = rawQuestionStats
+    .map((item): NonNullable<BattleRunSummary['questionStats']>[number] | null => {
+      if (!item || typeof item !== 'object') return null
+      const stats = item as Record<string, any>
+      const questionIndex = isFiniteNumber(stats.questionIndex) ? Math.max(1, Math.floor(stats.questionIndex)) : null
+      if (!questionIndex) return null
+      return {
+        questionIndex,
+        questionId: typeof stats.questionId === 'string' && stats.questionId.trim() ? stats.questionId.trim() : null,
+        questionTitle: typeof stats.questionTitle === 'string' && stats.questionTitle.trim() ? stats.questionTitle.trim() : null,
+        runsPerQuestion: isFiniteNumber(stats.runsPerQuestion) ? Math.max(1, Math.floor(stats.runsPerQuestion)) : 1,
+        passK: isFiniteNumber(stats.passK) ? Math.max(1, Math.floor(stats.passK)) : 1,
+        passAtK: Boolean(stats.passAtK),
+        passCount: isFiniteNumber(stats.passCount) ? Math.max(0, Math.floor(stats.passCount)) : 0,
+        accuracy: isFiniteNumber(stats.accuracy) ? clamp(stats.accuracy, 0, 1) : 0,
+        judgedCount: isFiniteNumber(stats.judgedCount) ? Math.max(0, Math.floor(stats.judgedCount)) : undefined,
+        totalAttempts: isFiniteNumber(stats.totalAttempts) ? Math.max(0, Math.floor(stats.totalAttempts)) : undefined,
+        judgeErrorCount: isFiniteNumber(stats.judgeErrorCount) ? Math.max(0, Math.floor(stats.judgeErrorCount)) : undefined,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
 
   return {
     totalModels,
@@ -247,6 +291,11 @@ const normalizeSummary = (
     judgeThreshold,
     passModelCount,
     accuracy: clamp(accuracy, 0, 1),
+    ...(mode ? { mode } : {}),
+    ...(typeof totalQuestions === 'number' ? { totalQuestions } : {}),
+    ...(typeof passedQuestions === 'number' ? { passedQuestions } : {}),
+    ...(typeof stabilityScore === 'number' ? { stabilityScore } : {}),
+    ...(questionStats.length > 0 ? { questionStats } : {}),
     modelStats,
   }
 }
@@ -299,6 +348,89 @@ const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
     .filter((item): item is NonNullable<typeof item> => item !== null)
 }
 
+const normalizeConfigModel = (raw: unknown): BattleRunConfigModel | null => {
+  if (!raw || typeof raw !== 'object') return null
+  const model = raw as Record<string, any>
+  const modelId = typeof model.modelId === 'string' ? model.modelId.trim() : ''
+  if (!modelId) return null
+  const skills = normalizeConfigSkills(model.skills ?? model.features)
+  const customHeaders = normalizeCustomHeadersForConfig(
+    Array.isArray(model.customHeaders) ? model.customHeaders : model.custom_headers,
+  )
+  const customBody = normalizeCustomBodyForConfig(
+    (model.customBody ?? model.custom_body) as
+      | Record<string, any>
+      | null
+      | undefined,
+  )
+  const extraPromptRaw = model.extraPrompt
+  const extraPrompt = typeof extraPromptRaw === 'string' ? extraPromptRaw.trim() : ''
+  const reasoningEnabled =
+    typeof model.reasoningEnabled === 'boolean'
+      ? model.reasoningEnabled
+      : null
+  const reasoningEffort = normalizeReasoningEffort(model.reasoningEffort)
+  const ollamaThink =
+    typeof model.ollamaThink === 'boolean'
+      ? model.ollamaThink
+      : null
+  return {
+    modelId,
+    connectionId: isFiniteNumber(model.connectionId) ? model.connectionId : null,
+    rawId: typeof model.rawId === 'string' && model.rawId.trim().length > 0 ? model.rawId.trim() : null,
+    ...(skills ? { skills } : {}),
+    ...(extraPrompt ? { extraPrompt } : {}),
+    ...(customHeaders.length > 0 ? { customHeaders } : {}),
+    ...(customBody ? { customBody } : {}),
+    reasoningEnabled,
+    reasoningEffort,
+    ollamaThink,
+  }
+}
+
+const normalizeQuestionConfig = (raw: unknown): BattleRunQuestionConfig | null => {
+  if (!raw || typeof raw !== 'object') return null
+  const item = raw as Record<string, any>
+  const questionIndex = isFiniteNumber(item.questionIndex) ? Math.max(1, Math.floor(item.questionIndex)) : null
+  const prompt = item.prompt && typeof item.prompt === 'object'
+    ? {
+      text: normalizeBattleText((item.prompt as Record<string, unknown>).text),
+      images: Array.isArray((item.prompt as Record<string, unknown>).images)
+        ? ((item.prompt as Record<string, unknown>).images as unknown[]).map((entry) => String(entry || '').trim()).filter(Boolean)
+        : [],
+    }
+    : { text: '', images: [] }
+  const expectedAnswer = item.expectedAnswer && typeof item.expectedAnswer === 'object'
+    ? {
+      text: normalizeBattleText((item.expectedAnswer as Record<string, unknown>).text),
+      images: Array.isArray((item.expectedAnswer as Record<string, unknown>).images)
+        ? ((item.expectedAnswer as Record<string, unknown>).images as unknown[]).map((entry) => String(entry || '').trim()).filter(Boolean)
+        : [],
+    }
+    : { text: '', images: [] }
+  if (!questionIndex) return null
+  return {
+    questionIndex,
+    questionId: typeof item.questionId === 'string' && item.questionId.trim() ? item.questionId.trim() : null,
+    title: typeof item.title === 'string' && item.title.trim() ? item.title.trim() : null,
+    prompt,
+    expectedAnswer,
+    runsPerQuestion: isFiniteNumber(item.runsPerQuestion) ? Math.max(1, Math.floor(item.runsPerQuestion)) : 1,
+    passK: isFiniteNumber(item.passK) ? Math.max(1, Math.floor(item.passK)) : 1,
+  }
+}
+
+const normalizeConfigQuestions = (raw: unknown): BattleRunQuestionConfig[] => {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => normalizeQuestionConfig(item))
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => a.questionIndex - b.questionIndex)
+}
+
+const parseRunConfigPayload = (raw: string | null | undefined) =>
+  safeParseJson<Record<string, any>>(raw || '{}', {})
+
 type LabelConnection = {
   id: number
   prefixId: string | null
@@ -331,6 +463,11 @@ const normalizeRunStatus = (value: string | null | undefined): BattleRunStatus =
   return 'error'
 }
 
+const normalizeBattleMode = (value: unknown): BattleMode => {
+  if (value === 'single_model_multi_question') return 'single_model_multi_question'
+  return 'multi_model'
+}
+
 const buildModelKey = (modelId: string, connectionId?: number | null, rawId?: string | null) => {
   if (typeof connectionId === 'number' && rawId) {
     return `${connectionId}:${rawId}`
@@ -338,7 +475,8 @@ const buildModelKey = (modelId: string, connectionId?: number | null, rawId?: st
   return `global:${modelId}`
 }
 
-const buildAttemptKey = (modelKey: string, attemptIndex: number) => `${modelKey}#${attemptIndex}`
+const buildAttemptKey = (modelKey: string, questionIndex: number, attemptIndex: number) =>
+  `${modelKey}#q${questionIndex}#${attemptIndex}`
 
 const parseImagePathsJson = (raw: string | null | undefined) => {
   const parsed = safeParseJson<unknown>(raw || '[]', [])
@@ -560,10 +698,13 @@ export class BattleService {
     }
     const results = await this.prisma.battleResult.findMany({
       where: { battleRunId: run.id },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
     const rawConfig = safeParseJson<Record<string, any>>(run.configJson, {})
+    const configMode = normalizeBattleMode(rawConfig.mode ?? run.mode)
     const configModels = normalizeConfigModels(rawConfig)
+    const configModel = normalizeConfigModel(rawConfig.model)
+    const configQuestions = normalizeConfigQuestions(rawConfig.questions)
     const fallbackModels = new Map<string, BattleRunConfigModel>()
     for (const item of results) {
       const key = `${item.modelId}:${item.connectionId ?? 'null'}:${item.rawId ?? 'null'}`
@@ -574,14 +715,26 @@ export class BattleService {
         rawId: item.rawId ?? null,
       })
     }
-    const config: BattleRunConfig = {
-      models: configModels.length > 0 ? configModels : Array.from(fallbackModels.values()),
-    }
+    const config: BattleRunConfig = configMode === 'single_model_multi_question'
+      ? {
+        mode: 'single_model_multi_question',
+        ...(configModel
+          ? { model: configModel }
+          : (Array.from(fallbackModels.values())[0]
+            ? { model: Array.from(fallbackModels.values())[0] }
+            : {})),
+        questions: configQuestions,
+      }
+      : {
+        mode: 'multi_model',
+        models: configModels.length > 0 ? configModels : Array.from(fallbackModels.values()),
+      }
     const connectionIds = Array.from(
       new Set(
         [
           ...results.map((item) => item.connectionId),
           ...configModels.map((item) => item.connectionId),
+          configModel?.connectionId ?? null,
         ].filter((value): value is number => typeof value === 'number'),
       ),
     )
@@ -608,7 +761,16 @@ export class BattleService {
     const shouldRebuildSummary =
       results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
     if (shouldRebuildSummary) {
-      summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+      summary = this.buildSummary(
+        results as BattleResultRecord[],
+        run.runsPerModel,
+        run.passK,
+        run.judgeThreshold,
+        {
+          mode: configMode,
+          questionConfigs: configQuestions,
+        },
+      )
       if (run.status === 'completed' || run.status === 'cancelled') {
         await this.prisma.battleRun.update({
           where: { id: run.id },
@@ -628,6 +790,9 @@ export class BattleService {
       results: results.map((item) => ({
         id: item.id,
         battleRunId: item.battleRunId,
+        questionIndex: item.questionIndex ?? 1,
+        questionId: item.questionId ?? null,
+        questionTitle: item.questionTitle ?? null,
         modelId: item.modelId,
         connectionId: item.connectionId,
         rawId: item.rawId,
@@ -729,9 +894,19 @@ export class BattleService {
 
     const results = await this.prisma.battleResult.findMany({
       where: { battleRunId: run.id },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
-    const summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+    const configPayload = parseRunConfigPayload(run.configJson)
+    const summary = this.buildSummary(
+      results as BattleResultRecord[],
+      run.runsPerModel,
+      run.passK,
+      run.judgeThreshold,
+      {
+        mode: normalizeBattleMode(configPayload.mode ?? run.mode),
+        questionConfigs: normalizeConfigQuestions(configPayload.questions),
+      },
+    )
 
     if (run.status === 'completed' || run.status === 'error' || run.status === 'cancelled') {
       return { status: run.status, summary }
@@ -751,7 +926,14 @@ export class BattleService {
 
   async cancelAttempt(
     actor: Actor,
-    params: { runId: number; modelId?: string | null; connectionId?: number | null; rawId?: string | null; attemptIndex: number },
+    params: {
+      runId: number
+      modelId?: string | null
+      connectionId?: number | null
+      rawId?: string | null
+      questionIndex?: number | null
+      attemptIndex: number
+    },
   ) {
     const run = await this.prisma.battleRun.findFirst({
       where: { id: params.runId, ...this.buildOwnershipWhere(actor) },
@@ -773,7 +955,7 @@ export class BattleService {
       throw new Error('Attempt target not found')
     }
 
-    const live = this.getLiveAttempt(runControl, target.modelKey, params.attemptIndex)
+    const live = this.getLiveAttempt(runControl, target.modelKey, target.questionIndex, params.attemptIndex)
     if (live && (live.status === 'success' || live.status === 'error')) {
       throw new Error('Attempt already completed')
     }
@@ -781,6 +963,7 @@ export class BattleService {
     const existing = await this.prisma.battleResult.findFirst({
       where: {
         battleRunId: run.id,
+        questionIndex: target.questionIndex,
         modelId: target.modelId,
         connectionId: target.connectionId,
         rawId: target.rawId,
@@ -791,12 +974,15 @@ export class BattleService {
       throw new Error('Attempt already completed')
     }
 
-    const attemptKey = buildAttemptKey(target.modelKey, params.attemptIndex)
+    const attemptKey = buildAttemptKey(target.modelKey, target.questionIndex, params.attemptIndex)
     this.cancelAttemptControl(runControl, {
       attemptKey,
       modelId: target.modelId,
       connectionId: target.connectionId,
       rawId: target.rawId,
+      questionIndex: target.questionIndex,
+      questionId: target.questionId,
+      questionTitle: target.questionTitle,
       attemptIndex: params.attemptIndex,
     })
 
@@ -806,7 +992,7 @@ export class BattleService {
     }
 
     if (!existing) {
-      const group = runControl.taskGroups.get(target.modelKey)
+      const group = runControl.taskGroups.get(target.taskGroupKey)
       if (group) {
         group.queue = group.queue.filter((task) => task.attemptKey !== attemptKey)
       }
@@ -816,6 +1002,9 @@ export class BattleService {
       }
       const record = await this.persistResult({
         battleRunId: run.id,
+        questionIndex: target.questionIndex,
+        questionId: target.questionId,
+        questionTitle: target.questionTitle,
         modelId: target.modelId,
         connectionId: target.connectionId,
         rawId: target.rawId,
@@ -846,6 +1035,9 @@ export class BattleService {
         type: 'attempt_complete',
         payload: {
           battleRunId: run.id,
+          questionIndex: target.questionIndex,
+          questionId: target.questionId,
+          questionTitle: target.questionTitle,
           modelId: target.modelId,
           attemptIndex: params.attemptIndex,
           result: this.serializeResult(record),
@@ -858,7 +1050,14 @@ export class BattleService {
 
   async retryAttempt(
     actor: Actor,
-    params: { runId: number; modelId?: string | null; connectionId?: number | null; rawId?: string | null; attemptIndex: number },
+    params: {
+      runId: number
+      modelId?: string | null
+      connectionId?: number | null
+      rawId?: string | null
+      questionIndex?: number | null
+      attemptIndex: number
+    },
   ) {
     const run = await this.prisma.battleRun.findFirst({
       where: { id: params.runId, ...this.buildOwnershipWhere(actor) },
@@ -880,7 +1079,7 @@ export class BattleService {
       throw new Error('Attempt target not found')
     }
 
-    const live = this.getLiveAttempt(runControl, target.modelKey, params.attemptIndex)
+    const live = this.getLiveAttempt(runControl, target.modelKey, target.questionIndex, params.attemptIndex)
     if (live && (live.status === 'running' || live.status === 'judging' || live.status === 'pending')) {
       throw new Error('Attempt is still running')
     }
@@ -888,6 +1087,7 @@ export class BattleService {
     const existing = await this.prisma.battleResult.findFirst({
       where: {
         battleRunId: run.id,
+        questionIndex: target.questionIndex,
         modelId: target.modelId,
         connectionId: target.connectionId,
         rawId: target.rawId,
@@ -898,7 +1098,7 @@ export class BattleService {
       throw new Error('Attempt is not failed')
     }
 
-    const attemptKey = buildAttemptKey(target.modelKey, params.attemptIndex)
+    const attemptKey = buildAttemptKey(target.modelKey, target.questionIndex, params.attemptIndex)
     const nextEpoch = this.bumpAttemptEpoch(runControl, attemptKey)
     runControl.cancelledAttempts.delete(attemptKey)
     const controllers = runControl.attemptControllers.get(attemptKey)
@@ -914,6 +1114,7 @@ export class BattleService {
     await this.prisma.battleResult.deleteMany({
       where: {
         battleRunId: run.id,
+        questionIndex: target.questionIndex,
         modelId: target.modelId,
         connectionId: target.connectionId,
         rawId: target.rawId,
@@ -923,13 +1124,17 @@ export class BattleService {
 
     const remainingResults = await this.prisma.battleResult.findMany({
       where: { battleRunId: run.id },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
     const refreshedSummary = this.buildSummary(
       remainingResults as BattleResultRecord[],
       run.runsPerModel,
       run.passK,
       run.judgeThreshold,
+      {
+        mode: normalizeBattleMode(target.mode ?? run.mode),
+        questionConfigs: target.questionConfigs,
+      },
     )
     await this.prisma.battleRun.update({
       where: { id: run.id },
@@ -942,6 +1147,9 @@ export class BattleService {
     }
 
     this.ensureLiveAttempt(runControl, {
+      questionIndex: target.questionIndex,
+      questionId: target.questionId,
+      questionTitle: target.questionTitle,
       modelId: target.modelId,
       connectionId: target.connectionId,
       rawId: target.rawId,
@@ -963,7 +1171,7 @@ export class BattleService {
       reason: 'manual_retry',
     })
 
-    const group = runControl.taskGroups.get(target.modelKey)
+    const group = runControl.taskGroups.get(target.taskGroupKey)
     if (group) {
       group.queue = group.queue.filter((task) => task.attemptKey !== attemptKey)
     }
@@ -976,13 +1184,14 @@ export class BattleService {
     const task = this.createAttemptTask({
       battleRunId: run.id,
       model: modelEntry,
+      question: target.question,
       attemptIndex: params.attemptIndex,
       runControl,
     })
     if (task.attemptEpoch !== nextEpoch) {
       task.attemptEpoch = nextEpoch
     }
-    if (!scheduler.enqueue(target.modelKey, task)) {
+    if (!scheduler.enqueue(target.taskGroupKey, task)) {
       throw new Error('Failed to enqueue attempt')
     }
 
@@ -1024,8 +1233,16 @@ export class BattleService {
       data: { judgeStatus: 'running', judgeError: null },
     })
 
-    const promptImagePaths = parseImagePathsJson(run.promptImagesJson)
-    const expectedAnswerImagePaths = parseImagePathsJson(run.expectedAnswerImagesJson)
+    const configPayload = parseRunConfigPayload(run.configJson)
+    const mode = normalizeBattleMode(configPayload.mode ?? run.mode)
+    const questionConfigs = normalizeConfigQuestions(configPayload.questions)
+    const questionConfig = mode === 'single_model_multi_question'
+      ? questionConfigs.find((item) => item.questionIndex === (record.questionIndex ?? 1))
+      : null
+    const promptText = questionConfig?.prompt.text ?? run.prompt
+    const expectedAnswerText = questionConfig?.expectedAnswer.text ?? run.expectedAnswer
+    const promptImagePaths = questionConfig?.prompt.images ?? parseImagePathsJson(run.promptImagesJson)
+    const expectedAnswerImagePaths = questionConfig?.expectedAnswer.images ?? parseImagePathsJson(run.expectedAnswerImagesJson)
     await this.ensureVisionCapabilities({
       judge: {
         modelId: run.judgeModelId,
@@ -1041,9 +1258,9 @@ export class BattleService {
     const executionContext = this.buildExecutionContext(undefined, undefined)
     try {
       const judged = await this.executor.judgeAnswer({
-        prompt: run.prompt,
+        prompt: promptText,
         promptImages,
-        expectedAnswer: run.expectedAnswer,
+        expectedAnswer: expectedAnswerText,
         expectedAnswerImages,
         answer: record.output || '',
         threshold: run.judgeThreshold,
@@ -1110,7 +1327,7 @@ export class BattleService {
         battleRunId: run.id,
         ...(scopedIds ? { id: { in: scopedIds } } : {}),
       },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
       take: scopedIds ? undefined : 200,
     })
 
@@ -1132,19 +1349,70 @@ export class BattleService {
       data: { judgeStatus: 'running', judgeError: null },
     })
 
-    const promptImagePaths = parseImagePathsJson(run.promptImagesJson)
-    const expectedAnswerImagePaths = parseImagePathsJson(run.expectedAnswerImagesJson)
+    const configPayload = parseRunConfigPayload(run.configJson)
+    const mode = normalizeBattleMode(configPayload.mode ?? run.mode)
+    const questionConfigs = normalizeConfigQuestions(configPayload.questions)
+    const questionConfigMap = new Map<number, BattleRunQuestionConfig>()
+    for (const question of questionConfigs) {
+      questionConfigMap.set(question.questionIndex, question)
+    }
+
+    const defaultPromptImagePaths = parseImagePathsJson(run.promptImagesJson)
+    const defaultExpectedImagePaths = parseImagePathsJson(run.expectedAnswerImagesJson)
     await this.ensureVisionCapabilities({
       judge: {
         modelId: run.judgeModelId,
         resolved: judgeResolution,
       },
       models: [],
-      promptHasImages: promptImagePaths.length > 0,
-      expectedAnswerHasImages: expectedAnswerImagePaths.length > 0,
+      promptHasImages: defaultPromptImagePaths.length > 0,
+      expectedAnswerHasImages: defaultExpectedImagePaths.length > 0,
     })
-    const promptImages = await this.imageService.loadImages(promptImagePaths)
-    const expectedAnswerImages = await this.imageService.loadImages(expectedAnswerImagePaths)
+    const defaultPromptImages = await this.imageService.loadImages(defaultPromptImagePaths)
+    const defaultExpectedImages = await this.imageService.loadImages(defaultExpectedImagePaths)
+    const singleQuestionCache = new Map<number, {
+      prompt: string
+      expectedAnswer: string
+      promptImages: BattleUploadImage[]
+      expectedAnswerImages: BattleUploadImage[]
+    }>()
+
+    const resolveQuestionJudgeContext = async (item: BattleResultRecord) => {
+      if (mode !== 'single_model_multi_question') {
+        return {
+          prompt: run.prompt,
+          expectedAnswer: run.expectedAnswer,
+          promptImages: defaultPromptImages,
+          expectedAnswerImages: defaultExpectedImages,
+        }
+      }
+      const index = item.questionIndex ?? 1
+      const cached = singleQuestionCache.get(index)
+      if (cached) return cached
+      const question = questionConfigMap.get(index)
+      if (!question) {
+        throw new Error(`Question config not found for questionIndex=${index}`)
+      }
+      await this.ensureVisionCapabilities({
+        judge: {
+          modelId: run.judgeModelId,
+          resolved: judgeResolution,
+        },
+        models: [],
+        promptHasImages: question.prompt.images.length > 0,
+        expectedAnswerHasImages: question.expectedAnswer.images.length > 0,
+      })
+      const promptImages = await this.imageService.loadImages(question.prompt.images)
+      const expectedAnswerImages = await this.imageService.loadImages(question.expectedAnswer.images)
+      const context = {
+        prompt: question.prompt.text,
+        expectedAnswer: question.expectedAnswer.text,
+        promptImages,
+        expectedAnswerImages,
+      }
+      singleQuestionCache.set(index, context)
+      return context
+    }
 
     const executionContext = this.buildExecutionContext(undefined, undefined)
     let updatedCount = 0
@@ -1158,11 +1426,12 @@ export class BattleService {
         continue
       }
       try {
+        const questionContext = await resolveQuestionJudgeContext(item as BattleResultRecord)
         const judged = await this.executor.judgeAnswer({
-          prompt: run.prompt,
-          promptImages,
-          expectedAnswer: run.expectedAnswer,
-          expectedAnswerImages,
+          prompt: questionContext.prompt,
+          promptImages: questionContext.promptImages,
+          expectedAnswer: questionContext.expectedAnswer,
+          expectedAnswerImages: questionContext.expectedAnswerImages,
           answer: item.output || '',
           threshold: run.judgeThreshold,
           judgeModel: judgeResolution,
@@ -1211,6 +1480,7 @@ export class BattleService {
       runId: number
       expectedAnswer: RejudgeExpectedAnswerInput
       resultIds?: number[] | null
+      questionIndices?: number[] | null
       judge?: {
         modelId: string
         connectionId?: number
@@ -1222,7 +1492,7 @@ export class BattleService {
       emitEvent?: (event: RejudgeStreamEvent) => void
     },
   ) {
-    const { runId, expectedAnswer, resultIds, judge, judgeThreshold } = params
+    const { runId, expectedAnswer, resultIds, questionIndices, judge, judgeThreshold } = params
     const emitEvent = options?.emitEvent
 
     const run = await this.prisma.battleRun.findFirst({
@@ -1230,6 +1500,9 @@ export class BattleService {
     })
     if (!run) {
       throw new Error('Battle run not found')
+    }
+    if (normalizeBattleMode(run.mode) === 'single_model_multi_question') {
+      throw new Error('单模型多问题模式暂不支持改答案重判，请使用重试裁判')
     }
 
     const resolvedThreshold = typeof judgeThreshold === 'number'
@@ -1310,14 +1583,18 @@ export class BattleService {
     const scopedIds = Array.isArray(resultIds) && resultIds.length > 0
       ? Array.from(new Set(resultIds.filter((id) => Number.isFinite(id)))).slice(0, 200)
       : null
+    const scopedQuestionIndices = Array.isArray(questionIndices) && questionIndices.length > 0
+      ? Array.from(new Set(questionIndices.filter((id) => Number.isFinite(id) && id > 0))).slice(0, 200)
+      : null
 
     const targets = await this.prisma.battleResult.findMany({
       where: {
         battleRunId: runId,
         error: null, // 跳过执行错误的
         ...(scopedIds ? { id: { in: scopedIds } } : {}),
+        ...(scopedQuestionIndices ? { questionIndex: { in: scopedQuestionIndices } } : {}),
       },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
       take: scopedIds ? undefined : 200,
     })
 
@@ -1416,11 +1693,12 @@ export class BattleService {
     }
     const results = await this.prisma.battleResult.findMany({
       where: { battleRunId: run.id },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
-    const rawConfig = safeParseJson<Record<string, any>>(run.configJson, {})
+    const rawConfig = parseRunConfigPayload(run.configJson)
     const configModels = normalizeConfigModels(rawConfig)
-    const models = this.buildShareModels(configModels, results)
+    const configModel = normalizeConfigModel(rawConfig.model)
+    const models = this.buildShareModels(configModels, results, configModel)
     const connectionMap = await this.buildShareConnectionMap(results, models)
     const judgeConnection = run.judgeConnectionId
       ? await this.prisma.connection.findFirst({
@@ -1471,14 +1749,24 @@ export class BattleService {
   private async refreshRunSummary(runId: number) {
     const run = await this.prisma.battleRun.findFirst({
       where: { id: runId },
-      select: { id: true, runsPerModel: true, passK: true, judgeThreshold: true },
+      select: { id: true, mode: true, configJson: true, runsPerModel: true, passK: true, judgeThreshold: true },
     })
     if (!run) return
     const results = await this.prisma.battleResult.findMany({
       where: { battleRunId: run.id },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
-    const summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+    const configPayload = parseRunConfigPayload(run.configJson)
+    const summary = this.buildSummary(
+      results as BattleResultRecord[],
+      run.runsPerModel,
+      run.passK,
+      run.judgeThreshold,
+      {
+        mode: normalizeBattleMode(configPayload.mode ?? run.mode),
+        questionConfigs: normalizeConfigQuestions(configPayload.questions),
+      },
+    )
     await this.prisma.battleRun.update({
       where: { id: run.id },
       data: { summaryJson: safeJsonStringify(summary, '{}') },
@@ -1503,11 +1791,12 @@ export class BattleService {
     if (!run) return null
     const results = await this.prisma.battleResult.findMany({
       where: { battleRunId: run.id },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
-    const rawConfig = safeParseJson<Record<string, any>>(run.configJson, {})
+    const rawConfig = parseRunConfigPayload(run.configJson)
     const configModels = normalizeConfigModels(rawConfig)
-    const models = this.buildShareModels(configModels, results)
+    const configModel = normalizeConfigModel(rawConfig.model)
+    const models = this.buildShareModels(configModels, results, configModel)
     const connectionMap = await this.buildShareConnectionMap(results, models)
     const judgeConnection = run.judgeConnectionId
       ? await this.prisma.connection.findFirst({
@@ -1538,11 +1827,383 @@ export class BattleService {
     }
   }
 
+  private async executeSingleModelMultiQuestionRun(
+    actor: Actor,
+    input: BattleRunCreateSingleModelInput,
+    options?: { emitEvent?: (event: BattleStreamEvent) => void },
+  ) {
+    if (!Array.isArray(input.questions) || input.questions.length === 0) {
+      throw new Error('请至少添加一道题目')
+    }
+
+    const normalizedQuestions = input.questions.map((item, index) => {
+      if (isBattleContentEmpty(item.prompt)) {
+        throw new Error(`第 ${index + 1} 题缺少题目内容`)
+      }
+      if (isBattleContentEmpty(item.expectedAnswer)) {
+        throw new Error(`第 ${index + 1} 题缺少期望答案`)
+      }
+      const runsPerQuestion = Math.min(3, Math.max(1, Math.floor(item.runsPerQuestion)))
+      const passK = Math.min(3, Math.max(1, Math.floor(item.passK)))
+      if (passK > runsPerQuestion) {
+        throw new Error(`第 ${index + 1} 题配置错误：passK 不能大于 runsPerQuestion`)
+      }
+      return {
+        questionIndex: index + 1,
+        questionId: typeof item.questionId === 'string' && item.questionId.trim() ? item.questionId.trim() : null,
+        title: typeof item.title === 'string' && item.title.trim() ? item.title.trim() : null,
+        promptText: normalizeBattleText(item.prompt.text),
+        expectedAnswerText: normalizeBattleText(item.expectedAnswer.text),
+        promptUploads: Array.isArray(item.prompt.images) ? item.prompt.images : [],
+        expectedAnswerUploads: Array.isArray(item.expectedAnswer.images) ? item.expectedAnswer.images : [],
+        runsPerQuestion,
+        passK,
+      }
+    })
+
+    const firstQuestion = normalizedQuestions[0]
+    const title = buildRunTitle(firstQuestion.promptText || `批量题集（${normalizedQuestions.length}题）`, input.title)
+    const judgeThreshold = this.normalizeJudgeThreshold(input.judgeThreshold)
+
+    const battlePolicy = await getBattlePolicy()
+    if (actor.type === 'user' && !battlePolicy.allowUsers) {
+      throw new Error('当前系统未开放模型大乱斗给注册用户')
+    }
+    if (actor.type === 'anonymous' && !battlePolicy.allowAnonymous) {
+      throw new Error('当前系统未开放模型大乱斗给匿名用户')
+    }
+    const quotaResult = await consumeBattleQuota(actor)
+    if (!quotaResult.success) {
+      throw new Error('今日模型大乱斗额度已耗尽')
+    }
+
+    const persistedQuestions: BattleRunQuestionConfig[] = []
+    const allQuestionImagePaths: string[] = []
+    try {
+      for (const question of normalizedQuestions) {
+        const promptImagePaths = await this.imageService.persistImages(question.promptUploads)
+        const expectedAnswerImagePaths = await this.imageService.persistImages(question.expectedAnswerUploads)
+        allQuestionImagePaths.push(...promptImagePaths, ...expectedAnswerImagePaths)
+        persistedQuestions.push({
+          questionIndex: question.questionIndex,
+          questionId: question.questionId,
+          title: question.title,
+          prompt: {
+            text: question.promptText,
+            images: promptImagePaths,
+          },
+          expectedAnswer: {
+            text: question.expectedAnswerText,
+            images: expectedAnswerImagePaths,
+          },
+          runsPerQuestion: question.runsPerQuestion,
+          passK: question.passK,
+        })
+      }
+    } catch (error) {
+      await this.imageService.deleteImages(allQuestionImagePaths)
+      throw error
+    }
+
+    const firstPersisted = persistedQuestions[0]
+    const extraPrompt = typeof input.model.extraPrompt === 'string' ? input.model.extraPrompt.trim() : ''
+    const normalizedSkills = normalizeConfigSkills(input.model.skills) || { enabled: [] as string[] }
+    const modelConfig = {
+      modelId: input.model.modelId,
+      connectionId: input.model.connectionId ?? null,
+      rawId: input.model.rawId ?? null,
+      skills: normalizedSkills,
+      ...(extraPrompt ? { extraPrompt } : {}),
+      customHeaders: normalizeCustomHeadersForConfig(input.model.custom_headers),
+      customBody: normalizeCustomBodyForConfig(input.model.custom_body),
+      reasoningEnabled: typeof input.model.reasoningEnabled === 'boolean' ? input.model.reasoningEnabled : null,
+      reasoningEffort: normalizeReasoningEffort(input.model.reasoningEffort),
+      ollamaThink: typeof input.model.ollamaThink === 'boolean' ? input.model.ollamaThink : null,
+    }
+    const configPayload = {
+      mode: 'single_model_multi_question' as const,
+      judgeThreshold,
+      model: modelConfig,
+      questions: persistedQuestions,
+    }
+
+    let run: BattleRunRecord
+    try {
+      run = await this.prisma.battleRun.create({
+        data: {
+          ...(actor.type === 'user' ? { userId: actor.id } : {}),
+          ...(actor.type === 'anonymous' ? { anonymousKey: actor.key } : {}),
+          mode: 'single_model_multi_question',
+          title,
+          prompt: firstPersisted?.prompt.text || '',
+          expectedAnswer: firstPersisted?.expectedAnswer.text || '',
+          promptImagesJson: safeJsonStringify(firstPersisted?.prompt.images || [], '[]'),
+          expectedAnswerImagesJson: safeJsonStringify(firstPersisted?.expectedAnswer.images || [], '[]'),
+          judgeModelId: input.judge.modelId,
+          judgeConnectionId: input.judge.connectionId ?? null,
+          judgeRawId: input.judge.rawId ?? null,
+          judgeThreshold,
+          runsPerModel: 1,
+          passK: 1,
+          status: 'pending',
+          configJson: safeJsonStringify(configPayload, '{}'),
+        },
+      })
+    } catch (error) {
+      await this.imageService.deleteImages(allQuestionImagePaths)
+      throw error
+    }
+
+    const runControl = this.createRunControl(run.id, actor)
+    runControl.emitEvent = (event) => {
+      options?.emitEvent?.(event)
+      if (runControl.eventListeners && runControl.eventListeners.size > 0) {
+        for (const listener of runControl.eventListeners) {
+          try {
+            listener(event)
+          } catch {}
+        }
+      }
+    }
+    let traceFinalStatus: TaskTraceStatus | null = null
+    let traceFinalError: string | null = null
+
+    runControl.emitEvent?.({
+      type: 'run_start',
+      payload: {
+        id: run.id,
+        mode: 'single_model_multi_question',
+        title: run.title,
+        prompt: this.toBattleContent(run.prompt, firstPersisted?.prompt.images || []),
+        expectedAnswer: this.toBattleContent(run.expectedAnswer, firstPersisted?.expectedAnswer.images || []),
+        judgeThreshold: run.judgeThreshold,
+        totalQuestions: persistedQuestions.length,
+      },
+    })
+
+    const startUpdate = await this.prisma.battleRun.updateMany({
+      where: { id: run.id, status: 'pending' },
+      data: { status: 'running' },
+    })
+    if (startUpdate.count === 0) {
+      const summary = await this.finalizeCancelledRun(run.id, {
+        runsPerModel: 1,
+        passK: 1,
+        judgeThreshold,
+      })
+      traceFinalStatus = 'cancelled'
+      runControl.emitEvent?.({
+        type: 'run_cancelled',
+        payload: {
+          id: run.id,
+          summary,
+        },
+      })
+      this.releaseRunControl(run.id)
+      return { runId: run.id, summary }
+    }
+
+    try {
+      this.throwIfRunCancelled(runControl)
+
+      const systemSettings = await this.loadSystemSettings()
+      const maxConcurrency = this.normalizeConcurrency(input.maxConcurrency)
+      const traceDecision = await shouldEnableTaskTrace({ actor, sysMap: systemSettings })
+      runControl.traceRecorder = await TaskTraceRecorder.create({
+        enabled: traceDecision.enabled,
+        actorIdentifier: actor.identifier,
+        traceLevel: traceDecision.traceLevel,
+        metadata: {
+          feature: 'battle',
+          mode: 'single_model_multi_question',
+          runId: run.id,
+          title: run.title,
+          questionCount: persistedQuestions.length,
+          judgeThreshold,
+          maxConcurrency,
+          judge: {
+            modelId: input.judge.modelId,
+            connectionId: input.judge.connectionId ?? null,
+            rawId: input.judge.rawId ?? null,
+          },
+          model: {
+            modelId: input.model.modelId,
+            connectionId: input.model.connectionId ?? null,
+            rawId: input.model.rawId ?? null,
+          },
+        },
+        maxEvents: traceDecision.config.maxEvents,
+      })
+
+      const judgeResolution = await this.resolveModel(actor, input.judge)
+      this.throwIfRunCancelled(runControl)
+      if (!judgeResolution) {
+        await this.prisma.battleRun.updateMany({
+          where: { id: run.id, status: { not: 'cancelled' } },
+          data: { status: 'error', summaryJson: safeJsonStringify({ error: 'Judge model not found' }, '{}') },
+        })
+        throw new Error('Judge model not found')
+      }
+
+      const modelResolution = await this.resolveModel(actor, input.model)
+      this.throwIfRunCancelled(runControl)
+      if (!modelResolution) {
+        await this.prisma.battleRun.updateMany({
+          where: { id: run.id, status: { not: 'cancelled' } },
+          data: { status: 'error', summaryJson: safeJsonStringify({ error: 'Model not found' }, '{}') },
+        })
+        throw new Error('Model not found')
+      }
+
+      await this.ensureVisionCapabilities({
+        judge: {
+          modelId: input.judge.modelId,
+          resolved: judgeResolution,
+        },
+        models: [{
+          modelId: input.model.modelId,
+          resolved: modelResolution,
+        }],
+        promptHasImages: persistedQuestions.some((item) => item.prompt.images.length > 0),
+        expectedAnswerHasImages: persistedQuestions.some((item) => item.expectedAnswer.images.length > 0),
+      })
+
+      const resolvedModel = { config: input.model, resolved: modelResolution }
+      const modelKey = buildModelKey(
+        input.model.modelId,
+        modelResolution.connection.id,
+        modelResolution.rawModelId,
+      )
+      const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>()
+      resolvedModelMap.set(modelKey, resolvedModel)
+      const taskGroups = new Map<string, { queue: AttemptTask[]; running: boolean }>()
+
+      runControl.runContext = {
+        mode: 'single_model_multi_question',
+        prompt: firstPersisted?.prompt.text || '',
+        expectedAnswer: firstPersisted?.expectedAnswer.text || '',
+        promptImages: [],
+        expectedAnswerImages: [],
+        promptImagePaths: firstPersisted?.prompt.images || [],
+        expectedAnswerImagePaths: firstPersisted?.expectedAnswer.images || [],
+        judgeThreshold,
+        judgeModel: judgeResolution,
+        systemSettings,
+        singleModel: {
+          model: resolvedModel,
+          questions: persistedQuestions,
+        },
+      }
+      runControl.resolvedModels = resolvedModelMap
+      runControl.taskGroups = taskGroups
+
+      for (const question of persistedQuestions) {
+        const taskGroupKey = `${modelKey}#q${question.questionIndex}`
+        let group = taskGroups.get(taskGroupKey)
+        if (!group) {
+          group = { queue: [], running: false }
+          taskGroups.set(taskGroupKey, group)
+        }
+        for (let attempt = 1; attempt <= question.runsPerQuestion; attempt += 1) {
+          const task = this.createAttemptTask({
+            battleRunId: run.id,
+            model: resolvedModel,
+            question,
+            attemptIndex: attempt,
+            runControl,
+          })
+          group.queue.push(task)
+        }
+      }
+
+      await this.runWithModelConcurrency(taskGroups, maxConcurrency, runControl)
+
+      if (this.isRunCancelled(runControl)) {
+        const summary = await this.finalizeCancelledRun(run.id, {
+          runsPerModel: 1,
+          passK: 1,
+          judgeThreshold,
+        })
+        traceFinalStatus = 'cancelled'
+        runControl.emitEvent?.({
+          type: 'run_cancelled',
+          payload: {
+            id: run.id,
+            summary,
+          },
+        })
+        return { runId: run.id, summary }
+      }
+
+      const summary = await this.buildSummaryForRun(run.id, {
+        runsPerModel: 1,
+        passK: 1,
+        judgeThreshold,
+      })
+      await this.prisma.battleRun.updateMany({
+        where: { id: run.id, status: { not: 'cancelled' } },
+        data: {
+          status: 'completed',
+          summaryJson: safeJsonStringify(summary, '{}'),
+        },
+      })
+
+      runControl.emitEvent?.({
+        type: 'run_complete',
+        payload: {
+          id: run.id,
+          summary,
+        },
+      })
+      traceFinalStatus = 'completed'
+      return { runId: run.id, summary }
+    } catch (error) {
+      if (this.isRunCancelled(runControl) || (await this.isRunCancelledInDb(run.id))) {
+        const summary = await this.finalizeCancelledRun(run.id, {
+          runsPerModel: 1,
+          passK: 1,
+          judgeThreshold,
+        })
+        traceFinalStatus = 'cancelled'
+        runControl.emitEvent?.({
+          type: 'run_cancelled',
+          payload: {
+            id: run.id,
+            summary,
+          },
+        })
+        return { runId: run.id, summary }
+      }
+
+      await this.prisma.battleRun.updateMany({
+        where: { id: run.id, status: { not: 'cancelled' } },
+        data: {
+          status: 'error',
+          summaryJson: safeJsonStringify({ error: (error as Error)?.message || 'Battle failed' }, '{}'),
+        },
+      })
+      traceFinalStatus = 'error'
+      traceFinalError = (error as Error)?.message || 'Battle failed'
+      throw error
+    } finally {
+      if (runControl.traceRecorder && traceFinalStatus) {
+        await runControl.traceRecorder.finalize(traceFinalStatus, {
+          error: traceFinalError,
+        })
+      }
+      this.releaseRunControl(run.id)
+    }
+  }
+
   async executeRun(
     actor: Actor,
     input: BattleRunCreateInput,
     options?: { emitEvent?: (event: BattleStreamEvent) => void },
   ) {
+    if (input.mode === 'single_model_multi_question') {
+      return this.executeSingleModelMultiQuestionRun(actor, input, options)
+    }
+
     if (isBattleContentEmpty(input.prompt)) {
       throw new Error('请输入问题或上传题目图片')
     }
@@ -1572,6 +2233,7 @@ export class BattleService {
     const expectedAnswerImagePaths = await this.imageService.persistImages(expectedAnswerImages)
 
     const configPayload = {
+      mode: 'multi_model' as const,
       runsPerModel: input.runsPerModel,
       passK: input.passK,
       judgeThreshold,
@@ -1599,6 +2261,7 @@ export class BattleService {
         data: {
           ...(actor.type === 'user' ? { userId: actor.id } : {}),
           ...(actor.type === 'anonymous' ? { anonymousKey: actor.key } : {}),
+          mode: 'multi_model',
           title,
           prompt: promptText,
           expectedAnswer: expectedAnswerText,
@@ -1636,6 +2299,7 @@ export class BattleService {
       type: 'run_start',
       payload: {
         id: run.id,
+        mode: 'multi_model',
         title: run.title,
         prompt: this.toBattleContent(run.prompt, promptImagePaths),
         expectedAnswer: this.toBattleContent(run.expectedAnswer, expectedAnswerImagePaths),
@@ -1686,6 +2350,7 @@ export class BattleService {
         traceLevel: traceDecision.traceLevel,
         metadata: {
           feature: 'battle',
+          mode: 'multi_model',
           runId: run.id,
           title: run.title,
           promptPreview: truncateString(promptText || '', 200),
@@ -1767,10 +2432,13 @@ export class BattleService {
       const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>()
 
       runControl.runContext = {
+        mode: 'multi_model',
         prompt: promptText,
         expectedAnswer: expectedAnswerText,
         promptImages,
         expectedAnswerImages,
+        promptImagePaths,
+        expectedAnswerImagePaths,
         judgeThreshold,
         judgeModel: judgeResolution,
         systemSettings,
@@ -1778,6 +2446,21 @@ export class BattleService {
       runControl.resolvedModels = resolvedModelMap
       runControl.taskGroups = taskGroups
 
+      const defaultQuestion: BattleRunQuestionConfig = {
+        questionIndex: 1,
+        questionId: null,
+        title: null,
+        prompt: {
+          text: promptText,
+          images: promptImagePaths,
+        },
+        expectedAnswer: {
+          text: expectedAnswerText,
+          images: expectedAnswerImagePaths,
+        },
+        runsPerQuestion: input.runsPerModel,
+        passK: input.passK,
+      }
       for (const model of resolved) {
         const modelKey = buildModelKey(
           model.config.modelId,
@@ -1794,6 +2477,7 @@ export class BattleService {
           const task = this.createAttemptTask({
             battleRunId: run.id,
             model,
+            question: defaultQuestion,
             attemptIndex: attempt,
             runControl,
           })
@@ -1949,6 +2633,7 @@ export class BattleService {
   private createAttemptTask(params: {
     battleRunId: number
     model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }
+    question: BattleRunQuestionConfig
     attemptIndex: number
     runControl: BattleRunControl
   }): AttemptTask {
@@ -1957,24 +2642,32 @@ export class BattleService {
       params.model.resolved.connection.id,
       params.model.resolved.rawModelId,
     )
-    const attemptKey = buildAttemptKey(modelKey, params.attemptIndex)
+    const taskGroupKey = `${modelKey}#q${params.question.questionIndex}`
+    const attemptKey = buildAttemptKey(modelKey, params.question.questionIndex, params.attemptIndex)
     const attemptEpoch = this.getAttemptEpoch(params.runControl, attemptKey)
     const context = params.runControl.runContext
     if (!context) {
       throw new Error('Battle run context missing')
     }
     return {
+      taskGroupKey,
       modelKey,
       attemptKey,
+      questionIndex: params.question.questionIndex,
+      questionId: params.question.questionId ?? null,
+      questionTitle: params.question.title ?? null,
       attemptIndex: params.attemptIndex,
       attemptEpoch,
       run: async () => {
         await this.runAttempt({
           battleRunId: params.battleRunId,
-          prompt: context.prompt,
-          expectedAnswer: context.expectedAnswer,
-          promptImages: context.promptImages,
-          expectedAnswerImages: context.expectedAnswerImages,
+          questionIndex: params.question.questionIndex,
+          questionId: params.question.questionId ?? null,
+          questionTitle: params.question.title ?? null,
+          prompt: params.question.prompt.text,
+          expectedAnswer: params.question.expectedAnswer.text,
+          promptImages: await this.imageService.loadImages(params.question.prompt.images),
+          expectedAnswerImages: await this.imageService.loadImages(params.question.expectedAnswer.images),
           judgeThreshold: context.judgeThreshold,
           judgeModel: context.judgeModel,
           model: params.model,
@@ -1990,6 +2683,9 @@ export class BattleService {
   private async runAttempt(
     params: {
       battleRunId: number
+      questionIndex: number
+      questionId: string | null
+      questionTitle: string | null
       prompt: string
       expectedAnswer: string
       promptImages: BattleUploadImage[]
@@ -2006,6 +2702,9 @@ export class BattleService {
   ): Promise<void> {
     const {
       battleRunId,
+      questionIndex,
+      questionId,
+      questionTitle,
       prompt,
       expectedAnswer,
       promptImages,
@@ -2023,19 +2722,25 @@ export class BattleService {
     this.throwIfRunCancelled(runControl)
 
     const modelKey = buildModelKey(modelId, model.resolved.connection.id, model.resolved.rawModelId)
-    const attemptKey = buildAttemptKey(modelKey, attemptIndex)
+    const attemptKey = buildAttemptKey(modelKey, questionIndex, attemptIndex)
     const isCurrentAttempt = () => this.isAttemptEpochCurrent(runControl, attemptKey, attemptEpoch)
     if (!isCurrentAttempt()) {
       return
     }
     const traceRecorder = runControl?.traceRecorder
     const attemptTraceContext = this.buildAttemptTraceContext(runControl, attemptKey, {
+      questionIndex,
+      questionId,
+      questionTitle,
       modelId,
       connectionId: model.resolved.connection.id,
       rawId: model.resolved.rawModelId,
     })
     if (runControl) {
       this.ensureLiveAttempt(runControl, {
+        questionIndex,
+        questionId,
+        questionTitle,
         modelId,
         connectionId: model.resolved.connection.id,
         rawId: model.resolved.rawModelId,
@@ -2050,6 +2755,9 @@ export class BattleService {
       }
       const record = await this.persistResult({
         battleRunId,
+        questionIndex,
+        questionId,
+        questionTitle,
         modelId,
         connectionId: model.resolved.connection.id,
         rawId: model.resolved.rawModelId,
@@ -2076,6 +2784,9 @@ export class BattleService {
         type: 'attempt_complete',
         payload: {
           battleRunId,
+          questionIndex,
+          questionId,
+          questionTitle,
           modelId,
           attemptIndex,
           result: this.serializeResult(record),
@@ -2097,6 +2808,9 @@ export class BattleService {
       type: 'attempt_start',
       payload: {
         battleRunId,
+        questionIndex,
+        questionId,
+        questionTitle,
         modelId,
         connectionId: model.resolved.connection.id,
         rawId: model.resolved.rawModelId,
@@ -2112,6 +2826,9 @@ export class BattleService {
     let error: string | null = null
     const executionContext = this.buildExecutionContext(runControl, attemptKey, {
       battleRunId,
+      questionIndex,
+      questionId,
+      questionTitle,
       modelId,
       connectionId: model.resolved.connection.id,
       rawId: model.resolved.rawModelId,
@@ -2135,6 +2852,9 @@ export class BattleService {
           }
           if (runControl) {
             this.appendLiveAttemptDelta(runControl, {
+              questionIndex,
+              questionId,
+              questionTitle,
               modelId,
               connectionId: model.resolved.connection.id,
               rawId: model.resolved.rawModelId,
@@ -2147,6 +2867,9 @@ export class BattleService {
             type: 'attempt_delta',
             payload: {
               battleRunId,
+              questionIndex,
+              questionId,
+              questionTitle,
               modelId,
               connectionId: model.resolved.connection.id,
               rawId: model.resolved.rawModelId,
@@ -2183,6 +2906,9 @@ export class BattleService {
     if (!error) {
       if (runControl) {
         this.ensureLiveAttempt(runControl, {
+          questionIndex,
+          questionId,
+          questionTitle,
           modelId,
           connectionId: model.resolved.connection.id,
           rawId: model.resolved.rawModelId,
@@ -2225,6 +2951,9 @@ export class BattleService {
     }
     const record = await this.persistResult({
       battleRunId,
+      questionIndex,
+      questionId,
+      questionTitle,
       modelId,
       connectionId: model.resolved.connection.id,
       rawId: model.resolved.rawModelId,
@@ -2244,6 +2973,9 @@ export class BattleService {
 
     if (runControl) {
       this.ensureLiveAttempt(runControl, {
+        questionIndex,
+        questionId,
+        questionTitle,
         modelId,
         connectionId: model.resolved.connection.id,
         rawId: model.resolved.rawModelId,
@@ -2271,6 +3003,9 @@ export class BattleService {
       type: 'attempt_complete',
       payload: {
         battleRunId,
+        questionIndex,
+        questionId,
+        questionTitle,
         modelId,
         attemptIndex,
         result: this.serializeResult(record),
@@ -2281,6 +3016,9 @@ export class BattleService {
 
   private async persistResult(params: {
     battleRunId: number
+    questionIndex: number
+    questionId: string | null
+    questionTitle: string | null
     modelId: string
     connectionId: number | null
     rawId: string | null
@@ -2300,6 +3038,9 @@ export class BattleService {
     const record = await this.prisma.battleResult.create({
       data: {
         battleRunId: params.battleRunId,
+        questionIndex: params.questionIndex,
+        questionId: params.questionId,
+        questionTitle: params.questionTitle,
         modelId: params.modelId,
         connectionId: params.connectionId,
         rawId: params.rawId,
@@ -2328,6 +3069,9 @@ export class BattleService {
     return {
       id: record.id,
       battleRunId: record.battleRunId,
+      questionIndex: record.questionIndex ?? 1,
+      questionId: record.questionId ?? null,
+      questionTitle: record.questionTitle ?? null,
       modelId: record.modelId,
       connectionId: record.connectionId,
       rawId: record.rawId,
@@ -2346,7 +3090,141 @@ export class BattleService {
     }
   }
 
-  private buildSummary(results: BattleResultRecord[], runsPerModel: number, passK: number, judgeThreshold: number): BattleRunSummary {
+  private buildSingleModelQuestionSummary(
+    results: BattleResultRecord[],
+    judgeThreshold: number,
+    questionConfigs: BattleRunQuestionConfig[],
+  ): BattleRunSummary {
+    const questionConfigMap = new Map<number, BattleRunQuestionConfig>()
+    for (const item of questionConfigs) {
+      questionConfigMap.set(item.questionIndex, item)
+    }
+    const questionGroups = new Map<number, {
+      questionIndex: number
+      questionId: string | null
+      questionTitle: string | null
+      runsPerQuestion: number
+      passK: number
+      passCount: number
+      judgedCount: number
+      totalAttempts: number
+      judgeErrorCount: number
+    }>()
+
+    for (const result of results) {
+      const config = questionConfigMap.get(result.questionIndex)
+      const group = questionGroups.get(result.questionIndex) || {
+        questionIndex: result.questionIndex,
+        questionId: result.questionId ?? config?.questionId ?? null,
+        questionTitle: result.questionTitle ?? config?.title ?? null,
+        runsPerQuestion: config?.runsPerQuestion ?? 1,
+        passK: config?.passK ?? 1,
+        passCount: 0,
+        judgedCount: 0,
+        totalAttempts: 0,
+        judgeErrorCount: 0,
+      }
+      group.totalAttempts += 1
+      const status = (result as any).judgeStatus as string | undefined
+      if (status === 'error') {
+        group.judgeErrorCount += 1
+      }
+      const judged = result.judgePass != null && status !== 'error'
+      if (judged) {
+        group.judgedCount += 1
+        if (result.judgePass === true) {
+          group.passCount += 1
+        }
+      }
+      questionGroups.set(result.questionIndex, group)
+    }
+
+    for (const config of questionConfigs) {
+      if (questionGroups.has(config.questionIndex)) continue
+      questionGroups.set(config.questionIndex, {
+        questionIndex: config.questionIndex,
+        questionId: config.questionId ?? null,
+        questionTitle: config.title ?? null,
+        runsPerQuestion: config.runsPerQuestion,
+        passK: config.passK,
+        passCount: 0,
+        judgedCount: 0,
+        totalAttempts: 0,
+        judgeErrorCount: 0,
+      })
+    }
+
+    const questionStats = Array.from(questionGroups.values())
+      .sort((a, b) => a.questionIndex - b.questionIndex)
+      .map((group) => {
+        const accuracy = group.totalAttempts > 0 ? group.passCount / group.totalAttempts : 0
+        return {
+          questionIndex: group.questionIndex,
+          questionId: group.questionId,
+          questionTitle: group.questionTitle,
+          runsPerQuestion: group.runsPerQuestion,
+          passK: group.passK,
+          passAtK: group.passCount >= group.passK,
+          passCount: group.passCount,
+          accuracy,
+          judgedCount: group.judgedCount,
+          totalAttempts: group.totalAttempts,
+          judgeErrorCount: group.judgeErrorCount,
+        }
+      })
+    const totalQuestions = questionStats.length
+    const passedQuestions = questionStats.filter((item) => item.passAtK).length
+    const stabilityScore = totalQuestions > 0 ? passedQuestions / totalQuestions : 0
+
+    const first = results[0]
+    const judgedCount = questionStats.reduce((acc, item) => acc + (item.judgedCount || 0), 0)
+    const totalAttempts = questionStats.reduce((acc, item) => acc + (item.totalAttempts || 0), 0)
+    const judgeErrorCount = questionStats.reduce((acc, item) => acc + (item.judgeErrorCount || 0), 0)
+    const modelStats = first
+      ? [{
+        modelId: first.modelId,
+        connectionId: first.connectionId ?? null,
+        rawId: first.rawId ?? null,
+        passAtK: totalQuestions > 0 ? passedQuestions === totalQuestions : false,
+        passCount: passedQuestions,
+        accuracy: stabilityScore,
+        judgedCount,
+        totalAttempts,
+        judgeErrorCount,
+      }]
+      : []
+
+    return {
+      totalModels: modelStats.length,
+      runsPerModel: 1,
+      passK: 1,
+      judgeThreshold,
+      passModelCount: modelStats.length > 0 && modelStats[0].passAtK ? 1 : 0,
+      accuracy: modelStats.length > 0 ? modelStats[0].accuracy : 0,
+      mode: 'single_model_multi_question',
+      totalQuestions,
+      passedQuestions,
+      stabilityScore,
+      questionStats,
+      modelStats,
+    }
+  }
+
+  private buildSummary(
+    results: BattleResultRecord[],
+    runsPerModel: number,
+    passK: number,
+    judgeThreshold: number,
+    options?: {
+      mode?: BattleMode
+      questionConfigs?: BattleRunQuestionConfig[]
+    },
+  ): BattleRunSummary {
+    const mode = normalizeBattleMode(options?.mode)
+    if (mode === 'single_model_multi_question') {
+      return this.buildSingleModelQuestionSummary(results, judgeThreshold, options?.questionConfigs || [])
+    }
+
     const groups = new Map<string, {
       modelId: string
       connectionId: number | null
@@ -2411,6 +3289,7 @@ export class BattleService {
       judgeThreshold,
       passModelCount,
       accuracy,
+      mode: 'multi_model',
       modelStats,
     }
   }
@@ -2472,12 +3351,18 @@ export class BattleService {
       modelId: string
       connectionId: number | null
       rawId: string | null
+      questionIndex: number
+      questionId: string | null
+      questionTitle: string | null
       attemptIndex: number
     },
     reason?: string,
   ) {
     runControl.cancelledAttempts.add(params.attemptKey)
     this.ensureLiveAttempt(runControl, {
+      questionIndex: params.questionIndex,
+      questionId: params.questionId,
+      questionTitle: params.questionTitle,
       modelId: params.modelId,
       connectionId: params.connectionId,
       rawId: params.rawId,
@@ -2566,6 +3451,9 @@ export class BattleService {
     attemptKey?: string,
     streamMeta?: {
       battleRunId?: number | null
+      questionIndex?: number
+      questionId?: string | null
+      questionTitle?: string | null
       modelId?: string
       connectionId?: number | null
       rawId?: string | null
@@ -2574,6 +3462,9 @@ export class BattleService {
     },
   ): BattleExecutionContext {
     const battleRunId = streamMeta?.battleRunId ?? runControl?.runId ?? null
+    const questionIndex = streamMeta?.questionIndex ?? 1
+    const questionId = streamMeta?.questionId ?? null
+    const questionTitle = streamMeta?.questionTitle ?? null
     const modelId = streamMeta?.modelId
     const connectionId = streamMeta?.connectionId ?? null
     const rawId = streamMeta?.rawId ?? null
@@ -2609,6 +3500,9 @@ export class BattleService {
           payload: {
             ...payload,
             battleRunId,
+            questionIndex,
+            questionId,
+            questionTitle,
             modelId: modelId ?? null,
             connectionId,
             rawId,
@@ -2624,6 +3518,9 @@ export class BattleService {
         if (!normalized) return
 
         const mergedEvents = this.upsertLiveAttemptToolEvent(runControl, {
+          questionIndex,
+          questionId,
+          questionTitle,
           modelId,
           connectionId,
           rawId,
@@ -2635,6 +3532,9 @@ export class BattleService {
           type: 'attempt_tool_call',
           payload: {
             battleRunId,
+            questionIndex,
+            questionId,
+            questionTitle,
             modelId,
             connectionId,
             rawId,
@@ -2651,6 +3551,9 @@ export class BattleService {
   private ensureLiveAttempt(
     runControl: BattleRunControl,
     params: {
+      questionIndex: number
+      questionId: string | null
+      questionTitle: string | null
       modelId: string
       connectionId: number | null
       rawId: string | null
@@ -2664,15 +3567,19 @@ export class BattleService {
     },
   ) {
     const modelKey = buildModelKey(params.modelId, params.connectionId, params.rawId)
+    const liveAttemptKey = `${params.questionIndex}#${params.attemptIndex}`
     let attempts = runControl.liveAttempts.get(modelKey)
     if (!attempts) {
       attempts = new Map()
       runControl.liveAttempts.set(modelKey, attempts)
     }
-    const existing = attempts.get(params.attemptIndex)
+    const existing = attempts.get(liveAttemptKey)
     if (existing) {
       const next: LiveAttemptState = {
         ...existing,
+        questionIndex: params.questionIndex ?? existing.questionIndex,
+        questionId: params.questionId ?? existing.questionId,
+        questionTitle: params.questionTitle ?? existing.questionTitle,
         status: params.status ?? existing.status,
         output: params.output ?? existing.output,
         reasoning: params.reasoning ?? existing.reasoning,
@@ -2680,10 +3587,13 @@ export class BattleService {
         error: params.error !== undefined ? params.error : existing.error,
         toolEvents: Array.isArray(params.toolEvents) ? params.toolEvents : existing.toolEvents,
       }
-      attempts.set(params.attemptIndex, next)
+      attempts.set(liveAttemptKey, next)
       return next
     }
     const record: LiveAttemptState = {
+      questionIndex: params.questionIndex,
+      questionId: params.questionId ?? null,
+      questionTitle: params.questionTitle ?? null,
       modelId: params.modelId,
       connectionId: params.connectionId,
       rawId: params.rawId,
@@ -2695,7 +3605,7 @@ export class BattleService {
       error: params.error ?? null,
       toolEvents: Array.isArray(params.toolEvents) ? params.toolEvents : [],
     }
-    attempts.set(params.attemptIndex, record)
+    attempts.set(liveAttemptKey, record)
     return record
   }
 
@@ -2749,16 +3659,20 @@ export class BattleService {
   private getLiveAttempt(
     runControl: BattleRunControl,
     modelKey: string,
+    questionIndex: number,
     attemptIndex: number,
   ): LiveAttemptState | null {
     const attempts = runControl.liveAttempts.get(modelKey)
     if (!attempts) return null
-    return attempts.get(attemptIndex) || null
+    return attempts.get(`${questionIndex}#${attemptIndex}`) || null
   }
 
   private appendLiveAttemptDelta(
     runControl: BattleRunControl,
     params: {
+      questionIndex: number
+      questionId: string | null
+      questionTitle: string | null
       modelId: string
       connectionId: number | null
       rawId: string | null
@@ -2768,6 +3682,9 @@ export class BattleService {
     },
   ) {
     const record = this.ensureLiveAttempt(runControl, {
+      questionIndex: params.questionIndex,
+      questionId: params.questionId,
+      questionTitle: params.questionTitle,
       modelId: params.modelId,
       connectionId: params.connectionId,
       rawId: params.rawId,
@@ -2785,6 +3702,9 @@ export class BattleService {
   private upsertLiveAttemptToolEvent(
     runControl: BattleRunControl,
     params: {
+      questionIndex: number
+      questionId: string | null
+      questionTitle: string | null
       modelId: string
       connectionId: number | null
       rawId: string | null
@@ -2793,6 +3713,9 @@ export class BattleService {
     },
   ) {
     const record = this.ensureLiveAttempt(runControl, {
+      questionIndex: params.questionIndex,
+      questionId: params.questionId,
+      questionTitle: params.questionTitle,
       modelId: params.modelId,
       connectionId: params.connectionId,
       rawId: params.rawId,
@@ -2831,7 +3754,10 @@ export class BattleService {
     attempts.sort((a, b) => {
       const keyA = buildModelKey(a.modelId, a.connectionId, a.rawId)
       const keyB = buildModelKey(b.modelId, b.connectionId, b.rawId)
-      if (keyA === keyB) return a.attemptIndex - b.attemptIndex
+      if (keyA === keyB) {
+        if (a.questionIndex !== b.questionIndex) return a.questionIndex - b.questionIndex
+        return a.attemptIndex - b.attemptIndex
+      }
       return keyA.localeCompare(keyB)
     })
     return attempts
@@ -2854,18 +3780,34 @@ export class BattleService {
     runId: number,
     config: { runsPerModel: number; passK: number; judgeThreshold: number },
   ) {
+    const run = await this.prisma.battleRun.findFirst({
+      where: { id: runId },
+      select: { mode: true, configJson: true },
+    })
     const results = await this.prisma.battleResult.findMany({
       where: { battleRunId: runId },
-      orderBy: [{ modelId: 'asc' }, { attemptIndex: 'asc' }],
+      orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
-    return this.buildSummary(results as BattleResultRecord[], config.runsPerModel, config.passK, config.judgeThreshold)
+    const configPayload = parseRunConfigPayload(run?.configJson)
+    return this.buildSummary(
+      results as BattleResultRecord[],
+      config.runsPerModel,
+      config.passK,
+      config.judgeThreshold,
+      {
+        mode: normalizeBattleMode(configPayload.mode ?? run?.mode),
+        questionConfigs: normalizeConfigQuestions(configPayload.questions),
+      },
+    )
   }
 
   private buildShareModels(
     configModels: BattleRunConfigModel[],
     results: BattleResultRecord[],
+    configModel?: BattleRunConfigModel | null,
   ): BattleRunConfigModel[] {
     if (configModels.length > 0) return configModels
+    if (configModel) return [configModel]
     const fallbackModels = new Map<string, BattleRunConfigModel>()
     for (const item of results) {
       const key = `${item.modelId}:${item.connectionId ?? 'null'}:${item.rawId ?? 'null'}`
@@ -2902,6 +3844,9 @@ export class BattleService {
   }
 
   private async resolveShareSummary(run: BattleRunRecord, results: BattleResultRecord[]) {
+    const configPayload = parseRunConfigPayload(run.configJson)
+    const mode = normalizeBattleMode(configPayload.mode ?? run.mode)
+    const questionConfigs = normalizeConfigQuestions(configPayload.questions)
     const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
     let summary = normalizeSummary(rawSummary, {
       runsPerModel: run.runsPerModel,
@@ -2909,9 +3854,22 @@ export class BattleService {
       judgeThreshold: run.judgeThreshold,
     })
     const shouldRebuildSummary =
-      results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
+      results.length > 0 && (
+        mode === 'single_model_multi_question'
+          ? ((summary.questionStats?.length || 0) === 0 || !summary.totalQuestions)
+          : (summary.modelStats.length === 0 || summary.totalModels === 0)
+      )
     if (shouldRebuildSummary) {
-      summary = this.buildSummary(results as BattleResultRecord[], run.runsPerModel, run.passK, run.judgeThreshold)
+      summary = this.buildSummary(
+        results as BattleResultRecord[],
+        run.runsPerModel,
+        run.passK,
+        run.judgeThreshold,
+        {
+          mode,
+          questionConfigs,
+        },
+      )
       if (run.status === 'completed' || run.status === 'cancelled') {
         await this.prisma.battleRun.update({
           where: { id: run.id },
@@ -2923,12 +3881,19 @@ export class BattleService {
   }
 
   private buildShareProgress(params: {
+    mode: BattleMode
+    summary: BattleRunSummary
     modelCount: number
     runsPerModel: number
     results: BattleResultRecord[]
     liveAttempts: Array<LiveAttemptState & { modelLabel: string | null }> | null
   }) {
-    const totalAttempts = Math.max(0, params.modelCount) * Math.max(1, Math.floor(params.runsPerModel))
+    const totalAttempts = params.mode === 'single_model_multi_question'
+      ? (params.summary.questionStats || []).reduce(
+        (acc, item) => acc + Math.max(0, Math.floor(item.runsPerQuestion || 0)),
+        0,
+      )
+      : Math.max(0, params.modelCount) * Math.max(1, Math.floor(params.runsPerModel))
     const completedAttempts = params.results.length
     let successAttempts = 0
     let failedAttempts = 0
@@ -2941,13 +3906,23 @@ export class BattleService {
     }
 
     const resultKeys = new Set(
-      params.results.map((item) => `${buildModelKey(item.modelId, item.connectionId, item.rawId)}#${item.attemptIndex}`),
+      params.results.map((item) =>
+        buildAttemptKey(
+          buildModelKey(item.modelId, item.connectionId, item.rawId),
+          item.questionIndex ?? 1,
+          item.attemptIndex,
+        ),
+      ),
     )
     let runningAttempts = 0
     let pendingAttempts = 0
     if (params.liveAttempts) {
       for (const attempt of params.liveAttempts) {
-        const key = `${buildModelKey(attempt.modelId, attempt.connectionId, attempt.rawId)}#${attempt.attemptIndex}`
+        const key = buildAttemptKey(
+          buildModelKey(attempt.modelId, attempt.connectionId, attempt.rawId),
+          attempt.questionIndex ?? 1,
+          attempt.attemptIndex,
+        )
         if (resultKeys.has(key)) continue
         if (attempt.status === 'running' || attempt.status === 'judging') {
           runningAttempts += 1
@@ -2981,6 +3956,9 @@ export class BattleService {
     judgeConnection: LabelConnection | null
     liveAttempts: Array<LiveAttemptState & { modelLabel: string | null }> | null
   }): BattleSharePayload {
+    const rawConfig = parseRunConfigPayload(params.run.configJson)
+    const mode = normalizeBattleMode(rawConfig.mode ?? params.run.mode)
+    const questionConfigs = normalizeConfigQuestions(rawConfig.questions)
     const promptImagePaths = parseImagePathsJson(params.run.promptImagesJson)
     const expectedAnswerImagePaths = parseImagePathsJson(params.run.expectedAnswerImagesJson)
     const models = params.models.map((model) => ({
@@ -2993,7 +3971,39 @@ export class BattleService {
       connectionId: model.connectionId ?? null,
       rawId: model.rawId ?? null,
     }))
+    const questions = questionConfigs.length > 0
+      ? questionConfigs.map((item) => ({
+        questionIndex: item.questionIndex,
+        questionId: item.questionId ?? null,
+        title: item.title ?? null,
+        prompt: this.toBattleContent(item.prompt.text, item.prompt.images),
+        expectedAnswer: this.toBattleContent(item.expectedAnswer.text, item.expectedAnswer.images),
+        runsPerQuestion: item.runsPerQuestion,
+        passK: item.passK,
+      }))
+      : undefined
+    const progressSummary = mode === 'single_model_multi_question'
+      && (!params.summary.questionStats || params.summary.questionStats.length === 0)
+      ? {
+        ...params.summary,
+        questionStats: questionConfigs.map((item) => ({
+          questionIndex: item.questionIndex,
+          questionId: item.questionId ?? null,
+          questionTitle: item.title ?? null,
+          runsPerQuestion: item.runsPerQuestion,
+          passK: item.passK,
+          passAtK: false,
+          passCount: 0,
+          accuracy: 0,
+          judgedCount: 0,
+          totalAttempts: item.runsPerQuestion,
+          judgeErrorCount: 0,
+        })),
+      }
+      : params.summary
     const progress = this.buildShareProgress({
+      mode,
+      summary: progressSummary,
       modelCount: models.length,
       runsPerModel: params.run.runsPerModel,
       results: params.results,
@@ -3002,6 +4012,9 @@ export class BattleService {
     const live = params.liveAttempts && params.liveAttempts.length > 0
       ? {
         attempts: params.liveAttempts.map((attempt) => ({
+          questionIndex: attempt.questionIndex,
+          questionId: attempt.questionId ?? null,
+          questionTitle: attempt.questionTitle ?? null,
           modelId: attempt.modelId,
           modelLabel: attempt.modelLabel ?? null,
           connectionId: attempt.connectionId,
@@ -3018,6 +4031,7 @@ export class BattleService {
       : undefined
     return {
       title: params.run.title,
+      mode,
       prompt: this.toBattleContent(params.run.prompt, promptImagePaths),
       expectedAnswer: this.toBattleContent(params.run.expectedAnswer, expectedAnswerImagePaths),
       judge: {
@@ -3028,8 +4042,12 @@ export class BattleService {
       status: normalizeRunStatus(params.run.status),
       progress,
       models,
+      ...(questions ? { questions } : {}),
       summary: params.summary,
       results: params.results.map((item) => ({
+        questionIndex: item.questionIndex ?? 1,
+        questionId: item.questionId ?? null,
+        questionTitle: item.questionTitle ?? null,
         modelId: item.modelId,
         modelLabel: composeModelLabel(params.connectionMap.get(item.connectionId || -1) || null, item.rawId, item.modelId),
         connectionId: item.connectionId,
@@ -3308,12 +4326,12 @@ export class BattleService {
       if (runControl) {
         runControl.taskGroups = groupsMap
         runControl.scheduler = {
-          enqueue: (modelKey, task) => {
+          enqueue: (taskGroupKey, task) => {
             if (settled || this.isRunCancelled(runControl)) return false
-            let group = groupsMap.get(modelKey)
+            let group = groupsMap.get(taskGroupKey)
             if (!group) {
               group = { queue: [], running: false }
-              groupsMap.set(modelKey, group)
+              groupsMap.set(taskGroupKey, group)
               groups.push(group)
             }
             group.queue.push(task)
@@ -3341,6 +4359,7 @@ export class BattleService {
 
     return {
       id: run.id,
+      mode: normalizeBattleMode(run.mode),
       title: run.title,
       prompt: this.toBattleContent(run.prompt, promptImagePaths),
       expectedAnswer: this.toBattleContent(run.expectedAnswer, expectedAnswerImagePaths),
@@ -3393,7 +4412,13 @@ export class BattleService {
 
   private resolveAttemptTarget(
     runControl: BattleRunControl,
-    params: { modelId?: string | null; connectionId?: number | null; rawId?: string | null; attemptIndex: number },
+    params: {
+      modelId?: string | null
+      connectionId?: number | null
+      rawId?: string | null
+      questionIndex?: number | null
+      attemptIndex: number
+    },
   ) {
     const connectionId = typeof params.connectionId === 'number' ? params.connectionId : null
     const rawId = typeof params.rawId === 'string' && params.rawId.trim() ? params.rawId.trim() : null
@@ -3419,8 +4444,39 @@ export class BattleService {
     if (!resolvedModelId) return null
     const resolvedConnectionId = entry?.resolved.connection.id ?? connectionId ?? null
     const resolvedRawId = entry?.resolved.rawModelId ?? rawId ?? null
+    const mode = normalizeBattleMode(runControl.runContext?.mode)
+    const questionConfigs = runControl.runContext?.singleModel?.questions || []
+    const requestedQuestionIndex = typeof params.questionIndex === 'number' && params.questionIndex > 0
+      ? Math.floor(params.questionIndex)
+      : 1
+    const question = mode === 'single_model_multi_question'
+      ? questionConfigs.find((item) => item.questionIndex === requestedQuestionIndex)
+      : {
+        questionIndex: 1,
+        questionId: null,
+        title: null,
+        prompt: {
+          text: runControl.runContext?.prompt || '',
+          images: runControl.runContext?.promptImagePaths || [],
+        },
+        expectedAnswer: {
+          text: runControl.runContext?.expectedAnswer || '',
+          images: runControl.runContext?.expectedAnswerImagePaths || [],
+        },
+        runsPerQuestion: 1,
+        passK: 1,
+      }
+    if (!question) return null
+    const taskGroupKey = `${modelKey}#q${question.questionIndex}`
 
     return {
+      mode,
+      questionConfigs,
+      question,
+      taskGroupKey,
+      questionIndex: question.questionIndex,
+      questionId: question.questionId ?? null,
+      questionTitle: question.title ?? null,
       modelKey,
       modelId: resolvedModelId,
       connectionId: resolvedConnectionId,
