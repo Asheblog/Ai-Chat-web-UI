@@ -2,6 +2,7 @@ import { Eye, Globe, Palette, Paperclip, Terminal } from "lucide-react"
 import type { ModelItem } from "@/store/models-store"
 
 export interface ModelSelectorProps {
+  // 连接级唯一键，格式: `${connectionId}:${rawId}`
   selectedModelId: string | null
   onModelChange: (model: ModelItem) => void
   disabled?: boolean

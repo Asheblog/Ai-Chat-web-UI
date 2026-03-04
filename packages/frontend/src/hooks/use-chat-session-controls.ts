@@ -60,7 +60,9 @@ export function useChatSessionControls({
 
   const toolbarModelId = useMemo(() => {
     if (!currentSession) return null
-    return currentSession.modelLabel || currentSession.modelRawId || null
+    if (typeof currentSession.connectionId !== 'number') return null
+    if (!currentSession.modelRawId) return null
+    return `${currentSession.connectionId}:${currentSession.modelRawId}`
   }, [currentSession])
 
   const toggleReasoning = useCallback(

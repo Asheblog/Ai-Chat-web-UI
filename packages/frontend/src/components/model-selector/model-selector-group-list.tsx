@@ -90,8 +90,8 @@ export function ModelSelectorGroupList({
 
                     return (
                       <CommandItem
-                        key={`${model.connectionId}:${model.id}`}
-                        value={`${model.name} ${model.id} ${model.provider} ${channel}`}
+                        key={key}
+                        value={`${key} ${model.name} ${model.id} ${model.provider} ${channel}`}
                         onSelect={() => onSelectModel(model)}
                         className={cn(
                           "my-1 rounded-md border px-2.5 py-2 transition-colors",

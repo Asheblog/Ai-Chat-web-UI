@@ -114,12 +114,25 @@ export const modelKeyFor = (model: Pick<ModelItem, 'connectionId' | 'rawId' | 'i
 
 export const findPreferredModel = (models: ModelItem[], preferred: PreferredModelState | null): ModelItem | null => {
   if (!preferred) return null
-  return models.find((model) => {
-    if (model.id === preferred.modelId) return true
-    if (preferred.rawId && model.rawId === preferred.rawId) {
-      if (preferred.connectionId == null || model.connectionId == null) return true
-      return preferred.connectionId === model.connectionId
-    }
-    return false
-  }) || null
+  if (preferred.connectionId != null && preferred.rawId) {
+    return models.find((model) => (
+      model.connectionId === preferred.connectionId &&
+      model.rawId === preferred.rawId
+    )) || null
+  }
+  if (preferred.connectionId != null && preferred.modelId) {
+    return models.find((model) => (
+      model.connectionId === preferred.connectionId &&
+      model.id === preferred.modelId
+    )) || null
+  }
+  if (preferred.rawId) {
+    const matches = models.filter((model) => model.rawId === preferred.rawId)
+    return matches.length === 1 ? matches[0] : null
+  }
+  if (preferred.modelId) {
+    const matches = models.filter((model) => model.id === preferred.modelId)
+    return matches.length === 1 ? matches[0] : null
+  }
+  return null
 }

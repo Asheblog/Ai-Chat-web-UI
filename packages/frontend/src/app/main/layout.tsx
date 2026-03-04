@@ -95,7 +95,11 @@ export default function MainLayout({
               </div>
               <div className="justify-self-center">
                 <ModelSelector
-                  selectedModelId={currentSession?.modelLabel || currentSession?.modelRawId || null}
+                  selectedModelId={
+                    currentSession && typeof currentSession.connectionId === 'number' && currentSession.modelRawId
+                      ? `${currentSession.connectionId}:${currentSession.modelRawId}`
+                      : null
+                  }
                   onModelChange={(model) => {
                     const cur = useChatStore.getState().currentSession
                     if (cur) {

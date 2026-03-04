@@ -19,6 +19,7 @@ import { rejudgeWithNewAnswer } from '../api'
 import { RefreshCw, X } from 'lucide-react'
 import type { ModelItem } from '@/store/models-store'
 import { useModelsStore } from '@/store/models-store'
+import { modelKeyFor } from '@/store/model-preference-store'
 import { ImagePreviewList } from '@/features/chat/welcome/ImagePreviewList'
 import { useImageAttachments } from '@/features/chat/composer'
 
@@ -114,17 +115,19 @@ export function RejudgeDialog({
   ])
 
   const selectedModelId = useMemo(() => {
-    if (judgeRef.connectionId != null && judgeRef.rawId) {
-      return `${judgeRef.connectionId}:${judgeRef.rawId}`
-    }
-    return judgeRef.rawId || judgeRef.modelId
+    if (judgeRef.connectionId == null || !judgeRef.rawId) return null
+    return modelKeyFor({
+      connectionId: judgeRef.connectionId,
+      rawId: judgeRef.rawId,
+      id: judgeRef.modelId,
+    })
   }, [judgeRef])
 
   const selectedJudgeModel = useMemo(() => {
     if (judgeRef.connectionId != null && judgeRef.rawId) {
       return models.find((item) => item.connectionId === judgeRef.connectionId && item.rawId === judgeRef.rawId) || null
     }
-    return models.find((item) => item.id === judgeRef.modelId) || null
+    return null
   }, [models, judgeRef])
 
   const judgeVisionCapable = selectedJudgeModel?.capabilities?.vision === true

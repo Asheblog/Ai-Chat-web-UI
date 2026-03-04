@@ -45,19 +45,11 @@ export const isModelSelected = (
     return false
   }
 
-  return (
-    selectedModelId === model.id ||
-    selectedModelId === modelKeyFor(model) ||
-    (model.rawId ? selectedModelId === model.rawId : false)
-  )
+  return selectedModelId === modelKeyFor(model)
 }
 
 export const matchesStoredModelId = (model: ModelItem, storedId: string): boolean => {
-  return (
-    model.id === storedId ||
-    (model.rawId ? model.rawId === storedId : false) ||
-    modelKeyFor(model) === storedId
-  )
+  return modelKeyFor(model) === storedId
 }
 
 export const formatContextWindow = (tokens: number): string => {

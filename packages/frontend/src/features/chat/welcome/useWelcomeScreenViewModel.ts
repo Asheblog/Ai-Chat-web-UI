@@ -5,12 +5,13 @@ import { shallow } from 'zustand/shallow'
 import { useToast } from '@/components/ui/use-toast'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
-import { useModelsStore } from '@/store/models-store'
+import { useModelsStore, type ModelItem } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import {
   useModelPreferenceStore,
   persistPreferredModel,
   findPreferredModel,
+  modelKeyFor,
 } from '@/store/model-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
@@ -58,7 +59,7 @@ export const useWelcomeScreenViewModel = () => {
   const [query, setQuery] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
+  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [thinkingTouched, setThinkingTouched] = useState(false)
   const [effort, setEffort] = useState<'unset' | 'low' | 'medium' | 'high'>('unset')
@@ -176,7 +177,7 @@ export const useWelcomeScreenViewModel = () => {
 
   useEffect(() => {
     if (modelsCount === 0) return
-    if (selectedModelId && models?.some((m) => m.id === selectedModelId)) {
+    if (selectedModelKey && models?.some((m) => modelKeyFor(m) === selectedModelKey)) {
       return
     }
     let resolved = findPreferredModel(models || [], preferred) || undefined
@@ -191,14 +192,14 @@ export const useWelcomeScreenViewModel = () => {
       resolved = models?.[0]
     }
     if (resolved) {
-      setSelectedModelId(resolved.id)
+      setSelectedModelKey(modelKeyFor(resolved))
       void persistPreferredModel(resolved, { actorType })
     }
-  }, [actorType, models, modelsCount, preferred, selectedModelId, toast])
+  }, [actorType, models, modelsCount, preferred, selectedModelKey, toast])
 
   const selectedModel = useMemo(
-    () => (models || []).find((item) => item.id === selectedModelId) ?? null,
-    [models, selectedModelId],
+    () => (models || []).find((item) => modelKeyFor(item) === selectedModelKey) ?? null,
+    [models, selectedModelKey],
   )
 
   const isVisionEnabled = useMemo(() => {
@@ -415,14 +416,11 @@ export const useWelcomeScreenViewModel = () => {
   )
 
   const handleModelChange = useCallback(
-    (model: { id: string }) => {
-      setSelectedModelId(model.id)
-      const matched = (models || []).find((m) => m.id === model.id)
-      if (matched) {
-        void persistPreferredModel(matched, { actorType })
-      }
+    (model: ModelItem) => {
+      setSelectedModelKey(modelKeyFor(model))
+      void persistPreferredModel(model, { actorType })
     },
-    [actorType, models],
+    [actorType],
   )
 
   const handlePickImages = useCallback(() => {
@@ -445,11 +443,11 @@ export const useWelcomeScreenViewModel = () => {
     pickImages()
   }, [isVisionEnabled, pickImages, quotaExhausted, toast])
 
-  const canCreate = Boolean(selectedModelId)
+  const canCreate = Boolean(selectedModel)
   const creationDisabled = !canCreate || isCreating || quotaExhausted
 
   const handleCreate = useCallback(async () => {
-    if (!canCreate || !selectedModelId || isCreating) return
+    if (!canCreate || !selectedModel || isCreating) return
     if (quotaExhausted) {
       toast({
         title: '匿名额度已用尽',
@@ -470,13 +468,12 @@ export const useWelcomeScreenViewModel = () => {
       }
 
       const title = text ? text.slice(0, 50) : '新的对话'
-      const matchedModel = (models || []).find((m) => m.id === selectedModelId)
       const normalizedPrompt = sessionPromptDraft.trim()
       const created = await createSession(
-        selectedModelId,
+        selectedModel.id,
         title,
-        matchedModel?.connectionId,
-        matchedModel?.rawId,
+        selectedModel.connectionId,
+        selectedModel.rawId,
         normalizedPrompt || undefined,
       )
       if (created?.id) {
@@ -576,13 +573,12 @@ export const useWelcomeScreenViewModel = () => {
     }
   }, [
     canCreate,
-    selectedModelId,
+    selectedModel,
     isCreating,
     quotaExhausted,
     query,
     toast,
     buildRequestPayload,
-    models,
     sessionPromptDraft,
     createSession,
     router,
@@ -631,7 +627,7 @@ export const useWelcomeScreenViewModel = () => {
 
   return {
     header: {
-      selectedModelId,
+      selectedModelId: selectedModelKey,
       onModelChange: handleModelChange,
       disabled: creationDisabled,
       isCreating,

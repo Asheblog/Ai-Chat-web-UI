@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { ModelSelector } from '@/components/model-selector'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
+import { modelKeyFor } from '@/store/model-preference-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { ChevronRight, X } from 'lucide-react'
 import type { JudgeConfig, ModelConfigState, UseBattleFlowReturn } from '../hooks/useBattleFlow'
@@ -321,7 +322,7 @@ export function ConfigStep({
                     <div className="space-y-2">
                         <Label>裁判模型</Label>
                         <ModelSelector
-                            selectedModelId={judgeConfig.model?.id || null}
+                            selectedModelId={judgeConfig.model ? modelKeyFor(judgeConfig.model) : null}
                             onModelChange={(model) => onJudgeConfigChange({ ...judgeConfig, model })}
                             size="lg"
                             dropdownDirection="bottom"
