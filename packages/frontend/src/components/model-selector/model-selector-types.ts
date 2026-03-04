@@ -7,6 +7,7 @@ export interface ModelSelectorProps {
   disabled?: boolean
   className?: string
   variant?: "default" | "inline"
+  size?: "sm" | "md" | "lg"
   dropdownDirection?: "auto" | "bottom"
 }
 

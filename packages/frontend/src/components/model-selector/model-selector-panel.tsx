@@ -27,6 +27,7 @@ export function ModelSelector({
   disabled,
   className,
   variant = "default",
+  size = "md",
   dropdownDirection = "auto",
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
@@ -249,6 +250,7 @@ export function ModelSelector({
           disabled={disabled}
           className={className}
           displayVariant={variant}
+          selectorSize={size}
         />
       </PopoverTrigger>
       <PopoverContent

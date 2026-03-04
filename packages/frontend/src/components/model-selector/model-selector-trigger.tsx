@@ -9,12 +9,20 @@ interface ModelSelectorTriggerProps
   open: boolean
   selected?: ModelItem
   displayVariant: "default" | "inline"
+  selectorSize: "sm" | "md" | "lg"
 }
 
 export const ModelSelectorTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   ModelSelectorTriggerProps
->(({ open, selected, className, displayVariant, ...buttonProps }, ref) => {
+>(({ open, selected, className, displayVariant, selectorSize, ...buttonProps }, ref) => {
+  const defaultSizeClass =
+    selectorSize === "sm"
+      ? "h-9 min-w-[180px] px-2.5"
+      : selectorSize === "lg"
+        ? "h-12 min-w-[280px] px-4"
+        : "h-11 min-w-[240px] px-3"
+
   return (
     <Button
       ref={ref}
@@ -27,7 +35,7 @@ export const ModelSelectorTrigger = React.forwardRef<
         "border-border/70 bg-background/95 shadow-sm transition-colors hover:border-border hover:bg-accent/45",
         displayVariant === "inline"
           ? "h-9 w-9 rounded-lg p-0"
-          : "h-11 min-w-[240px] justify-between rounded-lg px-3",
+          : cn(defaultSizeClass, "justify-between rounded-lg"),
         className
       )}
       {...buttonProps}

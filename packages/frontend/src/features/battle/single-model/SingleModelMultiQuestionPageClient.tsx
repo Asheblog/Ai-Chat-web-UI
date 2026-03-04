@@ -2,18 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Play, Square, Trash2, ListChecks, History, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Plus, Play, Square, Trash2, ListChecks, History, RefreshCw, Share2, Copy } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { ModelSelector } from '@/components/model-selector'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
+import { modelKeyFor } from '@/store/model-preference-store'
 import { formatDate } from '@/lib/utils'
-import { cancelBattleRun, getBattleRun, listBattleRuns, streamBattle } from '@/features/battle/api'
+import { cancelBattleRun, createBattleShare, getBattleRun, listBattleRuns, streamBattle } from '@/features/battle/api'
 import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
 import { DetailDrawer, type BattleAttemptDetail } from '../ui/DetailDrawer'
 import {
@@ -48,7 +49,7 @@ const createDefaultQuestion = (): QuestionDraft => ({
   passK: 1,
 })
 
-const modelSelectKey = (model: ModelItem) => `${model.connectionId}:${model.rawId}`
+const modelSelectKey = (model: Pick<ModelItem, 'id' | 'connectionId' | 'rawId'>) => modelKeyFor(model)
 
 const normalizeInt = (value: string, min: number, max: number, fallback: number) => {
   const parsed = Number.parseInt(value, 10)
@@ -103,6 +104,9 @@ export function SingleModelMultiQuestionPageClient() {
   const [historyLoadingRunId, setHistoryLoadingRunId] = useState<number | null>(null)
   const [sourceRunId, setSourceRunId] = useState<number | null>(null)
   const [selectedAttempt, setSelectedAttempt] = useState<{ questionIndex: number; attemptIndex: number } | null>(null)
+  const [shareLink, setShareLink] = useState<string | null>(null)
+  const [sharing, setSharing] = useState(false)
+  const [copiedShareLink, setCopiedShareLink] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
 
@@ -121,6 +125,8 @@ export function SingleModelMultiQuestionPageClient() {
     setSummary(null)
     setError(null)
     setSelectedAttempt(null)
+    setShareLink(null)
+    setCopiedShareLink(false)
   }, [])
 
   const resolveModelSelectKey = useCallback((params?: { modelId?: string | null; connectionId?: number | null; rawId?: string | null }) => {
@@ -183,6 +189,8 @@ export function SingleModelMultiQuestionPageClient() {
     setQuestions(buildQuestionsFromRunDetail(detail))
     setSourceRunId(detail.id)
     setSelectedAttempt(null)
+    setShareLink(null)
+    setCopiedShareLink(false)
 
     const missingTargets: string[] = []
     if (!nextModelKey) missingTargets.push('参赛模型')
@@ -319,6 +327,8 @@ export function SingleModelMultiQuestionPageClient() {
     setLiveAttempts(new Map())
     setError(null)
     setSelectedAttempt(null)
+    setShareLink(null)
+    setCopiedShareLink(false)
 
     try {
       const payload = {
@@ -475,6 +485,40 @@ export function SingleModelMultiQuestionPageClient() {
   const handleNewTask = useCallback(() => {
     clearExecutionState('idle')
   }, [clearExecutionState])
+
+  const handleShare = useCallback(async () => {
+    if (!runId || sharing) return
+    setSharing(true)
+    try {
+      const res = await createBattleShare(runId)
+      if (!res?.success || !res.data) {
+        toast({ title: res?.error || '生成分享链接失败', variant: 'destructive' })
+        return
+      }
+      const token = res.data.token
+      const base = typeof window !== 'undefined' ? window.location.origin : ''
+      const link = `${base}/share/battle/${token}`
+      setShareLink(link)
+      setCopiedShareLink(false)
+      toast({ title: '分享链接已生成' })
+    } catch (err: any) {
+      toast({ title: err?.message || '生成分享链接失败', variant: 'destructive' })
+    } finally {
+      setSharing(false)
+    }
+  }, [runId, sharing, toast])
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!shareLink) return
+    try {
+      await navigator.clipboard.writeText(shareLink)
+      setCopiedShareLink(true)
+      toast({ title: '分享链接已复制' })
+      window.setTimeout(() => setCopiedShareLink(false), 1800)
+    } catch {
+      toast({ title: '复制分享链接失败', variant: 'destructive' })
+    }
+  }, [shareLink, toast])
 
   useEffect(() => {
     if (!selectedAttempt) return
@@ -661,34 +705,26 @@ export function SingleModelMultiQuestionPageClient() {
           <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
               <Label>参赛模型</Label>
-              <Select value={modelKey} onValueChange={setModelKey} disabled={isRunning}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择模型" />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((item) => (
-                    <SelectItem key={`model-${item.connectionId}-${item.rawId}`} value={modelSelectKey(item)}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ModelSelector
+                selectedModelId={modelKey || null}
+                onModelChange={(model) => setModelKey(modelSelectKey(model))}
+                size="lg"
+                dropdownDirection="bottom"
+                disabled={isRunning}
+                className="w-full justify-between"
+              />
             </div>
 
             <div className="space-y-2">
               <Label>裁判模型</Label>
-              <Select value={judgeKey} onValueChange={setJudgeKey} disabled={isRunning}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择裁判" />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((item) => (
-                    <SelectItem key={`judge-${item.connectionId}-${item.rawId}`} value={modelSelectKey(item)}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ModelSelector
+                selectedModelId={judgeKey || null}
+                onModelChange={(model) => setJudgeKey(modelSelectKey(model))}
+                size="lg"
+                dropdownDirection="bottom"
+                disabled={isRunning}
+                className="w-full justify-between"
+              />
             </div>
 
             <div className="space-y-2">
@@ -822,8 +858,27 @@ export function SingleModelMultiQuestionPageClient() {
           <Button variant="outline" onClick={handleNewTask} disabled={isRunning}>
             <RefreshCw className="mr-2 h-4 w-4" />新任务
           </Button>
+          <Button variant="outline" onClick={() => void handleShare()} disabled={!runId || sharing}>
+            <Share2 className="mr-2 h-4 w-4" />{sharing ? '生成中...' : '分享'}
+          </Button>
           {error ? <span className="text-sm text-destructive">{error}</span> : null}
         </div>
+
+        {shareLink ? (
+          <Card className="bg-muted/30">
+            <CardContent className="flex flex-col gap-3 pt-4 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0 text-sm text-muted-foreground">
+                <span>分享链接：</span>
+                <a className="ml-1 break-all text-primary hover:underline" href={shareLink} target="_blank" rel="noreferrer">
+                  {shareLink}
+                </a>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => void handleCopyShareLink()}>
+                <Copy className="mr-2 h-4 w-4" />{copiedShareLink ? '已复制' : '复制链接'}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>

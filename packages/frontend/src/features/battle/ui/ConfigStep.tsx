@@ -109,6 +109,7 @@ export function ConfigStep({
                     <ModelSelector
                         selectedModelId={null}
                         onModelChange={onAddModel}
+                        size="lg"
                         dropdownDirection="bottom"
                         className="w-full justify-between"
                     />
@@ -322,6 +323,7 @@ export function ConfigStep({
                         <ModelSelector
                             selectedModelId={judgeConfig.model?.id || null}
                             onModelChange={(model) => onJudgeConfigChange({ ...judgeConfig, model })}
+                            size="lg"
                             dropdownDirection="bottom"
                             className="w-full justify-between"
                         />

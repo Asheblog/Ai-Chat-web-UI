@@ -113,6 +113,7 @@ export default function MainLayout({
                         })
                     }
                   }}
+                  size="sm"
                   className="w-[60vw] max-w-[280px]"
                 />
               </div>
