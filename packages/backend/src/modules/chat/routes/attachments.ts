@@ -1,5 +1,4 @@
 import type { Hono } from 'hono';
-import { prisma as defaultPrisma } from '../../../db';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware, adminOnlyMiddleware, requireUserActor } from '../../../middleware/auth';
 import type { ApiResponse } from '../../../types';
@@ -11,11 +10,11 @@ import {
 } from '../../../utils/chat-images';
 
 export interface ChatAttachmentRoutesDeps {
-  prisma?: PrismaClient
+  prisma: PrismaClient
 }
 
-export const registerChatAttachmentRoutes = (router: Hono, deps: ChatAttachmentRoutesDeps = {}) => {
-  const prisma = deps.prisma ?? defaultPrisma
+export const registerChatAttachmentRoutes = (router: Hono, deps: ChatAttachmentRoutesDeps) => {
+  const { prisma } = deps
   router.post('/admin/attachments/refresh', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
     try {
       const siteBaseSetting = await prisma.systemSetting.findUnique({

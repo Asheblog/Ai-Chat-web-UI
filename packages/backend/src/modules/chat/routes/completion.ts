@@ -1,7 +1,6 @@
 import type { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { PrismaClient } from '@prisma/client';
-import { prisma as defaultPrisma } from '../../../db';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { Actor, ApiResponse, UsageQuotaSnapshot } from '../../../types';
 import { serializeQuotaSnapshot } from '../../../utils/quota';
@@ -19,28 +18,23 @@ import {
 import { createUserMessageWithQuota } from '../services/message-service';
 import {
   ChatCompletionServiceError,
-  nonStreamChatService as defaultNonStreamChatService,
   type NonStreamChatService,
 } from '../services/non-stream-chat-service';
 import {
-  conversationCompressionService as defaultConversationCompressionService,
   type ConversationCompressionService,
 } from '../services/conversation-compression-service';
 
 export interface ChatCompletionRoutesDeps {
-  prisma?: PrismaClient
-  nonStreamService?: NonStreamChatService
-  conversationCompressionService?: ConversationCompressionService
+  prisma: PrismaClient
+  nonStreamService: NonStreamChatService
+  conversationCompressionService: ConversationCompressionService
 }
 
 export const registerChatCompletionRoutes = (
   router: Hono,
-  deps: ChatCompletionRoutesDeps = {},
+  deps: ChatCompletionRoutesDeps,
 ) => {
-  const prisma = deps.prisma ?? defaultPrisma
-  const nonStreamService = deps.nonStreamService ?? defaultNonStreamChatService
-  const conversationCompressionService =
-    deps.conversationCompressionService ?? defaultConversationCompressionService
+  const { prisma, nonStreamService, conversationCompressionService } = deps
   router.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
     let traceRecorder: TaskTraceRecorder | null = null
     let traceStatus: TaskTraceStatus = 'running'

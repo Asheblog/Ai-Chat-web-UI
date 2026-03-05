@@ -1,7 +1,6 @@
 import type { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import type { PrismaClient } from '@prisma/client'
-import { prisma as defaultPrisma } from '../../../db'
 import { actorMiddleware } from '../../../middleware/auth'
 import type { ApiResponse, Actor } from '../../../types'
 import { BackendLogger as log } from '../../../utils/logger'
@@ -24,8 +23,8 @@ import {
 
 export type { ChatStreamRoutesDeps }
 
-export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDeps = {}) => {
-  const prisma: PrismaClient = deps.prisma ?? defaultPrisma
+export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDeps) => {
+  const prisma: PrismaClient = deps.prisma
   const handleStream = createChatStreamHandler(deps)
 
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), handleStream)

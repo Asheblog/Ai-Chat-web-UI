@@ -5,12 +5,12 @@ import { z } from 'zod';
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import type { AuthResponse, RegisterResponse, ApiResponse, ActorContext, Actor } from '../types';
 import { serializeQuotaSnapshot } from '../utils/quota';
-import { authService as defaultAuthService, AuthServiceError, type AuthService } from '../services/auth/auth-service';
-import { getAppConfig, type AppConfig } from '../config/app-config';
+import { AuthServiceError, type AuthService } from '../services/auth/auth-service';
+import type { AppConfig } from '../config/app-config';
 
 export interface AuthApiDeps {
-  authService?: AuthService
-  config?: AppConfig
+  authService: AuthService
+  config: AppConfig
 }
 
 // 注册schema
@@ -25,10 +25,10 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
-export const createAuthApi = (deps: AuthApiDeps = {}) => {
+export const createAuthApi = (deps: AuthApiDeps) => {
   const router = new Hono();
-  const appConfig = deps.config ?? getAppConfig();
-  const svc = deps.authService ?? defaultAuthService;
+  const appConfig = deps.config;
+  const svc = deps.authService;
 
   // 用户注册
   router.post('/register', zValidator('json', registerSchema), async (c) => {
@@ -204,4 +204,4 @@ export const createAuthApi = (deps: AuthApiDeps = {}) => {
   return router;
 };
 
-export default createAuthApi();
+export default createAuthApi;

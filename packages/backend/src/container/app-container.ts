@@ -29,6 +29,7 @@ import { TaskTraceFileService } from '../services/task-trace/task-trace-file-ser
 import { ChatService } from '../services/chat/chat-service'
 import { ShareService } from '../services/shares'
 import { BattleService } from '../services/battle/battle-service'
+import { BattleImageService } from '../services/battle/battle-image-service'
 import { PromptTemplateService } from '../services/prompt-templates/prompt-template-service'
 import { ArtifactService } from '../services/workspace/artifact-service'
 import { WorkspaceService } from '../services/workspace/workspace-service'
@@ -190,15 +191,6 @@ export class AppContainer {
     this.contextWindowService = deps.contextWindowService ?? new ContextWindowService()
     registry.register(SERVICE_KEYS.contextWindowService, this.contextWindowService)
 
-    this.sessionService =
-      deps.sessionService ??
-      new SessionService({
-        prisma: this.context.prisma,
-        modelResolverService: this.modelResolverService,
-        logger: this.context.logger,
-      })
-    registry.register(SERVICE_KEYS.sessionService, this.sessionService)
-
     this.chatService =
       deps.chatService ??
       new ChatService({
@@ -220,6 +212,7 @@ export class AppContainer {
       new BattleService({
         prisma: this.context.prisma,
         modelResolver: this.modelResolverService,
+        imageService: new BattleImageService(),
       })
     registry.register(SERVICE_KEYS.battleService, this.battleService)
 
@@ -236,6 +229,17 @@ export class AppContainer {
         prisma: this.context.prisma,
       })
     registry.register(SERVICE_KEYS.artifactService, this.artifactService)
+
+    this.sessionService =
+      deps.sessionService ??
+      new SessionService({
+        prisma: this.context.prisma,
+        modelResolverService: this.modelResolverService,
+        artifactService: this.artifactService,
+        workspaceService: this.workspaceService,
+        logger: this.context.logger,
+      })
+    registry.register(SERVICE_KEYS.sessionService, this.sessionService)
 
     this.workspaceCleanupService =
       deps.workspaceCleanupService ??

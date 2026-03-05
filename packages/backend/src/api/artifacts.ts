@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import { artifactService as defaultArtifactService, type ArtifactService } from '../services/workspace/artifact-service'
+import type { ArtifactService } from '../services/workspace/artifact-service'
 import { WorkspaceServiceError } from '../services/workspace/workspace-errors'
 
 const buildContentDisposition = (fileName: string) => {
@@ -13,11 +13,11 @@ const buildContentDisposition = (fileName: string) => {
 }
 
 export interface ArtifactsApiDeps {
-  artifactService?: ArtifactService
+  artifactService: ArtifactService
 }
 
-export const createArtifactsApi = (deps: ArtifactsApiDeps = {}) => {
-  const artifactService = deps.artifactService ?? defaultArtifactService
+export const createArtifactsApi = (deps: ArtifactsApiDeps) => {
+  const artifactService = deps.artifactService
   const router = new Hono()
 
   router.get('/:id/download', actorMiddleware, async (c) => {
@@ -72,4 +72,4 @@ export const createArtifactsApi = (deps: ArtifactsApiDeps = {}) => {
   return router
 }
 
-export default createArtifactsApi()
+export default createArtifactsApi

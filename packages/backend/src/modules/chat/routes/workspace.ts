@@ -1,25 +1,22 @@
 import type { Hono } from 'hono'
 import { actorMiddleware } from '../../../middleware/auth'
 import type { Actor, ApiResponse } from '../../../types'
-import { chatService as defaultChatService, ChatServiceError, type ChatService } from '../../../services/chat'
-import { prisma as defaultPrisma } from '../../../db'
+import { ChatServiceError, type ChatService } from '../../../services/chat'
 import { extendAnonymousSession } from '../chat-common'
 import {
-  artifactService as defaultArtifactService,
   type ArtifactService,
 } from '../../../services/workspace/artifact-service'
 import {
-  workspaceService as defaultWorkspaceService,
   type WorkspaceService,
 } from '../../../services/workspace/workspace-service'
 import { WorkspaceServiceError } from '../../../services/workspace/workspace-errors'
 import type { PrismaClient } from '@prisma/client'
 
 export interface ChatWorkspaceRoutesDeps {
-  prisma?: PrismaClient
-  chatService?: ChatService
-  artifactService?: ArtifactService
-  workspaceService?: WorkspaceService
+  prisma: PrismaClient
+  chatService: ChatService
+  artifactService: ArtifactService
+  workspaceService: WorkspaceService
 }
 
 const ensureWorkspaceAccess = async (
@@ -37,11 +34,8 @@ const ensureWorkspaceAccess = async (
   await deps.chatService.ensureSessionAccess(actor, sessionId)
 }
 
-export const registerChatWorkspaceRoutes = (router: Hono, deps: ChatWorkspaceRoutesDeps = {}) => {
-  const prisma = deps.prisma ?? defaultPrisma
-  const chatService = deps.chatService ?? defaultChatService
-  const artifactService = deps.artifactService ?? defaultArtifactService
-  const workspaceService = deps.workspaceService ?? defaultWorkspaceService
+export const registerChatWorkspaceRoutes = (router: Hono, deps: ChatWorkspaceRoutesDeps) => {
+  const { prisma, chatService, artifactService, workspaceService } = deps
 
   router.get('/sessions/:sessionId/artifacts', actorMiddleware, async (c) => {
     try {

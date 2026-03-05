@@ -3,36 +3,32 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { PrismaClient } from '@prisma/client'
-import { prisma as defaultPrisma } from '../../../db'
 import { actorMiddleware } from '../../../middleware/auth'
 import type { Actor, ApiResponse } from '../../../types'
 import { BackendLogger as log } from '../../../utils/logger'
 import { sessionOwnershipClause } from '../chat-common'
 import {
-  titleSummaryService as defaultTitleSummaryService,
   TitleSummaryServiceError,
   type TitleSummaryService,
   type TitleSummaryConfig,
 } from '../services/title-summary-service'
-import { SettingsService, settingsService as defaultSettingsService } from '../../../services/settings'
+import type { SettingsService } from '../../../services/settings'
 
 const titleSummarySchema = z.object({
   content: z.string().min(1).max(5000),
 })
 
 export interface TitleSummaryRoutesDeps {
-  prisma?: PrismaClient
-  service?: TitleSummaryService
-  settingsService?: SettingsService
+  prisma: PrismaClient
+  service: TitleSummaryService
+  settingsService: SettingsService
 }
 
 export const registerTitleSummaryRoutes = (
   router: Hono,
-  deps: TitleSummaryRoutesDeps = {},
+  deps: TitleSummaryRoutesDeps,
 ) => {
-  const prisma = deps.prisma ?? defaultPrisma
-  const service = deps.service ?? defaultTitleSummaryService
-  const settingsService = deps.settingsService ?? defaultSettingsService
+  const { prisma, service, settingsService } = deps
 
   router.post(
     '/sessions/:sessionId/summarize-title',

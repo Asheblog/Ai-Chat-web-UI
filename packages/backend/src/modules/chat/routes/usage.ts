@@ -1,20 +1,18 @@
 import type { Hono } from 'hono';
-import { prisma as defaultPrisma } from '../../../db';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware } from '../../../middleware/auth';
 import { Tokenizer } from '../../../utils/tokenizer';
 import { resolveContextLimit } from '../../../utils/context-window';
 import type { Actor, ApiResponse } from '../../../types';
-import { chatService as defaultChatService, type ChatService } from '../../../services/chat';
+import type { ChatService } from '../../../services/chat';
 
 export interface ChatUsageRoutesDeps {
-  prisma?: PrismaClient
-  chatService?: ChatService
+  prisma: PrismaClient
+  chatService: ChatService
 }
 
-export const registerChatUsageRoutes = (router: Hono, deps: ChatUsageRoutesDeps = {}) => {
-  const prisma = deps.prisma ?? defaultPrisma
-  const chatService = deps.chatService ?? defaultChatService
+export const registerChatUsageRoutes = (router: Hono, deps: ChatUsageRoutesDeps) => {
+  const { prisma, chatService } = deps
   router.get('/usage', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor | undefined;

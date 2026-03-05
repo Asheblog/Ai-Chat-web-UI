@@ -1,14 +1,14 @@
 import { createLogger } from '../../utils/logger'
 import { getAppConfig, type WorkspaceConfig } from '../../config/app-config'
-import { ArtifactService, artifactService as defaultArtifactService } from './artifact-service'
-import { WorkspaceService, workspaceService as defaultWorkspaceService } from './workspace-service'
+import { ArtifactService } from './artifact-service'
+import { WorkspaceService } from './workspace-service'
 
 const log = createLogger('WorkspaceCleanup')
 
 export interface WorkspaceCleanupServiceDeps {
   config?: WorkspaceConfig
-  workspaceService?: WorkspaceService
-  artifactService?: ArtifactService
+  workspaceService: WorkspaceService
+  artifactService: ArtifactService
 }
 
 export class WorkspaceCleanupService {
@@ -18,10 +18,10 @@ export class WorkspaceCleanupService {
   private intervalId: NodeJS.Timeout | null = null
   private running = false
 
-  constructor(deps: WorkspaceCleanupServiceDeps = {}) {
+  constructor(deps: WorkspaceCleanupServiceDeps) {
     this.config = deps.config ?? getAppConfig().workspace
-    this.workspaceService = deps.workspaceService ?? defaultWorkspaceService
-    this.artifactService = deps.artifactService ?? defaultArtifactService
+    this.workspaceService = deps.workspaceService
+    this.artifactService = deps.artifactService
   }
 
   start() {
@@ -86,11 +86,3 @@ export class WorkspaceCleanupService {
     }
   }
 }
-
-let workspaceCleanupService = new WorkspaceCleanupService()
-
-export const setWorkspaceCleanupService = (service: WorkspaceCleanupService) => {
-  workspaceCleanupService = service
-}
-
-export { workspaceCleanupService }

@@ -2,7 +2,6 @@ import type { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { prisma as defaultPrisma } from '../../../db';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse } from '../../../types';
@@ -21,11 +20,11 @@ const toContentfulStatus = (status: number): ContentfulStatusCode => {
 };
 
 export interface ChatControlRoutesDeps {
-  prisma?: PrismaClient
+  prisma: PrismaClient
 }
 
-export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesDeps = {}) => {
-  const prisma = deps.prisma ?? defaultPrisma
+export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesDeps) => {
+  const { prisma } = deps
   router.post('/stop', actorMiddleware, zValidator('json', z.object({
     sessionId: z.number().int().positive(),
   })), async (c) => {

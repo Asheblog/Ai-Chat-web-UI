@@ -1,6 +1,5 @@
 import type { Context } from 'hono';
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { prisma as defaultPrisma } from '../../../db';
 import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../types';
 import { AuthUtils } from '../../../utils/auth';
 import type { ProviderType } from '../../../utils/providers';
@@ -33,12 +32,8 @@ import {
   updateStreamMetaController,
   deletePendingStreamCancelKey,
 } from '../../chat/stream-state';
+import type { ChatRequestBuilder } from '../services/chat-request-builder';
 import {
-  chatRequestBuilder as defaultChatRequestBuilder,
-  type ChatRequestBuilder,
-} from '../services/chat-request-builder';
-import {
-  reasoningCompatibilityService as defaultReasoningCompatibilityService,
   type ReasoningCompatibilityService,
   type AttemptTracker,
   type ReasoningProtocol,
@@ -56,32 +51,19 @@ import {
   sessionOwnershipClause,
 } from '../chat-common';
 import { createUserMessageWithQuota } from '../services/message-service';
-import { chatService as defaultChatService, ChatServiceError, type ChatService } from '../../../services/chat';
-import { providerRequester as defaultProviderRequester, type ProviderRequester } from '../services/provider-requester';
-import {
-  nonStreamFallbackService as defaultNonStreamFallbackService,
-  type NonStreamFallbackService,
-} from '../services/non-stream-fallback-service';
-import {
-  assistantProgressService as defaultAssistantProgressService,
-  type AssistantProgressService,
-} from '../services/assistant-progress-service';
+import { ChatServiceError, type ChatService } from '../../../services/chat';
+import type { ProviderRequester } from '../services/provider-requester';
+import type { NonStreamFallbackService } from '../services/non-stream-fallback-service';
+import type { AssistantProgressService } from '../services/assistant-progress-service';
 import { extractOpenAIResponsesStreamEvent } from '../../../utils/openai-responses';
 import {
-  streamUsageService as defaultStreamUsageService,
   type StreamUsageService,
   computeStreamMetrics,
   resolveCompletionTokensForMetrics,
 } from '../services/stream-usage-service';
-import {
-  streamTraceService as defaultStreamTraceService,
-  type StreamTraceService,
-} from '../services/stream-trace-service';
-import { streamSseService as defaultStreamSseService, type StreamSseService } from '../services/stream-sse-service';
-import {
-  conversationCompressionService as defaultConversationCompressionService,
-  type ConversationCompressionService,
-} from '../services/conversation-compression-service';
+import type { StreamTraceService } from '../services/stream-trace-service';
+import type { StreamSseService } from '../services/stream-sse-service';
+import type { ConversationCompressionService } from '../services/conversation-compression-service';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
@@ -95,33 +77,33 @@ import { ProviderStreamEngine } from './stream/provider-stream-engine';
 import { StreamPersistenceSink } from './stream/persistence-sink';
 
 export interface ChatStreamRoutesDeps {
-  prisma?: PrismaClient
-  chatService?: ChatService
-  chatRequestBuilder?: ChatRequestBuilder
-  reasoningCompatibilityService?: ReasoningCompatibilityService
-  providerRequester?: ProviderRequester
-  nonStreamFallbackService?: NonStreamFallbackService
-  assistantProgressService?: AssistantProgressService
-  streamUsageService?: StreamUsageService
-  streamTraceService?: StreamTraceService
-  streamSseService?: StreamSseService
-  conversationCompressionService?: ConversationCompressionService
+  prisma: PrismaClient
+  chatService: ChatService
+  chatRequestBuilder: ChatRequestBuilder
+  reasoningCompatibilityService: ReasoningCompatibilityService
+  providerRequester: ProviderRequester
+  nonStreamFallbackService: NonStreamFallbackService
+  assistantProgressService: AssistantProgressService
+  streamUsageService: StreamUsageService
+  streamTraceService: StreamTraceService
+  streamSseService: StreamSseService
+  conversationCompressionService: ConversationCompressionService
 }
 
-export const createChatStreamHandler = (deps: ChatStreamRoutesDeps = {}) => {
-  const prisma = deps.prisma ?? defaultPrisma
-  const chatService = deps.chatService ?? defaultChatService
-  const chatRequestBuilder = deps.chatRequestBuilder ?? defaultChatRequestBuilder
-  const reasoningCompatibilityService =
-    deps.reasoningCompatibilityService ?? defaultReasoningCompatibilityService
-  const providerRequester = deps.providerRequester ?? defaultProviderRequester
-  const nonStreamFallbackService = deps.nonStreamFallbackService ?? defaultNonStreamFallbackService
-  const assistantProgressService = deps.assistantProgressService ?? defaultAssistantProgressService
-  const streamUsageService = deps.streamUsageService ?? defaultStreamUsageService
-  const streamTraceService = deps.streamTraceService ?? defaultStreamTraceService
-  const streamSseService = deps.streamSseService ?? defaultStreamSseService
-  const conversationCompressionService =
-    deps.conversationCompressionService ?? defaultConversationCompressionService
+export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
+  const {
+    prisma,
+    chatService,
+    chatRequestBuilder,
+    reasoningCompatibilityService,
+    providerRequester,
+    nonStreamFallbackService,
+    assistantProgressService,
+    streamUsageService,
+    streamTraceService,
+    streamSseService,
+    conversationCompressionService,
+  } = deps
   const requestValidation = new ChatStreamRequestValidation({ chatService })
   const providerStreamEngine = new ProviderStreamEngine({
     providerRequester,

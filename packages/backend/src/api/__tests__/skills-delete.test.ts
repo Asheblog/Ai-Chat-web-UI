@@ -77,6 +77,16 @@ jest.mock('../../services/python-runtime', () => {
 import { createSkillsApi } from '../skills'
 import { prisma } from '../../db'
 import { pythonRuntimeService } from '../../services/python-runtime'
+import { skillInstaller } from '../../modules/skills/skill-installer'
+import { skillApprovalService } from '../../modules/skills/skill-approval-service'
+
+const createApp = () =>
+  createSkillsApi({
+    prisma: prisma as any,
+    skillInstaller: skillInstaller as any,
+    skillApprovalService: skillApprovalService as any,
+    pythonRuntimeService: pythonRuntimeService as any,
+  })
 
 describe('skills api - uninstall skill', () => {
   beforeEach(() => {
@@ -110,7 +120,7 @@ describe('skills api - uninstall skill', () => {
       removedPackages: ['numpy', 'pandas'],
     })
 
-    const app = createSkillsApi()
+    const app = createApp()
     const res = await app.request('http://localhost/12', {
       method: 'DELETE',
       headers: { 'x-role': 'ADMIN' },
@@ -167,7 +177,7 @@ describe('skills api - uninstall skill', () => {
       removablePackages: ['pandas'],
     })
 
-    const app = createSkillsApi()
+    const app = createApp()
     const res = await app.request('http://localhost/12/uninstall-plan', {
       method: 'GET',
       headers: { 'x-role': 'ADMIN' },
@@ -200,7 +210,7 @@ describe('skills api - uninstall skill', () => {
       versions: [],
     })
 
-    const app = createSkillsApi()
+    const app = createApp()
     const res = await app.request('http://localhost/1', {
       method: 'DELETE',
       headers: { 'x-role': 'ADMIN' },
@@ -214,7 +224,7 @@ describe('skills api - uninstall skill', () => {
   })
 
   it('rejects non-admin request', async () => {
-    const app = createSkillsApi()
+    const app = createApp()
     const res = await app.request('http://localhost/12', {
       method: 'DELETE',
       headers: { 'x-role': 'USER' },

@@ -26,9 +26,32 @@ import { registerChatCompletionRoutes } from '../../modules/chat/routes/completi
 
 describe('chat api factory', () => {
   it('registers chat routes', () => {
-    createChatApi()
+    const deps: any = {
+      messageRoutes: { prisma: {}, chatService: {}, chatMessageQueryService: {} },
+      compressionRoutes: { chatService: {}, conversationCompressionService: {} },
+      attachmentRoutes: { prisma: {} },
+      streamRoutes: {
+        prisma: {},
+        chatService: {},
+        chatRequestBuilder: {},
+        reasoningCompatibilityService: {},
+        providerRequester: {},
+        nonStreamFallbackService: {},
+        assistantProgressService: {},
+        streamUsageService: {},
+        streamTraceService: {},
+        streamSseService: {},
+        conversationCompressionService: {},
+      },
+      completionRoutes: { prisma: {}, nonStreamService: {}, conversationCompressionService: {} },
+      controlRoutes: { prisma: {} },
+      usageRoutes: { prisma: {}, chatService: {} },
+      titleSummaryRoutes: { prisma: {}, service: {}, settingsService: {} },
+      workspaceRoutes: { prisma: {}, chatService: {}, artifactService: {}, workspaceService: {} },
+    }
+    createChatApi(deps)
 
-    expect(registerChatStreamRoutes).toHaveBeenCalledWith(expect.anything(), undefined)
-    expect(registerChatCompletionRoutes).toHaveBeenCalledWith(expect.anything(), undefined)
+    expect(registerChatStreamRoutes).toHaveBeenCalledWith(expect.anything(), deps.streamRoutes)
+    expect(registerChatCompletionRoutes).toHaveBeenCalledWith(expect.anything(), deps.completionRoutes)
   })
 })

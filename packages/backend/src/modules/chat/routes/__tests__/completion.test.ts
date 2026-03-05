@@ -103,6 +103,9 @@ describe('completion route factory', () => {
         modelRawId: 'gpt-4o',
       }),
       nonStreamService,
+      conversationCompressionService: {
+        compressIfNeeded: jest.fn(),
+      } as any,
     })
 
     const res = await app.request('http://localhost/completion', {

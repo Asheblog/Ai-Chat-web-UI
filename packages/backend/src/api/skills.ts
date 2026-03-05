@@ -3,15 +3,15 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import type { PrismaClient } from '@prisma/client'
 import { actorMiddleware, adminOnlyMiddleware, requireUserActor } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import { prisma } from '../db'
-import { skillInstaller } from '../modules/skills/skill-installer'
-import { skillApprovalService } from '../modules/skills/skill-approval-service'
 import {
-  pythonRuntimeService,
+  type PythonRuntimeService,
   PythonRuntimeServiceError,
 } from '../services/python-runtime'
+import type { SkillInstaller } from '../modules/skills/skill-installer'
+import type { SkillApprovalService } from '../modules/skills/skill-approval-service'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('SkillsApi')
@@ -105,7 +105,15 @@ const collectPythonRequirementsFromManifest = (manifestJson: string | null | und
   }
 }
 
-export const createSkillsApi = () => {
+export interface SkillsApiDeps {
+  prisma: PrismaClient
+  skillInstaller: SkillInstaller
+  skillApprovalService: SkillApprovalService
+  pythonRuntimeService: PythonRuntimeService
+}
+
+export const createSkillsApi = (deps: SkillsApiDeps) => {
+  const { prisma, skillInstaller, skillApprovalService, pythonRuntimeService } = deps
   const router = new Hono()
 
   router.get('/catalog', actorMiddleware, async (c) => {

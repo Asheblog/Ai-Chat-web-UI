@@ -19,18 +19,18 @@ import { registerChatCompressionRoutes } from '../modules/chat/routes/compressio
 import type { ChatCompressionRoutesDeps } from '../modules/chat/routes/compression';
 
 export interface ChatApiDeps {
-  messageRoutes?: ChatMessageRoutesDeps
-  compressionRoutes?: ChatCompressionRoutesDeps
-  attachmentRoutes?: ChatAttachmentRoutesDeps
-  streamRoutes?: ChatStreamRoutesDeps
-  completionRoutes?: ChatCompletionRoutesDeps
-  controlRoutes?: ChatControlRoutesDeps
-  usageRoutes?: ChatUsageRoutesDeps
-  titleSummaryRoutes?: TitleSummaryRoutesDeps
-  workspaceRoutes?: ChatWorkspaceRoutesDeps
+  messageRoutes: ChatMessageRoutesDeps
+  compressionRoutes: ChatCompressionRoutesDeps
+  attachmentRoutes: ChatAttachmentRoutesDeps
+  streamRoutes: ChatStreamRoutesDeps
+  completionRoutes: ChatCompletionRoutesDeps
+  controlRoutes: ChatControlRoutesDeps
+  usageRoutes: ChatUsageRoutesDeps
+  titleSummaryRoutes: TitleSummaryRoutesDeps
+  workspaceRoutes: ChatWorkspaceRoutesDeps
 }
 
-export const createChatApi = (deps: ChatApiDeps = {}) => {
+export const createChatApi = (deps: ChatApiDeps) => {
   const chat = new Hono();
 
   registerChatMessageRoutes(chat, deps.messageRoutes);
@@ -46,4 +46,4 @@ export const createChatApi = (deps: ChatApiDeps = {}) => {
   return chat;
 };
 
-export default createChatApi();
+export default createChatApi;

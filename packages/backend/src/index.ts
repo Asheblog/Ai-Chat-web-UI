@@ -28,6 +28,20 @@ import { createSystemLogsApi } from './api/system-logs';
 import { createSkillsApi } from './api/skills';
 import { createArtifactsApi } from './api/artifacts';
 import { createPromptTemplatesApi } from './api/prompt-templates';
+import { SkillInstaller } from './modules/skills/skill-installer';
+import { SkillApprovalService } from './modules/skills/skill-approval-service';
+import { chatMessageQueryService } from './modules/chat/services/message-query-service';
+import { conversationCompressionService } from './modules/chat/services/conversation-compression-service';
+import { nonStreamChatService } from './modules/chat/services/non-stream-chat-service';
+import { titleSummaryService } from './modules/chat/services/title-summary-service';
+import { chatRequestBuilder } from './modules/chat/services/chat-request-builder';
+import { reasoningCompatibilityService } from './modules/chat/services/reasoning-compatibility-service';
+import { providerRequester } from './modules/chat/services/provider-requester';
+import { nonStreamFallbackService } from './modules/chat/services/non-stream-fallback-service';
+import { assistantProgressService } from './modules/chat/services/assistant-progress-service';
+import { streamUsageService } from './modules/chat/services/stream-usage-service';
+import { streamTraceService } from './modules/chat/services/stream-trace-service';
+import { streamSseService } from './modules/chat/services/stream-sse-service';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -39,6 +53,8 @@ setChatConfig(appContext.config);
 // 设置 RAG 初始化器依赖并启动
 setRAGInitializerDeps({ prisma: appContext.prisma });
 reloadRAGServices();
+const skillInstaller = new SkillInstaller({ prisma: appContext.prisma });
+const skillApprovalService = new SkillApprovalService({ prisma: appContext.prisma });
 
 const app = new Hono();
 
@@ -95,9 +111,11 @@ app.route('/api/chat', createChatApi({
   messageRoutes: {
     prisma: appContext.prisma,
     chatService: container.chatService,
+    chatMessageQueryService,
   },
   compressionRoutes: {
     chatService: container.chatService,
+    conversationCompressionService,
   },
   attachmentRoutes: {
     prisma: appContext.prisma,
@@ -105,9 +123,20 @@ app.route('/api/chat', createChatApi({
   streamRoutes: {
     prisma: appContext.prisma,
     chatService: container.chatService,
+    chatRequestBuilder,
+    reasoningCompatibilityService,
+    providerRequester,
+    nonStreamFallbackService,
+    assistantProgressService,
+    streamUsageService,
+    streamTraceService,
+    streamSseService,
+    conversationCompressionService,
   },
   completionRoutes: {
     prisma: appContext.prisma,
+    nonStreamService: nonStreamChatService,
+    conversationCompressionService,
   },
   controlRoutes: {
     prisma: appContext.prisma,
@@ -118,11 +147,14 @@ app.route('/api/chat', createChatApi({
   },
   titleSummaryRoutes: {
     prisma: appContext.prisma,
+    service: titleSummaryService,
     settingsService: container.settingsService,
   },
   workspaceRoutes: {
     prisma: appContext.prisma,
     chatService: container.chatService,
+    artifactService: container.artifactService,
+    workspaceService: container.workspaceService,
   },
 }));
 app.route('/api/settings', createSettingsApi({
@@ -137,14 +169,28 @@ app.route('/api/shares', createSharesApi({ shareService: container.shareService 
 app.route('/api/battle', createBattleApi({ battleService: container.battleService }));
 
 // 文档路由（RAG 服务状态在请求时动态检查）
-app.route('/api/documents', createDocumentsApi());
+app.route('/api/documents', createDocumentsApi({
+  resolveServices: () => {
+    const services = getDocumentServices();
+    if (!services) return null;
+    return {
+      documentService: services.documentService,
+      ragService: services.ragService,
+    };
+  },
+}));
 
 // 知识库路由
 app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 
 // 系统日志路由
 app.route('/api/system-logs', createSystemLogsApi({ systemLogService: container.systemLogService }));
-app.route('/api/skills', createSkillsApi());
+app.route('/api/skills', createSkillsApi({
+  prisma: appContext.prisma,
+  skillInstaller,
+  skillApprovalService,
+  pythonRuntimeService: container.pythonRuntimeService,
+}));
 app.route('/api/artifacts', createArtifactsApi({ artifactService: container.artifactService }));
 app.route('/api/prompt-templates', createPromptTemplatesApi({ promptTemplateService: container.promptTemplateService }));
 

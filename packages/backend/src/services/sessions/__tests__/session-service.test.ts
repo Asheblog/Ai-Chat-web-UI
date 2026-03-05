@@ -40,14 +40,22 @@ const createService = (overrides?: {
         rawModelId: 'gpt-4o',
       }),
     } as any)
+  const artifactService = {
+    cleanupArtifactsBySession: jest.fn().mockResolvedValue(undefined),
+  }
+  const workspaceService = {
+    destroyWorkspace: jest.fn().mockResolvedValue(undefined),
+  }
   const logger = { warn: jest.fn(), error: jest.fn() }
   const service = new SessionService({
     prisma: prisma as any,
     ensureAnonymousSession,
     modelResolverService: modelResolverService as any,
+    artifactService: artifactService as any,
+    workspaceService: workspaceService as any,
     logger,
   })
-  return { service, prisma, ensureAnonymousSession, modelResolverService }
+  return { service, prisma, ensureAnonymousSession, modelResolverService, artifactService, workspaceService }
 }
 
 const baseDate = new Date('2024-01-01T00:00:00.000Z')

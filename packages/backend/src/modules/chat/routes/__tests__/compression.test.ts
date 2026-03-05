@@ -46,6 +46,16 @@ jest.mock("../../services/conversation-compression-service", () => ({
   },
 }))
 
+const createDeps = () => ({
+  chatService: {
+    ensureSessionAccess: (...args: any[]) => mockEnsureSessionAccess(...args),
+  },
+  conversationCompressionService: {
+    updateGroupExpanded: (...args: any[]) => mockUpdateGroupExpanded(...args),
+    cancelGroup: (...args: any[]) => mockCancelGroup(...args),
+  },
+})
+
 describe("compression routes", () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -56,7 +66,7 @@ describe("compression routes", () => {
     mockUpdateGroupExpanded.mockResolvedValue(true)
 
     const app = new Hono()
-    registerChatCompressionRoutes(app)
+    registerChatCompressionRoutes(app, createDeps())
 
     const res = await app.request("http://localhost/sessions/9/compression/21", {
       method: "PATCH",
@@ -80,7 +90,7 @@ describe("compression routes", () => {
     mockUpdateGroupExpanded.mockResolvedValue(false)
 
     const app = new Hono()
-    registerChatCompressionRoutes(app)
+    registerChatCompressionRoutes(app, createDeps())
 
     const res = await app.request("http://localhost/sessions/9/compression/404", {
       method: "PATCH",
@@ -95,7 +105,7 @@ describe("compression routes", () => {
     mockCancelGroup.mockResolvedValue({ cancelled: true, releasedCount: 5 })
 
     const app = new Hono()
-    registerChatCompressionRoutes(app)
+    registerChatCompressionRoutes(app, createDeps())
 
     const res = await app.request("http://localhost/sessions/9/compression/21/cancel", {
       method: "POST",

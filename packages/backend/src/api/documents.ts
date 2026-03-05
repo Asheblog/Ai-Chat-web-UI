@@ -8,7 +8,8 @@ import { z } from 'zod'
 import { actorMiddleware, adminOnlyMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import { getSupportedMimeTypes } from '../modules/document/loaders'
-import { getDocumentServices } from '../services/document-services-factory'
+import type { DocumentService } from '../services/document/document-service'
+import type { RAGService } from '../services/document/rag-service'
 
 const uploadSchema = z.object({
   sessionId: z.number().int().positive().optional(),
@@ -24,23 +25,20 @@ const searchSchema = z.object({
   documentIds: z.array(z.number().int().positive()).optional(),
 })
 
-/**
- * 获取文档服务，如果不可用返回 null
- */
-const getServices = () => {
-  const services = getDocumentServices()
-  if (!services) return null
-  return {
-    documentService: services.documentService,
-    ragService: services.ragService,
-  }
+export interface DocumentsApiServices {
+  documentService: DocumentService
+  ragService: RAGService
+}
+
+export interface DocumentsApiDeps {
+  resolveServices: () => DocumentsApiServices | null
 }
 
 /**
  * 检查 RAG 服务是否可用的中间件
  */
-const requireRAGEnabled = async (c: any, next: () => Promise<void>) => {
-  const services = getServices()
+const createRequireRAGEnabled = (deps: DocumentsApiDeps) => async (c: any, next: () => Promise<void>) => {
+  const services = deps.resolveServices()
   if (!services) {
     return c.json(
       { success: false, error: 'RAG document services are not enabled. Please enable RAG in system settings.' },
@@ -51,8 +49,9 @@ const requireRAGEnabled = async (c: any, next: () => Promise<void>) => {
   await next()
 }
 
-export const createDocumentsApi = () => {
+export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   const router = new Hono()
+  const requireRAGEnabled = createRequireRAGEnabled(deps)
 
   /**
    * 获取支持的文件类型
@@ -70,7 +69,7 @@ export const createDocumentsApi = () => {
   router.post('/upload', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
 
       const formData = await c.req.formData()
       const file = formData.get('file') as File | null
@@ -117,7 +116,7 @@ export const createDocumentsApi = () => {
   router.get('/', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
 
       const documents =
         actor.type === 'user'
@@ -149,7 +148,7 @@ export const createDocumentsApi = () => {
    */
   router.get('/admin/all', actorMiddleware, adminOnlyMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
       const documents = await documentService!.getAllDocuments()
 
       return c.json<ApiResponse>({
@@ -183,7 +182,7 @@ export const createDocumentsApi = () => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
 
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
       const document = await documentService!.getDocument(documentId)
       if (!document) {
         return c.json<ApiResponse>({ success: false, error: 'Document not found' }, 404)
@@ -232,7 +231,7 @@ export const createDocumentsApi = () => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
 
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
       const document = await documentService!.getDocument(documentId)
       if (!document) {
         return c.json<ApiResponse>({ success: false, error: 'Document not found' }, 404)
@@ -265,7 +264,7 @@ export const createDocumentsApi = () => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
 
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
       const document = await documentService!.getDocument(documentId)
       if (!document) {
         return c.json<ApiResponse>({ success: false, error: 'Document not found' }, 404)
@@ -298,7 +297,7 @@ export const createDocumentsApi = () => {
     try {
       const { documentIds } = c.req.valid('json')
       const actor = c.get('actor') as Actor
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
 
       // 验证所有文档的权限
       const documents = await Promise.all(
@@ -348,7 +347,7 @@ export const createDocumentsApi = () => {
       }
 
       const { sessionId } = c.req.valid('json')
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
 
       await documentService!.attachToSession(documentId, sessionId)
 
@@ -371,7 +370,7 @@ export const createDocumentsApi = () => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
       }
 
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
       await documentService!.detachFromSession(documentId, sessionId)
 
       return c.json<ApiResponse>({ success: true, data: { detached: true } })
@@ -391,7 +390,7 @@ export const createDocumentsApi = () => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
 
-      const { documentService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
       const documents = await documentService!.getSessionDocuments(sessionId)
 
       return c.json<ApiResponse>({
@@ -418,7 +417,7 @@ export const createDocumentsApi = () => {
   router.post('/search', actorMiddleware, requireRAGEnabled, zValidator('json', searchSchema), async (c) => {
     try {
       const { query, sessionId, documentIds } = c.req.valid('json')
-      const { ragService } = c.get('docServices') as NonNullable<ReturnType<typeof getServices>>
+      const { ragService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
 
       let result
       if (sessionId) {

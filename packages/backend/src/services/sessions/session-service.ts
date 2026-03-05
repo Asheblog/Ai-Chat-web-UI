@@ -3,10 +3,9 @@ import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import { ensureAnonymousSession as defaultEnsureAnonymousSession } from '../../utils/actor'
 import type { ModelResolverService } from '../catalog/model-resolver-service'
-import { modelResolverService as defaultModelResolverService } from '../catalog/model-resolver-service'
+import type { ArtifactService } from '../workspace/artifact-service'
+import type { WorkspaceService } from '../workspace/workspace-service'
 import { cancelAllStreamsForSession } from '../../modules/chat/stream-state'
-import { artifactService } from '../workspace/artifact-service'
-import { workspaceService } from '../workspace/workspace-service'
 
 export class SessionServiceError extends Error {
   statusCode: number
@@ -21,7 +20,9 @@ export class SessionServiceError extends Error {
 export interface SessionServiceDeps {
   prisma?: PrismaClient
   ensureAnonymousSession?: typeof defaultEnsureAnonymousSession
-  modelResolverService?: ModelResolverService
+  modelResolverService: ModelResolverService
+  artifactService: ArtifactService
+  workspaceService: WorkspaceService
   logger?: Pick<typeof console, 'error' | 'warn'>
 }
 
@@ -137,12 +138,16 @@ export class SessionService {
   private prisma: PrismaClient
   private ensureAnonymousSession: typeof defaultEnsureAnonymousSession
   private modelResolverService: ModelResolverService
+  private artifactService: ArtifactService
+  private workspaceService: WorkspaceService
   private logger: Pick<typeof console, 'error' | 'warn'>
 
-  constructor(deps: SessionServiceDeps = {}) {
+  constructor(deps: SessionServiceDeps) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.ensureAnonymousSession = deps.ensureAnonymousSession ?? defaultEnsureAnonymousSession
-    this.modelResolverService = deps.modelResolverService ?? defaultModelResolverService
+    this.modelResolverService = deps.modelResolverService
+    this.artifactService = deps.artifactService
+    this.workspaceService = deps.workspaceService
     this.logger = deps.logger ?? console
   }
 
@@ -360,8 +365,8 @@ export class SessionService {
     // Cancel any active streams for this session before deleting
     cancelAllStreamsForSession(sessionId)
     try {
-      await artifactService.cleanupArtifactsBySession(sessionId)
-      await workspaceService.destroyWorkspace(sessionId)
+      await this.artifactService.cleanupArtifactsBySession(sessionId)
+      await this.workspaceService.destroyWorkspace(sessionId)
     } catch (error) {
       this.logger.error?.('Failed to cleanup workspace on session delete', {
         sessionId,
@@ -430,11 +435,3 @@ export class SessionService {
     return resolution
   }
 }
-
-let sessionService = new SessionService()
-
-export const setSessionService = (service: SessionService) => {
-  sessionService = service
-}
-
-export { sessionService }

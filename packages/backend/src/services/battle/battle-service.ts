@@ -3,7 +3,6 @@ import type { Prisma, PrismaClient, Connection } from '@prisma/client'
 import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import type { ModelResolverService } from '../catalog/model-resolver-service'
-import { modelResolverService as defaultModelResolverService } from '../catalog/model-resolver-service'
 import { consumeBattleQuota } from '../../utils/battle-quota'
 import { getBattlePolicy } from '../../utils/system-settings'
 import { TaskTraceRecorder, shouldEnableTaskTrace, truncateString, type TaskTraceStatus } from '../../utils/task-trace'
@@ -23,7 +22,7 @@ import type {
 } from '@aichat/shared/battle-contract'
 import { BattleExecutor, type BattleExecutionContext } from './battle-executor'
 import { safeJsonStringify, safeParseJson } from './battle-serialization'
-import { battleImageService as defaultBattleImageService, type BattleImageService } from './battle-image-service'
+import type { BattleImageService } from './battle-image-service'
 import { BattleRetentionCleanupService } from './battle-retention-cleanup-service'
 import { BattleSummaryProjector } from './battle-summary-projector'
 import { BattleShareProjector } from './battle-share-projector'
@@ -128,9 +127,9 @@ class BattleAttemptCancelledError extends Error {
 
 export interface BattleServiceDeps {
   prisma?: PrismaClient
-  modelResolver?: ModelResolverService
+  modelResolver: ModelResolverService
   executor?: BattleExecutor
-  imageService?: BattleImageService
+  imageService: BattleImageService
   retentionCleanupService?: BattleRetentionCleanupService
 }
 
@@ -569,11 +568,11 @@ export class BattleService {
   private activeRuns = new Map<number, BattleRunControl>()
   private vacuumInFlight: Promise<void> | null = null
 
-  constructor(deps: BattleServiceDeps = {}) {
+  constructor(deps: BattleServiceDeps) {
     this.prisma = deps.prisma ?? defaultPrisma
-    this.modelResolver = deps.modelResolver ?? defaultModelResolverService
+    this.modelResolver = deps.modelResolver
     this.executor = deps.executor ?? new BattleExecutor()
-    this.imageService = deps.imageService ?? defaultBattleImageService
+    this.imageService = deps.imageService
     this.retentionCleanupService =
       deps.retentionCleanupService ??
       new BattleRetentionCleanupService({
