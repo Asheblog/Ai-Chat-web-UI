@@ -11,11 +11,10 @@ import type { ProviderChatCompletionResponse } from '../chat-common'
 import { sendMessageSchema } from '../chat-common'
 import { extractReasoningFromResponsesResponse, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import {
-  chatRequestBuilder,
   type ChatRequestBuilder,
   type PreparedChatRequest,
 } from './chat-request-builder'
-import { providerRequester, type ProviderRequester } from './provider-requester'
+import type { ProviderRequester } from './provider-requester'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 
@@ -61,8 +60,8 @@ export class ChatCompletionServiceError extends Error {
 export interface NonStreamChatServiceDeps {
   prisma?: PrismaClient
   now?: () => Date
-  requestBuilder?: ChatRequestBuilder
-  requester?: ProviderRequester
+  requestBuilder: ChatRequestBuilder
+  requester: ProviderRequester
 }
 
 export class NonStreamChatService {
@@ -71,11 +70,11 @@ export class NonStreamChatService {
   private requestBuilder: ChatRequestBuilder
   private requester: ProviderRequester
 
-  constructor(deps: NonStreamChatServiceDeps = {}) {
+  constructor(deps: NonStreamChatServiceDeps) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.now = deps.now ?? (() => new Date())
-    this.requestBuilder = deps.requestBuilder ?? chatRequestBuilder
-    this.requester = deps.requester ?? providerRequester
+    this.requestBuilder = deps.requestBuilder
+    this.requester = deps.requester
   }
 
   async execute(request: NonStreamChatRequest): Promise<NonStreamChatResult> {
@@ -292,11 +291,3 @@ export class NonStreamChatService {
     return true
   }
 }
-
-let nonStreamChatService = new NonStreamChatService()
-
-export const setNonStreamChatService = (service: NonStreamChatService) => {
-  nonStreamChatService = service
-}
-
-export { nonStreamChatService }

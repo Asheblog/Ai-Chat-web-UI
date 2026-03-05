@@ -30,18 +30,18 @@ import { createArtifactsApi } from './api/artifacts';
 import { createPromptTemplatesApi } from './api/prompt-templates';
 import { SkillInstaller } from './modules/skills/skill-installer';
 import { SkillApprovalService } from './modules/skills/skill-approval-service';
-import { chatMessageQueryService } from './modules/chat/services/message-query-service';
-import { conversationCompressionService } from './modules/chat/services/conversation-compression-service';
-import { nonStreamChatService } from './modules/chat/services/non-stream-chat-service';
-import { titleSummaryService } from './modules/chat/services/title-summary-service';
-import { chatRequestBuilder } from './modules/chat/services/chat-request-builder';
-import { reasoningCompatibilityService } from './modules/chat/services/reasoning-compatibility-service';
-import { providerRequester } from './modules/chat/services/provider-requester';
-import { nonStreamFallbackService } from './modules/chat/services/non-stream-fallback-service';
-import { assistantProgressService } from './modules/chat/services/assistant-progress-service';
-import { streamUsageService } from './modules/chat/services/stream-usage-service';
-import { streamTraceService } from './modules/chat/services/stream-trace-service';
-import { streamSseService } from './modules/chat/services/stream-sse-service';
+import { ChatMessageQueryService } from './modules/chat/services/message-query-service';
+import { ConversationCompressionService } from './modules/chat/services/conversation-compression-service';
+import { NonStreamChatService } from './modules/chat/services/non-stream-chat-service';
+import { TitleSummaryService } from './modules/chat/services/title-summary-service';
+import { ChatRequestBuilder } from './modules/chat/services/chat-request-builder';
+import { ReasoningCompatibilityService } from './modules/chat/services/reasoning-compatibility-service';
+import { ProviderRequester } from './modules/chat/services/provider-requester';
+import { NonStreamFallbackService } from './modules/chat/services/non-stream-fallback-service';
+import { AssistantProgressService } from './modules/chat/services/assistant-progress-service';
+import { StreamUsageService } from './modules/chat/services/stream-usage-service';
+import { StreamTraceService } from './modules/chat/services/stream-trace-service';
+import { StreamSseService } from './modules/chat/services/stream-sse-service';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -55,6 +55,22 @@ setRAGInitializerDeps({ prisma: appContext.prisma });
 reloadRAGServices();
 const skillInstaller = new SkillInstaller({ prisma: appContext.prisma });
 const skillApprovalService = new SkillApprovalService({ prisma: appContext.prisma });
+const providerRequester = new ProviderRequester();
+const chatRequestBuilder = new ChatRequestBuilder({ prisma: appContext.prisma });
+const nonStreamFallbackService = new NonStreamFallbackService();
+const assistantProgressService = new AssistantProgressService({ prisma: appContext.prisma });
+const streamUsageService = new StreamUsageService();
+const streamTraceService = new StreamTraceService();
+const streamSseService = new StreamSseService();
+const reasoningCompatibilityService = new ReasoningCompatibilityService({ prisma: appContext.prisma });
+const conversationCompressionService = new ConversationCompressionService({ prisma: appContext.prisma });
+const chatMessageQueryService = new ChatMessageQueryService({ prisma: appContext.prisma });
+const nonStreamChatService = new NonStreamChatService({
+  prisma: appContext.prisma,
+  requestBuilder: chatRequestBuilder,
+  requester: providerRequester,
+});
+const titleSummaryService = new TitleSummaryService({ prisma: appContext.prisma });
 
 const app = new Hono();
 

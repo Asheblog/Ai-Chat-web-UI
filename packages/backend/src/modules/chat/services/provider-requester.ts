@@ -161,5 +161,3 @@ export class ProviderRequester {
     }
   }
 }
-
-export const providerRequester = new ProviderRequester()

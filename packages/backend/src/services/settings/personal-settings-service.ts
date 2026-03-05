@@ -169,11 +169,3 @@ export class PersonalSettingsService {
     }
   }
 }
-
-let personalSettingsService = new PersonalSettingsService()
-
-export const setPersonalSettingsService = (service: PersonalSettingsService) => {
-  personalSettingsService = service
-}
-
-export { personalSettingsService }

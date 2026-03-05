@@ -241,11 +241,3 @@ export class BattleImageService {
     }
   }
 }
-
-let battleImageService = new BattleImageService()
-
-export const setBattleImageService = (service: BattleImageService) => {
-  battleImageService = service
-}
-
-export { battleImageService }

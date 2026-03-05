@@ -150,11 +150,3 @@ export class StreamSseService {
     return () => clearInterval(hb)
   }
 }
-
-let streamSseService = new StreamSseService()
-
-export const setStreamSseService = (service: StreamSseService) => {
-  streamSseService = service
-}
-
-export { streamSseService }

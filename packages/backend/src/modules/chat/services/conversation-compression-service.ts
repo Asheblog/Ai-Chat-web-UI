@@ -502,5 +502,3 @@ export class ConversationCompressionService {
     }
   }
 }
-
-export const conversationCompressionService = new ConversationCompressionService()

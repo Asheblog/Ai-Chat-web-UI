@@ -1,10 +1,10 @@
 /**
  * Model Access Policy Utils - 代理层
  *
- * 委托给 SystemSettingsService，无回退实现。
+ * 委托给 SystemSettingsService 工具绑定。
  */
 
-import { getSystemSettingsService } from '../container/service-accessor'
+import { getSystemSettingsServiceForUtils } from './system-settings'
 import type { Actor } from '../types'
 
 export type ModelAccessTriState = 'allow' | 'deny' | 'inherit'
@@ -47,10 +47,10 @@ const parseAccessPolicy = (metaJson?: string | null): ModelAccessPolicy | null =
 }
 
 export const getModelAccessDefaults = (): Promise<ModelAccessDefaults> =>
-  getSystemSettingsService().getModelAccessDefaults()
+  getSystemSettingsServiceForUtils().getModelAccessDefaults()
 
 export const invalidateModelAccessDefaultsCache = (): void =>
-  getSystemSettingsService().invalidateModelAccessDefaultsCache()
+  getSystemSettingsServiceForUtils().invalidateModelAccessDefaultsCache()
 
 export const resolveModelAccessPolicy = (options: {
   metaJson?: string | null

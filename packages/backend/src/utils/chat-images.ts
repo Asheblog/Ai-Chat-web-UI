@@ -1,7 +1,7 @@
 /**
  * Chat Images Utils - 代理层
  *
- * 委托给 ChatImageService，无回退实现。
+ * 委托给 ChatImageService，可由容器显式绑定。
  * 纯函数（验证、URL 解析）保留在此文件中。
  */
 
@@ -13,10 +13,32 @@ import {
   CHAT_IMAGE_PUBLIC_PATH,
   CHAT_IMAGE_BASE_URL,
 } from '../config/storage'
-import { getChatImageService } from '../container/service-accessor'
+import { prisma } from '../db'
+import { ChatImageService } from '../services/attachment/chat-image-service'
 
 type IncomingImage = { data: string; mime: string }
 const BYTES_PER_MB = 1024 * 1024
+
+type ChatImageServiceLike = Pick<ChatImageService, 'persistImages' | 'loadImages' | 'cleanupExpired' | 'deleteForSessions'>
+
+interface ChatImagesUtilsDeps {
+  chatImageService: ChatImageServiceLike
+}
+
+let configuredChatImageService: ChatImageServiceLike | null = null
+let fallbackChatImageService: ChatImageService | null = null
+
+const resolveChatImageService = (): ChatImageServiceLike => {
+  if (configuredChatImageService) return configuredChatImageService
+  if (!fallbackChatImageService) {
+    fallbackChatImageService = new ChatImageService({ prisma })
+  }
+  return fallbackChatImageService
+}
+
+export const configureChatImagesUtils = (deps: ChatImagesUtilsDeps): void => {
+  configuredChatImageService = deps.chatImageService
+}
 
 const validationError = (message: string): Error => {
   const err = new Error(message)
@@ -237,17 +259,17 @@ export async function persistChatImages(
   if (!opts.skipValidation) {
     await validateChatImages(images)
   }
-  return getChatImageService().persistImages(images, { ...opts, skipValidation: true })
+  return resolveChatImageService().persistImages(images, { ...opts, skipValidation: true })
 }
 
 export async function loadPersistedChatImages(messageId: number): Promise<IncomingImage[]> {
-  return getChatImageService().loadImages(messageId)
+  return resolveChatImageService().loadImages(messageId)
 }
 
 export async function cleanupExpiredChatImages(retentionDays: number): Promise<void> {
-  return getChatImageService().cleanupExpired(retentionDays)
+  return resolveChatImageService().cleanupExpired(retentionDays)
 }
 
 export async function deleteAttachmentsForSessions(sessionIds: number[]): Promise<void> {
-  return getChatImageService().deleteForSessions(sessionIds)
+  return resolveChatImageService().deleteForSessions(sessionIds)
 }

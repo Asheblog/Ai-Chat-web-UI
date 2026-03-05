@@ -262,12 +262,4 @@ export class QuotaService {
     }
   }
 }
-
-let quotaService = new QuotaService()
-
-export const setQuotaService = (service: QuotaService) => {
-  quotaService = service
-}
-
-export { quotaService }
 export { SHARED_ANONYMOUS_IDENTIFIER }

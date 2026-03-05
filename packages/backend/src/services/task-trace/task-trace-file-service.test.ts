@@ -1,7 +1,7 @@
 import { writeFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { taskTraceFileService } from './task-trace-file-service'
+import { TaskTraceFileService } from './task-trace-file-service'
 
 const createTempFile = async (lines: string[]) => {
   const dir = await mkdtemp(join(tmpdir(), 'ttfs-'))
@@ -11,6 +11,8 @@ const createTempFile = async (lines: string[]) => {
 }
 
 describe('TaskTraceFileService', () => {
+  const taskTraceFileService = new TaskTraceFileService()
+
   it('reads trace events and respects limit', async () => {
     const { dir, file } = await createTempFile([
       JSON.stringify({ seq: 1, eventType: 'a', payload: { k: 1 }, timestamp: 't1' }),

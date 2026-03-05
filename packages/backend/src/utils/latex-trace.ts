@@ -7,7 +7,7 @@
 import { appendFile, mkdir } from 'node:fs/promises'
 import { resolve as resolvePath } from 'node:path'
 import { BackendLogger as log } from './logger'
-import { getAppContext } from '../container/service-accessor'
+import { prisma } from '../db'
 import type { LatexSegmentAudit } from '@aichat/shared/latex-normalizer'
 
 export type LatexTraceStatus = 'pending' | 'completed' | 'error'
@@ -47,7 +47,7 @@ interface LatexTraceLogEntry {
 }
 
 interface LatexTraceRecorderDeps {
-  prisma: ReturnType<typeof getAppContext>['prisma']
+  prisma: typeof prisma
 }
 
 export class LatexTraceRecorder {
@@ -78,7 +78,7 @@ export class LatexTraceRecorder {
     options: LatexTraceRecorderOptions,
     deps?: LatexTraceRecorderDeps,
   ): Promise<LatexTraceRecorder | null> {
-    const effectiveDeps = deps ?? { prisma: getAppContext().prisma }
+    const effectiveDeps = deps ?? { prisma }
     const recorder = new LatexTraceRecorder(options.taskTraceId, options, effectiveDeps)
     try {
       const logDir = LatexTraceRecorder.baseDir

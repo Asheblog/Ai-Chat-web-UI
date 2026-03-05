@@ -93,11 +93,3 @@ export class AssistantProgressService {
     }
   }
 }
-
-let assistantProgressService = new AssistantProgressService()
-
-export const setAssistantProgressService = (service: AssistantProgressService) => {
-  assistantProgressService = service
-}
-
-export { assistantProgressService }

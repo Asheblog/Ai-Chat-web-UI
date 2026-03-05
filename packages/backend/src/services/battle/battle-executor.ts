@@ -1,8 +1,6 @@
 import type { Connection } from '@prisma/client'
-import type { ChatRequestBuilder, PreparedChatRequest } from '../../modules/chat/services/chat-request-builder'
-import { chatRequestBuilder as defaultChatRequestBuilder } from '../../modules/chat/services/chat-request-builder'
-import type { ProviderRequester } from '../../modules/chat/services/provider-requester'
-import { providerRequester as defaultProviderRequester } from '../../modules/chat/services/provider-requester'
+import { ChatRequestBuilder, type PreparedChatRequest } from '../../modules/chat/services/chat-request-builder'
+import { ProviderRequester, type ProviderRequester as ProviderRequesterType } from '../../modules/chat/services/provider-requester'
 import { buildChatProviderRequest } from '../../utils/chat-provider'
 import {
   buildAgentPythonToolConfig,
@@ -41,7 +39,7 @@ export interface BattleExecutionContext {
 
 export interface BattleExecutorDeps {
   requestBuilder?: ChatRequestBuilder
-  requester?: ProviderRequester
+  requester?: ProviderRequesterType
 }
 
 const extractJsonObject = (raw: string) => {
@@ -95,12 +93,12 @@ const buildUsage = (json: any, context: { promptTokens: number; contextLimit: nu
 
 export class BattleExecutor {
   private requestBuilder: ChatRequestBuilder
-  private requester: ProviderRequester
+  private requester: ProviderRequesterType
   private logger = createLogger('BattleExecutor')
 
   constructor(deps: BattleExecutorDeps = {}) {
-    this.requestBuilder = deps.requestBuilder ?? defaultChatRequestBuilder
-    this.requester = deps.requester ?? defaultProviderRequester
+    this.requestBuilder = deps.requestBuilder ?? new ChatRequestBuilder()
+    this.requester = deps.requester ?? new ProviderRequester()
   }
 
   async executeModel(params: {

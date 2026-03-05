@@ -114,11 +114,3 @@ export class TaskTraceFileService {
     return { events: items, truncated }
   }
 }
-
-let taskTraceFileService = new TaskTraceFileService()
-
-export const setTaskTraceFileService = (service: TaskTraceFileService) => {
-  taskTraceFileService = service
-}
-
-export { taskTraceFileService }

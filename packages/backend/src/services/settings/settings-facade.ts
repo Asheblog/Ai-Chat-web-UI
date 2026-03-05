@@ -1,36 +1,39 @@
 import type { Actor } from '../../types'
-import { settingsService, SettingsServiceError } from './index'
-import { personalSettingsService } from './personal-settings-service'
-import { healthService, HealthServiceError } from './health-service'
-import { appInfoService } from './app-info-service'
-import type { SetupState } from './settings-service'
+import {
+  SettingsService,
+  SettingsServiceError,
+  type SetupState,
+} from './settings-service'
+import { PersonalSettingsService } from './personal-settings-service'
+import { HealthService, HealthServiceError } from './health-service'
+import { AppInfoService } from './app-info-service'
 import {
   syncSharedAnonymousQuota as defaultSyncSharedAnonymousQuota,
 } from '../../utils/quota'
 import { invalidateQuotaPolicyCache as defaultInvalidateQuotaPolicyCache } from '../../utils/system-settings'
 
 export interface SettingsFacadeDeps {
-  settingsService?: typeof settingsService
-  personalSettingsService?: typeof personalSettingsService
-  healthService?: typeof healthService
-  appInfoService?: typeof appInfoService
+  settingsService: SettingsService
+  personalSettingsService: PersonalSettingsService
+  healthService: HealthService
+  appInfoService: AppInfoService
   syncSharedAnonymousQuota?: typeof defaultSyncSharedAnonymousQuota
   invalidateQuotaPolicyCache?: typeof defaultInvalidateQuotaPolicyCache
 }
 
 export class SettingsFacade {
-  private settingsService: typeof settingsService
-  private personalSettingsService: typeof personalSettingsService
-  private healthService: typeof healthService
-  private appInfoService: typeof appInfoService
+  private settingsService: SettingsService
+  private personalSettingsService: PersonalSettingsService
+  private healthService: HealthService
+  private appInfoService: AppInfoService
   private syncSharedAnonymousQuota: typeof defaultSyncSharedAnonymousQuota
   private invalidateQuotaPolicyCache: typeof defaultInvalidateQuotaPolicyCache
 
-  constructor(deps: SettingsFacadeDeps = {}) {
-    this.settingsService = deps.settingsService ?? settingsService
-    this.personalSettingsService = deps.personalSettingsService ?? personalSettingsService
-    this.healthService = deps.healthService ?? healthService
-    this.appInfoService = deps.appInfoService ?? appInfoService
+  constructor(deps: SettingsFacadeDeps) {
+    this.settingsService = deps.settingsService
+    this.personalSettingsService = deps.personalSettingsService
+    this.healthService = deps.healthService
+    this.appInfoService = deps.appInfoService
     this.syncSharedAnonymousQuota = deps.syncSharedAnonymousQuota ?? defaultSyncSharedAnonymousQuota
     this.invalidateQuotaPolicyCache = deps.invalidateQuotaPolicyCache ?? defaultInvalidateQuotaPolicyCache
   }
@@ -79,11 +82,3 @@ export class SettingsFacade {
 }
 
 export { SettingsServiceError, HealthServiceError }
-
-let settingsFacade = new SettingsFacade()
-
-export const setSettingsFacade = (facade: SettingsFacade) => {
-  settingsFacade = facade
-}
-
-export { settingsFacade }

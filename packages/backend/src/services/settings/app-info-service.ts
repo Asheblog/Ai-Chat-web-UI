@@ -34,11 +34,3 @@ export class AppInfoService {
     }
   }
 }
-
-let appInfoService = new AppInfoService()
-
-export const setAppInfoService = (service: AppInfoService) => {
-  appInfoService = service
-}
-
-export { appInfoService }

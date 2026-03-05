@@ -81,11 +81,3 @@ export class ChatService {
     return session
   }
 }
-
-let chatService = new ChatService()
-
-export const setChatService = (service: ChatService) => {
-  chatService = service
-}
-
-export { chatService }

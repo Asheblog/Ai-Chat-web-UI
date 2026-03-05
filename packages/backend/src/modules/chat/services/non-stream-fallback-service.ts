@@ -279,11 +279,3 @@ export class NonStreamFallbackService {
     }
   }
 }
-
-let nonStreamFallbackService = new NonStreamFallbackService()
-
-export const setNonStreamFallbackService = (service: NonStreamFallbackService) => {
-  nonStreamFallbackService = service
-}
-
-export { nonStreamFallbackService }

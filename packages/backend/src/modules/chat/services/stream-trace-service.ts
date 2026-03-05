@@ -86,11 +86,3 @@ export class StreamTraceService {
     return { latexTraceRecorder, latexAuditSummary }
   }
 }
-
-let streamTraceService = new StreamTraceService()
-
-export const setStreamTraceService = (service: StreamTraceService) => {
-  streamTraceService = service
-}
-
-export { streamTraceService }

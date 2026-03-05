@@ -157,11 +157,3 @@ export class ModelResolverService {
     return { connection: resolved.connection, rawModelId: resolved.rawModelId }
   }
 }
-
-let modelResolverService = new ModelResolverService()
-
-export const setModelResolverServiceInstance = (service: ModelResolverService) => {
-  modelResolverService = service
-}
-
-export { modelResolverService }

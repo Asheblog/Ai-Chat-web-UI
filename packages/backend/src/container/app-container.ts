@@ -58,15 +58,22 @@ import {
   invalidateQuotaPolicyCache,
   invalidateBattlePolicyCache,
   invalidateReasoningMaxOutputTokensDefaultCache,
+  configureSystemSettingsUtils,
 } from '../utils/system-settings'
-import { invalidateCompletionLimitCache, invalidateContextWindowCache } from '../utils/context-window'
-import { invalidateTaskTraceConfig } from '../utils/task-trace'
-import { syncSharedAnonymousQuota } from '../utils/quota'
+import {
+  invalidateCompletionLimitCache,
+  invalidateContextWindowCache,
+  configureContextWindowUtils,
+} from '../utils/context-window'
+import { invalidateTaskTraceConfig, configureTaskTraceUtils } from '../utils/task-trace'
+import { syncSharedAnonymousQuota, configureQuotaUtils } from '../utils/quota'
 import { replaceProfileImage } from '../utils/profile-images'
-import { deleteAttachmentsForSessions } from '../utils/chat-images'
+import { deleteAttachmentsForSessions, configureChatImagesUtils } from '../utils/chat-images'
+import { configureAnonymousCleanupUtils } from '../utils/anonymous-cleanup'
+import { configureTokenizerUtils } from '../utils/tokenizer'
 import { BackendLogger as log } from '../utils/logger'
 import { ServiceRegistry } from './service-registry'
-import { SERVICE_KEYS } from './service-accessor'
+import { SERVICE_KEYS } from './service-keys'
 
 export interface AppContainerDeps {
   context?: AppContext
@@ -184,12 +191,15 @@ export class AppContainer {
         getQuotaPolicy,
       })
     registry.register(SERVICE_KEYS.quotaService, this.quotaService)
+    configureQuotaUtils({ quotaService: this.quotaService })
 
     this.tokenizerService = deps.tokenizerService ?? new TokenizerService()
     registry.register(SERVICE_KEYS.tokenizerService, this.tokenizerService)
+    configureTokenizerUtils({ tokenizerService: this.tokenizerService })
 
     this.contextWindowService = deps.contextWindowService ?? new ContextWindowService()
     registry.register(SERVICE_KEYS.contextWindowService, this.contextWindowService)
+    configureContextWindowUtils({ contextWindowService: this.contextWindowService })
 
     this.chatService =
       deps.chatService ??
@@ -382,6 +392,7 @@ export class AppContainer {
         prisma: this.context.prisma,
       })
     registry.register(SERVICE_KEYS.systemSettingsService, this.systemSettingsService)
+    configureSystemSettingsUtils({ systemSettingsService: this.systemSettingsService })
 
     this.anonymousCleanupService =
       deps.anonymousCleanupService ??
@@ -391,6 +402,7 @@ export class AppContainer {
         deleteAttachmentsForSessions,
       })
     registry.register(SERVICE_KEYS.anonymousCleanupService, this.anonymousCleanupService)
+    configureAnonymousCleanupUtils({ anonymousCleanupService: this.anonymousCleanupService })
 
     this.chatImageService =
       deps.chatImageService ??
@@ -398,6 +410,7 @@ export class AppContainer {
         prisma: this.context.prisma,
       })
     registry.register(SERVICE_KEYS.chatImageService, this.chatImageService)
+    configureChatImagesUtils({ chatImageService: this.chatImageService })
 
     this.taskTraceConfigService =
       deps.taskTraceConfigService ??
@@ -405,6 +418,7 @@ export class AppContainer {
         prisma: this.context.prisma,
       })
     registry.register(SERVICE_KEYS.taskTraceConfigService, this.taskTraceConfigService)
+    configureTaskTraceUtils({ taskTraceConfigService: this.taskTraceConfigService })
 
     registry.markInitialized()
   }

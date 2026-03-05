@@ -17,7 +17,7 @@ import { EnhancedRAGService } from './document/enhanced-rag-service'
 import { DocumentSectionService } from './document/section-service'
 import { CleanupScheduler, type CleanupConfig } from './cleanup/cleanup-scheduler'
 import { ServiceRegistry } from '../container/service-registry'
-import { SERVICE_KEYS } from '../container/service-accessor'
+import { SERVICE_KEYS } from '../container/service-keys'
 
 export interface DocumentServicesConfig {
   /**

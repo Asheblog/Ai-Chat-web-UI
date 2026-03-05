@@ -1,7 +1,7 @@
 /**
  * Task Trace Utils - 代理层
  *
- * 委托给 TaskTraceConfigService，无回退实现。
+ * 委托给 TaskTraceConfigService，可由容器显式绑定。
  * TaskTraceRecorder 使用依赖注入模式。
  */
 
@@ -11,14 +11,26 @@ import { prisma } from '../db'
 import { BackendLogger as log } from './logger'
 import type { Actor } from '../types'
 import {
-  getTaskTraceConfigService,
-  getAppContext,
-} from '../container/service-accessor'
-import { resolveConfigFromMap, type TaskTraceConfig } from '../services/task-trace/task-trace-config-service'
+  resolveConfigFromMap,
+  type TaskTraceConfig,
+  type TaskTraceConfigService,
+} from '../services/task-trace/task-trace-config-service'
 
 export type TaskTraceStatus = 'running' | 'completed' | 'error' | 'cancelled'
 
 export type { TaskTraceConfig }
+
+type TaskTraceConfigServiceLike = Pick<TaskTraceConfigService, 'getConfig' | 'invalidateCache'>
+
+interface TaskTraceUtilsDeps {
+  taskTraceConfigService: TaskTraceConfigServiceLike
+}
+
+let configuredTaskTraceConfigService: TaskTraceConfigServiceLike | null = null
+
+export const configureTaskTraceUtils = (deps: TaskTraceUtilsDeps): void => {
+  configuredTaskTraceConfigService = deps.taskTraceConfigService
+}
 
 // ============================================================================
 // 公共 API（代理到 TaskTraceConfigService）
@@ -26,8 +38,9 @@ export type { TaskTraceConfig }
 
 const resolveTaskTraceConfig = async (map?: Record<string, string>): Promise<TaskTraceConfig> => {
   if (map) return resolveConfigFromMap(map)
+  if (!configuredTaskTraceConfigService) return resolveConfigFromMap()
   try {
-    return await getTaskTraceConfigService().getConfig()
+    return await configuredTaskTraceConfigService.getConfig()
   } catch {
     return resolveConfigFromMap()
   }
@@ -37,11 +50,7 @@ export const getTaskTraceConfig = (map?: Record<string, string>): Promise<TaskTr
   resolveTaskTraceConfig(map)
 
 export const invalidateTaskTraceConfig = (): void => {
-  try {
-    getTaskTraceConfigService().invalidateCache()
-  } catch {
-    // ignore missing registry in test/runtime bootstrap
-  }
+  configuredTaskTraceConfigService?.invalidateCache()
 }
 
 // ============================================================================
@@ -198,14 +207,7 @@ export class TaskTraceRecorder {
   }
 
   static async create(options: TaskTraceRecorderOptions, deps?: TaskTraceRecorderDeps): Promise<TaskTraceRecorder> {
-    let effectiveDeps = deps
-    if (!effectiveDeps) {
-      try {
-        effectiveDeps = { prisma: getAppContext().prisma }
-      } catch {
-        effectiveDeps = { prisma }
-      }
-    }
+    const effectiveDeps = deps ?? { prisma }
     const recorder = new TaskTraceRecorder(options, effectiveDeps)
     if (!recorder.enabled) {
       return recorder

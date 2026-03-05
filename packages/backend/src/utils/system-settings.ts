@@ -1,48 +1,89 @@
 /**
  * System Settings Utils - 代理层
  *
- * 委托给 SystemSettingsService，无回退实现。
+ * 委托给 SystemSettingsService，可由容器显式绑定。
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client'
-import { getSystemSettingsService } from '../container/service-accessor'
-import type { SystemQuotaPolicy, BattleUsagePolicy } from '../services/settings/system-settings-service'
+import { prisma } from '../db'
+import {
+  SystemSettingsService,
+  type SystemQuotaPolicy,
+  type BattleUsagePolicy,
+  type ModelAccessDefaults,
+} from '../services/settings/system-settings-service'
 
 // Re-export type
-export type { SystemQuotaPolicy, BattleUsagePolicy }
+export type { SystemQuotaPolicy, BattleUsagePolicy, ModelAccessDefaults }
+
+type SystemSettingsServiceLike = Pick<
+  SystemSettingsService,
+  | 'getSystemContextTokenLimit'
+  | 'invalidateContextTokenLimitCache'
+  | 'getReasoningMaxOutputTokensDefault'
+  | 'invalidateReasoningMaxTokensCache'
+  | 'getQuotaPolicy'
+  | 'invalidateQuotaPolicyCache'
+  | 'getBattlePolicy'
+  | 'invalidateBattlePolicyCache'
+  | 'getModelAccessDefaults'
+  | 'invalidateModelAccessDefaultsCache'
+>
+
+interface SystemSettingsUtilsDeps {
+  systemSettingsService: SystemSettingsServiceLike
+}
+
+let configuredSystemSettingsService: SystemSettingsServiceLike | null = null
+let fallbackSystemSettingsService: SystemSettingsService | null = null
+
+const resolveSystemSettingsService = (): SystemSettingsServiceLike => {
+  if (configuredSystemSettingsService) return configuredSystemSettingsService
+  if (!fallbackSystemSettingsService) {
+    fallbackSystemSettingsService = new SystemSettingsService({ prisma })
+  }
+  return fallbackSystemSettingsService
+}
+
+export const configureSystemSettingsUtils = (deps: SystemSettingsUtilsDeps): void => {
+  configuredSystemSettingsService = deps.systemSettingsService
+}
+
+export const getSystemSettingsServiceForUtils = (): SystemSettingsServiceLike =>
+  resolveSystemSettingsService()
 
 export const getSystemContextTokenLimit = (): Promise<number> =>
-  getSystemSettingsService().getSystemContextTokenLimit()
+  resolveSystemSettingsService().getSystemContextTokenLimit()
 
 export const invalidateSystemContextTokenLimitCache = (): void =>
-  getSystemSettingsService().invalidateContextTokenLimitCache()
+  resolveSystemSettingsService().invalidateContextTokenLimitCache()
 
 export const getReasoningMaxOutputTokensDefault = (): Promise<number> =>
-  getSystemSettingsService().getReasoningMaxOutputTokensDefault()
+  resolveSystemSettingsService().getReasoningMaxOutputTokensDefault()
 
 export const invalidateReasoningMaxOutputTokensDefaultCache = (): void =>
-  getSystemSettingsService().invalidateReasoningMaxTokensCache()
+  resolveSystemSettingsService().invalidateReasoningMaxTokensCache()
 
 export const getQuotaPolicy = (
   client?: PrismaClient | Prisma.TransactionClient,
 ): Promise<SystemQuotaPolicy> =>
-  getSystemSettingsService().getQuotaPolicy(client)
+  resolveSystemSettingsService().getQuotaPolicy(client)
 
 export const invalidateQuotaPolicyCache = (): void =>
-  getSystemSettingsService().invalidateQuotaPolicyCache()
+  resolveSystemSettingsService().invalidateQuotaPolicyCache()
 
 export const getBattlePolicy = (
   client?: PrismaClient | Prisma.TransactionClient,
 ): Promise<BattleUsagePolicy> =>
-  getSystemSettingsService().getBattlePolicy(client)
+  resolveSystemSettingsService().getBattlePolicy(client)
 
 export const invalidateBattlePolicyCache = (): void =>
-  getSystemSettingsService().invalidateBattlePolicyCache()
+  resolveSystemSettingsService().invalidateBattlePolicyCache()
 
 export const getBattleQuotaPolicy = async (
   client?: PrismaClient | Prisma.TransactionClient,
 ): Promise<SystemQuotaPolicy> => {
-  const policy = await getSystemSettingsService().getBattlePolicy(client)
+  const policy = await resolveSystemSettingsService().getBattlePolicy(client)
   return {
     anonymousDailyQuota: policy.anonymousDailyQuota,
     defaultUserDailyQuota: policy.userDailyQuota,

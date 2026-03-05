@@ -81,11 +81,3 @@ export class TokenizerService {
     return included
   }
 }
-
-let tokenizerService = new TokenizerService()
-
-export const setTokenizerService = (service: TokenizerService) => {
-  tokenizerService = service
-}
-
-export { tokenizerService }

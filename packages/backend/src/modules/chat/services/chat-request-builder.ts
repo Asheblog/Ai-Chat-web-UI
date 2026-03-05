@@ -773,5 +773,3 @@ export class ChatRequestBuilder {
     return {}
   }
 }
-
-export const chatRequestBuilder = new ChatRequestBuilder()

@@ -553,11 +553,3 @@ export class ShareService {
     throw new ShareServiceError('Failed to generate share token', 500)
   }
 }
-
-let shareService = new ShareService()
-
-export const setShareService = (service: ShareService) => {
-  shareService = service
-}
-
-export { shareService }

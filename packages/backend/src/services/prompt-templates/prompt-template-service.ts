@@ -211,11 +211,3 @@ export class PromptTemplateService {
     }
   }
 }
-
-let promptTemplateService = new PromptTemplateService()
-
-export const setPromptTemplateService = (service: PromptTemplateService) => {
-  promptTemplateService = service
-}
-
-export { promptTemplateService }

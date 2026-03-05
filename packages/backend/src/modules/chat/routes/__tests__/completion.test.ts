@@ -2,8 +2,6 @@ import { Hono } from 'hono'
 import { registerChatCompletionRoutes } from '../completion'
 import type { NonStreamChatService } from '../../services/non-stream-chat-service'
 import type { PrismaClient } from '@prisma/client'
-import { chatRequestBuilder } from '../../services/chat-request-builder'
-import { providerRequester } from '../../services/provider-requester'
 
 jest.mock('../../services/message-service', () => ({
   createUserMessageWithQuota: jest.fn(async () => ({
@@ -15,47 +13,6 @@ jest.mock('../../services/message-service', () => ({
 jest.mock('../../../../utils/providers', () => ({
   convertOpenAIReasoningPayload: (payload: any) => payload,
 }))
-jest.mock('../../services/chat-request-builder', () => {
-  const actual = jest.requireActual('../../services/chat-request-builder')
-  return {
-    ...actual,
-    chatRequestBuilder: {
-      ...actual.chatRequestBuilder,
-      prepare: jest.fn(async (input: any) => ({
-        providerRequest: {
-          url: 'http://example.com',
-          headers: {},
-          body: input.payload,
-          providerLabel: 'demo',
-          providerHost: 'example.com',
-          timeoutMs: 1000,
-        },
-        promptTokens: 1,
-        contextLimit: 100,
-        contextRemaining: 99,
-      })),
-    },
-  }
-})
-jest.mock('../../services/provider-requester', () => {
-  const actual = jest.requireActual('../../services/provider-requester')
-  return {
-    ...actual,
-    providerRequester: {
-      ...actual.providerRequester,
-      requestWithBackoff: jest.fn(async () => ({
-        ok: true,
-        status: 200,
-        statusText: 'ok',
-        json: async () => ({
-          choices: [{ message: { content: 'hi' } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1 },
-        }),
-      })),
-    },
-  }
-})
-
 jest.mock('../../../../middleware/auth', () => ({
   actorMiddleware: async (c: any, next: any) => {
     c.set('actor', {

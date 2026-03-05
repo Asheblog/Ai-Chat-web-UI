@@ -49,11 +49,3 @@ export class HealthService {
     }
   }
 }
-
-let healthService = new HealthService()
-
-export const setHealthService = (service: HealthService) => {
-  healthService = service
-}
-
-export { healthService }

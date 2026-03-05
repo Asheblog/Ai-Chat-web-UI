@@ -250,5 +250,3 @@ export class TitleSummaryService {
     }
   }
 }
-
-export const titleSummaryService = new TitleSummaryService()

@@ -223,11 +223,3 @@ export class ContextWindowService {
     this.completionCache.delete(key)
   }
 }
-
-let contextWindowService = new ContextWindowService()
-
-export const setContextWindowService = (service: ContextWindowService) => {
-  contextWindowService = service
-}
-
-export { contextWindowService }

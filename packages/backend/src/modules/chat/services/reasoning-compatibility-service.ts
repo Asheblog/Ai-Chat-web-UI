@@ -460,14 +460,3 @@ export class ReasoningCompatibilityService {
     };
   }
 }
-
-let singleton: ReasoningCompatibilityService | null = null;
-
-export const getReasoningCompatibilityService = () => {
-  if (!singleton) {
-    singleton = new ReasoningCompatibilityService();
-  }
-  return singleton;
-};
-
-export const reasoningCompatibilityService = getReasoningCompatibilityService();
