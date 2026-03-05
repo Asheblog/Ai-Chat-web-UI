@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import { sessionService, SessionServiceError } from '../services/sessions'
+import { SessionServiceError } from '../services/sessions'
 import type { SessionService } from '../services/sessions/session-service'
 import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
 
@@ -57,11 +57,11 @@ const handleServiceError = (
 }
 
 export interface SessionsApiDeps {
-  sessionService?: SessionService
+  sessionService: SessionService
 }
 
-export const createSessionsApi = (deps: SessionsApiDeps = {}) => {
-  const svc = deps.sessionService ?? sessionService
+export const createSessionsApi = (deps: SessionsApiDeps) => {
+  const svc = deps.sessionService
   const router = new Hono()
 
   router.get('/', actorMiddleware, async (c) => {
@@ -174,5 +174,3 @@ export const createSessionsApi = (deps: SessionsApiDeps = {}) => {
 
   return router
 }
-
-export default createSessionsApi()

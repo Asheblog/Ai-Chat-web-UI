@@ -25,6 +25,8 @@ import { BattleExecutor, type BattleExecutionContext } from './battle-executor'
 import { safeJsonStringify, safeParseJson } from './battle-serialization'
 import { battleImageService as defaultBattleImageService, type BattleImageService } from './battle-image-service'
 import { BattleRetentionCleanupService } from './battle-retention-cleanup-service'
+import { BattleSummaryProjector } from './battle-summary-projector'
+import { BattleShareProjector } from './battle-share-projector'
 import { createLogger } from '../../utils/logger'
 import type {
   BattleQuestionInput,
@@ -214,90 +216,6 @@ const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | n
     return value
   }
   return null
-}
-
-const normalizeSummary = (
-  raw: unknown,
-  defaults: { runsPerModel: number; passK: number; judgeThreshold: number },
-): BattleRunSummary => {
-  const data = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {}
-  const rawStats = Array.isArray(data.modelStats) ? data.modelStats : []
-  const modelStats = rawStats
-    .map((item): BattleRunSummary['modelStats'][number] | null => {
-      if (!item || typeof item !== 'object') return null
-      const stats = item as Record<string, any>
-      const modelId = typeof stats.modelId === 'string' ? stats.modelId : ''
-      if (!modelId) return null
-      const accuracy = isFiniteNumber(stats.accuracy) ? clamp(stats.accuracy, 0, 1) : 0
-      return {
-        modelId,
-        connectionId: isFiniteNumber(stats.connectionId) ? stats.connectionId : null,
-        rawId: typeof stats.rawId === 'string' && stats.rawId.trim().length > 0 ? stats.rawId : null,
-        passAtK: Boolean(stats.passAtK),
-        passCount: isFiniteNumber(stats.passCount) ? stats.passCount : 0,
-        accuracy,
-        judgedCount: isFiniteNumber(stats.judgedCount) ? Math.max(0, Math.floor(stats.judgedCount)) : undefined,
-        totalAttempts: isFiniteNumber(stats.totalAttempts) ? Math.max(0, Math.floor(stats.totalAttempts)) : undefined,
-        judgeErrorCount: isFiniteNumber(stats.judgeErrorCount) ? Math.max(0, Math.floor(stats.judgeErrorCount)) : undefined,
-      }
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null)
-
-  const runsPerModel = isFiniteNumber(data.runsPerModel) ? data.runsPerModel : defaults.runsPerModel
-  const passK = isFiniteNumber(data.passK) ? data.passK : defaults.passK
-  const judgeThreshold = isFiniteNumber(data.judgeThreshold)
-    ? clamp(data.judgeThreshold, 0, 1)
-    : defaults.judgeThreshold
-  const totalModels = isFiniteNumber(data.totalModels) ? data.totalModels : modelStats.length
-  const passModelCount = isFiniteNumber(data.passModelCount)
-    ? data.passModelCount
-    : modelStats.filter((item) => item.passAtK).length
-  const accuracy = isFiniteNumber(data.accuracy)
-    ? data.accuracy
-    : totalModels > 0
-      ? passModelCount / totalModels
-      : 0
-  const mode = normalizeBattleMode(data.mode) || undefined
-  const totalQuestions = isFiniteNumber(data.totalQuestions) ? Math.max(0, Math.floor(data.totalQuestions)) : undefined
-  const passedQuestions = isFiniteNumber(data.passedQuestions) ? Math.max(0, Math.floor(data.passedQuestions)) : undefined
-  const stabilityScore = isFiniteNumber(data.stabilityScore) ? clamp(data.stabilityScore, 0, 1) : undefined
-  const rawQuestionStats = Array.isArray(data.questionStats) ? data.questionStats : []
-  const questionStats = rawQuestionStats
-    .map((item): NonNullable<BattleRunSummary['questionStats']>[number] | null => {
-      if (!item || typeof item !== 'object') return null
-      const stats = item as Record<string, any>
-      const questionIndex = isFiniteNumber(stats.questionIndex) ? Math.max(1, Math.floor(stats.questionIndex)) : null
-      if (!questionIndex) return null
-      return {
-        questionIndex,
-        questionId: typeof stats.questionId === 'string' && stats.questionId.trim() ? stats.questionId.trim() : null,
-        questionTitle: typeof stats.questionTitle === 'string' && stats.questionTitle.trim() ? stats.questionTitle.trim() : null,
-        runsPerQuestion: isFiniteNumber(stats.runsPerQuestion) ? Math.max(1, Math.floor(stats.runsPerQuestion)) : 1,
-        passK: isFiniteNumber(stats.passK) ? Math.max(1, Math.floor(stats.passK)) : 1,
-        passAtK: Boolean(stats.passAtK),
-        passCount: isFiniteNumber(stats.passCount) ? Math.max(0, Math.floor(stats.passCount)) : 0,
-        accuracy: isFiniteNumber(stats.accuracy) ? clamp(stats.accuracy, 0, 1) : 0,
-        judgedCount: isFiniteNumber(stats.judgedCount) ? Math.max(0, Math.floor(stats.judgedCount)) : undefined,
-        totalAttempts: isFiniteNumber(stats.totalAttempts) ? Math.max(0, Math.floor(stats.totalAttempts)) : undefined,
-        judgeErrorCount: isFiniteNumber(stats.judgeErrorCount) ? Math.max(0, Math.floor(stats.judgeErrorCount)) : undefined,
-      }
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null)
-
-  return {
-    totalModels,
-    runsPerModel,
-    passK,
-    judgeThreshold,
-    passModelCount,
-    accuracy: clamp(accuracy, 0, 1),
-    ...(mode ? { mode } : {}),
-    ...(typeof totalQuestions === 'number' ? { totalQuestions } : {}),
-    ...(typeof passedQuestions === 'number' ? { passedQuestions } : {}),
-    ...(typeof stabilityScore === 'number' ? { stabilityScore } : {}),
-    ...(questionStats.length > 0 ? { questionStats } : {}),
-    modelStats,
-  }
 }
 
 const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
@@ -646,6 +564,8 @@ export class BattleService {
   private executor: BattleExecutor
   private imageService: BattleImageService
   private retentionCleanupService: BattleRetentionCleanupService
+  private summaryProjector: BattleSummaryProjector
+  private shareProjector: BattleShareProjector
   private activeRuns = new Map<number, BattleRunControl>()
   private vacuumInFlight: Promise<void> | null = null
 
@@ -663,6 +583,21 @@ export class BattleService {
           this.scheduleAsyncVacuum()
         },
       })
+    this.summaryProjector = new BattleSummaryProjector({
+      normalizeMode: normalizeBattleMode,
+    })
+    this.shareProjector = new BattleShareProjector({
+      parseRunConfigPayload,
+      normalizeMode: normalizeBattleMode,
+      normalizeQuestions: normalizeConfigQuestions,
+      parseImagePaths: parseImagePathsJson,
+      toBattleContent: (text, imagePaths) => this.toBattleContent(text, imagePaths),
+      composeModelLabel,
+      normalizeRunStatus,
+      safeParseUsage: (raw) => safeParseJson(raw, {} as Record<string, any>),
+      buildAttemptKey,
+      buildModelKey,
+    })
   }
 
   async listRuns(actor: Actor, params?: { page?: number; limit?: number }) {
@@ -753,7 +688,7 @@ export class BattleService {
       : null
 
     const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
-    let summary = normalizeSummary(rawSummary, {
+    let summary = this.summaryProjector.normalizeSummary(rawSummary, {
       runsPerModel: run.runsPerModel,
       passK: run.passK,
       judgeThreshold: run.judgeThreshold,
@@ -761,7 +696,7 @@ export class BattleService {
     const shouldRebuildSummary =
       results.length > 0 && (summary.modelStats.length === 0 || summary.totalModels === 0)
     if (shouldRebuildSummary) {
-      summary = this.buildSummary(
+      summary = this.summaryProjector.buildSummary(
         results as BattleResultRecord[],
         run.runsPerModel,
         run.passK,
@@ -897,7 +832,7 @@ export class BattleService {
       orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
     const configPayload = parseRunConfigPayload(run.configJson)
-    const summary = this.buildSummary(
+    const summary = this.summaryProjector.buildSummary(
       results as BattleResultRecord[],
       run.runsPerModel,
       run.passK,
@@ -1126,7 +1061,7 @@ export class BattleService {
       where: { battleRunId: run.id },
       orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
-    const refreshedSummary = this.buildSummary(
+    const refreshedSummary = this.summaryProjector.buildSummary(
       remainingResults as BattleResultRecord[],
       run.runsPerModel,
       run.passK,
@@ -1698,7 +1633,7 @@ export class BattleService {
     const rawConfig = parseRunConfigPayload(run.configJson)
     const configModels = normalizeConfigModels(rawConfig)
     const configModel = normalizeConfigModel(rawConfig.model)
-    const models = this.buildShareModels(configModels, results, configModel)
+    const models = this.shareProjector.buildShareModels(configModels, results, configModel)
     const connectionMap = await this.buildShareConnectionMap(results, models)
     const judgeConnection = run.judgeConnectionId
       ? await this.prisma.connection.findFirst({
@@ -1708,7 +1643,7 @@ export class BattleService {
       : null
     const summary = await this.resolveShareSummary(run, results)
     const liveAttempts = this.collectLiveAttempts(run.id, connectionMap)
-    const payload = this.buildSharePayload({
+    const payload = this.shareProjector.buildSharePayload({
       run,
       summary,
       results,
@@ -1757,7 +1692,7 @@ export class BattleService {
       orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
     const configPayload = parseRunConfigPayload(run.configJson)
-    const summary = this.buildSummary(
+    const summary = this.summaryProjector.buildSummary(
       results as BattleResultRecord[],
       run.runsPerModel,
       run.passK,
@@ -1796,7 +1731,7 @@ export class BattleService {
     const rawConfig = parseRunConfigPayload(run.configJson)
     const configModels = normalizeConfigModels(rawConfig)
     const configModel = normalizeConfigModel(rawConfig.model)
-    const models = this.buildShareModels(configModels, results, configModel)
+    const models = this.shareProjector.buildShareModels(configModels, results, configModel)
     const connectionMap = await this.buildShareConnectionMap(results, models)
     const judgeConnection = run.judgeConnectionId
       ? await this.prisma.connection.findFirst({
@@ -1806,7 +1741,7 @@ export class BattleService {
       : null
     const summary = await this.resolveShareSummary(run, results)
     const liveAttempts = this.collectLiveAttempts(run.id, connectionMap)
-    const payload = this.buildSharePayload({
+    const payload = this.shareProjector.buildSharePayload({
       run,
       summary,
       results,
@@ -3090,210 +3025,6 @@ export class BattleService {
     }
   }
 
-  private buildSingleModelQuestionSummary(
-    results: BattleResultRecord[],
-    judgeThreshold: number,
-    questionConfigs: BattleRunQuestionConfig[],
-  ): BattleRunSummary {
-    const questionConfigMap = new Map<number, BattleRunQuestionConfig>()
-    for (const item of questionConfigs) {
-      questionConfigMap.set(item.questionIndex, item)
-    }
-    const questionGroups = new Map<number, {
-      questionIndex: number
-      questionId: string | null
-      questionTitle: string | null
-      runsPerQuestion: number
-      passK: number
-      passCount: number
-      judgedCount: number
-      totalAttempts: number
-      judgeErrorCount: number
-    }>()
-
-    for (const result of results) {
-      const config = questionConfigMap.get(result.questionIndex)
-      const group = questionGroups.get(result.questionIndex) || {
-        questionIndex: result.questionIndex,
-        questionId: result.questionId ?? config?.questionId ?? null,
-        questionTitle: result.questionTitle ?? config?.title ?? null,
-        runsPerQuestion: config?.runsPerQuestion ?? 1,
-        passK: config?.passK ?? 1,
-        passCount: 0,
-        judgedCount: 0,
-        totalAttempts: 0,
-        judgeErrorCount: 0,
-      }
-      group.totalAttempts += 1
-      const status = (result as any).judgeStatus as string | undefined
-      if (status === 'error') {
-        group.judgeErrorCount += 1
-      }
-      const judged = result.judgePass != null && status !== 'error'
-      if (judged) {
-        group.judgedCount += 1
-        if (result.judgePass === true) {
-          group.passCount += 1
-        }
-      }
-      questionGroups.set(result.questionIndex, group)
-    }
-
-    for (const config of questionConfigs) {
-      if (questionGroups.has(config.questionIndex)) continue
-      questionGroups.set(config.questionIndex, {
-        questionIndex: config.questionIndex,
-        questionId: config.questionId ?? null,
-        questionTitle: config.title ?? null,
-        runsPerQuestion: config.runsPerQuestion,
-        passK: config.passK,
-        passCount: 0,
-        judgedCount: 0,
-        totalAttempts: 0,
-        judgeErrorCount: 0,
-      })
-    }
-
-    const questionStats = Array.from(questionGroups.values())
-      .sort((a, b) => a.questionIndex - b.questionIndex)
-      .map((group) => {
-        const accuracy = group.totalAttempts > 0 ? group.passCount / group.totalAttempts : 0
-        return {
-          questionIndex: group.questionIndex,
-          questionId: group.questionId,
-          questionTitle: group.questionTitle,
-          runsPerQuestion: group.runsPerQuestion,
-          passK: group.passK,
-          passAtK: group.passCount >= group.passK,
-          passCount: group.passCount,
-          accuracy,
-          judgedCount: group.judgedCount,
-          totalAttempts: group.totalAttempts,
-          judgeErrorCount: group.judgeErrorCount,
-        }
-      })
-    const totalQuestions = questionStats.length
-    const passedQuestions = questionStats.filter((item) => item.passAtK).length
-    const stabilityScore = totalQuestions > 0 ? passedQuestions / totalQuestions : 0
-
-    const first = results[0]
-    const judgedCount = questionStats.reduce((acc, item) => acc + (item.judgedCount || 0), 0)
-    const totalAttempts = questionStats.reduce((acc, item) => acc + (item.totalAttempts || 0), 0)
-    const judgeErrorCount = questionStats.reduce((acc, item) => acc + (item.judgeErrorCount || 0), 0)
-    const modelStats = first
-      ? [{
-        modelId: first.modelId,
-        connectionId: first.connectionId ?? null,
-        rawId: first.rawId ?? null,
-        passAtK: totalQuestions > 0 ? passedQuestions === totalQuestions : false,
-        passCount: passedQuestions,
-        accuracy: stabilityScore,
-        judgedCount,
-        totalAttempts,
-        judgeErrorCount,
-      }]
-      : []
-
-    return {
-      totalModels: modelStats.length,
-      runsPerModel: 1,
-      passK: 1,
-      judgeThreshold,
-      passModelCount: modelStats.length > 0 && modelStats[0].passAtK ? 1 : 0,
-      accuracy: modelStats.length > 0 ? modelStats[0].accuracy : 0,
-      mode: 'single_model_multi_question',
-      totalQuestions,
-      passedQuestions,
-      stabilityScore,
-      questionStats,
-      modelStats,
-    }
-  }
-
-  private buildSummary(
-    results: BattleResultRecord[],
-    runsPerModel: number,
-    passK: number,
-    judgeThreshold: number,
-    options?: {
-      mode?: BattleMode
-      questionConfigs?: BattleRunQuestionConfig[]
-    },
-  ): BattleRunSummary {
-    const mode = normalizeBattleMode(options?.mode)
-    if (mode === 'single_model_multi_question') {
-      return this.buildSingleModelQuestionSummary(results, judgeThreshold, options?.questionConfigs || [])
-    }
-
-    const groups = new Map<string, {
-      modelId: string
-      connectionId: number | null
-      rawId: string | null
-      passCount: number
-      judgedCount: number
-      totalAttempts: number
-      judgeErrorCount: number
-    }>()
-
-    for (const result of results) {
-      const key = `${result.modelId}:${result.connectionId ?? 'null'}:${result.rawId ?? 'null'}`
-      const group = groups.get(key) || {
-        modelId: result.modelId,
-        connectionId: result.connectionId ?? null,
-        rawId: result.rawId ?? null,
-        passCount: 0,
-        judgedCount: 0,
-        totalAttempts: 0,
-        judgeErrorCount: 0,
-      }
-      group.totalAttempts += 1
-      const status = (result as any).judgeStatus as string | undefined
-      if (status === 'error') {
-        group.judgeErrorCount += 1
-      }
-      const judged = result.judgePass != null && status !== 'error'
-      if (judged) {
-        group.judgedCount += 1
-        if (result.judgePass === true) {
-          group.passCount += 1
-        }
-      }
-      groups.set(key, group)
-    }
-
-    const modelStats = Array.from(groups.values()).map((group) => {
-      // 使用 totalAttempts 作为分母计算准确率，这样错误的尝试也会被计入
-      // 确保统计的公平性：无论是模型报错还是裁判失败，都应该算作未通过
-      const accuracy = group.totalAttempts > 0 ? group.passCount / group.totalAttempts : 0
-      return {
-        modelId: group.modelId,
-        connectionId: group.connectionId,
-        rawId: group.rawId,
-        passAtK: group.passCount >= passK,
-        passCount: group.passCount,
-        accuracy,
-        judgedCount: group.judgedCount,
-        totalAttempts: group.totalAttempts,
-        judgeErrorCount: group.judgeErrorCount,
-      }
-    })
-
-    const totalModels = modelStats.length
-    const passModelCount = modelStats.filter((item) => item.passAtK).length
-    const accuracy = totalModels > 0 ? passModelCount / totalModels : 0
-
-    return {
-      totalModels,
-      runsPerModel,
-      passK,
-      judgeThreshold,
-      passModelCount,
-      accuracy,
-      mode: 'multi_model',
-      modelStats,
-    }
-  }
-
   private createRunControl(runId: number, actor: Actor): BattleRunControl {
     const existing = this.activeRuns.get(runId)
     if (existing) return existing
@@ -3789,7 +3520,7 @@ export class BattleService {
       orderBy: [{ questionIndex: 'asc' }, { modelId: 'asc' }, { attemptIndex: 'asc' }],
     })
     const configPayload = parseRunConfigPayload(run?.configJson)
-    return this.buildSummary(
+    return this.summaryProjector.buildSummary(
       results as BattleResultRecord[],
       config.runsPerModel,
       config.passK,
@@ -3799,26 +3530,6 @@ export class BattleService {
         questionConfigs: normalizeConfigQuestions(configPayload.questions),
       },
     )
-  }
-
-  private buildShareModels(
-    configModels: BattleRunConfigModel[],
-    results: BattleResultRecord[],
-    configModel?: BattleRunConfigModel | null,
-  ): BattleRunConfigModel[] {
-    if (configModels.length > 0) return configModels
-    if (configModel) return [configModel]
-    const fallbackModels = new Map<string, BattleRunConfigModel>()
-    for (const item of results) {
-      const key = `${item.modelId}:${item.connectionId ?? 'null'}:${item.rawId ?? 'null'}`
-      if (fallbackModels.has(key)) continue
-      fallbackModels.set(key, {
-        modelId: item.modelId,
-        connectionId: item.connectionId ?? null,
-        rawId: item.rawId ?? null,
-      })
-    }
-    return Array.from(fallbackModels.values())
   }
 
   private async buildShareConnectionMap(
@@ -3848,7 +3559,7 @@ export class BattleService {
     const mode = normalizeBattleMode(configPayload.mode ?? run.mode)
     const questionConfigs = normalizeConfigQuestions(configPayload.questions)
     const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
-    let summary = normalizeSummary(rawSummary, {
+    let summary = this.summaryProjector.normalizeSummary(rawSummary, {
       runsPerModel: run.runsPerModel,
       passK: run.passK,
       judgeThreshold: run.judgeThreshold,
@@ -3860,7 +3571,7 @@ export class BattleService {
           : (summary.modelStats.length === 0 || summary.totalModels === 0)
       )
     if (shouldRebuildSummary) {
-      summary = this.buildSummary(
+      summary = this.summaryProjector.buildSummary(
         results as BattleResultRecord[],
         run.runsPerModel,
         run.passK,
@@ -3878,196 +3589,6 @@ export class BattleService {
       }
     }
     return summary
-  }
-
-  private buildShareProgress(params: {
-    mode: BattleMode
-    summary: BattleRunSummary
-    modelCount: number
-    runsPerModel: number
-    results: BattleResultRecord[]
-    liveAttempts: Array<LiveAttemptState & { modelLabel: string | null }> | null
-  }) {
-    const totalAttempts = params.mode === 'single_model_multi_question'
-      ? (params.summary.questionStats || []).reduce(
-        (acc, item) => acc + Math.max(0, Math.floor(item.runsPerQuestion || 0)),
-        0,
-      )
-      : Math.max(0, params.modelCount) * Math.max(1, Math.floor(params.runsPerModel))
-    const completedAttempts = params.results.length
-    let successAttempts = 0
-    let failedAttempts = 0
-    for (const result of params.results) {
-      if (!result.error && result.judgePass === true) {
-        successAttempts += 1
-      } else {
-        failedAttempts += 1
-      }
-    }
-
-    const resultKeys = new Set(
-      params.results.map((item) =>
-        buildAttemptKey(
-          buildModelKey(item.modelId, item.connectionId, item.rawId),
-          item.questionIndex ?? 1,
-          item.attemptIndex,
-        ),
-      ),
-    )
-    let runningAttempts = 0
-    let pendingAttempts = 0
-    if (params.liveAttempts) {
-      for (const attempt of params.liveAttempts) {
-        const key = buildAttemptKey(
-          buildModelKey(attempt.modelId, attempt.connectionId, attempt.rawId),
-          attempt.questionIndex ?? 1,
-          attempt.attemptIndex,
-        )
-        if (resultKeys.has(key)) continue
-        if (attempt.status === 'running' || attempt.status === 'judging') {
-          runningAttempts += 1
-          continue
-        }
-        if (attempt.status === 'pending') {
-          pendingAttempts += 1
-        }
-      }
-    }
-
-    const remaining = Math.max(0, totalAttempts - completedAttempts - runningAttempts - pendingAttempts)
-    pendingAttempts += remaining
-
-    return {
-      totalAttempts,
-      completedAttempts,
-      runningAttempts,
-      pendingAttempts,
-      successAttempts,
-      failedAttempts,
-    }
-  }
-
-  private buildSharePayload(params: {
-    run: BattleRunRecord
-    summary: BattleRunSummary
-    results: BattleResultRecord[]
-    models: BattleRunConfigModel[]
-    connectionMap: Map<number, LabelConnection>
-    judgeConnection: LabelConnection | null
-    liveAttempts: Array<LiveAttemptState & { modelLabel: string | null }> | null
-  }): BattleSharePayload {
-    const rawConfig = parseRunConfigPayload(params.run.configJson)
-    const mode = normalizeBattleMode(rawConfig.mode ?? params.run.mode)
-    const questionConfigs = normalizeConfigQuestions(rawConfig.questions)
-    const promptImagePaths = parseImagePathsJson(params.run.promptImagesJson)
-    const expectedAnswerImagePaths = parseImagePathsJson(params.run.expectedAnswerImagesJson)
-    const models = params.models.map((model) => ({
-      modelId: model.modelId,
-      modelLabel: composeModelLabel(
-        model.connectionId != null ? params.connectionMap.get(model.connectionId) || null : null,
-        model.rawId,
-        model.modelId,
-      ),
-      connectionId: model.connectionId ?? null,
-      rawId: model.rawId ?? null,
-    }))
-    const questions = questionConfigs.length > 0
-      ? questionConfigs.map((item) => ({
-        questionIndex: item.questionIndex,
-        questionId: item.questionId ?? null,
-        title: item.title ?? null,
-        prompt: this.toBattleContent(item.prompt.text, item.prompt.images),
-        expectedAnswer: this.toBattleContent(item.expectedAnswer.text, item.expectedAnswer.images),
-        runsPerQuestion: item.runsPerQuestion,
-        passK: item.passK,
-      }))
-      : undefined
-    const progressSummary = mode === 'single_model_multi_question'
-      && (!params.summary.questionStats || params.summary.questionStats.length === 0)
-      ? {
-        ...params.summary,
-        questionStats: questionConfigs.map((item) => ({
-          questionIndex: item.questionIndex,
-          questionId: item.questionId ?? null,
-          questionTitle: item.title ?? null,
-          runsPerQuestion: item.runsPerQuestion,
-          passK: item.passK,
-          passAtK: false,
-          passCount: 0,
-          accuracy: 0,
-          judgedCount: 0,
-          totalAttempts: item.runsPerQuestion,
-          judgeErrorCount: 0,
-        })),
-      }
-      : params.summary
-    const progress = this.buildShareProgress({
-      mode,
-      summary: progressSummary,
-      modelCount: models.length,
-      runsPerModel: params.run.runsPerModel,
-      results: params.results,
-      liveAttempts: params.liveAttempts,
-    })
-    const live = params.liveAttempts && params.liveAttempts.length > 0
-      ? {
-        attempts: params.liveAttempts.map((attempt) => ({
-          questionIndex: attempt.questionIndex,
-          questionId: attempt.questionId ?? null,
-          questionTitle: attempt.questionTitle ?? null,
-          modelId: attempt.modelId,
-          modelLabel: attempt.modelLabel ?? null,
-          connectionId: attempt.connectionId,
-          rawId: attempt.rawId,
-          attemptIndex: attempt.attemptIndex,
-          status: attempt.status,
-          output: attempt.output,
-          reasoning: attempt.reasoning,
-          durationMs: attempt.durationMs,
-          error: attempt.error,
-          ...(attempt.toolEvents.length > 0 ? { toolEvents: attempt.toolEvents } : {}),
-        })),
-      }
-      : undefined
-    return {
-      title: params.run.title,
-      mode,
-      prompt: this.toBattleContent(params.run.prompt, promptImagePaths),
-      expectedAnswer: this.toBattleContent(params.run.expectedAnswer, expectedAnswerImagePaths),
-      judge: {
-        modelId: params.run.judgeModelId,
-        modelLabel: composeModelLabel(params.judgeConnection, params.run.judgeRawId, params.run.judgeModelId),
-        threshold: params.run.judgeThreshold,
-      },
-      status: normalizeRunStatus(params.run.status),
-      progress,
-      models,
-      ...(questions ? { questions } : {}),
-      summary: params.summary,
-      results: params.results.map((item) => ({
-        questionIndex: item.questionIndex ?? 1,
-        questionId: item.questionId ?? null,
-        questionTitle: item.questionTitle ?? null,
-        modelId: item.modelId,
-        modelLabel: composeModelLabel(params.connectionMap.get(item.connectionId || -1) || null, item.rawId, item.modelId),
-        connectionId: item.connectionId,
-        rawId: item.rawId,
-        attemptIndex: item.attemptIndex,
-        output: item.output,
-        reasoning: item.reasoning || '',
-        durationMs: item.durationMs,
-        error: item.error,
-        usage: safeParseJson(item.usageJson, {} as Record<string, any>),
-        judgeStatus: item.judgeStatus as any,
-        judgeError: item.judgeError,
-        judgePass: item.judgePass,
-        judgeScore: item.judgeScore,
-        judgeReason: item.judgeReason,
-        judgeFallbackUsed: item.judgeFallbackUsed,
-      })),
-      ...(live ? { live } : {}),
-      createdAt: params.run.createdAt.toISOString(),
-    }
   }
 
   private async finalizeCancelledRun(
@@ -4348,7 +3869,7 @@ export class BattleService {
 
   private serializeRunSummary(run: BattleRunRecord) {
     const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
-    const summary = normalizeSummary(rawSummary, {
+    const summary = this.summaryProjector.normalizeSummary(rawSummary, {
       runsPerModel: run.runsPerModel,
       passK: run.passK,
       judgeThreshold: run.judgeThreshold,
@@ -4488,11 +4009,3 @@ export class BattleService {
     return actor.type === 'user' ? { userId: actor.id } : { anonymousKey: actor.key }
   }
 }
-
-let battleService = new BattleService()
-
-export const setBattleService = (service: BattleService) => {
-  battleService = service
-}
-
-export { battleService }

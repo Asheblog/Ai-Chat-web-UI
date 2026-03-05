@@ -4,20 +4,18 @@ import { z } from 'zod'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import { getTaskTraceConfig } from '../utils/task-trace'
-import { taskTraceService } from '../services/task-trace/task-trace-service'
-import { taskTraceFileService } from '../services/task-trace/task-trace-file-service'
 import { buildLatexExport, buildTraceExport } from '../services/task-trace/task-trace-export-service'
 import type { TaskTraceService } from '../services/task-trace/task-trace-service'
 import type { TaskTraceFileService } from '../services/task-trace/task-trace-file-service'
 
 export interface TaskTraceApiDeps {
-  taskTraceService?: TaskTraceService
-  taskTraceFileService?: TaskTraceFileService
+  taskTraceService: TaskTraceService
+  taskTraceFileService: TaskTraceFileService
 }
 
-export const createTaskTraceApi = (deps: TaskTraceApiDeps = {}) => {
-  const traceService = deps.taskTraceService ?? taskTraceService
-  const traceFileService = deps.taskTraceFileService ?? taskTraceFileService
+export const createTaskTraceApi = (deps: TaskTraceApiDeps) => {
+  const traceService = deps.taskTraceService
+  const traceFileService = deps.taskTraceFileService
   const taskTrace = new Hono()
 
 const cleanupSchema = z.object({
@@ -276,5 +274,3 @@ taskTrace.post('/cleanup', actorMiddleware, requireUserActor, adminOnlyMiddlewar
 
   return taskTrace
 }
-
-export default createTaskTraceApi()

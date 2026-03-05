@@ -4,7 +4,6 @@ import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware, requireUserActor } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import {
-  promptTemplateService,
   PromptTemplateService,
   PromptTemplateServiceError,
 } from '../services/prompt-templates'
@@ -35,7 +34,7 @@ const updateTemplateSchema = z
   })
 
 export interface PromptTemplatesApiDeps {
-  promptTemplateService?: PromptTemplateService
+  promptTemplateService: PromptTemplateService
 }
 
 const parseTemplateId = (raw: string): number | null => {
@@ -52,8 +51,8 @@ const handleError = (c: any, error: unknown, fallback: string) => {
   return c.json({ success: false, error: fallback }, 500)
 }
 
-export const createPromptTemplatesApi = (deps: PromptTemplatesApiDeps = {}) => {
-  const svc = deps.promptTemplateService ?? promptTemplateService
+export const createPromptTemplatesApi = (deps: PromptTemplatesApiDeps) => {
+  const svc = deps.promptTemplateService
   const router = new Hono()
 
   router.get('/', actorMiddleware, requireUserActor, async (c) => {
@@ -135,5 +134,3 @@ export const createPromptTemplatesApi = (deps: PromptTemplatesApiDeps = {}) => {
 
   return router
 }
-
-export default createPromptTemplatesApi()

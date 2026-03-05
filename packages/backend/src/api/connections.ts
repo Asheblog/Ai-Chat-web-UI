@@ -4,7 +4,6 @@ import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import {
-  connectionService,
   ConnectionServiceError,
   type ConnectionService,
 } from '../services/connections'
@@ -48,8 +47,12 @@ const handleServiceError = (
   return c.json({ success: false, error: fallbackMessage }, 500)
 }
 
-export const createConnectionsApi = (deps: { connectionService?: ConnectionService } = {}) => {
-  const service = deps.connectionService ?? connectionService
+export interface ConnectionsApiDeps {
+  connectionService: ConnectionService
+}
+
+export const createConnectionsApi = (deps: ConnectionsApiDeps) => {
+  const service = deps.connectionService
   const router = new Hono()
 
   router.use('*', actorMiddleware)
@@ -128,5 +131,3 @@ export const createConnectionsApi = (deps: { connectionService?: ConnectionServi
 
   return router
 }
-
-export default createConnectionsApi()

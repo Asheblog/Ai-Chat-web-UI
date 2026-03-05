@@ -16,6 +16,8 @@ import { RAGService, type RAGConfig } from './document/rag-service'
 import { EnhancedRAGService } from './document/enhanced-rag-service'
 import { DocumentSectionService } from './document/section-service'
 import { CleanupScheduler, type CleanupConfig } from './cleanup/cleanup-scheduler'
+import { ServiceRegistry } from '../container/service-registry'
+import { SERVICE_KEYS } from '../container/service-accessor'
 
 export interface DocumentServicesConfig {
   /**
@@ -178,25 +180,32 @@ export function createDocumentServices(
   }
 }
 
-// 全局单例（可选）
-let documentServicesInstance: DocumentServices | null = null
+const getRegistry = () => ServiceRegistry.getInstance()
 
 export function initDocumentServices(
   prisma: PrismaClient,
   config?: Partial<DocumentServicesConfig>
 ): DocumentServices {
-  if (documentServicesInstance) {
-    return documentServicesInstance
+  const registry = getRegistry()
+  const existing = registry.tryResolve<DocumentServices>(SERVICE_KEYS.documentServices)
+  if (existing) {
+    return existing
   }
 
-  documentServicesInstance = createDocumentServices(prisma, config)
-  return documentServicesInstance
+  const services = createDocumentServices(prisma, config)
+  registry.register(SERVICE_KEYS.documentServices, services)
+  return services
 }
 
 export function getDocumentServices(): DocumentServices | null {
-  return documentServicesInstance
+  return getRegistry().tryResolve<DocumentServices>(SERVICE_KEYS.documentServices) ?? null
 }
 
-export function setDocumentServices(services: DocumentServices): void {
-  documentServicesInstance = services
+export function setDocumentServices(services: DocumentServices | null): void {
+  const registry = getRegistry()
+  if (!services) {
+    registry.unregister(SERVICE_KEYS.documentServices)
+    return
+  }
+  registry.register(SERVICE_KEYS.documentServices, services)
 }

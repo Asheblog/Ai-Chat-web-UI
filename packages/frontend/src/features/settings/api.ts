@@ -1,4 +1,5 @@
 import { apiHttpClient } from '@/lib/api'
+import { serializeSystemSettingsPatch } from '@aichat/shared'
 import type {
   ApiResponse,
   PythonRuntimeStatus,
@@ -540,139 +541,140 @@ export const updateSystemSettings = async (
   },
 ) => {
   const { assistantAvatarUpload, assistantAvatarRemove, ...rest } = settings
-  const payload: any = {}
-  if (typeof rest.allowRegistration === 'boolean') payload.registration_enabled = !!rest.allowRegistration
-  if (typeof rest.brandText === 'string') payload.brand_text = rest.brandText
-  if (typeof rest.sseHeartbeatIntervalMs === 'number') payload.sse_heartbeat_interval_ms = rest.sseHeartbeatIntervalMs
-  if (typeof rest.providerMaxIdleMs === 'number') payload.provider_max_idle_ms = rest.providerMaxIdleMs
-  if (typeof rest.providerTimeoutMs === 'number') payload.provider_timeout_ms = rest.providerTimeoutMs
-  if (typeof rest.providerInitialGraceMs === 'number') payload.provider_initial_grace_ms = rest.providerInitialGraceMs
-  if (typeof rest.providerReasoningIdleMs === 'number') payload.provider_reasoning_idle_ms = rest.providerReasoningIdleMs
-  if (typeof rest.reasoningKeepaliveIntervalMs === 'number') payload.reasoning_keepalive_interval_ms = rest.reasoningKeepaliveIntervalMs
-  if (typeof rest.usageEmit === 'boolean') payload.usage_emit = !!rest.usageEmit
-  if (typeof rest.usageProviderOnly === 'boolean') payload.usage_provider_only = !!rest.usageProviderOnly
-  if (typeof rest.contextCompressionEnabled === 'boolean') payload.context_compression_enabled = !!rest.contextCompressionEnabled
-  if (typeof rest.contextCompressionThresholdRatio === 'number') payload.context_compression_threshold_ratio = rest.contextCompressionThresholdRatio
-  if (typeof rest.contextCompressionTailMessages === 'number') payload.context_compression_tail_messages = rest.contextCompressionTailMessages
-  if (typeof rest.chatSystemPrompt === 'string') payload.chat_system_prompt = rest.chatSystemPrompt
-  if (typeof rest.reasoningEnabled === 'boolean') payload.reasoning_enabled = !!rest.reasoningEnabled
-  if (typeof rest.reasoningDefaultExpand === 'boolean') payload.reasoning_default_expand = !!rest.reasoningDefaultExpand
-  if (typeof rest.reasoningSaveToDb === 'boolean') payload.reasoning_save_to_db = !!rest.reasoningSaveToDb
-  if (typeof rest.reasoningTagsMode === 'string') payload.reasoning_tags_mode = rest.reasoningTagsMode
-  if (typeof rest.reasoningCustomTags === 'string') payload.reasoning_custom_tags = rest.reasoningCustomTags
-  if (typeof rest.streamDeltaChunkSize === 'number') payload.stream_delta_chunk_size = rest.streamDeltaChunkSize
-  if (typeof rest.streamDeltaFlushIntervalMs === 'number') payload.stream_delta_flush_interval_ms = rest.streamDeltaFlushIntervalMs
-  if (typeof rest.streamReasoningFlushIntervalMs === 'number') payload.stream_reasoning_flush_interval_ms = rest.streamReasoningFlushIntervalMs
-  if (typeof rest.streamKeepaliveIntervalMs === 'number') payload.stream_keepalive_interval_ms = rest.streamKeepaliveIntervalMs
-  if (typeof rest.openaiReasoningEffort === 'string') payload.openai_reasoning_effort = rest.openaiReasoningEffort
+  const patch: Record<string, unknown> = {}
+  if (typeof rest.allowRegistration === 'boolean') patch.allowRegistration = !!rest.allowRegistration
+  if (typeof rest.brandText === 'string') patch.brandText = rest.brandText
+  if (typeof rest.sseHeartbeatIntervalMs === 'number') patch.sseHeartbeatIntervalMs = rest.sseHeartbeatIntervalMs
+  if (typeof rest.providerMaxIdleMs === 'number') patch.providerMaxIdleMs = rest.providerMaxIdleMs
+  if (typeof rest.providerTimeoutMs === 'number') patch.providerTimeoutMs = rest.providerTimeoutMs
+  if (typeof rest.providerInitialGraceMs === 'number') patch.providerInitialGraceMs = rest.providerInitialGraceMs
+  if (typeof rest.providerReasoningIdleMs === 'number') patch.providerReasoningIdleMs = rest.providerReasoningIdleMs
+  if (typeof rest.reasoningKeepaliveIntervalMs === 'number') patch.reasoningKeepaliveIntervalMs = rest.reasoningKeepaliveIntervalMs
+  if (typeof rest.usageEmit === 'boolean') patch.usageEmit = !!rest.usageEmit
+  if (typeof rest.usageProviderOnly === 'boolean') patch.usageProviderOnly = !!rest.usageProviderOnly
+  if (typeof rest.contextCompressionEnabled === 'boolean') patch.contextCompressionEnabled = !!rest.contextCompressionEnabled
+  if (typeof rest.contextCompressionThresholdRatio === 'number') patch.contextCompressionThresholdRatio = rest.contextCompressionThresholdRatio
+  if (typeof rest.contextCompressionTailMessages === 'number') patch.contextCompressionTailMessages = rest.contextCompressionTailMessages
+  if (typeof rest.chatSystemPrompt === 'string') patch.chatSystemPrompt = rest.chatSystemPrompt
+  if (typeof rest.reasoningEnabled === 'boolean') patch.reasoningEnabled = !!rest.reasoningEnabled
+  if (typeof rest.reasoningDefaultExpand === 'boolean') patch.reasoningDefaultExpand = !!rest.reasoningDefaultExpand
+  if (typeof rest.reasoningSaveToDb === 'boolean') patch.reasoningSaveToDb = !!rest.reasoningSaveToDb
+  if (typeof rest.reasoningTagsMode === 'string') patch.reasoningTagsMode = rest.reasoningTagsMode
+  if (typeof rest.reasoningCustomTags === 'string') patch.reasoningCustomTags = rest.reasoningCustomTags
+  if (typeof rest.streamDeltaChunkSize === 'number') patch.streamDeltaChunkSize = rest.streamDeltaChunkSize
+  if (typeof rest.streamDeltaFlushIntervalMs === 'number') patch.streamDeltaFlushIntervalMs = rest.streamDeltaFlushIntervalMs
+  if (typeof rest.streamReasoningFlushIntervalMs === 'number') patch.streamReasoningFlushIntervalMs = rest.streamReasoningFlushIntervalMs
+  if (typeof rest.streamKeepaliveIntervalMs === 'number') patch.streamKeepaliveIntervalMs = rest.streamKeepaliveIntervalMs
+  if (typeof rest.openaiReasoningEffort === 'string') patch.openaiReasoningEffort = rest.openaiReasoningEffort
   if (Object.prototype.hasOwnProperty.call(rest, 'reasoningMaxOutputTokensDefault')) {
     if (typeof rest.reasoningMaxOutputTokensDefault === 'number') {
-      payload.reasoning_max_output_tokens_default = rest.reasoningMaxOutputTokensDefault
+      patch.reasoningMaxOutputTokensDefault = rest.reasoningMaxOutputTokensDefault
     } else if (rest.reasoningMaxOutputTokensDefault === null) {
-      payload.reasoning_max_output_tokens_default = null
+      patch.reasoningMaxOutputTokensDefault = null
     }
   }
   if (Object.prototype.hasOwnProperty.call(rest, 'temperatureDefault')) {
     if (typeof rest.temperatureDefault === 'number') {
-      payload.temperature_default = rest.temperatureDefault
+      patch.temperatureDefault = rest.temperatureDefault
     } else if (rest.temperatureDefault === null) {
-      payload.temperature_default = null
+      patch.temperatureDefault = null
     }
   }
-  if (typeof rest.ollamaThink === 'boolean') payload.ollama_think = !!rest.ollamaThink
-  if (typeof rest.chatImageRetentionDays === 'number') payload.chat_image_retention_days = rest.chatImageRetentionDays
-  if (typeof rest.assistantReplyHistoryLimit === 'number') payload.assistant_reply_history_limit = rest.assistantReplyHistoryLimit
-  if (typeof rest.siteBaseUrl === 'string') payload.site_base_url = rest.siteBaseUrl
-  if (typeof rest.anonymousRetentionDays === 'number') payload.anonymous_retention_days = rest.anonymousRetentionDays
-  if (typeof rest.anonymousDailyQuota === 'number') payload.anonymous_daily_quota = rest.anonymousDailyQuota
-  if (typeof rest.defaultUserDailyQuota === 'number') payload.default_user_daily_quota = rest.defaultUserDailyQuota
-  if (typeof rest.battleAllowAnonymous === 'boolean') payload.battle_allow_anonymous = rest.battleAllowAnonymous
-  if (typeof rest.battleAllowUsers === 'boolean') payload.battle_allow_users = rest.battleAllowUsers
-  if (typeof rest.battleAnonymousDailyQuota === 'number') payload.battle_anonymous_daily_quota = rest.battleAnonymousDailyQuota
-  if (typeof rest.battleUserDailyQuota === 'number') payload.battle_user_daily_quota = rest.battleUserDailyQuota
-  if (typeof rest.battleRetentionDays === 'number') payload.battle_retention_days = rest.battleRetentionDays
+  if (typeof rest.ollamaThink === 'boolean') patch.ollamaThink = !!rest.ollamaThink
+  if (typeof rest.chatImageRetentionDays === 'number') patch.chatImageRetentionDays = rest.chatImageRetentionDays
+  if (typeof rest.assistantReplyHistoryLimit === 'number') patch.assistantReplyHistoryLimit = rest.assistantReplyHistoryLimit
+  if (typeof rest.siteBaseUrl === 'string') patch.siteBaseUrl = rest.siteBaseUrl
+  if (typeof rest.anonymousRetentionDays === 'number') patch.anonymousRetentionDays = rest.anonymousRetentionDays
+  if (typeof rest.anonymousDailyQuota === 'number') patch.anonymousDailyQuota = rest.anonymousDailyQuota
+  if (typeof rest.defaultUserDailyQuota === 'number') patch.defaultUserDailyQuota = rest.defaultUserDailyQuota
+  if (typeof rest.battleAllowAnonymous === 'boolean') patch.battleAllowAnonymous = rest.battleAllowAnonymous
+  if (typeof rest.battleAllowUsers === 'boolean') patch.battleAllowUsers = rest.battleAllowUsers
+  if (typeof rest.battleAnonymousDailyQuota === 'number') patch.battleAnonymousDailyQuota = rest.battleAnonymousDailyQuota
+  if (typeof rest.battleUserDailyQuota === 'number') patch.battleUserDailyQuota = rest.battleUserDailyQuota
+  if (typeof rest.battleRetentionDays === 'number') patch.battleRetentionDays = rest.battleRetentionDays
   if (typeof rest.modelAccessDefaultAnonymous === 'string')
-    payload.model_access_default_anonymous = rest.modelAccessDefaultAnonymous
-  if (typeof rest.modelAccessDefaultUser === 'string') payload.model_access_default_user = rest.modelAccessDefaultUser
-  if (typeof rest.webSearchAgentEnable === 'boolean') payload.web_search_agent_enable = rest.webSearchAgentEnable
-  if (Array.isArray(rest.webSearchEnabledEngines)) payload.web_search_enabled_engines = rest.webSearchEnabledEngines
-  if (Array.isArray(rest.webSearchEngineOrder)) payload.web_search_engine_order = rest.webSearchEngineOrder
-  if (typeof rest.webSearchResultLimit === 'number') payload.web_search_result_limit = rest.webSearchResultLimit
-  if (Array.isArray(rest.webSearchDomainFilter)) payload.web_search_domain_filter = rest.webSearchDomainFilter
-  if (typeof rest.webSearchScope === 'string') payload.web_search_scope = rest.webSearchScope
-  if (typeof rest.webSearchIncludeSummary === 'boolean') payload.web_search_include_summary = rest.webSearchIncludeSummary
-  if (typeof rest.webSearchIncludeRaw === 'boolean') payload.web_search_include_raw = rest.webSearchIncludeRaw
-  if (typeof rest.webSearchParallelMaxEngines === 'number') payload.web_search_parallel_max_engines = rest.webSearchParallelMaxEngines
+    patch.modelAccessDefaultAnonymous = rest.modelAccessDefaultAnonymous
+  if (typeof rest.modelAccessDefaultUser === 'string') patch.modelAccessDefaultUser = rest.modelAccessDefaultUser
+  if (typeof rest.webSearchAgentEnable === 'boolean') patch.webSearchAgentEnable = rest.webSearchAgentEnable
+  if (Array.isArray(rest.webSearchEnabledEngines)) patch.webSearchEnabledEngines = rest.webSearchEnabledEngines
+  if (Array.isArray(rest.webSearchEngineOrder)) patch.webSearchEngineOrder = rest.webSearchEngineOrder
+  if (typeof rest.webSearchResultLimit === 'number') patch.webSearchResultLimit = rest.webSearchResultLimit
+  if (Array.isArray(rest.webSearchDomainFilter)) patch.webSearchDomainFilter = rest.webSearchDomainFilter
+  if (typeof rest.webSearchScope === 'string') patch.webSearchScope = rest.webSearchScope
+  if (typeof rest.webSearchIncludeSummary === 'boolean') patch.webSearchIncludeSummary = rest.webSearchIncludeSummary
+  if (typeof rest.webSearchIncludeRaw === 'boolean') patch.webSearchIncludeRaw = rest.webSearchIncludeRaw
+  if (typeof rest.webSearchParallelMaxEngines === 'number') patch.webSearchParallelMaxEngines = rest.webSearchParallelMaxEngines
   if (typeof rest.webSearchParallelMaxQueriesPerCall === 'number') {
-    payload.web_search_parallel_max_queries_per_call = rest.webSearchParallelMaxQueriesPerCall
+    patch.webSearchParallelMaxQueriesPerCall = rest.webSearchParallelMaxQueriesPerCall
   }
-  if (typeof rest.webSearchParallelTimeoutMs === 'number') payload.web_search_parallel_timeout_ms = rest.webSearchParallelTimeoutMs
+  if (typeof rest.webSearchParallelTimeoutMs === 'number') patch.webSearchParallelTimeoutMs = rest.webSearchParallelTimeoutMs
   if (typeof rest.webSearchParallelMergeStrategy === 'string') {
-    payload.web_search_parallel_merge_strategy = rest.webSearchParallelMergeStrategy
+    patch.webSearchParallelMergeStrategy = rest.webSearchParallelMergeStrategy
   }
-  if (typeof rest.webSearchAutoBilingual === 'boolean') payload.web_search_auto_bilingual = rest.webSearchAutoBilingual
-  if (typeof rest.webSearchAutoBilingualMode === 'string') payload.web_search_auto_bilingual_mode = rest.webSearchAutoBilingualMode
+  if (typeof rest.webSearchAutoBilingual === 'boolean') patch.webSearchAutoBilingual = rest.webSearchAutoBilingual
+  if (typeof rest.webSearchAutoBilingualMode === 'string') patch.webSearchAutoBilingualMode = rest.webSearchAutoBilingualMode
   if (typeof rest.webSearchAutoReadParallelism === 'number') {
-    payload.web_search_auto_read_parallelism = rest.webSearchAutoReadParallelism
+    patch.webSearchAutoReadParallelism = rest.webSearchAutoReadParallelism
   }
-  if (typeof rest.pythonToolEnable === 'boolean') payload.python_tool_enable = rest.pythonToolEnable
-  if (typeof rest.pythonToolTimeoutMs === 'number') payload.python_tool_timeout_ms = rest.pythonToolTimeoutMs
-  if (typeof rest.pythonToolMaxOutputChars === 'number') payload.python_tool_max_output_chars = rest.pythonToolMaxOutputChars
-  if (typeof rest.pythonToolMaxSourceChars === 'number') payload.python_tool_max_source_chars = rest.pythonToolMaxSourceChars
+  if (typeof rest.pythonToolEnable === 'boolean') patch.pythonToolEnable = rest.pythonToolEnable
+  if (typeof rest.pythonToolTimeoutMs === 'number') patch.pythonToolTimeoutMs = rest.pythonToolTimeoutMs
+  if (typeof rest.pythonToolMaxOutputChars === 'number') patch.pythonToolMaxOutputChars = rest.pythonToolMaxOutputChars
+  if (typeof rest.pythonToolMaxSourceChars === 'number') patch.pythonToolMaxSourceChars = rest.pythonToolMaxSourceChars
   if (typeof rest.agentMaxToolIterations === 'number') {
     const clamped = Math.max(0, Math.min(20, Math.round(rest.agentMaxToolIterations)))
-    payload.agent_max_tool_iterations = clamped
+    patch.agentMaxToolIterations = clamped
   }
-  if (typeof rest.webSearchApiKeyTavily === 'string') payload.web_search_api_key_tavily = rest.webSearchApiKeyTavily
-  if (typeof rest.webSearchApiKeyBrave === 'string') payload.web_search_api_key_brave = rest.webSearchApiKeyBrave
-  if (typeof rest.webSearchApiKeyMetaso === 'string') payload.web_search_api_key_metaso = rest.webSearchApiKeyMetaso
-  if (typeof rest.taskTraceEnabled === 'boolean') payload.task_trace_enabled = rest.taskTraceEnabled
-  if (typeof rest.taskTraceDefaultOn === 'boolean') payload.task_trace_default_on = rest.taskTraceDefaultOn
-  if (typeof rest.taskTraceAdminOnly === 'boolean') payload.task_trace_admin_only = rest.taskTraceAdminOnly
-  if (typeof rest.taskTraceEnv === 'string') payload.task_trace_env = rest.taskTraceEnv
-  if (typeof rest.taskTraceRetentionDays === 'number') payload.task_trace_retention_days = rest.taskTraceRetentionDays
-  if (typeof rest.taskTraceMaxEvents === 'number') payload.task_trace_max_events = rest.taskTraceMaxEvents
-  if (typeof rest.taskTraceIdleTimeoutMs === 'number') payload.task_trace_idle_timeout_ms = rest.taskTraceIdleTimeoutMs
+  if (typeof rest.webSearchApiKeyTavily === 'string') patch.webSearchApiKeyTavily = rest.webSearchApiKeyTavily
+  if (typeof rest.webSearchApiKeyBrave === 'string') patch.webSearchApiKeyBrave = rest.webSearchApiKeyBrave
+  if (typeof rest.webSearchApiKeyMetaso === 'string') patch.webSearchApiKeyMetaso = rest.webSearchApiKeyMetaso
+  if (typeof rest.taskTraceEnabled === 'boolean') patch.taskTraceEnabled = rest.taskTraceEnabled
+  if (typeof rest.taskTraceDefaultOn === 'boolean') patch.taskTraceDefaultOn = rest.taskTraceDefaultOn
+  if (typeof rest.taskTraceAdminOnly === 'boolean') patch.taskTraceAdminOnly = rest.taskTraceAdminOnly
+  if (typeof rest.taskTraceEnv === 'string') patch.taskTraceEnv = rest.taskTraceEnv
+  if (typeof rest.taskTraceRetentionDays === 'number') patch.taskTraceRetentionDays = rest.taskTraceRetentionDays
+  if (typeof rest.taskTraceMaxEvents === 'number') patch.taskTraceMaxEvents = rest.taskTraceMaxEvents
+  if (typeof rest.taskTraceIdleTimeoutMs === 'number') patch.taskTraceIdleTimeoutMs = rest.taskTraceIdleTimeoutMs
   if (typeof rest.chatMaxConcurrentStreams === 'number') {
-    payload.chat_max_concurrent_streams = Math.max(1, Math.min(8, Math.floor(rest.chatMaxConcurrentStreams)))
+    patch.chatMaxConcurrentStreams = Math.max(1, Math.min(8, Math.floor(rest.chatMaxConcurrentStreams)))
   }
   // 标题智能总结设置
-  if (typeof rest.titleSummaryEnabled === 'boolean') payload.title_summary_enabled = rest.titleSummaryEnabled
+  if (typeof rest.titleSummaryEnabled === 'boolean') patch.titleSummaryEnabled = rest.titleSummaryEnabled
   if (typeof rest.titleSummaryMaxLength === 'number') {
-    payload.title_summary_max_length = Math.max(5, Math.min(50, Math.floor(rest.titleSummaryMaxLength)))
+    patch.titleSummaryMaxLength = Math.max(5, Math.min(50, Math.floor(rest.titleSummaryMaxLength)))
   }
-  if (typeof rest.titleSummaryModelSource === 'string') payload.title_summary_model_source = rest.titleSummaryModelSource
+  if (typeof rest.titleSummaryModelSource === 'string') patch.titleSummaryModelSource = rest.titleSummaryModelSource
   if (Object.prototype.hasOwnProperty.call(rest, 'titleSummaryConnectionId')) {
-    payload.title_summary_connection_id = rest.titleSummaryConnectionId ?? null
+    patch.titleSummaryConnectionId = rest.titleSummaryConnectionId ?? null
   }
   if (Object.prototype.hasOwnProperty.call(rest, 'titleSummaryModelId')) {
-    payload.title_summary_model_id = rest.titleSummaryModelId ?? null
+    patch.titleSummaryModelId = rest.titleSummaryModelId ?? null
   }
   // RAG 设置
-  if (typeof rest.ragEnabled === 'boolean') payload.rag_enabled = rest.ragEnabled
+  if (typeof rest.ragEnabled === 'boolean') patch.ragEnabled = rest.ragEnabled
   if (Object.prototype.hasOwnProperty.call(rest, 'ragEmbeddingConnectionId')) {
-    payload.rag_embedding_connection_id = rest.ragEmbeddingConnectionId ?? null
+    patch.ragEmbeddingConnectionId = rest.ragEmbeddingConnectionId ?? null
   }
-  if (typeof rest.ragEmbeddingModelId === 'string') payload.rag_embedding_model_id = rest.ragEmbeddingModelId
-  if (typeof rest.ragEmbeddingBatchSize === 'number') payload.rag_embedding_batch_size = rest.ragEmbeddingBatchSize
-  if (typeof rest.ragEmbeddingConcurrency === 'number') payload.rag_embedding_concurrency = rest.ragEmbeddingConcurrency
-  if (typeof rest.ragTopK === 'number') payload.rag_top_k = rest.ragTopK
-  if (typeof rest.ragRelevanceThreshold === 'number') payload.rag_relevance_threshold = rest.ragRelevanceThreshold
-  if (typeof rest.ragMaxContextTokens === 'number') payload.rag_max_context_tokens = rest.ragMaxContextTokens
-  if (typeof rest.ragChunkSize === 'number') payload.rag_chunk_size = rest.ragChunkSize
-  if (typeof rest.ragChunkOverlap === 'number') payload.rag_chunk_overlap = rest.ragChunkOverlap
-  if (typeof rest.ragMaxFileSizeMb === 'number') payload.rag_max_file_size_mb = rest.ragMaxFileSizeMb
-  if (typeof rest.ragMaxPages === 'number') payload.rag_max_pages = rest.ragMaxPages
-  if (typeof rest.ragRetentionDays === 'number') payload.rag_retention_days = rest.ragRetentionDays
+  if (typeof rest.ragEmbeddingModelId === 'string') patch.ragEmbeddingModelId = rest.ragEmbeddingModelId
+  if (typeof rest.ragEmbeddingBatchSize === 'number') patch.ragEmbeddingBatchSize = rest.ragEmbeddingBatchSize
+  if (typeof rest.ragEmbeddingConcurrency === 'number') patch.ragEmbeddingConcurrency = rest.ragEmbeddingConcurrency
+  if (typeof rest.ragTopK === 'number') patch.ragTopK = rest.ragTopK
+  if (typeof rest.ragRelevanceThreshold === 'number') patch.ragRelevanceThreshold = rest.ragRelevanceThreshold
+  if (typeof rest.ragMaxContextTokens === 'number') patch.ragMaxContextTokens = rest.ragMaxContextTokens
+  if (typeof rest.ragChunkSize === 'number') patch.ragChunkSize = rest.ragChunkSize
+  if (typeof rest.ragChunkOverlap === 'number') patch.ragChunkOverlap = rest.ragChunkOverlap
+  if (typeof rest.ragMaxFileSizeMb === 'number') patch.ragMaxFileSizeMb = rest.ragMaxFileSizeMb
+  if (typeof rest.ragMaxPages === 'number') patch.ragMaxPages = rest.ragMaxPages
+  if (typeof rest.ragRetentionDays === 'number') patch.ragRetentionDays = rest.ragRetentionDays
   // 知识库设置
-  if (typeof rest.knowledgeBaseEnabled === 'boolean') payload.knowledge_base_enabled = rest.knowledgeBaseEnabled
-  if (typeof rest.knowledgeBaseAllowAnonymous === 'boolean') payload.knowledge_base_allow_anonymous = rest.knowledgeBaseAllowAnonymous
-  if (typeof rest.knowledgeBaseAllowUsers === 'boolean') payload.knowledge_base_allow_users = rest.knowledgeBaseAllowUsers
+  if (typeof rest.knowledgeBaseEnabled === 'boolean') patch.knowledgeBaseEnabled = rest.knowledgeBaseEnabled
+  if (typeof rest.knowledgeBaseAllowAnonymous === 'boolean') patch.knowledgeBaseAllowAnonymous = rest.knowledgeBaseAllowAnonymous
+  if (typeof rest.knowledgeBaseAllowUsers === 'boolean') patch.knowledgeBaseAllowUsers = rest.knowledgeBaseAllowUsers
   if (assistantAvatarUpload) {
-    payload.assistant_avatar = assistantAvatarUpload
+    patch.assistantAvatarUpload = assistantAvatarUpload
   } else if (assistantAvatarRemove) {
-    payload.assistant_avatar = null
+    patch.assistantAvatarUpload = null
   }
+  const payload = serializeSystemSettingsPatch(patch as any)
   await client.put<ApiResponse<any>>('/settings/system', payload)
   const current = await getSystemSettings()
   return current

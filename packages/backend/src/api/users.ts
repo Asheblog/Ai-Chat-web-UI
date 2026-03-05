@@ -4,15 +4,15 @@ import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import { serializeQuotaSnapshot } from '../utils/quota'
-import { userService, UserServiceError, type ListStatus } from '../services/users'
+import { UserServiceError, type ListStatus } from '../services/users'
 import type { UserService } from '../services/users/user-service'
 
 export interface UsersApiDeps {
-  userService?: UserService
+  userService: UserService
 }
 
-export const createUsersApi = (deps: UsersApiDeps = {}) => {
-  const svc = deps.userService ?? userService
+export const createUsersApi = (deps: UsersApiDeps) => {
+  const svc = deps.userService
   const users = new Hono()
 
 users.use('*', actorMiddleware, requireUserActor, adminOnlyMiddleware)
@@ -259,5 +259,3 @@ users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
 
   return users
 }
-
-export default createUsersApi()

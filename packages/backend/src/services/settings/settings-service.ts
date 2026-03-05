@@ -17,6 +17,7 @@ import {
 import type { Actor } from '../../types'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../config/storage'
 import { invalidateModelAccessDefaultsCache as defaultInvalidateModelAccessDefaultsCache } from '../../utils/model-access-policy'
+import { SYSTEM_SETTINGS_FIELD_MAP } from '@aichat/shared'
 
 export type SetupState = 'required' | 'skipped' | 'completed'
 
@@ -409,8 +410,14 @@ export class SettingsService {
       ),
       assistant_avatar_url: null as string | null,
       assistant_avatar_path: settingsObj.assistant_avatar_path || null,
-      model_access_default_anonymous: parseAccessDefault(map.get('model_access_default_anonymous'), 'deny'),
-      model_access_default_user: parseAccessDefault(map.get('model_access_default_user'), 'allow'),
+      model_access_default_anonymous: parseAccessDefault(
+        map.get(SYSTEM_SETTINGS_FIELD_MAP.modelAccessDefaultAnonymous),
+        'deny',
+      ),
+      model_access_default_user: parseAccessDefault(
+        map.get(SYSTEM_SETTINGS_FIELD_MAP.modelAccessDefaultUser),
+        'allow',
+      ),
       // 标题智能总结设置
       title_summary_enabled: this.parseBoolean(settingsObj.title_summary_enabled, process.env.TITLE_SUMMARY_ENABLED || 'false'),
       title_summary_max_length: this.parseIntInRange(settingsObj.title_summary_max_length, process.env.TITLE_SUMMARY_MAX_LENGTH, 5, 50, 20),
@@ -510,11 +517,16 @@ export class SettingsService {
       }
     }
 
-    if (typeof payload.registration_enabled === 'boolean') {
-      updates.push(upsert('registration_enabled', String(payload.registration_enabled)))
+    if (typeof payload[SYSTEM_SETTINGS_FIELD_MAP.allowRegistration] === 'boolean') {
+      updates.push(
+        upsert(
+          SYSTEM_SETTINGS_FIELD_MAP.allowRegistration,
+          String(payload[SYSTEM_SETTINGS_FIELD_MAP.allowRegistration]),
+        ),
+      )
     }
-    if (typeof payload.brand_text === 'string') {
-      updates.push(upsert('brand_text', payload.brand_text))
+    if (typeof payload[SYSTEM_SETTINGS_FIELD_MAP.brandText] === 'string') {
+      updates.push(upsert(SYSTEM_SETTINGS_FIELD_MAP.brandText, payload[SYSTEM_SETTINGS_FIELD_MAP.brandText]))
       this.invalidateBrandingCache()
     }
 
@@ -561,28 +573,28 @@ export class SettingsService {
     assignIfNumber('rag_embedding_concurrency', payload.rag_embedding_concurrency)
 
     const boolFields = [
-      'usage_emit',
-      'usage_provider_only',
-      'context_compression_enabled',
-      'reasoning_enabled',
-      'reasoning_default_expand',
-      'reasoning_save_to_db',
-      'ollama_think',
-      'battle_allow_anonymous',
-      'battle_allow_users',
-      'web_search_agent_enable',
-      'web_search_include_summary',
-      'web_search_include_raw',
-      'web_search_auto_bilingual',
-      'python_tool_enable',
-      'task_trace_enabled',
-      'task_trace_default_on',
-      'task_trace_admin_only',
-      'title_summary_enabled',
-      'rag_enabled',
-      'knowledge_base_enabled',
-      'knowledge_base_allow_anonymous',
-      'knowledge_base_allow_users',
+      SYSTEM_SETTINGS_FIELD_MAP.usageEmit,
+      SYSTEM_SETTINGS_FIELD_MAP.usageProviderOnly,
+      SYSTEM_SETTINGS_FIELD_MAP.contextCompressionEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.reasoningEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.reasoningDefaultExpand,
+      SYSTEM_SETTINGS_FIELD_MAP.reasoningSaveToDb,
+      SYSTEM_SETTINGS_FIELD_MAP.ollamaThink,
+      SYSTEM_SETTINGS_FIELD_MAP.battleAllowAnonymous,
+      SYSTEM_SETTINGS_FIELD_MAP.battleAllowUsers,
+      SYSTEM_SETTINGS_FIELD_MAP.webSearchAgentEnable,
+      SYSTEM_SETTINGS_FIELD_MAP.webSearchIncludeSummary,
+      SYSTEM_SETTINGS_FIELD_MAP.webSearchIncludeRaw,
+      SYSTEM_SETTINGS_FIELD_MAP.webSearchAutoBilingual,
+      SYSTEM_SETTINGS_FIELD_MAP.pythonToolEnable,
+      SYSTEM_SETTINGS_FIELD_MAP.taskTraceEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.taskTraceDefaultOn,
+      SYSTEM_SETTINGS_FIELD_MAP.taskTraceAdminOnly,
+      SYSTEM_SETTINGS_FIELD_MAP.titleSummaryEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.ragEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseAllowAnonymous,
+      SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseAllowUsers,
     ] as const
     boolFields.forEach((key) => {
       if (typeof payload[key] === 'boolean') {
@@ -590,9 +602,15 @@ export class SettingsService {
       }
     })
 
-    const accessDefaults: Array<{ key: 'model_access_default_anonymous' | 'model_access_default_user'; value: unknown }> = [
-      { key: 'model_access_default_anonymous', value: payload.model_access_default_anonymous },
-      { key: 'model_access_default_user', value: payload.model_access_default_user },
+    const accessDefaults: Array<{ key: string; value: unknown }> = [
+      {
+        key: SYSTEM_SETTINGS_FIELD_MAP.modelAccessDefaultAnonymous,
+        value: payload[SYSTEM_SETTINGS_FIELD_MAP.modelAccessDefaultAnonymous],
+      },
+      {
+        key: SYSTEM_SETTINGS_FIELD_MAP.modelAccessDefaultUser,
+        value: payload[SYSTEM_SETTINGS_FIELD_MAP.modelAccessDefaultUser],
+      },
     ]
     accessDefaults.forEach(({ key, value }) => {
       if (value === undefined) return

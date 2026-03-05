@@ -28,10 +28,6 @@ import { createSystemLogsApi } from './api/system-logs';
 import { createSkillsApi } from './api/skills';
 import { createArtifactsApi } from './api/artifacts';
 import { createPromptTemplatesApi } from './api/prompt-templates';
-import { workspaceCleanupService } from './services/workspace/workspace-cleanup-service';
-import { battleService } from './services/battle/battle-service';
-import { artifactService } from './services/workspace/artifact-service';
-import { promptTemplateService } from './services/prompt-templates';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -129,13 +125,16 @@ app.route('/api/chat', createChatApi({
     chatService: container.chatService,
   },
 }));
-app.route('/api/settings', createSettingsApi({ settingsFacade: container.settingsFacade }));
+app.route('/api/settings', createSettingsApi({
+  settingsFacade: container.settingsFacade,
+  pythonRuntimeService: container.pythonRuntimeService,
+}));
 app.route('/api/task-trace', createTaskTraceApi({
   taskTraceService: container.taskTraceService,
   taskTraceFileService: container.taskTraceFileService,
 }));
 app.route('/api/shares', createSharesApi({ shareService: container.shareService }));
-app.route('/api/battle', createBattleApi({ battleService }));
+app.route('/api/battle', createBattleApi({ battleService: container.battleService }));
 
 // 文档路由（RAG 服务状态在请求时动态检查）
 app.route('/api/documents', createDocumentsApi());
@@ -144,15 +143,16 @@ app.route('/api/documents', createDocumentsApi());
 app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 
 // 系统日志路由
-app.route('/api/system-logs', createSystemLogsApi());
+app.route('/api/system-logs', createSystemLogsApi({ systemLogService: container.systemLogService }));
 app.route('/api/skills', createSkillsApi());
-app.route('/api/artifacts', createArtifactsApi({ artifactService }));
-app.route('/api/prompt-templates', createPromptTemplatesApi({ promptTemplateService }));
+app.route('/api/artifacts', createArtifactsApi({ artifactService: container.artifactService }));
+app.route('/api/prompt-templates', createPromptTemplatesApi({ promptTemplateService: container.promptTemplateService }));
 
 app.route(
   '/v1',
   createOpenAICompatApi({
     modelResolverService: container.modelResolverService,
+    messageService: container.openaiCompatMessageService,
   }),
 );
 
@@ -289,7 +289,7 @@ setModelCatalogTtlSeconds(appContext.config.modelCatalog.ttlSeconds);
 const stopCatalogRefresh = scheduleModelCatalogAutoRefresh({
   refreshIntervalMs: appContext.config.modelCatalog.refreshIntervalMs,
 });
-workspaceCleanupService.start();
+container.workspaceCleanupService.start();
 
 // 启动服务器
 // 端口解析：优先 PORT，其次兼容 BACKEND_PORT，最后回退 8001（统一本地/容器内行为）
@@ -319,7 +319,7 @@ process.on('SIGINT', async () => {
   console.log('\n🔄 Gracefully shutting down...');
   try { stopCatalogRefresh(); } catch {}
   try { getDocumentServices()?.cleanupScheduler.stop(); } catch {}
-  try { workspaceCleanupService.stop(); } catch {}
+  try { container.workspaceCleanupService.stop(); } catch {}
   process.exit(0);
 });
 
@@ -327,7 +327,7 @@ process.on('SIGTERM', async () => {
   console.log('\n🔄 Gracefully shutting down...');
   try { stopCatalogRefresh(); } catch {}
   try { getDocumentServices()?.cleanupScheduler.stop(); } catch {}
-  try { workspaceCleanupService.stop(); } catch {}
+  try { container.workspaceCleanupService.stop(); } catch {}
   process.exit(0);
 });
 

@@ -651,6 +651,127 @@ exports[`视图快照 > SystemGeneralPage 渲染保持稳定 1`] = `
         </div>
       </div>
       <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-center"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            <div
+              class="flex items-center gap-2"
+            >
+              上下文压缩
+              <div
+                class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+              >
+                推荐
+              </div>
+            </div>
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            达到阈值后自动将较早消息压缩为摘要，减少长会话上下文占用
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end"
+        >
+          <button
+            aria-checked="true"
+            class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input"
+            data-state="checked"
+            id="contextCompressionEnabled"
+            role="switch"
+            type="button"
+            value="on"
+          >
+            <span
+              class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+              data-state="checked"
+            />
+          </button>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            压缩触发阈值（上下文比例）
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            按模型上下文窗口动态计算阈值，默认 0.5（范围 0.2-0.9）
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="contextCompressionThresholdRatio"
+              inputmode="decimal"
+              type="text"
+              value="0.5"
+            />
+            <span
+              class="text-sm text-muted-foreground"
+            >
+              比例
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
+      >
+        <div
+          class="shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground"
+        >
+          <div
+            class="text-base text-foreground/90 leading-6"
+          >
+            压缩后保留最近消息数
+          </div>
+          <p
+            class="mt-1 leading-relaxed text-sm"
+          >
+            压缩时强制保留末尾消息，避免影响当前轮上下文（范围 4-50）
+          </p>
+        </div>
+        <div
+          class="w-full flex sm:flex-1 sm:justify-end"
+        >
+          <div
+            class="flex w-full flex-wrap items-center justify-end gap-2"
+          >
+            <input
+              class="flex h-10 rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-28 text-right"
+              id="contextCompressionTailMessages"
+              inputmode="numeric"
+              type="text"
+              value="12"
+            />
+            <span
+              class="text-sm text-muted-foreground"
+            >
+              条
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
         class="rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6 sm:items-start"
       >
         <div

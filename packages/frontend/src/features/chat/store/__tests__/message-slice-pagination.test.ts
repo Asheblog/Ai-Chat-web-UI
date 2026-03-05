@@ -60,7 +60,7 @@ describe('message slice pagination', () => {
     expect(chatApi.getMessages).toHaveBeenCalledTimes(1)
     expect(vi.mocked(chatApi.getMessages).mock.calls[0]?.[2]).toEqual({
       page: 'latest',
-      limit: 50,
+      limit: 20,
     })
     expect(store.getState().messageMetas.filter((meta) => meta.sessionId === 1)).toHaveLength(50)
     expect(store.getState().messagePaginationBySession[1]).toMatchObject({

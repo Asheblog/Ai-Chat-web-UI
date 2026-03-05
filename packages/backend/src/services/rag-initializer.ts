@@ -108,7 +108,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       const ragEnabled = settingsMap.rag_enabled?.toLowerCase() === 'true'
       if (!ragEnabled) {
         // 清除现有服务
-        setDocumentServices(null as any)
+        setDocumentServices(null)
         log.info('RAG services disabled')
         return { success: true, message: 'RAG services disabled' }
       }
@@ -118,7 +118,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
       const modelId = settingsMap.rag_embedding_model_id
 
       if (!connectionIdStr || !modelId) {
-        setDocumentServices(null as any)
+        setDocumentServices(null)
         log.warn('RAG enabled but no embedding model selected')
         return { success: false, message: 'No embedding model selected' }
       }

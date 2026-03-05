@@ -7,12 +7,12 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { ApiResponse } from '../types'
-import { getSystemLogService, SystemLogService } from '../services/system-logs/system-log-service'
+import { SystemLogService } from '../services/system-logs/system-log-service'
 import { getLogConfig, setLogConfig, cleanupOldLogFiles, type LogLevel } from '../utils/logger'
 import { actorMiddleware, adminOnlyMiddleware } from '../middleware/auth'
 
 export interface SystemLogsApiDeps {
-  systemLogService?: SystemLogService
+  systemLogService: SystemLogService
 }
 
 // 查询参数 schema
@@ -38,9 +38,9 @@ const cleanupSchema = z.object({
   retentionDays: z.number().int().min(1).max(365).optional(),
 })
 
-export const createSystemLogsApi = (deps: SystemLogsApiDeps = {}) => {
+export const createSystemLogsApi = (deps: SystemLogsApiDeps) => {
   const router = new Hono()
-  const logService = deps.systemLogService ?? getSystemLogService()
+  const logService = deps.systemLogService
 
   // 所有接口仅限管理员
   router.use('*', actorMiddleware, adminOnlyMiddleware)
@@ -177,5 +177,3 @@ export const createSystemLogsApi = (deps: SystemLogsApiDeps = {}) => {
 
   return router
 }
-
-export default createSystemLogsApi()

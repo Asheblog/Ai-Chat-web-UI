@@ -5,7 +5,7 @@ import { zValidator } from '@hono/zod-validator';
 import { randomUUID } from 'node:crypto';
 
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
-import { getModelResolverService, resolveModelForActor } from '../utils/model-resolver';
+import { getModelResolverService } from '../utils/model-resolver';
 import { AuthUtils } from '../utils/auth';
 import { buildHeaders, type ProviderType } from '../utils/providers';
 import { buildChatProviderRequest, flattenMessageContent } from '../utils/chat-provider';
@@ -16,7 +16,6 @@ import type { Actor } from '../types';
 
 import type { Connection, Message as MessageEntity } from '@prisma/client';
 import {
-  openaiCompatMessageService,
   OpenAICompatMessageServiceError,
   OpenAICompatMessageService,
 } from '../services/openai-compat/message-service';
@@ -28,8 +27,8 @@ const PROVIDER_TIMEOUT_MS = parseInt(process.env.PROVIDER_TIMEOUT_MS || '300000'
 const CHAT_IMAGE_MAX_COUNT = DEFAULT_CHAT_IMAGE_LIMITS.maxCount;
 
 export interface OpenAICompatDeps {
-  modelResolverService?: ReturnType<typeof getModelResolverService>
-  messageService?: OpenAICompatMessageService
+  modelResolverService: ReturnType<typeof getModelResolverService>
+  messageService: OpenAICompatMessageService
   fetchImpl?: typeof fetch
 }
 
@@ -357,9 +356,9 @@ function formatMessage(message: MessageEntity) {
   };
 }
 
-export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
+export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const messageService = deps.messageService ?? openaiCompatMessageService;
+  const messageService = deps.messageService;
 
   const openaiCompat = new Hono();
 
@@ -414,9 +413,11 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
           metadataKeys: body.metadata ? Object.keys(body.metadata) : undefined,
         })
 
-        const resolved = deps.modelResolverService
-          ? await deps.modelResolverService.resolveModelForRequest({ actor, userId: user.id, modelId: body.model })
-          : await resolveModelForActor({ actor, modelId: body.model });
+        const resolved = await deps.modelResolverService.resolveModelForRequest({
+          actor,
+          userId: user.id,
+          modelId: body.model,
+        })
         if (!resolved) {
           traceStatus = 'error'
           traceError = 'model_not_found'
@@ -697,9 +698,11 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
       const actor = c.get('actor') as Actor
       const body = c.req.valid('json');
 
-      const resolved = deps.modelResolverService
-        ? await deps.modelResolverService.resolveModelForRequest({ actor, userId: user.id, modelId: body.model })
-        : await resolveModelForActor({ actor, modelId: body.model });
+      const resolved = await deps.modelResolverService.resolveModelForRequest({
+        actor,
+        userId: user.id,
+        modelId: body.model,
+      })
       if (!resolved) {
         return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
       }
@@ -966,9 +969,11 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
       const body = c.req.valid('json');
 
       try {
-        const resolved = deps.modelResolverService
-          ? await deps.modelResolverService.resolveModelForRequest({ actor, userId: user.id, modelId: body.model })
-          : await resolveModelForActor({ actor, modelId: body.model });
+        const resolved = await deps.modelResolverService.resolveModelForRequest({
+          actor,
+          userId: user.id,
+          modelId: body.model,
+        })
 
         if (!resolved) {
           return c.json({ error: 'model_not_found', message: 'Model not found in available connections' }, 404);
@@ -1051,5 +1056,3 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps = {}) => {
 
   return openaiCompat;
 };
-
-export default createOpenAICompatApi();

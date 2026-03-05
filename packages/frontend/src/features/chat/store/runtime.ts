@@ -1,10 +1,8 @@
-import { getMessageProgress } from '@/features/chat/api'
 import type {
   ChatState,
   Message,
   MessageBody,
   MessageMeta,
-  MessageStreamMetrics,
   ToolEvent,
 } from '@/types'
 import {
@@ -18,8 +16,6 @@ import {
   normalizeToolEvents,
   STREAM_FLUSH_INTERVAL,
   STREAM_SNAPSHOT_PERSIST_INTERVAL,
-  STREAM_SNAPSHOT_STORAGE_KEY,
-  STREAM_SNAPSHOT_TTL_MS,
 } from './utils'
 import type {
   ActiveStreamEntry,
@@ -27,363 +23,45 @@ import type {
   ChatStoreRuntime,
   ChatStoreSetState,
   MessageId,
-  StreamCompletionSnapshot,
 } from './types'
 
-const getSnapshotStorages = (): Storage[] => {
-  if (typeof window === 'undefined') return []
-  const storages: Storage[] = []
-  try {
-    if (window.localStorage) storages.push(window.localStorage)
-  } catch {
-    // ignore
-  }
-  try {
-    if (window.sessionStorage) storages.push(window.sessionStorage)
-  } catch {
-    // ignore
-  }
-  return storages
-}
-
-let snapshotCache: StreamCompletionSnapshot[] = []
-let snapshotCacheLoaded = false
-let snapshotWriteTimer: ReturnType<typeof setTimeout> | null = null
-let lastSnapshotPruneAt = 0
-const SNAPSHOT_PRUNE_INTERVAL_MS = 30 * 1000
-
-const sanitizeCompletionSnapshots = (parsed: any[]): StreamCompletionSnapshot[] => {
-  const now = Date.now()
-  try {
-    return parsed
-      .map((item) => {
-        if (!item || typeof item !== 'object') return null
-        const sessionId = Number((item as any).sessionId)
-        if (!Number.isFinite(sessionId)) return null
-        const completedAt = Number((item as any).completedAt)
-        if (!Number.isFinite(completedAt)) return null
-        const reasoningText = typeof (item as any).reasoning === 'string' ? (item as any).reasoning : ''
-        const rawPlayed = Number((item as any).reasoningPlayedLength)
-        const reasoningPlayedLength =
-          Number.isFinite(rawPlayed) && rawPlayed > 0 ? Math.min(rawPlayed, reasoningText.length) : undefined
-        const normalizeMetricNumber = (value: any) => {
-          const n = Number(value)
-          return Number.isFinite(n) ? n : null
-        }
-        const metricsRaw = (item as any).metrics
-        const metrics =
-          metricsRaw && typeof metricsRaw === 'object'
-            ? ({
-                firstTokenLatencyMs: normalizeMetricNumber((metricsRaw as any).firstTokenLatencyMs),
-                responseTimeMs: normalizeMetricNumber((metricsRaw as any).responseTimeMs),
-                tokensPerSecond: normalizeMetricNumber((metricsRaw as any).tokensPerSecond),
-                promptTokens: normalizeMetricNumber((metricsRaw as any).promptTokens),
-                completionTokens: normalizeMetricNumber((metricsRaw as any).completionTokens),
-                totalTokens: normalizeMetricNumber((metricsRaw as any).totalTokens),
-              } satisfies MessageStreamMetrics)
-            : null
-        const hasMetricValue = metrics
-          ? Object.values(metrics).some((value) => typeof value === 'number')
-          : false
-        return {
-          sessionId,
-          messageId:
-            typeof (item as any).messageId === 'number' && Number.isFinite((item as any).messageId)
-              ? Number((item as any).messageId)
-              : null,
-          clientMessageId:
-            typeof (item as any).clientMessageId === 'string'
-              ? (item as any).clientMessageId
-              : null,
-          content: typeof (item as any).content === 'string' ? (item as any).content : '',
-          reasoning: reasoningText,
-          reasoningPlayedLength,
-          usage:
-            (item as any).usage && typeof (item as any).usage === 'object'
-              ? ((item as any).usage as StreamCompletionSnapshot['usage'])
-              : undefined,
-          toolEvents: Array.isArray((item as any).toolEvents)
-            ? ((item as any).toolEvents as ToolEvent[])
-            : undefined,
-          reasoningStatus:
-            typeof (item as any).reasoningStatus === 'string'
-              ? ((item as any).reasoningStatus as MessageMeta['reasoningStatus'])
-              : undefined,
-          streamStatus:
-            typeof (item as any).streamStatus === 'string'
-              ? ((item as any).streamStatus as MessageMeta['streamStatus'])
-              : undefined,
-          completedAt,
-          metrics: hasMetricValue ? metrics : null,
-        } as StreamCompletionSnapshot
-      })
-      .filter(
-        (item): item is StreamCompletionSnapshot =>
-          Boolean(item && now - item.completedAt <= STREAM_SNAPSHOT_TTL_MS),
-      )
-  } catch {
-    return []
-  }
-}
-
-const loadCompletionSnapshotsFromStorage = (): StreamCompletionSnapshot[] => {
-  if (typeof window === 'undefined') return []
-  const storages = getSnapshotStorages()
-  if (storages.length === 0) return []
-  try {
-    const targetStorage = storages[0] ?? null
-    let parsed: any[] | null = null
-    let sourceStorage: Storage | null = null
-    for (const storage of storages) {
-      const raw = storage.getItem(STREAM_SNAPSHOT_STORAGE_KEY)
-      if (!raw) continue
-      parsed = JSON.parse(raw)
-      sourceStorage = storage
-      break
-    }
-    if (!parsed || !Array.isArray(parsed)) return []
-    const sanitized = sanitizeCompletionSnapshots(parsed)
-    if (sanitized.length !== parsed.length && sourceStorage) {
-      sourceStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(sanitized))
-    }
-    if (targetStorage && sourceStorage && targetStorage !== sourceStorage) {
-      targetStorage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(sanitized))
-    }
-    return sanitized
-  } catch {
-    return []
-  }
-}
-
-const readCompletionSnapshots = (): StreamCompletionSnapshot[] => {
-  if (typeof window === 'undefined') return []
-  if (!snapshotCacheLoaded) {
-    snapshotCache = loadCompletionSnapshotsFromStorage()
-    snapshotCacheLoaded = true
-    lastSnapshotPruneAt = Date.now()
-  } else if (snapshotCache.length > 0 && Date.now() - lastSnapshotPruneAt >= SNAPSHOT_PRUNE_INTERVAL_MS) {
-    snapshotCache = sanitizeCompletionSnapshots(snapshotCache as any[])
-    lastSnapshotPruneAt = Date.now()
-  }
-  return snapshotCache
-}
-
-const flushSnapshotWriteQueue = () => {
-  if (typeof window === 'undefined') return
-  const storages = getSnapshotStorages()
-  const storage = storages[0]
-  if (!storage) return
-  try {
-    storage.setItem(STREAM_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshotCache))
-  } catch {
-    // ignore quota errors
-  }
-}
-
-const scheduleSnapshotWrite = () => {
-  if (snapshotWriteTimer != null) return
-  snapshotWriteTimer = setTimeout(() => {
-    snapshotWriteTimer = null
-    flushSnapshotWriteQueue()
-  }, STREAM_SNAPSHOT_PERSIST_INTERVAL)
-}
-
-const writeCompletionSnapshots = (records: StreamCompletionSnapshot[], immediate = false) => {
-  if (typeof window === 'undefined') return
-  snapshotCache = records
-  snapshotCacheLoaded = true
-  lastSnapshotPruneAt = Date.now()
-  if (immediate) {
-    if (snapshotWriteTimer != null) {
-      clearTimeout(snapshotWriteTimer)
-      snapshotWriteTimer = null
-    }
-    flushSnapshotWriteQueue()
-    return
-  }
-  scheduleSnapshotWrite()
-}
-
-export const snapshotDebug = (...args: any[]) => {
-  if (
-    process.env.NODE_ENV === 'production' ||
-    process.env.NEXT_PUBLIC_DEBUG_STREAM !== '1'
-  ) {
-    return
-  }
-  // eslint-disable-next-line no-console
-  console.debug('[snapshot]', ...args)
-}
-
-const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) => {
-  if (typeof window === 'undefined') return
-  const entries = readCompletionSnapshots()
-  const index = entries.findIndex((item) => {
-    if (item.sessionId !== snapshot.sessionId) return false
-    if (snapshot.messageId != null && item.messageId === snapshot.messageId) {
-      return true
-    }
-    if (snapshot.messageId == null && item.messageId == null && snapshot.clientMessageId && item.clientMessageId) {
-      return item.clientMessageId === snapshot.clientMessageId
-    }
-    return false
-  })
-  if (index === -1) {
-    entries.push(snapshot)
-    snapshotDebug('persist:new', {
-      sessionId: snapshot.sessionId,
-      messageId: snapshot.messageId,
-      clientMessageId: snapshot.clientMessageId,
-      streamStatus: snapshot.streamStatus,
-      reasoningStatus: snapshot.reasoningStatus,
-      toolEvents: snapshot.toolEvents?.length ?? 0,
-      reasoningPlayedLength: snapshot.reasoningPlayedLength,
-    })
-  } else {
-    const existing = entries[index]
-    entries[index] = {
-      ...existing,
-      ...snapshot,
-      content: snapshot.content || existing.content,
-      reasoning: snapshot.reasoning || existing.reasoning,
-      toolEvents: snapshot.toolEvents ?? existing.toolEvents,
-      reasoningStatus: snapshot.reasoningStatus ?? existing.reasoningStatus,
-      streamStatus: snapshot.streamStatus ?? existing.streamStatus,
-      metrics: snapshot.metrics ?? existing.metrics,
-      reasoningPlayedLength:
-        typeof snapshot.reasoningPlayedLength === 'number'
-          ? snapshot.reasoningPlayedLength
-          : existing.reasoningPlayedLength,
-    }
-    snapshotDebug('persist:update', {
-      sessionId: snapshot.sessionId,
-      messageId: snapshot.messageId,
-      clientMessageId: snapshot.clientMessageId,
-      streamStatus: entries[index].streamStatus,
-      reasoningStatus: entries[index].reasoningStatus,
-      toolEvents: entries[index].toolEvents?.length ?? 0,
-      reasoningPlayedLength: entries[index].reasoningPlayedLength,
-    })
-  }
-  const terminalSnapshot =
-    snapshot.streamStatus != null && snapshot.streamStatus !== 'streaming'
-  writeCompletionSnapshots(entries, terminalSnapshot)
-}
-
-const removeCompletionSnapshot = (
-  sessionId: number,
-  opts: { messageId?: number | null; clientMessageId?: string | null },
-) => {
-  if (typeof window === 'undefined') return
-  const entries = readCompletionSnapshots()
-  const filtered = entries.filter((item) => {
-    if (item.sessionId !== sessionId) return true
-    if (opts.messageId != null && item.messageId === opts.messageId) {
-      return false
-    }
-    if (
-      opts.messageId == null &&
-      item.messageId == null &&
-      opts.clientMessageId &&
-      item.clientMessageId === opts.clientMessageId
-    ) {
-      return false
-    }
-    return true
-  })
-  if (filtered.length !== entries.length) {
-    writeCompletionSnapshots(filtered, true)
-  }
-}
-
-const getSessionCompletionSnapshots = (sessionId: number): StreamCompletionSnapshot[] => {
-  if (typeof window === 'undefined') return []
-  return readCompletionSnapshots().filter((item) => item.sessionId === sessionId)
-}
+import {
+  getSessionCompletionSnapshots,
+  persistCompletionSnapshot,
+  removeCompletionSnapshot,
+  snapshotDebug,
+} from './runtime/snapshot-store'
+import { createStreamStateRuntime } from './runtime/stream-state'
+import { createProgressWatcherRuntime } from './runtime/progress-watcher'
 
 export const createChatStoreRuntime = (
   set: ChatStoreSetState,
   get: ChatStoreGetState,
 ): ChatStoreRuntime => {
-  const activeStreams = new Map<string, ActiveStreamEntry>()
-  const streamingPollers = new Map<number, ReturnType<typeof setInterval>>()
-  const activeWatchers = new Set<number>()
-
-  const sessionStreamingUpdate = (sessionId: number, delta: number) => {
-    if (!Number.isFinite(sessionId)) return
-    set((state) => {
-      const current = { ...(state.streamingSessions || {}) }
-      const prev = current[sessionId] ?? 0
-      const next = Math.max(0, prev + delta)
-      if (next <= 0) {
-        delete current[sessionId]
-      } else {
-        current[sessionId] = next
-      }
-      return {
-        streamingSessions: current,
-        activeStreamCount: activeStreams.size,
-      }
-    })
-    recomputeStreamingState()
-  }
-
-  const registerActiveStream = (entry: ActiveStreamEntry) => {
-    activeStreams.set(entry.streamKey, entry)
-    sessionStreamingUpdate(entry.sessionId, 1)
-  }
-
-  const unregisterActiveStream = (streamKey: string) => {
-    const entry = activeStreams.get(streamKey)
-    if (!entry) return
-    if (entry.flushTimer) {
-      clearTimeout(entry.flushTimer)
-      entry.flushTimer = null
-    }
-    activeStreams.delete(streamKey)
-    sessionStreamingUpdate(entry.sessionId, -1)
-  }
-
-  const findStreamByAssistantId = (messageId: MessageId | null | undefined): ActiveStreamEntry | null => {
-    if (typeof messageId === 'undefined' || messageId === null) return null
-    const target = messageKey(messageId)
-    for (const stream of activeStreams.values()) {
-      if (messageKey(stream.assistantId) === target) {
-        return stream
-      }
-    }
-    return null
-  }
-
-  const findStreamByClientMessageId = (clientMessageId?: string | null): ActiveStreamEntry | null => {
-    if (!clientMessageId) return null
-    for (const stream of activeStreams.values()) {
-      if (stream.clientMessageId && stream.clientMessageId === clientMessageId) {
-        return stream
-      }
-      if (stream.assistantClientMessageId && stream.assistantClientMessageId === clientMessageId) {
-        return stream
-      }
-    }
-    return null
-  }
-
-  const stopMessagePoller = (messageId: number) => {
-    const timer = streamingPollers.get(messageId)
-    if (timer) {
-      clearInterval(timer)
-      streamingPollers.delete(messageId)
-    }
-    // 同时从 activeWatchers 中删除，停止 startMessageProgressWatcher 的轮询
-    activeWatchers.delete(messageId)
-  }
-
-  const stopAllMessagePollers = () => {
-    streamingPollers.forEach((timer) => clearInterval(timer))
-    streamingPollers.clear()
-    // 同时清空 activeWatchers，停止所有 startMessageProgressWatcher 的轮询
-    activeWatchers.clear()
-  }
+  const streamState = createStreamStateRuntime(set, get)
+  const {
+    activeStreams,
+    registerActiveStream,
+    unregisterActiveStream,
+    findStreamByAssistantId,
+    findStreamByClientMessageId,
+    recomputeStreamingState,
+    streamingFlagUpdate,
+  } = streamState
+  let applyServerMessageSnapshotHandler: ((message: Message) => void) | null = null
+  const progressWatcher = createProgressWatcherRuntime({
+    get,
+    findStreamByAssistantId,
+    applyServerMessageSnapshot: (message) => {
+      applyServerMessageSnapshotHandler?.(message)
+    },
+  })
+  const {
+    streamingPollers,
+    stopMessagePoller,
+    stopAllMessagePollers,
+    startMessageProgressWatcher,
+  } = progressWatcher
 
   const persistSnapshotForStream = (stream: ActiveStreamEntry | null) => {
     if (!stream) return
@@ -441,51 +119,6 @@ export const createChatStoreRuntime = (
       streamStatus: resolvedStreamStatus,
       completedAt: Date.now(),
     })
-  }
-
-  const recomputeStreamingState = () => {
-    const snapshot = get()
-    const currentSessionId = snapshot.currentSession?.id ?? null
-    const streamingCounts = snapshot.streamingSessions || {}
-    const activeForCurrent = currentSessionId ? streamingCounts[currentSessionId] ?? 0 : 0
-    const hasStreamingMeta = snapshot.messageMetas.some(
-      (meta) => meta.sessionId === currentSessionId && meta.streamStatus === 'streaming',
-    )
-    const shouldFlagCurrent = Boolean(currentSessionId) && (activeForCurrent > 0 || hasStreamingMeta)
-    const nextActiveSessionId = shouldFlagCurrent ? currentSessionId : null
-    const updates: Partial<ChatState> = {}
-    if (snapshot.isStreaming !== shouldFlagCurrent) {
-      updates.isStreaming = shouldFlagCurrent
-    }
-    if (snapshot.activeStreamSessionId !== nextActiveSessionId) {
-      updates.activeStreamSessionId = nextActiveSessionId
-    }
-    if (Object.keys(updates).length > 0) {
-      set(updates)
-    }
-  }
-
-  const streamingFlagUpdate = (state: ChatState, sessionId: number | null, streaming: boolean): Partial<ChatState> => {
-    if (streaming) {
-      if (sessionId == null) return {}
-      return {
-        activeStreamSessionId: sessionId,
-        isStreaming: state.currentSession?.id === sessionId,
-      }
-    }
-    if (sessionId == null) {
-      if (state.activeStreamSessionId == null && !state.isStreaming) {
-        return {}
-      }
-      return { activeStreamSessionId: null, isStreaming: false }
-    }
-    if (state.activeStreamSessionId !== sessionId) {
-      return {}
-    }
-    return {
-      activeStreamSessionId: null,
-      isStreaming: state.currentSession?.id === sessionId ? false : state.isStreaming,
-    }
   }
 
   const applyBufferedSnapshots = (sessionId: number) => {
@@ -950,6 +583,7 @@ export const createChatStoreRuntime = (
     }
     recomputeStreamingState()
   }
+  applyServerMessageSnapshotHandler = applyServerMessageSnapshot
 
   const updateMetaStreamStatus = (
     messageId: MessageId,
@@ -973,49 +607,6 @@ export const createChatStoreRuntime = (
       stopMessagePoller(messageId)
     }
     recomputeStreamingState()
-  }
-
-  const startMessageProgressWatcher = (sessionId: number, messageId: number) => {
-    if (typeof messageId !== 'number' || Number.isNaN(messageId)) return
-    if (findStreamByAssistantId(messageId)) return
-    if (activeWatchers.has(messageId)) return
-    activeWatchers.add(messageId)
-
-    const poll = async () => {
-      const snapshot = get()
-      if (snapshot.currentSession?.id !== sessionId) {
-        if (activeWatchers.has(messageId)) {
-          setTimeout(poll, 500)
-        }
-        return
-      }
-      try {
-        const response = await getMessageProgress(sessionId, messageId)
-        const payload = response?.data?.message ?? (response?.data as Message | undefined)
-        if (payload) {
-          applyServerMessageSnapshot(payload)
-          if (payload.streamStatus && payload.streamStatus !== 'streaming') {
-            stopMessagePoller(messageId)
-            activeWatchers.delete(messageId)
-            get().fetchUsage(sessionId).catch(() => { })
-            get().fetchSessionsUsage().catch(() => { })
-            return
-          }
-        }
-      } catch (error: any) {
-        const status = error?.response?.status
-        if (status === 404 || status === 403) {
-          stopMessagePoller(messageId)
-          activeWatchers.delete(messageId)
-          return
-        }
-      }
-      if (activeWatchers.has(messageId)) {
-        setTimeout(poll, 1500)
-      }
-    }
-
-    poll()
   }
 
   const flushStreamBuffer = (stream: ActiveStreamEntry | null, force = false) => {

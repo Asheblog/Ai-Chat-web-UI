@@ -59,6 +59,13 @@ export class ServiceRegistry {
   }
 
   /**
+   * 取消注册指定服务
+   */
+  unregister(key: string): void {
+    this.services.delete(key)
+  }
+
+  /**
    * 标记注册表已完成初始化
    */
   markInitialized(): void {

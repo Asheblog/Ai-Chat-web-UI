@@ -3,25 +3,25 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth';
 import type { ApiResponse, Actor } from '../types';
-import { settingsFacade, SettingsServiceError, HealthServiceError } from '../services/settings/settings-facade'
+import { SettingsServiceError, HealthServiceError } from '../services/settings/settings-facade'
 import type { SettingsFacade } from '../services/settings/settings-facade'
 import type { SetupState } from '../services/settings/settings-service'
 import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
 import { reloadRAGServices } from '../services/rag-initializer'
 import {
-  pythonRuntimeService as defaultPythonRuntimeService,
   PythonRuntimeServiceError,
   type PythonRuntimeService,
 } from '../services/python-runtime'
+import { RAG_SYSTEM_SETTINGS_KEYS } from '@aichat/shared'
 
 export interface SettingsApiDeps {
-  settingsFacade?: SettingsFacade
-  pythonRuntimeService?: PythonRuntimeService
+  settingsFacade: SettingsFacade
+  pythonRuntimeService: PythonRuntimeService
 }
 
-export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
-  const facade = deps.settingsFacade ?? settingsFacade
-  const pythonRuntimeService = deps.pythonRuntimeService ?? defaultPythonRuntimeService
+export const createSettingsApi = (deps: SettingsApiDeps) => {
+  const facade = deps.settingsFacade
+  const pythonRuntimeService = deps.pythonRuntimeService
   const settings = new Hono();
 
   const handleServiceError = (
@@ -268,21 +268,7 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
         await facade.updateSystemSettings(payload)
 
         // 如果更新了 RAG 相关设置，自动重载 RAG 服务
-        const ragKeys = [
-          'rag_enabled',
-          'rag_embedding_connection_id',
-          'rag_embedding_model_id',
-          'rag_embedding_batch_size',
-          'rag_embedding_concurrency',
-          'rag_top_k',
-          'rag_relevance_threshold',
-          'rag_max_context_tokens',
-          'rag_chunk_size',
-          'rag_chunk_overlap',
-          'rag_max_file_size_mb',
-          'rag_retention_days',
-        ]
-        const hasRagChanges = ragKeys.some(key => key in payload)
+        const hasRagChanges = RAG_SYSTEM_SETTINGS_KEYS.some((key) => key in payload)
         if (hasRagChanges) {
           const ragResult = await reloadRAGServices()
           console.log(`🔄 RAG services reload: ${ragResult.message}`)
@@ -547,5 +533,3 @@ export const createSettingsApi = (deps: SettingsApiDeps = {}) => {
 
   return settings;
 };
-
-export default createSettingsApi();

@@ -3,12 +3,12 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { ApiResponse, Actor } from '../types'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
-import { battleService, BattleService } from '../services/battle/battle-service'
+import { BattleService } from '../services/battle/battle-service'
 import type { BattleRunCreateInput } from '../services/battle/battle-types'
 import { prisma } from '../db'
 
 export interface BattleApiDeps {
-  battleService?: BattleService
+  battleService: BattleService
 }
 
 const headerSchema = z.object({
@@ -178,8 +178,8 @@ const parsePagination = (value: string | null | undefined, fallback: number) => 
   return fallback
 }
 
-export const createBattleApi = (deps: BattleApiDeps = {}) => {
-  const svc = deps.battleService ?? battleService
+export const createBattleApi = (deps: BattleApiDeps) => {
+  const svc = deps.battleService
   const router = new Hono()
 
   router.use('*', async (_c, next) => {
@@ -687,5 +687,3 @@ export const createBattleApi = (deps: BattleApiDeps = {}) => {
 
   return router
 }
-
-export default createBattleApi()

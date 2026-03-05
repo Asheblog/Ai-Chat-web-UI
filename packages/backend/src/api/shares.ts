@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import { shareService, ShareService, ShareServiceError } from '../services/shares'
+import { ShareService, ShareServiceError } from '../services/shares'
 import { extendAnonymousSession } from '../modules/chat/chat-common'
 
 const createShareSchema = z.object({
@@ -19,7 +19,7 @@ const updateShareSchema = z.object({
 })
 
 export interface SharesApiDeps {
-  shareService?: ShareService
+  shareService: ShareService
 }
 
 const handleError = (c: any, error: unknown, fallback: string) => {
@@ -42,8 +42,8 @@ const parsePagination = (value: string | null | undefined, fallback: number) => 
   return fallback
 }
 
-export const createSharesApi = (deps: SharesApiDeps = {}) => {
-  const svc = deps.shareService ?? shareService
+export const createSharesApi = (deps: SharesApiDeps) => {
+  const svc = deps.shareService
   const router = new Hono()
 
   router.get('/', actorMiddleware, async (c) => {
@@ -141,5 +141,3 @@ export const createSharesApi = (deps: SharesApiDeps = {}) => {
 
   return router
 }
-
-export default createSharesApi()

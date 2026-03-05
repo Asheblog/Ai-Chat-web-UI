@@ -315,17 +315,3 @@ export class SystemLogService {
     return Array.from(tags).sort()
   }
 }
-
-// 单例实例
-let systemLogService: SystemLogService | null = null
-
-export function getSystemLogService(): SystemLogService {
-  if (!systemLogService) {
-    systemLogService = new SystemLogService()
-  }
-  return systemLogService
-}
-
-export function setSystemLogService(service: SystemLogService): void {
-  systemLogService = service
-}

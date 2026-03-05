@@ -1,15 +1,15 @@
 import { Hono } from 'hono'
 import type { ApiResponse } from '../types'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
-import { modelCatalogService, ModelCatalogServiceError } from '../services/catalog'
+import { ModelCatalogServiceError } from '../services/catalog'
 import type { ModelCatalogService } from '../services/catalog/model-catalog-service'
 
 export interface CatalogApiDeps {
-  modelCatalogService?: ModelCatalogService
+  modelCatalogService: ModelCatalogService
 }
 
-export const createCatalogApi = (deps: CatalogApiDeps = {}) => {
-  const svc = deps.modelCatalogService ?? modelCatalogService
+export const createCatalogApi = (deps: CatalogApiDeps) => {
+  const svc = deps.modelCatalogService
   const catalog = new Hono()
 
 catalog.use('*', actorMiddleware)
@@ -143,5 +143,3 @@ catalog.get('/models/overrides', requireUserActor, adminOnlyMiddleware, async (c
 
   return catalog
 }
-
-export default createCatalogApi()

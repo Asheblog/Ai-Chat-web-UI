@@ -1,8 +1,12 @@
-import { spawn } from 'node:child_process'
-import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { PrismaClient } from '@prisma/client'
 import { createLogger } from '../../utils/logger'
+import { PythonRuntimePlatformAdapter, type RuntimePaths } from './platform-adapter'
+import { PipCommandGateway, type CommandResult } from './pip-command-gateway'
+import { PythonRuntimeSourceRegistry } from './source-registry'
+import { PythonDependencyPolicy, type RequirementEntry } from './dependency-policy'
+import { PythonRuntimeCommandExecutor } from './command-executor'
+import { PythonRuntimeBootstrap } from './runtime-bootstrap'
 
 const logger = createLogger('PythonRuntime')
 
@@ -153,25 +157,6 @@ export class PythonRuntimeServiceError extends Error {
     this.code = code
     this.details = details
   }
-}
-
-interface RequirementEntry {
-  raw: string
-  packageName: string
-}
-
-interface RuntimePaths {
-  dataRoot: string
-  runtimeRoot: string
-  venvPath: string
-  pythonPath: string
-}
-
-interface CommandResult {
-  stdout: string
-  stderr: string
-  exitCode: number | null
-  durationMs: number
 }
 
 interface PythonRuntimeServiceDeps {
@@ -345,6 +330,12 @@ export class PythonRuntimeService {
   private readonly prisma: PrismaClient
   private readonly env: NodeJS.ProcessEnv
   private readonly platform: NodeJS.Platform
+  private readonly platformAdapter: PythonRuntimePlatformAdapter
+  private readonly commandExecutor: PythonRuntimeCommandExecutor
+  private readonly runtimeBootstrap: PythonRuntimeBootstrap
+  private readonly sourceRegistry: PythonRuntimeSourceRegistry
+  private readonly pipGateway: PipCommandGateway
+  private readonly dependencyPolicy: PythonDependencyPolicy
   private operationQueue: Promise<unknown> = Promise.resolve()
 
   constructor(deps: PythonRuntimeServiceDeps = {}) {
@@ -358,24 +349,40 @@ export class PythonRuntimeService {
     this.prisma = deps.prisma
     this.env = deps.env ?? process.env
     this.platform = deps.platform ?? process.platform
+    this.commandExecutor = new PythonRuntimeCommandExecutor({
+      defaultTimeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+      outputLimit: OUTPUT_LIMIT,
+      createError: (message, statusCode, code, details) =>
+        new PythonRuntimeServiceError(message, statusCode, code, details),
+    })
+    this.runtimeBootstrap = new PythonRuntimeBootstrap({
+      env: this.env,
+      platform: this.platform,
+      operationTimeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+      runCommand: (command, args, options) => this.runCommand(command, args, options),
+      createError: (message, statusCode, code, details) =>
+        new PythonRuntimeServiceError(message, statusCode, code, details),
+      onInfo: (message, payload) => logger.info(message, payload),
+    })
+    this.platformAdapter = new PythonRuntimePlatformAdapter(this.env, this.platform)
+    this.sourceRegistry = new PythonRuntimeSourceRegistry({
+      readSettings: (keys) => this.readSettings(keys),
+      upsertSetting: (key, value) => this.upsertSetting(key, value),
+      parseJsonArray,
+      normalizePackageList,
+    })
+    this.pipGateway = new PipCommandGateway((cmd, args, options) => this.runCommand(cmd, args, options))
+    this.dependencyPolicy = new PythonDependencyPolicy({
+      validatePackageName,
+      parseRequirement,
+      parseRequirementSafe,
+      extractMissingModuleNames,
+      moduleNameToRequirement,
+    })
   }
 
   resolvePaths(): RuntimePaths {
-    const rawDataRoot = this.env.APP_DATA_DIR || this.env.DATA_DIR || path.resolve(process.cwd(), 'data')
-    const dataRoot = path.resolve(rawDataRoot)
-    const runtimeRoot = path.resolve(dataRoot, 'python-runtime')
-    const venvPath = path.resolve(runtimeRoot, 'venv')
-    const pythonPath =
-      this.platform === 'win32'
-        ? path.resolve(venvPath, 'Scripts', 'python.exe')
-        : path.resolve(venvPath, 'bin', 'python')
-
-    return {
-      dataRoot,
-      runtimeRoot,
-      venvPath,
-      pythonPath,
-    }
+    return this.platformAdapter.resolvePaths()
   }
 
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -466,29 +473,19 @@ export class PythonRuntimeService {
   }
 
   private async getSourcePackages(settingKey: string): Promise<string[]> {
-    const map = await this.readSettings([settingKey])
-    const rawList = parseJsonArray(map.get(settingKey))
-    return normalizePackageList(rawList)
+    return this.sourceRegistry.get(settingKey)
   }
 
   private async saveSourcePackages(settingKey: string, packages: string[]): Promise<void> {
-    const normalized = normalizePackageList(packages)
-    await this.upsertSetting(settingKey, JSON.stringify(normalized))
+    await this.sourceRegistry.save(settingKey, packages)
   }
 
   private async addSourcePackages(settingKey: string, packages: string[]): Promise<void> {
-    const existing = await this.getSourcePackages(settingKey)
-    const merged = normalizePackageList([...existing, ...packages])
-    await this.saveSourcePackages(settingKey, merged)
+    await this.sourceRegistry.add(settingKey, packages)
   }
 
   private async removeSourcePackages(settingKey: string, packages: string[]): Promise<void> {
-    const existing = await this.getSourcePackages(settingKey)
-    if (existing.length === 0) return
-    const removeSet = new Set(normalizePackageList(packages))
-    if (removeSet.size === 0) return
-    const next = existing.filter((item) => !removeSet.has(item))
-    await this.saveSourcePackages(settingKey, next)
+    await this.sourceRegistry.remove(settingKey, packages)
   }
 
   async getManualPackages(): Promise<string[]> {
@@ -534,7 +531,7 @@ export class PythonRuntimeService {
     const removedSkillPackages = Array.from(
       new Set(
         (input.removedRequirements || [])
-          .map((item) => parseRequirementSafe(item))
+          .map((item) => this.dependencyPolicy.parseRequirementSafe(item))
           .filter((item): item is RequirementEntry => Boolean(item))
           .map((item) => item.packageName),
       ),
@@ -644,208 +641,17 @@ export class PythonRuntimeService {
     }
   }
 
-  private async fileExists(targetPath: string): Promise<boolean> {
-    try {
-      await fs.access(targetPath)
-      return true
-    } catch {
-      return false
-    }
-  }
-
   private async runCommand(
     command: string,
     args: string[],
-    options?: { cwd?: string; timeoutMs?: number },
+    options?: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv },
   ): Promise<CommandResult> {
-    const timeoutMs = Math.max(1_000, options?.timeoutMs ?? DEFAULT_OPERATION_TIMEOUT_MS)
-    const startedAt = Date.now()
-
-    return new Promise<CommandResult>((resolve, reject) => {
-      const child = spawn(command, args, {
-        cwd: options?.cwd,
-        stdio: 'pipe',
-      })
-
-      const stdoutChunks: Buffer[] = []
-      const stderrChunks: Buffer[] = []
-      let stdoutLength = 0
-      let stderrLength = 0
-
-      const collect = (chunks: Buffer[], chunk: Buffer, currentLength: number): number => {
-        const nextLength = currentLength + chunk.length
-        if (nextLength <= OUTPUT_LIMIT) {
-          chunks.push(chunk)
-          return nextLength
-        }
-        const remain = OUTPUT_LIMIT - currentLength
-        if (remain > 0) {
-          chunks.push(chunk.subarray(0, remain))
-        }
-        return OUTPUT_LIMIT
-      }
-
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL')
-        reject(
-          new PythonRuntimeServiceError(
-            `命令执行超时（${timeoutMs}ms）`,
-            504,
-            'PYTHON_RUNTIME_TIMEOUT',
-            { command, args },
-          ),
-        )
-      }, timeoutMs)
-
-      child.on('error', (error) => {
-        clearTimeout(timer)
-        reject(
-          new PythonRuntimeServiceError(
-            `命令执行失败：${error.message}`,
-            500,
-            'PYTHON_RUNTIME_COMMAND_ERROR',
-            { command, args },
-          ),
-        )
-      })
-
-      child.stdout.on('data', (chunk: Buffer) => {
-        stdoutLength = collect(stdoutChunks, chunk, stdoutLength)
-      })
-      child.stderr.on('data', (chunk: Buffer) => {
-        stderrLength = collect(stderrChunks, chunk, stderrLength)
-      })
-
-      child.on('close', (code) => {
-        clearTimeout(timer)
-        resolve({
-          stdout: Buffer.concat(stdoutChunks).toString('utf8'),
-          stderr: Buffer.concat(stderrChunks).toString('utf8'),
-          exitCode: typeof code === 'number' ? code : null,
-          durationMs: Math.max(0, Date.now() - startedAt),
-        })
-      })
-    })
-  }
-
-  private async createVenv(paths: RuntimePaths, options?: { clear?: boolean }): Promise<void> {
-    const bootstrapCandidates =
-      this.platform === 'win32'
-        ? [this.env.PYTHON_BOOTSTRAP_COMMAND || 'python', 'py']
-        : [this.env.PYTHON_BOOTSTRAP_COMMAND || 'python3', 'python']
-    const args = ['-m', 'venv', ...(options?.clear ? ['--clear'] : []), paths.venvPath]
-
-    let lastError: unknown = null
-    for (const candidate of bootstrapCandidates) {
-      const command = (candidate || '').trim()
-      if (!command) continue
-      try {
-        const result = await this.runCommand(command, args, {
-          timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
-        })
-        if ((result.exitCode ?? 1) !== 0) {
-          lastError = new Error(result.stderr || `exit code ${result.exitCode}`)
-          continue
-        }
-        logger.info('created managed venv', {
-          command,
-          clear: Boolean(options?.clear),
-          venvPath: paths.venvPath,
-          durationMs: result.durationMs,
-        })
-        return
-      } catch (error) {
-        lastError = error
-      }
-    }
-
-    const message = lastError instanceof Error ? lastError.message : 'unknown error'
-    throw new PythonRuntimeServiceError(
-      `无法创建 Python 虚拟环境：${message}`,
-      500,
-      'PYTHON_RUNTIME_CREATE_VENV_FAILED',
-      { venvPath: paths.venvPath, clear: Boolean(options?.clear) },
-    )
-  }
-
-  private commandOutput(result: CommandResult): string {
-    const output = `${result.stderr}\n${result.stdout}`.trim()
-    if (output) return output
-    return `exit code ${result.exitCode ?? 'null'}`
-  }
-
-  private buildPipUnavailableHint(): string {
-    if (this.platform === 'win32') {
-      return 'Windows 请确认 Python 安装时已包含 pip/venv，必要时执行 `py -m ensurepip --upgrade`。'
-    }
-    return 'WSL/Linux 请安装系统 venv 组件后重试（如 Debian/Ubuntu: `sudo apt install python3-venv` 或 `sudo apt install python3.12-venv`）。'
-  }
-
-  private async ensurePipAvailable(paths: RuntimePaths): Promise<void> {
-    const diagnostics: Record<string, unknown> = {}
-
-    const firstCheck = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
-      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
-    })
-    if ((firstCheck.exitCode ?? 1) === 0) return
-    diagnostics.initialPipCheck = this.commandOutput(firstCheck)
-
-    try {
-      await this.createVenv(paths, { clear: true })
-      diagnostics.recreateVenv = 'ok'
-    } catch (error) {
-      diagnostics.recreateVenv = error instanceof Error ? error.message : String(error)
-    }
-
-    const secondCheck = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
-      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
-    })
-    if ((secondCheck.exitCode ?? 1) === 0) {
-      logger.info('recovered managed runtime pip by recreating venv', {
-        venvPath: paths.venvPath,
-      })
-      return
-    }
-    diagnostics.afterRecreatePipCheck = this.commandOutput(secondCheck)
-
-    try {
-      const ensurePipResult = await this.runCommand(paths.pythonPath, ['-m', 'ensurepip', '--upgrade'], {
-        timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
-      })
-      diagnostics.ensurePip = this.commandOutput(ensurePipResult)
-    } catch (error) {
-      diagnostics.ensurePip = error instanceof Error ? error.message : String(error)
-    }
-
-    const finalCheck = await this.runCommand(paths.pythonPath, ['-m', 'pip', '--version'], {
-      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
-    })
-    if ((finalCheck.exitCode ?? 1) === 0) {
-      logger.info('recovered managed runtime pip via ensurepip', {
-        venvPath: paths.venvPath,
-      })
-      return
-    }
-    diagnostics.finalPipCheck = this.commandOutput(finalCheck)
-
-    throw new PythonRuntimeServiceError(
-      `受管环境 pip 不可用，自动修复失败。${this.buildPipUnavailableHint()}`,
-      500,
-      'PYTHON_RUNTIME_PIP_UNAVAILABLE',
-      diagnostics,
-    )
+    return this.commandExecutor.run(command, args, options)
   }
 
   async ensureManagedRuntime(): Promise<RuntimePaths> {
     const paths = this.resolvePaths()
-    await fs.mkdir(paths.runtimeRoot, { recursive: true })
-
-    if (!(await this.fileExists(paths.pythonPath))) {
-      await this.createVenv(paths)
-    }
-    await this.ensurePipAvailable(paths)
-
-    return paths
+    return this.runtimeBootstrap.ensureManagedRuntime(paths)
   }
 
   async getManagedPythonPath(): Promise<string> {
@@ -874,7 +680,7 @@ export class PythonRuntimeService {
 
     const dedup = new Map<string, RequirementEntry>()
     for (const requirement of requirements) {
-      const parsed = parseRequirement(requirement)
+      const parsed = this.dependencyPolicy.parseRequirement(requirement)
       if (!dedup.has(parsed.raw)) {
         dedup.set(parsed.raw, parsed)
       }
@@ -883,58 +689,24 @@ export class PythonRuntimeService {
   }
 
   parseMissingRequirementsFromOutput(output: string): string[] {
-    const modules = extractMissingModuleNames(output)
-    if (modules.length === 0) return []
-    const dedup = new Set<string>()
-    for (const moduleName of modules) {
-      const requirement = moduleNameToRequirement(moduleName)
-      if (!requirement) continue
-      const parsed = parseRequirementSafe(requirement)
-      if (!parsed) continue
-      dedup.add(parsed.raw)
-    }
-    return Array.from(dedup).sort((a, b) => a.localeCompare(b))
+    return this.dependencyPolicy.parseMissingRequirementsFromOutput(output)
   }
 
   async listInstalledPackages(): Promise<PythonRuntimeInstalledPackage[]> {
     const paths = await this.ensureManagedRuntime()
-    const result = await this.runCommand(paths.pythonPath, ['-m', 'pip', 'list', '--format=json'], {
-      timeoutMs: DEFAULT_PIP_TIMEOUT_MS,
-    })
-
-    if ((result.exitCode ?? 1) !== 0) {
+    try {
+      return await this.pipGateway.listInstalledPackages(paths, DEFAULT_PIP_TIMEOUT_MS)
+    } catch (error) {
       throw new PythonRuntimeServiceError(
-        `读取已安装包失败：${result.stderr || 'unknown error'}`,
+        `读取已安装包失败：${error instanceof Error ? error.message : 'unknown error'}`,
         500,
         'PYTHON_RUNTIME_LIST_PACKAGES_FAILED',
       )
     }
-
-    try {
-      const parsed = JSON.parse(result.stdout)
-      if (!Array.isArray(parsed)) return []
-      return parsed
-        .map((item) => ({
-          name: typeof item?.name === 'string' ? item.name : '',
-          version: typeof item?.version === 'string' ? item.version : '',
-        }))
-        .filter((item) => item.name)
-        .sort((a, b) => a.name.localeCompare(b.name))
-    } catch {
-      return []
-    }
   }
 
   private async runPipCheck(paths: RuntimePaths): Promise<{ passed: boolean; output: string }> {
-    const checkResult = await this.runCommand(paths.pythonPath, ['-m', 'pip', 'check'], {
-      timeoutMs: DEFAULT_PIP_TIMEOUT_MS,
-    })
-
-    const output = `${checkResult.stdout}\n${checkResult.stderr}`.trim()
-    return {
-      passed: (checkResult.exitCode ?? 1) === 0,
-      output,
-    }
+    return this.pipGateway.runCheck(paths, DEFAULT_PIP_TIMEOUT_MS)
   }
 
   async collectActiveDependencies(): Promise<PythonRuntimeDependencyItem[]> {
@@ -991,7 +763,7 @@ export class PythonRuntimeService {
 
       for (const requirement of pythonPackages) {
         if (typeof requirement !== 'string') continue
-        const parsed = parseRequirement(requirement)
+        const parsed = this.dependencyPolicy.parseRequirement(requirement)
         items.push({
           skillId: skill.id,
           skillSlug: skill.slug,
@@ -1221,7 +993,7 @@ export class PythonRuntimeService {
     const normalized = Array.from(
       new Set(
         packages
-          .map((pkg) => validatePackageName(pkg))
+          .map((pkg) => this.dependencyPolicy.validatePackageName(pkg))
           .filter((pkg): pkg is string => Boolean(pkg)),
       ),
     )

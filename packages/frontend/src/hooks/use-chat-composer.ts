@@ -10,7 +10,6 @@ import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
-import { listSkillCatalog } from '@/features/skills/api'
 import {
   useAdvancedRequest,
   useComposerFeatureFlags,
@@ -18,7 +17,9 @@ import {
   useDocumentAttachments,
 } from '@/features/chat/composer'
 import type { ComposerImage, AttachedDocument } from '@/features/chat/composer'
-import { messageKey as toMessageKey } from '@/features/chat/store/utils'
+import { useSkillsSelection } from './use-skills-selection'
+import { useSendCommand } from './use-send-command'
+import { useScrollPersistence } from './use-scroll-persistence'
 
 export type { AttachedDocument }
 
@@ -29,59 +30,11 @@ export interface UseChatComposerOptions {
   knowledgeBaseIds?: number[]
 }
 
-const AUTO_SCROLL_BOTTOM_THRESHOLD = 96
-const AUTO_LOAD_OLDER_TOP_THRESHOLD = 80
-const SESSION_SCROLL_STORAGE_KEY = 'aichat:chat-session-scroll'
-const BUILTIN_SKILL_SLUGS = new Set([
-  'web-search',
-  'python-runner',
-  'url-reader',
-  'document-search',
-  'knowledge-base-search',
-])
-
-const readSessionScrollState = (): Record<number, number> => {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.sessionStorage.getItem(SESSION_SCROLL_STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    if (!parsed || typeof parsed !== 'object') return {}
-    const next: Record<number, number> = {}
-    for (const [key, value] of Object.entries(parsed)) {
-      const sessionId = Number.parseInt(key, 10)
-      const top = Number(value)
-      if (!Number.isFinite(sessionId) || !Number.isFinite(top)) continue
-      next[sessionId] = Math.max(0, Math.floor(top))
-    }
-    return next
-  } catch {
-    return {}
-  }
-}
-
-const writeSessionScrollState = (state: Record<number, number>) => {
-  if (typeof window === 'undefined') return
-  try {
-    window.sessionStorage.setItem(SESSION_SCROLL_STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // ignore
-  }
-}
-
 export function useChatComposer(options?: UseChatComposerOptions) {
   const knowledgeBaseIds = options?.knowledgeBaseIds
   const [input, setInput] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true)
-  const autoScrollEnabledRef = useRef(true)
-  const scrollStateRef = useRef<Record<number, number>>({})
-  const scrollPersistTimerRef = useRef<number | null>(null)
-  const pendingRestoreSessionRef = useRef<number | null>(null)
-  const prependAnchorRef = useRef<{ sessionId: number; scrollTop: number; scrollHeight: number } | null>(null)
-  const loadingOlderRef = useRef(false)
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
   const {
     currentSession,
@@ -147,10 +100,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
   const [sessionPromptDraft, setSessionPromptDraft] = useState<string>('')
   const [sessionPromptSaving, setSessionPromptSaving] = useState<boolean>(false)
-  const [extraSkillsCatalog, setExtraSkillsCatalog] = useState<
-    Array<{ slug: string; displayName: string; description?: string | null }>
-  >([])
-  const [enabledExtraSkills, setEnabledExtraSkills] = useState<string[]>([])
 
   const { systemSettings } = useSettingsStore()
   const { toast } = useToast()
@@ -170,55 +119,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     }
   }, [modelsCount, fetchModels])
 
-  useEffect(() => {
-    let cancelled = false
-    listSkillCatalog()
-      .then((response) => {
-        if (cancelled) return
-        const list = Array.isArray(response?.data) ? response.data : []
-        const filtered = list
-          .map((item) => ({
-            slug: String(item.slug || '').trim(),
-            displayName: String(item.displayName || item.slug || '').trim(),
-            description: item.description || null,
-          }))
-          .filter((item) => item.slug.length > 0 && !BUILTIN_SKILL_SLUGS.has(item.slug))
-        setExtraSkillsCatalog(filtered)
-        setEnabledExtraSkills((prev) =>
-          prev.filter((slug) => filtered.some((item) => item.slug === slug)),
-        )
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setExtraSkillsCatalog([])
-          setEnabledExtraSkills([])
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const skillOptions = useMemo(() => {
-    return extraSkillsCatalog.map((item) => ({
-      slug: item.slug,
-      label: item.displayName || item.slug,
-      description: item.description || undefined,
-      enabled: enabledExtraSkills.includes(item.slug),
-    }))
-  }, [enabledExtraSkills, extraSkillsCatalog])
-
-  const toggleSkillOption = useCallback((slug: string, enabled: boolean) => {
-    const normalized = slug.trim()
-    if (!normalized) return
-    setEnabledExtraSkills((prev) => {
-      if (enabled) {
-        if (prev.includes(normalized)) return prev
-        return [...prev, normalized]
-      }
-      return prev.filter((item) => item !== normalized)
-    })
-  }, [])
+  const { enabledExtraSkills, skillOptions, toggleSkillOption } = useSkillsSelection()
 
   const activeModel = useMemo(() => {
     if (!currentSession) return null
@@ -305,230 +206,15 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setSessionPromptDraft,
   ])
 
-  const setAutoScrollState = useCallback((enabled: boolean) => {
-    autoScrollEnabledRef.current = enabled
-    setIsAutoScrollEnabled((prev) => (prev === enabled ? prev : enabled))
-  }, [])
-
-  const getScrollViewport = useCallback((): HTMLElement | null => {
-    if (!scrollAreaRef.current) return null
-    return scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null
-  }, [])
-
-  const isNearBottom = useCallback((element: HTMLElement) => {
-    const distance = element.scrollHeight - element.scrollTop - element.clientHeight
-    return distance <= AUTO_SCROLL_BOTTOM_THRESHOLD
-  }, [])
-
-  const scrollToBottom = useCallback(
-    (force = false) => {
-      const scrollElement = getScrollViewport()
-      if (!scrollElement) return
-      if (!force && !autoScrollEnabledRef.current) return
-      scrollElement.scrollTop = scrollElement.scrollHeight
-      if (!autoScrollEnabledRef.current) {
-        setAutoScrollState(true)
-      }
-    },
-    [getScrollViewport, setAutoScrollState],
-  )
-
-  const persistScrollState = useCallback(() => {
-    writeSessionScrollState(scrollStateRef.current)
-  }, [])
-
-  const schedulePersistScrollState = useCallback(() => {
-    if (typeof window === 'undefined') return
-    if (scrollPersistTimerRef.current !== null) return
-    scrollPersistTimerRef.current = window.setTimeout(() => {
-      scrollPersistTimerRef.current = null
-      persistScrollState()
-    }, 120)
-  }, [persistScrollState])
-
-  const saveSessionScrollTop = useCallback(
-    (sessionId: number | null, top: number) => {
-      if (sessionId == null) return
-      if (!Number.isFinite(top)) return
-      const normalized = Math.max(0, Math.floor(top))
-      if (scrollStateRef.current[sessionId] === normalized) return
-      scrollStateRef.current = {
-        ...scrollStateRef.current,
-        [sessionId]: normalized,
-      }
-      schedulePersistScrollState()
-    },
-    [schedulePersistScrollState],
-  )
-
-  useEffect(() => {
-    scrollStateRef.current = readSessionScrollState()
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (scrollPersistTimerRef.current !== null && typeof window !== 'undefined') {
-        window.clearTimeout(scrollPersistTimerRef.current)
-        scrollPersistTimerRef.current = null
-      }
-      persistScrollState()
-    }
-  }, [persistScrollState])
-
-  useEffect(() => {
-    const sessionId = currentSession?.id ?? null
-    pendingRestoreSessionRef.current = sessionId
-    loadingOlderRef.current = false
-    prependAnchorRef.current = null
-    if (sessionId == null) return
-    const savedTop = scrollStateRef.current[sessionId]
-    if (Number.isFinite(savedTop)) {
-      setAutoScrollState(false)
-    } else {
-      setAutoScrollState(true)
-    }
-  }, [currentSession?.id, setAutoScrollState])
-
-  useEffect(() => {
-    const sessionId = currentSession?.id ?? null
-    if (sessionId == null) return
-    if (pendingRestoreSessionRef.current !== sessionId) return
-
-    const scrollElement = getScrollViewport()
-    if (!scrollElement) return
-    if (isMessagesLoading && sessionMessageMetas.length === 0) return
-
-    pendingRestoreSessionRef.current = null
-    const savedTop = scrollStateRef.current[sessionId]
-    const hasSavedTop = Number.isFinite(savedTop)
-    if (typeof window === 'undefined') return
-
-    const frame = window.requestAnimationFrame(() => {
-      const maxTop = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight)
-      const targetTop = hasSavedTop
-        ? Math.max(0, Math.min(Number(savedTop), maxTop))
-        : maxTop
-      scrollElement.scrollTop = targetTop
-      saveSessionScrollTop(sessionId, scrollElement.scrollTop)
-      setAutoScrollState(isNearBottom(scrollElement))
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-    }
-  }, [
-    currentSession?.id,
-    getScrollViewport,
+  const { scrollAreaRef, isAutoScrollEnabled } = useScrollPersistence({
+    currentSessionId: currentSession?.id ?? null,
+    sessionMessageMetas,
+    currentSessionPagination,
     isMessagesLoading,
-    isNearBottom,
-    saveSessionScrollTop,
-    sessionMessageMetas.length,
-    setAutoScrollState,
-  ])
-
-  useEffect(() => {
-    const anchor = prependAnchorRef.current
-    if (!anchor) return
-    if (currentSession?.id !== anchor.sessionId) {
-      prependAnchorRef.current = null
-      return
-    }
-    if (currentSessionPagination?.isLoadingOlder) return
-    const scrollElement = getScrollViewport()
-    if (!scrollElement) return
-    if (typeof window === 'undefined') return
-
-    const frame = window.requestAnimationFrame(() => {
-      const delta = scrollElement.scrollHeight - anchor.scrollHeight
-      if (delta > 0) {
-        scrollElement.scrollTop = Math.max(0, anchor.scrollTop + delta)
-        saveSessionScrollTop(anchor.sessionId, scrollElement.scrollTop)
-      }
-      prependAnchorRef.current = null
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-    }
-  }, [
-    currentSession?.id,
-    currentSessionPagination?.isLoadingOlder,
-    getScrollViewport,
-    saveSessionScrollTop,
-    sessionMessageMetas.length,
-  ])
-
-  useEffect(() => {
-    return () => {
-      const sessionId = currentSession?.id ?? null
-      const scrollElement = getScrollViewport()
-      if (!scrollElement || sessionId == null) return
-      saveSessionScrollTop(sessionId, scrollElement.scrollTop)
-    }
-  }, [currentSession?.id, getScrollViewport, saveSessionScrollTop])
-
-  useEffect(() => {
-    const scrollElement = getScrollViewport()
-    if (!scrollElement) return
-
-    const updateAutoScrollState = () => {
-      setAutoScrollState(isNearBottom(scrollElement))
-      saveSessionScrollTop(currentSession?.id ?? null, scrollElement.scrollTop)
-      if (!currentSession) return
-      if (isMessagesLoading) return
-      if (scrollElement.scrollTop > AUTO_LOAD_OLDER_TOP_THRESHOLD) return
-      if (!currentSessionPagination?.hasOlder || currentSessionPagination.isLoadingOlder) return
-      if (loadingOlderRef.current) return
-      if (prependAnchorRef.current) return
-
-      loadingOlderRef.current = true
-      prependAnchorRef.current = {
-        sessionId: currentSession.id,
-        scrollTop: scrollElement.scrollTop,
-        scrollHeight: scrollElement.scrollHeight,
-      }
-      void loadOlderMessages(currentSession.id).finally(() => {
-        loadingOlderRef.current = false
-      })
-    }
-
-    updateAutoScrollState()
-    scrollElement.addEventListener('scroll', updateAutoScrollState, { passive: true })
-
-    return () => {
-      scrollElement.removeEventListener('scroll', updateAutoScrollState)
-    }
-  }, [
-    currentSession,
-    currentSessionPagination?.hasOlder,
-    currentSessionPagination?.isLoadingOlder,
-    getScrollViewport,
-    isMessagesLoading,
-    isNearBottom,
+    isStreaming,
+    messageBodies: messageBodies as any,
     loadOlderMessages,
-    saveSessionScrollTop,
-    setAutoScrollState,
-  ])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [sessionMessageMetas.length, scrollToBottom])
-
-  const streamScrollAnchor = useMemo(() => {
-    if (!isStreaming || sessionMessageMetas.length === 0) return 'idle'
-    const lastMeta = sessionMessageMetas[sessionMessageMetas.length - 1]
-    if (!lastMeta || lastMeta.role !== 'assistant') {
-      return `stream:${sessionMessageMetas.length}`
-    }
-    const key = toMessageKey(lastMeta.id)
-    const body = messageBodies[key]
-    return `stream:${key}:${body?.version ?? 0}:${body?.reasoningVersion ?? 0}`
-  }, [isStreaming, messageBodies, sessionMessageMetas])
-
-  useEffect(() => {
-    if (!isStreaming) return
-    scrollToBottom()
-  }, [isStreaming, scrollToBottom, streamScrollAnchor])
+  })
 
   useEffect(() => {
     if (!textareaRef.current) return
@@ -642,80 +328,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     ? `留空以继承${personalPromptFallback ? '个人提示词' : '全局提示词'}：${effectiveFallbackPrompt.slice(0, 60)}${effectiveFallbackPrompt.length > 60 ? '...' : ''}`
     : '留空将使用默认提示词：今天日期是{day time}（{day time} 会替换为服务器当前时间）'
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || !currentSession) return
-    if (concurrencyLocked) {
-      toast({
-        title: '生成任务已达上限',
-        description: `当前共有 ${totalActiveStreams}/${maxConcurrentStreams} 个请求进行中，请稍候或先停止部分任务。`,
-        variant: 'destructive',
-      })
-      return
-    }
-    const message = input.trim()
-    const prevSelectedImages = selectedImages
-    setInput('')
-    clearError()
-    try {
-      const imagesPayload =
-        isVisionEnabled && prevSelectedImages.length
-          ? prevSelectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
-          : undefined
-      if (prevSelectedImages.length > 0) {
-        setSelectedImages([])
-      }
-      const requestPayload = buildRequestPayload()
-      if (!requestPayload.ok) {
-        toast({ title: '发送失败', description: requestPayload.reason, variant: 'destructive' })
-        return
-      }
-      const enabledSkills: string[] = [...enabledExtraSkills]
-      const skillOverrides: Record<string, Record<string, unknown>> = {}
-      if (webSearchEnabled && canUseWebSearch) {
-        enabledSkills.push('web-search', 'url-reader')
-        const webSearchOverride: Record<string, unknown> = {}
-        if (isMetasoEngine) webSearchOverride.scope = webSearchScope
-        if (systemSettings?.webSearchIncludeSummary) webSearchOverride.includeSummary = true
-        if (systemSettings?.webSearchIncludeRaw) webSearchOverride.includeRawContent = true
-        if (Object.keys(webSearchOverride).length > 0) {
-          skillOverrides['web-search'] = webSearchOverride
-        }
-      }
-      if (pythonToolEnabled && canUsePythonTool) {
-        enabledSkills.push('python-runner')
-      }
-      const skillsPayload =
-        enabledSkills.length > 0
-          ? {
-              enabled: Array.from(new Set(enabledSkills)),
-              ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
-            }
-          : undefined
-      const options = {
-        reasoningEnabled: thinkingEnabled,
-        reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
-        ollamaThink: thinkingEnabled ? ollamaThink : undefined,
-        saveReasoning: !noSaveThisRound,
-        skills: skillsPayload,
-        traceEnabled: canUseTrace ? traceEnabled : undefined,
-        customBody: requestPayload.customBody,
-        customHeaders: requestPayload.customHeaders,
-        knowledgeBaseIds: knowledgeBaseIds?.length ? knowledgeBaseIds : undefined,
-      }
-      await streamMessage(currentSession.id, message, imagesPayload, options)
-      setNoSaveThisRound(false)
-    } catch (error) {
-      if (prevSelectedImages.length > 0) {
-        setSelectedImages(prevSelectedImages)
-      }
-      console.error('Failed to send message:', error)
-      toast({
-        title: '发送失败',
-        description: error instanceof Error ? error.message : '未知错误',
-        variant: 'destructive',
-      })
-    }
-  }, [
+  const handleSend = useSendCommand({
     input,
     currentSession,
     concurrencyLocked,
@@ -724,27 +337,29 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     clearError,
     isVisionEnabled,
     selectedImages,
-    thinkingEnabled,
-    effort,
-    ollamaThink,
-    noSaveThisRound,
-    streamMessage,
-    toast,
+    setSelectedImages,
+    buildRequestPayload,
+    enabledExtraSkills,
     webSearchEnabled,
     canUseWebSearch,
     webSearchScope,
     isMetasoEngine,
-    systemSettings?.webSearchIncludeSummary,
-    systemSettings?.webSearchIncludeRaw,
-    canUseTrace,
-    traceEnabled,
-    buildRequestPayload,
-    enabledExtraSkills,
+    webSearchIncludeSummary: systemSettings?.webSearchIncludeSummary,
+    webSearchIncludeRaw: systemSettings?.webSearchIncludeRaw,
     canUsePythonTool,
     pythonToolEnabled,
-    setSelectedImages,
+    thinkingEnabled,
+    effort,
+    ollamaThink,
+    noSaveThisRound,
+    setNoSaveThisRound,
+    traceEnabled,
+    canUseTrace,
     knowledgeBaseIds,
-  ])
+    streamMessage,
+    toast,
+    setInput,
+  })
 
   const handleStop = useCallback(() => {
     stopStreaming()

@@ -34,6 +34,13 @@ export const SERVICE_KEYS = {
   taskTraceFileService: 'taskTraceFileService',
   chatService: 'chatService',
   shareService: 'shareService',
+  battleService: 'battleService',
+  promptTemplateService: 'promptTemplateService',
+  artifactService: 'artifactService',
+  workspaceService: 'workspaceService',
+  workspaceCleanupService: 'workspaceCleanupService',
+  pythonRuntimeService: 'pythonRuntimeService',
+  systemLogService: 'systemLogService',
 
   // Phase 3: New Utils-layer Services
   systemSettingsService: 'systemSettingsService',
@@ -84,6 +91,13 @@ import type { TaskTraceService } from '../services/task-trace/task-trace-service
 import type { TaskTraceFileService } from '../services/task-trace/task-trace-file-service'
 import type { ChatService } from '../services/chat/chat-service'
 import type { ShareService } from '../services/shares'
+import type { BattleService } from '../services/battle/battle-service'
+import type { PromptTemplateService } from '../services/prompt-templates/prompt-template-service'
+import type { ArtifactService } from '../services/workspace/artifact-service'
+import type { WorkspaceService } from '../services/workspace/workspace-service'
+import type { WorkspaceCleanupService } from '../services/workspace/workspace-cleanup-service'
+import type { PythonRuntimeService } from '../services/python-runtime/python-runtime-service'
+import type { SystemLogService } from '../services/system-logs/system-log-service'
 
 // Phase 3: New Utils-layer Service types
 import type { SystemSettingsService } from '../services/settings/system-settings-service'
@@ -180,6 +194,26 @@ export const getTaskTraceFileService = (): TaskTraceFileService =>
 export const getChatService = (): ChatService => getRegistry().resolve(SERVICE_KEYS.chatService)
 
 export const getShareService = (): ShareService => getRegistry().resolve(SERVICE_KEYS.shareService)
+
+export const getBattleService = (): BattleService => getRegistry().resolve(SERVICE_KEYS.battleService)
+
+export const getPromptTemplateService = (): PromptTemplateService =>
+  getRegistry().resolve(SERVICE_KEYS.promptTemplateService)
+
+export const getArtifactService = (): ArtifactService =>
+  getRegistry().resolve(SERVICE_KEYS.artifactService)
+
+export const getWorkspaceService = (): WorkspaceService =>
+  getRegistry().resolve(SERVICE_KEYS.workspaceService)
+
+export const getWorkspaceCleanupService = (): WorkspaceCleanupService =>
+  getRegistry().resolve(SERVICE_KEYS.workspaceCleanupService)
+
+export const getPythonRuntimeService = (): PythonRuntimeService =>
+  getRegistry().resolve(SERVICE_KEYS.pythonRuntimeService)
+
+export const getSystemLogService = (): SystemLogService =>
+  getRegistry().resolve(SERVICE_KEYS.systemLogService)
 
 // ============================================================================
 // Phase 3: Utils-layer Service Accessors

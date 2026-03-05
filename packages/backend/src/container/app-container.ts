@@ -28,6 +28,13 @@ import { TaskTraceService } from '../services/task-trace/task-trace-service'
 import { TaskTraceFileService } from '../services/task-trace/task-trace-file-service'
 import { ChatService } from '../services/chat/chat-service'
 import { ShareService } from '../services/shares'
+import { BattleService } from '../services/battle/battle-service'
+import { PromptTemplateService } from '../services/prompt-templates/prompt-template-service'
+import { ArtifactService } from '../services/workspace/artifact-service'
+import { WorkspaceService } from '../services/workspace/workspace-service'
+import { WorkspaceCleanupService } from '../services/workspace/workspace-cleanup-service'
+import { PythonRuntimeService } from '../services/python-runtime/python-runtime-service'
+import { SystemLogService } from '../services/system-logs/system-log-service'
 
 // Phase 3: New Utils-layer Services
 import { SystemSettingsService } from '../services/settings/system-settings-service'
@@ -84,6 +91,13 @@ export interface AppContainerDeps {
   taskTraceFileService?: TaskTraceFileService
   chatService?: ChatService
   shareService?: ShareService
+  battleService?: BattleService
+  promptTemplateService?: PromptTemplateService
+  artifactService?: ArtifactService
+  workspaceService?: WorkspaceService
+  workspaceCleanupService?: WorkspaceCleanupService
+  pythonRuntimeService?: PythonRuntimeService
+  systemLogService?: SystemLogService
 
   // Phase 3: New Utils-layer Services
   systemSettingsService?: SystemSettingsService
@@ -116,6 +130,13 @@ export class AppContainer {
   readonly taskTraceFileService: TaskTraceFileService
   readonly chatService: ChatService
   readonly shareService: ShareService
+  readonly battleService: BattleService
+  readonly promptTemplateService: PromptTemplateService
+  readonly artifactService: ArtifactService
+  readonly workspaceService: WorkspaceService
+  readonly workspaceCleanupService: WorkspaceCleanupService
+  readonly pythonRuntimeService: PythonRuntimeService
+  readonly systemLogService: SystemLogService
 
   // Phase 3: New Utils-layer Services
   readonly systemSettingsService: SystemSettingsService
@@ -193,6 +214,58 @@ export class AppContainer {
         logger: this.context.logger,
       })
     registry.register(SERVICE_KEYS.shareService, this.shareService)
+
+    this.battleService =
+      deps.battleService ??
+      new BattleService({
+        prisma: this.context.prisma,
+        modelResolver: this.modelResolverService,
+      })
+    registry.register(SERVICE_KEYS.battleService, this.battleService)
+
+    this.workspaceService =
+      deps.workspaceService ??
+      new WorkspaceService({
+        prisma: this.context.prisma,
+      })
+    registry.register(SERVICE_KEYS.workspaceService, this.workspaceService)
+
+    this.artifactService =
+      deps.artifactService ??
+      new ArtifactService({
+        prisma: this.context.prisma,
+      })
+    registry.register(SERVICE_KEYS.artifactService, this.artifactService)
+
+    this.workspaceCleanupService =
+      deps.workspaceCleanupService ??
+      new WorkspaceCleanupService({
+        workspaceService: this.workspaceService,
+        artifactService: this.artifactService,
+      })
+    registry.register(SERVICE_KEYS.workspaceCleanupService, this.workspaceCleanupService)
+
+    this.promptTemplateService =
+      deps.promptTemplateService ??
+      new PromptTemplateService({
+        prisma: this.context.prisma,
+        logger: this.context.logger,
+      })
+    registry.register(SERVICE_KEYS.promptTemplateService, this.promptTemplateService)
+
+    this.pythonRuntimeService =
+      deps.pythonRuntimeService ??
+      new PythonRuntimeService({
+        prisma: this.context.prisma,
+        env: process.env,
+        platform: process.platform,
+      })
+    registry.register(SERVICE_KEYS.pythonRuntimeService, this.pythonRuntimeService)
+
+    this.systemLogService =
+      deps.systemLogService ??
+      new SystemLogService()
+    registry.register(SERVICE_KEYS.systemLogService, this.systemLogService)
 
     this.userService =
       deps.userService ??
