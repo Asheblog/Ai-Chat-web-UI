@@ -81,6 +81,13 @@ const toStatusLabel = (status?: string) => {
   return '未开始'
 }
 
+const ACTIVE_SINGLE_RUN_STORAGE_KEY = 'battle:single-model:active-run-id'
+const LAST_VIEWED_SINGLE_RUN_STORAGE_KEY = 'battle:single-model:last-viewed-run-id'
+
+const isSingleRunInProgress = (
+  status: 'idle' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled',
+) => status === 'pending' || status === 'running'
+
 export function SingleModelMultiQuestionPageClient() {
   const { toast } = useToast()
   const { models } = useModelsStore()
@@ -109,6 +116,7 @@ export function SingleModelMultiQuestionPageClient() {
   const [copiedShareLink, setCopiedShareLink] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
+  const restoredRef = useRef(false)
 
   const selectedModel = useMemo(() => models.find((item) => modelSelectKey(item) === modelKey) || null, [models, modelKey])
   const selectedJudge = useMemo(() => models.find((item) => modelSelectKey(item) === judgeKey) || null, [models, judgeKey])
@@ -170,6 +178,35 @@ export function SingleModelMultiQuestionPageClient() {
     }]
   }, [])
 
+  const applyRunSnapshot = useCallback((detail: BattleRunDetail) => {
+    const orderedResults = [...(detail.results || [])].sort((a, b) => {
+      if (a.questionIndex !== b.questionIndex) return a.questionIndex - b.questionIndex
+      return a.attemptIndex - b.attemptIndex
+    })
+    const nextLiveAttempts = new Map<string, LiveAttempt>()
+    for (const item of detail.live?.attempts || []) {
+      const questionIndex = Number(item.questionIndex ?? 1)
+      const attemptIndex = Number(item.attemptIndex)
+      if (!Number.isFinite(questionIndex) || !Number.isFinite(attemptIndex)) continue
+      nextLiveAttempts.set(buildAttemptKey(questionIndex, attemptIndex), {
+        status: item.status,
+        output: item.output || '',
+        reasoning: item.reasoning || '',
+        error: item.error ?? null,
+      })
+    }
+
+    const nextStatus = normalizeSingleRunStatus(detail.status)
+    setRunId(detail.id)
+    setRunStatus(nextStatus)
+    setResults(orderedResults)
+    setLiveAttempts(nextLiveAttempts)
+    setSummary(detail.summary || null)
+    setError(null)
+    setIsRunning(isSingleRunInProgress(nextStatus))
+    setIsStreaming(false)
+  }, [buildAttemptKey])
+
   const applyHistoryRun = useCallback((detail: BattleRunDetail, asNewTask: boolean) => {
     const modelConfig = detail.config?.model || detail.results?.[0] || null
     const nextModelKey = resolveModelSelectKey({
@@ -207,32 +244,8 @@ export function SingleModelMultiQuestionPageClient() {
       return
     }
 
-    const orderedResults = [...(detail.results || [])].sort((a, b) => {
-      if (a.questionIndex !== b.questionIndex) return a.questionIndex - b.questionIndex
-      return a.attemptIndex - b.attemptIndex
-    })
-    const nextLiveAttempts = new Map<string, LiveAttempt>()
-    for (const item of detail.live?.attempts || []) {
-      const questionIndex = Number(item.questionIndex ?? 1)
-      const attemptIndex = Number(item.attemptIndex)
-      if (!Number.isFinite(questionIndex) || !Number.isFinite(attemptIndex)) continue
-      nextLiveAttempts.set(buildAttemptKey(questionIndex, attemptIndex), {
-        status: item.status,
-        output: item.output || '',
-        reasoning: item.reasoning || '',
-        error: item.error ?? null,
-      })
-    }
-
-    setRunId(detail.id)
-    setRunStatus(normalizeSingleRunStatus(detail.status))
-    setResults(orderedResults)
-    setLiveAttempts(nextLiveAttempts)
-    setSummary(detail.summary || null)
-    setError(null)
-    setIsRunning(false)
-    setIsStreaming(false)
-  }, [buildAttemptKey, buildQuestionsFromRunDetail, clearExecutionState, resolveModelSelectKey, toast])
+    applyRunSnapshot(detail)
+  }, [applyRunSnapshot, buildQuestionsFromRunDetail, clearExecutionState, resolveModelSelectKey, toast])
 
   const refreshHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -248,30 +261,111 @@ export function SingleModelMultiQuestionPageClient() {
     }
   }, [toast])
 
-  const handleLoadHistory = useCallback(async (targetRunId: number, asNewTask: boolean) => {
-    setHistoryLoadingRunId(targetRunId)
+  const fetchRunDetail = useCallback(async (targetRunId: number, options?: { silent?: boolean }) => {
     try {
       const res = await getBattleRun(targetRunId)
       if (!res?.success || !res.data) {
-        toast({ title: res?.error || '加载记录失败', variant: 'destructive' })
-        return
+        if (!options?.silent) {
+          toast({ title: res?.error || '加载记录失败', variant: 'destructive' })
+        }
+        return null
       }
       const detail = res.data as BattleRunDetail
       if (detail.mode !== 'single_model_multi_question') {
-        toast({ title: '该记录不属于单模型多问题模式', variant: 'destructive' })
-        return
+        if (!options?.silent) {
+          toast({ title: '该记录不属于单模型多问题模式', variant: 'destructive' })
+        }
+        return null
       }
-      applyHistoryRun(detail, asNewTask)
+      return detail
     } catch (err: any) {
-      toast({ title: err?.message || '加载记录失败', variant: 'destructive' })
+      if (!options?.silent) {
+        toast({ title: err?.message || '加载记录失败', variant: 'destructive' })
+      }
+      return null
+    }
+  }, [toast])
+
+  const handleLoadHistory = useCallback(async (targetRunId: number, asNewTask: boolean) => {
+    setHistoryLoadingRunId(targetRunId)
+    try {
+      const detail = await fetchRunDetail(targetRunId)
+      if (!detail) return
+      applyHistoryRun(detail, asNewTask)
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(LAST_VIEWED_SINGLE_RUN_STORAGE_KEY, String(targetRunId))
+      }
     } finally {
       setHistoryLoadingRunId(null)
     }
-  }, [applyHistoryRun, toast])
+  }, [applyHistoryRun, fetchRunDetail])
 
   useEffect(() => {
     void refreshHistory()
   }, [refreshHistory])
+
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    if (typeof window === 'undefined') return
+    const storedActive = window.sessionStorage.getItem(ACTIVE_SINGLE_RUN_STORAGE_KEY)
+    const storedViewed = window.sessionStorage.getItem(LAST_VIEWED_SINGLE_RUN_STORAGE_KEY)
+    const stored = storedActive || storedViewed
+    if (!stored) return
+    const parsedRunId = Number.parseInt(stored, 10)
+    if (!Number.isFinite(parsedRunId)) {
+      window.sessionStorage.removeItem(ACTIVE_SINGLE_RUN_STORAGE_KEY)
+      window.sessionStorage.removeItem(LAST_VIEWED_SINGLE_RUN_STORAGE_KEY)
+      return
+    }
+    void (async () => {
+      const detail = await fetchRunDetail(parsedRunId, { silent: true })
+      if (!detail) return
+      applyHistoryRun(detail, false)
+    })()
+  }, [applyHistoryRun, fetchRunDetail])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (runId && isSingleRunInProgress(runStatus)) {
+      window.sessionStorage.setItem(ACTIVE_SINGLE_RUN_STORAGE_KEY, String(runId))
+      return
+    }
+    window.sessionStorage.removeItem(ACTIVE_SINGLE_RUN_STORAGE_KEY)
+  }, [runId, runStatus])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !runId) return
+    window.sessionStorage.setItem(LAST_VIEWED_SINGLE_RUN_STORAGE_KEY, String(runId))
+  }, [runId])
+
+  useEffect(() => {
+    if (!runId || isStreaming || !isSingleRunInProgress(runStatus)) return
+    let stopped = false
+    let inFlight = false
+    const poll = async () => {
+      if (stopped || inFlight) return
+      inFlight = true
+      try {
+        const detail = await fetchRunDetail(runId, { silent: true })
+        if (!detail || stopped) return
+        applyRunSnapshot(detail)
+        if (!isSingleRunInProgress(normalizeSingleRunStatus(detail.status))) {
+          void refreshHistory()
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+    void poll()
+    const timer = window.setInterval(() => {
+      void poll()
+    }, 2000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [applyRunSnapshot, fetchRunDetail, isStreaming, refreshHistory, runId, runStatus])
 
   const updateQuestion = (localId: string, updater: (current: QuestionDraft) => QuestionDraft) => {
     setQuestions((prev) => prev.map((item) => (item.localId === localId ? updater(item) : item)))
