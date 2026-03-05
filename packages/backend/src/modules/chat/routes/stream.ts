@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { Prisma } from '@prisma/client';
-import { prisma } from '../../../db';
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { prisma as defaultPrisma } from '../../../db';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../types';
 import { AuthUtils } from '../../../utils/auth';
@@ -42,9 +42,13 @@ import {
   updateStreamMetaController,
   deletePendingStreamCancelKey,
 } from '../../chat/stream-state';
-import { chatRequestBuilder } from '../services/chat-request-builder';
 import {
-  reasoningCompatibilityService,
+  chatRequestBuilder as defaultChatRequestBuilder,
+  type ChatRequestBuilder,
+} from '../services/chat-request-builder';
+import {
+  reasoningCompatibilityService as defaultReasoningCompatibilityService,
+  type ReasoningCompatibilityService,
   type AttemptTracker,
   type ReasoningProtocol,
 } from '../services/reasoning-compatibility-service';
@@ -64,26 +68,66 @@ import {
   sessionOwnershipClause,
 } from '../chat-common';
 import { createUserMessageWithQuota } from '../services/message-service';
-import { chatService, ChatServiceError } from '../../../services/chat';
-import { providerRequester } from '../services/provider-requester';
-import { nonStreamFallbackService } from '../services/non-stream-fallback-service';
-import { assistantProgressService } from '../services/assistant-progress-service';
+import { chatService as defaultChatService, ChatServiceError, type ChatService } from '../../../services/chat';
+import { providerRequester as defaultProviderRequester, type ProviderRequester } from '../services/provider-requester';
+import {
+  nonStreamFallbackService as defaultNonStreamFallbackService,
+  type NonStreamFallbackService,
+} from '../services/non-stream-fallback-service';
+import {
+  assistantProgressService as defaultAssistantProgressService,
+  type AssistantProgressService,
+} from '../services/assistant-progress-service';
 import { extractOpenAIResponsesStreamEvent } from '../../../utils/openai-responses';
 import {
-  streamUsageService,
+  streamUsageService as defaultStreamUsageService,
+  type StreamUsageService,
   computeStreamMetrics,
   resolveCompletionTokensForMetrics,
 } from '../services/stream-usage-service';
-import { streamTraceService } from '../services/stream-trace-service';
-import { streamSseService } from '../services/stream-sse-service';
-import { conversationCompressionService } from '../services/conversation-compression-service';
+import {
+  streamTraceService as defaultStreamTraceService,
+  type StreamTraceService,
+} from '../services/stream-trace-service';
+import { streamSseService as defaultStreamSseService, type StreamSseService } from '../services/stream-sse-service';
+import {
+  conversationCompressionService as defaultConversationCompressionService,
+  type ConversationCompressionService,
+} from '../services/conversation-compression-service';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
 import { GeneratedImageStorage, type GeneratedImage } from '../../../services/image-generation';
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/types';
 
-export const registerChatStreamRoutes = (router: Hono) => {
+export interface ChatStreamRoutesDeps {
+  prisma?: PrismaClient
+  chatService?: ChatService
+  chatRequestBuilder?: ChatRequestBuilder
+  reasoningCompatibilityService?: ReasoningCompatibilityService
+  providerRequester?: ProviderRequester
+  nonStreamFallbackService?: NonStreamFallbackService
+  assistantProgressService?: AssistantProgressService
+  streamUsageService?: StreamUsageService
+  streamTraceService?: StreamTraceService
+  streamSseService?: StreamSseService
+  conversationCompressionService?: ConversationCompressionService
+}
+
+export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDeps = {}) => {
+  const prisma = deps.prisma ?? defaultPrisma
+  const chatService = deps.chatService ?? defaultChatService
+  const chatRequestBuilder = deps.chatRequestBuilder ?? defaultChatRequestBuilder
+  const reasoningCompatibilityService =
+    deps.reasoningCompatibilityService ?? defaultReasoningCompatibilityService
+  const providerRequester = deps.providerRequester ?? defaultProviderRequester
+  const nonStreamFallbackService = deps.nonStreamFallbackService ?? defaultNonStreamFallbackService
+  const assistantProgressService = deps.assistantProgressService ?? defaultAssistantProgressService
+  const streamUsageService = deps.streamUsageService ?? defaultStreamUsageService
+  const streamTraceService = deps.streamTraceService ?? defaultStreamTraceService
+  const streamSseService = deps.streamSseService ?? defaultStreamSseService
+  const conversationCompressionService =
+    deps.conversationCompressionService ?? defaultConversationCompressionService
   router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
     let traceRecorder!: TaskTraceRecorder
     try {

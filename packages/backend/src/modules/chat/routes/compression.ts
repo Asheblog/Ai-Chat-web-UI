@@ -4,14 +4,25 @@ import { z } from 'zod'
 import { actorMiddleware } from '../../../middleware/auth'
 import type { Actor, ApiResponse } from '../../../types'
 import { extendAnonymousSession } from '../chat-common'
-import { chatService, ChatServiceError } from '../../../services/chat'
-import { conversationCompressionService } from '../services/conversation-compression-service'
+import { chatService as defaultChatService, ChatServiceError, type ChatService } from '../../../services/chat'
+import {
+  conversationCompressionService as defaultConversationCompressionService,
+  type ConversationCompressionService,
+} from '../services/conversation-compression-service'
 
 const updateCompressionSchema = z.object({
   expanded: z.boolean(),
 })
 
-export const registerChatCompressionRoutes = (router: Hono) => {
+export interface ChatCompressionRoutesDeps {
+  chatService?: ChatService
+  conversationCompressionService?: ConversationCompressionService
+}
+
+export const registerChatCompressionRoutes = (router: Hono, deps: ChatCompressionRoutesDeps = {}) => {
+  const chatService = deps.chatService ?? defaultChatService
+  const conversationCompressionService =
+    deps.conversationCompressionService ?? defaultConversationCompressionService
   router.patch(
     '/sessions/:sessionId/compression/:groupId',
     actorMiddleware,

@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import { artifactService } from '../services/workspace/artifact-service'
+import { artifactService as defaultArtifactService, type ArtifactService } from '../services/workspace/artifact-service'
 import { WorkspaceServiceError } from '../services/workspace/workspace-errors'
 
 const buildContentDisposition = (fileName: string) => {
@@ -12,7 +12,12 @@ const buildContentDisposition = (fileName: string) => {
   return `attachment; filename=\"${fallback}\"; filename*=UTF-8''${encoded}`
 }
 
-export const createArtifactsApi = () => {
+export interface ArtifactsApiDeps {
+  artifactService?: ArtifactService
+}
+
+export const createArtifactsApi = (deps: ArtifactsApiDeps = {}) => {
+  const artifactService = deps.artifactService ?? defaultArtifactService
   const router = new Hono()
 
   router.get('/:id/download', actorMiddleware, async (c) => {

@@ -3,13 +3,30 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { Actor, ApiResponse } from '../../../types';
-import { prisma } from '../../../db';
+import { prisma as defaultPrisma } from '../../../db';
 import { extendAnonymousSession } from '../chat-common';
-import { chatService, ChatServiceError } from '../../../services/chat';
-import { chatMessageQueryService } from '../services/message-query-service';
+import {
+  chatService as defaultChatService,
+  ChatServiceError,
+  type ChatService,
+} from '../../../services/chat';
+import {
+  chatMessageQueryService as defaultChatMessageQueryService,
+  type ChatMessageQueryService,
+} from '../services/message-query-service';
 import type { ToolLogEntry } from '../../chat/tool-logs';
+import type { PrismaClient } from '@prisma/client'
 
-export const registerChatMessageRoutes = (router: Hono) => {
+export interface ChatMessageRoutesDeps {
+  prisma?: PrismaClient
+  chatService?: ChatService
+  chatMessageQueryService?: ChatMessageQueryService
+}
+
+export const registerChatMessageRoutes = (router: Hono, deps: ChatMessageRoutesDeps = {}) => {
+  const prisma = deps.prisma ?? defaultPrisma
+  const chatService = deps.chatService ?? defaultChatService
+  const chatMessageQueryService = deps.chatMessageQueryService ?? defaultChatMessageQueryService
   router.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor;

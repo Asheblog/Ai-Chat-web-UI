@@ -1,25 +1,48 @@
 import type { Hono } from 'hono'
 import { actorMiddleware } from '../../../middleware/auth'
 import type { Actor, ApiResponse } from '../../../types'
-import { chatService, ChatServiceError } from '../../../services/chat'
-import { prisma } from '../../../db'
+import { chatService as defaultChatService, ChatServiceError, type ChatService } from '../../../services/chat'
+import { prisma as defaultPrisma } from '../../../db'
 import { extendAnonymousSession } from '../chat-common'
-import { artifactService } from '../../../services/workspace/artifact-service'
-import { workspaceService } from '../../../services/workspace/workspace-service'
+import {
+  artifactService as defaultArtifactService,
+  type ArtifactService,
+} from '../../../services/workspace/artifact-service'
+import {
+  workspaceService as defaultWorkspaceService,
+  type WorkspaceService,
+} from '../../../services/workspace/workspace-service'
 import { WorkspaceServiceError } from '../../../services/workspace/workspace-errors'
+import type { PrismaClient } from '@prisma/client'
 
-const ensureWorkspaceAccess = async (actor: Actor, sessionId: number) => {
+export interface ChatWorkspaceRoutesDeps {
+  prisma?: PrismaClient
+  chatService?: ChatService
+  artifactService?: ArtifactService
+  workspaceService?: WorkspaceService
+}
+
+const ensureWorkspaceAccess = async (
+  actor: Actor,
+  sessionId: number,
+  deps: { prisma: PrismaClient; chatService: ChatService },
+) => {
   if (actor.type === 'user' && actor.role === 'ADMIN') {
-    const exists = await prisma.chatSession.findUnique({ where: { id: sessionId }, select: { id: true } })
+    const exists = await deps.prisma.chatSession.findUnique({ where: { id: sessionId }, select: { id: true } })
     if (!exists) {
       throw new ChatServiceError('Chat session not found', 404)
     }
     return
   }
-  await chatService.ensureSessionAccess(actor, sessionId)
+  await deps.chatService.ensureSessionAccess(actor, sessionId)
 }
 
-export const registerChatWorkspaceRoutes = (router: Hono) => {
+export const registerChatWorkspaceRoutes = (router: Hono, deps: ChatWorkspaceRoutesDeps = {}) => {
+  const prisma = deps.prisma ?? defaultPrisma
+  const chatService = deps.chatService ?? defaultChatService
+  const artifactService = deps.artifactService ?? defaultArtifactService
+  const workspaceService = deps.workspaceService ?? defaultWorkspaceService
+
   router.get('/sessions/:sessionId/artifacts', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
@@ -35,7 +58,7 @@ export const registerChatWorkspaceRoutes = (router: Hono) => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid message ID' }, 400)
       }
 
-      await ensureWorkspaceAccess(actor, sessionId)
+      await ensureWorkspaceAccess(actor, sessionId, { prisma, chatService })
       const artifacts = await artifactService.listSessionArtifacts(actor, sessionId, messageId)
       await extendAnonymousSession(actor, sessionId)
 
@@ -62,7 +85,7 @@ export const registerChatWorkspaceRoutes = (router: Hono) => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
 
-      await ensureWorkspaceAccess(actor, sessionId)
+      await ensureWorkspaceAccess(actor, sessionId, { prisma, chatService })
       await artifactService.cleanupArtifactsBySession(sessionId)
       await workspaceService.destroyWorkspace(sessionId)
       await extendAnonymousSession(actor, sessionId)

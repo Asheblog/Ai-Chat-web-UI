@@ -28,7 +28,7 @@ describe('chat api factory', () => {
   it('registers chat routes', () => {
     createChatApi()
 
-    expect(registerChatStreamRoutes).toHaveBeenCalledWith(expect.anything())
-    expect(registerChatCompletionRoutes).toHaveBeenCalledWith(expect.anything())
+    expect(registerChatStreamRoutes).toHaveBeenCalledWith(expect.anything(), undefined)
+    expect(registerChatCompletionRoutes).toHaveBeenCalledWith(expect.anything(), undefined)
   })
 })

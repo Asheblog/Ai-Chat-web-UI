@@ -9,12 +9,12 @@ import type { Actor, ApiResponse } from '../../../types'
 import { BackendLogger as log } from '../../../utils/logger'
 import { sessionOwnershipClause } from '../chat-common'
 import {
-  titleSummaryService,
+  titleSummaryService as defaultTitleSummaryService,
   TitleSummaryServiceError,
   type TitleSummaryService,
   type TitleSummaryConfig,
 } from '../services/title-summary-service'
-import { SettingsService } from '../../../services/settings/settings-service'
+import { SettingsService, settingsService as defaultSettingsService } from '../../../services/settings'
 
 const titleSummarySchema = z.object({
   content: z.string().min(1).max(5000),
@@ -31,8 +31,8 @@ export const registerTitleSummaryRoutes = (
   deps: TitleSummaryRoutesDeps = {},
 ) => {
   const prisma = deps.prisma ?? defaultPrisma
-  const service = deps.service ?? titleSummaryService
-  const settingsService = deps.settingsService ?? new SettingsService()
+  const service = deps.service ?? defaultTitleSummaryService
+  const settingsService = deps.settingsService ?? defaultSettingsService
 
   router.post(
     '/sessions/:sessionId/summarize-title',

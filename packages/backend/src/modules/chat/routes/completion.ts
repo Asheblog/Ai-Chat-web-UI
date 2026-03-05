@@ -19,20 +19,28 @@ import {
 import { createUserMessageWithQuota } from '../services/message-service';
 import {
   ChatCompletionServiceError,
-  nonStreamChatService,
+  nonStreamChatService as defaultNonStreamChatService,
   type NonStreamChatService,
 } from '../services/non-stream-chat-service';
-import { conversationCompressionService } from '../services/conversation-compression-service';
+import {
+  conversationCompressionService as defaultConversationCompressionService,
+  type ConversationCompressionService,
+} from '../services/conversation-compression-service';
+
+export interface ChatCompletionRoutesDeps {
+  prisma?: PrismaClient
+  nonStreamService?: NonStreamChatService
+  conversationCompressionService?: ConversationCompressionService
+}
 
 export const registerChatCompletionRoutes = (
   router: Hono,
-  deps: {
-    prisma?: PrismaClient
-    nonStreamService?: NonStreamChatService
-  } = {},
+  deps: ChatCompletionRoutesDeps = {},
 ) => {
   const prisma = deps.prisma ?? defaultPrisma
-  const nonStreamService = deps.nonStreamService ?? nonStreamChatService
+  const nonStreamService = deps.nonStreamService ?? defaultNonStreamChatService
+  const conversationCompressionService =
+    deps.conversationCompressionService ?? defaultConversationCompressionService
   router.post('/completion', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
     let traceRecorder: TaskTraceRecorder | null = null
     let traceStatus: TaskTraceStatus = 'running'

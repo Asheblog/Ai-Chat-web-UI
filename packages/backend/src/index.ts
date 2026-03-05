@@ -10,7 +10,7 @@ import { createAppContainer } from './container/app-container';
 import { createAuthApi } from './api/auth';
 import { createUsersApi } from './api/users';
 import { createSessionsApi } from './api/sessions';
-import chat from './api/chat';
+import { createChatApi } from './api/chat';
 import { createSettingsApi } from './api/settings';
 import { createConnectionsApi } from './api/connections';
 import { createCatalogApi } from './api/catalog';
@@ -29,6 +29,9 @@ import { createSkillsApi } from './api/skills';
 import { createArtifactsApi } from './api/artifacts';
 import { createPromptTemplatesApi } from './api/prompt-templates';
 import { workspaceCleanupService } from './services/workspace/workspace-cleanup-service';
+import { battleService } from './services/battle/battle-service';
+import { artifactService } from './services/workspace/artifact-service';
+import { promptTemplateService } from './services/prompt-templates';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -92,14 +95,47 @@ app.route(
 );
 app.route('/api/catalog', createCatalogApi({ modelCatalogService: container.modelCatalogService }));
 app.route('/api/sessions', createSessionsApi({ sessionService: container.sessionService }));
-app.route('/api/chat', chat);
+app.route('/api/chat', createChatApi({
+  messageRoutes: {
+    prisma: appContext.prisma,
+    chatService: container.chatService,
+  },
+  compressionRoutes: {
+    chatService: container.chatService,
+  },
+  attachmentRoutes: {
+    prisma: appContext.prisma,
+  },
+  streamRoutes: {
+    prisma: appContext.prisma,
+    chatService: container.chatService,
+  },
+  completionRoutes: {
+    prisma: appContext.prisma,
+  },
+  controlRoutes: {
+    prisma: appContext.prisma,
+  },
+  usageRoutes: {
+    prisma: appContext.prisma,
+    chatService: container.chatService,
+  },
+  titleSummaryRoutes: {
+    prisma: appContext.prisma,
+    settingsService: container.settingsService,
+  },
+  workspaceRoutes: {
+    prisma: appContext.prisma,
+    chatService: container.chatService,
+  },
+}));
 app.route('/api/settings', createSettingsApi({ settingsFacade: container.settingsFacade }));
 app.route('/api/task-trace', createTaskTraceApi({
   taskTraceService: container.taskTraceService,
   taskTraceFileService: container.taskTraceFileService,
 }));
 app.route('/api/shares', createSharesApi({ shareService: container.shareService }));
-app.route('/api/battle', createBattleApi());
+app.route('/api/battle', createBattleApi({ battleService }));
 
 // 文档路由（RAG 服务状态在请求时动态检查）
 app.route('/api/documents', createDocumentsApi());
@@ -110,8 +146,8 @@ app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 // 系统日志路由
 app.route('/api/system-logs', createSystemLogsApi());
 app.route('/api/skills', createSkillsApi());
-app.route('/api/artifacts', createArtifactsApi());
-app.route('/api/prompt-templates', createPromptTemplatesApi());
+app.route('/api/artifacts', createArtifactsApi({ artifactService }));
+app.route('/api/prompt-templates', createPromptTemplatesApi({ promptTemplateService }));
 
 app.route(
   '/v1',
