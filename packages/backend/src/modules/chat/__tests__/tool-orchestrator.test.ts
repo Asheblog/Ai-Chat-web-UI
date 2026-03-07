@@ -180,4 +180,35 @@ describe('tool-orchestrator', () => {
     expect(result.content).toBe('done')
     expect(requestCount).toBe(3)
   })
+
+  it('retries current turn when onTurnError asks for retry', async () => {
+    let requestCount = 0
+    const result = await runToolOrchestration({
+      provider: 'openai',
+      requestData: {},
+      initialMessages: [{ role: 'user', content: 'hello' }],
+      toolDefinitions: [],
+      allowedToolNames: new Set<string>(),
+      maxIterations: 1,
+      stream: false,
+      requestTurn: async () => {
+        requestCount += 1
+        if (requestCount === 1) {
+          return {
+            ok: false,
+            status: 400,
+            text: async () => 'maximum context length is 1000 tokens, however you requested 2500 tokens',
+          } as any
+        }
+        return buildNonStreamResponseLike('retry success')
+      },
+      onTurnError: async (params) =>
+        String((params.error as any)?.message || '').includes('maximum context length'),
+      handleToolCall: async () => null,
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.content).toBe('retry success')
+    expect(requestCount).toBe(2)
+  })
 })

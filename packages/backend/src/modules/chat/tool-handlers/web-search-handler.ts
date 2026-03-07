@@ -40,6 +40,12 @@ const DEFAULT_AUTO_READ_TIMEOUT_MS = 18000
 const DEFAULT_AUTO_READ_MAX_CONTENT_LENGTH = 24000
 const DEFAULT_AUTO_READ_PARALLELISM = 2
 const DEFAULT_MODEL_EVIDENCE_CHARS = 2200
+const DEFAULT_MODEL_RESULT_HITS = 5
+const DEFAULT_MODEL_TASK_RESULTS = 6
+const DEFAULT_MODEL_SNIPPET_CHARS = 360
+const DEFAULT_MODEL_SUMMARY_CHARS = 3200
+const DEFAULT_MODEL_EVIDENCE_ITEMS = 2
+const DEFAULT_MODEL_EVIDENCE_ITEM_CHARS = 900
 const DEFAULT_PARALLEL_MAX_ENGINES = 3
 const DEFAULT_PARALLEL_MAX_QUERIES = 2
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12000
@@ -272,6 +278,42 @@ const buildSummaryForModel = (
 
   return `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
 }
+
+const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
+  hits.slice(0, DEFAULT_MODEL_RESULT_HITS).map((hit) => ({
+    title: hit.title,
+    url: hit.url,
+    snippet: truncateText(hit.snippet || hit.content || '', DEFAULT_MODEL_SNIPPET_CHARS),
+    engine: hit.engine,
+    rank: hit.rank,
+    sourceEngines: Array.isArray(hit.sourceEngines) ? hit.sourceEngines.slice(0, 3) : undefined,
+  }))
+
+const slimTaskResultsForModel = (tasks: Array<{ task: { engine: string; query: string; queryLanguage: string }; status: 'success' | 'error'; hits: unknown[]; error?: string }>) =>
+  tasks.slice(0, DEFAULT_MODEL_TASK_RESULTS).map((item) => ({
+    engine: item.task.engine,
+    query: item.task.query,
+    queryLanguage: item.task.queryLanguage,
+    status: item.status,
+    hitsCount: Array.isArray(item.hits) ? item.hits.length : 0,
+    error: item.error,
+  }))
+
+const slimEvidenceForModel = (items: AutoReadEvidenceItem[]) =>
+  items.slice(0, DEFAULT_MODEL_EVIDENCE_ITEMS).map((item) => ({
+    url: item.url,
+    title: item.title,
+    excerpt: item.excerpt ? truncateText(item.excerpt, DEFAULT_MODEL_SNIPPET_CHARS) : undefined,
+    content: item.content ? truncateText(item.content, DEFAULT_MODEL_EVIDENCE_ITEM_CHARS) : undefined,
+    siteName: item.siteName,
+    byline: item.byline,
+    wordCount: item.wordCount,
+    error: item.error,
+    errorCode: item.errorCode,
+    httpStatus: item.httpStatus,
+    fallbackUsed: item.fallbackUsed,
+    rank: item.rank,
+  }))
 
 async function mapWithConcurrency<TItem, TResult>(
   items: TItem[],
@@ -728,10 +770,10 @@ export class WebSearchToolHandler implements IToolHandler {
             query,
             expandedQueries,
             engines: activeEngines,
-            hits,
-            taskResults: searchResult.tasks,
-            summary,
-            autoReadEvidence,
+            hits: slimHitsForModel(hits),
+            taskResults: slimTaskResultsForModel(searchResult.tasks),
+            summary: truncateText(summary, DEFAULT_MODEL_SUMMARY_CHARS),
+            autoReadEvidence: slimEvidenceForModel(autoReadEvidence),
             taskStats: {
               total: plannedSearchTaskCount,
               succeeded: taskSucceeded,

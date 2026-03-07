@@ -34,6 +34,7 @@ import {
   buildToolRequest,
 } from './tool-protocol';
 import { runToolOrchestration } from './tool-orchestrator';
+import { guardToolLoopMessages } from './services/tool-loop-context-guard';
 import {
   type AgentWebSearchConfig,
   type AgentPythonToolConfig,
@@ -628,6 +629,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let aiResponseContent = '';
       let reasoningBuffer = '';
       let providerUsageSeen = false;
+      let contextLengthRetryCount = 0;
 
       try {
         const orchestration = await runToolOrchestration({
@@ -678,6 +680,22 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             safeEnqueue({ type: 'usage', usage });
           },
           requestTurn: async ({ schema, messages, iteration }) => {
+            const guardResult = await guardToolLoopMessages({
+              messages,
+              contextLimit,
+              mode: 'normal',
+            });
+            if (guardResult.changed) {
+              messages.splice(0, messages.length, ...guardResult.messages);
+              traceRecorder.log('agent:tool_context_guard', {
+                mode: 'normal',
+                iteration,
+                beforeTokens: guardResult.beforeTokens,
+                afterTokens: guardResult.afterTokens,
+                targetTokens: guardResult.targetTokens,
+                messageCount: messages.length,
+              });
+            }
             const response = await callProvider(messages, schema, iteration);
             return {
               response,
@@ -686,6 +704,35 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 setStreamController(null);
               },
             };
+          },
+          onTurnError: async ({ error, iteration, messages }) => {
+            const parsed = parseApiError(error);
+            if (parsed.type !== 'context_length') {
+              return false;
+            }
+            if (contextLengthRetryCount >= 1) {
+              return false;
+            }
+            const guardResult = await guardToolLoopMessages({
+              messages,
+              contextLimit,
+              mode: 'aggressive',
+            });
+            if (!guardResult.changed) {
+              return false;
+            }
+            contextLengthRetryCount += 1;
+            messages.splice(0, messages.length, ...guardResult.messages);
+            traceRecorder.log('agent:tool_context_guard_retry', {
+              mode: 'aggressive',
+              iteration,
+              retryCount: contextLengthRetryCount,
+              beforeTokens: guardResult.beforeTokens,
+              afterTokens: guardResult.afterTokens,
+              targetTokens: guardResult.targetTokens,
+              reason: parsed.message,
+            });
+            return true;
           },
           handleToolCall: async (toolName, toolCall, args) => {
             if (!toolName || !allowedToolNames.has(toolName)) return null;

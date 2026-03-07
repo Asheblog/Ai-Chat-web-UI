@@ -87,6 +87,12 @@ export interface ToolOrchestratorParams {
   onUsage?: (usage: Record<string, any>) => MaybePromise<void>
   onStreamChunk?: () => MaybePromise<void>
   onFirstResponseEvent?: () => MaybePromise<void>
+  onTurnError?: (params: {
+    error: unknown
+    schema: ToolSchema
+    iteration: number
+    messages: any[]
+  }) => MaybePromise<boolean>
   includeReasoningInToolMessage?: boolean
   emptyContentErrorMessage?: string
 }
@@ -124,6 +130,7 @@ export async function runToolOrchestration(
       onUsage: params.onUsage,
       onStreamChunk: params.onStreamChunk,
       onFirstResponseEvent: params.onFirstResponseEvent,
+      onTurnError: params.onTurnError,
       checkAbort: params.checkAbort,
     })
 
@@ -266,6 +273,12 @@ async function executeTurnWithFallback(params: {
   onUsage?: (usage: Record<string, any>) => MaybePromise<void>
   onStreamChunk?: () => MaybePromise<void>
   onFirstResponseEvent?: () => MaybePromise<void>
+  onTurnError?: (params: {
+    error: unknown
+    schema: ToolSchema
+    iteration: number
+    messages: any[]
+  }) => MaybePromise<boolean>
   checkAbort?: () => void
 }): Promise<{ schema: ToolSchema; parsed: ParsedToolTurn }> {
   let activeSchema = params.schema
@@ -305,6 +318,17 @@ async function executeTurnWithFallback(params: {
         error,
       })
       if (!fallbackSchema) {
+        if (params.onTurnError) {
+          const shouldRetry = await params.onTurnError({
+            error,
+            schema: activeSchema,
+            iteration: params.iteration,
+            messages: params.messages,
+          })
+          if (shouldRetry) {
+            continue
+          }
+        }
         throw error
       }
       activeSchema = fallbackSchema
