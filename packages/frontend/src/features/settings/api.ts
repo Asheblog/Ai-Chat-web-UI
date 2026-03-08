@@ -275,6 +275,7 @@ export const getSystemSettings = async () => {
     return typeof parsed === 'number' ? Math.max(1, Math.min(4, parsed)) : 2
   })()
   const pythonToolEnable = Boolean(raw.python_tool_enable ?? false)
+  const chatDynamicSkillRuntimeEnabled = Boolean(raw.chat_dynamic_skill_runtime_enabled ?? false)
   const pythonToolTimeoutMs = (() => {
     const v = raw.python_tool_timeout_ms
     if (typeof v === 'number') return Math.max(1000, Math.min(60000, v))
@@ -440,6 +441,7 @@ export const getSystemSettings = async () => {
       webSearchAutoBilingualMode,
       webSearchAutoReadParallelism,
       pythonToolEnable,
+      chatDynamicSkillRuntimeEnabled,
       pythonToolTimeoutMs,
       pythonToolMaxOutputChars,
       pythonToolMaxSourceChars,
@@ -617,6 +619,9 @@ export const updateSystemSettings = async (
     patch.webSearchAutoReadParallelism = rest.webSearchAutoReadParallelism
   }
   if (typeof rest.pythonToolEnable === 'boolean') patch.pythonToolEnable = rest.pythonToolEnable
+  if (typeof rest.chatDynamicSkillRuntimeEnabled === 'boolean') {
+    patch.chatDynamicSkillRuntimeEnabled = rest.chatDynamicSkillRuntimeEnabled
+  }
   if (typeof rest.pythonToolTimeoutMs === 'number') patch.pythonToolTimeoutMs = rest.pythonToolTimeoutMs
   if (typeof rest.pythonToolMaxOutputChars === 'number') patch.pythonToolMaxOutputChars = rest.pythonToolMaxOutputChars
   if (typeof rest.pythonToolMaxSourceChars === 'number') patch.pythonToolMaxSourceChars = rest.pythonToolMaxSourceChars

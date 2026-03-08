@@ -79,6 +79,7 @@ export type AgentResponseParams = {
   urlReaderConfig: AgentUrlReaderConfig;
   workspaceToolConfig: AgentWorkspaceToolConfig;
   agentMaxToolIterations: number;
+  allowDynamicRuntime?: boolean;
   toolFlags: {
     webSearch: boolean;
     python: boolean;
@@ -127,6 +128,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     urlReaderConfig,
     workspaceToolConfig,
     agentMaxToolIterations,
+    allowDynamicRuntime,
     toolFlags,
     requestedSkills,
     provider,
@@ -545,7 +547,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             ? { enabled: true, knowledgeBaseIds, ragService }
             : null,
         },
-        allowDynamicRuntime: false,
+        allowDynamicRuntime: allowDynamicRuntime === true,
       });
       const toolDefinitions = toolRegistry.getToolDefinitions();
       const allowedToolNames = toolRegistry.getAllowedToolNames();

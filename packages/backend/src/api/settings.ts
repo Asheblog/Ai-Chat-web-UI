@@ -174,6 +174,7 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     web_search_auto_read_parallelism: z.number().int().min(1).max(4).optional(),
     agent_max_tool_iterations: z.number().int().min(0).max(20).optional(),
     python_tool_enable: z.boolean().optional(),
+    chat_dynamic_skill_runtime_enabled: z.boolean().optional(),
     python_tool_timeout_ms: z.number().int().min(1000).max(60000).optional(),
     python_tool_max_output_chars: z.number().int().min(256).max(20000).optional(),
     python_tool_max_source_chars: z.number().int().min(256).max(20000).optional(),

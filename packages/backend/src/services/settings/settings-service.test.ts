@@ -93,6 +93,7 @@ describe('SettingsService', () => {
       registration_enabled: true,
       anonymous_daily_quota: 50,
       anonymous_retention_days: 4,
+      chat_dynamic_skill_runtime_enabled: true,
       reasoning_max_output_tokens_default: 64000,
       reset_quota_cache: true,
     })
@@ -106,6 +107,12 @@ describe('SettingsService', () => {
       expect.objectContaining({
         where: { key: 'anonymous_daily_quota' },
         update: { value: '50' },
+      }),
+    )
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'chat_dynamic_skill_runtime_enabled' },
+        update: { value: 'true' },
       }),
     )
     expect(invalidateQuotaPolicyCache).toHaveBeenCalled()

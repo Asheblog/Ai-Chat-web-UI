@@ -105,6 +105,7 @@ export function SystemWebSearchPage() {
   const [autoBilingualMode, setAutoBilingualMode] = useState<WebSearchBilingualMode>("conditional")
   const [autoReadParallelism, setAutoReadParallelism] = useState(2)
   const [pythonEnabled, setPythonEnabled] = useState(false)
+  const [chatDynamicSkillRuntimeEnabled, setChatDynamicSkillRuntimeEnabled] = useState(false)
   const [pythonTimeout, setPythonTimeout] = useState(8000)
   const [pythonMaxOutput, setPythonMaxOutput] = useState(4000)
   const [pythonMaxSource, setPythonMaxSource] = useState(4000)
@@ -140,6 +141,7 @@ export function SystemWebSearchPage() {
     setAutoBilingualMode(systemSettings.webSearchAutoBilingualMode ?? "conditional")
     setAutoReadParallelism(Number(systemSettings.webSearchAutoReadParallelism ?? 2))
     setPythonEnabled(Boolean(systemSettings.pythonToolEnable ?? false))
+    setChatDynamicSkillRuntimeEnabled(Boolean(systemSettings.chatDynamicSkillRuntimeEnabled ?? false))
     setPythonTimeout(Number(systemSettings.pythonToolTimeoutMs ?? 8000))
     setPythonMaxOutput(Number(systemSettings.pythonToolMaxOutputChars ?? 4000))
     setPythonMaxSource(Number(systemSettings.pythonToolMaxSourceChars ?? 4000))
@@ -227,6 +229,8 @@ export function SystemWebSearchPage() {
     autoBilingualMode !== (systemSettings.webSearchAutoBilingualMode ?? "conditional") ||
     autoReadParallelism !== Number(systemSettings.webSearchAutoReadParallelism ?? 2) ||
     pythonEnabled !== Boolean(systemSettings.pythonToolEnable ?? false) ||
+    chatDynamicSkillRuntimeEnabled !==
+      Boolean(systemSettings.chatDynamicSkillRuntimeEnabled ?? false) ||
     pythonTimeout !== Number(systemSettings.pythonToolTimeoutMs ?? 8000) ||
     pythonMaxOutput !== Number(systemSettings.pythonToolMaxOutputChars ?? 4000) ||
     pythonMaxSource !== Number(systemSettings.pythonToolMaxSourceChars ?? 4000) ||
@@ -307,6 +311,7 @@ export function SystemWebSearchPage() {
         Math.min(autoReadParallelismRange.max, Math.round(autoReadParallelism)),
       ),
       pythonToolEnable: pythonEnabled,
+      chatDynamicSkillRuntimeEnabled,
       pythonToolTimeoutMs: Math.max(
         pythonTimeoutRange.min,
         Math.min(pythonTimeoutRange.max, Math.round(pythonTimeout)),
@@ -723,6 +728,18 @@ export function SystemWebSearchPage() {
             </p>
           </div>
           <Switch checked={pythonEnabled} onCheckedChange={(v) => setPythonEnabled(!!v)} />
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-300/70 bg-amber-50/50 px-3 py-2 dark:border-amber-500/40 dark:bg-amber-950/30">
+          <div>
+            <p className="text-sm font-medium">启用聊天侧第三方动态 Skill Runtime</p>
+            <p className="text-xs text-muted-foreground">
+              默认关闭。开启后，聊天可直接调度已安装并绑定的第三方 Skill；建议配合审批与审计策略。
+            </p>
+          </div>
+          <Switch
+            checked={chatDynamicSkillRuntimeEnabled}
+            onCheckedChange={(v) => setChatDynamicSkillRuntimeEnabled(!!v)}
+          />
         </div>
         <p className="text-xs text-muted-foreground">
           Python 解释器由受管运行环境统一提供（`/app/data/python-runtime/venv`），不再支持在此处自定义命令参数。

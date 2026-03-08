@@ -300,6 +300,7 @@ describe("系统设置页面", () => {
           webSearchAutoBilingual: true,
           webSearchAutoBilingualMode: "conditional",
           webSearchAutoReadParallelism: 2,
+          chatDynamicSkillRuntimeEnabled: false,
           webSearchApiKeyTavily: "",
         }),
       )

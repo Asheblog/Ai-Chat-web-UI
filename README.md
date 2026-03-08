@@ -280,7 +280,7 @@ npm run start:dev
 
 - 聊天/Battle 请求字段统一为 `skills`，旧 `features` 已移除
 - 旧主机执行配置 `python_tool_command`、`python_tool_args` 已下线
-- 聊天侧动态第三方 Skill runtime 已禁用，请改用 workspace 工具链
+- 聊天侧动态第三方 Skill runtime 默认禁用；可在系统设置开启（建议同时启用审批/审计）
 
 请求示例：
 

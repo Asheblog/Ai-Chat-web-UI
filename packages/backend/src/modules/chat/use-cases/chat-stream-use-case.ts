@@ -580,9 +580,16 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH,
         ])
       const dynamicSkillRequestedRaw = Array.from(requestedSkillSet).some((slug) => !builtinSkillSlugs.has(slug));
-      const dynamicSkillRequested = false;
-      const dynamicSkillDisabledMessage = '聊天侧动态 Skill 运行时已迁移，请使用 workspace 工具链（python_runner / workspace_*）';
-      if (dynamicSkillRequestedRaw) {
+      const dynamicSkillRuntimeEnabled =
+        (sysMap.chat_dynamic_skill_runtime_enabled ||
+          process.env.CHAT_DYNAMIC_SKILL_RUNTIME_ENABLED ||
+          'false')
+          .toString()
+          .toLowerCase() === 'true';
+      const dynamicSkillRequested = dynamicSkillRequestedRaw && dynamicSkillRuntimeEnabled;
+      const dynamicSkillDisabledMessage =
+        '聊天侧第三方动态 Skill Runtime 当前关闭，请在系统设置中启用“聊天侧第三方动态 Skill Runtime”后重试。';
+      if (dynamicSkillRequestedRaw && !dynamicSkillRuntimeEnabled) {
         log.warn('[chat stream] dynamic skill runtime disabled in chat route', {
           sessionId,
           actor: actor.identifier,
@@ -591,6 +598,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       }
       if (
         dynamicSkillRequestedRaw &&
+        !dynamicSkillRuntimeEnabled &&
         !agentWebSearchActive &&
         !pythonToolActive &&
         !workspaceToolsActive &&
@@ -743,6 +751,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             document: documentToolsActive,
             knowledgeBase: knowledgeBaseToolsActive,
           },
+          allowDynamicRuntime: dynamicSkillRuntimeEnabled,
           provider,
           baseUrl,
           authHeader,

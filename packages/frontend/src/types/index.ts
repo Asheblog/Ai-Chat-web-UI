@@ -372,6 +372,7 @@ export interface SystemSettings {
   webSearchAutoBilingualMode?: WebSearchBilingualMode;
   webSearchAutoReadParallelism?: number;
   pythonToolEnable?: boolean;
+  chatDynamicSkillRuntimeEnabled?: boolean;
   pythonToolTimeoutMs?: number;
   pythonToolMaxOutputChars?: number;
   pythonToolMaxSourceChars?: number;

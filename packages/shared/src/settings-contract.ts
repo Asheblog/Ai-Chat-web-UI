@@ -12,6 +12,7 @@ export const SYSTEM_SETTINGS_FIELD_MAP = {
   battleUserDailyQuota: 'battle_user_daily_quota',
   brandText: 'brand_text',
   chatImageRetentionDays: 'chat_image_retention_days',
+  chatDynamicSkillRuntimeEnabled: 'chat_dynamic_skill_runtime_enabled',
   chatMaxConcurrentStreams: 'chat_max_concurrent_streams',
   chatSystemPrompt: 'chat_system_prompt',
   contextCompressionEnabled: 'context_compression_enabled',
