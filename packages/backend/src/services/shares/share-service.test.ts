@@ -49,8 +49,35 @@ describe('ShareService', () => {
         role: 'assistant',
         content: 'Hello',
         reasoning: null,
+        toolLogsJson: JSON.stringify([
+          {
+            id: 'tool-1',
+            tool: 'web_search',
+            stage: 'result',
+            query: 'hello',
+            createdAt: Date.now(),
+            hits: [
+              {
+                title: 'Web Result',
+                url: 'https://example.com',
+                imageUrl: 'https://example.com/cover.png',
+              },
+            ],
+          },
+        ]),
         createdAt: baseDate,
-        attachments: [],
+        attachments: [{ relativePath: '/img/a.png' }],
+        generatedImages: [
+          {
+            url: 'https://cdn.example.com/generated/1.png',
+            storagePath: null,
+            base64: null,
+            mime: 'image/png',
+            width: 640,
+            height: 480,
+            revisedPrompt: 'generated-1',
+          },
+        ],
       },
     ])
     prisma.systemSetting.findUnique.mockResolvedValue(null)
@@ -83,8 +110,48 @@ describe('ShareService', () => {
         }),
       }),
     )
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          generatedImages: expect.objectContaining({
+            select: expect.any(Object),
+          }),
+        }),
+      }),
+    )
+    const createPayload = prisma.chatShare.create.mock.calls[0]?.[0]
+    const persistedPayload = JSON.parse(createPayload?.data?.payloadJson ?? '{}') as any
+    expect(persistedPayload?.messages?.[0]?.richPayload).toMatchObject({ layout: 'side-by-side' })
+    expect(persistedPayload?.messages?.[0]?.richPayload?.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Hello' })]),
+    )
+    expect(persistedPayload?.messages?.[0]?.richPayload?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'image',
+          source: 'attachment',
+          url: expect.stringContaining('/img/a.png'),
+        }),
+        expect.objectContaining({
+          type: 'image',
+          source: 'generated',
+          url: 'https://cdn.example.com/generated/1.png',
+        }),
+        expect.objectContaining({
+          type: 'image',
+          source: 'external',
+          url: 'https://example.com/cover.png',
+          sourceUrl: 'https://example.com',
+        }),
+      ]),
+    )
     expect(result.title).toBe('Custom Title')
     expect(result.messageCount).toBe(1)
+    const resultRichPayload = (result.messages[0] as any).richPayload
+    expect(resultRichPayload).toMatchObject({ layout: 'side-by-side' })
+    expect(resultRichPayload.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Hello' })]),
+    )
   })
 
   it('lists shares with pagination metadata', async () => {

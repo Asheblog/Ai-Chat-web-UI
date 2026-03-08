@@ -158,4 +158,56 @@ describe("ShareViewer", () => {
 
     expect(screen.getByText("AIChat")).toBeInTheDocument()
   })
+
+  it("renders assistant rich payload in evidence split mode", () => {
+    const now = new Date().toISOString()
+    const initialMessages = [
+      {
+        id: 1,
+        role: "assistant" as const,
+        content: "默认文本",
+        createdAt: now,
+        richPayload: {
+          layout: "side-by-side",
+          parts: [
+            { type: "text", text: "联网检索结论 [图1]", format: "markdown" },
+            {
+              type: "image",
+              url: "https://example.com/evidence.png",
+              source: "external",
+              sourceKind: "web",
+              title: "证据图 1",
+              sourceUrl: "https://example.com/source",
+              confidence: "high",
+              refId: "img-1",
+            },
+          ],
+        },
+      },
+    ]
+
+    render(
+      <ShareViewer
+        share={{
+          id: 1,
+          sessionId: 10,
+          token: "abc",
+          title: "证据模式",
+          sessionTitle: "会话",
+          messageCount: 1,
+          createdAt: now,
+          expiresAt: null,
+          revokedAt: null,
+          messages: initialMessages as any,
+        }}
+        token="abc"
+        initialMessages={initialMessages as any}
+        initialPagination={{ page: 1, limit: 50, total: 1, totalPages: 1 }}
+      />,
+    )
+
+    const renderer = screen.getByTestId("rich-message-renderer")
+    expect(renderer).toHaveAttribute("data-layout", "side-by-side")
+    expect(screen.getByText("证据图 1")).toBeInTheDocument()
+  })
 })

@@ -45,9 +45,24 @@ const buildService = () => {
 }
 
 describe('ChatMessageQueryService', () => {
-  it('lists messages with normalized images and tool events', async () => {
+  it('lists messages with normalized images, tool events and rich payload', async () => {
     const { prisma, service, actor, request, resolveChatImageUrls, parseToolLogsJson, determineChatImageBaseUrl } =
       buildService()
+    parseToolLogsJson.mockReturnValue([
+      {
+        id: 'tool-1',
+        tool: 'web_search',
+        stage: 'result',
+        createdAt: Date.now(),
+        hits: [
+          {
+            title: 'Result A',
+            url: 'https://example.com/a',
+            imageUrl: 'https://example.com/a.png',
+          },
+        ],
+      },
+    ])
 
     prisma.message.findMany.mockResolvedValue([
       {
@@ -62,7 +77,22 @@ describe('ChatMessageQueryService', () => {
         clientMessageId: 'c1',
         reasoning: null,
         reasoningDurationSeconds: null,
-        toolLogsJson: '{"events":[]}',
+        toolLogsJson: JSON.stringify([
+          {
+            id: 'tool-1',
+            tool: 'web_search',
+            stage: 'result',
+            query: 'result-a',
+            createdAt: Date.now(),
+            hits: [
+              {
+                title: 'Result A',
+                url: 'https://example.com/a',
+                imageUrl: 'https://example.com/a.png',
+              },
+            ],
+          },
+        ]),
         createdAt: new Date('2024-01-01T00:00:00Z'),
         updatedAt: new Date('2024-01-01T00:00:00Z'),
         streamStatus: null,
@@ -70,6 +100,17 @@ describe('ChatMessageQueryService', () => {
         streamReasoning: null,
         streamError: null,
         usageMetrics: [],
+        generatedImages: [
+          {
+            url: 'https://cdn.example.com/generated/a.png',
+            storagePath: null,
+            base64: null,
+            mime: 'image/png',
+            width: 1024,
+            height: 768,
+            revisedPrompt: 'generated',
+          },
+        ],
       },
     ])
     prisma.messageGroup.findMany.mockResolvedValue([])
@@ -95,7 +136,39 @@ describe('ChatMessageQueryService', () => {
     expect(resolveChatImageUrls).toHaveBeenCalledWith(['/img/a.png'], 'https://cdn.example.com')
     expect(parseToolLogsJson).toHaveBeenCalled()
     expect(result.messages[0].images).toEqual(['https://cdn.example.com/img/a.png'])
-    expect(result.messages[0].toolEvents).toEqual([{ level: 'info', message: 'tool-event' }])
+    expect(result.messages[0].toolEvents).toEqual([
+      expect.objectContaining({
+        id: 'tool-1',
+        tool: 'web_search',
+      }),
+    ])
+    const richPayload = (result.messages[0] as any).richPayload
+    expect(richPayload).toBeTruthy()
+    expect(richPayload).toMatchObject({ layout: 'side-by-side' })
+    expect(richPayload.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'hi' })]),
+    )
+    expect(richPayload?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'image',
+          source: 'attachment',
+          url: 'https://cdn.example.com/img/a.png',
+        }),
+        expect.objectContaining({
+          type: 'image',
+          source: 'generated',
+          url: 'https://cdn.example.com/generated/a.png',
+        }),
+        expect.objectContaining({
+          type: 'image',
+          source: 'external',
+          url: 'https://example.com/a.png',
+          sourceUrl: 'https://example.com/a',
+          title: 'Result A',
+        }),
+      ]),
+    )
     expect(result.pagination).toEqual({ page: 1, limit: 2, total: 1, totalPages: 1 })
   })
 

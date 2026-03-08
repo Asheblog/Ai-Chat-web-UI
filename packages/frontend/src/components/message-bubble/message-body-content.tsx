@@ -3,30 +3,69 @@
 import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import { ChevronDown } from 'lucide-react'
-import type { MessageMeta } from '@/types'
+import type { GeneratedImage, MessageMeta, RichMessagePayload } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { cn } from '@/lib/utils'
 import { ImageLightbox, useImageLightbox } from '@/components/ui/image-lightbox'
+import { RichMessageRenderer } from '@/components/message-content/rich-message-renderer'
 
 // 折叠阈值：超过此行数时自动折叠
 const COLLAPSE_LINE_THRESHOLD = 8
 // 折叠后显示的行数
 const COLLAPSED_VISIBLE_LINES = 4
 
-// 检测生成图片的 markdown 模式
-// 格式：![Generated Image N](data:image/...;base64,...)
-const GENERATED_IMAGE_PATTERN = /!\[Generated Image \d+\]\((data:image\/[^;]+;base64,[^)]+)\)/g
-
-/**
- * 从 markdown 内容中提取生成的图片 URL
- * 用于高效显示大型 base64 图片，避免通过复杂的 markdown 渲染管道
- */
-const extractGeneratedImages = (content: string): string[] => {
-  if (!content || !content.includes('![Generated Image')) {
-    return []
+const resolveGeneratedImageUrl = (image: GeneratedImage): string | null => {
+  if (typeof image?.url === 'string' && image.url.trim().length > 0) {
+    return image.url.trim()
   }
-  const matches = content.matchAll(GENERATED_IMAGE_PATTERN)
-  return Array.from(matches).map((m) => m[1])
+  if (typeof image?.base64 === 'string' && image.base64.trim().length > 0) {
+    const mime = image.mime || 'image/png'
+    return `data:${mime};base64,${image.base64}`
+  }
+  return null
+}
+
+const buildAssistantRichPayload = (meta: MessageMeta, content: string): RichMessagePayload | null => {
+  const payload = meta.richPayload
+  if (payload && Array.isArray(payload.parts) && payload.parts.length > 0) {
+    return payload
+  }
+  const generated = Array.isArray(meta.generatedImages) ? meta.generatedImages : []
+  if (generated.length === 0) {
+    return null
+  }
+
+  const text = typeof content === 'string' ? content : ''
+  const hasText = text.trim().length > 0
+  const imageParts = generated
+    .map((image, index) => {
+      const url = resolveGeneratedImageUrl(image)
+      if (!url) return null
+      return {
+        type: 'image' as const,
+        url,
+        source: 'generated' as const,
+        sourceKind: 'generated' as const,
+        title: image.revisedPrompt,
+        width: image.width ?? null,
+        height: image.height ?? null,
+        alt: image.revisedPrompt || `AI 生成图片 ${index + 1}`,
+        refId: `img-${index + 1}`,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+
+  if (imageParts.length === 0) return null
+
+  return {
+    layout: hasText ? 'side-by-side' : 'stack',
+    parts: [
+      ...(hasText
+        ? [{ type: 'text' as const, text, format: 'markdown' as const }]
+        : []),
+      ...imageParts,
+    ],
+  }
 }
 
 interface MessageBodyContentProps {
@@ -52,10 +91,10 @@ export function MessageBodyContent({
 }: MessageBodyContentProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lightbox = useImageLightbox()
-
-  // 检测是否包含生成的图片（大型 base64 data URL）
-  const generatedImages = useMemo(() => extractGeneratedImages(content), [content])
-  const hasGeneratedImages = generatedImages.length > 0
+  const assistantRichPayload = useMemo(
+    () => (isUser ? null : buildAssistantRichPayload(meta, content)),
+    [content, isUser, meta],
+  )
 
   // 计算内容行数和是否需要折叠
   const { shouldCollapse, previewContent, lineCount } = useMemo(() => {
@@ -148,31 +187,15 @@ export function MessageBodyContent({
     )
   }
 
-  // 如果内容只包含生成的图片，直接渲染图片组件，避免通过 markdown 渲染管道
-  // 这样可以高效处理大型 base64 图片（可能超过 2MB）
-  if (hasGeneratedImages && !shouldShowStreamingPlaceholder) {
+  if (assistantRichPayload) {
     return (
       <div className={bubbleClass}>
-        <div className="flex flex-col gap-4">
-          {generatedImages.map((url, idx) => (
-            <div key={idx} className="relative">
-              <img
-                src={url}
-                alt={`Generated Image ${idx + 1}`}
-                className="max-w-full h-auto rounded-lg shadow-md cursor-pointer hover:opacity-95 transition-opacity"
-                onClick={() => lightbox.openLightbox(generatedImages, idx)}
-                loading="lazy"
-                style={{ maxHeight: '70vh' }}
-              />
-            </div>
-          ))}
-          <ImageLightbox
-            images={generatedImages}
-            initialIndex={lightbox.initialIndex}
-            open={lightbox.open}
-            onOpenChange={lightbox.setOpen}
-          />
-        </div>
+        <RichMessageRenderer
+          payload={assistantRichPayload}
+          textHtml={contentHtml}
+          isStreaming={isStreaming}
+          isRendering={isRendering}
+        />
       </div>
     )
   }

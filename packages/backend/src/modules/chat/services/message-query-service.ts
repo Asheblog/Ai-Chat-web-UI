@@ -1,11 +1,12 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
-import type { Actor } from '../../../types'
+import type { Actor, RichMessagePayload } from '../../../types'
 import {
   determineChatImageBaseUrl as defaultDetermineChatImageBaseUrl,
   resolveChatImageUrls as defaultResolveChatImageUrls,
 } from '../../../utils/chat-images'
 import { parseToolLogsJson as defaultParseToolLogsJson, type ToolLogEntry } from '../tool-logs'
+import { buildRichMessagePayload, type GeneratedImageRecord } from '../rich-payload'
 import { sessionOwnershipClause } from '../chat-common'
 
 const messageSelectFields = {
@@ -19,6 +20,17 @@ const messageSelectFields = {
   attachments: {
     select: {
       relativePath: true,
+    },
+  },
+  generatedImages: {
+    select: {
+      url: true,
+      storagePath: true,
+      base64: true,
+      mime: true,
+      width: true,
+      height: true,
+      revisedPrompt: true,
     },
   },
   clientMessageId: true,
@@ -55,6 +67,7 @@ type RawMessage = {
   parentMessageId?: number | null
   variantIndex?: number | null
   attachments?: Array<{ relativePath: string }>
+  generatedImages?: GeneratedImageRecord[]
   clientMessageId?: string | null
   reasoning?: string | null
   reasoningDurationSeconds?: number | null
@@ -100,6 +113,7 @@ export interface NormalizedMessage {
   streamReasoning: string | null
   streamError: string | null
   images: string[]
+  richPayload?: RichMessagePayload | null
   toolEvents?: ToolLogEntry[]
   metrics?: {
     promptTokens?: number | null
@@ -372,6 +386,7 @@ export class ChatMessageQueryService {
   private normalizeMessage(raw: RawMessage, baseUrl: string): NormalizedMessage {
     const { attachments, toolLogsJson, usageMetrics } = raw as RawMessage & {
       attachments?: Array<{ relativePath: string }>
+      generatedImages?: GeneratedImageRecord[]
       toolLogsJson?: string | null
       usageMetrics?: Array<{
         promptTokens: number
@@ -384,6 +399,14 @@ export class ChatMessageQueryService {
     }
     const usage = Array.isArray(usageMetrics) && usageMetrics.length > 0 ? usageMetrics[0] : null
     const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
+    const richPayload = buildRichMessagePayload({
+      content: raw.content,
+      attachmentRelativePaths: rel,
+      generatedImages: Array.isArray(raw.generatedImages) ? raw.generatedImages : [],
+      toolLogsJson: toolLogsJson ?? null,
+      baseUrl,
+      resolveChatImageUrls: this.resolveChatImageUrls,
+    })
     return {
       id: raw.id,
       sessionId: raw.sessionId,
@@ -401,6 +424,7 @@ export class ChatMessageQueryService {
       streamReasoning: raw.streamReasoning ?? null,
       streamError: raw.streamError ?? null,
       images: this.resolveChatImageUrls(rel, baseUrl),
+      richPayload,
       toolEvents: this.parseToolLogsJson(toolLogsJson),
       metrics: usage
         ? {

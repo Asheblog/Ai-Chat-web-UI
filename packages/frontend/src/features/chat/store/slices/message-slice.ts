@@ -213,6 +213,12 @@ export const createMessageSlice: ChatSliceCreator<
             if ((!body.toolEvents || body.toolEvents.length === 0) && prevBody.toolEvents?.length) {
               body.toolEvents = prevBody.toolEvents
             }
+            if ((!body.generatedImages || body.generatedImages.length === 0) && prevBody.generatedImages?.length) {
+              body.generatedImages = prevBody.generatedImages
+            }
+            if (!body.richPayload && prevBody.richPayload) {
+              body.richPayload = prevBody.richPayload
+            }
           }
           nextSessionBodyEntries.push([messageKey(body.id), body])
           if (msg.role === 'assistant' && msg.metrics) {

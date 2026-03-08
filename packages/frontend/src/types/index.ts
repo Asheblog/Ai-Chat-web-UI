@@ -136,6 +136,40 @@ export interface CompressedGroupMessage {
   createdAt: string;
 }
 
+export type RichMessageLayout = 'auto' | 'side-by-side' | 'stack';
+export type RichMessageImageSource = 'generated' | 'attachment' | 'external';
+export type RichMessageEvidenceKind = 'web' | 'document' | 'generated' | 'upload' | 'unknown';
+export type RichMessageEvidenceConfidence = 'high' | 'medium' | 'low';
+
+export interface RichMessageTextPart {
+  type: 'text';
+  text: string;
+  format: 'markdown';
+}
+
+export interface RichMessageImagePart {
+  type: 'image';
+  url: string;
+  source: RichMessageImageSource;
+  sourceKind?: RichMessageEvidenceKind;
+  alt?: string;
+  width?: number | null;
+  height?: number | null;
+  title?: string;
+  sourceUrl?: string;
+  sourceLabel?: string;
+  confidence?: RichMessageEvidenceConfidence;
+  refId?: string;
+  meta?: Record<string, unknown>;
+}
+
+export type RichMessagePart = RichMessageTextPart | RichMessageImagePart;
+
+export interface RichMessagePayload {
+  layout: RichMessageLayout;
+  parts: RichMessagePart[];
+}
+
 export interface Message {
   id: number | string;
   sessionId: number;
@@ -161,6 +195,7 @@ export interface Message {
   images?: string[];
   // AI 生成的图片（生图模型输出）
   generatedImages?: GeneratedImage[];
+  richPayload?: RichMessagePayload | null;
   artifacts?: WorkspaceArtifact[];
   toolEvents?: ToolEvent[];
   metrics?: MessageStreamMetrics | null;
@@ -188,6 +223,7 @@ export interface MessageMeta {
   reasoningUnavailableSuggestion?: string | null;
   images?: string[];
   generatedImages?: GeneratedImage[];
+  richPayload?: RichMessagePayload | null;
   artifacts?: WorkspaceArtifact[];
   isPlaceholder?: boolean;
   streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
@@ -210,6 +246,7 @@ export interface MessageBody {
   reasoningVersion: number;
   toolEvents?: ToolEvent[];
   generatedImages?: GeneratedImage[];
+  richPayload?: RichMessagePayload | null;
   artifacts?: WorkspaceArtifact[];
   compressedMessages?: CompressedGroupMessage[];
   expanded?: boolean;
@@ -236,6 +273,7 @@ export interface ShareMessage {
   reasoning?: string | null;
   createdAt: string;
   images?: string[];
+  richPayload?: RichMessagePayload | null;
   toolEvents?: ToolEvent[];
 }
 

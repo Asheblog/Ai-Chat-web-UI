@@ -5,6 +5,7 @@ import type { ApiResponse, ChatShare, MessageMeta, ShareMessage, ShareMessagesPa
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { ReasoningSection } from '@/components/message-bubble/reasoning-section'
 import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
+import { RichMessageRenderer } from '@/components/message-content/rich-message-renderer'
 import { cn, formatDate } from '@/lib/utils'
 import { User, Bot } from 'lucide-react'
 
@@ -213,6 +214,10 @@ function ShareMessageItem({
   }), [hasReasoning, msg.createdAt, msg.id, msg.role, sessionId])
 
   const isUser = msg.role === 'user'
+  const richPayload =
+    !isUser && msg.richPayload && Array.isArray(msg.richPayload.parts) && msg.richPayload.parts.length > 0
+      ? msg.richPayload
+      : null
 
   return (
     <article className={cn('flex gap-3 border-b border-border/70 py-5', isUser && 'flex-row-reverse')}>
@@ -261,12 +266,16 @@ function ShareMessageItem({
               'ml-auto inline-block rounded-2xl rounded-tr-md border border-border/80 bg-[hsl(var(--surface-hover))] px-4 py-2.5'
           )}
         >
-          <div className="prose prose-sm max-w-none dark:prose-invert">
-            <MarkdownRenderer html={null} fallback={msg.content} />
-          </div>
+          {richPayload ? (
+            <RichMessageRenderer payload={richPayload} />
+          ) : (
+            <div className="prose prose-sm max-w-none dark:prose-invert">
+              <MarkdownRenderer html={null} fallback={msg.content} />
+            </div>
+          )}
         </div>
 
-        {msg.images && msg.images.length > 0 && (
+        {!richPayload && msg.images && msg.images.length > 0 && (
           <div className="grid grid-cols-2 gap-3">
             {msg.images.map((src, index) => (
               <img

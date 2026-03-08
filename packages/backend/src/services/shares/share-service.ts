@@ -1,11 +1,12 @@
 import crypto from 'node:crypto'
 import type { Prisma, PrismaClient } from '@prisma/client'
-import type { Actor } from '../../types'
+import type { Actor, RichMessagePayload } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import {
   determineChatImageBaseUrl as defaultDetermineChatImageBaseUrl,
   resolveChatImageUrls,
 } from '../../utils/chat-images'
+import { buildRichMessagePayload, type GeneratedImageRecord } from '../../modules/chat/rich-payload'
 
 export class ShareServiceError extends Error {
   statusCode: number
@@ -44,6 +45,7 @@ export interface ShareMessageSnapshot {
   reasoning?: string | null
   createdAt: string
   images?: string[]
+  richPayload?: RichMessagePayload | null
   toolEvents?: ShareToolEvent[]
 }
 
@@ -116,6 +118,17 @@ const messageSelect = {
   attachments: {
     select: {
       relativePath: true,
+    },
+  },
+  generatedImages: {
+    select: {
+      url: true,
+      storagePath: true,
+      base64: true,
+      mime: true,
+      width: true,
+      height: true,
+      revisedPrompt: true,
     },
   },
 } satisfies Prisma.MessageSelect
@@ -401,11 +414,22 @@ export class ShareService {
 
     return withOrder.map((msg) => {
       const attachments = Array.isArray(msg.attachments) ? msg.attachments : []
+      const attachmentPaths = attachments.map((att) => att.relativePath)
       const images = resolveChatImageUrls(
-        attachments.map((att) => att.relativePath),
+        attachmentPaths,
         baseUrl,
       )
       const toolEvents = this.parseToolLogs(msg.toolLogsJson)
+      const richPayload = buildRichMessagePayload({
+        content: msg.content,
+        attachmentRelativePaths: attachmentPaths,
+        generatedImages: (Array.isArray(msg.generatedImages)
+          ? msg.generatedImages
+          : []) as GeneratedImageRecord[],
+        toolLogsJson: msg.toolLogsJson,
+        baseUrl,
+        resolveChatImageUrls,
+      })
       return {
         id: msg.id,
         role: msg.role === 'user' ? 'user' : 'assistant',
@@ -413,6 +437,7 @@ export class ShareService {
         reasoning: msg.reasoning,
         createdAt: msg.createdAt.toISOString(),
         images: images.length > 0 ? images : undefined,
+        richPayload,
         toolEvents: toolEvents.length > 0 ? toolEvents : undefined,
       }
     })
