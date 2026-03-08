@@ -10,6 +10,10 @@ import type { Actor, ApiResponse } from '../types'
 import { getSupportedMimeTypes } from '../modules/document/loaders'
 import type { DocumentService } from '../services/document/document-service'
 import type { RAGService } from '../services/document/rag-service'
+import {
+  documentWorkspaceBridgeService as defaultDocumentWorkspaceBridgeService,
+  type DocumentWorkspaceBridgeService,
+} from '../services/document/document-workspace-bridge-service'
 
 const uploadSchema = z.object({
   sessionId: z.number().int().positive().optional(),
@@ -17,6 +21,11 @@ const uploadSchema = z.object({
 
 const attachSchema = z.object({
   sessionId: z.number().int().positive(),
+})
+
+const bridgeSyncSchema = z.object({
+  sessionId: z.number().int().positive(),
+  force: z.boolean().optional(),
 })
 
 const searchSchema = z.object({
@@ -32,6 +41,7 @@ export interface DocumentsApiServices {
 
 export interface DocumentsApiDeps {
   resolveServices: () => DocumentsApiServices | null
+  bridgeService?: DocumentWorkspaceBridgeService
 }
 
 /**
@@ -52,6 +62,7 @@ const createRequireRAGEnabled = (deps: DocumentsApiDeps) => async (c: any, next:
 export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   const router = new Hono()
   const requireRAGEnabled = createRequireRAGEnabled(deps)
+  const bridgeService = deps.bridgeService ?? defaultDocumentWorkspaceBridgeService
 
   /**
    * 获取支持的文件类型
@@ -96,6 +107,18 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
         const sessionId = parseInt(sessionIdStr, 10)
         if (!isNaN(sessionId)) {
           await documentService!.attachToSession(result.documentId, sessionId)
+          try {
+            await bridgeService.syncDocumentToWorkspace({
+              sessionId,
+              documentId: result.documentId,
+            })
+          } catch (bridgeError) {
+            console.warn('[Documents] Upload bridge sync warning:', {
+              sessionId,
+              documentId: result.documentId,
+              error: bridgeError instanceof Error ? bridgeError.message : String(bridgeError),
+            })
+          }
         }
       }
 
@@ -350,8 +373,22 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
       const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
 
       await documentService!.attachToSession(documentId, sessionId)
+      let bridgeSynced = true
+      try {
+        await bridgeService.syncDocumentToWorkspace({
+          sessionId,
+          documentId,
+        })
+      } catch (bridgeError) {
+        bridgeSynced = false
+        console.warn('[Documents] Attach bridge sync warning:', {
+          sessionId,
+          documentId,
+          error: bridgeError instanceof Error ? bridgeError.message : String(bridgeError),
+        })
+      }
 
-      return c.json<ApiResponse>({ success: true, data: { attached: true } })
+      return c.json<ApiResponse>({ success: true, data: { attached: true, bridgeSynced } })
     } catch (error) {
       console.error('[Documents] Attach error:', error)
       return c.json<ApiResponse>({ success: false, error: 'Failed to attach document' }, 500)
@@ -372,11 +409,96 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
 
       const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
       await documentService!.detachFromSession(documentId, sessionId)
+      try {
+        await bridgeService.removeDocumentBridge({ sessionId, documentId })
+      } catch (bridgeError) {
+        console.warn('[Documents] Detach bridge cleanup warning:', {
+          sessionId,
+          documentId,
+          error: bridgeError instanceof Error ? bridgeError.message : String(bridgeError),
+        })
+      }
 
       return c.json<ApiResponse>({ success: true, data: { detached: true } })
     } catch (error) {
       console.error('[Documents] Detach error:', error)
       return c.json<ApiResponse>({ success: false, error: 'Failed to detach document' }, 500)
+    }
+  })
+
+  /**
+   * 手动触发文档桥接到 workspace
+   */
+  router.post('/:id/bridge', actorMiddleware, requireRAGEnabled, zValidator('json', bridgeSyncSchema), async (c) => {
+    try {
+      const documentId = parseInt(c.req.param('id'), 10)
+      if (isNaN(documentId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
+      }
+
+      const { sessionId, force } = c.req.valid('json')
+      const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
+      const sessionDocIds = await documentService.getSessionDocumentIds(sessionId)
+      if (!sessionDocIds.includes(documentId)) {
+        return c.json<ApiResponse>(
+          { success: false, error: `Document ${documentId} is not attached to session ${sessionId}` },
+          400,
+        )
+      }
+
+      const bridge = await bridgeService.syncDocumentToWorkspace({
+        sessionId,
+        documentId,
+        force,
+      })
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: bridge,
+      })
+    } catch (error) {
+      console.error('[Documents] Bridge sync error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to sync bridge' }, 500)
+    }
+  })
+
+  /**
+   * 获取会话桥接状态列表
+   */
+  router.get('/session/:sessionId/bridges', actorMiddleware, requireRAGEnabled, async (c) => {
+    try {
+      const sessionId = parseInt(c.req.param('sessionId'), 10)
+      if (isNaN(sessionId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
+      }
+
+      const bridges = await bridgeService.listSessionBridges(sessionId)
+      return c.json<ApiResponse>({
+        success: true,
+        data: bridges,
+      })
+    } catch (error) {
+      console.error('[Documents] List bridges error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to list bridges' }, 500)
+    }
+  })
+
+  /**
+   * 仅删除文档 bridge（不影响会话附加关系）
+   */
+  router.delete('/:id/bridge/:sessionId', actorMiddleware, requireRAGEnabled, async (c) => {
+    try {
+      const documentId = parseInt(c.req.param('id'), 10)
+      const sessionId = parseInt(c.req.param('sessionId'), 10)
+      if (isNaN(documentId) || isNaN(sessionId)) {
+        return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
+      }
+
+      await bridgeService.removeDocumentBridge({ sessionId, documentId })
+      return c.json<ApiResponse>({ success: true, data: { removed: true } })
+    } catch (error) {
+      console.error('[Documents] Remove bridge error:', error)
+      return c.json<ApiResponse>({ success: false, error: 'Failed to remove bridge' }, 500)
     }
   })
 

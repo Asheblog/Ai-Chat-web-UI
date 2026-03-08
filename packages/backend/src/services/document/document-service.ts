@@ -26,6 +26,10 @@ import { type VectorDBClient, type VectorItem } from '../../modules/document/vec
 import type { DocumentSectionService, SectionTreeNode } from './section-service'
 import type { ChunkWithMetadata } from '../../modules/document/structure/types'
 import { createLogger } from '../../utils/logger'
+import {
+  documentWorkspaceBridgeService as defaultDocumentWorkspaceBridgeService,
+  type DocumentWorkspaceBridgeService,
+} from './document-workspace-bridge-service'
 
 const log = createLogger('Document')
 
@@ -125,17 +129,20 @@ export class DocumentService {
   private embeddingService: EmbeddingService
   private config: DocumentServiceConfig
   private sectionService: DocumentSectionService | null = null
+  private bridgeService: Pick<DocumentWorkspaceBridgeService, 'removeDocumentBridge'>
 
   constructor(
     prisma: PrismaClient,
     vectorDB: VectorDBClient,
     embeddingService: EmbeddingService,
-    config: DocumentServiceConfig
+    config: DocumentServiceConfig,
+    bridgeService: Pick<DocumentWorkspaceBridgeService, 'removeDocumentBridge'> = defaultDocumentWorkspaceBridgeService,
   ) {
     this.prisma = prisma
     this.vectorDB = vectorDB
     this.embeddingService = embeddingService
     this.config = config
+    this.bridgeService = bridgeService
   }
 
   /**
@@ -999,6 +1006,7 @@ export class DocumentService {
     })
 
     if (!document) return
+    const bridgeRelations = await this.collectSessionDocumentRelations([documentId])
 
     await this.prisma.documentProcessingJob.updateMany({
       where: {
@@ -1032,6 +1040,7 @@ export class DocumentService {
     }
 
     // 删除数据库记录（级联删除 chunks 和 session_documents）
+    await this.cleanupDocumentBridges(bridgeRelations)
     await this.prisma.document.delete({
       where: { id: documentId },
     })
@@ -1054,6 +1063,7 @@ export class DocumentService {
     const documents = await this.prisma.document.findMany({
       where: { id: { in: documentIds } },
     })
+    const bridgeRelations = await this.collectSessionDocumentRelations(documentIds)
 
     await this.prisma.documentProcessingJob.updateMany({
       where: {
@@ -1090,6 +1100,7 @@ export class DocumentService {
 
     // 批量删除数据库记录
     try {
+      await this.cleanupDocumentBridges(bridgeRelations)
       const result = await this.prisma.document.deleteMany({
         where: { id: { in: documentIds } },
       })
@@ -1113,6 +1124,48 @@ export class DocumentService {
     }
 
     return { deleted, failed }
+  }
+
+  private async collectSessionDocumentRelations(
+    documentIds: number[],
+  ): Promise<Array<{ documentId: number; sessionId: number }>> {
+    if (documentIds.length === 0) return []
+    const relations = await this.prisma.sessionDocument.findMany({
+      where: {
+        documentId: { in: documentIds },
+      },
+      select: {
+        documentId: true,
+        sessionId: true,
+      },
+    })
+    if (relations.length <= 1) return relations
+
+    const dedup = new Map<string, { documentId: number; sessionId: number }>()
+    for (const relation of relations) {
+      dedup.set(`${relation.documentId}:${relation.sessionId}`, relation)
+    }
+    return Array.from(dedup.values())
+  }
+
+  private async cleanupDocumentBridges(
+    relations: Array<{ documentId: number; sessionId: number }>,
+  ): Promise<void> {
+    if (relations.length === 0) return
+    for (const relation of relations) {
+      try {
+        await this.bridgeService.removeDocumentBridge({
+          sessionId: relation.sessionId,
+          documentId: relation.documentId,
+        })
+      } catch (error) {
+        log.warn('[DocumentService] bridge cleanup failed', {
+          documentId: relation.documentId,
+          sessionId: relation.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
   }
 
   private resolveChunkingConfig(document: Document): {

@@ -7,6 +7,10 @@ import type { RAGService } from '../../services/document/rag-service'
 import type { EnhancedRAGService } from '../../services/document/enhanced-rag-service'
 import type { DocumentService } from '../../services/document/document-service'
 import type { DocumentSectionService } from '../../services/document/section-service'
+import {
+  documentWorkspaceBridgeService as defaultDocumentWorkspaceBridgeService,
+  type DocumentWorkspaceBridgeService,
+} from '../../services/document/document-workspace-bridge-service'
 
 /**
  * 文档工具定义（OpenAI function calling 格式）
@@ -219,6 +223,59 @@ export const documentToolDefinitions = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'document_sync_to_workspace',
+      description: `将会话文档桥接到 workspace/input/documents，供 python_runner 与 workspace_* 工具直接读取。
+
+**使用场景**:
+- ✅ 需要用 Python 处理上传附件原件
+- ✅ 需要拿到标准化导出文件（content.md/pages.jsonl/toc.json）
+- ✅ 文档刚处理完成后，主动重建桥接`,
+      parameters: {
+        type: 'object',
+        properties: {
+          document_id: {
+            type: 'integer',
+            description: '可选，指定文档 ID；为空时同步当前会话全部文档',
+          },
+          force: {
+            type: 'boolean',
+            description: '可选，是否强制重建（当前版本保留参数，默认 false）',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'document_get_workspace_path',
+      description: `获取文档在 workspace 中的可读路径（优先 normalized/content.md）。
+
+**使用场景**:
+- ✅ 把路径交给 workspace_read_text
+- ✅ 在 python_runner 里 open() 读取
+- ✅ 原件与标准化导出路径切换`,
+      parameters: {
+        type: 'object',
+        properties: {
+          document_id: {
+            type: 'integer',
+            description: '文档 ID',
+          },
+          channel: {
+            type: 'string',
+            enum: ['normalized', 'original'],
+            description: '路径类型，默认 normalized',
+          },
+        },
+        required: ['document_id'],
+      },
+    },
+  },
 ]
 
 /**
@@ -230,6 +287,8 @@ export const documentToolNames = new Set([
   'document_get_content',
   'document_get_toc',
   'document_get_section',
+  'document_sync_to_workspace',
+  'document_get_workspace_path',
 ])
 
 /**
@@ -240,6 +299,7 @@ export class DocumentToolHandler {
   private documentService: DocumentService
   private enhancedRagService: EnhancedRAGService | null
   private sectionService: DocumentSectionService | null
+  private bridgeService: DocumentWorkspaceBridgeService
   private sessionId: number
 
   constructor(
@@ -247,13 +307,15 @@ export class DocumentToolHandler {
     documentService: DocumentService,
     sessionId: number,
     enhancedRagService?: EnhancedRAGService | null,
-    sectionService?: DocumentSectionService | null
+    sectionService?: DocumentSectionService | null,
+    bridgeService: DocumentWorkspaceBridgeService = defaultDocumentWorkspaceBridgeService,
   ) {
     this.ragService = ragService
     this.documentService = documentService
     this.sessionId = sessionId
     this.enhancedRagService = enhancedRagService || null
     this.sectionService = sectionService || null
+    this.bridgeService = bridgeService
   }
 
   async handleToolCall(
@@ -280,6 +342,12 @@ export class DocumentToolHandler {
 
         case 'document_get_section':
           return await this.handleGetSection(args)
+
+        case 'document_sync_to_workspace':
+          return await this.handleSyncToWorkspace(args)
+
+        case 'document_get_workspace_path':
+          return await this.handleGetWorkspacePath(args)
 
         default:
           return {
@@ -612,6 +680,140 @@ export class DocumentToolHandler {
     }
   }
 
+  private async handleSyncToWorkspace(args: Record<string, unknown>): Promise<{
+    success: boolean
+    result: unknown
+    error?: string
+  }> {
+    const documentId =
+      typeof args.document_id === 'number' && Number.isFinite(args.document_id)
+        ? Math.floor(args.document_id)
+        : null
+    const force = args.force === true
+
+    if (documentId && documentId > 0) {
+      const isInSession = await this.isDocumentInSession(documentId)
+      if (!isInSession) {
+        return {
+          success: false,
+          result: null,
+          error: `文档 ${documentId} 不属于当前会话`,
+        }
+      }
+      const bridged = await this.bridgeService.syncDocumentToWorkspace({
+        sessionId: this.sessionId,
+        documentId,
+        force,
+      })
+      return {
+        success: true,
+        result: {
+          message: `文档 ${documentId} 桥接完成`,
+          bridge: bridged,
+        },
+      }
+    }
+
+    const sessionDocIds = await this.documentService.getSessionDocumentIds(this.sessionId)
+    if (sessionDocIds.length === 0) {
+      return {
+        success: true,
+        result: {
+          total: 0,
+          ready: 0,
+          pending: 0,
+          error: 0,
+          bridges: [],
+          message: '当前会话没有可桥接文档',
+        },
+      }
+    }
+
+    const bridges = await this.bridgeService.syncSessionDocumentsToWorkspace(this.sessionId)
+    const ready = bridges.filter((item) => item.status === 'ready').length
+    const pending = bridges.filter((item) => item.status === 'pending').length
+    const error = bridges.filter((item) => item.status === 'error').length
+    return {
+      success: true,
+      result: {
+        total: bridges.length,
+        ready,
+        pending,
+        error,
+        bridges,
+        message: `已完成 ${bridges.length} 个文档桥接（ready=${ready}, pending=${pending}, error=${error}）`,
+      },
+    }
+  }
+
+  private async handleGetWorkspacePath(args: Record<string, unknown>): Promise<{
+    success: boolean
+    result: unknown
+    error?: string
+  }> {
+    const documentId =
+      typeof args.document_id === 'number' && Number.isFinite(args.document_id)
+        ? Math.floor(args.document_id)
+        : 0
+    if (!documentId || documentId <= 0) {
+      return {
+        success: false,
+        result: null,
+        error: 'document_id 不能为空',
+      }
+    }
+
+    const isInSession = await this.isDocumentInSession(documentId)
+    if (!isInSession) {
+      return {
+        success: false,
+        result: null,
+        error: `文档 ${documentId} 不属于当前会话`,
+      }
+    }
+
+    const channel = args.channel === 'original' ? 'original' : 'normalized'
+    const bridge = await this.bridgeService.syncDocumentToWorkspace({
+      sessionId: this.sessionId,
+      documentId,
+    })
+
+    if (channel === 'normalized') {
+      if (!bridge.normalized.exists) {
+        return {
+          success: false,
+          result: {
+            documentId,
+            channel,
+            bridgeStatus: bridge.status,
+          },
+          error: '文档标准化导出尚未就绪，请稍后重试或改用 original 通道',
+        }
+      }
+      return {
+        success: true,
+        result: {
+          documentId,
+          channel,
+          bridgeStatus: bridge.status,
+          workspacePath: bridge.normalized.contentPath,
+          pagesPath: bridge.normalized.pagesPath,
+          tocPath: bridge.normalized.tocPath,
+        },
+      }
+    }
+
+    return {
+      success: true,
+      result: {
+        documentId,
+        channel,
+        bridgeStatus: bridge.status,
+        workspacePath: bridge.original.relativePath,
+      },
+    }
+  }
+
   private async isDocumentInSession(documentId: number): Promise<boolean> {
     const docs = await this.documentService.getSessionDocumentIds(this.sessionId)
     return docs.includes(documentId)
@@ -649,6 +851,18 @@ export function formatDocumentToolReasoning(
       return stage === 'start'
         ? `获取章节 ${args.section_path} 内容...`
         : '已获取章节内容'
+
+    case 'document_sync_to_workspace':
+      if (stage === 'start') return '正在同步文档到 workspace...'
+      if (stage === 'result') return '文档桥接同步完成'
+      return '文档桥接同步失败'
+
+    case 'document_get_workspace_path':
+      if (stage === 'start') {
+        return `获取文档 ${args.document_id} 的 workspace 路径...`
+      }
+      if (stage === 'result') return '已获取 workspace 路径'
+      return '获取 workspace 路径失败'
 
     default:
       return `执行文档工具：${toolName}`
