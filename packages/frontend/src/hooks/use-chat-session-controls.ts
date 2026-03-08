@@ -47,12 +47,11 @@ export function useChatSessionControls({
   }, [quota, quotaRemaining])
 
   const basePlaceholder = useMemo(() => {
-    if (!quota) return '输入消息（Shift+Enter 换行）'
     if (quotaExhausted) {
       return '额度已用尽，请登录或等待次日重置'
     }
-    return `本日消息发送额度剩余 ${quotaLabel}`
-  }, [quota, quotaExhausted, quotaLabel])
+    return currentSession ? '继续输入（Shift+Enter 换行）' : '输入消息（Shift+Enter 换行）'
+  }, [currentSession, quotaExhausted])
 
   const mobilePlaceholder = useMemo(() => {
     return currentSession ? '继续输入...' : '输入你要翻译的文字'
