@@ -6,10 +6,24 @@ import type { Actor, ApiResponse } from '../types'
 import type { ArtifactService } from '../services/workspace/artifact-service'
 import { WorkspaceServiceError } from '../services/workspace/workspace-errors'
 
+const buildContentDispositionFallback = (sanitizedName: string) => {
+  const extensionMatch = sanitizedName.match(/(\.[A-Za-z0-9]{1,16})$/)
+  const extension = extensionMatch ? extensionMatch[1] : ''
+  const ascii = sanitizedName
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[\\/;]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const fallback = (ascii || `artifact${extension}` || 'artifact').slice(0, 180)
+  return fallback
+}
+
 const buildContentDisposition = (fileName: string) => {
-  const fallback = (fileName || 'artifact').replace(/[\r\n\"]/g, '')
-  const encoded = encodeURIComponent(fallback)
-  return `attachment; filename=\"${fallback}\"; filename*=UTF-8''${encoded}`
+  const sanitized = (fileName || 'artifact').replace(/[\r\n\"]/g, '').trim() || 'artifact'
+  const fallback = buildContentDispositionFallback(sanitized)
+  const encoded = encodeURIComponent(sanitized)
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`
 }
 
 export interface ArtifactsApiDeps {
