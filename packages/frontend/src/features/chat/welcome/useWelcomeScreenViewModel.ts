@@ -155,11 +155,17 @@ export const useWelcomeScreenViewModel = () => {
   } = useKnowledgeBase({ sessionId: null })
 
   const brandText = (systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'
+  const quotaMessage = quota
+    ? quotaExhausted
+      ? '额度已用尽，请登录或等待次日重置'
+      : `本日消息发送额度剩余 ${quotaLabel}`
+    : null
   const basePlaceholder = quota
     ? quotaExhausted
       ? '额度已用尽，请登录或等待次日重置'
       : `本日消息发送额度剩余 ${quotaLabel}`
     : '输入消息（Shift+Enter 换行）'
+  const mobilePlaceholder = '输入消息...'
 
   const MAX_AUTO_HEIGHT = 200
   const scopePreferenceKey = 'web_search_scope_preference'
@@ -641,6 +647,8 @@ export const useWelcomeScreenViewModel = () => {
       setIsComposing,
       textareaRef,
       basePlaceholder,
+      mobilePlaceholder,
+      mobileQuotaNotice: quotaMessage,
       creationDisabled,
       isCreating,
       showExpand,

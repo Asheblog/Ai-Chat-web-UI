@@ -31,7 +31,7 @@ interface AutoReadEvidenceItem {
   error?: string
   errorCode?: UrlReadErrorCode
   httpStatus?: number
-  fallbackUsed: 'none' | 'search_snippet'
+  fallbackUsed: 'none' | 'search_snippet' | 'crawler'
   rank: number
 }
 
@@ -266,7 +266,8 @@ const buildSummaryForModel = (
       continue
     }
     const title = item.title || item.url
-    lines.push(`${item.rank}. ${title}`)
+    const extractionSuffix = item.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''
+    lines.push(`${item.rank}. ${title}${extractionSuffix}`)
     lines.push(`   URL: ${item.url}`)
     if (item.excerpt) {
       lines.push(`   摘要: ${truncateText(item.excerpt, 360)}`)
@@ -669,11 +670,11 @@ export class WebSearchToolHandler implements IToolHandler {
             byline: readResult.byline || undefined,
             wordCount: readResult.wordCount,
             content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
-            fallbackUsed: 'none',
+            fallbackUsed: readResult.fallbackUsed === 'crawler' ? 'crawler' : 'none',
             rank,
           }
           context.emitReasoning(
-            `网页读取成功：${readResult.title || targetUrl}（约 ${readResult.wordCount || 0} 词）`,
+            `网页读取成功：${readResult.title || targetUrl}（约 ${readResult.wordCount || 0} 词${evidenceItem.fallbackUsed === 'crawler' ? '，爬虫回退' : ''}）`,
             {
               ...reasoningMetaBase,
               stage: 'result',
@@ -683,6 +684,7 @@ export class WebSearchToolHandler implements IToolHandler {
               rank,
               title: readResult.title,
               wordCount: readResult.wordCount,
+              fallbackUsed: evidenceItem.fallbackUsed,
             },
           )
           context.sendToolEvent({
@@ -690,7 +692,11 @@ export class WebSearchToolHandler implements IToolHandler {
             tool: 'read_url',
             stage: 'result',
             query: targetUrl,
-            summary: readResult.title ? `已读取：${readResult.title}` : '网页读取完成',
+            summary: readResult.title
+              ? `已读取：${readResult.title}${evidenceItem.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''}`
+              : evidenceItem.fallbackUsed === 'crawler'
+                ? '网页读取完成（爬虫回退）'
+                : '网页读取完成',
             url: targetUrl,
             title: readResult.title,
             excerpt: readResult.excerpt,
@@ -710,6 +716,7 @@ export class WebSearchToolHandler implements IToolHandler {
               wordCount: readResult.wordCount,
               siteName: readResult.siteName,
               byline: readResult.byline,
+              fallbackUsed: evidenceItem.fallbackUsed,
             },
           })
           return evidenceItem

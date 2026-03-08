@@ -646,7 +646,9 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  line-height: 18pt;
+  /* 标题行高必须使用相对值，避免移动端换行时被固定 pt 值压缩 */
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {

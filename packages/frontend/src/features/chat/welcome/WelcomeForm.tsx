@@ -1,4 +1,4 @@
-import { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject, useState } from 'react'
+import { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject, useEffect, useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -20,6 +20,8 @@ interface WelcomeFormProps {
     setIsComposing: (value: boolean) => void
     textareaRef: RefObject<HTMLTextAreaElement>
     basePlaceholder: string
+    mobilePlaceholder: string
+    mobileQuotaNotice: string | null
     creationDisabled: boolean
     isCreating: boolean
     showExpand: boolean
@@ -121,6 +123,8 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     setIsComposing,
     textareaRef,
     basePlaceholder,
+    mobilePlaceholder,
+    mobileQuotaNotice,
     creationDisabled,
     isCreating,
     showExpand,
@@ -135,6 +139,24 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     advancedDialog,
     sessionPromptDialog,
   } = form
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(max-width: 767px)')
+    const update = () => setIsMobile(mq.matches)
+    update()
+    const handle = (event: MediaQueryListEvent) => setIsMobile(event.matches)
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', handle)
+      return () => mq.removeEventListener('change', handle)
+    }
+    mq.addListener(handle)
+    return () => mq.removeListener(handle)
+  }, [])
+
+  const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
 
   return (
     <div className="w-full max-w-4xl">
@@ -178,7 +200,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           <Textarea
             ref={textareaRef}
             value={query}
-            placeholder={basePlaceholder}
+            placeholder={activePlaceholder}
             disabled={creationDisabled}
             onChange={(event) => onTextareaChange(event.target.value)}
             onKeyDown={onKeyDown}
@@ -201,8 +223,13 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         </Button>
       </div>
 
+      {mobileQuotaNotice ? (
+        <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm md:hidden">
+          {mobileQuotaNotice}
+        </p>
+      ) : null}
       {creationDisabled && basePlaceholder ? (
-        <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm">
+        <p className="mx-auto mt-3 hidden max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm md:block">
           {basePlaceholder}
         </p>
       ) : null}

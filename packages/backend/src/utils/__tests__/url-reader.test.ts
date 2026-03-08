@@ -1,4 +1,5 @@
 import { readUrlContent } from '../url-reader'
+import { Readability } from '@mozilla/readability'
 
 describe('readUrlContent error classification', () => {
   const originalFetch = global.fetch
@@ -52,5 +53,37 @@ describe('readUrlContent error classification', () => {
     expect(result.errorCode).toBe('JS_CHALLENGE')
     expect(result.error).toContain('JavaScript challenge')
   })
-})
 
+  test('falls back to crawler extraction when readability parsing returns null', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(
+        `
+        <html>
+          <head><title>Example Article</title></head>
+          <body>
+            <main>
+              <p>第一段：这是正文内容，不应该在回退时丢失。</p>
+              <p>第二段：当 Readability 失败后，爬虫应提取这里的文本。</p>
+            </main>
+          </body>
+        </html>
+        `,
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        }
+      )
+    ) as typeof fetch
+
+    jest.spyOn(Readability.prototype, 'parse').mockReturnValue(null)
+
+    const result = await readUrlContent('https://example.com/fallback')
+
+    expect(result.error).toBeUndefined()
+    expect(result.errorCode).toBeUndefined()
+    expect(result.fallbackUsed).toBe('crawler')
+    expect(result.textContent).toContain('第一段：这是正文内容')
+    expect(result.textContent).toContain('第二段：当 Readability 失败后')
+  })
+})

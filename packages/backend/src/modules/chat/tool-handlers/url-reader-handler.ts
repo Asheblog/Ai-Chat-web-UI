@@ -161,13 +161,15 @@ export class UrlReaderToolHandler implements IToolHandler {
         }
       }
 
+      const extractionMode = result.fallbackUsed === 'crawler' ? 'crawler' : 'readability'
       context.emitReasoning(
-        `成功读取网页「${result.title || url}」，共约 ${result.wordCount || 0} 词。`,
+        `成功读取网页「${result.title || url}」，共约 ${result.wordCount || 0} 词（${extractionMode}）。`,
         {
           ...reasoningMetaBase,
           stage: 'result',
           title: result.title,
           wordCount: result.wordCount,
+          fallbackUsed: result.fallbackUsed || 'none',
         }
       )
       context.sendToolEvent({
@@ -176,8 +178,10 @@ export class UrlReaderToolHandler implements IToolHandler {
         stage: 'result',
         query: url,
         summary: result.title
-          ? `已读取：${result.title}`
-          : '网页读取完成',
+          ? `已读取：${result.title}${result.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''}`
+          : result.fallbackUsed === 'crawler'
+            ? '网页读取完成（爬虫回退）'
+            : '网页读取完成',
         url,
         title: result.title,
         excerpt: result.excerpt,
@@ -191,6 +195,7 @@ export class UrlReaderToolHandler implements IToolHandler {
           wordCount: result.wordCount,
           siteName: result.siteName,
           byline: result.byline,
+          fallbackUsed: result.fallbackUsed || 'none',
         },
       })
 
