@@ -7,7 +7,8 @@ import { Send, Square, Brain, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ChatImagePreview } from './chat-image-preview'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
@@ -114,11 +115,18 @@ export function MobileComposer({
 }: MobileComposerProps) {
   const disabled = sendLocked || hasProcessingDocuments || (!input.trim() && selectedImages.length === 0)
   const [plusOpen, setPlusOpen] = useState(false)
+  const [plusAdvancedOpen, setPlusAdvancedOpen] = useState(false)
   const [skillPanelOpen, setSkillPanelOpen] = useState(false)
   const openSkillPanelFromMenu = () => {
     setPlusOpen(false)
     window.setTimeout(() => {
       setSkillPanelOpen(true)
+    }, 0)
+  }
+  const openAdvancedFromQuick = () => {
+    setPlusOpen(false)
+    window.setTimeout(() => {
+      setPlusAdvancedOpen(true)
     }, 0)
   }
 
@@ -168,8 +176,8 @@ export function MobileComposer({
 
           <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2.5 pb-2.5 pt-2">
             <div className="flex items-center gap-1.5">
-              <Sheet open={plusOpen} onOpenChange={setPlusOpen}>
-                <SheetTrigger asChild>
+              <Popover open={plusOpen} onOpenChange={setPlusOpen}>
+                <PopoverTrigger asChild>
                   <Button
                     type="button"
                     variant="ghost"
@@ -182,47 +190,47 @@ export function MobileComposer({
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
-                </SheetTrigger>
-                <SheetContent
-                  side="bottom"
-                  dialogTitle="更多操作"
-                  className="rounded-t-3xl border-border/80 bg-card/95 pb-[calc(env(safe-area-inset-bottom)+20px)]"
+                </PopoverTrigger>
+                <PopoverContent
+                  side="top"
+                  align="start"
+                  sideOffset={10}
+                  className="w-[min(92vw,22rem)] rounded-2xl border-border/80 bg-popover/95 p-2 shadow-[0_18px_40px_hsl(var(--background)/0.35)] backdrop-blur-xl"
                 >
-                  <div className="px-4 pt-4 pb-2">
-                    <h3 className="text-base font-semibold text-foreground">更多操作</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">在这里配置技能、请求头与会话提示词。</p>
-                  </div>
-                  <div className="max-h-[70vh] overflow-y-auto px-4 pb-2">
-                    <PlusMenuContent
-                      thinkingEnabled={thinkingEnabled}
-                      onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
-                      webSearchEnabled={webSearchEnabled}
-                      onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-                      canUseWebSearch={canUseWebSearch}
-                      showWebSearchScope={showWebSearchScope}
-                      webSearchScope={webSearchScope}
-                      onWebSearchScopeChange={onWebSearchScopeChange}
-                      webSearchDisabledNote={webSearchDisabledNote}
-                      pythonToolEnabled={pythonToolEnabled}
-                      onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-                      canUsePythonTool={canUsePythonTool}
-                      pythonToolDisabledNote={pythonToolDisabledNote}
-                      skillOptions={skillOptions}
-                      onToggleSkillOption={onToggleSkillOption}
-                      onOpenSkillPanel={openSkillPanelFromMenu}
-                      canUseTrace={canUseTrace}
-                      traceEnabled={traceEnabled}
-                      onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
-                      showThinkingToggle={false}
-                      showWebSearchToggle={false}
-                      onOpenAdvanced={onOpenAdvanced}
-                      onOpenSessionPrompt={onOpenSessionPrompt}
-                      container="plain"
-                      onActionComplete={() => setPlusOpen(false)}
-                    />
-                  </div>
-                </SheetContent>
-              </Sheet>
+                  <PlusMenuContent
+                    thinkingEnabled={thinkingEnabled}
+                    onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+                    webSearchEnabled={webSearchEnabled}
+                    onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+                    canUseWebSearch={canUseWebSearch}
+                    showWebSearchScope={showWebSearchScope}
+                    webSearchScope={webSearchScope}
+                    onWebSearchScopeChange={onWebSearchScopeChange}
+                    webSearchDisabledNote={webSearchDisabledNote}
+                    pythonToolEnabled={pythonToolEnabled}
+                    onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+                    canUsePythonTool={canUsePythonTool}
+                    pythonToolDisabledNote={pythonToolDisabledNote}
+                    skillOptions={skillOptions}
+                    onToggleSkillOption={onToggleSkillOption}
+                    onOpenSkillPanel={openSkillPanelFromMenu}
+                    canUseTrace={canUseTrace}
+                    traceEnabled={traceEnabled}
+                    onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
+                    showThinkingToggle={false}
+                    showWebSearchToggle={false}
+                    showAdvancedRequestAction={false}
+                    showSessionPromptAction={false}
+                    extraAction={{
+                      title: '更多设置',
+                      description: '编辑请求头与会话系统提示词。',
+                      onClick: openAdvancedFromQuick,
+                    }}
+                    container="plain"
+                    onActionComplete={() => setPlusOpen(false)}
+                  />
+                </PopoverContent>
+              </Popover>
 
               <AttachmentMenu
                 onPickImages={pickImages}
@@ -290,6 +298,50 @@ export function MobileComposer({
         skillOptions={skillOptions}
         onToggleSkillOption={onToggleSkillOption}
       />
+
+      <Sheet open={plusAdvancedOpen} onOpenChange={setPlusAdvancedOpen}>
+        <SheetContent
+          side="bottom"
+          dialogTitle="更多设置"
+          className="rounded-t-3xl border-border/80 bg-card/95 pb-[calc(env(safe-area-inset-bottom)+20px)]"
+        >
+          <div className="px-4 pt-4 pb-2">
+            <h3 className="text-base font-semibold text-foreground">更多设置</h3>
+            <p className="mt-1 text-xs text-muted-foreground">这里放低频操作，避免主输入区拥挤。</p>
+          </div>
+          <div className="max-h-[70vh] overflow-y-auto px-4 pb-2">
+            <PlusMenuContent
+              thinkingEnabled={thinkingEnabled}
+              onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+              webSearchEnabled={webSearchEnabled}
+              onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+              canUseWebSearch={canUseWebSearch}
+              showWebSearchScope={showWebSearchScope}
+              webSearchScope={webSearchScope}
+              onWebSearchScopeChange={onWebSearchScopeChange}
+              webSearchDisabledNote={webSearchDisabledNote}
+              pythonToolEnabled={pythonToolEnabled}
+              onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+              canUsePythonTool={canUsePythonTool}
+              pythonToolDisabledNote={pythonToolDisabledNote}
+              skillOptions={skillOptions}
+              onToggleSkillOption={onToggleSkillOption}
+              canUseTrace={canUseTrace}
+              traceEnabled={traceEnabled}
+              onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
+              showThinkingToggle={false}
+              showWebSearchToggle={false}
+              showControlCard={false}
+              showCapabilitySummary={false}
+              showSkillPanelAction={false}
+              onOpenAdvanced={onOpenAdvanced}
+              onOpenSessionPrompt={onOpenSessionPrompt}
+              container="plain"
+              onActionComplete={() => setPlusAdvancedOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

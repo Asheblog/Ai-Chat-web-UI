@@ -159,10 +159,43 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
   const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
 
   return (
-    <div className="w-full max-w-5xl">
+    <div className="w-full max-w-4xl">
       <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
 
-      <div className="overflow-hidden rounded-[1.9rem] border border-border/70 bg-[hsl(var(--surface))/0.9] shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background">
+      <div className="flex items-end gap-2 overflow-hidden rounded-[1.7rem] border border-border/70 bg-[hsl(var(--surface))/0.9] px-2 py-2 shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background">
+        <div className="flex shrink-0 items-center gap-1">
+          <AdvancedOptions {...advancedOptions} />
+          {showExpand && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-lg text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground md:h-10 md:w-10 md:rounded-xl"
+              onClick={onOpenExpand}
+              disabled={creationDisabled}
+              aria-label="全屏编辑"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          )}
+          <AttachmentMenu
+            onPickImages={attachments.onPickImages}
+            onPickDocuments={attachments.onPickDocuments}
+            disableImages={creationDisabled}
+            disableDocuments={creationDisabled}
+            hasImages={attachments.selectedImages.length > 0}
+            hasDocuments={attachments.documents.length > 0}
+            className="h-9 w-9 rounded-lg border-0 bg-transparent md:h-10 md:w-10 md:rounded-xl"
+            ariaLabel="添加附件"
+            onOpenManager={() => setAttachmentViewerOpen(true)}
+            manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
+            manageCount={attachments.selectedImages.length + attachments.documents.length}
+            onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
+            knowledgeBaseEnabled={knowledgeBase.enabled}
+            knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
+          />
+        </div>
+
         <Textarea
           ref={textareaRef}
           value={query}
@@ -173,54 +206,19 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
           onPaste={attachments.onPaste}
-          className="h-auto min-h-[56px] max-h-[240px] w-full resize-none border-0 bg-transparent px-4 pb-3 pt-4 text-left leading-[1.45] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 md:min-h-[64px] md:px-5"
+          className="h-auto min-h-[56px] max-h-[240px] flex-1 resize-none border-0 bg-transparent px-2 py-3 text-left leading-[1.45] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
           rows={1}
         />
 
-        <div className="flex items-center justify-between gap-3 border-t border-border/60 px-2.5 pb-2.5 pt-2 md:px-3 md:pb-3">
-          <div className="flex items-center gap-1.5">
-            <AdvancedOptions {...advancedOptions} />
-            {showExpand && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-lg text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground md:h-10 md:w-10 md:rounded-xl"
-                onClick={onOpenExpand}
-                disabled={creationDisabled}
-                aria-label="全屏编辑"
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
-            )}
-            <AttachmentMenu
-              onPickImages={attachments.onPickImages}
-              onPickDocuments={attachments.onPickDocuments}
-              disableImages={creationDisabled}
-              disableDocuments={creationDisabled}
-              hasImages={attachments.selectedImages.length > 0}
-              hasDocuments={attachments.documents.length > 0}
-              className="h-9 w-9 rounded-lg border-0 bg-transparent md:h-10 md:w-10 md:rounded-xl"
-              ariaLabel="添加附件"
-              onOpenManager={() => setAttachmentViewerOpen(true)}
-              manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
-              manageCount={attachments.selectedImages.length + attachments.documents.length}
-              onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
-              knowledgeBaseEnabled={knowledgeBase.enabled}
-              knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
-            />
-          </div>
-
-          <Button
-            type="button"
-            onClick={onSubmit}
-            disabled={creationDisabled}
-            className="h-10 w-10 rounded-xl p-0 shadow-[0_10px_24px_hsl(var(--background)/0.24)] md:h-11 md:w-11"
-            aria-label={isCreating ? '正在创建会话' : '发送'}
-          >
-            {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-          </Button>
-        </div>
+        <Button
+          type="button"
+          onClick={onSubmit}
+          disabled={creationDisabled}
+          className="h-10 w-10 shrink-0 rounded-xl p-0 shadow-[0_10px_24px_hsl(var(--background)/0.24)] md:h-11 md:w-11"
+          aria-label={isCreating ? '正在创建会话' : '发送'}
+        >
+          {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+        </Button>
       </div>
 
       {mobileQuotaNotice ? (

@@ -38,6 +38,17 @@ interface PlusMenuContentProps {
   onOpenSessionPrompt?: () => void
   showThinkingToggle?: boolean
   showWebSearchToggle?: boolean
+  showControlCard?: boolean
+  showCapabilitySummary?: boolean
+  showSkillPanelAction?: boolean
+  showAdvancedRequestAction?: boolean
+  showSessionPromptAction?: boolean
+  extraAction?: {
+    title: string
+    description: string
+    onClick?: () => void
+    disabled?: boolean
+  }
   container?: 'dropdown' | 'plain'
   align?: 'start' | 'center' | 'end'
   onActionComplete?: () => void
@@ -86,6 +97,12 @@ export function PlusMenuContent({
   onOpenAdvanced,
   onOpenSessionPrompt,
   showThinkingToggle = true,
+  showControlCard = true,
+  showCapabilitySummary = true,
+  showSkillPanelAction = true,
+  showAdvancedRequestAction = true,
+  showSessionPromptAction = true,
+  extraAction,
   container = 'dropdown',
   align = 'start',
   onActionComplete,
@@ -102,54 +119,60 @@ export function PlusMenuContent({
 
   const body = (
     <div className={cn('space-y-3', bodyClassName)}>
-      <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.72] p-3">
-        <div className="space-y-3">
-          {showThinkingToggle ? (
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">思考模式</span>
-              <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
-            </div>
-          ) : null}
+      {showControlCard ? (
+        <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.72] p-3">
+          <div className="space-y-3">
+            {showThinkingToggle ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">思考模式</span>
+                <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
+              </div>
+            ) : null}
 
-          {onEffortChange ? (
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-medium text-muted-foreground">思考深度</span>
-              <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
-                <SelectTrigger className="h-8 w-32 rounded-lg border-border/70 bg-background/60 text-xs">
-                  <SelectValue placeholder="不设置" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unset">不设置</SelectItem>
-                  <SelectItem value="low">low</SelectItem>
-                  <SelectItem value="medium">medium</SelectItem>
-                  <SelectItem value="high">high</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
+            {onEffortChange ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-muted-foreground">思考深度</span>
+                <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
+                  <SelectTrigger className="h-8 w-32 rounded-lg border-border/70 bg-background/60 text-xs">
+                    <SelectValue placeholder="不设置" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unset">不设置</SelectItem>
+                    <SelectItem value="low">low</SelectItem>
+                    <SelectItem value="medium">medium</SelectItem>
+                    <SelectItem value="high">high</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
 
-          {canUseTrace && onToggleTrace ? (
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">任务追踪</span>
-              <Switch checked={Boolean(traceEnabled)} onCheckedChange={(checked) => onToggleTrace(Boolean(checked))} />
-            </div>
-          ) : null}
+            {canUseTrace && onToggleTrace ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">任务追踪</span>
+                <Switch checked={Boolean(traceEnabled)} onCheckedChange={(checked) => onToggleTrace(Boolean(checked))} />
+              </div>
+            ) : null}
 
-          <p className="text-[11px] leading-5 text-muted-foreground">
-            已启用 {enabledSkillCount} 个能力（内置 + 第三方技能）。
-          </p>
+            {showCapabilitySummary ? (
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                已启用 {enabledSkillCount} 个能力（内置 + 第三方技能）。
+              </p>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="space-y-2">
-        <ActionCardButton
-          title="打开技能面板"
-          description="管理联网检索、Python 工具与第三方技能。"
-          onClick={() => handleAction(onOpenSkillPanel)}
-          disabled={!onOpenSkillPanel}
-        />
+        {showSkillPanelAction ? (
+          <ActionCardButton
+            title="打开技能面板"
+            description="管理联网检索、Python 工具与第三方技能。"
+            onClick={() => handleAction(onOpenSkillPanel)}
+            disabled={!onOpenSkillPanel}
+          />
+        ) : null}
 
-        {onOpenAdvanced ? (
+        {showAdvancedRequestAction && onOpenAdvanced ? (
           <ActionCardButton
             title="编辑自定义请求头"
             description="为当前请求附加高级参数。"
@@ -157,11 +180,20 @@ export function PlusMenuContent({
           />
         ) : null}
 
-        {onOpenSessionPrompt ? (
+        {showSessionPromptAction && onOpenSessionPrompt ? (
           <ActionCardButton
             title="当前会话系统提示词"
             description="查看或修改会话级系统提示词。"
             onClick={() => handleAction(onOpenSessionPrompt)}
+          />
+        ) : null}
+
+        {extraAction ? (
+          <ActionCardButton
+            title={extraAction.title}
+            description={extraAction.description}
+            onClick={() => handleAction(extraAction.onClick)}
+            disabled={extraAction.disabled}
           />
         ) : null}
       </div>
