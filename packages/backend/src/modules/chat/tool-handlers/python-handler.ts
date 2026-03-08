@@ -29,7 +29,7 @@ export class PythonToolHandler implements IToolHandler {
       function: {
         name: 'python_runner',
         description:
-          'Execute Python code inside the isolated workspace sandbox. Do NOT run pip install in user code. Import modules directly (do not swallow ModuleNotFoundError/ImportError with try/except) and let the runtime auto-install missing packages. Save downloadable files to /workspace/artifacts.',
+          'Execute Python code inside the isolated workspace sandbox. Do NOT run pip install in user code. Import modules directly (do not swallow ModuleNotFoundError/ImportError with try/except) and let the runtime auto-install missing packages. Save downloadable files to /workspace/artifacts and explicitly declare publishable files in downloadable_files.',
         parameters: {
           type: 'object',
           properties: {
@@ -41,6 +41,14 @@ export class PythonToolHandler implements IToolHandler {
             input: {
               type: 'string',
               description: 'Optional standard input passed to the Python process.',
+            },
+            downloadable_files: {
+              type: 'array',
+              description:
+                'Explicit list of files that can be downloaded by users. Only declared files will be published. Use relative paths like artifacts/report.xlsx (or /workspace/artifacts/report.xlsx).',
+              items: {
+                type: 'string',
+              },
             },
           },
           required: ['code'],
@@ -60,6 +68,9 @@ export class PythonToolHandler implements IToolHandler {
   ): Promise<ToolHandlerResult> {
     const source = typeof args.code === 'string' ? args.code : ''
     const stdin = typeof args.input === 'string' ? args.input : undefined
+    const downloadableFiles = Array.isArray(args.downloadable_files)
+      ? args.downloadable_files.filter((item): item is string => typeof item === 'string')
+      : undefined
     const callId = toolCall.id || randomUUID()
     const reasoningMetaBase = { kind: 'tool', tool: 'python_runner', callId }
 
@@ -89,6 +100,9 @@ export class PythonToolHandler implements IToolHandler {
     if (stdin !== undefined) {
       baseDetails.input = stdin
     }
+    if (Array.isArray(downloadableFiles) && downloadableFiles.length > 0) {
+      baseDetails.downloadableFiles = downloadableFiles
+    }
 
     context.emitReasoning('在会话 workspace 中执行 Python 代码', {
       ...reasoningMetaBase,
@@ -110,6 +124,7 @@ export class PythonToolHandler implements IToolHandler {
         toolCallId: callId,
         code: source,
         input: stdin,
+        downloadableFiles,
         timeoutMs: this.config.timeoutMs,
         maxOutputChars: this.config.maxOutputChars,
         maxSourceChars: this.config.maxSourceChars,

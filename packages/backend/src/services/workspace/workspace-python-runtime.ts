@@ -43,6 +43,37 @@ const PREVIEW_LIMIT = 4000
 
 const normalizeCode = (raw: string) => raw.replace(/\r\n/g, '\n')
 
+const normalizeArtifactPath = (
+  rawPath: string,
+  options: {
+    allowImplicitArtifactsPrefix: boolean
+  },
+): string | null => {
+  let value = (rawPath || '').trim()
+  if (!value) return null
+  value = value.replace(/\\/g, '/')
+
+  if (value === '/workspace' || value === 'workspace') return null
+  if (value.startsWith('/workspace/')) {
+    value = value.slice('/workspace/'.length)
+  } else if (value.startsWith('workspace/')) {
+    value = value.slice('workspace/'.length)
+  }
+
+  value = value.replace(/^\.\//, '').replace(/^\/+/, '')
+  if (!value) return null
+
+  if (!value.startsWith('artifacts/')) {
+    if (!options.allowImplicitArtifactsPrefix) return null
+    value = `artifacts/${value}`
+  }
+
+  const normalized = path.posix.normalize(value)
+  if (!normalized || normalized === '.' || normalized === 'artifacts') return null
+  if (!normalized.startsWith('artifacts/')) return null
+  return normalized
+}
+
 const truncateText = (value: string, limit: number) => {
   if (!value) return ''
   if (value.length <= limit) return value
@@ -81,6 +112,48 @@ export const extractMissingModuleRequirements = (output: string): string[] => {
   return Array.from(found)
 }
 
+export const normalizeDeclaredArtifactPaths = (
+  declaredPaths: unknown,
+  maxCount = Number.POSITIVE_INFINITY,
+): string[] => {
+  if (!Array.isArray(declaredPaths)) return []
+  const normalized: string[] = []
+  const unique = new Set<string>()
+  const safeMax = Number.isFinite(maxCount) ? Math.max(0, Math.floor(maxCount)) : Number.MAX_SAFE_INTEGER
+
+  for (const item of declaredPaths) {
+    if (normalized.length >= safeMax) break
+    if (typeof item !== 'string') continue
+    const value = normalizeArtifactPath(item, { allowImplicitArtifactsPrefix: true })
+    if (!value || unique.has(value)) continue
+    unique.add(value)
+    normalized.push(value)
+  }
+
+  return normalized
+}
+
+export const selectDeclaredArtifactsFromChangedPaths = (
+  changedRelativePaths: string[],
+  declaredPaths: unknown,
+): string[] => {
+  const declared = normalizeDeclaredArtifactPaths(declaredPaths)
+  if (declared.length <= 0) return []
+
+  const declaredSet = new Set(declared)
+  const selected = new Set<string>()
+
+  for (const changed of Array.isArray(changedRelativePaths) ? changedRelativePaths : []) {
+    if (typeof changed !== 'string') continue
+    const normalized = normalizeArtifactPath(changed, { allowImplicitArtifactsPrefix: false })
+    if (!normalized) continue
+    if (!declaredSet.has(normalized)) continue
+    selected.add(normalized)
+  }
+
+  return Array.from(selected).sort((a, b) => a.localeCompare(b))
+}
+
 const classifyRunErrorStatus = (error: unknown): 'error' | 'timeout' | 'cancelled' => {
   if (error instanceof WorkspaceServiceError) {
     if (error.code === 'WORKSPACE_EXEC_TIMEOUT') return 'timeout'
@@ -103,6 +176,7 @@ export interface WorkspacePythonRunParams {
   toolCallId: string
   code: string
   input?: string
+  downloadableFiles?: string[]
   timeoutMs: number
   maxOutputChars: number
   maxSourceChars: number
@@ -135,6 +209,10 @@ export class WorkspacePythonRuntime {
 
   async runPythonSnippet(params: WorkspacePythonRunParams): Promise<WorkspacePythonRunResult> {
     const normalizedCode = normalizeCode(params.code || '')
+    const declaredDownloadablePaths = normalizeDeclaredArtifactPaths(
+      params.downloadableFiles,
+      this.config.maxArtifactsPerMessage,
+    )
     if (!normalizedCode.trim()) {
       throw new WorkspaceServiceError('Python code 不能为空', 400, 'WORKSPACE_PYTHON_CODE_EMPTY')
     }
@@ -185,7 +263,11 @@ export class WorkspacePythonRuntime {
 
       const afterArtifacts = await ArtifactService.snapshotArtifactTree(workspace.artifactsPath)
       const changedRelativePaths = ArtifactService.diffArtifactSnapshot(beforeArtifacts, afterArtifacts)
-      const changedFiles = changedRelativePaths.map((relativePath) => ({
+      const declaredChangedPaths = selectDeclaredArtifactsFromChangedPaths(
+        changedRelativePaths,
+        declaredDownloadablePaths,
+      )
+      const changedFiles = declaredChangedPaths.map((relativePath) => ({
         relativePath,
         absolutePath: path.resolve(workspace.rootPath, relativePath),
       }))
