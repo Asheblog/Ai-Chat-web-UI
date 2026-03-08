@@ -3,7 +3,7 @@
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Square, Brain, Plus } from 'lucide-react'
+import { Send, Square, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -33,6 +33,8 @@ interface MobileComposerProps {
   onRemoveImage: (index: number) => void
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
+  effort: 'low' | 'medium' | 'high' | 'unset'
+  onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
   webSearchEnabled: boolean
   onToggleWebSearch: (value: boolean) => void
   webSearchScope: string
@@ -82,6 +84,8 @@ export function MobileComposer({
   onRemoveImage,
   thinkingEnabled,
   onToggleThinking,
+  effort,
+  onEffortChange,
   webSearchEnabled,
   onToggleWebSearch,
   webSearchScope,
@@ -135,30 +139,6 @@ export function MobileComposer({
       <div className="space-y-3 rounded-[1.75rem] border border-border/70 bg-[hsl(var(--surface))/0.9] px-3 py-3 shadow-[0_16px_40px_hsl(var(--background)/0.24)] backdrop-blur-md">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-0" />
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className={`h-9 rounded-full px-2.5 text-xs transition-colors ${
-              thinkingEnabled
-                ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                : 'border-border/70 bg-[hsl(var(--surface))/0.75] text-muted-foreground hover:bg-[hsl(var(--surface-hover))]'
-            }`}
-            onClick={() => onToggleThinking(!thinkingEnabled)}
-            aria-pressed={thinkingEnabled}
-            aria-label={thinkingEnabled ? '关闭思考模式' : '开启思考模式'}
-          >
-            <span
-              className={`mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full ${
-                thinkingEnabled ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              <Brain className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-xs font-medium">思考</span>
-          </Button>
-        </div>
-
         <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-[hsl(var(--surface))/0.82] focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40">
           <Textarea
             ref={textareaRef}
@@ -200,6 +180,8 @@ export function MobileComposer({
                   <PlusMenuContent
                     thinkingEnabled={thinkingEnabled}
                     onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+                    effort={effort}
+                    onEffortChange={onEffortChange}
                     webSearchEnabled={webSearchEnabled}
                     onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
                     canUseWebSearch={canUseWebSearch}
@@ -217,8 +199,6 @@ export function MobileComposer({
                     canUseTrace={canUseTrace}
                     traceEnabled={traceEnabled}
                     onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
-                    showThinkingToggle={false}
-                    showWebSearchToggle={false}
                     showAdvancedRequestAction={false}
                     showSessionPromptAction={false}
                     extraAction={{
@@ -313,6 +293,8 @@ export function MobileComposer({
             <PlusMenuContent
               thinkingEnabled={thinkingEnabled}
               onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+              effort={effort}
+              onEffortChange={onEffortChange}
               webSearchEnabled={webSearchEnabled}
               onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
               canUseWebSearch={canUseWebSearch}

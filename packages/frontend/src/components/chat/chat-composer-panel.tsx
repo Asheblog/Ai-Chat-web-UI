@@ -663,6 +663,8 @@ export function ChatComposerPanel({
         onRemoveImage={onRemoveImage}
         thinkingEnabled={thinkingEnabled}
         onToggleThinking={onToggleThinking}
+        effort={effort}
+        onEffortChange={onEffortChange}
         webSearchEnabled={webSearchEnabled}
         onToggleWebSearch={onToggleWebSearch}
         webSearchScope={webSearchScope}

@@ -162,7 +162,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     <div className="w-full max-w-4xl">
       <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
 
-      <div className="flex items-end gap-2 overflow-hidden rounded-[1.7rem] border border-border/70 bg-[hsl(var(--surface))/0.9] px-2 py-2 shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background">
+      <div className="flex items-center gap-2 overflow-hidden rounded-[1.7rem] border border-border/70 bg-[hsl(var(--surface))/0.9] px-2 py-1.5 shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background md:py-2">
         <div className="flex shrink-0 items-center gap-1">
           <AdvancedOptions {...advancedOptions} />
           {showExpand && (
@@ -206,7 +206,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
           onPaste={attachments.onPaste}
-          className="h-auto min-h-[56px] max-h-[240px] flex-1 resize-none border-0 bg-transparent px-2 py-3 text-left leading-[1.45] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="h-auto min-h-[44px] max-h-[220px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-left text-sm leading-[1.45] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 md:min-h-[56px] md:py-3 md:text-base"
           rows={1}
         />
 
