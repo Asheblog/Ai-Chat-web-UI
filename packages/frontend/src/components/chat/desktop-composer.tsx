@@ -135,132 +135,132 @@ export function DesktopComposer({
 
   return (
     <div className="hidden md:block">
-      <div className="mx-auto max-w-4xl px-4 md:px-6 pb-6">
+      <div className="mx-auto max-w-5xl px-4 pb-6 md:px-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
-        <div className="flex items-end gap-2">
-          <div className="flex h-14 items-center gap-1 rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.78] px-2 shadow-[0_10px_24px_hsl(var(--background)/0.16)] backdrop-blur-sm">
-            <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
-                  aria-label="更多操作"
-                >
-                  <Plus className="h-[18px] w-[18px]" />
-                </button>
-              </DropdownMenuTrigger>
-              <PlusMenuContent
-                thinkingEnabled={thinkingEnabled}
-                onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
-                webSearchEnabled={webSearchEnabled}
-                onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-                canUseWebSearch={canUseWebSearch}
-                showWebSearchScope={showWebSearchScope}
-                webSearchScope={webSearchScope}
-                onWebSearchScopeChange={onWebSearchScopeChange}
-                webSearchDisabledNote={webSearchDisabledNote}
-                pythonToolEnabled={pythonToolEnabled}
-                onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-                canUsePythonTool={canUsePythonTool}
-                pythonToolDisabledNote={pythonToolDisabledNote}
-                skillOptions={skillOptions}
-                onToggleSkillOption={onToggleSkillOption}
-                canUseTrace={canUseTrace}
-                traceEnabled={traceEnabled}
-                onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
-                effort={effort}
-                onEffortChange={(value) => onEffortChange(value as typeof effort)}
-                contentClassName="rounded-2xl"
-                bodyClassName="text-sm"
-                onOpenSkillPanel={openSkillPanelFromMenu}
-                onOpenAdvanced={() => {
-                  setPlusOpen(false)
-                  onOpenAdvanced()
-                }}
-                onOpenSessionPrompt={
-                  onOpenSessionPrompt
-                    ? () => {
-                        setPlusOpen(false)
-                        onOpenSessionPrompt()
-                      }
-                    : undefined
-                }
+        <div className="overflow-hidden rounded-[1.9rem] border border-border/70 bg-[hsl(var(--surface))/0.9] shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background">
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => onInputChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={onCompositionEnd}
+            placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
+            disabled={textareaDisabled}
+            className="h-auto min-h-[64px] max-h-[260px] w-full resize-none border-0 bg-transparent px-5 pb-3 pt-4 text-left leading-[1.45] placeholder:text-muted-foreground transition-[height] duration-150 ease-out focus-visible:ring-0 focus-visible:ring-offset-0"
+            rows={1}
+          />
+
+          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-3 pb-3 pt-2">
+            <div className="flex items-center gap-1.5">
+              <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
+                    aria-label="更多操作"
+                  >
+                    <Plus className="h-[18px] w-[18px]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <PlusMenuContent
+                  thinkingEnabled={thinkingEnabled}
+                  onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+                  webSearchEnabled={webSearchEnabled}
+                  onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+                  canUseWebSearch={canUseWebSearch}
+                  showWebSearchScope={showWebSearchScope}
+                  webSearchScope={webSearchScope}
+                  onWebSearchScopeChange={onWebSearchScopeChange}
+                  webSearchDisabledNote={webSearchDisabledNote}
+                  pythonToolEnabled={pythonToolEnabled}
+                  onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+                  canUsePythonTool={canUsePythonTool}
+                  pythonToolDisabledNote={pythonToolDisabledNote}
+                  skillOptions={skillOptions}
+                  onToggleSkillOption={onToggleSkillOption}
+                  canUseTrace={canUseTrace}
+                  traceEnabled={traceEnabled}
+                  onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
+                  effort={effort}
+                  onEffortChange={(value) => onEffortChange(value as typeof effort)}
+                  contentClassName="rounded-2xl"
+                  bodyClassName="text-sm"
+                  onOpenSkillPanel={openSkillPanelFromMenu}
+                  onOpenAdvanced={() => {
+                    setPlusOpen(false)
+                    onOpenAdvanced()
+                  }}
+                  onOpenSessionPrompt={
+                    onOpenSessionPrompt
+                      ? () => {
+                          setPlusOpen(false)
+                          onOpenSessionPrompt()
+                        }
+                      : undefined
+                  }
+                />
+              </DropdownMenu>
+
+              {showExpand && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
+                        onClick={onExpandOpen}
+                        aria-label="全屏编辑"
+                      >
+                        <Maximize2 className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>全屏编辑</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+
+              <AttachmentMenu
+                onPickImages={pickImages}
+                onPickDocuments={pickDocuments}
+                disableImages={isStreaming || !isVisionEnabled}
+                disableDocuments={isStreaming}
+                hasImages={selectedImages.length > 0}
+                hasDocuments={hasDocuments}
+                onOpenManager={onOpenAttachmentManager}
+                manageDisabled={!hasDocuments && selectedImages.length === 0}
+                manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
+                ariaLabel="上传附件"
+                className="h-10 w-10 rounded-xl border-0 bg-transparent"
+                onOpenKnowledgeBase={onOpenKnowledgeBase}
+                knowledgeBaseEnabled={knowledgeBaseEnabled}
+                knowledgeBaseCount={knowledgeBaseCount}
               />
-            </DropdownMenu>
+            </div>
 
-            {showExpand && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
-                      onClick={onExpandOpen}
-                      aria-label="全屏编辑"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>全屏编辑</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            <AttachmentMenu
-              onPickImages={pickImages}
-              onPickDocuments={pickDocuments}
-              disableImages={isStreaming || !isVisionEnabled}
-              disableDocuments={isStreaming}
-              hasImages={selectedImages.length > 0}
-              hasDocuments={hasDocuments}
-              onOpenManager={onOpenAttachmentManager}
-              manageDisabled={!hasDocuments && selectedImages.length === 0}
-              manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
-              ariaLabel="上传附件"
-              className="h-10 w-10 rounded-xl border-0 bg-transparent"
-              onOpenKnowledgeBase={onOpenKnowledgeBase}
-              knowledgeBaseEnabled={knowledgeBaseEnabled}
-              knowledgeBaseCount={knowledgeBaseCount}
-            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <motion.button
+                    onClick={isStreaming ? onStop : onSend}
+                    disabled={desktopSendDisabled}
+                    aria-label={isStreaming ? '停止生成' : '发送'}
+                    className={`inline-flex h-11 w-11 items-center justify-center rounded-xl shadow-[0_10px_22px_hsl(var(--background)/0.24)] transition-colors ${
+                      isStreaming
+                        ? 'bg-destructive text-destructive-foreground hover:opacity-90'
+                        : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    }`}
+                    variants={sendButtonVariants}
+                    animate="idle"
+                    whileHover={!isStreaming ? 'hover' : undefined}
+                    whileTap={!isStreaming ? 'tap' : undefined}
+                  >
+                    {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+                  </motion.button>
+                </TooltipTrigger>
+                <TooltipContent>{sendTooltip}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-
-          <div className="flex-1 overflow-hidden rounded-[1.7rem] border border-border/70 bg-[hsl(var(--surface))/0.9] shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background">
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => onInputChange(e.target.value)}
-              onKeyDown={onKeyDown}
-              onPaste={onPaste}
-              onCompositionStart={onCompositionStart}
-              onCompositionEnd={onCompositionEnd}
-              placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
-              disabled={textareaDisabled}
-              className="h-auto min-h-[56px] max-h-[240px] w-full resize-none border-0 bg-transparent px-5 py-4 text-left leading-[1.45] placeholder:text-muted-foreground transition-[height] duration-150 ease-out focus-visible:ring-0 focus-visible:ring-offset-0"
-              rows={1}
-            />
-          </div>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  onClick={isStreaming ? onStop : onSend}
-                  disabled={desktopSendDisabled}
-                  aria-label={isStreaming ? '停止生成' : '发送'}
-                  className={`inline-flex h-14 w-14 items-center justify-center rounded-2xl shadow-[0_12px_26px_hsl(var(--background)/0.24)] transition-colors ${
-                    isStreaming
-                      ? 'bg-destructive text-destructive-foreground hover:opacity-90'
-                      : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  }`}
-                  variants={sendButtonVariants}
-                  animate={isStreaming ? 'sending' : 'idle'}
-                  whileHover={!isStreaming ? 'hover' : undefined}
-                  whileTap={!isStreaming ? 'tap' : undefined}
-                >
-                  {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent>{sendTooltip}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         </div>
 
         <SkillPanelSheet
