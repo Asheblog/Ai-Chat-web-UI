@@ -558,6 +558,8 @@ export interface WebSearchHit {
   title: string;
   url: string;
   snippet?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
 }
 
 export interface ToolEventDetails {
@@ -572,6 +574,14 @@ export interface ToolEventDetails {
   wordCount?: number;
   siteName?: string;
   byline?: string;
+  leadImageUrl?: string;
+  images?: Array<{
+    url: string;
+    alt?: string;
+    source?: string;
+    width?: number;
+    height?: number;
+  }>;
   requestedLimit?: number | null;
   appliedLimit?: number | null;
   warning?: string;

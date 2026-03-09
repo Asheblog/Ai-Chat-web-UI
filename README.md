@@ -281,6 +281,8 @@ npm run start:dev
 - 聊天/Battle 请求字段统一为 `skills`，旧 `features` 已移除
 - 旧主机执行配置 `python_tool_command`、`python_tool_args` 已下线
 - 聊天侧动态第三方 Skill runtime 默认禁用；可在系统设置开启（建议同时启用审批/审计）
+- `read_url` 升级为 v2：返回结构新增 `leadImageUrl` 与 `images[]`（网页图片证据），`web_search` 命中新增 `imageUrl`/`thumbnailUrl`
+- 迁移策略：无迁移、直接替换（旧调用方可继续读取原有文本字段；新字段按需消费）
 
 请求示例：
 

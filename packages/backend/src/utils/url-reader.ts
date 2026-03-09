@@ -40,6 +40,8 @@ export interface UrlReadResult {
   errorCode?: UrlReadErrorCode
   httpStatus?: number
   fallbackUsed?: 'none' | 'crawler'
+  leadImageUrl?: string
+  images?: UrlReadImage[]
 }
 
 export interface UrlReaderOptions {
@@ -48,12 +50,21 @@ export interface UrlReaderOptions {
   userAgent?: string
 }
 
+export interface UrlReadImage {
+  url: string
+  alt?: string
+  width?: number
+  height?: number
+  source: 'meta' | 'content' | 'crawler'
+}
+
 const DEFAULT_TIMEOUT = 30000
 const DEFAULT_MAX_CONTENT_LENGTH = 100000
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (compatible; AIChat/1.0; +https://github.com/Asheblog/aichat)'
 const CRAWLER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
 const CRAWLER_MIN_TEXT_LENGTH = 40
+const MAX_EXTRACTED_IMAGES = 8
 const JS_CHALLENGE_PATTERNS: RegExp[] = [
   /cf-chl/i,
   /cloudflare/i,
@@ -213,6 +224,113 @@ const buildExcerpt = (value: string): string | undefined => {
   return normalized.length > 220 ? `${normalized.slice(0, 220)}...` : normalized
 }
 
+const parsePositiveInt = (value: string | null): number | undefined => {
+  if (!value) return undefined
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined
+  return parsed
+}
+
+const extractSrcFromSrcSet = (value: string | null): string | null => {
+  if (!value) return null
+  const first = value
+    .split(',')
+    .map((item) => item.trim())
+    .find(Boolean)
+  if (!first) return null
+  const url = first.split(/\s+/)[0]?.trim()
+  return url || null
+}
+
+const normalizeImageUrl = (value: string | null | undefined, baseUrl: string): string | null => {
+  if (!value) return null
+  const raw = value.trim()
+  if (!raw) return null
+  if (/^data:image\//i.test(raw)) return raw
+  if (/^https?:\/\//i.test(raw)) return raw
+  if (raw.startsWith('//')) return `https:${raw}`
+  try {
+    return new URL(raw, baseUrl).toString()
+  } catch {
+    return null
+  }
+}
+
+const isLikelyDecorativeImage = (url: string): boolean => {
+  const normalized = url.toLowerCase()
+  return (
+    normalized.includes('favicon') ||
+    normalized.includes('sprite') ||
+    normalized.includes('/logo') ||
+    normalized.includes('icon')
+  )
+}
+
+const collectImagesFromDocument = (
+  doc: any,
+  baseUrl: string,
+  contentSource: 'content' | 'crawler',
+): { leadImageUrl?: string; images?: UrlReadImage[] } => {
+  if (!doc) return {}
+
+  const images: UrlReadImage[] = []
+  const seen = new Set<string>()
+  const pushImage = (item: UrlReadImage) => {
+    const normalizedUrl = item.url.trim()
+    if (!normalizedUrl || seen.has(normalizedUrl)) return
+    seen.add(normalizedUrl)
+    images.push(item)
+  }
+
+  const metaImageCandidates = [
+    doc.querySelector('meta[property="og:image"]')?.getAttribute('content'),
+    doc.querySelector('meta[property="og:image:url"]')?.getAttribute('content'),
+    doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content'),
+    doc.querySelector('meta[name="twitter:image:src"]')?.getAttribute('content'),
+  ]
+  for (const candidate of metaImageCandidates) {
+    const normalized = normalizeImageUrl(candidate, baseUrl)
+    if (!normalized) continue
+    pushImage({
+      url: normalized,
+      source: 'meta',
+    })
+  }
+
+  const contentRoots = [
+    ...Array.from(doc.querySelectorAll('article,main,[role="main"],.article-content,.post-content,.entry-content')),
+  ]
+  if (contentRoots.length === 0 && doc.body) {
+    contentRoots.push(doc.body)
+  }
+  const imageElements = contentRoots.flatMap((root: any) => Array.from(root.querySelectorAll('img')))
+  for (const element of imageElements) {
+    const src =
+      element.getAttribute('src') ||
+      element.getAttribute('data-src') ||
+      element.getAttribute('data-original') ||
+      extractSrcFromSrcSet(element.getAttribute('srcset'))
+    const normalized = normalizeImageUrl(src, baseUrl)
+    if (!normalized || isLikelyDecorativeImage(normalized)) continue
+
+    pushImage({
+      url: normalized,
+      alt: (element.getAttribute('alt') || '').trim() || undefined,
+      width: parsePositiveInt(element.getAttribute('width')),
+      height: parsePositiveInt(element.getAttribute('height')),
+      source: contentSource,
+    })
+  }
+
+  if (images.length === 0) return {}
+  const bounded = images.slice(0, MAX_EXTRACTED_IMAGES)
+  const leadImageUrl = bounded[0]?.url
+  return {
+    leadImageUrl,
+    images: bounded,
+  }
+}
+
 async function fetchPageBody(
   url: string,
   timeout: number,
@@ -346,6 +464,8 @@ const extractCrawlerResultFromHtml = (
       return null
     }
 
+    const imageEvidence = collectImagesFromDocument(doc, url, 'crawler')
+
     return {
       title: extractTitleFromDocument(doc),
       url,
@@ -354,6 +474,8 @@ const extractCrawlerResultFromHtml = (
       excerpt: buildExcerpt(bestText),
       wordCount: countWords(bestText),
       fallbackUsed: 'crawler',
+      leadImageUrl: imageEvidence.leadImageUrl,
+      images: imageEvidence.images,
     }
   } finally {
     dom.window.close()
@@ -372,6 +494,7 @@ const extractReadabilityResultFromHtml = (
   })
 
   try {
+    const imageEvidence = collectImagesFromDocument(dom.window.document, url, 'content')
     const reader = new Readability(dom.window.document, {
       charThreshold: 20,
     })
@@ -395,6 +518,8 @@ const extractReadabilityResultFromHtml = (
       publishedTime: article.publishedTime || undefined,
       wordCount: countWords(textContent),
       fallbackUsed: 'none',
+      leadImageUrl: imageEvidence.leadImageUrl,
+      images: imageEvidence.images,
     }
   } finally {
     dom.window.close()
@@ -664,6 +789,24 @@ export function formatUrlContentForModel(result: UrlReadResult): string {
     parts.push('')
     parts.push(`## 摘要`)
     parts.push(result.excerpt)
+  }
+
+  const images = Array.isArray(result.images) ? result.images : []
+  if (result.leadImageUrl || images.length > 0) {
+    parts.push('')
+    parts.push('## 图片证据')
+    if (result.leadImageUrl) {
+      parts.push(`- **主图**: ${result.leadImageUrl}`)
+    }
+    const candidateImages = images.filter((item) => item.url && item.url !== result.leadImageUrl).slice(0, 5)
+    if (candidateImages.length > 0) {
+      parts.push('- **候选图**:')
+      for (const [index, image] of candidateImages.entries()) {
+        const sourceLabel = image.source ? ` [${image.source}]` : ''
+        const altLabel = image.alt ? `（${image.alt}）` : ''
+        parts.push(`  ${index + 1}. ${image.url}${altLabel}${sourceLabel}`)
+      }
+    }
   }
 
   parts.push('')

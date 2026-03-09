@@ -7,6 +7,8 @@ export interface WebSearchHit {
   url: string
   snippet?: string
   content?: string
+  imageUrl?: string
+  thumbnailUrl?: string
   engine?: string
   query?: string
   queryLanguage?: WebSearchQueryLanguage
@@ -82,6 +84,51 @@ const normalizeDomains = (domains?: string[]) =>
   Array.isArray(domains) ? domains.map((d) => d.trim()).filter(Boolean) : []
 
 const normalizeEngine = (value: string) => value.trim().toLowerCase()
+
+const looksLikeImageUrl = (value: string): boolean =>
+  /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i.test(value)
+
+const pickFirstString = (...candidates: unknown[]): string | undefined => {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+  return undefined
+}
+
+const pickImageUrl = (item: any): string | undefined => {
+  const direct = pickFirstString(
+    item?.imageUrl,
+    item?.image_url,
+    item?.image,
+    item?.imageSrc,
+    item?.image_src,
+    item?.cover,
+    item?.coverUrl,
+    item?.cover_url,
+    item?.pic,
+    item?.picUrl,
+    item?.pic_url,
+  )
+  if (direct) return direct
+  const nested = pickFirstString(item?.image?.url, item?.images?.[0]?.url)
+  if (nested) return nested
+  const fallbackUrl = pickFirstString(item?.url)
+  return fallbackUrl && looksLikeImageUrl(fallbackUrl) ? fallbackUrl : undefined
+}
+
+const pickThumbnailUrl = (item: any): string | undefined =>
+  pickFirstString(
+    item?.thumbnailUrl,
+    item?.thumbnail_url,
+    item?.thumbnail,
+    item?.thumb,
+    item?.previewImage,
+    item?.preview_image,
+    item?.image?.thumbnail,
+    item?.images?.[0]?.thumbnail,
+  )
 
 const normalizeUrlForDedupe = (rawUrl: string): string => {
   if (!rawUrl) return ''
@@ -170,6 +217,8 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
     url: item?.url || '',
     snippet: item?.content || item?.snippet || '',
     content: item?.content,
+    imageUrl: pickImageUrl(item),
+    thumbnailUrl: pickThumbnailUrl(item),
   }))
 }
 
@@ -201,6 +250,8 @@ const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<We
     url: item?.url || '',
     snippet: item?.description || item?.snippet || '',
     content: item?.description,
+    imageUrl: pickImageUrl(item),
+    thumbnailUrl: pickThumbnailUrl(item),
   }))
 }
 
@@ -272,6 +323,8 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     url: item?.url || item?.link || item?.imageUrl || '',
     snippet: item?.summary || item?.description || item?.snippet || '',
     content: item?.content || item?.summary || item?.description,
+    imageUrl: pickImageUrl(item),
+    thumbnailUrl: pickThumbnailUrl(item),
   }))
 }
 

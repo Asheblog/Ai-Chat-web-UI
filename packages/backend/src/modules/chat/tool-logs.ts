@@ -102,6 +102,17 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
               };
               if (typeof hit.snippet === 'string') normalized.snippet = hit.snippet;
               if (typeof hit.content === 'string') normalized.content = hit.content;
+              if (typeof hit.imageUrl === 'string') normalized.imageUrl = hit.imageUrl;
+              if (typeof hit.image_url === 'string' && !normalized.imageUrl) {
+                normalized.imageUrl = hit.image_url;
+              }
+              if (typeof hit.thumbnailUrl === 'string') normalized.thumbnailUrl = hit.thumbnailUrl;
+              if (typeof hit.thumbnail_url === 'string' && !normalized.thumbnailUrl) {
+                normalized.thumbnailUrl = hit.thumbnail_url;
+              }
+              if (typeof hit.thumbnail === 'string' && !normalized.thumbnailUrl) {
+                normalized.thumbnailUrl = hit.thumbnail;
+              }
               return normalized;
             })
             .filter((hit: WebSearchHit | null): hit is WebSearchHit => Boolean(hit));

@@ -172,10 +172,10 @@ export class UrlReaderToolHandler implements IToolHandler {
           fallbackUsed: result.fallbackUsed || 'none',
         }
       )
-      context.sendToolEvent({
-        id: callId,
-        tool: 'read_url',
-        stage: 'result',
+        context.sendToolEvent({
+          id: callId,
+          tool: 'read_url',
+          stage: 'result',
         query: url,
         summary: result.title
           ? `已读取：${result.title}${result.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''}`
@@ -188,16 +188,18 @@ export class UrlReaderToolHandler implements IToolHandler {
         wordCount: result.wordCount,
         siteName: result.siteName,
         byline: result.byline,
-        details: {
-          url,
-          title: result.title,
-          excerpt: result.excerpt,
-          wordCount: result.wordCount,
-          siteName: result.siteName,
-          byline: result.byline,
-          fallbackUsed: result.fallbackUsed || 'none',
-        },
-      })
+          details: {
+            url,
+            title: result.title,
+            excerpt: result.excerpt,
+            wordCount: result.wordCount,
+            siteName: result.siteName,
+            byline: result.byline,
+            leadImageUrl: result.leadImageUrl,
+            images: Array.isArray(result.images) ? result.images.slice(0, 4) : undefined,
+            fallbackUsed: result.fallbackUsed || 'none',
+          },
+        })
 
       const formatted = formatUrlContentForModel(result)
       return {
