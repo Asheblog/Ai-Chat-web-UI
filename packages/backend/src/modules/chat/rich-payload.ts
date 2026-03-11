@@ -30,6 +30,8 @@ type AnyRecord = Record<string, unknown>
 const IMAGE_URL_KEYS = [
   'imageUrl',
   'image_url',
+  'leadImageUrl',
+  'lead_image_url',
   'thumbnail',
   'thumbnailUrl',
   'thumbnail_url',
@@ -67,6 +69,12 @@ const pickStringFromKeys = (obj: AnyRecord, keys: string[]): string | null => {
 const looksLikeImageUrl = (url: string): boolean =>
   /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i.test(url) ||
   /^data:image\//i.test(url)
+
+const normalizePositiveInt = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  const normalized = Math.trunc(value)
+  return normalized > 0 ? normalized : undefined
+}
 
 const normalizeEvidenceUrl = (value: string | null, baseUrl: string): string | null => {
   if (!value) return null
@@ -171,6 +179,18 @@ const resolveGeneratedImageUrl = (
   return null
 }
 
+const normalizeSourceUrl = (
+  candidate: string | null,
+  imageUrl: string,
+  baseUrl: string,
+): string | undefined => {
+  const normalized = normalizeEvidenceUrl(candidate, baseUrl)
+  if (!normalized) return undefined
+  if (normalized === imageUrl) return undefined
+  if (looksLikeImageUrl(normalized)) return undefined
+  return normalized
+}
+
 const buildExternalImageParts = (toolLogsJson: string | null | undefined, baseUrl: string): RichMessageImagePart[] => {
   if (!toolLogsJson) return []
   let parsed: unknown
@@ -186,45 +206,56 @@ const buildExternalImageParts = (toolLogsJson: string | null | undefined, baseUr
     const event = asRecord(entry)
     if (!event) continue
     const tool = pickString(event.tool) || ''
-    const sourceKind = inferSourceKind(tool)
+    const normalizedTool = tool.trim().toLowerCase()
+    const isWebSearchTool = normalizedTool.includes('web_search') || normalizedTool.endsWith('search')
+    const isReadUrlTool = normalizedTool.includes('read_url')
     const details = asRecord(event.details)
+    const parentTool = pickString(details?.parentTool)
+    const sourceKind = inferSourceKind(parentTool || tool)
     const hits = Array.isArray(event.hits) ? event.hits : []
     const eventSummary = pickString(event.summary)
     const eventQuery = pickString(event.query)
+    const eventUrl = normalizeEvidenceUrl(pickString(event.url), baseUrl)
     const defaultConfidence =
       normalizeConfidence(details?.confidence) ??
       normalizeConfidence(details?.reliability) ??
       normalizeConfidence(details?.score)
 
-    const candidateRecords: AnyRecord[] = []
+    const candidateRecords: Array<{
+      record: AnyRecord
+      orderHint?: number
+    }> = []
     if (details) {
-      candidateRecords.push(details)
-      const detailImages = Array.isArray(details.images) ? details.images : []
-      for (const item of detailImages) {
-        const imageRecord = asRecord(item)
-        if (imageRecord) candidateRecords.push(imageRecord)
-      }
+      candidateRecords.push({
+        record: details,
+        orderHint: normalizePositiveInt(details.rank),
+      })
     }
-    for (const hit of hits) {
+    for (const [hitIndex, hit] of hits.entries()) {
       const hitRecord = asRecord(hit)
       if (!hitRecord) continue
-      candidateRecords.push(hitRecord)
-      const hitImages = Array.isArray(hitRecord.images) ? hitRecord.images : []
-      for (const item of hitImages) {
-        const imageRecord = asRecord(item)
-        if (imageRecord) candidateRecords.push(imageRecord)
-      }
+      candidateRecords.push({
+        record: hitRecord,
+        orderHint: normalizePositiveInt(hitRecord.rank) ?? hitIndex + 1,
+      })
     }
 
-    for (const record of candidateRecords) {
+    for (const [candidateIndex, candidate] of candidateRecords.entries()) {
+      const { record, orderHint } = candidate
       const rawImageUrl = extractImageUrlFromRecord(record)
       const url = normalizeEvidenceUrl(rawImageUrl, baseUrl)
       if (!url) continue
-      const sourceUrl =
-        normalizeEvidenceUrl(
-          pickStringFromKeys(record, SOURCE_URL_KEYS) || pickString(event.url) || null,
-          baseUrl,
-        ) || undefined
+      const sourceUrl = (() => {
+        if (isReadUrlTool) {
+          return normalizeSourceUrl(eventUrl || null, url, baseUrl)
+        }
+        if (isWebSearchTool) {
+          const hitUrl = pickString(record.url)
+          return normalizeSourceUrl(hitUrl || eventUrl || null, url, baseUrl)
+        }
+        const genericSource = pickStringFromKeys(record, SOURCE_URL_KEYS) || eventUrl || null
+        return normalizeSourceUrl(genericSource, url, baseUrl)
+      })()
       const title = pickStringFromKeys(record, TITLE_KEYS) || eventSummary || undefined
       const confidence =
         normalizeConfidence(record.confidence) ??
@@ -232,11 +263,13 @@ const buildExternalImageParts = (toolLogsJson: string | null | undefined, baseUr
         normalizeConfidence(record.score) ??
         defaultConfidence
       const metaFromRecord = extractContextMeta(record)
+      const evidenceOrder = orderHint ?? candidateIndex + 1
       const meta =
-        metaFromRecord || eventQuery
+        metaFromRecord || eventQuery || evidenceOrder
           ? {
               ...(metaFromRecord ?? {}),
               ...(eventQuery ? { query: eventQuery } : {}),
+              evidenceOrder,
             }
           : undefined
 
@@ -288,23 +321,22 @@ export const buildRichMessagePayload = ({
     alt: `上传图片 ${index + 1}`,
   }))
 
-  const generatedParts: RichMessageImagePart[] = (generatedImages ?? [])
-    .map((image, index) => {
-      const url = resolveGeneratedImageUrl(image, baseUrl, resolveChatImageUrls)
-      if (!url) return null
-      const title = pickString(image.revisedPrompt) || undefined
-      return {
-        type: 'image',
-        source: 'generated',
-        sourceKind: 'generated',
-        url,
-        alt: title || `AI 生成图片 ${index + 1}`,
-        title,
-        width: typeof image.width === 'number' ? image.width : null,
-        height: typeof image.height === 'number' ? image.height : null,
-      } satisfies RichMessageImagePart
+  const generatedParts: RichMessageImagePart[] = []
+  for (const [index, image] of (generatedImages ?? []).entries()) {
+    const url = resolveGeneratedImageUrl(image, baseUrl, resolveChatImageUrls)
+    if (!url) continue
+    const title = pickString(image.revisedPrompt) || undefined
+    generatedParts.push({
+      type: 'image',
+      source: 'generated',
+      sourceKind: 'generated',
+      url,
+      alt: title || `AI 生成图片 ${index + 1}`,
+      title,
+      width: typeof image.width === 'number' ? image.width : null,
+      height: typeof image.height === 'number' ? image.height : null,
     })
-    .filter((item): item is RichMessageImagePart => Boolean(item))
+  }
 
   const externalParts = buildExternalImageParts(toolLogsJson, baseUrl)
   const dedupe = new Set<string>()

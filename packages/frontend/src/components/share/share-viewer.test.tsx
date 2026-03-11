@@ -159,7 +159,7 @@ describe("ShareViewer", () => {
     expect(screen.getByText("AIChat")).toBeInTheDocument()
   })
 
-  it("renders assistant rich payload in evidence split mode", () => {
+  it("renders assistant rich payload in news list mode", () => {
     const now = new Date().toISOString()
     const initialMessages = [
       {
@@ -170,7 +170,7 @@ describe("ShareViewer", () => {
         richPayload: {
           layout: "side-by-side",
           parts: [
-            { type: "text", text: "联网检索结论 [图1]", format: "markdown" },
+            { type: "text", text: "今日新闻\n1. 条目一", format: "markdown" },
             {
               type: "image",
               url: "https://example.com/evidence.png",
@@ -207,7 +207,11 @@ describe("ShareViewer", () => {
     )
 
     const renderer = screen.getByTestId("rich-message-renderer")
-    expect(renderer).toHaveAttribute("data-layout", "side-by-side")
+    expect(renderer).toHaveAttribute("data-render-mode", "news-list")
     expect(screen.getByText("证据图 1")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "查看原文" })).toHaveAttribute(
+      "href",
+      "https://example.com/source",
+    )
   })
 })
