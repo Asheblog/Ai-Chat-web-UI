@@ -211,4 +211,41 @@ describe('tool-orchestrator', () => {
     expect(result.content).toBe('retry success')
     expect(requestCount).toBe(2)
   })
+
+  it('normalizes assistant tool-call message content to null when model emits empty content', async () => {
+    let requestCount = 0
+    const result = await runToolOrchestration({
+      provider: 'openai',
+      requestData: {},
+      initialMessages: [{ role: 'user', content: '查一下新闻' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set<string>(['python_runner']),
+      maxIterations: 1,
+      stream: false,
+      requestTurn: async () => {
+        requestCount += 1
+        if (requestCount === 1) {
+          return buildToolCallTurnResponse('python_runner', { code: 'print("hello")' }, 'call_empty_content')
+        }
+        return buildNonStreamResponseLike('done')
+      },
+      handleToolCall: async (_toolName, toolCall) => ({
+        toolCallId: toolCall.id || 'call',
+        toolName: 'python_runner',
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id || 'call',
+          name: 'python_runner',
+          content: JSON.stringify({ stdout: 'hello' }),
+        },
+      }),
+    })
+
+    expect(result.status).toBe('completed')
+    const assistantToolCallMessage = result.messages.find(
+      (msg) => msg?.role === 'assistant' && Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0,
+    )
+    expect(assistantToolCallMessage).toBeDefined()
+    expect(assistantToolCallMessage?.content).toBeNull()
+  })
 })

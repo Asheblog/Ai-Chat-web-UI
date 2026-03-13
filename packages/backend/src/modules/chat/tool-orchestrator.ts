@@ -226,9 +226,14 @@ export async function runToolOrchestration(
       continue
     }
 
+    const assistantToolCallContent =
+      typeof turn.parsed.content === 'string' && turn.parsed.content.trim().length === 0
+        ? null
+        : turn.parsed.content
+
     workingMessages.push({
       role: 'assistant',
-      content: turn.parsed.content,
+      content: assistantToolCallContent,
       ...(includeReasoningInToolMessage && reasoningPayload
         ? { reasoning_content: reasoningPayload }
         : {}),
