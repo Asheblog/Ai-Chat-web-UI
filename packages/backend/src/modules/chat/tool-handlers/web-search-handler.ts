@@ -28,8 +28,6 @@ interface AutoReadEvidenceItem {
   byline?: string
   wordCount?: number
   content?: string
-  leadImageUrl?: string
-  images?: Array<{ url: string; alt?: string; source?: string }>
   error?: string
   errorCode?: UrlReadErrorCode
   httpStatus?: number
@@ -282,7 +280,7 @@ const buildSummaryForModel = (
   return `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
 }
 
-const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; engine?: string; rank?: number; sourceEngines?: string[]; imageUrl?: string; thumbnailUrl?: string }>) =>
+const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
   hits.slice(0, DEFAULT_MODEL_RESULT_HITS).map((hit) => ({
     title: hit.title,
     url: hit.url,
@@ -290,8 +288,6 @@ const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: st
     engine: hit.engine,
     rank: hit.rank,
     sourceEngines: Array.isArray(hit.sourceEngines) ? hit.sourceEngines.slice(0, 3) : undefined,
-    imageUrl: hit.imageUrl,
-    thumbnailUrl: hit.thumbnailUrl,
   }))
 
 const slimTaskResultsForModel = (tasks: Array<{ task: { engine: string; query: string; queryLanguage: string }; status: 'success' | 'error'; hits: unknown[]; error?: string }>) =>
@@ -313,8 +309,6 @@ const slimEvidenceForModel = (items: AutoReadEvidenceItem[]) =>
     siteName: item.siteName,
     byline: item.byline,
     wordCount: item.wordCount,
-    leadImageUrl: item.leadImageUrl,
-    images: Array.isArray(item.images) ? item.images.slice(0, 3) : undefined,
     error: item.error,
     errorCode: item.errorCode,
     httpStatus: item.httpStatus,
@@ -530,7 +524,7 @@ export class WebSearchToolHandler implements IToolHandler {
           tool: 'web_search',
           stage: 'result',
           query: taskResult.task.query,
-          hits: taskResult.hits,
+          hits: taskResult.hits.map(({ imageUrl: _imageUrl, thumbnailUrl: _thumbnailUrl, ...hit }) => hit),
           summary: `并行搜索完成：${taskResult.task.engine} 命中 ${taskResult.hits.length} 条`,
           details: {
             groupId: callId,
@@ -547,7 +541,7 @@ export class WebSearchToolHandler implements IToolHandler {
         })
       }
 
-      const hits = searchResult.hits
+      const hits = searchResult.hits.map(({ imageUrl: _imageUrl, thumbnailUrl: _thumbnailUrl, ...hit }) => hit)
       const autoReadEnabled = this.config.autoReadAfterSearch !== false
       const autoReadTopK = clampAutoReadTopK(this.config.autoReadTopK)
       const autoReadParallelism = clampPositiveInt(
@@ -676,14 +670,6 @@ export class WebSearchToolHandler implements IToolHandler {
             byline: readResult.byline || undefined,
             wordCount: readResult.wordCount,
             content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
-            leadImageUrl: readResult.leadImageUrl,
-            images: Array.isArray(readResult.images)
-              ? readResult.images.slice(0, 3).map((image) => ({
-                  url: image.url,
-                  alt: image.alt,
-                  source: image.source,
-                }))
-              : undefined,
             fallbackUsed: readResult.fallbackUsed === 'crawler' ? 'crawler' : 'none',
             rank,
           }
@@ -730,8 +716,6 @@ export class WebSearchToolHandler implements IToolHandler {
               wordCount: readResult.wordCount,
               siteName: readResult.siteName,
               byline: readResult.byline,
-              leadImageUrl: evidenceItem.leadImageUrl,
-              images: evidenceItem.images,
               fallbackUsed: evidenceItem.fallbackUsed,
             },
           })

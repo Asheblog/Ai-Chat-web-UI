@@ -31,12 +31,14 @@ const confidenceLabelMap: Record<RichMessageEvidenceConfidence, string> = {
   low: '可信度 低',
 }
 
-const normalizeLayout = (payload: RichMessagePayload): RichMessagePayload['layout'] => {
-  const hasText = payload.parts.some((part) => part.type === 'text' && part.text.trim().length > 0)
-  const hasImage = payload.parts.some((part) => part.type === 'image')
+const normalizeLayout = (
+  preferredLayout: RichMessagePayload['layout'],
+  hasText: boolean,
+  hasImage: boolean,
+): RichMessagePayload['layout'] => {
   if (!hasImage) return 'auto'
   if (!hasText) return 'stack'
-  if (payload.layout === 'side-by-side') return 'side-by-side'
+  if (preferredLayout === 'side-by-side') return 'side-by-side'
   return 'auto'
 }
 
@@ -52,24 +54,6 @@ const toConfidenceLabel = (confidence?: RichMessageEvidenceConfidence) =>
 const isLikelyImageUrl = (url: string) =>
   /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i.test(url)
 
-const isWebEvidenceImage = (image: RichMessageImagePart) =>
-  image.source === 'external' && image.sourceKind === 'web'
-
-const getEvidenceOrder = (image: RichMessageImagePart, index: number): number => {
-  const fromMeta = Number((image.meta as { evidenceOrder?: unknown } | undefined)?.evidenceOrder)
-  if (Number.isFinite(fromMeta) && fromMeta > 0) return Math.trunc(fromMeta)
-  const fromRef = Number((image.refId || '').replace(/^img-/, ''))
-  if (Number.isFinite(fromRef) && fromRef > 0) return Math.trunc(fromRef)
-  return index + 1
-}
-
-const toOrderedWebEvidenceImages = (images: RichMessageImagePart[]) =>
-  images
-    .map((image, index) => ({ image, index, order: getEvidenceOrder(image, index) }))
-    .filter((item) => isWebEvidenceImage(item.image))
-    .sort((a, b) => (a.order === b.order ? a.index - b.index : a.order - b.order))
-    .map((item) => item.image)
-
 const hasValidSourceUrl = (image: RichMessageImagePart): boolean => {
   const sourceUrl = image.sourceUrl?.trim()
   if (!sourceUrl) return false
@@ -79,62 +63,8 @@ const hasValidSourceUrl = (image: RichMessageImagePart): boolean => {
   return true
 }
 
-type ParsedTopLevelList = {
-  prefix: string
-  items: string[]
-  suffix: string
-}
-
-const topLevelListItemRe = /^(?: {0,3})(?:[-*+]|\d+\.)\s+(.+)$/
-
-const parseTopLevelMarkdownList = (markdown: string): ParsedTopLevelList | null => {
-  const lines = markdown.split('\n')
-  const startIndex = lines.findIndex((line) => topLevelListItemRe.test(line))
-  if (startIndex < 0) return null
-
-  const prefix = lines.slice(0, startIndex).join('\n').trim()
-  const items: string[] = []
-  let currentItemLines: string[] = []
-  let endIndex = lines.length
-
-  for (let index = startIndex; index < lines.length; index += 1) {
-    const line = lines[index]
-    const markerMatch = line.match(topLevelListItemRe)
-    if (markerMatch) {
-      if (currentItemLines.length > 0) {
-        items.push(currentItemLines.join('\n').trim())
-      }
-      currentItemLines = [markerMatch[1]]
-      continue
-    }
-
-    if (currentItemLines.length === 0) {
-      endIndex = index
-      break
-    }
-
-    if (line.trim().length === 0) {
-      currentItemLines.push('')
-      continue
-    }
-
-    if (/^(?: {2,}|\t+)/.test(line)) {
-      currentItemLines.push(line.trim())
-      continue
-    }
-
-    endIndex = index
-    break
-  }
-
-  if (currentItemLines.length > 0) {
-    items.push(currentItemLines.join('\n').trim())
-  }
-  if (items.length === 0) return null
-
-  const suffix = lines.slice(endIndex).join('\n').trim()
-  return { prefix, items, suffix }
-}
+const shouldHideImagePart = (image: RichMessageImagePart): boolean =>
+  image.source === 'external' && image.sourceKind === 'web'
 
 interface EvidenceImageCardProps {
   image: RichMessageImagePart
@@ -205,88 +135,27 @@ export function RichMessageRenderer({
   isRendering = false,
 }: RichMessageRendererProps) {
   const textParts = payload.parts.filter((part) => part.type === 'text')
-  const imageParts = payload.parts.filter((part): part is RichMessageImagePart => part.type === 'image')
-  const orderedWebEvidenceImages = toOrderedWebEvidenceImages(imageParts)
+  const imageParts = payload.parts
+    .filter((part): part is RichMessageImagePart => part.type === 'image')
+    .filter((part) => !shouldHideImagePart(part))
   const textFallback = textParts.map((part) => part.text).join('\n\n')
   const hasText = textFallback.trim().length > 0
   const hasImages = imageParts.length > 0
-  const shouldUseNewsListMode =
-    hasText &&
-    hasImages &&
-    orderedWebEvidenceImages.length > 0 &&
-    orderedWebEvidenceImages.length === imageParts.length
-  const parsedTopLevelList = shouldUseNewsListMode ? parseTopLevelMarkdownList(textFallback) : null
-  const useInlineNewsListMode = shouldUseNewsListMode && Boolean(parsedTopLevelList)
-  const layout = normalizeLayout(payload)
-  const sideBySide = !shouldUseNewsListMode && layout === 'side-by-side' && hasText && hasImages
+  const layout = normalizeLayout(payload.layout, hasText, hasImages)
+  const sideBySide = layout === 'side-by-side' && hasText && hasImages
 
   return (
     <div
       data-testid="rich-message-renderer"
       data-layout={layout}
-      data-render-mode={shouldUseNewsListMode ? 'news-list' : 'default'}
+      data-render-mode="default"
       className={cn(
         'w-full',
         sideBySide && 'grid gap-4 lg:grid lg:grid-cols-12 lg:gap-5',
         className,
       )}
     >
-      {useInlineNewsListMode && parsedTopLevelList ? (
-        <div className="min-w-0 space-y-4">
-          {parsedTopLevelList.prefix && (
-            <MarkdownRenderer
-              html={null}
-              fallback={parsedTopLevelList.prefix}
-              isStreaming={isStreaming}
-              isRendering={isRendering}
-            />
-          )}
-          {parsedTopLevelList.items.map((item, index) => {
-            const matchedImage = orderedWebEvidenceImages[index]
-            return (
-              <section
-                key={`news-item-${index + 1}`}
-                className="space-y-3"
-                data-testid={`news-item-${index + 1}`}
-              >
-                <div className="rounded-lg border border-border/60 bg-background px-3 py-2">
-                  <MarkdownRenderer
-                    html={null}
-                    fallback={`${index + 1}. ${item}`}
-                    isStreaming={isStreaming}
-                    isRendering={isRendering}
-                  />
-                </div>
-                {matchedImage && <EvidenceImageCard image={matchedImage} index={index} />}
-              </section>
-            )
-          })}
-          {orderedWebEvidenceImages.length > parsedTopLevelList.items.length && (
-            <section className="space-y-2" data-testid="news-extra-sources">
-              <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">更多来源</p>
-              <div className={cn('grid gap-3', 'grid-cols-1 sm:grid-cols-2')}>
-                {orderedWebEvidenceImages
-                  .slice(parsedTopLevelList.items.length)
-                  .map((image, index) => (
-                    <EvidenceImageCard
-                      key={`${image.url}-${index}`}
-                      image={image}
-                      index={parsedTopLevelList.items.length + index}
-                    />
-                  ))}
-              </div>
-            </section>
-          )}
-          {parsedTopLevelList.suffix && (
-            <MarkdownRenderer
-              html={null}
-              fallback={parsedTopLevelList.suffix}
-              isStreaming={isStreaming}
-              isRendering={isRendering}
-            />
-          )}
-        </div>
-      ) : hasText && (
+      {hasText && (
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-7')}>
           <MarkdownRenderer
             html={hasImages ? null : textHtml ?? null}
@@ -297,18 +166,15 @@ export function RichMessageRenderer({
         </div>
       )}
 
-      {hasImages && !useInlineNewsListMode && (
+      {hasImages && (
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-5')}>
-          {shouldUseNewsListMode && (
-            <p className="mb-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">来源</p>
-          )}
           <div
             className={cn(
               'grid gap-3',
-              shouldUseNewsListMode ? 'grid-cols-1 sm:grid-cols-2' : imageParts.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1',
+              imageParts.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1',
             )}
           >
-            {(shouldUseNewsListMode ? orderedWebEvidenceImages : imageParts).map((image, index) => (
+            {imageParts.map((image, index) => (
               <EvidenceImageCard key={`${image.url}-${index}`} image={image} index={index} />
             ))}
           </div>

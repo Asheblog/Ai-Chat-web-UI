@@ -195,8 +195,6 @@ export class UrlReaderToolHandler implements IToolHandler {
             wordCount: result.wordCount,
             siteName: result.siteName,
             byline: result.byline,
-            leadImageUrl: result.leadImageUrl,
-            images: Array.isArray(result.images) ? result.images.slice(0, 4) : undefined,
             fallbackUsed: result.fallbackUsed || 'none',
           },
         })

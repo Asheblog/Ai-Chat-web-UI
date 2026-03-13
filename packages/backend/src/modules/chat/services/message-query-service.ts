@@ -403,7 +403,6 @@ export class ChatMessageQueryService {
       content: raw.content,
       attachmentRelativePaths: rel,
       generatedImages: Array.isArray(raw.generatedImages) ? raw.generatedImages : [],
-      toolLogsJson: toolLogsJson ?? null,
       baseUrl,
       resolveChatImageUrls: this.resolveChatImageUrls,
     })

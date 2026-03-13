@@ -160,13 +160,6 @@ describe('ChatMessageQueryService', () => {
           source: 'generated',
           url: 'https://cdn.example.com/generated/a.png',
         }),
-        expect.objectContaining({
-          type: 'image',
-          source: 'external',
-          url: 'https://example.com/a.png',
-          sourceUrl: 'https://example.com/a',
-          title: 'Result A',
-        }),
       ]),
     )
     expect(result.pagination).toEqual({ page: 1, limit: 2, total: 1, totalPages: 1 })

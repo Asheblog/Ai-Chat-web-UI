@@ -159,7 +159,7 @@ describe("ShareViewer", () => {
     expect(screen.getByText("AIChat")).toBeInTheDocument()
   })
 
-  it("renders assistant rich payload in news list mode", () => {
+  it("ignores external web evidence images in shared rich payload", () => {
     const now = new Date().toISOString()
     const initialMessages = [
       {
@@ -207,11 +207,10 @@ describe("ShareViewer", () => {
     )
 
     const renderer = screen.getByTestId("rich-message-renderer")
-    expect(renderer).toHaveAttribute("data-render-mode", "news-list")
-    expect(screen.getByText("证据图 1")).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "查看原文" })).toHaveAttribute(
-      "href",
-      "https://example.com/source",
-    )
+    expect(renderer).toHaveAttribute("data-render-mode", "default")
+    expect(renderer).toHaveAttribute("data-layout", "auto")
+    expect(screen.getByText("今日新闻")).toBeInTheDocument()
+    expect(screen.queryByText("证据图 1")).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "查看原文" })).not.toBeInTheDocument()
   })
 })

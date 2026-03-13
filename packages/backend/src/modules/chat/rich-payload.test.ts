@@ -1,11 +1,11 @@
 import { buildRichMessagePayload } from './rich-payload'
 
-describe('buildRichMessagePayload external evidence mapping', () => {
+describe('buildRichMessagePayload external evidence disabled', () => {
   const baseUrl = 'https://chat.example.com'
   const resolveChatImageUrls = (relativePaths: string[], host: string) =>
     relativePaths.map((path) => `${host}${path}`)
 
-  test('uses web search hit url as sourceUrl', () => {
+  test('ignores external image fields from web tool logs', () => {
     const payload = buildRichMessagePayload({
       content: 'news',
       toolLogsJson: JSON.stringify([
@@ -24,29 +24,6 @@ describe('buildRichMessagePayload external evidence mapping', () => {
             },
           ],
         },
-      ]),
-      baseUrl,
-      resolveChatImageUrls,
-    })
-
-    const imageParts = payload?.parts.filter(
-      (part) => part.type === 'image' && part.source === 'external',
-    )
-    expect(imageParts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          url: 'https://cdn.example.com/a.jpg',
-          sourceUrl: 'https://example.com/article-a',
-          meta: expect.objectContaining({ evidenceOrder: 3 }),
-        }),
-      ]),
-    )
-  })
-
-  test('maps read_url lead image to event url and ignores details.images noise', () => {
-    const payload = buildRichMessagePayload({
-      content: 'read_url',
-      toolLogsJson: JSON.stringify([
         {
           id: 'tool-2',
           tool: 'read_url',
@@ -64,51 +41,48 @@ describe('buildRichMessagePayload external evidence mapping', () => {
       ]),
       baseUrl,
       resolveChatImageUrls,
-    })
+    } as any)
 
-    const externalUrls =
-      payload?.parts
-        .filter((part) => part.type === 'image' && part.source === 'external')
-        .map((part) => ({
-          url: part.url,
-          sourceUrl: part.sourceUrl,
-        })) || []
+    const externalImageParts =
+      payload?.parts.filter((part) => part.type === 'image' && part.source === 'external') || []
 
-    expect(externalUrls).toEqual([
-      {
-        url: 'https://img.example.com/lead.jpg',
-        sourceUrl: 'https://news.example.com/article',
-      },
-    ])
+    expect(externalImageParts).toEqual([])
   })
 
-  test('does not fallback sourceUrl to image url', () => {
+  test('keeps attachment and generated images', () => {
     const payload = buildRichMessagePayload({
-      content: 'image only',
-      toolLogsJson: JSON.stringify([
+      content: 'mixed',
+      attachmentRelativePaths: ['/img/upload-a.png'],
+      generatedImages: [
         {
-          id: 'tool-3',
-          tool: 'web_search',
-          stage: 'result',
-          createdAt: Date.now(),
-          hits: [
-            {
-              title: 'Image Source',
-              url: 'https://cdn.example.com/hero.png',
-              imageUrl: 'https://cdn.example.com/hero.png',
-            },
-          ],
+          url: 'https://cdn.example.com/generated-a.png',
+          width: 1024,
+          height: 768,
+          revisedPrompt: 'generated prompt',
         },
-      ]),
+      ],
       baseUrl,
       resolveChatImageUrls,
     })
 
-    const imagePart = payload?.parts.find(
-      (part) => part.type === 'image' && part.source === 'external',
+    expect(payload?.layout).toBe('side-by-side')
+    expect(payload?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'image',
+          source: 'attachment',
+          url: 'https://chat.example.com/img/upload-a.png',
+        }),
+        expect.objectContaining({
+          type: 'image',
+          source: 'generated',
+          url: 'https://cdn.example.com/generated-a.png',
+        }),
+      ]),
     )
 
-    expect(imagePart).toBeTruthy()
-    expect(imagePart?.sourceUrl).toBeUndefined()
+    const externalImageParts =
+      payload?.parts.filter((part) => part.type === 'image' && part.source === 'external') || []
+    expect(externalImageParts).toEqual([])
   })
 })
