@@ -36,6 +36,10 @@ import {
 import { runToolOrchestration } from './tool-orchestrator';
 import { guardToolLoopMessages } from './services/tool-loop-context-guard';
 import {
+  extractMissingFunctionCallOutputId,
+  pruneMissingToolCallReferences,
+} from './services/tool-call-repair';
+import {
   type AgentWebSearchConfig,
   type AgentPythonToolConfig,
   type AgentUrlReaderConfig,
@@ -632,6 +636,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let reasoningBuffer = '';
       let providerUsageSeen = false;
       let contextLengthRetryCount = 0;
+      let missingToolCallRetryCount = 0;
 
       try {
         const orchestration = await runToolOrchestration({
@@ -708,6 +713,25 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             };
           },
           onTurnError: async ({ error, iteration, messages }) => {
+            const missingToolCallId = extractMissingFunctionCallOutputId(error);
+            if (missingToolCallId) {
+              if (missingToolCallRetryCount >= 1) {
+                return false;
+              }
+              const repairResult = pruneMissingToolCallReferences(messages, missingToolCallId);
+              if (repairResult.changed) {
+                missingToolCallRetryCount += 1;
+                traceRecorder.log('agent:tool_call_repair_retry', {
+                  iteration,
+                  retryCount: missingToolCallRetryCount,
+                  callId: missingToolCallId,
+                  removedAssistantCalls: repairResult.removedAssistantCalls,
+                  removedToolMessages: repairResult.removedToolMessages,
+                  messageCount: messages.length,
+                });
+                return true;
+              }
+            }
             const parsed = parseApiError(error);
             if (parsed.type !== 'context_length') {
               return false;
