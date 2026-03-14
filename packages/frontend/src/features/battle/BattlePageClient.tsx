@@ -36,7 +36,7 @@ import { PromptStep } from './ui/PromptStep'
 import { ExecutionStep } from './ui/ExecutionStep'
 import { ResultStep } from './ui/ResultStep'
 import { DetailDrawer, type BattleAttemptDetail } from './ui/DetailDrawer'
-import { useBattleFlow, type BattleStep } from './hooks/useBattleFlow'
+import { useBattleFlow, type BattleDraftImage, type BattleStep } from './hooks/useBattleFlow'
 import './battle.css'
 import { buildModelKey, parseModelKey } from './utils/model-key'
 
@@ -314,10 +314,13 @@ export function BattlePageClient() {
   }, [clearingAll, flow.resetBattle, isAdmin, refreshHistory, toast])
 
   // Start battle
-  const handleStartBattle = async () => {
+  const handleStartBattle = async (payload?: {
+    promptImages: BattleDraftImage[]
+    expectedAnswerImages: BattleDraftImage[]
+  }) => {
     setShareLink(null)
     setSelectedNode(null)
-    const result = await flow.startBattle(models)
+    const result = await flow.startBattle(models, payload)
     if (!result.success && result.error) {
       toast({ title: result.error, variant: 'destructive' })
     } else {

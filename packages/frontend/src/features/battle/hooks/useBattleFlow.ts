@@ -856,21 +856,30 @@ export function useBattleFlow() {
   }, [])
 
   // Validate and build payload
-  const validateAndBuildPayload = useCallback((): {
+  const validateAndBuildPayload = useCallback((imageOverrides?: {
+    promptImages?: BattleDraftImage[]
+    expectedAnswerImages?: BattleDraftImage[]
+  }): {
     valid: boolean;
     payload?: MultiModelBattleStreamPayload;
     error?: string;
     updatedConfigs?: ModelConfigState[];
   } => {
+    const effectivePromptImages = Array.isArray(imageOverrides?.promptImages)
+      ? imageOverrides.promptImages
+      : promptImages
+    const effectiveExpectedAnswerImages = Array.isArray(imageOverrides?.expectedAnswerImages)
+      ? imageOverrides.expectedAnswerImages
+      : expectedAnswerImages
     const promptText = prompt.trim()
     const expectedAnswerText = expectedAnswer.trim()
-    const promptHasImages = promptImages.length > 0
-    const expectedAnswerHasImages = expectedAnswerImages.length > 0
+    const promptHasImages = effectivePromptImages.length > 0
+    const expectedAnswerHasImages = effectiveExpectedAnswerImages.length > 0
 
-    if (!hasBattleContent(prompt, promptImages)) {
+    if (!hasBattleContent(prompt, effectivePromptImages)) {
       return { valid: false, error: '请输入问题或上传题目图片' }
     }
-    if (!hasBattleContent(expectedAnswer, expectedAnswerImages)) {
+    if (!hasBattleContent(expectedAnswer, effectiveExpectedAnswerImages)) {
       return { valid: false, error: '请输入期望答案或上传答案图片' }
     }
     if (!judgeConfig.model) {
@@ -956,7 +965,7 @@ export function useBattleFlow() {
     if (promptText) {
       promptPayload.text = promptText
     }
-    const promptUploadImages = toBattleUploadImages(promptImages)
+    const promptUploadImages = toBattleUploadImages(effectivePromptImages)
     if (promptUploadImages.length > 0) {
       promptPayload.images = promptUploadImages
     }
@@ -965,7 +974,7 @@ export function useBattleFlow() {
     if (expectedAnswerText) {
       expectedAnswerPayload.text = expectedAnswerText
     }
-    const expectedAnswerUploadImages = toBattleUploadImages(expectedAnswerImages)
+    const expectedAnswerUploadImages = toBattleUploadImages(effectiveExpectedAnswerImages)
     if (expectedAnswerUploadImages.length > 0) {
       expectedAnswerPayload.images = expectedAnswerUploadImages
     }
@@ -990,8 +999,20 @@ export function useBattleFlow() {
   }, [prompt, promptImages, expectedAnswer, expectedAnswerImages, judgeConfig, selectedModels])
 
   // Execute battle
-  const startBattle = useCallback(async (models: ModelItem[]) => {
-    const validation = validateAndBuildPayload()
+  const startBattle = useCallback(async (
+    models: ModelItem[],
+    imageOverrides?: { promptImages?: BattleDraftImage[]; expectedAnswerImages?: BattleDraftImage[] },
+  ) => {
+    const effectivePromptImages = Array.isArray(imageOverrides?.promptImages)
+      ? imageOverrides.promptImages
+      : promptImages
+    const effectiveExpectedAnswerImages = Array.isArray(imageOverrides?.expectedAnswerImages)
+      ? imageOverrides.expectedAnswerImages
+      : expectedAnswerImages
+    const validation = validateAndBuildPayload({
+      promptImages: effectivePromptImages,
+      expectedAnswerImages: effectiveExpectedAnswerImages,
+    })
 
     if (validation.updatedConfigs) {
       setSelectedModels(validation.updatedConfigs)
@@ -1016,8 +1037,10 @@ export function useBattleFlow() {
     setSummary(null)
     setCurrentRunId(null)
     setError(null)
-    setPromptImageUrls(promptImages.map((item) => item.dataUrl))
-    setExpectedAnswerImageUrls(expectedAnswerImages.map((item) => item.dataUrl))
+    setPromptImages(effectivePromptImages)
+    setExpectedAnswerImages(effectiveExpectedAnswerImages)
+    setPromptImageUrls(effectivePromptImages.map((item) => item.dataUrl))
+    setExpectedAnswerImageUrls(effectiveExpectedAnswerImages.map((item) => item.dataUrl))
     initializeNodeStates()
     setStep('execution')
 

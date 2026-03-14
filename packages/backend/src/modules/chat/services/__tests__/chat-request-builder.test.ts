@@ -38,7 +38,7 @@ const buildBuilder = () => {
       findMany: jest.fn(),
     },
     modelCatalog: {
-      findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
   }
   const tokenizer = {
@@ -80,7 +80,7 @@ describe('ChatRequestBuilder', () => {
       { key: 'provider_timeout_ms', value: '123000' },
       { key: 'reasoning_enabled', value: 'true' },
     ])
-    prisma.modelCatalog.findFirst.mockResolvedValue(null)
+    prisma.modelCatalog.findMany.mockResolvedValue([])
     tokenizer.truncateMessages.mockResolvedValue([
       { role: 'assistant', content: 'hi' },
       { role: 'user', content: 'hello' },
@@ -120,7 +120,7 @@ describe('ChatRequestBuilder', () => {
       { key: 'reasoning_enabled', value: 'false' },
       { key: 'ollama_think', value: 'true' },
     ])
-    prisma.modelCatalog.findFirst.mockResolvedValue(null)
+    prisma.modelCatalog.findMany.mockResolvedValue([])
     tokenizer.truncateMessages.mockResolvedValue([
       { role: 'assistant', content: 'old' },
       { role: 'user', content: 'replay' },
@@ -166,7 +166,7 @@ describe('ChatRequestBuilder', () => {
     prisma.systemSetting.findMany.mockResolvedValue([
       { key: 'chat_system_prompt', value: 'global prompt' },
     ])
-    prisma.modelCatalog.findFirst.mockResolvedValue(null)
+    prisma.modelCatalog.findMany.mockResolvedValue([])
     tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
     tokenizer.countConversationTokens.mockResolvedValue(10)
     resolveContextLimit.mockResolvedValue(1000)
@@ -192,7 +192,7 @@ describe('ChatRequestBuilder', () => {
     prisma.systemSetting.findMany.mockResolvedValue([
       { key: 'chat_system_prompt', value: 'global prompt' },
     ])
-    prisma.modelCatalog.findFirst.mockResolvedValue(null)
+    prisma.modelCatalog.findMany.mockResolvedValue([])
     tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
     tokenizer.countConversationTokens.mockResolvedValue(10)
     resolveContextLimit.mockResolvedValue(1000)
@@ -210,5 +210,42 @@ describe('ChatRequestBuilder', () => {
       role: 'system',
       content: 'personal prompt',
     })
+  })
+
+  it('prefers model-specific temperature over system default', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'temperature_default', value: '0.7' },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValue([
+      {
+        metaJson: '{"fetched_at":"2026-03-14T13:02:53.706Z"}',
+        manualOverride: false,
+        lastFetchedAt: new Date('2026-03-14T13:02:53.706Z'),
+        modelId: 'kimi-k2.5',
+        rawId: 'kimi-k2.5',
+      },
+      {
+        metaJson: '{"temperature":1}',
+        manualOverride: true,
+        lastFetchedAt: new Date('2026-03-14T13:02:53.707Z'),
+        modelId: 'kimi-k2.5',
+        rawId: 'kimi-k2.5',
+      },
+    ])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: { ...baseSession, modelRawId: 'kimi-k2.5' } as any,
+      payload: { sessionId: 1, content: 'hi' } as any,
+      content: 'hi',
+      mode: 'stream',
+    })
+
+    expect(prepared.baseRequestBody.temperature).toBe(1)
   })
 })

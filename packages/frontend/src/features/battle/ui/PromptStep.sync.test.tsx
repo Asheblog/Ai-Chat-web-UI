@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { PromptStep } from './PromptStep'
 import type { BattleDraftImage } from '../hooks/useBattleFlow'
 
@@ -110,5 +110,56 @@ describe('PromptStep image sync', () => {
 
     expect(onPromptImagesChange).toHaveBeenCalledWith(localSelection)
     expect(promptSetSelectedImages).not.toHaveBeenCalled()
+  })
+
+  it('passes latest local image selection when starting battle', () => {
+    const onStart = vi.fn()
+    const onPromptImagesChange = vi.fn()
+    const onExpectedAnswerImagesChange = vi.fn()
+    promptSelectedImages = [
+      {
+        dataUrl: 'data:image/png;base64,AAAA',
+        mime: 'image/png',
+        size: 10,
+      },
+    ]
+    expectedSelectedImages = [
+      {
+        dataUrl: 'data:image/jpeg;base64,BBBB',
+        mime: 'image/jpeg',
+        size: 12,
+      },
+    ]
+
+    const props = {
+      prompt: '识别图片有什么问题',
+      expectedAnswer: '答案：一度房室传导阻滞',
+      promptImages: [] as BattleDraftImage[],
+      expectedAnswerImages: [] as BattleDraftImage[],
+      selectedModels: [],
+      judgeConfig: {
+        model: null,
+        threshold: 0.8,
+        runsPerModel: 1,
+        passK: 1,
+        maxConcurrency: 3,
+      },
+      onPromptChange: noop,
+      onExpectedAnswerChange: noop,
+      onPromptImagesChange,
+      onExpectedAnswerImagesChange,
+      onBack: noop,
+      onStart,
+      canStart: true,
+      isRunning: false,
+    }
+
+    render(<PromptStep {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: '开始对战' }))
+
+    expect(onStart).toHaveBeenCalledWith({
+      promptImages: promptSelectedImages,
+      expectedAnswerImages: expectedSelectedImages,
+    })
   })
 })

@@ -194,6 +194,7 @@ export class ChatRequestBuilder {
     const temperature = await this.resolveTemperature({
       connectionId: params.session.connectionId,
       rawModelId: params.session.modelRawId,
+      connectionPrefixId: (params.session.connection as any)?.prefixId,
       systemSettings,
     })
 
@@ -692,16 +693,39 @@ export class ChatRequestBuilder {
   private async resolveTemperature(params: {
     connectionId: number
     rawModelId: string
+    connectionPrefixId?: string | null
     systemSettings: Record<string, string>
   }): Promise<number> {
-    const { connectionId, rawModelId, systemSettings } = params
-    const catalog = await this.prisma.modelCatalog.findFirst({
-      where: { connectionId, rawId: rawModelId },
-      select: { metaJson: true },
+    const { connectionId, rawModelId, connectionPrefixId, systemSettings } = params
+    const normalizedRawId = (rawModelId || '').trim()
+    const normalizedPrefix = (connectionPrefixId || '').trim()
+    const modelIdCandidates = new Set<string>([normalizedRawId])
+    if (normalizedPrefix) {
+      modelIdCandidates.add(`${normalizedPrefix}.${normalizedRawId}`)
+    }
+    const catalogRows = await this.prisma.modelCatalog.findMany({
+      where: {
+        connectionId,
+        OR: [
+          { rawId: normalizedRawId },
+          { modelId: { in: Array.from(modelIdCandidates) } },
+        ],
+      },
+      select: {
+        metaJson: true,
+      },
+      orderBy: [
+        { manualOverride: 'desc' },
+        { lastFetchedAt: 'desc' },
+        { id: 'desc' },
+      ],
+      take: 8,
     })
-    const modelOverride = this.parseTemperatureValue(catalog?.metaJson)
-    if (modelOverride !== null) {
-      return modelOverride
+    for (const row of catalogRows) {
+      const modelOverride = this.parseTemperatureValue(row?.metaJson)
+      if (modelOverride !== null) {
+        return modelOverride
+      }
     }
     const systemDefault = this.parseTemperatureValue(systemSettings.temperature_default)
     if (systemDefault !== null) {

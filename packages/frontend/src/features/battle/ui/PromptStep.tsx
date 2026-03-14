@@ -25,7 +25,7 @@ interface PromptStepProps {
     onPromptImagesChange: (images: BattleDraftImage[]) => void
     onExpectedAnswerImagesChange: (images: BattleDraftImage[]) => void
     onBack: () => void
-    onStart: () => void
+    onStart: (payload?: { promptImages: BattleDraftImage[]; expectedAnswerImages: BattleDraftImage[] }) => void
     canStart: boolean
     isRunning: boolean
 }
@@ -110,6 +110,13 @@ export function PromptStep({
             onExpectedAnswerImagesChange(expectedSelectedImages)
         }
     }, [expectedSelectedImages, expectedAnswerImages, onExpectedAnswerImagesChange])
+
+    const handleStart = () => {
+        onStart({
+            promptImages: promptSelectedImages,
+            expectedAnswerImages: expectedSelectedImages,
+        })
+    }
 
     return (
         <div className="space-y-6 w-full">
@@ -246,7 +253,7 @@ export function PromptStep({
                 </Button>
 
                 <Button
-                    onClick={onStart}
+                    onClick={handleStart}
                     disabled={!canStart || isRunning}
                     size="lg"
                     className="gap-2 min-w-[140px]"
