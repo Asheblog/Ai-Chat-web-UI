@@ -6,7 +6,6 @@
  */
 
 import os from 'node:os'
-import sharp from 'sharp'
 import { Prisma } from '@prisma/client'
 import { DEFAULT_CHAT_IMAGE_LIMITS, type ChatImageLimitConfig } from '@aichat/shared/image-limits'
 import {
@@ -18,6 +17,7 @@ import { ChatImageService } from '../services/attachment/chat-image-service'
 
 type IncomingImage = { data: string; mime: string }
 const BYTES_PER_MB = 1024 * 1024
+const MAX_SVG_PARSE_BYTES = 128 * 1024
 
 type ChatImageServiceLike = Pick<ChatImageService, 'persistImages' | 'loadImages' | 'cleanupExpired' | 'deleteForSessions'>
 
@@ -44,6 +44,219 @@ const validationError = (message: string): Error => {
   const err = new Error(message)
   err.name = 'ValidationError'
   return err
+}
+
+interface ImageDimensions {
+  width: number
+  height: number
+}
+
+const normalizeDimensions = (width: number, height: number): ImageDimensions | null => {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return null
+  }
+  const normalizedWidth = Math.max(0, Math.floor(Math.abs(width)))
+  const normalizedHeight = Math.max(0, Math.floor(Math.abs(height)))
+  if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+    return null
+  }
+  return { width: normalizedWidth, height: normalizedHeight }
+}
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+const readPngDimensions = (buffer: Buffer): ImageDimensions | null => {
+  if (buffer.length < 24) return null
+  if (!buffer.subarray(0, 8).equals(PNG_SIGNATURE)) return null
+  if (buffer.toString('ascii', 12, 16) !== 'IHDR') return null
+  const width = buffer.readUInt32BE(16)
+  const height = buffer.readUInt32BE(20)
+  return normalizeDimensions(width, height)
+}
+
+const SOF_MARKERS = new Set([
+  0xc0, 0xc1, 0xc2, 0xc3,
+  0xc5, 0xc6, 0xc7,
+  0xc9, 0xca, 0xcb,
+  0xcd, 0xce, 0xcf,
+])
+
+const readJpegDimensions = (buffer: Buffer): ImageDimensions | null => {
+  if (buffer.length < 4) return null
+  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) return null
+
+  let offset = 2
+  while (offset + 3 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1
+      continue
+    }
+    while (offset < buffer.length && buffer[offset] === 0xff) {
+      offset += 1
+    }
+    if (offset >= buffer.length) return null
+
+    const marker = buffer[offset]
+    offset += 1
+
+    if (
+      marker === 0xd8 ||
+      marker === 0xd9 ||
+      marker === 0x01 ||
+      (marker >= 0xd0 && marker <= 0xd7)
+    ) {
+      continue
+    }
+
+    if (offset + 1 >= buffer.length) return null
+    const segmentLength = buffer.readUInt16BE(offset)
+    if (segmentLength < 2) return null
+    offset += 2
+    if (offset + segmentLength - 2 > buffer.length) return null
+
+    if (SOF_MARKERS.has(marker)) {
+      if (segmentLength < 7 || offset + 4 >= buffer.length) return null
+      const height = buffer.readUInt16BE(offset + 1)
+      const width = buffer.readUInt16BE(offset + 3)
+      return normalizeDimensions(width, height)
+    }
+
+    offset += segmentLength - 2
+  }
+
+  return null
+}
+
+const readGifDimensions = (buffer: Buffer): ImageDimensions | null => {
+  if (buffer.length < 10) return null
+  const magic = buffer.toString('ascii', 0, 6)
+  if (magic !== 'GIF87a' && magic !== 'GIF89a') return null
+  const width = buffer.readUInt16LE(6)
+  const height = buffer.readUInt16LE(8)
+  return normalizeDimensions(width, height)
+}
+
+const readWebpDimensions = (buffer: Buffer): ImageDimensions | null => {
+  if (buffer.length < 30) return null
+  if (buffer.toString('ascii', 0, 4) !== 'RIFF') return null
+  if (buffer.toString('ascii', 8, 12) !== 'WEBP') return null
+
+  const chunk = buffer.toString('ascii', 12, 16)
+  if (chunk === 'VP8X') {
+    const width = 1 + buffer[24] + (buffer[25] << 8) + (buffer[26] << 16)
+    const height = 1 + buffer[27] + (buffer[28] << 8) + (buffer[29] << 16)
+    return normalizeDimensions(width, height)
+  }
+
+  if (chunk === 'VP8 ') {
+    if (buffer.length < 30) return null
+    const width = buffer.readUInt16LE(26) & 0x3fff
+    const height = buffer.readUInt16LE(28) & 0x3fff
+    return normalizeDimensions(width, height)
+  }
+
+  if (chunk === 'VP8L') {
+    if (buffer.length < 25) return null
+    const b0 = buffer[21]
+    const b1 = buffer[22]
+    const b2 = buffer[23]
+    const b3 = buffer[24]
+    const width = 1 + (((b1 & 0x3f) << 8) | b0)
+    const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6))
+    return normalizeDimensions(width, height)
+  }
+
+  return null
+}
+
+const readBmpDimensions = (buffer: Buffer): ImageDimensions | null => {
+  if (buffer.length < 26) return null
+  if (buffer.toString('ascii', 0, 2) !== 'BM') return null
+  const dibHeaderSize = buffer.readUInt32LE(14)
+
+  if (dibHeaderSize === 12) {
+    if (buffer.length < 22) return null
+    const width = buffer.readUInt16LE(18)
+    const height = buffer.readUInt16LE(20)
+    return normalizeDimensions(width, height)
+  }
+
+  if (dibHeaderSize >= 40) {
+    if (buffer.length < 26) return null
+    const width = Math.abs(buffer.readInt32LE(18))
+    const height = Math.abs(buffer.readInt32LE(22))
+    return normalizeDimensions(width, height)
+  }
+
+  return null
+}
+
+const parseSvgLength = (raw: string | null): number | null => {
+  if (!raw) return null
+  const match = raw.trim().match(/^([0-9]*\.?[0-9]+)/)
+  if (!match) return null
+  const value = Number.parseFloat(match[1])
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+const readSvgDimensions = (buffer: Buffer): ImageDimensions | null => {
+  const text = buffer.toString('utf8', 0, Math.min(buffer.length, MAX_SVG_PARSE_BYTES))
+  const svgTagMatch = text.match(/<svg\b[^>]*>/i)
+  if (!svgTagMatch) return null
+  const svgTag = svgTagMatch[0]
+
+  const widthAttr = svgTag.match(/\bwidth\s*=\s*['"]([^'"]+)['"]/i)?.[1] || null
+  const heightAttr = svgTag.match(/\bheight\s*=\s*['"]([^'"]+)['"]/i)?.[1] || null
+  const width = parseSvgLength(widthAttr)
+  const height = parseSvgLength(heightAttr)
+  if (width != null && height != null) {
+    return normalizeDimensions(width, height)
+  }
+
+  const viewBoxMatch = svgTag.match(
+    /\bviewBox\s*=\s*['"]\s*[-+]?[0-9]*\.?[0-9]+\s+[-+]?[0-9]*\.?[0-9]+\s+([0-9]*\.?[0-9]+)\s+([0-9]*\.?[0-9]+)\s*['"]/i,
+  )
+  if (!viewBoxMatch) return null
+  const viewBoxWidth = Number.parseFloat(viewBoxMatch[1])
+  const viewBoxHeight = Number.parseFloat(viewBoxMatch[2])
+  return normalizeDimensions(viewBoxWidth, viewBoxHeight)
+}
+
+const readImageDimensions = (buffer: Buffer, mime: string): ImageDimensions | null => {
+  const mimeType = (mime || '').toLowerCase().split(';')[0].trim()
+
+  const parsersByMime: Record<string, (input: Buffer) => ImageDimensions | null> = {
+    'image/png': readPngDimensions,
+    'image/jpeg': readJpegDimensions,
+    'image/jpg': readJpegDimensions,
+    'image/gif': readGifDimensions,
+    'image/webp': readWebpDimensions,
+    'image/bmp': readBmpDimensions,
+    'image/svg+xml': readSvgDimensions,
+  }
+
+  const orderedParsers = [
+    readPngDimensions,
+    readJpegDimensions,
+    readGifDimensions,
+    readWebpDimensions,
+    readBmpDimensions,
+    readSvgDimensions,
+  ]
+
+  const preferred = parsersByMime[mimeType]
+  if (preferred) {
+    const preferredResult = preferred(buffer)
+    if (preferredResult) return preferredResult
+  }
+
+  for (const parser of orderedParsers) {
+    if (parser === preferred) continue
+    const result = parser(buffer)
+    if (result) return result
+  }
+
+  return null
 }
 
 // ============================================================================
@@ -87,18 +300,12 @@ export async function validateChatImages(
 
     totalBytes += buffer.byteLength
 
-    try {
-      const metadata = await sharp(buffer).metadata()
-      const width = metadata.width ?? 0
-      const height = metadata.height ?? 0
-      if (width > limits.maxEdge || height > limits.maxEdge) {
-        throw validationError(`分辨率过大（>${limits.maxEdge}像素）`)
-      }
-    } catch (error) {
-      if ((error as Error).name === 'ValidationError') {
-        throw error
-      }
+    const dimensions = readImageDimensions(buffer, mime)
+    if (!dimensions) {
       throw validationError('图片读取失败或格式不受支持')
+    }
+    if (dimensions.width > limits.maxEdge || dimensions.height > limits.maxEdge) {
+      throw validationError(`分辨率过大（>${limits.maxEdge}像素）`)
     }
   }
 
