@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -57,6 +57,8 @@ export function PromptStep({
     isRunning,
 }: PromptStepProps) {
     const { toast } = useToast()
+    const prevPromptImagesRef = useRef<BattleDraftImage[]>(promptImages)
+    const prevExpectedAnswerImagesRef = useRef<BattleDraftImage[]>(expectedAnswerImages)
 
     const promptAttachments = useImageAttachments({
         isVisionEnabled: true,
@@ -68,30 +70,46 @@ export function PromptStep({
         limits: DEFAULT_CHAT_IMAGE_LIMITS,
         toast,
     })
+    const {
+        selectedImages: promptSelectedImages,
+        setSelectedImages: setPromptSelectedImages,
+    } = promptAttachments
+    const {
+        selectedImages: expectedSelectedImages,
+        setSelectedImages: setExpectedSelectedImages,
+    } = expectedAnswerAttachments
 
     useEffect(() => {
-        if (!isSameImages(promptAttachments.selectedImages, promptImages)) {
-            promptAttachments.setSelectedImages(promptImages)
+        if (prevPromptImagesRef.current === promptImages) {
+            return
         }
-    }, [promptAttachments.selectedImages, promptAttachments.setSelectedImages, promptImages])
+        prevPromptImagesRef.current = promptImages
+        if (!isSameImages(promptSelectedImages, promptImages)) {
+            setPromptSelectedImages(promptImages)
+        }
+    }, [promptImages, promptSelectedImages, setPromptSelectedImages])
 
     useEffect(() => {
-        if (!isSameImages(expectedAnswerAttachments.selectedImages, expectedAnswerImages)) {
-            expectedAnswerAttachments.setSelectedImages(expectedAnswerImages)
+        if (prevExpectedAnswerImagesRef.current === expectedAnswerImages) {
+            return
         }
-    }, [expectedAnswerAttachments.selectedImages, expectedAnswerAttachments.setSelectedImages, expectedAnswerImages])
+        prevExpectedAnswerImagesRef.current = expectedAnswerImages
+        if (!isSameImages(expectedSelectedImages, expectedAnswerImages)) {
+            setExpectedSelectedImages(expectedAnswerImages)
+        }
+    }, [expectedAnswerImages, expectedSelectedImages, setExpectedSelectedImages])
 
     useEffect(() => {
-        if (!isSameImages(promptAttachments.selectedImages, promptImages)) {
-            onPromptImagesChange(promptAttachments.selectedImages)
+        if (!isSameImages(promptSelectedImages, promptImages)) {
+            onPromptImagesChange(promptSelectedImages)
         }
-    }, [promptAttachments.selectedImages, promptImages, onPromptImagesChange])
+    }, [promptSelectedImages, promptImages, onPromptImagesChange])
 
     useEffect(() => {
-        if (!isSameImages(expectedAnswerAttachments.selectedImages, expectedAnswerImages)) {
-            onExpectedAnswerImagesChange(expectedAnswerAttachments.selectedImages)
+        if (!isSameImages(expectedSelectedImages, expectedAnswerImages)) {
+            onExpectedAnswerImagesChange(expectedSelectedImages)
         }
-    }, [expectedAnswerAttachments.selectedImages, expectedAnswerImages, onExpectedAnswerImagesChange])
+    }, [expectedSelectedImages, expectedAnswerImages, onExpectedAnswerImagesChange])
 
     return (
         <div className="space-y-6 w-full">
