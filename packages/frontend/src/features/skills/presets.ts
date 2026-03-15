@@ -9,7 +9,7 @@ export const BUILTIN_SKILL_PRESETS: BuiltinSkillPreset[] = [
   {
     slug: 'web-search',
     label: '联网搜索',
-    description: '调用搜索引擎获取最新网页信息',
+    description: '按语言路由搜索引擎并做多源校验，冲突时自动升级复核',
     toolName: 'web_search',
   },
   {
@@ -45,4 +45,3 @@ const PRESET_MAP = new Map<string, BuiltinSkillPreset>(
 export const getBuiltinSkillPreset = (slug: string): BuiltinSkillPreset | null => {
   return PRESET_MAP.get(slug) || null
 }
-

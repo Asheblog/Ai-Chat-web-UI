@@ -69,6 +69,7 @@ import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
 import { GeneratedImageStorage, type GeneratedImage } from '../../../services/image-generation';
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/types';
+import { applyWebSearchSkillOverrides } from '../web-search-skill-overrides';
 import {
   ChatStreamRequestValidation,
   normalizeChatStreamPayload,
@@ -439,51 +440,14 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           : undefined;
       };
       const webSearchSkillOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}
-      const webSearchScopeOverride =
-        typeof webSearchSkillOverride.scope === 'string'
-          ? webSearchSkillOverride.scope
-          : typeof webSearchSkillOverride.web_search_scope === 'string'
-            ? webSearchSkillOverride.web_search_scope
-            : null
-      if (webSearchScopeOverride) {
-        agentWebSearchConfig.scope = sanitizeScope(webSearchScopeOverride) || agentWebSearchConfig.scope
-      }
-      const includeSummaryOverride =
-        typeof webSearchSkillOverride.includeSummary === 'boolean'
-          ? webSearchSkillOverride.includeSummary
-          : typeof webSearchSkillOverride.include_summary === 'boolean'
-            ? webSearchSkillOverride.include_summary
-            : typeof webSearchSkillOverride.web_search_include_summary === 'boolean'
-              ? webSearchSkillOverride.web_search_include_summary
-              : null
-      if (typeof includeSummaryOverride === 'boolean') {
-        agentWebSearchConfig.includeSummary = includeSummaryOverride
-      }
-      const includeRawOverride =
-        typeof webSearchSkillOverride.includeRawContent === 'boolean'
-          ? webSearchSkillOverride.includeRawContent
-          : typeof webSearchSkillOverride.include_raw === 'boolean'
-            ? webSearchSkillOverride.include_raw
-            : typeof webSearchSkillOverride.web_search_include_raw === 'boolean'
-              ? webSearchSkillOverride.web_search_include_raw
-              : null
-      if (typeof includeRawOverride === 'boolean') {
-        agentWebSearchConfig.includeRawContent = includeRawOverride
-      }
-      const resultLimitOverrideRaw =
-        typeof webSearchSkillOverride.resultLimit === 'number'
-          ? webSearchSkillOverride.resultLimit
-          : typeof webSearchSkillOverride.result_limit === 'number'
-            ? webSearchSkillOverride.result_limit
-            : typeof webSearchSkillOverride.size === 'number'
-              ? webSearchSkillOverride.size
-              : typeof webSearchSkillOverride.web_search_size === 'number'
-                ? webSearchSkillOverride.web_search_size
-                : null
-      if (typeof resultLimitOverrideRaw === 'number' && Number.isFinite(resultLimitOverrideRaw)) {
-        const next = Math.max(1, Math.min(10, resultLimitOverrideRaw));
-        agentWebSearchConfig.resultLimit = next;
-      }
+      Object.assign(
+        agentWebSearchConfig,
+        applyWebSearchSkillOverrides(
+          agentWebSearchConfig,
+          webSearchSkillOverride,
+          { sanitizeScope },
+        ),
+      );
       const assistantReplyHistoryLimit = (() => {
         const raw =
           sysMap.assistant_reply_history_limit ||

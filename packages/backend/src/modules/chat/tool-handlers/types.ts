@@ -122,6 +122,13 @@ export interface WebSearchHandlerConfig {
   autoReadParallelism?: number
   autoReadTimeoutMs?: number
   autoReadMaxContentLength?: number
+  minSources?: number
+  conflictEscalation?: 'off' | 'auto'
+  localeRouting?: {
+    zh?: string[]
+    en?: string[]
+    unknown?: string[]
+  }
 }
 
 /**

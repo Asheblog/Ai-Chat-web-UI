@@ -34,13 +34,14 @@ export const BUILTIN_SKILLS: BuiltinSkillDefinition[] = [
   {
     slug: 'web-search',
     displayName: 'Web Search',
-    description: '内置联网搜索能力',
+    description: '内置联网搜索能力（语言路由、多源交叉验证、冲突自动升级）',
     riskLevel: 'medium',
     pythonPackages: [],
     tools: [
       {
         name: 'web_search',
-        description: 'Search the web for up-to-date information.',
+        description:
+          'Search the web for up-to-date information with locale-aware routing and conflict-aware multi-source verification.',
         input_schema: {
           type: 'object',
           properties: {

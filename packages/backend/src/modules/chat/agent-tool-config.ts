@@ -16,6 +16,13 @@ import {
 export type AgentWebSearchEngine = 'tavily' | 'brave' | 'metaso'
 export type AgentWebSearchMergeStrategy = 'hybrid_score_v1'
 export type AgentWebSearchBilingualMode = 'off' | 'conditional' | 'always'
+export type AgentWebSearchConflictEscalation = 'off' | 'auto'
+
+export interface AgentWebSearchLocaleRouting {
+  zh?: AgentWebSearchEngine[]
+  en?: AgentWebSearchEngine[]
+  unknown?: AgentWebSearchEngine[]
+}
 
 export interface AgentWebSearchConfig {
   enabled: boolean;
@@ -39,6 +46,9 @@ export interface AgentWebSearchConfig {
   autoReadParallelism?: number;
   autoReadTimeoutMs?: number;
   autoReadMaxContentLength?: number;
+  minSources?: number;
+  conflictEscalation?: AgentWebSearchConflictEscalation;
+  localeRouting?: AgentWebSearchLocaleRouting;
 }
 
 /**
@@ -267,6 +277,7 @@ export const buildAgentWebSearchConfig = (
     autoReadParallelism,
     autoReadTimeoutMs,
     autoReadMaxContentLength,
+    conflictEscalation: 'auto',
   };
 };
 

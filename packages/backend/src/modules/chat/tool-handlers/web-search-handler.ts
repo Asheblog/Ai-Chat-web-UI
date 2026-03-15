@@ -297,6 +297,7 @@ interface SearchRoutingPlan {
   primaryLanguage: 'zh' | 'en' | 'unknown'
   highRisk: boolean
   requiredSources: number
+  conflictEscalation: 'off' | 'auto'
 }
 
 type SearchEscalationReason = 'insufficient_sources' | 'low_overlap'
@@ -329,8 +330,18 @@ const rankEnginesByLanguage = (
   activeEngines: string[],
   orderedEngines: string[],
   language: 'zh' | 'en' | 'unknown',
+  localeRouting?: {
+    zh?: string[]
+    en?: string[]
+    unknown?: string[]
+  },
 ): string[] => {
-  const preferred = LANGUAGE_ENGINE_PRIORITY[language] || LANGUAGE_ENGINE_PRIORITY.unknown
+  const preferredFromConfig = Array.isArray(localeRouting?.[language])
+    ? localeRouting?.[language] || []
+    : []
+  const preferred = preferredFromConfig.length > 0
+    ? preferredFromConfig
+    : (LANGUAGE_ENGINE_PRIORITY[language] || LANGUAGE_ENGINE_PRIORITY.unknown)
   return [
     ...preferred.filter((engine) => activeEngines.includes(engine)),
     ...orderedEngines.filter((engine) => !preferred.includes(engine)),
@@ -342,8 +353,16 @@ const countPlannedTasks = (queryPlans: WebSearchParallelQueryPlan[]): number =>
 
 const isHighRiskQuery = (query: string): boolean => HIGH_RISK_QUERY_RE.test(query)
 
-const pickRequiredSourceCount = (activeEngineCount: number, highRisk: boolean): number =>
-  Math.max(1, Math.min(activeEngineCount, highRisk ? 3 : 2))
+const pickRequiredSourceCount = (
+  activeEngineCount: number,
+  highRisk: boolean,
+  minSourcesOverride?: number,
+): number => {
+  if (typeof minSourcesOverride === 'number' && Number.isFinite(minSourcesOverride)) {
+    return Math.max(1, Math.min(activeEngineCount, Math.floor(minSourcesOverride)))
+  }
+  return Math.max(1, Math.min(activeEngineCount, highRisk ? 3 : 2))
+}
 
 const pickPerQuerySourceCount = (
   queryIndex: number,
@@ -361,21 +380,32 @@ export const buildLanguageAwareSearchPlan = ({
   expandedQueries,
   activeEngines,
   engineOrder,
+  minSources,
+  conflictEscalation,
+  localeRouting,
 }: {
   originalQuery: string
   expandedQueries: WebSearchParallelQuery[]
   activeEngines: string[]
   engineOrder: string[]
+  minSources?: number
+  conflictEscalation?: 'off' | 'auto'
+  localeRouting?: {
+    zh?: string[]
+    en?: string[]
+    unknown?: string[]
+  }
 }): SearchRoutingPlan => {
   const orderedEngines = normalizeEngineOrderForRouting(activeEngines, engineOrder)
   const queryList = expandedQueries.length > 0 ? expandedQueries : [{ query: originalQuery, queryLanguage: 'unknown' }]
   const primaryLanguage = queryList[0]?.queryLanguage || detectQueryLanguage(originalQuery)
   const highRisk = isHighRiskQuery(originalQuery)
-  const requiredSources = pickRequiredSourceCount(activeEngines.length, highRisk)
+  const requiredSources = pickRequiredSourceCount(activeEngines.length, highRisk, minSources)
+  const escalationPolicy = conflictEscalation === 'off' ? 'off' : 'auto'
 
   const queryPlans: WebSearchParallelQueryPlan[] = queryList.map((queryItem, queryIndex) => {
     const language = queryItem.queryLanguage || detectQueryLanguage(queryItem.query)
-    const rankedEngines = rankEnginesByLanguage(activeEngines, orderedEngines, language)
+    const rankedEngines = rankEnginesByLanguage(activeEngines, orderedEngines, language, localeRouting)
     const perQuerySources = pickPerQuerySourceCount(queryIndex, rankedEngines, requiredSources, highRisk)
     return {
       query: queryItem.query,
@@ -385,7 +415,12 @@ export const buildLanguageAwareSearchPlan = ({
   })
 
   const usedEngines = new Set(queryPlans.flatMap((item) => item.engines))
-  const fallbackEngines = rankEnginesByLanguage(activeEngines, orderedEngines, primaryLanguage).filter(
+  const fallbackEngines = rankEnginesByLanguage(
+    activeEngines,
+    orderedEngines,
+    primaryLanguage,
+    localeRouting,
+  ).filter(
     (engine) => !usedEngines.has(engine),
   )
 
@@ -395,6 +430,7 @@ export const buildLanguageAwareSearchPlan = ({
     primaryLanguage,
     highRisk,
     requiredSources,
+    conflictEscalation: escalationPolicy,
   }
 }
 
@@ -432,7 +468,11 @@ export const evaluateSearchEscalation = (
       successfulEngineCount,
     }
   }
-  if (successfulEngineCount >= 2 && overlapRatio < MIN_OVERLAP_RATIO_FOR_STABLE) {
+  if (
+    plan.conflictEscalation !== 'off' &&
+    successfulEngineCount >= 2 &&
+    overlapRatio < MIN_OVERLAP_RATIO_FOR_STABLE
+  ) {
     return {
       escalate: true,
       reason: 'low_overlap',
@@ -577,7 +617,7 @@ export class WebSearchToolHandler implements IToolHandler {
       function: {
         name: 'web_search',
         description:
-          'Use this tool to search the live web for up-to-date information before responding. Prioritize the conversation language and actively use both Chinese and English queries when cross-language evidence is needed.',
+          'Use this tool to search the live web for up-to-date information before responding. It uses locale-aware engine routing, bilingual query expansion when needed, and conflict-aware source escalation for better reliability.',
         parameters: {
           type: 'object',
           properties: {
@@ -638,6 +678,9 @@ export class WebSearchToolHandler implements IToolHandler {
       expandedQueries,
       activeEngines,
       engineOrder: this.config.engineOrder || [],
+      minSources: this.config.minSources,
+      conflictEscalation: this.config.conflictEscalation,
+      localeRouting: this.config.localeRouting,
     })
 
     context.emitReasoning(
