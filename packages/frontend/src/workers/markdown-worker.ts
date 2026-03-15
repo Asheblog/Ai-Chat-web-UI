@@ -15,7 +15,7 @@ import {
 
 interface WorkerRequest {
   jobId: string
-  messageId: string
+  messageId: string | number
   content: string
   reasoning?: string
   contentVersion: number
@@ -183,6 +183,7 @@ const pendingByMessage = new Map<string, WorkerRequest>()
 const deferredByMessage = new Map<string, WorkerRequest>()
 const processingMessages = new Set<string>()
 let flushTimer: ReturnType<typeof setTimeout> | null = null
+const toMessageKey = (messageId: WorkerRequest['messageId']) => String(messageId)
 
 const scheduleFlush = () => {
   if (flushTimer) return
@@ -197,24 +198,26 @@ const scheduleFlush = () => {
 }
 
 const queueJob = (payload: WorkerRequest) => {
-  pendingByMessage.set(payload.messageId, payload)
+  pendingByMessage.set(toMessageKey(payload.messageId), payload)
   scheduleFlush()
 }
 
 const processJob = async (payload: WorkerRequest) => {
-  if (processingMessages.has(payload.messageId)) {
-    deferredByMessage.set(payload.messageId, payload)
+  const messageKey = toMessageKey(payload.messageId)
+  if (processingMessages.has(messageKey)) {
+    deferredByMessage.set(messageKey, payload)
     return
   }
-  processingMessages.add(payload.messageId)
+  processingMessages.add(messageKey)
 
   const { jobId, messageId, content, reasoning, contentVersion, reasoningVersion } = payload
+  const responseMessageId = toMessageKey(messageId)
 
   try {
     const contentResult = await renderMarkdown(content || '')
     const response: WorkerResponse = {
       jobId,
-      messageId,
+      messageId: responseMessageId,
       contentHtml: contentResult.html,
       contentVersion,
       reasoningVersion,
@@ -229,7 +232,7 @@ const processJob = async (payload: WorkerRequest) => {
   } catch (error: any) {
     const response: WorkerResponse = {
       jobId,
-      messageId,
+      messageId: responseMessageId,
       contentHtml: `<pre>${escapeHtml(content || '')}</pre>`,
       contentVersion,
       reasoningVersion,
@@ -241,10 +244,10 @@ const processJob = async (payload: WorkerRequest) => {
     }
     self.postMessage(response)
   } finally {
-    processingMessages.delete(messageId)
-    const deferred = deferredByMessage.get(messageId)
+    processingMessages.delete(messageKey)
+    const deferred = deferredByMessage.get(messageKey)
     if (deferred) {
-      deferredByMessage.delete(messageId)
+      deferredByMessage.delete(messageKey)
       queueJob(deferred)
     }
   }
@@ -252,7 +255,10 @@ const processJob = async (payload: WorkerRequest) => {
 
 self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   const payload = event.data
-  if (!payload || typeof payload.jobId !== 'string' || typeof payload.messageId !== 'string') {
+  if (!payload || typeof payload.jobId !== 'string') {
+    return
+  }
+  if (typeof payload.messageId !== 'string' && typeof payload.messageId !== 'number') {
     return
   }
   queueJob(payload)

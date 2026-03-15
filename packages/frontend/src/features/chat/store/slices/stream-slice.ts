@@ -978,12 +978,13 @@ export const createStreamSlice: ChatSliceCreator<
       }
 
       const finalStream = runtime.activeStreams.get(streamEntry.streamKey) ?? null
+      runtime.flushStreamBuffer(finalStream, true)
       const snapshotToolEvents =
         finalStream && streamEntry.sessionId === sessionId
           ? get().toolEvents.filter(
               (event) =>
                 event.sessionId === sessionId &&
-              messageKey(event.messageId) === messageKey(finalStream.assistantId),
+                messageKey(event.messageId) === messageKey(finalStream.assistantId),
             )
           : []
       const completedAtMs = finalStream?.completedAt ?? Date.now()
@@ -1024,7 +1025,6 @@ export const createStreamSlice: ChatSliceCreator<
         : null
       const completedAssistantId =
         typeof finalStream?.assistantId !== 'undefined' ? finalStream?.assistantId : null
-      runtime.flushStreamBuffer(finalStream, true)
       if (
         completedSnapshot &&
         (completedSnapshot.content.length > 0 || completedSnapshot.reasoning.length > 0)

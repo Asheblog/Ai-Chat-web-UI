@@ -152,7 +152,7 @@ export const requestMarkdownRender = async (payload: RenderRequest): Promise<Ren
 
   worker.postMessage({
     jobId,
-    messageId: payload.messageId,
+    messageId: String(payload.messageId),
     content: payload.content,
     reasoning: payload.reasoning,
     contentVersion: payload.contentVersion,

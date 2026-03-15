@@ -28,6 +28,17 @@ let snapshotWriteTimer: ReturnType<typeof setTimeout> | null = null
 let lastSnapshotPruneAt = 0
 const SNAPSHOT_PRUNE_INTERVAL_MS = 30 * 1000
 
+const mergeSnapshotText = (incoming: string | undefined, existing: string | undefined): string => {
+  const nextText = typeof incoming === 'string' ? incoming : ''
+  const prevText = typeof existing === 'string' ? existing : ''
+  if (!nextText) return prevText
+  if (!prevText) return nextText
+  if (nextText === prevText) return prevText
+  if (nextText.startsWith(prevText)) return nextText
+  if (prevText.startsWith(nextText)) return prevText
+  return nextText
+}
+
 const sanitizeCompletionSnapshots = (parsed: any[]): StreamCompletionSnapshot[] => {
   const now = Date.now()
   try {
@@ -220,8 +231,8 @@ export const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) =>
     entries[index] = {
       ...existing,
       ...snapshot,
-      content: snapshot.content || existing.content,
-      reasoning: snapshot.reasoning || existing.reasoning,
+      content: mergeSnapshotText(snapshot.content, existing.content),
+      reasoning: mergeSnapshotText(snapshot.reasoning, existing.reasoning),
       toolEvents: snapshot.toolEvents ?? existing.toolEvents,
       reasoningStatus: snapshot.reasoningStatus ?? existing.reasoningStatus,
       streamStatus: snapshot.streamStatus ?? existing.streamStatus,
