@@ -1,3 +1,5 @@
+import type { ExecutionSseEvent } from './execution-contract.js'
+
 export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 export type BattleMode = 'multi_model' | 'single_model_multi_question'
 
@@ -346,7 +348,7 @@ export interface BattleShare {
   revokedAt: string | null
 }
 
-export interface BattleStreamEvent {
+export interface LegacyBattleStreamEvent {
   type:
     | 'run_start'
     | 'attempt_start'
@@ -362,6 +364,8 @@ export interface BattleStreamEvent {
   payload?: Record<string, any>
   error?: string
 }
+
+export type BattleStreamEvent = LegacyBattleStreamEvent | ExecutionSseEvent
 
 export interface RejudgeStreamEvent {
   type: 'rejudge_start' | 'rejudge_progress' | 'rejudge_complete' | 'error'

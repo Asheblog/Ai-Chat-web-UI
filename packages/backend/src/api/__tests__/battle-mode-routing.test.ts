@@ -148,6 +148,46 @@ describe('battle api - mode routing', () => {
     )
   })
 
+  it('stream 会输出统一 execution 协议事件', async () => {
+    const service = createServiceMock()
+    const app = createBattleApi({ battleService: service })
+    const res = await app.request('http://localhost/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(makeMultiPayload()),
+    })
+
+    expect(res.status).toBe(200)
+    const raw = await res.text()
+    const events = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('data: '))
+      .map((line) => line.slice(6))
+      .filter((line) => line.length > 0 && line !== '[DONE]')
+      .map((line) => JSON.parse(line) as { type: string; payload?: Record<string, unknown> })
+
+    const types = events.map((event) => event.type)
+    expect(types).toEqual(expect.arrayContaining([
+      'run_start',
+      'plan_ready',
+      'run_metrics',
+      'run_complete',
+      'complete',
+    ]))
+    expect(types).not.toContain('attempt_start')
+    expect(types).not.toContain('attempt_complete')
+
+    const runStart = events.find((event) => event.type === 'run_start')
+    expect(runStart).toBeDefined()
+    expect(runStart).toMatchObject({
+      payload: expect.objectContaining({
+        sourceType: 'battle',
+        sourceId: '99',
+      }),
+    })
+  })
+
   it('attempt cancel 会透传 questionIndex', async () => {
     const service = createServiceMock()
     const app = createBattleApi({ battleService: service })

@@ -10,7 +10,8 @@
     ".": "./dist/index.js",
     "./latex-normalizer": "./dist/latex-normalizer.js",
     "./image-limits": "./dist/image-limits.js",
-    "./battle-contract": "./dist/battle-contract.js"
+    "./battle-contract": "./dist/battle-contract.js",
+    "./execution-contract": "./dist/execution-contract.js"
   },
   "files": [
     "dist"

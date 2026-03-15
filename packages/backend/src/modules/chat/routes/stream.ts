@@ -20,6 +20,7 @@ import {
   createChatStreamHandler,
   type ChatStreamRoutesDeps,
 } from '../use-cases/chat-stream-use-case'
+import { proxyChatStreamToExecution } from '../../execution/chat-stream-proxy'
 
 export type { ChatStreamRoutesDeps }
 
@@ -27,7 +28,30 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
   const prisma: PrismaClient = deps.prisma
   const handleStream = createChatStreamHandler(deps)
 
-  router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), handleStream)
+  router.post('/stream', actorMiddleware, zValidator('json', sendMessageSchema), async (c) => {
+    const payload = c.req.valid('json') as {
+      sessionId?: number
+      clientMessageId?: string
+    }
+    const legacyResponse = await handleStream(c)
+    const sessionId =
+      typeof payload?.sessionId === 'number' && Number.isFinite(payload.sessionId)
+        ? payload.sessionId
+        : 0
+    const runKey = `chat-run-${sessionId}-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`
+    const sourceId =
+      typeof payload?.clientMessageId === 'string' && payload.clientMessageId.trim()
+        ? payload.clientMessageId.trim()
+        : String(sessionId)
+    return proxyChatStreamToExecution({
+      legacyResponse,
+      sessionId,
+      runKey,
+      sourceId,
+    })
+  })
 
   router.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSchema), async (c) => {
     const actor = c.get('actor') as Actor

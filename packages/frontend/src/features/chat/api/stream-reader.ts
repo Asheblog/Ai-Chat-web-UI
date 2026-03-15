@@ -76,6 +76,113 @@ const normalizeLegacyStage = (
   return 'start'
 }
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+
+const asString = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value : null
+
+const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
+  const eventType = asString(payload?.type)
+  if (!eventType) return null
+  const eventPayload = asRecord(payload?.payload) ?? {}
+
+  if (eventType === 'step_delta') {
+    const channel = asString(eventPayload.channel)
+    const delta = asString(eventPayload.delta)
+    if (!delta) return null
+    if (channel === 'reasoning') {
+      return {
+        type: 'reasoning',
+        content: delta,
+      }
+    }
+    if (channel === 'content') {
+      return {
+        type: 'content',
+        content: delta,
+      }
+    }
+  }
+
+  if (eventType === 'step_artifact') {
+    const kind = asString(eventPayload.kind)
+    if (kind === 'tool_call') {
+      const data = asRecord(eventPayload.data)
+      const event = asRecord(data?.event)
+      if (!event) return null
+      const phase = normalizeToolCallPhase(event.phase, event.status, event.stage)
+      const status = normalizeToolCallStatus(event.status, phase, event.stage)
+      const stage = normalizeLegacyStage(event.stage, phase)
+      const identifier =
+        asString(event.identifier) || asString(event.tool) || undefined
+      const callId = asString(event.callId) || asString(event.id) || undefined
+      return {
+        type: 'tool_call',
+        callId,
+        source: normalizeToolCallSource(event.source),
+        identifier,
+        apiName: asString(event.apiName) || identifier,
+        phase,
+        status,
+        id: asString(event.id) || callId,
+        stage,
+        query: asString(event.query) || undefined,
+        hits: Array.isArray(event.hits) ? event.hits : undefined,
+        argumentsText:
+          asString(event.argumentsText) || undefined,
+        argumentsPatch:
+          asString(event.argumentsPatch) || undefined,
+        resultText: asString(event.resultText) || undefined,
+        resultJson: event.resultJson,
+        error: asString(event.error) || undefined,
+        summary: asString(event.summary) || undefined,
+        details:
+          event.details && typeof event.details === 'object'
+            ? (event.details as import('@/types').ToolEventDetails)
+            : undefined,
+        intervention:
+          event.intervention && typeof event.intervention === 'object'
+            ? event.intervention
+            : undefined,
+        thoughtSignature:
+          typeof event.thoughtSignature === 'string' || event.thoughtSignature === null
+            ? event.thoughtSignature
+            : undefined,
+        meta: event.meta as Record<string, unknown> | undefined,
+      }
+    }
+  }
+
+  if (eventType === 'run_metrics') {
+    const usage = asRecord(eventPayload.usage)
+    if (usage) {
+      return {
+        type: 'usage',
+        usage,
+      }
+    }
+  }
+
+  if (eventType === 'run_complete') {
+    return { type: 'complete' }
+  }
+
+  if (eventType === 'run_error') {
+    return {
+      type: 'error',
+      error:
+        asString(eventPayload.message) ||
+        asString(payload?.error) ||
+        '工具调用失败，请稍后重试',
+    }
+  }
+
+  return null
+}
+
 export async function* parseEventStream(
   response: Response,
   streamKey: string,
@@ -118,7 +225,11 @@ export async function* parseEventStream(
           }
           try {
             const parsed = JSON.parse(payload)
-            if (parsed?.type === 'complete') {
+            if (
+              parsed?.type === 'complete' ||
+              parsed?.type === 'run_complete' ||
+              parsed?.type === 'run_error'
+            ) {
               completed = true
             }
             const chunk = normalizeChunk(parsed)
@@ -148,6 +259,10 @@ export async function* parseEventStream(
 }
 
 export const normalizeChunk = (payload: any): ChatStreamChunk | null => {
+  const executionChunk = normalizeExecutionEventChunk(payload)
+  if (executionChunk) {
+    return executionChunk
+  }
   if (payload?.type === 'content' && payload.content) {
     return { type: 'content', content: payload.content }
   }

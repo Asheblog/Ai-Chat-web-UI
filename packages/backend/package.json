@@ -17,6 +17,7 @@
     "db:seed": "prisma db seed",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:migrate:execution-domain": "tsx scripts/migrate-execution-domain.ts",
     "db:studio": "prisma studio",
     "python-runtime:reconcile": "tsx scripts/reconcile-python-runtime.ts",
     "test": "jest"

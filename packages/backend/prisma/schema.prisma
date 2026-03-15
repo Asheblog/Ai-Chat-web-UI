@@ -864,3 +864,97 @@ model BattleShare {
   @@index([createdByAnonymousKey])
   @@map("battle_shares")
 }
+
+// ============================================
+// 统一执行域 (Execution Domain) 相关模型
+// ============================================
+
+model ExecutionRun {
+  id           Int      @id @default(autoincrement())
+  runKey       String   @unique
+  sourceType   String // chat | battle
+  sourceId     String?
+  mode         String?
+  title        String?
+  status       String   @default("pending") // pending | running | completed | error | cancelled | retrying
+  inputJson    String   @default("{}")
+  outputJson   String   @default("{}")
+  metricsJson  String   @default("{}")
+  errorJson    String   @default("{}")
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  steps     ExecutionStep[]
+  artifacts ExecutionArtifact[]
+  events    ExecutionEvent[]
+
+  @@index([sourceType, sourceId])
+  @@index([status, createdAt])
+  @@map("execution_runs")
+}
+
+model ExecutionStep {
+  id               Int      @id @default(autoincrement())
+  runId            Int
+  stepKey          String
+  agentRole        String?
+  title            String?
+  status           String   @default("pending") // pending | running | completed | error | cancelled | retrying
+  dependenciesJson String   @default("[]")
+  metadataJson     String   @default("{}")
+  resultJson       String   @default("{}")
+  error            String?
+  retryCount       Int      @default(0)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  run       ExecutionRun      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  artifacts ExecutionArtifact[]
+  events    ExecutionEvent[]
+
+  @@unique([runId, stepKey])
+  @@index([runId, status])
+  @@map("execution_steps")
+}
+
+model ExecutionArtifact {
+  id        Int      @id @default(autoincrement())
+  runId     Int
+  stepId    Int?
+  kind      String
+  name      String?
+  dataJson  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  run  ExecutionRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step ExecutionStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+
+  @@index([runId, stepId])
+  @@index([kind])
+  @@map("execution_artifacts")
+}
+
+model ExecutionEvent {
+  id        Int      @id @default(autoincrement())
+  runId     Int
+  stepId    Int?
+  eventId   String
+  type      String
+  status    String
+  ts        DateTime
+  agentRole String?
+  payloadJson String @default("{}")
+  createdAt DateTime @default(now())
+
+  run  ExecutionRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step ExecutionStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+
+  @@unique([runId, eventId])
+  @@index([runId, ts])
+  @@index([type, status])
+  @@map("execution_events")
+}

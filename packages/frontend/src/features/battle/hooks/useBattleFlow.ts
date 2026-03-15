@@ -556,6 +556,16 @@ export const appendBattleToolEvent = (timeline: ToolEvent[] | undefined, incomin
   return next
 }
 
+const parseExecutionStepIdentity = (stepId: unknown): { modelKey: string; attemptIndex: number } | null => {
+  if (typeof stepId !== 'string' || stepId.trim().length === 0) return null
+  const matched = stepId.match(/^(.*):q\d+:a(\d+)$/)
+  if (!matched) return null
+  const modelKey = matched[1]?.trim()
+  const attemptIndex = Number.parseInt(matched[2] || '', 10)
+  if (!modelKey || !Number.isFinite(attemptIndex) || attemptIndex <= 0) return null
+  return { modelKey, attemptIndex }
+}
+
 export const buildNodeStatesFromRun = (
   models: BattleNodeModel[],
   runsPerModel: number,
@@ -1047,9 +1057,11 @@ export function useBattleFlow() {
     try {
       for await (const event of streamBattle(validation.payload, { signal: controller.signal })) {
         if (event.type === 'run_start') {
-          const id = Number(event.payload?.id)
-          const nextPrompt = normalizeBattleContent(event.payload?.prompt)
-          const nextExpectedAnswer = normalizeBattleContent(event.payload?.expectedAnswer)
+          const payload = (event.payload || {}) as Record<string, unknown>
+          const sourceId = Number.parseInt(String(payload.sourceId || ''), 10)
+          const input = (payload.input || {}) as Record<string, unknown>
+          const nextPrompt = normalizeBattleContent(input.prompt)
+          const nextExpectedAnswer = normalizeBattleContent(input.expectedAnswer)
           if (nextPrompt.text || nextPrompt.images.length > 0) {
             setPrompt(nextPrompt.text)
             setPromptImageUrls(nextPrompt.images)
@@ -1058,88 +1070,71 @@ export function useBattleFlow() {
             setExpectedAnswer(nextExpectedAnswer.text)
             setExpectedAnswerImageUrls(nextExpectedAnswer.images)
           }
-          if (Number.isFinite(id)) {
-            setCurrentRunId(id)
+          if (Number.isFinite(sourceId)) {
+            setCurrentRunId(sourceId)
             if (cancelRequestedRef.current) {
-              void cancelBattleRun(id)
+              void cancelBattleRun(sourceId)
             }
           }
         }
 
-        if (event.type === 'attempt_start') {
-          const payload = event.payload as {
-            modelKey?: string
-            modelId?: string
-            connectionId?: number | null
-            rawId?: string | null
-            attemptIndex?: number
-          } | undefined
-          const attemptIndex = payload?.attemptIndex
-          const modelKey = payload?.modelKey
-            || (payload?.modelId
-              ? buildModelKey({
-                modelId: payload.modelId,
-                connectionId: payload.connectionId ?? null,
-                rawId: payload.rawId ?? null,
-              })
-              : null)
-          if (modelKey && attemptIndex) {
-            updateNodeState(modelKey, attemptIndex, { status: 'running' })
+        if (event.type === 'step_start') {
+          const identity = parseExecutionStepIdentity(event.stepId)
+          if (identity) {
+            updateNodeState(identity.modelKey, identity.attemptIndex, { status: 'running' })
           }
         }
 
-        if (event.type === 'attempt_delta') {
-          const payload = event.payload as {
-            modelKey?: string
-            modelId?: string
-            connectionId?: number | null
-            rawId?: string | null
-            attemptIndex?: number
-            delta?: string
-            reasoning?: string
-          } | undefined
-          const attemptIndex = payload?.attemptIndex
-          const delta = typeof payload?.delta === 'string' ? payload.delta : ''
-          const reasoning = typeof payload?.reasoning === 'string' ? payload.reasoning : ''
-          const modelKey = payload?.modelKey
-            || (payload?.modelId
-              ? buildModelKey({
-                modelId: payload.modelId,
-                connectionId: payload.connectionId ?? null,
-                rawId: payload.rawId ?? null,
-              })
-              : null)
-          if (modelKey && attemptIndex && (delta || reasoning)) {
-            appendNodeOutput(modelKey, attemptIndex, delta, reasoning)
+        if (event.type === 'step_delta') {
+          const identity = parseExecutionStepIdentity(event.stepId)
+          const payload = (event.payload || {}) as Record<string, unknown>
+          const channel = typeof payload.channel === 'string' ? payload.channel : ''
+          const delta = typeof payload.delta === 'string' ? payload.delta : ''
+          if (!identity || !delta) continue
+          if (channel === 'reasoning') {
+            appendNodeOutput(identity.modelKey, identity.attemptIndex, '', delta)
+          } else {
+            appendNodeOutput(identity.modelKey, identity.attemptIndex, delta, '')
           }
         }
 
-        if (event.type === 'attempt_tool_call') {
-          const payload = event.payload as {
-            modelKey?: string
-            modelId?: string
-            connectionId?: number | null
-            rawId?: string | null
-            attemptIndex?: number
-            event?: unknown
-          } | undefined
-          const attemptIndex = payload?.attemptIndex
-          const modelKey = payload?.modelKey
-            || (payload?.modelId
-              ? buildModelKey({
-                modelId: payload.modelId,
-                connectionId: payload.connectionId ?? null,
-                rawId: payload.rawId ?? null,
-              })
-              : null)
-          const toolEvent = normalizeBattleToolEvent(payload?.event)
-          if (modelKey && attemptIndex && toolEvent) {
-            appendNodeToolEvent(modelKey, attemptIndex, toolEvent)
+        if (event.type === 'step_artifact') {
+          const identity = parseExecutionStepIdentity(event.stepId)
+          const payload = (event.payload || {}) as Record<string, unknown>
+          if (
+            (payload.name === 'skill_approval_request' || payload.name === 'skill_approval_result') &&
+            typeof window !== 'undefined'
+          ) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('aichat:skill-approval', {
+                  detail: {
+                    type: payload.name,
+                    ...((payload.data && typeof payload.data === 'object'
+                      ? payload.data
+                      : {}) as Record<string, unknown>),
+                  },
+                }),
+              )
+            } catch {
+              // ignore UI dispatch errors
+            }
+          }
+          if (payload.kind === 'tool_call' && identity) {
+            const data =
+              payload.data && typeof payload.data === 'object'
+                ? (payload.data as Record<string, unknown>)
+                : {}
+            const toolEvent = normalizeBattleToolEvent(data.event)
+            if (toolEvent) {
+              appendNodeToolEvent(identity.modelKey, identity.attemptIndex, toolEvent)
+            }
           }
         }
 
-        if (event.type === 'attempt_complete') {
-          const result = event.payload?.result as BattleResult | undefined
+        if (event.type === 'step_complete') {
+          const payload = (event.payload || {}) as Record<string, unknown>
+          const result = payload.result as BattleResult | undefined
           if (result) {
             const modelKey = buildModelKey({
               modelId: result.modelId,
@@ -1183,53 +1178,34 @@ export function useBattleFlow() {
               judgeScore: result.judgeScore,
               judgeReason: result.judgeReason,
             })
-          }
-        }
-
-        if (event.type === 'skill_approval_request' || event.type === 'skill_approval_result') {
-          if (typeof window !== 'undefined') {
-            const payload =
-              event.payload && typeof event.payload === 'object'
-                ? (event.payload as Record<string, unknown>)
-                : {}
-            try {
-              window.dispatchEvent(
-                new CustomEvent('aichat:skill-approval', {
-                  detail: {
-                    type: event.type,
-                    ...payload,
-                  },
-                }),
-              )
-            } catch {
-              // ignore UI dispatch errors
+          } else {
+            const identity = parseExecutionStepIdentity(event.stepId)
+            const error = typeof payload.error === 'string' ? payload.error : null
+            if (identity && error) {
+              updateNodeState(identity.modelKey, identity.attemptIndex, {
+                status: 'error',
+                error,
+              })
             }
           }
         }
 
         if (event.type === 'run_complete') {
-          const nextSummary = event.payload?.summary as BattleRunSummary['summary'] | undefined
+          const payload = (event.payload || {}) as Record<string, unknown>
+          const nextSummary = payload.summary as BattleRunSummary['summary'] | undefined
           if (nextSummary) {
             setSummary(nextSummary)
           }
           setRunStatus('completed')
         }
 
-        if (event.type === 'run_cancelled') {
-          const nextSummary = event.payload?.summary as BattleRunSummary['summary'] | undefined
-          if (nextSummary) {
-            setSummary(nextSummary)
-          }
+        if (event.type === 'run_error') {
+          const payload = (event.payload || {}) as Record<string, unknown>
+          const message = typeof payload.message === 'string' ? payload.message : '乱斗执行失败'
+          setError(message)
           setIsRunning(false)
-          setStep('result')
-          setRunStatus('cancelled')
-        }
-
-        if (event.type === 'error') {
-          setError(event.error || '乱斗执行失败')
-          setIsRunning(false)
-          setRunStatus('error')
-          return { success: false, error: event.error }
+          setRunStatus(event.status === 'cancelled' ? 'cancelled' : 'error')
+          return { success: false, error: message }
         }
 
         if (event.type === 'complete') {

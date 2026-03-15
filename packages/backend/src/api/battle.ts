@@ -6,6 +6,7 @@ import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middl
 import { BattleService } from '../services/battle/battle-service'
 import type { BattleRunCreateInput } from '../services/battle/battle-types'
 import { prisma } from '../db'
+import { createBattleExecutionEventBridge } from '../modules/execution/battle-execution-event-bridge'
 
 export interface BattleApiDeps {
   battleService: BattleService
@@ -230,17 +231,30 @@ export const createBattleApi = (deps: BattleApiDeps) => {
         const encoder = new TextEncoder()
         let lastSentAt = Date.now()
         let runId: number | null = null
+        const runKey = `battle-run-${Date.now().toString(36)}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`
+        const bridge = createBattleExecutionEventBridge({
+          runKey,
+          sourceType: 'battle',
+          sourceId: runKey,
+        })
         const send = (event: unknown) => {
           try {
             lastSentAt = Date.now()
-            const payload = event as any
-            if (payload?.type === 'run_start') {
-              const id = Number(payload?.payload?.id)
+            const legacyEvent = event as any
+            if (legacyEvent?.type === 'run_start') {
+              const id = Number(legacyEvent?.payload?.id)
               if (Number.isFinite(id)) {
                 runId = id
               }
             }
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
+            const unifiedEvents = bridge.consume(legacyEvent)
+            for (const unifiedEvent of unifiedEvents) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify(unifiedEvent)}\n\n`),
+              )
+            }
           } catch {}
         }
 
@@ -249,7 +263,9 @@ export const createBattleApi = (deps: BattleApiDeps) => {
         const startHeartbeat = () => {
           if (keepaliveIntervalMs <= 0 || keepaliveTimer) return
           keepaliveTimer = setInterval(() => {
-            send({ type: 'keepalive', ts: Date.now() })
+            try {
+              controller.enqueue(encoder.encode(': ping\n\n'))
+            } catch {}
           }, keepaliveIntervalMs)
         }
         const stopHeartbeat = () => {

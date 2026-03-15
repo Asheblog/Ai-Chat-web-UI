@@ -72,6 +72,37 @@ const normalizeSingleRunStatus = (status?: string) => {
   return 'idle' as const
 }
 
+const asObject = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+
+const asNonEmptyString = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value : null
+
+const asPositiveInt = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value)
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number.parseInt(value, 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed
+    }
+  }
+  return null
+}
+
+const parseExecutionStepIdentity = (stepId: unknown): { questionIndex: number; attemptIndex: number } | null => {
+  if (typeof stepId !== 'string' || stepId.trim().length === 0) return null
+  const matched = stepId.match(/:q(\d+):a(\d+)$/)
+  if (!matched) return null
+  const questionIndex = asPositiveInt(matched[1])
+  const attemptIndex = asPositiveInt(matched[2])
+  if (!questionIndex || !attemptIndex) return null
+  return { questionIndex, attemptIndex }
+}
+
 const toStatusLabel = (status?: string) => {
   if (status === 'pending') return '排队中'
   if (status === 'running') return '运行中'
@@ -451,14 +482,15 @@ export function SingleModelMultiQuestionPageClient() {
 
       for await (const event of streamBattle(payload, { signal: controller.signal })) {
         if (event.type === 'run_start') {
-          const id = Number(event.payload?.id)
+          const payload = asObject(event.payload)
+          const id = asPositiveInt(payload?.sourceId) ?? asPositiveInt(payload?.id)
           if (Number.isFinite(id)) setRunId(id)
         }
 
-        if (event.type === 'attempt_start') {
-          const questionIndex = Number(event.payload?.questionIndex ?? 1)
-          const attemptIndex = Number(event.payload?.attemptIndex)
-          if (!Number.isFinite(questionIndex) || !Number.isFinite(attemptIndex)) continue
+        if (event.type === 'step_start') {
+          const identity = parseExecutionStepIdentity(event.stepId)
+          if (!identity) continue
+          const { questionIndex, attemptIndex } = identity
           const key = buildAttemptKey(questionIndex, attemptIndex)
           setLiveAttempts((prev) => {
             const next = new Map(prev)
@@ -472,20 +504,23 @@ export function SingleModelMultiQuestionPageClient() {
           })
         }
 
-        if (event.type === 'attempt_delta') {
-          const questionIndex = Number(event.payload?.questionIndex ?? 1)
-          const attemptIndex = Number(event.payload?.attemptIndex)
-          if (!Number.isFinite(questionIndex) || !Number.isFinite(attemptIndex)) continue
+        if (event.type === 'step_delta') {
+          const identity = parseExecutionStepIdentity(event.stepId)
+          const payload = asObject(event.payload)
+          if (!identity || !payload) continue
+          const { questionIndex, attemptIndex } = identity
           const key = buildAttemptKey(questionIndex, attemptIndex)
-          const delta = typeof event.payload?.delta === 'string' ? event.payload.delta : ''
-          const reasoning = typeof event.payload?.reasoning === 'string' ? event.payload.reasoning : ''
+          const channel = asNonEmptyString(payload.channel)
+          const delta = asNonEmptyString(payload.delta) || ''
+          const reasoning = channel === 'reasoning' ? delta : ''
+          const content = channel === 'reasoning' ? '' : delta
           if (!delta && !reasoning) continue
           setLiveAttempts((prev) => {
             const next = new Map(prev)
             const current = next.get(key) || { status: 'running', output: '', reasoning: '' }
             next.set(key, {
               status: current.status,
-              output: `${current.output}${delta}`,
+              output: `${current.output}${content}`,
               reasoning: `${current.reasoning}${reasoning}`,
               error: current.error ?? null,
             })
@@ -493,11 +528,38 @@ export function SingleModelMultiQuestionPageClient() {
           })
         }
 
-        if (event.type === 'attempt_complete') {
-          const result = event.payload?.result as BattleResult | undefined
-          if (!result) continue
-          const questionIndex = Number(result.questionIndex ?? event.payload?.questionIndex ?? 1)
-          const attemptIndex = Number(result.attemptIndex)
+        if (event.type === 'step_complete') {
+          const payload = asObject(event.payload)
+          if (!payload) continue
+          const identity = parseExecutionStepIdentity(event.stepId)
+          const resultObject = asObject(payload.result)
+          if (!resultObject) {
+            if (identity) {
+              const key = buildAttemptKey(identity.questionIndex, identity.attemptIndex)
+              const message = asNonEmptyString(payload.error) || '执行失败'
+              setLiveAttempts((prev) => {
+                const next = new Map(prev)
+                const current = next.get(key) || { status: 'running', output: '', reasoning: '' }
+                next.set(key, {
+                  ...current,
+                  status: 'error',
+                  error: message,
+                })
+                return next
+              })
+            }
+            continue
+          }
+
+          const result = resultObject as unknown as BattleResult
+          const questionIndex =
+            asPositiveInt(result.questionIndex) ??
+            identity?.questionIndex ??
+            1
+          const attemptIndex =
+            asPositiveInt(result.attemptIndex) ??
+            identity?.attemptIndex
+          if (!attemptIndex) continue
           const key = buildAttemptKey(questionIndex, attemptIndex)
           setResults((prev) => {
             const next = prev.filter((item) => !(item.questionIndex === questionIndex && item.attemptIndex === attemptIndex))
@@ -507,7 +569,13 @@ export function SingleModelMultiQuestionPageClient() {
           setLiveAttempts((prev) => {
             const next = new Map(prev)
             next.set(key, {
-              status: result.error ? 'error' : (result.judgeStatus === 'error' ? 'error' : 'success'),
+              status: result.error
+                ? 'error'
+                : (result.judgeStatus === 'running'
+                  ? 'judging'
+                  : (result.judgeStatus === 'success' && result.judgePass === true)
+                    ? 'success'
+                    : 'error'),
               output: result.output || next.get(key)?.output || '',
               reasoning: result.reasoning || next.get(key)?.reasoning || '',
               error: result.error ?? null,
@@ -517,24 +585,22 @@ export function SingleModelMultiQuestionPageClient() {
         }
 
         if (event.type === 'run_complete') {
-          const nextSummary = event.payload?.summary as BattleRunSummary['summary'] | undefined
+          const payload = asObject(event.payload)
+          const nextSummary = (payload?.summary || null) as BattleRunSummary['summary'] | null
           if (nextSummary) setSummary(nextSummary)
           setRunStatus('completed')
           void refreshHistory()
         }
 
-        if (event.type === 'run_cancelled') {
-          const nextSummary = event.payload?.summary as BattleRunSummary['summary'] | undefined
-          if (nextSummary) setSummary(nextSummary)
-          setRunStatus('cancelled')
+        if (event.type === 'run_error') {
+          const payload = asObject(event.payload)
+          const message = asNonEmptyString(payload?.message) || '执行失败'
+          if (event.status !== 'cancelled') {
+            setError(message)
+          }
+          setRunStatus(event.status === 'cancelled' ? 'cancelled' : 'error')
           setIsRunning(false)
           void refreshHistory()
-        }
-
-        if (event.type === 'error') {
-          setError(event.error || '执行失败')
-          setRunStatus('error')
-          setIsRunning(false)
         }
 
         if (event.type === 'complete') {
