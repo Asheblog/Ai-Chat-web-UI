@@ -5,8 +5,12 @@
 import { randomUUID } from 'node:crypto'
 import {
   runWebSearchParallel,
+  mergeWebSearchParallelResults,
   formatHitsForModel,
   type WebSearchParallelQuery,
+  type WebSearchParallelQueryPlan,
+  type WebSearchParallelResult,
+  type WebSearchTaskResult,
 } from '../../../utils/web-search'
 import { truncateText } from '../../../utils/parsers'
 import { readUrlContent, type UrlReadErrorCode } from '../../../utils/url-reader'
@@ -238,6 +242,226 @@ const pickActiveEngines = (config: WebSearchHandlerConfig): string[] => {
   return withKeys.slice(0, maxEngines)
 }
 
+const HIGH_RISK_QUERY_RE = new RegExp(
+  [
+    '最新',
+    '今日',
+    '实时',
+    '刚刚',
+    '突发',
+    '政策',
+    '法规',
+    '法律',
+    '监管',
+    '医疗',
+    '药品',
+    '诊断',
+    '金融',
+    '股价',
+    '投资',
+    '汇率',
+    '安全',
+    '漏洞',
+    'cve',
+    'latest',
+    'today',
+    'breaking',
+    'law',
+    'legal',
+    'policy',
+    'regulation',
+    'medical',
+    'drug',
+    'diagnosis',
+    'finance',
+    'stock',
+    'market',
+    'exchange rate',
+    'security',
+    'vulnerability',
+  ].join('|'),
+  'i',
+)
+
+const LANGUAGE_ENGINE_PRIORITY: Record<'zh' | 'en' | 'unknown', string[]> = {
+  zh: ['metaso', 'tavily', 'brave'],
+  en: ['tavily', 'brave', 'metaso'],
+  unknown: ['tavily', 'metaso', 'brave'],
+}
+
+const MIN_OVERLAP_RATIO_FOR_STABLE = 0.25
+
+interface SearchRoutingPlan {
+  queryPlans: WebSearchParallelQueryPlan[]
+  fallbackEngines: string[]
+  primaryLanguage: 'zh' | 'en' | 'unknown'
+  highRisk: boolean
+  requiredSources: number
+}
+
+type SearchEscalationReason = 'insufficient_sources' | 'low_overlap'
+
+interface SearchEscalationDecision {
+  escalate: boolean
+  reason: SearchEscalationReason | null
+  overlapRatio: number
+  successfulEngineCount: number
+}
+
+const normalizeEngineOrderForRouting = (
+  activeEngines: string[],
+  engineOrder: string[],
+): string[] => {
+  const normalizedOrder = Array.from(
+    new Set(
+      (engineOrder || [])
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  )
+  return [
+    ...normalizedOrder.filter((engine) => activeEngines.includes(engine)),
+    ...activeEngines.filter((engine) => !normalizedOrder.includes(engine)),
+  ]
+}
+
+const rankEnginesByLanguage = (
+  activeEngines: string[],
+  orderedEngines: string[],
+  language: 'zh' | 'en' | 'unknown',
+): string[] => {
+  const preferred = LANGUAGE_ENGINE_PRIORITY[language] || LANGUAGE_ENGINE_PRIORITY.unknown
+  return [
+    ...preferred.filter((engine) => activeEngines.includes(engine)),
+    ...orderedEngines.filter((engine) => !preferred.includes(engine)),
+  ]
+}
+
+const countPlannedTasks = (queryPlans: WebSearchParallelQueryPlan[]): number =>
+  queryPlans.reduce((sum, item) => sum + item.engines.length, 0)
+
+const isHighRiskQuery = (query: string): boolean => HIGH_RISK_QUERY_RE.test(query)
+
+const pickRequiredSourceCount = (activeEngineCount: number, highRisk: boolean): number =>
+  Math.max(1, Math.min(activeEngineCount, highRisk ? 3 : 2))
+
+const pickPerQuerySourceCount = (
+  queryIndex: number,
+  rankedEngines: string[],
+  requiredSources: number,
+  highRisk: boolean,
+): number => {
+  if (queryIndex === 0) return Math.max(1, Math.min(requiredSources, rankedEngines.length))
+  const fallbackTarget = highRisk ? 2 : 1
+  return Math.max(1, Math.min(fallbackTarget, rankedEngines.length))
+}
+
+export const buildLanguageAwareSearchPlan = ({
+  originalQuery,
+  expandedQueries,
+  activeEngines,
+  engineOrder,
+}: {
+  originalQuery: string
+  expandedQueries: WebSearchParallelQuery[]
+  activeEngines: string[]
+  engineOrder: string[]
+}): SearchRoutingPlan => {
+  const orderedEngines = normalizeEngineOrderForRouting(activeEngines, engineOrder)
+  const queryList = expandedQueries.length > 0 ? expandedQueries : [{ query: originalQuery, queryLanguage: 'unknown' }]
+  const primaryLanguage = queryList[0]?.queryLanguage || detectQueryLanguage(originalQuery)
+  const highRisk = isHighRiskQuery(originalQuery)
+  const requiredSources = pickRequiredSourceCount(activeEngines.length, highRisk)
+
+  const queryPlans: WebSearchParallelQueryPlan[] = queryList.map((queryItem, queryIndex) => {
+    const language = queryItem.queryLanguage || detectQueryLanguage(queryItem.query)
+    const rankedEngines = rankEnginesByLanguage(activeEngines, orderedEngines, language)
+    const perQuerySources = pickPerQuerySourceCount(queryIndex, rankedEngines, requiredSources, highRisk)
+    return {
+      query: queryItem.query,
+      queryLanguage: language,
+      engines: rankedEngines.slice(0, perQuerySources),
+    }
+  })
+
+  const usedEngines = new Set(queryPlans.flatMap((item) => item.engines))
+  const fallbackEngines = rankEnginesByLanguage(activeEngines, orderedEngines, primaryLanguage).filter(
+    (engine) => !usedEngines.has(engine),
+  )
+
+  return {
+    queryPlans,
+    fallbackEngines,
+    primaryLanguage,
+    highRisk,
+    requiredSources,
+  }
+}
+
+const calculateOverlapRatio = (result: WebSearchParallelResult): number => {
+  if (result.hits.length === 0) return 0
+  const overlapHits = result.hits.filter(
+    (item) => Array.isArray(item.sourceEngines) && item.sourceEngines.length >= 2,
+  ).length
+  return overlapHits / result.hits.length
+}
+
+export const evaluateSearchEscalation = (
+  plan: SearchRoutingPlan,
+  searchResult: WebSearchParallelResult,
+): SearchEscalationDecision => {
+  const successfulEngineCount = new Set(
+    searchResult.tasks
+      .filter((item) => item.status === 'success')
+      .map((item) => item.task.engine),
+  ).size
+  const overlapRatio = calculateOverlapRatio(searchResult)
+  if (plan.fallbackEngines.length === 0) {
+    return {
+      escalate: false,
+      reason: null,
+      overlapRatio,
+      successfulEngineCount,
+    }
+  }
+  if (successfulEngineCount < plan.requiredSources) {
+    return {
+      escalate: true,
+      reason: 'insufficient_sources',
+      overlapRatio,
+      successfulEngineCount,
+    }
+  }
+  if (successfulEngineCount >= 2 && overlapRatio < MIN_OVERLAP_RATIO_FOR_STABLE) {
+    return {
+      escalate: true,
+      reason: 'low_overlap',
+      overlapRatio,
+      successfulEngineCount,
+    }
+  }
+  return {
+    escalate: false,
+    reason: null,
+    overlapRatio,
+    successfulEngineCount,
+  }
+}
+
+const buildEscalationQueryPlans = (
+  plan: SearchRoutingPlan,
+  escalationEngine: string,
+): WebSearchParallelQueryPlan[] => {
+  if (!escalationEngine) return []
+  if (plan.queryPlans.length === 0) return []
+  const targetPlans = plan.highRisk ? plan.queryPlans : plan.queryPlans.slice(0, 1)
+  return targetPlans.map((item) => ({
+    query: item.query,
+    queryLanguage: item.queryLanguage,
+    engines: [escalationEngine],
+  }))
+}
+
 const buildSummaryForModel = (
   query: string,
   hits: Array<{ title: string; url: string; snippet?: string; content?: string }>,
@@ -409,9 +633,15 @@ export class WebSearchToolHandler implements IToolHandler {
     const appliedLimit = this.config.resultLimit
     const expandedQueries = buildBilingualQueries(query, this.config)
     const activeEngines = pickActiveEngines(this.config)
+    const routingPlan = buildLanguageAwareSearchPlan({
+      originalQuery: query,
+      expandedQueries,
+      activeEngines,
+      engineOrder: this.config.engineOrder || [],
+    })
 
     context.emitReasoning(
-      `联网搜索：${query}（引擎 ${activeEngines.length}，查询 ${expandedQueries.length}，目标 ${appliedLimit} 条）`,
+      `联网搜索：${query}（引擎 ${activeEngines.length}，查询 ${expandedQueries.length}，目标 ${appliedLimit} 条，最少来源 ${routingPlan.requiredSources}）`,
       {
         ...reasoningMetaBase,
         stage: 'start',
@@ -428,6 +658,8 @@ export class WebSearchToolHandler implements IToolHandler {
         groupId: callId,
         engineCount: activeEngines.length,
         queryCount: expandedQueries.length,
+        requiredSources: routingPlan.requiredSources,
+        highRisk: routingPlan.highRisk,
       },
     })
 
@@ -445,58 +677,49 @@ export class WebSearchToolHandler implements IToolHandler {
       }
     }
 
-    const plannedSearchTaskCount = activeEngines.length * expandedQueries.length
-    for (let queryIndex = 0; queryIndex < expandedQueries.length; queryIndex += 1) {
-      const queryItem = expandedQueries[queryIndex]
-      for (let engineIndex = 0; engineIndex < activeEngines.length; engineIndex += 1) {
-        const engine = activeEngines[engineIndex]
-        const taskIndex = queryIndex * activeEngines.length + engineIndex
-        context.sendToolEvent({
-          id: `${callId}:search:${taskIndex + 1}`,
-          tool: 'web_search',
-          stage: 'start',
-          query: queryItem.query,
-          summary: `并行搜索中：${engine} / ${queryItem.queryLanguage || 'unknown'}`,
-          details: {
-            groupId: callId,
-            parentTool: 'web_search',
-            parentCallId: callId,
-            taskType: 'search',
-            engine,
-            queryLanguage: queryItem.queryLanguage || 'unknown',
-            originalQuery: query,
-            expandedQuery: queryItem.query,
-            queryIndex,
-          },
-        })
+    const plannedSearchTaskCount = countPlannedTasks(routingPlan.queryPlans)
+    const emitSearchTaskStartEvents = (
+      queryPlans: WebSearchParallelQueryPlan[],
+      phase: 'initial' | 'escalation',
+    ) => {
+      let taskIndex = 0
+      for (let queryIndex = 0; queryIndex < queryPlans.length; queryIndex += 1) {
+        const queryItem = queryPlans[queryIndex]
+        for (let engineIndex = 0; engineIndex < queryItem.engines.length; engineIndex += 1) {
+          const engine = queryItem.engines[engineIndex]
+          context.sendToolEvent({
+            id: `${callId}:search:${phase}:${taskIndex + 1}`,
+            tool: 'web_search',
+            stage: 'start',
+            query: queryItem.query,
+            summary:
+              phase === 'initial'
+                ? `并行搜索中：${engine} / ${queryItem.queryLanguage || 'unknown'}`
+                : `冲突升级复核：${engine} / ${queryItem.queryLanguage || 'unknown'}`,
+            details: {
+              groupId: callId,
+              parentTool: 'web_search',
+              parentCallId: callId,
+              taskType: 'search',
+              phase,
+              engine,
+              queryLanguage: queryItem.queryLanguage || 'unknown',
+              originalQuery: query,
+              expandedQuery: queryItem.query,
+              queryIndex,
+            },
+          })
+          taskIndex += 1
+        }
       }
     }
 
-    try {
-      const parallelTimeoutMs = clampPositiveInt(
-        this.config.parallelTimeoutMs,
-        DEFAULT_PARALLEL_TIMEOUT_MS,
-        1000,
-        120000,
-      )
-      const searchResult = await runWebSearchParallel({
-        engines: activeEngines,
-        engineOrder: this.config.engineOrder,
-        apiKeys: this.config.apiKeys || {},
-        queries: expandedQueries,
-        limit: appliedLimit,
-        domains: this.config.domains,
-        endpoint: this.config.endpoint,
-        scope: this.config.scope,
-        includeSummary: this.config.includeSummary,
-        includeRawContent: this.config.includeRawContent,
-        timeoutMs: parallelTimeoutMs,
-        parallelMaxEngines: this.config.parallelMaxEngines,
-        mergeStrategy: this.config.mergeStrategy,
-      })
-
-      for (const taskResult of searchResult.tasks) {
-        const taskId = `${callId}:search:${taskResult.task.taskIndex + 1}`
+    const emitSearchTaskResultEvents = (
+      taskResults: WebSearchTaskResult[],
+      phase: 'initial' | 'escalation',
+    ) => {
+      for (const taskResult of taskResults) {
+        const taskId = `${callId}:search:${phase}:${taskResult.task.taskIndex + 1}`
         if (taskResult.status === 'error') {
           context.sendToolEvent({
             id: taskId,
@@ -510,6 +733,7 @@ export class WebSearchToolHandler implements IToolHandler {
               parentTool: 'web_search',
               parentCallId: callId,
               taskType: 'search',
+              phase,
               engine: taskResult.task.engine,
               queryLanguage: taskResult.task.queryLanguage,
               originalQuery: query,
@@ -531,6 +755,7 @@ export class WebSearchToolHandler implements IToolHandler {
             parentTool: 'web_search',
             parentCallId: callId,
             taskType: 'search',
+            phase,
             engine: taskResult.task.engine,
             queryLanguage: taskResult.task.queryLanguage,
             originalQuery: query,
@@ -539,6 +764,105 @@ export class WebSearchToolHandler implements IToolHandler {
             hitsCount: taskResult.hits.length,
           },
         })
+      }
+    }
+
+    emitSearchTaskStartEvents(routingPlan.queryPlans, 'initial')
+
+    try {
+      const parallelTimeoutMs = clampPositiveInt(
+        this.config.parallelTimeoutMs,
+        DEFAULT_PARALLEL_TIMEOUT_MS,
+        1000,
+        120000,
+      )
+      let searchResult = await runWebSearchParallel({
+        engines: activeEngines,
+        engineOrder: this.config.engineOrder,
+        apiKeys: this.config.apiKeys || {},
+        queries: expandedQueries,
+        queryPlans: routingPlan.queryPlans,
+        limit: appliedLimit,
+        domains: this.config.domains,
+        endpoint: this.config.endpoint,
+        scope: this.config.scope,
+        includeSummary: this.config.includeSummary,
+        includeRawContent: this.config.includeRawContent,
+        timeoutMs: parallelTimeoutMs,
+        parallelMaxEngines: this.config.parallelMaxEngines,
+        mergeStrategy: this.config.mergeStrategy,
+      })
+      emitSearchTaskResultEvents(searchResult.tasks, 'initial')
+
+      let executedSearchTaskCount = plannedSearchTaskCount
+      let escalationInfo: {
+        triggered: boolean
+        reason: SearchEscalationReason | null
+        engine?: string
+        overlapRatio: number
+        successfulEngineCount: number
+      } = {
+        triggered: false,
+        reason: null,
+        overlapRatio: 0,
+        successfulEngineCount: 0,
+      }
+
+      const escalationDecision = evaluateSearchEscalation(routingPlan, searchResult)
+      escalationInfo = {
+        ...escalationInfo,
+        overlapRatio: escalationDecision.overlapRatio,
+        successfulEngineCount: escalationDecision.successfulEngineCount,
+      }
+      if (escalationDecision.escalate) {
+        const escalationEngine = routingPlan.fallbackEngines[0]
+        const escalationPlans = buildEscalationQueryPlans(routingPlan, escalationEngine)
+        if (escalationEngine && escalationPlans.length > 0) {
+          context.emitReasoning(
+            `搜索结果出现${escalationDecision.reason === 'low_overlap' ? '低重叠冲突' : '来源不足'}，追加 ${escalationEngine} 复核。`,
+            {
+              ...reasoningMetaBase,
+              stage: 'start',
+              escalationReason: escalationDecision.reason,
+              escalationEngine,
+              overlapRatio: escalationDecision.overlapRatio,
+              successfulEngineCount: escalationDecision.successfulEngineCount,
+            },
+          )
+          emitSearchTaskStartEvents(escalationPlans, 'escalation')
+          const escalationResult = await runWebSearchParallel({
+            engines: activeEngines,
+            engineOrder: this.config.engineOrder,
+            apiKeys: this.config.apiKeys || {},
+            queries: escalationPlans.map((item) => ({
+              query: item.query,
+              queryLanguage: item.queryLanguage,
+            })),
+            queryPlans: escalationPlans,
+            limit: appliedLimit,
+            domains: this.config.domains,
+            endpoint: this.config.endpoint,
+            scope: this.config.scope,
+            includeSummary: this.config.includeSummary,
+            includeRawContent: this.config.includeRawContent,
+            timeoutMs: parallelTimeoutMs,
+            parallelMaxEngines: this.config.parallelMaxEngines,
+            mergeStrategy: this.config.mergeStrategy,
+          })
+          emitSearchTaskResultEvents(escalationResult.tasks, 'escalation')
+          searchResult = mergeWebSearchParallelResults(
+            [searchResult, escalationResult],
+            appliedLimit,
+            this.config.engineOrder,
+          )
+          executedSearchTaskCount += countPlannedTasks(escalationPlans)
+          escalationInfo = {
+            ...escalationInfo,
+            triggered: true,
+            reason: escalationDecision.reason,
+            engine: escalationEngine,
+          }
+        }
       }
 
       const hits = searchResult.hits.map(({ imageUrl: _imageUrl, thumbnailUrl: _thumbnailUrl, ...hit }) => hit)
@@ -739,6 +1063,10 @@ export class WebSearchToolHandler implements IToolHandler {
         autoReadRequested: autoReadTargets.length,
         autoReadSucceeded,
         autoReadFailed,
+        escalationTriggered: escalationInfo.triggered,
+        escalationReason: escalationInfo.reason,
+        escalationEngine: escalationInfo.engine,
+        overlapRatio: escalationInfo.overlapRatio,
       })
       context.sendToolEvent({
         id: callId,
@@ -763,6 +1091,12 @@ export class WebSearchToolHandler implements IToolHandler {
           autoReadRequested: autoReadTargets.length,
           autoReadSucceeded,
           autoReadFailed,
+          requiredSources: routingPlan.requiredSources,
+          highRisk: routingPlan.highRisk,
+          escalationTriggered: escalationInfo.triggered,
+          escalationReason: escalationInfo.reason,
+          escalationEngine: escalationInfo.engine,
+          overlapRatio: escalationInfo.overlapRatio,
         },
       })
 
@@ -782,10 +1116,21 @@ export class WebSearchToolHandler implements IToolHandler {
             summary: truncateText(summary, DEFAULT_MODEL_SUMMARY_CHARS),
             autoReadEvidence: slimEvidenceForModel(autoReadEvidence),
             taskStats: {
-              total: plannedSearchTaskCount,
+              total: executedSearchTaskCount,
               succeeded: taskSucceeded,
               failed: taskFailed,
             },
+            routing: {
+              requiredSources: routingPlan.requiredSources,
+              highRisk: routingPlan.highRisk,
+              primaryLanguage: routingPlan.primaryLanguage,
+              queryPlans: routingPlan.queryPlans.map((item) => ({
+                query: item.query,
+                queryLanguage: item.queryLanguage,
+                engines: item.engines,
+              })),
+            },
+            escalation: escalationInfo,
             autoReadStats: {
               enabled: autoReadEnabled,
               requested: autoReadTargets.length,

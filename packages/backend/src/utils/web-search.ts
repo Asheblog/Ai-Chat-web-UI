@@ -34,6 +34,10 @@ export interface WebSearchParallelQuery {
   queryLanguage?: WebSearchQueryLanguage
 }
 
+export interface WebSearchParallelQueryPlan extends WebSearchParallelQuery {
+  engines: string[]
+}
+
 export interface WebSearchParallelTask {
   engine: string
   query: string
@@ -54,6 +58,7 @@ export interface WebSearchParallelOptions {
   engineOrder?: string[]
   apiKeys: Partial<Record<string, string>>
   queries: WebSearchParallelQuery[]
+  queryPlans?: WebSearchParallelQueryPlan[]
   limit: number
   domains?: string[]
   endpoint?: string
@@ -164,6 +169,22 @@ const getEngineWeight = (engine: string, engineOrder: string[]): number => {
   const idx = engineOrder.indexOf(engine)
   if (idx < 0) return 0
   return Math.max(0, engineOrder.length - idx)
+}
+
+const normalizeEngineOrderForMerge = (
+  engines: string[],
+  engineOrder?: string[],
+): string[] => {
+  const normalizedEngines = Array.from(
+    new Set((engines || []).map((engine) => normalizeEngine(engine)).filter(Boolean)),
+  )
+  const normalizedOrder = Array.from(
+    new Set((engineOrder || []).map((engine) => normalizeEngine(engine)).filter(Boolean)),
+  )
+  return [
+    ...normalizedOrder.filter((engine) => normalizedEngines.includes(engine)),
+    ...normalizedEngines.filter((engine) => !normalizedOrder.includes(engine)),
+  ]
 }
 
 export const formatHitsForModel = (query: string, hits: WebSearchHit[]): string => {
@@ -442,22 +463,55 @@ export const runWebSearchParallel = async (
     }))
     .filter((item) => item.query.length > 0)
 
-  if (selectedEngines.length === 0 || normalizedQueries.length === 0) {
+  const normalizedQueryPlans = (opts.queryPlans || [])
+    .map((item) => ({
+      query: (item.query || '').trim(),
+      queryLanguage: item.queryLanguage || 'unknown',
+      engines: Array.from(
+        new Set((item.engines || []).map((engine) => normalizeEngine(engine)).filter(Boolean)),
+      ).filter((engine) => selectedEngines.includes(engine)),
+    }))
+    .filter((item) => item.query.length > 0 && item.engines.length > 0)
+
+  if (selectedEngines.length === 0 || (normalizedQueries.length === 0 && normalizedQueryPlans.length === 0)) {
     return { hits: [], tasks: [] }
   }
 
   const tasks: WebSearchParallelTask[] = []
   let taskIndex = 0
-  for (const [queryIndex, queryItem] of normalizedQueries.entries()) {
-    for (const engine of selectedEngines) {
+  if (normalizedQueryPlans.length > 0) {
+    for (const [queryIndex, queryItem] of normalizedQueryPlans.entries()) {
       tasks.push({
-        engine,
+        engine: queryItem.engines[0],
         query: queryItem.query,
         queryLanguage: queryItem.queryLanguage,
         queryIndex,
         taskIndex,
       })
       taskIndex += 1
+      for (let idx = 1; idx < queryItem.engines.length; idx += 1) {
+        tasks.push({
+          engine: queryItem.engines[idx],
+          query: queryItem.query,
+          queryLanguage: queryItem.queryLanguage,
+          queryIndex,
+          taskIndex,
+        })
+        taskIndex += 1
+      }
+    }
+  } else {
+    for (const [queryIndex, queryItem] of normalizedQueries.entries()) {
+      for (const engine of selectedEngines) {
+        tasks.push({
+          engine,
+          query: queryItem.query,
+          queryLanguage: queryItem.queryLanguage,
+          queryIndex,
+          taskIndex,
+        })
+        taskIndex += 1
+      }
     }
   }
 
@@ -519,14 +573,31 @@ export const runWebSearchParallel = async (
     }),
   )
 
-  const mergedHits = mergeHits(
-    taskResults.flatMap((result) => result.hits),
-    opts.limit,
-    selectedEngines,
-  )
+  const mergeOrder = normalizeEngineOrderForMerge(selectedEngines, opts.engineOrder)
+  const mergedHits = mergeHits(taskResults.flatMap((result) => result.hits), opts.limit, mergeOrder)
 
   return {
     hits: mergedHits,
     tasks: taskResults,
+  }
+}
+
+export const mergeWebSearchParallelResults = (
+  results: WebSearchParallelResult[],
+  limit: number,
+  engineOrder?: string[],
+): WebSearchParallelResult => {
+  const mergedTasks = results.flatMap((result) => result.tasks)
+  const enginesFromTasks = Array.from(
+    new Set(
+      mergedTasks
+        .map((result) => normalizeEngine(result.task.engine || ''))
+        .filter(Boolean),
+    ),
+  )
+  const mergeOrder = normalizeEngineOrderForMerge(enginesFromTasks, engineOrder)
+  return {
+    hits: mergeHits(mergedTasks.flatMap((result) => result.hits), limit, mergeOrder),
+    tasks: mergedTasks,
   }
 }
