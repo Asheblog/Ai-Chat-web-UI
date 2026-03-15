@@ -6,6 +6,7 @@
 
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
+import { isIP } from 'node:net'
 import { BackendLogger as log } from './logger'
 
 export type UrlReadErrorCode =
@@ -65,6 +66,7 @@ const CRAWLER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
 const CRAWLER_MIN_TEXT_LENGTH = 40
 const MAX_EXTRACTED_IMAGES = 8
+const MAX_HTML_PARSE_LENGTH = 1024 * 1024
 const JS_CHALLENGE_PATTERNS: RegExp[] = [
   /cf-chl/i,
   /cloudflare/i,
@@ -74,6 +76,94 @@ const JS_CHALLENGE_PATTERNS: RegExp[] = [
   /just a moment/i,
   /verify you are human/i,
 ]
+
+interface UrlTransformRule {
+  id: 'medium_to_scribe' | 'github_blob_to_raw'
+  pattern: RegExp
+  transform: (match: RegExpMatchArray) => string
+}
+
+const URL_TRANSFORM_RULES: UrlTransformRule[] = [
+  {
+    id: 'medium_to_scribe',
+    pattern: /^https?:\/\/(?:[^/]+\.)?medium\.com\/(.+)$/i,
+    transform: (match) => `https://scribe.rip/${match[1] || ''}`,
+  },
+  {
+    id: 'github_blob_to_raw',
+    pattern: /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/i,
+    transform: (match) =>
+      `https://github.com/${match[1] || ''}/${match[2] || ''}/raw/refs/heads/${match[3] || ''}/${match[4] || ''}`,
+  },
+]
+
+const isPrivateIPv4 = (ip: string): boolean => {
+  const parts = ip.split('.').map((item) => Number.parseInt(item, 10))
+  if (parts.length !== 4 || parts.some((item) => !Number.isFinite(item) || item < 0 || item > 255)) {
+    return false
+  }
+
+  const [a, b] = parts
+
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19))
+  )
+}
+
+const isPrivateIPv6 = (ip: string): boolean => {
+  const normalized = ip.toLowerCase()
+  if (normalized === '::' || normalized === '::1') return true
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true
+  if (/^fe[89ab]/.test(normalized)) return true
+  if (normalized.startsWith('::ffff:')) {
+    const mapped = normalized.slice('::ffff:'.length)
+    if (isIP(mapped) === 4 && isPrivateIPv4(mapped)) return true
+  }
+  return false
+}
+
+const isDisallowedHost = (hostname: string): boolean => {
+  const normalized = hostname.toLowerCase()
+  if (
+    normalized === 'localhost' ||
+    normalized.endsWith('.local') ||
+    normalized.endsWith('.internal')
+  ) {
+    return true
+  }
+
+  const ipVersion = isIP(normalized)
+  if (ipVersion === 4) return isPrivateIPv4(normalized)
+  if (ipVersion === 6) return isPrivateIPv6(normalized)
+  return false
+}
+
+const applyUrlTransformRules = (
+  url: string,
+): { fetchUrl: string; transformedBy?: UrlTransformRule['id'] } => {
+  for (const rule of URL_TRANSFORM_RULES) {
+    const match = url.match(rule.pattern)
+    if (!match) continue
+    const transformed = rule.transform(match)
+    if (transformed && transformed !== url) {
+      return { fetchUrl: transformed, transformedBy: rule.id }
+    }
+  }
+  return { fetchUrl: url }
+}
+
+const trimHtmlForParsing = (html: string): string => {
+  if (!html) return ''
+  if (html.length <= MAX_HTML_PARSE_LENGTH) return html
+  return html.slice(0, MAX_HTML_PARSE_LENGTH)
+}
 
 /**
  * 验证 URL 格式和安全性
@@ -87,24 +177,9 @@ function validateUrl(url: string): string {
 
   try {
     const parsed = new URL(normalized)
-    const hostname = parsed.hostname.toLowerCase()
+    const hostname = parsed.hostname
 
-    if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '0.0.0.0' ||
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('10.') ||
-      hostname.startsWith('172.16.') ||
-      hostname.startsWith('172.17.') ||
-      hostname.startsWith('172.18.') ||
-      hostname.startsWith('172.19.') ||
-      hostname.startsWith('172.2') ||
-      hostname.startsWith('172.30.') ||
-      hostname.startsWith('172.31.') ||
-      hostname.endsWith('.local') ||
-      hostname.endsWith('.internal')
-    ) {
+    if (isDisallowedHost(hostname)) {
       throw new Error('Access to local/internal URLs is not allowed for security reasons')
     }
 
@@ -112,7 +187,7 @@ function validateUrl(url: string): string {
       throw new Error('Only HTTP and HTTPS URLs are supported')
     }
 
-    return normalized
+    return parsed.toString()
   } catch (error) {
     if (error instanceof Error && error.message.includes('not allowed')) {
       throw error
@@ -557,16 +632,33 @@ export async function readUrlContent(
   opts: UrlReaderOptions = {}
 ): Promise<UrlReadResult> {
   let validatedUrl = url.trim()
+  let fetchUrl = validatedUrl
   const timeout = opts.timeout || DEFAULT_TIMEOUT
   const maxContentLength = opts.maxContentLength || DEFAULT_MAX_CONTENT_LENGTH
   const userAgent = opts.userAgent || DEFAULT_USER_AGENT
 
   try {
     validatedUrl = validateUrl(url)
-    log.debug('url reader: fetching', { url: validatedUrl })
+    const transformed = applyUrlTransformRules(validatedUrl)
+    fetchUrl = transformed.fetchUrl
+
+    if (transformed.transformedBy) {
+      log.debug('url reader: url transform applied', {
+        originalUrl: validatedUrl,
+        fetchUrl,
+        rule: transformed.transformedBy,
+      })
+    }
+
+    const toPublicResult = (result: UrlReadResult): UrlReadResult => ({
+      ...result,
+      url: validatedUrl,
+    })
+
+    log.debug('url reader: fetching', { url: validatedUrl, fetchUrl })
 
     const { response, body: responseBody } = await fetchPageBody(
-      validatedUrl,
+      fetchUrl,
       timeout,
       buildPrimaryHeaders(userAgent),
     )
@@ -579,13 +671,13 @@ export async function readUrlContent(
       const blockedByChallenge = detectJsChallenge(bodySnippet)
       const finalCode = blockedByChallenge ? 'JS_CHALLENGE' : errorCode
       if (!blockedByChallenge && status !== 404) {
-        const crawlerResult = await tryCrawlerRefetch(validatedUrl, timeout, maxContentLength)
+        const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength)
         if (crawlerResult) {
           log.debug('url reader: crawler fallback success after non-2xx response', {
             url: validatedUrl,
             httpStatus: status,
           })
-          return crawlerResult
+          return toPublicResult(crawlerResult)
         }
       }
       const message =
@@ -614,7 +706,7 @@ export async function readUrlContent(
             url: validatedUrl,
             contentType,
           })
-          return crawlerResult
+          return toPublicResult(crawlerResult)
         }
       }
       const message = `Unsupported content type: ${contentType}. Only HTML pages are supported.`
@@ -634,14 +726,23 @@ export async function readUrlContent(
     }
 
     const html = responseBody
+    const htmlForParse = trimHtmlForParsing(html)
+    if (html.length !== htmlForParse.length) {
+      log.debug('url reader: html trimmed for parsing', {
+        url: validatedUrl,
+        originalLength: html.length,
+        trimmedLength: htmlForParse.length,
+        maxLength: MAX_HTML_PARSE_LENGTH,
+      })
+    }
 
-    if (detectJsChallenge(html)) {
-      const crawlerResult = await tryCrawlerRefetch(validatedUrl, timeout, maxContentLength)
+    if (detectJsChallenge(htmlForParse)) {
+      const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength)
       if (crawlerResult) {
         log.debug('url reader: crawler fallback success after JS challenge detection', {
           url: validatedUrl,
         })
-        return crawlerResult
+        return toPublicResult(crawlerResult)
       }
       const message = 'The page appears to be protected by a JavaScript challenge or anti-bot verification'
       log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'JS_CHALLENGE' })
@@ -655,14 +756,14 @@ export async function readUrlContent(
       }
     }
 
-    if (!html || html.length < 100) {
-      const crawlerResult = await tryCrawlerRefetch(validatedUrl, timeout, maxContentLength)
+    if (!htmlForParse || htmlForParse.length < 100) {
+      const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength)
       if (crawlerResult) {
         log.debug('url reader: crawler fallback success after empty content', {
           url: validatedUrl,
-          htmlLength: html.length,
+          htmlLength: htmlForParse.length,
         })
-        return crawlerResult
+        return toPublicResult(crawlerResult)
       }
       const message = 'Page content is empty or too short'
       log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'EMPTY_CONTENT' })
@@ -676,33 +777,33 @@ export async function readUrlContent(
       }
     }
 
-    log.debug('url reader: parsing', { url: validatedUrl, htmlLength: html.length })
+    log.debug('url reader: parsing', { url: validatedUrl, htmlLength: htmlForParse.length })
 
-    const readabilityResult = extractReadabilityResultFromHtml(html, validatedUrl, maxContentLength)
+    const readabilityResult = extractReadabilityResultFromHtml(htmlForParse, fetchUrl, maxContentLength)
     if (readabilityResult) {
       log.debug('url reader: success', {
         url: validatedUrl,
         title: readabilityResult.title,
         wordCount: readabilityResult.wordCount,
       })
-      return readabilityResult
+      return toPublicResult(readabilityResult)
     }
 
-    const crawlerInlineResult = extractCrawlerResultFromHtml(html, validatedUrl, maxContentLength)
+    const crawlerInlineResult = extractCrawlerResultFromHtml(htmlForParse, fetchUrl, maxContentLength)
     if (crawlerInlineResult) {
       log.debug('url reader: crawler fallback success after readability parse miss', {
         url: validatedUrl,
         wordCount: crawlerInlineResult.wordCount,
       })
-      return crawlerInlineResult
+      return toPublicResult(crawlerInlineResult)
     }
 
-    const crawlerRefetchResult = await tryCrawlerRefetch(validatedUrl, timeout, maxContentLength)
+    const crawlerRefetchResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength)
     if (crawlerRefetchResult) {
       log.debug('url reader: crawler fallback success after readability parse miss + refetch', {
         url: validatedUrl,
       })
-      return crawlerRefetchResult
+      return toPublicResult(crawlerRefetchResult)
     }
 
     {
@@ -718,15 +819,23 @@ export async function readUrlContent(
       }
     }
   } catch (error) {
-    const crawlerResult = await tryCrawlerRefetch(validatedUrl, timeout, maxContentLength)
-    if (crawlerResult) {
-      log.debug('url reader: crawler fallback success after thrown error', {
-        url: validatedUrl,
-      })
-      return crawlerResult
+    const classified = classifyThrownError(error)
+    const shouldTryCrawlerFallback =
+      classified.errorCode !== 'DISALLOWED_URL' && classified.errorCode !== 'INVALID_URL'
+
+    if (shouldTryCrawlerFallback) {
+      const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength)
+      if (crawlerResult) {
+        log.debug('url reader: crawler fallback success after thrown error', {
+          url: validatedUrl,
+        })
+        return {
+          ...crawlerResult,
+          url: validatedUrl,
+        }
+      }
     }
 
-    const classified = classifyThrownError(error)
     const message =
       classified.errorCode === 'TIMEOUT'
         ? `Request timeout after ${timeout / 1000} seconds`

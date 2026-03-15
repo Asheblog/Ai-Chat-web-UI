@@ -156,4 +156,80 @@ describe('readUrlContent error classification', () => {
     expect(formatted).toContain('https://example.com/cover.jpg')
     expect(formatted).toContain('https://example.com/images/a.png')
   })
+
+  test('does not treat 172.2.x.x as private network and allows fetching', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(
+        `
+        <html>
+          <head><title>Public IP Article</title></head>
+          <body>
+            <main>
+              <p>这是一段足够长的正文内容，用于验证 172.2 网段不会被误判为私网并被拦截。</p>
+              <p>第二段补充文本，确保正文提取稳定通过最小长度阈值。</p>
+            </main>
+          </body>
+        </html>
+        `,
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        },
+      ),
+    ) as typeof fetch
+
+    const result = await readUrlContent('http://172.2.1.2/article')
+
+    expect(result.error).toBeUndefined()
+    expect(result.errorCode).toBeUndefined()
+    expect(global.fetch).toHaveBeenCalled()
+  })
+
+  test('transforms medium URL to scribe.rip before fetching', async () => {
+    const fetchMock = jest.fn(async () =>
+      new Response(
+        `
+        <html>
+          <head><title>Medium Mirror</title></head>
+          <body>
+            <article>
+              <p>第一段用于验证 URL 改写逻辑生效，内容长度足够通过正文提取。</p>
+              <p>第二段继续补齐文本，保证测试稳定。</p>
+            </article>
+          </body>
+        </html>
+        `,
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        },
+      ),
+    ) as typeof fetch
+    global.fetch = fetchMock
+
+    const result = await readUrlContent('https://medium.com/someone/some-post')
+
+    expect(result.error).toBeUndefined()
+    expect(fetchMock).toHaveBeenCalled()
+    const firstCallUrl = String(fetchMock.mock.calls[0]?.[0] ?? '')
+    expect(firstCallUrl).toBe('https://scribe.rip/someone/some-post')
+  })
+
+  test('rejects localhost URL without attempting fetch', async () => {
+    const fetchMock = jest.fn(async () =>
+      new Response('<html><body>should not be fetched</body></html>', {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    ) as typeof fetch
+    global.fetch = fetchMock
+
+    const result = await readUrlContent('http://127.0.0.1:3000/secret')
+
+    expect(result.errorCode).toBe('DISALLOWED_URL')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })
