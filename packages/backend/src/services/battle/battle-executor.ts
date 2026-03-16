@@ -91,6 +91,40 @@ const buildUsage = (json: any, context: { promptTokens: number; contextLimit: nu
   }
 }
 
+const normalizeTextOnlyContent = (content: unknown): unknown => {
+  if (!Array.isArray(content) || content.length === 0) {
+    return content
+  }
+  const textParts: string[] = []
+  for (const part of content) {
+    if (!part || typeof part !== 'object' || (part as any).type !== 'text') {
+      return content
+    }
+    const text = (part as any).text
+    textParts.push(typeof text === 'string' ? text : '')
+  }
+  return textParts.join('')
+}
+
+const normalizeMessagesForProviderCompatibility = (messages: unknown): unknown => {
+  if (!Array.isArray(messages)) {
+    return messages
+  }
+  return messages.map((message) => {
+    if (!message || typeof message !== 'object') {
+      return message
+    }
+    const content = normalizeTextOnlyContent((message as any).content)
+    if (content === (message as any).content) {
+      return message
+    }
+    return {
+      ...(message as Record<string, unknown>),
+      content,
+    }
+  })
+}
+
 export class BattleExecutor {
   private requestBuilder: ChatRequestBuilder
   private requester: ProviderRequesterType
@@ -204,6 +238,7 @@ export class BattleExecutor {
       personalPrompt: null,
       extraSystemPrompts: extraPrompt ? [extraPrompt] : [],
     })
+    this.normalizePreparedRequest(prepared)
 
     if (effectiveSkills.enabled.length > 0) {
       return this.executeWithTools(
@@ -270,6 +305,7 @@ export class BattleExecutor {
       mode: 'completion',
       personalPrompt: null,
     })
+    this.normalizePreparedRequest(prepared)
 
     const response = await this.requester.requestWithBackoff({
       request: {
@@ -753,5 +789,32 @@ export class BattleExecutor {
       systemPrompt: null,
       connection,
     } as any
+  }
+
+  private normalizePreparedRequest(prepared: PreparedChatRequest) {
+    const normalizedMessagesPayload = normalizeMessagesForProviderCompatibility(prepared.messagesPayload)
+    if (Array.isArray(normalizedMessagesPayload)) {
+      prepared.messagesPayload = normalizedMessagesPayload as any[]
+    }
+
+    if (prepared.baseRequestBody && typeof prepared.baseRequestBody === 'object') {
+      const normalized = normalizeMessagesForProviderCompatibility((prepared.baseRequestBody as any).messages)
+      if (Array.isArray(normalized)) {
+        prepared.baseRequestBody = {
+          ...prepared.baseRequestBody,
+          messages: normalized,
+        }
+      }
+    }
+
+    if (prepared.providerRequest?.body && typeof prepared.providerRequest.body === 'object') {
+      const normalized = normalizeMessagesForProviderCompatibility((prepared.providerRequest.body as any).messages)
+      if (Array.isArray(normalized)) {
+        prepared.providerRequest.body = {
+          ...prepared.providerRequest.body,
+          messages: normalized,
+        }
+      }
+    }
   }
 }
