@@ -93,7 +93,7 @@ function aggregateAdjacentChunks(
         const lastChunk = current.aggregatedFrom![current.aggregatedFrom!.length - 1]
         const gap = hit.chunkIndex - lastChunk
         
-        if (gap <= maxGap + 1) {
+        if (gap <= maxGap) {
           // 相邻，合并内容
           current.content += '\n\n' + hit.content
           current.score = Math.max(current.score, hit.score)
@@ -124,6 +124,13 @@ function aggregateAdjacentChunks(
   result.sort((a, b) => b.score - a.score)
   
   return result
+}
+
+export function aggregateAdjacentChunksForTest(
+  hits: EnhancedRAGHit[],
+  maxGap: number = 1
+): EnhancedRAGHit[] {
+  return aggregateAdjacentChunks(hits, maxGap)
 }
 
 /**
@@ -310,34 +317,6 @@ export class EnhancedRAGService {
         
         const chunkIndex = (result.metadata.chunkIndex as number) || 0
         
-        // 获取 chunk 的章节信息
-        let sectionInfo: EnhancedRAGHit['section'] | undefined
-        
-        if (opts.groupBySection) {
-          try {
-            const chunk = await this.prisma.documentChunk.findFirst({
-              where: {
-                documentId: doc.id,
-                chunkIndex,
-              },
-              include: {
-                section: true,
-              },
-            })
-            
-            if (chunk?.section) {
-              sectionInfo = {
-                id: chunk.section.id,
-                title: chunk.section.title,
-                path: chunk.section.path,
-                level: chunk.section.level,
-              }
-            }
-          } catch {
-            // section 表可能尚未创建
-          }
-        }
-        
         const pageNumber = (result.metadata.pageNumber as number) || 0
         const totalPages = (result.metadata.totalPages as number) || 1
         let pagePosition: 'top' | 'middle' | 'bottom' = 'middle'
@@ -357,9 +336,12 @@ export class EnhancedRAGService {
             ...result.metadata,
             pagePosition,
           },
-          section: sectionInfo,
         })
       }
+    }
+
+    if (opts.groupBySection && allHits.length > 0) {
+      await this.attachSectionInfo(allHits)
     }
     
     // 记录原始命中数
@@ -418,50 +400,144 @@ export class EnhancedRAGService {
   }
   
   /**
-   * 添加上下文 chunks
+   * 为命中结果批量补充章节信息，避免 N+1 查询。
+   */
+  private async attachSectionInfo(hits: EnhancedRAGHit[]): Promise<void> {
+    const byDocument = new Map<number, Set<number>>()
+    for (const hit of hits) {
+      if (!byDocument.has(hit.documentId)) {
+        byDocument.set(hit.documentId, new Set<number>())
+      }
+      byDocument.get(hit.documentId)!.add(hit.chunkIndex)
+    }
+
+    const whereOr = Array.from(byDocument.entries()).map(([documentId, chunkSet]) => ({
+      documentId,
+      chunkIndex: { in: Array.from(chunkSet.values()) },
+    }))
+
+    if (whereOr.length === 0) return
+
+    try {
+      const rows = await this.prisma.documentChunk.findMany({
+        where: { OR: whereOr },
+        select: {
+          documentId: true,
+          chunkIndex: true,
+          section: {
+            select: {
+              id: true,
+              title: true,
+              path: true,
+              level: true,
+            },
+          },
+        },
+      })
+
+      const sectionMap = new Map<string, EnhancedRAGHit['section']>()
+      for (const row of rows as Array<any>) {
+        const key = `${row.documentId}:${row.chunkIndex}`
+        const section = row.section
+          ? {
+              id: row.section.id,
+              title: row.section.title,
+              path: row.section.path,
+              level: row.section.level,
+            }
+          : undefined
+        sectionMap.set(key, section)
+      }
+
+      for (const hit of hits) {
+        hit.section = sectionMap.get(`${hit.documentId}:${hit.chunkIndex}`)
+      }
+    } catch {
+      // section 表可能尚未创建
+    }
+  }
+
+  /**
+   * 添加上下文 chunks（批量）
    */
   private async addContext(
     hits: EnhancedRAGHit[],
     contextSize: number
   ): Promise<EnhancedRAGHit[]> {
-    const result: EnhancedRAGHit[] = []
-    
-    for (const hit of hits) {
-      const minChunk = Math.min(...(hit.aggregatedFrom || [hit.chunkIndex]))
-      const maxChunk = Math.max(...(hit.aggregatedFrom || [hit.chunkIndex]))
-      
-      // 获取前后 context
-      const [beforeChunks, afterChunks] = await Promise.all([
-        this.prisma.documentChunk.findMany({
-          where: {
-            documentId: hit.documentId,
-            chunkIndex: {
-              gte: Math.max(0, minChunk - contextSize),
-              lt: minChunk,
-            },
-          },
-          orderBy: { chunkIndex: 'asc' },
-        }),
-        this.prisma.documentChunk.findMany({
-          where: {
-            documentId: hit.documentId,
-            chunkIndex: {
-              gt: maxChunk,
-              lte: maxChunk + contextSize,
-            },
-          },
-          orderBy: { chunkIndex: 'asc' },
-        }),
-      ])
-      
-      result.push({
-        ...hit,
-        contextBefore: beforeChunks.map((c: any) => c.content).join('\n'),
-        contextAfter: afterChunks.map((c: any) => c.content).join('\n'),
-      })
+    if (hits.length === 0 || contextSize <= 0) {
+      return hits
     }
-    
-    return result
+
+    const neededByDocument = new Map<number, Set<number>>()
+
+    for (const hit of hits) {
+      const indices = hit.aggregatedFrom && hit.aggregatedFrom.length > 0
+        ? [...hit.aggregatedFrom].sort((a, b) => a - b)
+        : [hit.chunkIndex]
+      const minChunk = indices[0]
+      const maxChunk = indices[indices.length - 1]
+      if (!neededByDocument.has(hit.documentId)) {
+        neededByDocument.set(hit.documentId, new Set<number>())
+      }
+      const set = neededByDocument.get(hit.documentId)!
+      for (let i = Math.max(0, minChunk - contextSize); i < minChunk; i++) {
+        set.add(i)
+      }
+      for (let i = maxChunk + 1; i <= maxChunk + contextSize; i++) {
+        set.add(i)
+      }
+    }
+
+    const rowsList = await Promise.all(
+      Array.from(neededByDocument.entries()).map(async ([documentId, indexSet]) => {
+        const chunkIndexes = Array.from(indexSet.values())
+        if (chunkIndexes.length === 0) return []
+        return this.prisma.documentChunk.findMany({
+          where: {
+            documentId,
+            chunkIndex: { in: chunkIndexes },
+          },
+          select: {
+            documentId: true,
+            chunkIndex: true,
+            content: true,
+          },
+        })
+      })
+    )
+
+    const chunkMap = new Map<string, string>()
+    for (const rows of rowsList) {
+      for (const row of rows as Array<any>) {
+        chunkMap.set(`${row.documentId}:${row.chunkIndex}`, row.content || '')
+      }
+    }
+
+    return hits.map((hit) => {
+      const indices = hit.aggregatedFrom && hit.aggregatedFrom.length > 0
+        ? [...hit.aggregatedFrom].sort((a, b) => a - b)
+        : [hit.chunkIndex]
+      const minChunk = indices[0]
+      const maxChunk = indices[indices.length - 1]
+
+      const beforeParts: string[] = []
+      for (let i = Math.max(0, minChunk - contextSize); i < minChunk; i++) {
+        const content = chunkMap.get(`${hit.documentId}:${i}`)
+        if (content) beforeParts.push(content)
+      }
+
+      const afterParts: string[] = []
+      for (let i = maxChunk + 1; i <= maxChunk + contextSize; i++) {
+        const content = chunkMap.get(`${hit.documentId}:${i}`)
+        if (content) afterParts.push(content)
+      }
+
+      return {
+        ...hit,
+        contextBefore: beforeParts.join('\n'),
+        contextAfter: afterParts.join('\n'),
+      }
+    })
   }
   
   /**

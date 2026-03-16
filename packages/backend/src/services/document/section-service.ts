@@ -136,6 +136,8 @@ export class DocumentSectionService {
     )
     
     // 为每个 chunk 找到对应的 section
+    const sectionToChunkIndexes = new Map<number, number[]>()
+
     for (const chunk of chunks) {
       let sectionId: number | null = null
       
@@ -155,17 +157,29 @@ export class DocumentSectionService {
       }
       
       if (sectionId !== null) {
-        await this.prisma.documentChunk.updateMany({
+        const indexes = sectionToChunkIndexes.get(sectionId) || []
+        indexes.push(chunk.chunkIndex)
+        sectionToChunkIndexes.set(sectionId, indexes)
+      }
+    }
+
+    if (sectionToChunkIndexes.size === 0) {
+      return
+    }
+
+    await Promise.all(
+      Array.from(sectionToChunkIndexes.entries()).map(([sectionId, chunkIndexes]) =>
+        this.prisma.documentChunk.updateMany({
           where: {
             documentId,
-            chunkIndex: chunk.chunkIndex,
+            chunkIndex: { in: chunkIndexes },
           },
           data: {
             sectionId,
           },
         })
-      }
-    }
+      )
+    )
   }
   
   /**

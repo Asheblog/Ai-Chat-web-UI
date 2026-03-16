@@ -22,8 +22,8 @@ function buildSectionsFromOutline(
     const path = basePath ? `${basePath}.${index + 1}` : String(index + 1)
     
     // 提取页码（如果有 dest）
-    let startPage: number | undefined
-    if (item.dest) {
+    let startPage: number | undefined = item.pageNumber
+    if (startPage === undefined && item.dest) {
       // dest 可能是数组，第一个元素通常包含页面引用
       if (Array.isArray(item.dest) && item.dest.length > 0) {
         // 页码需要从 PDF 文档中解析，这里暂时不处理

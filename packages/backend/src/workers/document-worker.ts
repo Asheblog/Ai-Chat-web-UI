@@ -41,6 +41,9 @@ const RAG_CONFIG_KEYS = [
   'rag_max_file_size_mb',
   'rag_max_pages',
   'rag_retention_days',
+  'rag_ocr_fallback_enabled',
+  'rag_ocr_command',
+  'rag_ocr_language',
 ]
 
 /**

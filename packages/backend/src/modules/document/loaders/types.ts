@@ -28,6 +28,13 @@ export interface StreamLoadOptions {
   onPage?: (content: DocumentContent, pageIndex: number) => Promise<boolean | void>
 }
 
+export interface StreamLoadResult {
+  totalPages: number
+  processedPages: number
+  skipped: boolean
+  outline?: unknown[]
+}
+
 export interface DocumentLoader {
   /**
    * 加载器名称
@@ -48,11 +55,7 @@ export interface DocumentLoader {
    * 流式加载文档内容（按页处理，减少内存占用）
    * 如果加载器不支持流式，则回退到全量加载
    */
-  loadStream?(filePath: string, mimeType: string, options: StreamLoadOptions): Promise<{
-    totalPages: number
-    processedPages: number
-    skipped: boolean
-  }>
+  loadStream?(filePath: string, mimeType: string, options: StreamLoadOptions): Promise<StreamLoadResult>
 }
 
 export interface LoaderOptions {

@@ -29,6 +29,7 @@ export interface StructureExtractionResult {
 
 export interface PDFOutlineItem {
   title: string;
+  pageNumber?: number;
   dest?: string | any[];
   url?: string;
   bold?: boolean;

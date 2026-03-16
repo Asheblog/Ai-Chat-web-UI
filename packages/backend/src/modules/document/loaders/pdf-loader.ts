@@ -6,10 +6,12 @@
 
 import fs from 'fs/promises'
 import path from 'path'
-import type { DocumentLoader, DocumentContent, StreamLoadOptions } from './types'
+import type { DocumentLoader, DocumentContent, StreamLoadOptions, StreamLoadResult } from './types'
+import type { PDFOutlineItem } from '../structure/types'
 
 // 动态导入 pdf-parse，因为它可能未安装
 let pdfParse: typeof import('pdf-parse') | null = null
+let pdfJsLib: any | null = null
 
 async function getPdfParse() {
   if (pdfParse) return pdfParse
@@ -18,6 +20,89 @@ async function getPdfParse() {
     return pdfParse
   } catch {
     throw new Error('pdf-parse is not installed. Run: pnpm add pdf-parse')
+  }
+}
+
+async function getPdfJs() {
+  if (pdfJsLib) return pdfJsLib
+  try {
+    pdfJsLib = await import('pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js')
+    return pdfJsLib
+  } catch {
+    return null
+  }
+}
+
+async function resolveOutlinePageNumber(pdfDoc: any, dest: unknown): Promise<number | undefined> {
+  try {
+    let resolvedDest = dest
+    if (typeof resolvedDest === 'string' && typeof pdfDoc?.getDestination === 'function') {
+      resolvedDest = await pdfDoc.getDestination(resolvedDest)
+    }
+    if (Array.isArray(resolvedDest) && resolvedDest.length > 0 && typeof pdfDoc?.getPageIndex === 'function') {
+      const pageRef = resolvedDest[0]
+      const pageIndex = await pdfDoc.getPageIndex(pageRef)
+      if (Number.isFinite(pageIndex)) {
+        return pageIndex + 1
+      }
+    }
+  } catch {
+    // 忽略页码解析失败
+  }
+  return undefined
+}
+
+async function normalizeOutlineItems(pdfDoc: any, items: any[]): Promise<PDFOutlineItem[]> {
+  const normalized: PDFOutlineItem[] = []
+  for (const item of items || []) {
+    const title = typeof item?.title === 'string' ? item.title.trim() : ''
+    if (!title) continue
+    const pageNumber = await resolveOutlinePageNumber(pdfDoc, item.dest)
+    const children = await normalizeOutlineItems(pdfDoc, Array.isArray(item.items) ? item.items : [])
+    normalized.push({
+      title,
+      pageNumber,
+      dest: item.dest,
+      url: item.url,
+      bold: item.bold,
+      italic: item.italic,
+      color: item.color,
+      count: item.count,
+      items: children,
+    })
+  }
+  return normalized
+}
+
+async function extractPdfOutline(dataBuffer: Buffer): Promise<PDFOutlineItem[]> {
+  const pdfJs = await getPdfJs()
+  if (!pdfJs || typeof pdfJs.getDocument !== 'function') {
+    return []
+  }
+
+  let loadingTask: any = null
+  let pdfDoc: any = null
+  try {
+    loadingTask = pdfJs.getDocument({ data: new Uint8Array(dataBuffer) })
+    pdfDoc = await loadingTask.promise
+    const outline = await pdfDoc.getOutline()
+    if (!Array.isArray(outline) || outline.length === 0) {
+      return []
+    }
+    return normalizeOutlineItems(pdfDoc, outline)
+  } catch {
+    return []
+  } finally {
+    try {
+      await pdfDoc?.destroy?.()
+    } catch {
+      // ignore
+    }
+    try {
+      await loadingTask?.destroy?.()
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -66,7 +151,7 @@ export class PdfLoader implements DocumentLoader {
     filePath: string,
     _mimeType: string,
     options: StreamLoadOptions
-  ): Promise<{ totalPages: number; processedPages: number; skipped: boolean }> {
+  ): Promise<StreamLoadResult> {
     const pdf = await getPdfParse()
     const dataBuffer = await fs.readFile(filePath)
     const filename = path.basename(filePath)
@@ -130,10 +215,13 @@ export class PdfLoader implements DocumentLoader {
 
     totalPages = data.numpages
 
+    const outline = await extractPdfOutline(dataBuffer)
+
     return {
       totalPages,
       processedPages,
       skipped: skipped || (maxPages > 0 && totalPages > maxPages),
+      outline,
     }
   }
 

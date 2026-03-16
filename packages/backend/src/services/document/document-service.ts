@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { loadDocument, loadDocumentStream, isSupportedMimeType } from '../../modules/document/loaders'
 import type { DocumentContent } from '../../modules/document/loaders'
+import { extractPdfTextWithOcr } from '../../modules/document/loaders/pdf-ocr'
 import {
   iterateTextChunks,
   iteratePageAwareChunks,
@@ -24,8 +25,9 @@ import {
 import { EmbeddingService, type EmbeddingConfig } from './embedding-service'
 import { type VectorDBClient, type VectorItem } from '../../modules/document/vector'
 import type { DocumentSectionService, SectionTreeNode } from './section-service'
-import type { ChunkWithMetadata } from '../../modules/document/structure/types'
+import type { ChunkWithMetadata, PDFOutlineItem } from '../../modules/document/structure/types'
 import { createLogger } from '../../utils/logger'
+import { resolvePdfChunkResumeIndex } from './pdf-chunk-index'
 import {
   documentWorkspaceBridgeService as defaultDocumentWorkspaceBridgeService,
   type DocumentWorkspaceBridgeService,
@@ -71,6 +73,21 @@ export interface DocumentServiceConfig {
    * 用于防止超大 PDF 导致服务器崩溃
    */
   maxPages?: number
+
+  /**
+   * 启用 OCR 降级处理（扫描 PDF）
+   */
+  ocrFallbackEnabled?: boolean
+
+  /**
+   * OCR 命令（默认 ocrmypdf）
+   */
+  ocrCommand?: string
+
+  /**
+   * OCR 语言（默认 eng）
+   */
+  ocrLanguage?: string
 }
 
 export interface UploadResult {
@@ -352,11 +369,13 @@ export class DocumentService {
       let processedPages = 0
       let hasPageInfo = false
       let wasTruncated = false
+      let pdfOutline: PDFOutlineItem[] | null = null
+      let ocrFallbackError: string | null = null
 
       // 批处理缓冲区
       let batchChunks: (TextChunk | PageAwareTextChunk)[] = []
       let batchTexts: string[] = []
-      let chunkIndex = startIndex
+      let parsedPdfChunkIndex = 0
 
       // 刷新批次
       const flushBatch = async () => {
@@ -493,15 +512,15 @@ export class DocumentService {
                 chunkOverlap: chunkingConfig.chunkOverlap,
                 separators: chunkingConfig.separators,
               })) {
-                // 重新编排 chunk index
-                const adjustedChunk: PageAwareTextChunk = {
-                  ...chunk,
-                  index: chunkIndex++,
+                const resumeIndex = resolvePdfChunkResumeIndex(parsedPdfChunkIndex++, startIndex)
+                if (resumeIndex.skip) {
+                  processedChars += chunk.content.length
+                  continue
                 }
 
-                if (adjustedChunk.index < startIndex) {
-                  processedChars += adjustedChunk.content.length
-                  continue
+                const adjustedChunk: PageAwareTextChunk = {
+                  ...chunk,
+                  index: resumeIndex.index,
                 }
 
                 batchChunks.push(adjustedChunk)
@@ -525,6 +544,9 @@ export class DocumentService {
 
         totalPages = streamResult.totalPages
         wasTruncated = streamResult.skipped
+        if (Array.isArray(streamResult.outline)) {
+          pdfOutline = streamResult.outline as PDFOutlineItem[]
+        }
       } else {
         // 非 PDF 使用传统全量加载
         await report({ stage: 'parsing', progress: 10, message: '正在解析文档...' })
@@ -598,15 +620,97 @@ export class DocumentService {
 
       await flushBatch()
 
+      if (isPdf && totalChunksProcessed === startIndex && this.config.ocrFallbackEnabled) {
+        await report({
+          stage: 'parsing',
+          progress: 28,
+          message: '未检测到文字层，尝试 OCR 降级解析...',
+        })
+
+        try {
+          const ocrContents = await extractPdfTextWithOcr(document.filePath, {
+            command: this.config.ocrCommand,
+            language: this.config.ocrLanguage,
+            maxPages,
+          })
+
+          if (ocrContents.length > 0) {
+            hasPageInfo = true
+
+            for (const content of ocrContents) {
+              await checkCanceled()
+              processedPages++
+
+              const pageText = content.pageContent
+              if (!pageText.trim()) continue
+              totalChars += pageText.length
+
+              const pageContent: PageContent = {
+                pageContent: pageText,
+                pageNumber:
+                  typeof content.metadata.pageNumber === 'number'
+                    ? content.metadata.pageNumber
+                    : processedPages,
+                metadata: content.metadata,
+              }
+
+              for (const chunk of iteratePageAwareChunks([pageContent], {
+                chunkSize: chunkingConfig.chunkSize,
+                chunkOverlap: chunkingConfig.chunkOverlap,
+                separators: chunkingConfig.separators,
+              })) {
+                const resumeIndex = resolvePdfChunkResumeIndex(parsedPdfChunkIndex++, startIndex)
+                if (resumeIndex.skip) {
+                  processedChars += chunk.content.length
+                  continue
+                }
+
+                const adjustedChunk: PageAwareTextChunk = {
+                  ...chunk,
+                  index: resumeIndex.index,
+                  metadata: {
+                    ...chunk.metadata,
+                    ocr: true,
+                  },
+                }
+
+                batchChunks.push(adjustedChunk)
+                batchTexts.push(adjustedChunk.content)
+                processedChars += adjustedChunk.content.length
+
+                if (batchTexts.length >= batchSize) {
+                  await flushBatch()
+                }
+              }
+            }
+
+            await flushBatch()
+          }
+        } catch (ocrError) {
+          ocrFallbackError =
+            ocrError instanceof Error ? ocrError.message : String(ocrError)
+          log.warn('[DocumentService] OCR fallback failed', {
+            documentId,
+            error: ocrFallbackError,
+          })
+        }
+      }
+
       if (totalChunksProcessed === 0) {
         // 根据文档类型给出更友好的错误提示
         if (isPdf) {
+          const ocrHint = this.config.ocrFallbackEnabled
+            ? ocrFallbackError
+              ? `\n\nOCR 降级失败：${ocrFallbackError}`
+              : '\n\n已尝试 OCR 降级，但仍未提取到有效文本。'
+            : '\n\n可在系统设置中开启 OCR 降级，自动处理扫描版 PDF。'
           throw new Error(
             '无法从PDF中提取文字内容。\n\n' +
             '可能的原因：\n' +
             '• 这是扫描件或图片转换的PDF（仅包含图片，无文字层）\n' +
             '• PDF文件已加密或损坏\n\n' +
-            '解决方案：请使用OCR工具（如Adobe Acrobat、ABBYY FineReader等）将PDF转换为可搜索的文本PDF后重新上传。'
+            '解决方案：请使用OCR工具（如Adobe Acrobat、ABBYY FineReader等）将PDF转换为可搜索的文本PDF后重新上传。' +
+            ocrHint
           )
         }
         throw new Error('No content extracted from document. The file may be empty or corrupted.')
@@ -646,7 +750,7 @@ export class DocumentService {
           const structureResult = await this.sectionService.extractAndSave(
             documentId,
             chunksForStructure,
-            null // PDF 书签暂不支持，后续可优化 pdf-loader
+            pdfOutline && pdfOutline.length > 0 ? pdfOutline : null
           )
           
           log.info('[DocumentService] Section extraction completed', {

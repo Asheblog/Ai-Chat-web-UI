@@ -35,6 +35,20 @@ function getRecommendedJournalMode(): 'WAL' | 'DELETE' {
   return isWSLEnvironment() ? 'DELETE' : 'WAL'
 }
 
+function blockingSleep(ms: number): void {
+  if (ms <= 0) return
+  try {
+    const sab = new SharedArrayBuffer(4)
+    const arr = new Int32Array(sab)
+    Atomics.wait(arr, 0, 0, ms)
+  } catch {
+    const start = Date.now()
+    while (Date.now() - start < ms) {
+      // fallback
+    }
+  }
+}
+
 /**
  * 将 number[] 向量转换为二进制 Buffer (Float32)
  * 内存占用：1536维 JSON ~30KB → Binary ~6KB
@@ -287,11 +301,8 @@ export class SQLiteVectorClient implements VectorDBClient {
 
         if (isLockError && attempt < maxRetries) {
           log.warn(`Table init failed (attempt ${attempt}/${maxRetries}), retrying...`)
-          // 同步等待 - 构造函数中不能用 async
-          const start = Date.now()
-          while (Date.now() - start < retryDelay) {
-            // busy wait
-          }
+          // 构造函数中不能用 async，采用阻塞等待但避免 busy-spin
+          blockingSleep(retryDelay)
         } else {
           log.warn('Failed to init vector_collections table, continuing:', message)
           return
@@ -409,7 +420,13 @@ export class SQLiteVectorClient implements VectorDBClient {
     const tableName = `vec_${collectionName.replace(/[^a-zA-Z0-9_]/g, '_')}`
 
     // 使用 TopKHeap 维护结果，避免全量排序
-    const topK = new TopKHeap<SearchResult>(limit, (a, b) => a.score - b.score)
+    type SearchCandidate = {
+      id: string
+      text: string
+      score: number
+      metadataRaw: string
+    }
+    const topK = new TopKHeap<SearchCandidate>(limit, (a, b) => a.score - b.score)
 
     // 分批流式读取，每批约 10-25MB 内存
     const BATCH_SIZE = 500
@@ -453,11 +470,19 @@ export class SQLiteVectorClient implements VectorDBClient {
           const score = cosineSimilarityTyped(queryVectorTyped, vector)
           similarityCalcTimeMs += Date.now() - calcStart
 
+          const shouldPush =
+            topK.size < limit ||
+            (topK.peek() !== undefined && score > (topK.peek() as SearchCandidate).score)
+
+          if (!shouldPush) {
+            continue
+          }
+
           topK.push({
             id: row.id,
             text: row.text,
             score,
-            metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+            metadataRaw: row.metadata,
           })
         } catch {
           // 跳过解析失败的记录
@@ -481,7 +506,20 @@ export class SQLiteVectorClient implements VectorDBClient {
       })
     }
 
-    return topK.toSortedArray()
+    return topK.toSortedArray().map((item) => {
+      let metadata: Record<string, unknown> = {}
+      try {
+        metadata = JSON.parse(item.metadataRaw) as Record<string, unknown>
+      } catch {
+        metadata = {}
+      }
+      return {
+        id: item.id,
+        text: item.text,
+        score: item.score,
+        metadata,
+      }
+    })
   }
 
   async deleteByIds(collectionName: string, ids: string[]): Promise<void> {

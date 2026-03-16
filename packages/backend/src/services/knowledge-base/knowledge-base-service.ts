@@ -366,6 +366,31 @@ export class KnowledgeBaseService {
   }
 
   /**
+   * 检查知识库集合是否至少有一个文档
+   */
+  async hasAnyDocuments(knowledgeBaseIds: number[]): Promise<boolean> {
+    if (knowledgeBaseIds.length === 0) return false
+    const count = await this.prisma.knowledgeBaseDocument.count({
+      where: {
+        knowledgeBaseId: { in: knowledgeBaseIds },
+      },
+    })
+    return count > 0
+  }
+
+  /**
+   * 批量获取知识库名称
+   */
+  async getNamesByIds(knowledgeBaseIds: number[]): Promise<string[]> {
+    if (knowledgeBaseIds.length === 0) return []
+    const rows = await this.prisma.knowledgeBase.findMany({
+      where: { id: { in: knowledgeBaseIds } },
+      select: { name: true },
+    })
+    return rows.map((row) => row.name)
+  }
+
+  /**
    * 在知识库中检索（增强版）
    * 支持搜索模式
    */

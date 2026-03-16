@@ -78,6 +78,9 @@ export const DEFAULT_DOCUMENT_SERVICES_CONFIG: DocumentServicesConfig = {
     chunkOverlap: 100,
     retentionDays: 30,
     maxPages: 200, // 最大页数限制，防止超大 PDF 导致服务器崩溃
+    ocrFallbackEnabled: String(process.env.RAG_OCR_FALLBACK_ENABLED || '').toLowerCase() === 'true',
+    ocrCommand: process.env.RAG_OCR_COMMAND || 'ocrmypdf',
+    ocrLanguage: process.env.RAG_OCR_LANGUAGE || 'eng',
   },
   rag: {
     topK: 5,

@@ -162,13 +162,7 @@ export class RAGContextBuilder {
    */
   async hasKnowledgeBases(knowledgeBaseIds: number[]): Promise<boolean> {
     if (!knowledgeBaseIds || knowledgeBaseIds.length === 0) return false
-    // 验证至少有一个知识库存在且有文档
-    for (const kbId of knowledgeBaseIds) {
-      const kb = await this.kbService.get(kbId)
-      // KnowledgeBaseWithDocuments 包含 documents 数组，检查其长度
-      if (kb && kb.documents && kb.documents.length > 0) return true
-    }
-    return false
+    return this.kbService.hasAnyDocuments(knowledgeBaseIds)
   }
 
   /**
@@ -256,12 +250,7 @@ export class RAGContextBuilder {
     const startTime = Date.now()
 
     // 获取知识库名称 (KnowledgeBase 类型包含 name 字段)
-    const kbNames: string[] = []
-    for (const kbId of knowledgeBaseIds) {
-      const kb = await this.kbService.get(kbId)
-      if (kb) kbNames.push((kb as any).name)
-    }
-    const kbLookupTime = Date.now() - startTime
+    const kbNames = await this.kbService.getNamesByIds(knowledgeBaseIds)
 
     // 发送开始事件
     if (onEvent) {

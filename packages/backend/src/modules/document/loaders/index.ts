@@ -3,7 +3,7 @@
  * 根据 MIME 类型选择合适的加载器
  */
 
-import type { DocumentLoader, DocumentContent, StreamLoadOptions } from './types'
+import type { DocumentLoader, DocumentContent, StreamLoadOptions, StreamLoadResult } from './types'
 import { TextLoader } from './text-loader'
 import { PdfLoader } from './pdf-loader'
 import { DocxLoader } from './docx-loader'
@@ -71,7 +71,7 @@ export async function loadDocumentStream(
   filePath: string,
   mimeType: string,
   options: StreamLoadOptions
-): Promise<{ totalPages: number; processedPages: number; skipped: boolean }> {
+): Promise<StreamLoadResult> {
   const loader = getLoaderForMimeType(mimeType)
 
   if (!loader) {
@@ -93,6 +93,7 @@ export async function loadDocumentStream(
         totalPages: contents.length,
         processedPages,
         skipped: true,
+        outline: [],
       }
     }
 
@@ -103,6 +104,7 @@ export async function loadDocumentStream(
           totalPages: contents.length,
           processedPages,
           skipped: true,
+          outline: [],
         }
       }
     }
@@ -113,11 +115,12 @@ export async function loadDocumentStream(
     totalPages: contents.length,
     processedPages,
     skipped: false,
+    outline: [],
   }
 }
 
 // 导出类型
-export type { DocumentLoader, DocumentContent, StreamLoadOptions } from './types'
+export type { DocumentLoader, DocumentContent, StreamLoadOptions, StreamLoadResult } from './types'
 
 // 导出加载器类
 export { TextLoader } from './text-loader'
