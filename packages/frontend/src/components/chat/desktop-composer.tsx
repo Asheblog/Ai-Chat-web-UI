@@ -241,7 +241,7 @@ export function DesktopComposer({
               <TooltipTrigger asChild>
                 <motion.button
                   onClick={isStreaming ? onStop : onSend}
-                  disabled={desktopSendDisabled}
+                  disabled={isStreaming ? false : desktopSendDisabled}
                   aria-label={isStreaming ? '停止生成' : '发送'}
                   className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-[0_10px_22px_hsl(var(--background)/0.24)] transition-colors ${
                     isStreaming
