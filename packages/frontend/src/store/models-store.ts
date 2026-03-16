@@ -12,7 +12,7 @@ export type ModelItem = {
   connectionType?: string
   modelType?: 'chat' | 'embedding' | 'both'
   tags?: Array<{ name: string }>
-  capabilities?: { vision?: boolean; file_upload?: boolean; web_search?: boolean; image_generation?: boolean; code_interpreter?: boolean }
+  capabilities?: { vision?: boolean; image_generation?: boolean }
   capabilitySource?: string
   overridden?: boolean
   contextWindow?: number | null

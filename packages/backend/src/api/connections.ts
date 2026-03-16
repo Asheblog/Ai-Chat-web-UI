@@ -10,10 +10,7 @@ import {
 
 const capabilitySchema = z.object({
   vision: z.boolean().optional(),
-  file_upload: z.boolean().optional(),
-  web_search: z.boolean().optional(),
   image_generation: z.boolean().optional(),
-  code_interpreter: z.boolean().optional(),
 })
 
 const vendorEnum = z.enum(['deepseek'])

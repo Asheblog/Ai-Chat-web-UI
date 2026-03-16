@@ -213,35 +213,22 @@ export const useWelcomeScreenViewModel = () => {
     return typeof cap === 'boolean' ? cap : true
   }, [selectedModel])
 
-  const isWebSearchCapable = useMemo(() => {
-    const cap = selectedModel?.capabilities?.web_search
-    return typeof cap === 'boolean' ? cap : true
-  }, [selectedModel])
-
-  const pythonToolCapable = useMemo(() => {
-    const cap = selectedModel?.capabilities?.code_interpreter
-    return typeof cap === 'boolean' ? cap : true
-  }, [selectedModel])
-
   const canUseWebSearch = Boolean(
     systemSettings?.webSearchAgentEnable &&
-    systemSettings?.webSearchHasApiKey &&
-    isWebSearchCapable,
+    systemSettings?.webSearchHasApiKey,
   )
-  const canUsePythonTool = Boolean(systemSettings?.pythonToolEnable) && pythonToolCapable
+  const canUsePythonTool = Boolean(systemSettings?.pythonToolEnable)
 
   const webSearchDisabledNote = useMemo(() => {
     if (!systemSettings?.webSearchAgentEnable) return '管理员未启用联网搜索'
     if (!systemSettings?.webSearchHasApiKey) return '尚未配置搜索 API Key'
-    if (!isWebSearchCapable) return '该模型未启用联网搜索'
     return undefined
-  }, [isWebSearchCapable, systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey])
+  }, [systemSettings?.webSearchAgentEnable, systemSettings?.webSearchHasApiKey])
 
   const pythonToolDisabledNote = useMemo(() => {
     if (!systemSettings?.pythonToolEnable) return '管理员未开启 Python 工具'
-    if (!pythonToolCapable) return '该模型未启用 Python 工具'
     return undefined
-  }, [pythonToolCapable, systemSettings?.pythonToolEnable])
+  }, [systemSettings?.pythonToolEnable])
 
   const isMetasoEngine = Boolean(
     systemSettings?.webSearchEnabledEngines?.includes('metaso') &&

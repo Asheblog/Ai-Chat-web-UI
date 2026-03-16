@@ -1,4 +1,4 @@
-export const CAPABILITY_KEYS = ['vision', 'file_upload', 'web_search', 'image_generation', 'code_interpreter'] as const
+export const CAPABILITY_KEYS = ['vision', 'image_generation'] as const
 
 export type CapabilityKey = typeof CAPABILITY_KEYS[number]
 export type CapabilityFlags = Partial<Record<CapabilityKey, boolean>>

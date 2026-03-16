@@ -78,10 +78,7 @@ export const sampleModelList = [
     tags: [{ name: 'vision' }],
     capabilities: {
       vision: true,
-      file_upload: false,
-      web_search: true,
       image_generation: false,
-      code_interpreter: false,
     },
   },
   {
@@ -92,13 +89,10 @@ export const sampleModelList = [
     provider: 'Azure',
     overridden: false,
     capabilitySource: 'provider',
-    tags: [{ name: 'code_interpreter' }],
+    tags: [{ name: 'image_generation' }],
     capabilities: {
       vision: false,
-      file_upload: true,
-      web_search: false,
-      image_generation: false,
-      code_interpreter: true,
+      image_generation: true,
     },
   },
 ] as const

@@ -72,10 +72,7 @@ export function computeCapabilities(rawId: string, tags?: Array<{ name: string }
   const hasTag = (k: string) => tnames.includes(k)
 
   if (hasTag('vision')) caps.vision = true
-  if (hasTag('file_upload') || hasTag('file')) caps.file_upload = true
-  if (hasTag('web_search')) caps.web_search = true
   if (hasTag('image_generation')) caps.image_generation = true
-  if (hasTag('code_interpreter')) caps.code_interpreter = true
 
   const id = (rawId || '').toLowerCase()
   if (caps.vision !== true) {
@@ -88,24 +85,9 @@ export function computeCapabilities(rawId: string, tags?: Array<{ name: string }
     if (visionHints.some((p) => id.includes(p))) caps.vision = true
   }
 
-  const fileUploadHints = ['upload-anything', 'file-gpt', 'omni', 'vision', 'gpt-4.1', 'gpt4o', 'o4']
-  if (caps.file_upload !== true && fileUploadHints.some((p) => id.includes(p))) {
-    caps.file_upload = true
-  }
-
-  const webSearchHints = ['web', 'browse', 'search', 'perplexity', 'webgpt', 'internet']
-  if (caps.web_search !== true && webSearchHints.some((p) => id.includes(p))) {
-    caps.web_search = true
-  }
-
   const imageGenHints = ['image-gen', 'image_generation', 'dall', 'kandinsky', 'sdxl', 'flux', 'kling', 'midjourney']
   if (caps.image_generation !== true && imageGenHints.some((p) => id.includes(p))) {
     caps.image_generation = true
-  }
-
-  const codeHints = ['code', 'coder', 'program', 'deepseek', 'o1', 'o3', 'reasoner', 'math']
-  if (caps.code_interpreter !== true && codeHints.some((p) => id.includes(p))) {
-    caps.code_interpreter = true
   }
 
   return caps

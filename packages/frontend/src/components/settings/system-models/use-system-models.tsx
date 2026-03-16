@@ -19,6 +19,7 @@ const ACCESS_OPTIONS: Array<{ value: 'inherit' | 'allow' | 'deny'; label: string
   { value: 'allow', label: '允许' },
   { value: 'deny', label: '禁止' },
 ]
+const LEGACY_REMOVED_CAP_TAGS = new Set(['file_upload', 'web_search', 'code_interpreter', 'file'])
 
 export type ModelSortField = 'name' | 'provider'
 export type ModelSortOrder = 'asc' | 'desc'
@@ -107,7 +108,12 @@ export function useSystemModels() {
 
   const buildCapabilityPayload = (model: any, key: ModelCapKey, value: boolean) => {
     const tags = Array.isArray(model.tags) ? model.tags.map((tag: any) => ({ name: String(tag?.name || '') })) : []
-    const baseTags = tags.filter((tag: any) => !MODEL_CAP_KEYS.includes(tag.name as ModelCapKey))
+    const baseTags = tags.filter((tag: any) => {
+      const name = String(tag?.name || '').trim()
+      if (!name) return false
+      if (MODEL_CAP_KEYS.includes(name as ModelCapKey)) return false
+      return !LEGACY_REMOVED_CAP_TAGS.has(name)
+    })
     const enabledCaps = new Set<ModelCapKey>(MODEL_CAP_KEYS.filter((k) => hasCapability(model, k)) as ModelCapKey[])
     if (value) enabledCaps.add(key); else enabledCaps.delete(key)
     const capabilityState = capabilityStateOf(model)
@@ -448,6 +454,11 @@ export function useSystemModels() {
       for (const item of items) {
         if (!item?.connectionId || !item?.rawId) continue
         let tags = Array.isArray(item?.tags) ? item.tags : []
+        tags = tags.filter((tag: any) => {
+          const name = String(tag?.name || '').trim()
+          if (!name) return false
+          return !LEGACY_REMOVED_CAP_TAGS.has(name)
+        })
         if ((!tags || tags.length === 0) && item?.capabilities && typeof item.capabilities === 'object') {
           const caps = item.capabilities
           const capTags = MODEL_CAP_KEYS.filter((key) => Boolean(caps[key])).map((key) => ({ name: key }))

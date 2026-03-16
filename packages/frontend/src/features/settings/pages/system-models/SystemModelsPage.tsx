@@ -170,7 +170,7 @@ export function SystemModelsPage() {
           <Cpu className="w-5 h-5 text-primary" />
           <div>
             <CardTitle className="text-lg">模型管理</CardTitle>
-            <CardDescription>为模型开启/关闭能力标签:图片理解、文件上传、联网搜索、图像生成、代码解释器</CardDescription>
+            <CardDescription>为模型开启/关闭能力标签:图片理解、图像生成</CardDescription>
           </div>
         </div>
 

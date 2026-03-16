@@ -1,4 +1,4 @@
-import { Eye, Globe, Palette, Paperclip, Terminal } from "lucide-react"
+import { Eye, Palette } from "lucide-react"
 import type { ModelItem } from "@/store/models-store"
 
 export interface ModelSelectorProps {
@@ -15,8 +15,6 @@ export interface ModelSelectorProps {
 export type CapabilityFilter =
   | "all"
   | "vision"
-  | "web_search"
-  | "code_interpreter"
   | "image_generation"
 
 export type SelectorView = "all" | "favorites" | "recent"
@@ -26,10 +24,7 @@ export const FAVORITE_MODELS_KEY = "favorite-models"
 
 export const CAPABILITY_ICONS = {
   vision: { icon: Eye, label: "Vision", title: "图片理解" },
-  file_upload: { icon: Paperclip, label: "File", title: "文件上传" },
-  web_search: { icon: Globe, label: "Web", title: "联网搜索" },
   image_generation: { icon: Palette, label: "Image", title: "图像生成" },
-  code_interpreter: { icon: Terminal, label: "Code", title: "代码执行" },
 } as const
 
 export type CapabilityKey = keyof typeof CAPABILITY_ICONS
@@ -47,9 +42,7 @@ export const CAPABILITY_FILTER_OPTIONS: Array<{
 }> = [
   { id: "all", label: "全部" },
   { id: "vision", label: "视觉", icon: Eye },
-  { id: "web_search", label: "联网", icon: Globe },
   { id: "image_generation", label: "绘图", icon: Palette },
-  { id: "code_interpreter", label: "代码", icon: Terminal },
 ]
 
 export const PRIORITY_GROUP_ORDER = [

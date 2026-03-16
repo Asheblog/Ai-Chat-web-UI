@@ -1,4 +1,3 @@
-import { useModelsStore } from '@/store/models-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
@@ -10,7 +9,6 @@ import type {
   MessageRenderCacheEntry,
   ToolEvent,
 } from '@/types'
-import type { ModelItem } from '@/store/models-store'
 import type { MessageId } from '../types'
 
 // 以固定帧率批量刷新流式内容，避免每个 chunk 都触发一次重渲染
@@ -93,32 +91,10 @@ export const findSessionById = (
   return null
 }
 
-export const findModelForSession = (session: ChatSession | null): ModelItem | null => {
-  if (!session) return null
-  const models = useModelsStore.getState().models
-  if (!Array.isArray(models) || models.length === 0) return null
-  const connectionId = session.connectionId ?? null
-  const modelIdentifier = session.modelRawId ?? session.modelLabel ?? null
-  if (!modelIdentifier) return null
-  return (
-    models.find((item) => {
-      const matchesConnection = connectionId != null ? item.connectionId === connectionId : true
-      if (!matchesConnection) return false
-      return item.rawId === modelIdentifier || item.id === modelIdentifier
-    }) ?? null
-  )
-}
-
 export const shouldEnableWebSearchForSession = (session: ChatSession | null): boolean => {
   if (!session) return false
   const systemSettings = useSettingsStore.getState().systemSettings
   if (!systemSettings?.webSearchAgentEnable) return false
-  const model = findModelForSession(session)
-  const modelSupportsWebSearch =
-    typeof model?.capabilities?.web_search === 'boolean'
-      ? model.capabilities.web_search
-      : true
-  if (!modelSupportsWebSearch) return false
   const preference = useWebSearchPreferenceStore.getState().lastSelection
   const userEnabled = typeof preference === 'boolean' ? preference : true
   return userEnabled
@@ -128,17 +104,6 @@ export const shouldEnablePythonToolForSession = (session: ChatSession | null): b
   if (!session) return false
   const systemSettings = useSettingsStore.getState().systemSettings
   if (!systemSettings?.pythonToolEnable) return false
-  const model = findModelForSession(session)
-  if (!model) return false
-  const provider = (model.provider || '').toLowerCase()
-  if (provider && provider !== 'openai' && provider !== 'azure_openai') {
-    return false
-  }
-  const pythonCapable =
-    typeof model.capabilities?.code_interpreter === 'boolean'
-      ? model.capabilities.code_interpreter
-      : true
-  if (!pythonCapable) return false
   const preference = usePythonToolPreferenceStore.getState().lastSelection
   return typeof preference === 'boolean' ? preference : false
 }
