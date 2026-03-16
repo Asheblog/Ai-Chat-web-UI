@@ -190,4 +190,31 @@ describe('stream slice', () => {
     expect(assistantMeta.streamStatus).toBe('cancelled')
     expect(state.error).toBeNull()
   })
+
+  it('normalizes completed assistant content to match persisted final response', async () => {
+    const store = createChatStoreInstance()
+    const session = createSession({ id: 77 })
+    store.setState({
+      sessions: [session],
+      currentSession: session,
+    })
+
+    vi.mocked(chatApi.streamChat).mockImplementation(async function* mockStream() {
+      yield { type: 'start', messageId: 771, assistantMessageId: 772 }
+      yield { type: 'content', content: '\n# 标题\n正文\n\n' }
+      yield { type: 'complete' }
+    })
+
+    await store.getState().streamMessage(session.id, 'normalize')
+    await flushMicrotasks()
+
+    const state = store.getState()
+    const assistantMeta = state.messageMetas.find((meta) => meta.role === 'assistant')
+    expect(assistantMeta).toBeTruthy()
+    if (!assistantMeta) {
+      throw new Error('assistant meta missing')
+    }
+    const assistantBody = state.messageBodies[messageKey(assistantMeta.id)]
+    expect(assistantBody?.content).toBe('# 标题\n正文')
+  })
 })

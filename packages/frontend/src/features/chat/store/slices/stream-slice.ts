@@ -979,6 +979,19 @@ export const createStreamSlice: ChatSliceCreator<
 
       const finalStream = runtime.activeStreams.get(streamEntry.streamKey) ?? null
       runtime.flushStreamBuffer(finalStream, true)
+      if (finalStream) {
+        const normalizedContent = finalStream.content.trim()
+        const normalizedReasoning = finalStream.reasoning.trim()
+        if (
+          normalizedContent !== finalStream.content ||
+          normalizedReasoning !== finalStream.reasoning
+        ) {
+          finalStream.content = normalizedContent
+          finalStream.reasoning = normalizedReasoning
+          finalStream.reasoningPlayedLength = normalizedReasoning.length
+          runtime.flushStreamBuffer(finalStream, true)
+        }
+      }
       const snapshotToolEvents =
         finalStream && streamEntry.sessionId === sessionId
           ? get().toolEvents.filter(
