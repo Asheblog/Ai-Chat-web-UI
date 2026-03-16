@@ -10,6 +10,8 @@ import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import { AttachmentTray, DocumentAttachmentInput } from '@/features/chat/composer'
 import type { AttachedDocument } from '@/features/chat/composer/use-document-attachments'
 import { KnowledgeBaseSelector, type KnowledgeBaseItem } from '@/components/chat/knowledge-base-selector'
+import { cn } from '@/lib/utils'
+import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
 
 type Effort = 'unset' | 'low' | 'medium' | 'high'
 
@@ -162,7 +164,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     <div className="w-full max-w-4xl">
       <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
 
-      <div className="flex items-center gap-2 overflow-hidden rounded-[1.7rem] border border-border/70 bg-[hsl(var(--surface))/0.9] px-2 py-1.5 shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background md:py-2">
+      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex items-center gap-2 px-2 py-1.5 md:py-2')}>
         <div className="flex shrink-0 items-center gap-1">
           <AdvancedOptions {...advancedOptions} />
           {showExpand && (
@@ -206,7 +208,10 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
           onPaste={attachments.onPaste}
-          className="h-auto min-h-[44px] max-h-[220px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-left text-sm leading-[1.45] placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 md:min-h-[56px] md:py-3 md:text-base"
+          className={cn(
+            COMPOSER_TEXTAREA_BASE_CLASS,
+            'min-h-[44px] max-h-[220px] flex-1 px-2 py-2.5 text-sm md:min-h-[56px] md:py-3 md:text-base'
+          )}
           rows={1}
         />
 

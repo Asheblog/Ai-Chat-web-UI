@@ -14,6 +14,8 @@ import { PlusMenuContent } from '@/components/plus-menu-content'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import type { ComposerSkillOption } from './chat-composer-panel'
 import { SkillPanelSheet } from './skill-panel-sheet'
+import { cn } from '@/lib/utils'
+import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
 
 interface DesktopComposerProps {
   input: string
@@ -137,7 +139,7 @@ export function DesktopComposer({
     <div className="hidden md:block">
       <div className="mx-auto max-w-4xl px-4 pb-6 md:px-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
-        <div className="flex items-center gap-2 overflow-hidden rounded-[1.7rem] border border-border/70 bg-[hsl(var(--surface))/0.9] px-2 py-2 shadow-[0_18px_42px_hsl(var(--background)/0.22)] backdrop-blur-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background">
+        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex items-center gap-2 px-2 py-2')}>
           <div className="flex shrink-0 items-center gap-1">
             <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
               <DropdownMenuTrigger asChild>
@@ -232,7 +234,10 @@ export function DesktopComposer({
             onCompositionEnd={onCompositionEnd}
             placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
             disabled={textareaDisabled}
-            className="h-auto min-h-[52px] max-h-[240px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-left text-sm leading-[1.45] placeholder:text-muted-foreground transition-[height] duration-150 ease-out focus-visible:ring-0 focus-visible:ring-offset-0 lg:min-h-[56px] lg:py-3 lg:text-base"
+            className={cn(
+              COMPOSER_TEXTAREA_BASE_CLASS,
+              'min-h-[52px] max-h-[240px] flex-1 px-2 py-2.5 text-sm lg:min-h-[56px] lg:py-3 lg:text-base'
+            )}
             rows={1}
           />
 
