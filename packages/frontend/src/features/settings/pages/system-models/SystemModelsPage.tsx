@@ -285,7 +285,7 @@ export function SystemModelsPage() {
             {batchUpdating && <span className="text-amber-600 dark:text-amber-300">批量更新中…</span>}
           </div>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {MODEL_CAP_KEYS.map((cap) => {
             const Icon = MODEL_CAP_ICONS[cap]
             return (
@@ -295,7 +295,7 @@ export function SystemModelsPage() {
               >
                 <div className="flex items-center gap-2 text-sm">
                   <Icon className="w-4 h-4" />
-                  <span>{MODEL_CAP_LABELS[cap]}</span>
+                  <span className="whitespace-nowrap">{MODEL_CAP_LABELS[cap]}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button
