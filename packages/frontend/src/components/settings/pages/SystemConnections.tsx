@@ -1,337 +1,326 @@
 "use client"
-import { Link2, Edit, Trash2 } from 'lucide-react'
-import { deriveChannelName } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardTitle, CardDescription } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useSystemConnections, SPECIAL_PROVIDER_DEEPSEEK, SPECIAL_VENDOR_DEEPSEEK } from '@/components/settings/system-connections/use-system-connections'
-import { CONNECTION_CAP_KEYS, CONNECTION_CAP_LABELS } from '@/components/settings/system-connections/constants'
+
+import { useMemo, useState } from "react"
+import { motion, useReducedMotion } from "framer-motion"
+import { Loader2, Sparkles } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { AlertDialog } from "@/components/ui/alert-dialog"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DestructiveConfirmDialogContent } from "@/components/ui/destructive-confirm-dialog"
+import { useSystemConnections, SPECIAL_PROVIDER_DEEPSEEK, SPECIAL_VENDOR_DEEPSEEK } from "@/components/settings/system-connections/use-system-connections"
+import { CONNECTION_CAP_KEYS, CONNECTION_CAP_LABELS } from "@/components/settings/system-connections/constants"
+import { SystemConnectionKeyPool } from "@/components/settings/system-connections/SystemConnectionKeyPool"
+import { SystemConnectionVerifyPanel } from "@/components/settings/system-connections/SystemConnectionVerifyPanel"
+import { SystemConnectionGroupList } from "@/components/settings/system-connections/SystemConnectionGroupList"
+import { EditorSummary, Field, HelperText, StatTile } from "@/components/settings/system-connections/SystemConnectionsPageParts"
 
 export function SystemConnectionsPage() {
   const {
     connections,
     loading,
+    submitting,
+    verifying,
+    deletingId,
     error,
     form,
     setForm,
     capabilities,
     editing,
+    verifyResult,
     refresh,
     startEdit,
     cancelEdit,
+    addKey,
+    removeKey,
+    updateKey,
     submitConnection,
     verifyConnection,
     removeConnection,
     toggleCapability,
-    verifyDialogOpen,
-    setVerifyDialogOpen,
-    verifyResult,
   } = useSystemConnections()
+  const reducedMotion = useReducedMotion()
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+
+  const totalConfiguredKeys = useMemo(
+    () => connections.reduce((sum, item) => sum + item.apiKeys.length, 0),
+    [connections],
+  )
+  const enabledConfiguredKeys = useMemo(
+    () => connections.reduce((sum, item) => sum + item.apiKeys.filter((key) => key.enable).length, 0),
+    [connections],
+  )
 
   const handleProviderChange = (value: string) => {
     setForm((prev) => {
-      const isGoogle = value === 'google_genai'
+      const isGoogle = value === "google_genai"
       const isDeepseek = value === SPECIAL_PROVIDER_DEEPSEEK
       const next = {
         ...prev,
         provider: value,
-        authType: isGoogle || isDeepseek ? 'bearer' : prev.authType,
+        authType: isGoogle || isDeepseek ? "bearer" : prev.authType,
       }
       if (isDeepseek && (!prev.baseUrl || prev.provider !== SPECIAL_PROVIDER_DEEPSEEK)) {
-        next.baseUrl = 'https://api.deepseek.com/v1'
+        next.baseUrl = "https://api.deepseek.com/v1"
       }
       return next
     })
   }
 
   const renderVendorLabel = (vendor?: string | null) => {
-    if (vendor === SPECIAL_VENDOR_DEEPSEEK) return 'DeepSeek（交错思考）'
+    if (vendor === SPECIAL_VENDOR_DEEPSEEK) return "DeepSeek（交错思考）"
     return null
   }
 
   const baseUrlPlaceholder = (() => {
-    if (form.provider === SPECIAL_PROVIDER_DEEPSEEK) return 'https://api.deepseek.com/v1'
-    if (form.provider === 'ollama') return 'http://localhost:11434'
-    if (form.provider === 'google_genai') return 'https://generativelanguage.googleapis.com/v1beta'
-    return 'https://api.openai.com/v1'
+    if (form.provider === SPECIAL_PROVIDER_DEEPSEEK) return "https://api.deepseek.com/v1"
+    if (form.provider === "ollama") return "http://localhost:11434"
+    if (form.provider === "google_genai") return "https://generativelanguage.googleapis.com/v1beta"
+    return "https://api.openai.com/v1"
   })()
 
+  const heroMotion = reducedMotion
+    ? {}
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.28, ease: "easeOut" as const },
+      }
+
   return (
-    <div className="space-y-6 min-w-0">
-      <Dialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>模型列表</DialogTitle>
-            <DialogDescription>
-              {verifyResult?.warning
-                ? `验证成功，但拉取模型信息时发生警告：${verifyResult.warning}`
-                : `共 ${verifyResult?.models?.length ?? 0} 个模型`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[60vh] overflow-auto">
-            <Table className="table-fixed w-full">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[40%]">Model ID</TableHead>
-                  <TableHead className="w-[12%]">Provider</TableHead>
-                  <TableHead className="w-[12%]">Channel</TableHead>
-                  <TableHead className="w-[18%]">Tags</TableHead>
-                  <TableHead className="w-[18%]">Capabilities</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(verifyResult?.models ?? []).map((m) => {
-                  const tags = (m.tags ?? []).map((t) => t?.name).filter(Boolean).join(', ')
-                  const caps = m.capabilities
-                    ? Object.entries(m.capabilities)
-                        .filter(([, v]) => v === true)
-                        .map(([k]) => k)
-                        .join(', ')
-                    : ''
-                  return (
-                    <TableRow key={m.id}>
-                      <TableCell className="align-top font-mono text-xs whitespace-normal break-all">{m.id}</TableCell>
-                      <TableCell className="align-top text-xs">{m.provider}</TableCell>
-                      <TableCell className="align-top text-xs whitespace-normal break-words">{m.channelName || '-'}</TableCell>
-                      <TableCell className="align-top text-xs whitespace-normal break-words">{tags || '-'}</TableCell>
-                      <TableCell className="align-top text-xs whitespace-normal break-words">{caps || '-'}</TableCell>
-                    </TableRow>
-                  )
-                })}
-                {(verifyResult?.models?.length ?? 0) === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-sm text-muted-foreground">
-                      未返回模型列表。若上游不支持 /models，请手动填写 Model IDs 后再验证。
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
+    <div className="space-y-8 min-w-0">
+      <AlertDialog open={confirmDeleteId !== null} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+        <DestructiveConfirmDialogContent
+          title="删除整个端点组"
+          description="该操作会删除这个 API 端点下的所有 Key 条目，并清空相关模型目录缓存。"
+          warning="删除后不会保留回滚入口，请确认当前不是仍在使用的生产端点。"
+          actionLabel={deletingId === confirmDeleteId ? "删除中..." : "确认删除"}
+          actionDisabled={deletingId === confirmDeleteId}
+          onAction={() => {
+            if (confirmDeleteId != null) {
+              void removeConnection(confirmDeleteId)
+            }
+            setConfirmDeleteId(null)
+          }}
+        />
+      </AlertDialog>
 
-      {/* 连接表单区块 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b">
-          <Link2 className="w-5 h-5 text-primary" />
-          <div>
-            <CardTitle className="text-lg">连接配置</CardTitle>
-            <CardDescription>配置API端点和认证信息</CardDescription>
-          </div>
-        </div>
-
-        {error && <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded">{error}</div>}
-
-        <Card className="space-y-3 px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <Label>Provider</Label>
-              <Select
-                value={form.provider}
-                onValueChange={handleProviderChange}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="openai_responses">OpenAI（Responses）</SelectItem>
-                  <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
-                  <SelectItem value="ollama">Ollama</SelectItem>
-                  <SelectItem value="google_genai">Google Generative AI</SelectItem>
-                  <SelectItem value={SPECIAL_PROVIDER_DEEPSEEK}>DeepSeek（交错思考）</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Auth</Label>
-              <Select
-                value={form.authType}
-                onValueChange={(v) => setForm((prev) => ({ ...prev, authType: v }))}
-                disabled={form.provider === 'google_genai'}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="bearer">Bearer</SelectItem>
-                  <SelectItem value="session">Session</SelectItem>
-                  <SelectItem value="system_oauth">System OAuth</SelectItem>
-                  <SelectItem value="microsoft_entra_id">Entra ID</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-1 sm:col-span-2">
-              <Label>Base URL</Label>
-              <Input
-                value={form.baseUrl}
-                onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                placeholder={baseUrlPlaceholder}
-              />
-              {(form.provider === 'openai' || form.provider === 'openai_responses') && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  填写完整 Base URL（可包含任意路径/版本号）。示例：OpenAI https://api.openai.com/v1；智谱 BigModel https://open.bigmodel.cn/api/coding/paas/v4
-                </p>
-              )}
-              {form.provider === 'google_genai' && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  需要在 Google AI Studio 控制台启用 API 并配置 API Key，默认基地址为
-                  https://generativelanguage.googleapis.com/v1beta
-                </p>
-              )}
-              {form.provider === SPECIAL_PROVIDER_DEEPSEEK && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  使用 DeepSeek 推理模式时，请将 Base URL 指向官方 OpenAI 兼容接口，例如 https://api.deepseek.com/v1
-                </p>
-              )}
-            </div>
-            {form.authType === 'bearer' && (
-              <div className="col-span-1 sm:col-span-2">
-                <Label>API Key</Label>
-                <Input
-                  type="password"
-                  value={form.apiKey}
-                  onChange={(e) => setForm((prev) => ({ ...prev, apiKey: e.target.value }))}
-                  placeholder="sk-..."
-                />
+      <motion.section
+        {...heroMotion}
+        className="overflow-hidden rounded-[28px] border border-border/70 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--surface))/0.88_46%,hsl(var(--background))_100%)] shadow-[0_24px_70px_hsl(var(--background)/0.24)]"
+      >
+        <div className="border-b border-border/70 px-6 py-6 sm:px-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                端点与 Key 池
               </div>
-            )}
-            {form.provider === 'azure_openai' && (
               <div>
-                <Label>API Version</Label>
-                <Input
-                  value={form.azureApiVersion}
-                  onChange={(e) => setForm((prev) => ({ ...prev, azureApiVersion: e.target.value }))}
-                  placeholder="2024-02-15-preview"
-                />
+                <h2 className="text-2xl font-semibold tracking-tight">同一 API 端点下集中管理多个 Key</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                  共享端点字段只维护一份，每个 Key 保留自己的标签、启用状态和模型范围；验证会按 Key 并发执行，编辑时也会保留已配置的 models 与密钥摘要。
+                </p>
               </div>
-            )}
-            <div>
-              <Label>Prefix ID</Label>
-              <Input
-                value={form.prefixId}
-                onChange={(e) => setForm((prev) => ({ ...prev, prefixId: e.target.value }))}
-                placeholder="可选：前缀，避免冲突"
-              />
             </div>
-            <div>
-              <Label>Connection Type</Label>
-              <Select value={form.connectionType} onValueChange={(v) => setForm((prev) => ({ ...prev, connectionType: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="external">external</SelectItem>
-                  <SelectItem value="local">local</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <StatTile label="端点组" value={connections.length} />
+              <StatTile label="已配置 Key" value={totalConfiguredKeys} />
+              <StatTile label="启用中" value={enabledConfiguredKeys} className="col-span-2 sm:col-span-1" />
             </div>
-            <div className="col-span-1 sm:col-span-2">
-              <Label>Tags（逗号分隔）</Label>
-              <Input
-                value={form.tags}
-                onChange={(e) => setForm((prev) => ({ ...prev, tags: e.target.value }))}
-                placeholder="prod,team-a"
-              />
-            </div>
-            <div className="col-span-1 sm:col-span-2">
-              <Label>默认能力（影响此连接拉取的所有模型）</Label>
-              <div className="flex flex-wrap gap-3 text-sm mt-1">
-                {CONNECTION_CAP_KEYS.map((k) => (
-                  <div key={k} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`cap-${k}`}
-                      checked={capabilities[k]}
-                      onCheckedChange={(checked) => toggleCapability(k, Boolean(checked))}
+          </div>
+        </div>
+
+        <div className="grid gap-6 px-6 py-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.72fr)] sm:px-8">
+          <div className="space-y-6">
+            {error ? (
+              <div
+                role="alert"
+                className="rounded-2xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {error}
+              </div>
+            ) : null}
+
+            <Card className="border-border/70 bg-background/55 shadow-none">
+              <CardHeader className="space-y-2">
+                <CardTitle className="text-lg">{editing ? "编辑端点组" : "新建端点组"}</CardTitle>
+                <CardDescription>
+                  这里填写共享配置，下面的每个 Key 条目只负责自己的标签、密钥和值守模型。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Provider" htmlFor="provider">
+                    <Select value={form.provider} onValueChange={handleProviderChange}>
+                      <SelectTrigger id="provider">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="openai_responses">OpenAI（Responses）</SelectItem>
+                        <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
+                        <SelectItem value="ollama">Ollama</SelectItem>
+                        <SelectItem value="google_genai">Google Generative AI</SelectItem>
+                        <SelectItem value={SPECIAL_PROVIDER_DEEPSEEK}>DeepSeek（交错思考）</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field label="认证方式" htmlFor="authType">
+                    <Select
+                      value={form.authType}
+                      onValueChange={(value) => setForm((prev) => ({ ...prev, authType: value }))}
+                      disabled={form.provider === "google_genai"}
+                    >
+                      <SelectTrigger id="authType">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="bearer">Bearer</SelectItem>
+                        <SelectItem value="session">Session</SelectItem>
+                        <SelectItem value="system_oauth">System OAuth</SelectItem>
+                        <SelectItem value="microsoft_entra_id">Entra ID</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field label="Base URL" htmlFor="baseUrl" className="md:col-span-2">
+                    <Input
+                      id="baseUrl"
+                      value={form.baseUrl}
+                      onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value }))}
+                      placeholder={baseUrlPlaceholder}
                     />
-                    <Label htmlFor={`cap-${k}`} className="font-normal">{CONNECTION_CAP_LABELS[k]}</Label>
+                    <HelperText provider={form.provider} specialProviderDeepseek={SPECIAL_PROVIDER_DEEPSEEK} />
+                  </Field>
+
+                  {form.provider === "azure_openai" ? (
+                    <Field label="API Version" htmlFor="azureApiVersion">
+                      <Input
+                        id="azureApiVersion"
+                        value={form.azureApiVersion}
+                        onChange={(event) => setForm((prev) => ({ ...prev, azureApiVersion: event.target.value }))}
+                        placeholder="2024-02-15-preview"
+                      />
+                    </Field>
+                  ) : null}
+
+                  <Field label="Prefix ID" htmlFor="prefixId">
+                    <Input
+                      id="prefixId"
+                      value={form.prefixId}
+                      onChange={(event) => setForm((prev) => ({ ...prev, prefixId: event.target.value }))}
+                      placeholder="可选，用于避免模型名冲突"
+                    />
+                  </Field>
+
+                  <Field label="Connection Type" htmlFor="connectionType">
+                    <Select
+                      value={form.connectionType}
+                      onValueChange={(value) => setForm((prev) => ({ ...prev, connectionType: value }))}
+                    >
+                      <SelectTrigger id="connectionType">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="external">external</SelectItem>
+                        <SelectItem value="local">local</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field label="共享标签" htmlFor="tags" className="md:col-span-2">
+                    <Input
+                      id="tags"
+                      value={form.tags}
+                      onChange={(event) => setForm((prev) => ({ ...prev, tags: event.target.value }))}
+                      placeholder="prod,team-a,newapi"
+                    />
+                  </Field>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <Label>默认能力</Label>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      这里的能力会作用到这个端点组下的所有模型目录项。
+                    </p>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="col-span-1 sm:col-span-2">
-              <Label>Model IDs（逗号分隔，留空自动枚举）</Label>
-              <Input
-                value={form.modelIds}
-                onChange={(e) => setForm((prev) => ({ ...prev, modelIds: e.target.value }))}
-                placeholder="gpt-4o, gpt-4o-mini, text-embedding-3-small"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                提示：可添加 Embedding 模型用于 RAG 文档解析，如 text-embedding-3-small、nomic-embed-text 等
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button onClick={submitConnection} disabled={loading} className="w-full sm:w-auto">{editing ? '保存' : '新增'}</Button>
-            <Button onClick={verifyConnection} variant="outline" disabled={loading} className="w-full sm:w-auto">验证连接</Button>
-            {editing && (
-              <Button onClick={cancelEdit} variant="ghost" className="w-full sm:w-auto">
-                取消编辑
+                  <div className="flex flex-wrap gap-3">
+                    {CONNECTION_CAP_KEYS.map((key) => (
+                      <label
+                        key={key}
+                        className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-border/70 bg-background/80 px-4 py-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={capabilities[key]}
+                          onCheckedChange={(checked) => toggleCapability(key, Boolean(checked))}
+                        />
+                        <span>{CONNECTION_CAP_LABELS[key]}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <SystemConnectionKeyPool
+              keys={form.keys}
+              reducedMotion={Boolean(reducedMotion)}
+              onAddKey={addKey}
+              onRemoveKey={removeKey}
+              onUpdateKey={updateKey}
+            />
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button onClick={submitConnection} disabled={submitting || verifying} className="min-h-11">
+                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {editing ? "保存端点组" : "创建端点组"}
               </Button>
-            )}
+              <Button onClick={verifyConnection} variant="outline" disabled={submitting || verifying} className="min-h-11">
+                {verifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                并发验证全部 Key
+              </Button>
+              {editing ? (
+                <Button onClick={cancelEdit} variant="ghost" className="min-h-11">
+                  取消编辑
+                </Button>
+              ) : null}
+            </div>
           </div>
-        </Card>
-      </div>
 
-      {/* 连接列表区块 */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">已配置的连接</CardTitle>
-          <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>刷新</Button>
+          <div className="space-y-6">
+            <EditorSummary
+              endpoint={form.baseUrl}
+              provider={form.provider}
+              keyCount={form.keys.length}
+              labels={form.keys.map((key, index) => key.apiKeyLabel || `Key ${index + 1}`)}
+            />
+            <SystemConnectionVerifyPanel verifyResult={verifyResult} reducedMotion={Boolean(reducedMotion)} />
+          </div>
         </div>
+      </motion.section>
 
-        <div className="space-y-2">
-          {loading && connections.length === 0 && (
-            <>
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="p-3 border rounded">
-                  <div className="h-4 w-52 bg-muted rounded" />
-                  <div className="mt-2 h-3 w-64 bg-muted/70 rounded" />
-                </div>
-              ))}
-            </>
-          )}
-
-          {!loading && connections.length === 0 && (
-            <div className="text-sm text-muted-foreground text-center py-6">暂无连接，填写上方表单后新增</div>
-          )}
-
-          {connections.map((connection) => {
-            const channelLabel = deriveChannelName(connection.provider, connection.baseUrl)
-            const vendorLabel = renderVendorLabel(connection.vendor)
-            return (
-              <Card key={connection.id} className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 space-y-2">
-                    <div className="font-medium text-lg">{channelLabel}</div>
-                    <div className="text-sm text-muted-foreground break-all">{connection.baseUrl}</div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Provider: {connection.provider}</span>
-                      {vendorLabel && (
-                        <span className="px-2 py-1 rounded bg-muted text-muted-foreground">
-                          Vendor: {vendorLabel}
-                        </span>
-                      )}
-                      <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Auth: {connection.authType}</span>
-                      {connection.prefixId && <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Prefix: {connection.prefixId}</span>}
-                      <span className="px-2 py-1 rounded bg-muted text-muted-foreground">Type: {connection.connectionType}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => startEdit(connection)}>
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => removeConnection(connection.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
-      </div>
+      <SystemConnectionGroupList
+        connections={connections}
+        loading={loading}
+        reducedMotion={Boolean(reducedMotion)}
+        onRefresh={refresh}
+        onStartEdit={startEdit}
+        onRequestDelete={setConfirmDeleteId}
+        renderVendorLabel={renderVendorLabel}
+      />
     </div>
   )
 }

@@ -248,11 +248,11 @@ app.get('/api', (c) => {
         'GET /api/catalog/models/overrides': '导出所有覆写记录（管理员）',
       },
       connections: {
-        'GET /api/connections': '系统连接列表（管理员）',
-        'POST /api/connections': '新增系统连接（管理员）',
-        'PUT /api/connections/:id': '更新系统连接（管理员）',
-        'DELETE /api/connections/:id': '删除系统连接（管理员）',
-        'POST /api/connections/verify': '验证连接',
+        'GET /api/connections': '系统端点组列表（管理员，多 Key 视图）',
+        'POST /api/connections': '新增系统端点组（管理员，多 Key）',
+        'PUT /api/connections/:id': '更新系统端点组（管理员，多 Key）',
+        'DELETE /api/connections/:id': '删除系统端点组（管理员，多 Key）',
+        'POST /api/connections/verify': '并发验证端点组下的 Key',
       },
       sessions: {
         'GET /api/sessions': '获取会话列表',

@@ -11,11 +11,11 @@ export const createEmptyConnectionCaps = (): Record<ConnectionCapKey, boolean> =
   image_generation: false,
 })
 
-export const parseConnectionCaps = (raw?: string | null): Record<ConnectionCapKey, boolean> => {
+export const parseConnectionCaps = (raw?: string | Record<string, unknown> | null): Record<ConnectionCapKey, boolean> => {
   const next = createEmptyConnectionCaps()
   if (!raw) return next
   try {
-    const parsed = JSON.parse(raw || '{}')
+    const parsed = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw
     CONNECTION_CAP_KEYS.forEach((key) => {
       next[key] = Boolean(parsed?.[key])
     })

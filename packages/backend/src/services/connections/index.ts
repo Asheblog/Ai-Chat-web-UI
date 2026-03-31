@@ -11,6 +11,7 @@ const connectionRepository = new PrismaConnectionRepository(prisma)
 let connectionService: ConnectionService = new ConnectionService({
   repository: connectionRepository,
   encryptApiKey: AuthUtils.encryptApiKey,
+  decryptApiKey: AuthUtils.decryptApiKey,
   refreshModelCatalog: refreshModelCatalogForConnection,
   verifyConnection,
   logger: log,

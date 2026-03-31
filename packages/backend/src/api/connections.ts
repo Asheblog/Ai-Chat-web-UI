@@ -15,20 +15,26 @@ const capabilitySchema = z.object({
 
 const vendorEnum = z.enum(['deepseek'])
 
+const apiKeySchema = z.object({
+  id: z.number().int().positive().optional(),
+  apiKeyLabel: z.string().optional(),
+  apiKey: z.string().optional(),
+  modelIds: z.array(z.string()).optional(),
+  enable: z.boolean().optional().default(true),
+})
+
 const connectionSchema = z.object({
   provider: z.enum(['openai', 'openai_responses', 'azure_openai', 'ollama', 'google_genai']),
   vendor: vendorEnum.optional(),
   baseUrl: z.string().url(),
-  enable: z.boolean().optional().default(true),
   authType: z.enum(['bearer', 'none', 'session', 'system_oauth', 'microsoft_entra_id']).optional().default('bearer'),
-  apiKey: z.string().optional(),
   headers: z.record(z.string()).optional(),
   azureApiVersion: z.string().optional(),
   prefixId: z.string().optional(),
   tags: z.array(z.object({ name: z.string() })).optional(),
-  modelIds: z.array(z.string()).optional(),
   connectionType: z.enum(['external', 'local']).optional(),
   defaultCapabilities: capabilitySchema.partial().optional(),
+  apiKeys: z.array(apiKeySchema).min(1),
 })
 
 const handleServiceError = (
@@ -83,7 +89,7 @@ export const createConnectionsApi = (deps: ConnectionsApiDeps) => {
     '/:id',
     requireUserActor,
     adminOnlyMiddleware,
-    zValidator('json', connectionSchema.partial()),
+    zValidator('json', connectionSchema),
     async (c) => {
       try {
         const id = parseInt(c.req.param('id'), 10)
@@ -112,19 +118,19 @@ export const createConnectionsApi = (deps: ConnectionsApiDeps) => {
     }
   })
 
-	  router.post('/verify', requireUserActor, zValidator('json', connectionSchema), async (c) => {
-	    try {
-	      const payload = c.req.valid('json')
-	      const result = await service.verifyConnectionConfig(payload)
-	      return c.json<ApiResponse>({
-	        success: true,
-	        message: 'Connection verified',
-	        data: result,
-	      })
-	    } catch (error) {
-	      return handleServiceError(c, error, 'Verify failed', 'Verify connection error:')
-	    }
-	  })
+  router.post('/verify', requireUserActor, zValidator('json', connectionSchema), async (c) => {
+    try {
+      const payload = c.req.valid('json')
+      const result = await service.verifyConnectionConfig(payload)
+      return c.json<ApiResponse>({
+        success: true,
+        message: 'Connection verified',
+        data: result,
+      })
+    } catch (error) {
+      return handleServiceError(c, error, 'Verify failed', 'Verify connection error:')
+    }
+  })
 
   return router
 }

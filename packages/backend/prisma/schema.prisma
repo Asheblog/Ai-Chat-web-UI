@@ -489,6 +489,7 @@ model Connection {
   enable                  Boolean  @default(true)
   authType                String   @default("bearer") // 'bearer' | 'none' | 预留：'session' | 'system_oauth' | 'microsoft_entra_id'
   apiKey                  String   @default("") // 加密存储；none 时为空
+  apiKeyLabel             String?
   headersJson             String   @default("") // 额外HTTP头（JSON字符串）
   azureApiVersion         String? // 仅 provider=azure_openai 时必填
   prefixId                String?
