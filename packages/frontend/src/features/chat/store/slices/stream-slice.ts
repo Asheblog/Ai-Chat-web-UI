@@ -1079,7 +1079,8 @@ export const createStreamSlice: ChatSliceCreator<
       get().fetchSessionsUsage().catch(() => {})
     } catch (error: any) {
       const interruptedContext = runtime.activeStreams.get(streamEntry.streamKey) ?? null
-      const manualStopRequested = interruptedContext?.stopRequested ?? false
+      const manualStopRequested =
+        interruptedContext?.stopRequested ?? streamEntry.stopRequested ?? false
       runtime.flushStreamBuffer(interruptedContext, true)
       runtime.clearActiveStream(interruptedContext)
       runtime.recomputeStreamingState()
@@ -1096,6 +1097,11 @@ export const createStreamSlice: ChatSliceCreator<
         error?.name === 'AbortError' ||
         error?.code === 20 ||
         (typeof error?.message === 'string' && error.message.toLowerCase().includes('aborted'))
+
+      if (manualStopRequested && (isAbortError || isStreamIncomplete)) {
+        set((state) => runtime.streamingFlagUpdate(state, sessionId, false))
+        return
+      }
 
       const trySyncFinalResult = async (): Promise<boolean> => {
         const candidates = [

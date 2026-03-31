@@ -191,6 +191,61 @@ describe('stream slice', () => {
     expect(state.error).toBeNull()
   })
 
+  it('does not sync user message again when stopping before the start event arrives', async () => {
+    const store = createChatStoreInstance()
+    const session = createSession({ id: 56 })
+    store.setState({
+      sessions: [session],
+      currentSession: session,
+    })
+
+    let rejectStream: ((reason?: any) => void) | null = null
+    let notifyReady: (() => void) | null = null
+    const ready = new Promise<void>((resolve) => {
+      notifyReady = resolve
+    })
+
+    const streamIncompleteError: Error & { code?: string } = new Error('Stream closed before completion')
+    streamIncompleteError.code = 'STREAM_INCOMPLETE'
+
+    vi.mocked(chatApi.streamChat).mockImplementation(async function* streamUntilCancelled() {
+      await new Promise((_resolve, reject) => {
+        rejectStream = reject
+        notifyReady?.()
+      })
+    })
+
+    vi.mocked(chatApi.cancelStream).mockImplementation(() => {
+      rejectStream?.(streamIncompleteError)
+    })
+
+    vi.mocked(chatApi.getMessageByClientId).mockResolvedValue({
+      data: {
+        message: {
+          id: 5678,
+          sessionId: session.id,
+          role: 'user',
+          content: 'stop before start',
+          createdAt: new Date().toISOString(),
+          clientMessageId: 'server-user-client-id',
+        },
+      },
+    } as any)
+
+    const pending = store.getState().streamMessage(session.id, 'stop before start')
+    await ready
+    store.getState().stopStreaming()
+    await pending
+    await flushMicrotasks()
+
+    expect(chatApi.getMessageByClientId).not.toHaveBeenCalled()
+
+    const state = store.getState()
+    const userMetas = state.messageMetas.filter((meta) => meta.role === 'user')
+    expect(userMetas).toHaveLength(1)
+    expect(state.error).toBeNull()
+  })
+
   it('normalizes completed assistant content to match persisted final response', async () => {
     const store = createChatStoreInstance()
     const session = createSession({ id: 77 })
