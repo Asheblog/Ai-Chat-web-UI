@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../types';
 import { AuthUtils } from '../../../utils/auth';
 import type { ProviderType } from '../../../utils/providers';
@@ -48,6 +49,7 @@ import {
   ProviderChatCompletionResponse,
   QuotaExceededError,
   extendAnonymousSession,
+  sendMessageSchema,
   sessionOwnershipClause,
 } from '../chat-common';
 import { createUserMessageWithQuota } from '../services/message-service';
@@ -72,10 +74,16 @@ import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/type
 import { applyWebSearchSkillOverrides } from '../web-search-skill-overrides';
 import {
   ChatStreamRequestValidation,
+  type ChatStreamPayload,
   normalizeChatStreamPayload,
 } from './stream/request-validation';
 import { ProviderStreamEngine } from './stream/provider-stream-engine';
 import { StreamPersistenceSink } from './stream/persistence-sink';
+
+type SendMessagePayload = z.infer<typeof sendMessageSchema>
+type ValidatedJsonRequest<T> = Context['req'] & {
+  valid: (target: 'json') => T
+}
 
 export interface ChatStreamRoutesDeps {
   prisma: PrismaClient
@@ -122,7 +130,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         enabled: false,
         actorIdentifier: actor.identifier,
       })
-      const payload = c.req.valid('json') as any;
+      const payload = (c.req as ValidatedJsonRequest<SendMessagePayload>).valid('json') as ChatStreamPayload;
       const normalizedPayload = normalizeChatStreamPayload(payload)
       const {
         sessionId,

@@ -158,7 +158,7 @@ taskTrace.get('/:id/latex/events', actorMiddleware, requireUserActor, adminOnlyM
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
-    const latex = await taskTraceService.getLatexTrace(id)
+    const latex = await traceService.getLatexTrace(id)
     if (!latex) {
       return c.json<ApiResponse>({ success: false, error: 'Latex trace not found' }, 404)
     }

@@ -78,6 +78,7 @@ export interface WebSearchParallelResult {
 const DEFAULT_LIMIT = 4
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12_000
 const SUPPORTED_ENGINES = ['tavily', 'brave', 'metaso'] as const
+type SupportedSearchEngine = (typeof SUPPORTED_ENGINES)[number]
 const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'scholar', 'image', 'video', 'podcast'])
 
 const clampLimit = (value?: number) => {
@@ -89,6 +90,9 @@ const normalizeDomains = (domains?: string[]) =>
   Array.isArray(domains) ? domains.map((d) => d.trim()).filter(Boolean) : []
 
 const normalizeEngine = (value: string) => value.trim().toLowerCase()
+
+const isSupportedEngine = (engine: string): engine is SupportedSearchEngine =>
+  SUPPORTED_ENGINES.includes(engine as SupportedSearchEngine)
 
 const looksLikeImageUrl = (value: string): boolean =>
   /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i.test(value)
@@ -442,15 +446,11 @@ export const runWebSearchParallel = async (
 ): Promise<WebSearchParallelResult> => {
   const engineCandidates = Array.from(
     new Set((opts.engines || []).map((engine) => normalizeEngine(engine)).filter(Boolean))
-  ).filter((engine): engine is (typeof SUPPORTED_ENGINES)[number] =>
-    SUPPORTED_ENGINES.includes(engine as (typeof SUPPORTED_ENGINES)[number])
-  )
+  ).filter(isSupportedEngine)
   const maxEngines = Math.max(1, Math.min(3, Math.floor(opts.parallelMaxEngines || engineCandidates.length || 1)))
   const engineOrderRaw = Array.from(
     new Set((opts.engineOrder || []).map((engine) => normalizeEngine(engine)).filter(Boolean))
-  ).filter((engine): engine is (typeof SUPPORTED_ENGINES)[number] =>
-    SUPPORTED_ENGINES.includes(engine as (typeof SUPPORTED_ENGINES)[number])
-  )
+  ).filter(isSupportedEngine)
   const selectedEngines = [
     ...engineOrderRaw.filter((engine) => engineCandidates.includes(engine)),
     ...engineCandidates.filter((engine) => !engineOrderRaw.includes(engine)),
@@ -469,7 +469,7 @@ export const runWebSearchParallel = async (
       queryLanguage: item.queryLanguage || 'unknown',
       engines: Array.from(
         new Set((item.engines || []).map((engine) => normalizeEngine(engine)).filter(Boolean)),
-      ).filter((engine) => selectedEngines.includes(engine)),
+      ).filter((engine): engine is SupportedSearchEngine => selectedEngines.includes(engine as SupportedSearchEngine)),
     }))
     .filter((item) => item.query.length > 0 && item.engines.length > 0)
 

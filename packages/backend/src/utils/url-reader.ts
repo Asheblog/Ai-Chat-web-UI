@@ -83,6 +83,14 @@ interface UrlTransformRule {
   transform: (match: RegExpMatchArray) => string
 }
 
+interface DomLikeElement {
+  textContent?: string | null
+  innerHTML?: string
+  getAttribute(name: string): string | null
+  querySelectorAll(selector: string): ArrayLike<DomLikeElement> | Iterable<DomLikeElement>
+  remove?: () => void
+}
+
 const URL_TRANSFORM_RULES: UrlTransformRule[] = [
   {
     id: 'medium_to_scribe',
@@ -372,13 +380,17 @@ const collectImagesFromDocument = (
     })
   }
 
-  const contentRoots = [
-    ...Array.from(doc.querySelectorAll('article,main,[role="main"],.article-content,.post-content,.entry-content')),
-  ]
+  const contentRoots = Array.from(
+    doc.querySelectorAll('article,main,[role="main"],.article-content,.post-content,.entry-content') as
+      | ArrayLike<DomLikeElement>
+      | Iterable<DomLikeElement>,
+  )
   if (contentRoots.length === 0 && doc.body) {
-    contentRoots.push(doc.body)
+    contentRoots.push(doc.body as DomLikeElement)
   }
-  const imageElements = contentRoots.flatMap((root: any) => Array.from(root.querySelectorAll('img')))
+  const imageElements = contentRoots.flatMap((root) =>
+    Array.from(root.querySelectorAll('img') as ArrayLike<DomLikeElement> | Iterable<DomLikeElement>),
+  )
   for (const element of imageElements) {
     const src =
       element.getAttribute('src') ||
@@ -480,8 +492,12 @@ const extractCrawlerResultFromHtml = (
 
   try {
     const doc = dom.window.document
-    const removableNodes = doc.querySelectorAll('script,style,noscript,svg,canvas,iframe,form,nav,aside')
-    removableNodes.forEach((node) => node.remove())
+    const removableNodes = Array.from(
+      doc.querySelectorAll('script,style,noscript,svg,canvas,iframe,form,nav,aside') as
+        | ArrayLike<DomLikeElement>
+        | Iterable<DomLikeElement>,
+    )
+    removableNodes.forEach((node) => node.remove?.())
 
     const preferredSelectors = [
       'article',
@@ -494,12 +510,16 @@ const extractCrawlerResultFromHtml = (
       '#content',
       '.markdown-body',
     ]
-    const candidateNodes: any[] = []
+    const candidateNodes: DomLikeElement[] = []
     for (const selector of preferredSelectors) {
-      candidateNodes.push(...Array.from(doc.querySelectorAll(selector)))
+      candidateNodes.push(
+        ...Array.from(
+          doc.querySelectorAll(selector) as ArrayLike<DomLikeElement> | Iterable<DomLikeElement>,
+        ),
+      )
     }
     if (candidateNodes.length === 0 && doc.body) {
-      candidateNodes.push(doc.body)
+      candidateNodes.push(doc.body as DomLikeElement)
     }
 
     let bestText = ''
@@ -514,7 +534,11 @@ const extractCrawlerResultFromHtml = (
 
     if (bestText.length < CRAWLER_MIN_TEXT_LENGTH) {
       const blockTexts = dedupeTextBlocks(
-        Array.from(doc.querySelectorAll('p,li,blockquote,pre,h1,h2,h3,h4'))
+        Array.from(
+          doc.querySelectorAll('p,li,blockquote,pre,h1,h2,h3,h4') as
+            | ArrayLike<DomLikeElement>
+            | Iterable<DomLikeElement>,
+        )
           .map((node) => normalizeTextContent(node.textContent || '', maxContentLength))
           .filter((value) => value.length >= 24),
       )

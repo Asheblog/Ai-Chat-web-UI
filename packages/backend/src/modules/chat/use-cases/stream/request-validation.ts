@@ -1,5 +1,10 @@
 import type { Actor } from '../../../../types'
 import type { ChatService } from '../../../../services/chat'
+import { z } from 'zod'
+import { sendMessageSchema } from '../../chat-common'
+
+export type ChatStreamPayload = z.infer<typeof sendMessageSchema>
+export type ChatStreamImageInput = ChatStreamPayload['images']
 
 export interface NormalizedChatStreamPayload {
   sessionId: number
@@ -7,7 +12,7 @@ export interface NormalizedChatStreamPayload {
   replyToClientMessageId: string | null
   clientMessageId: string | null
   content: string
-  images: unknown
+  images: ChatStreamImageInput
   traceToggle: boolean | undefined
 }
 
@@ -19,7 +24,9 @@ export class ChatStreamRequestValidation {
   }
 }
 
-export const normalizeChatStreamPayload = (payload: any): NormalizedChatStreamPayload => {
+export const normalizeChatStreamPayload = (
+  payload: ChatStreamPayload,
+): NormalizedChatStreamPayload => {
   const replyToMessageId =
     typeof payload?.replyToMessageId === 'number' ? payload.replyToMessageId : null
   const replyToClientMessageIdRaw =
@@ -36,7 +43,10 @@ export const normalizeChatStreamPayload = (payload: any): NormalizedChatStreamPa
     replyToClientMessageId: replyToClientMessageIdRaw || null,
     clientMessageId: clientMessageIdRaw || null,
     content: typeof payload?.content === 'string' ? payload.content : '',
-    images: replyToMessageId || replyToClientMessageIdRaw ? undefined : payload?.images,
+    images:
+      replyToMessageId || replyToClientMessageIdRaw || !Array.isArray(payload?.images)
+        ? undefined
+        : payload.images,
     traceToggle: typeof payload?.traceEnabled === 'boolean' ? payload.traceEnabled : undefined,
   }
 }

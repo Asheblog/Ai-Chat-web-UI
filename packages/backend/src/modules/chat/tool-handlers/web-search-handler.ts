@@ -7,6 +7,7 @@ import {
   runWebSearchParallel,
   mergeWebSearchParallelResults,
   formatHitsForModel,
+  type WebSearchQueryLanguage,
   type WebSearchParallelQuery,
   type WebSearchParallelQueryPlan,
   type WebSearchParallelResult,
@@ -167,6 +168,11 @@ const detectQueryLanguage = (query: string): 'zh' | 'en' | 'unknown' => {
   if (ENGLISH_WORD_RE.test(query)) return 'en'
   return 'unknown'
 }
+
+const normalizeQueryLanguage = (
+  value: WebSearchQueryLanguage | undefined,
+  query: string,
+): WebSearchQueryLanguage => value ?? detectQueryLanguage(query)
 
 const shouldExpandBilingual = (
   query: string,
@@ -397,14 +403,17 @@ export const buildLanguageAwareSearchPlan = ({
   }
 }): SearchRoutingPlan => {
   const orderedEngines = normalizeEngineOrderForRouting(activeEngines, engineOrder)
-  const queryList = expandedQueries.length > 0 ? expandedQueries : [{ query: originalQuery, queryLanguage: 'unknown' }]
-  const primaryLanguage = queryList[0]?.queryLanguage || detectQueryLanguage(originalQuery)
+  const queryList: WebSearchParallelQuery[] =
+    expandedQueries.length > 0
+      ? expandedQueries
+      : [{ query: originalQuery, queryLanguage: 'unknown' }]
+  const primaryLanguage = normalizeQueryLanguage(queryList[0]?.queryLanguage, originalQuery)
   const highRisk = isHighRiskQuery(originalQuery)
   const requiredSources = pickRequiredSourceCount(activeEngines.length, highRisk, minSources)
   const escalationPolicy = conflictEscalation === 'off' ? 'off' : 'auto'
 
   const queryPlans: WebSearchParallelQueryPlan[] = queryList.map((queryItem, queryIndex) => {
-    const language = queryItem.queryLanguage || detectQueryLanguage(queryItem.query)
+    const language = normalizeQueryLanguage(queryItem.queryLanguage, queryItem.query)
     const rankedEngines = rankEnginesByLanguage(activeEngines, orderedEngines, language, localeRouting)
     const perQuerySources = pickPerQuerySourceCount(queryIndex, rankedEngines, requiredSources, highRisk)
     return {
