@@ -30,17 +30,19 @@ export function SystemConnectionKeyPool({
 }: SystemConnectionKeyPoolProps) {
   return (
     <Card className="border-border/80 bg-card/95 shadow-none">
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <CardHeader className="space-y-3">
         <div className="space-y-2">
           <CardTitle className="text-lg">Key 池</CardTitle>
           <CardDescription>
             同端点下的每个 Key 都可以保留自己绑定的模型范围，适合 NewAPI 一类按 Key 分组的网关。
           </CardDescription>
         </div>
-        <Button type="button" variant="outline" onClick={onAddKey} className="min-h-11">
-          <Plus className="mr-2 h-4 w-4" />
-          添加 Key
-        </Button>
+        <div>
+          <Button type="button" variant="outline" onClick={onAddKey} className="min-h-11 w-full sm:w-auto">
+            <Plus className="mr-2 h-4 w-4" />
+            添加 Key
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <AnimatePresence initial={false}>
@@ -54,24 +56,22 @@ export function SystemConnectionKeyPool({
               transition={{ duration: 0.2, ease: "easeOut" }}
               className="rounded-[26px] border border-border/75 bg-[hsl(var(--surface))/0.38] p-4 sm:p-5"
             >
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2">
-                    <div className="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
-                      <KeyRound className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">{key.apiKeyLabel || `Key ${index + 1}`}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {key.hasStoredApiKey
-                          ? `已保存 ${key.apiKeyMasked || "密钥摘要"}，留空表示继续沿用`
-                          : "新条目需要填写真实 API Key"}
-                      </div>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
+                    <KeyRound className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{key.apiKeyLabel || `Key ${index + 1}`}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {key.hasStoredApiKey
+                        ? `已保存 ${key.apiKeyMasked || "密钥摘要"}，留空表示继续沿用`
+                        : "新条目需要填写真实 API Key"}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <label className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-sm sm:justify-start">
                     <Checkbox
                       checked={key.enable}
                       onCheckedChange={(checked) =>
@@ -87,53 +87,51 @@ export function SystemConnectionKeyPool({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="min-h-11 px-3 text-destructive hover:text-destructive"
+                    className="min-h-11 w-full justify-center px-3 text-destructive hover:text-destructive sm:w-auto"
                     onClick={() => onRemoveKey(key.clientId)}
                     aria-label={`删除 ${key.apiKeyLabel || `Key ${index + 1}`}`}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="mr-2 h-4 w-4 sm:mr-0" />
+                    <span className="sm:hidden">删除此 Key</span>
                   </Button>
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
-                    <Input
-                      id={`key-label-${key.clientId}`}
-                      value={key.apiKeyLabel}
-                      onChange={(event) =>
-                        onUpdateKey(key.clientId, (current) => ({
-                          ...current,
-                          apiKeyLabel: event.target.value,
-                        }))
-                      }
-                      placeholder={`Key ${index + 1}`}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`key-secret-${key.clientId}`}>API Key</Label>
-                    <Input
-                      id={`key-secret-${key.clientId}`}
-                      type="password"
-                      value={key.apiKey}
-                      onChange={(event) =>
-                        onUpdateKey(key.clientId, (current) => ({
-                          ...current,
-                          apiKey: event.target.value,
-                        }))
-                      }
-                      placeholder={key.hasStoredApiKey ? "留空则继续使用已保存的 Key" : "sk-..."}
-                    />
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      {key.hasStoredApiKey
-                        ? `当前已保存摘要：${key.apiKeyMasked || "已保存"}`
-                        : "新建时建议立即写明用途，例如 team-a、group-1、images。"}
-                    </p>
-                  </div>
+              <div className="mt-5 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
+                  <Input
+                    id={`key-label-${key.clientId}`}
+                    value={key.apiKeyLabel}
+                    onChange={(event) =>
+                      onUpdateKey(key.clientId, (current) => ({
+                        ...current,
+                        apiKeyLabel: event.target.value,
+                      }))
+                    }
+                    placeholder={`Key ${index + 1}`}
+                  />
                 </div>
-
+                <div className="space-y-2">
+                  <Label htmlFor={`key-secret-${key.clientId}`}>API Key</Label>
+                  <Input
+                    id={`key-secret-${key.clientId}`}
+                    type="password"
+                    value={key.apiKey}
+                    onChange={(event) =>
+                      onUpdateKey(key.clientId, (current) => ({
+                        ...current,
+                        apiKey: event.target.value,
+                      }))
+                    }
+                    placeholder={key.hasStoredApiKey ? "留空则继续使用已保存的 Key" : "sk-..."}
+                  />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {key.hasStoredApiKey
+                      ? `当前已保存摘要：${key.apiKeyMasked || "已保存"}`
+                      : "新建时建议立即写明用途，例如 team-a、group-1、images。"}
+                  </p>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor={`key-models-${key.clientId}`}>Model IDs</Label>
                   <Textarea

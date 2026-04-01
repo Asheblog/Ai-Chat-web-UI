@@ -18,7 +18,7 @@ export function SystemConnectionsHero({
 }) {
   return (
     <div className="border-b border-border/70 px-6 py-6 sm:px-8">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)] xl:items-start">
+      <div className="space-y-5">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             <Sparkles className="h-3.5 w-3.5" />
@@ -32,7 +32,7 @@ export function SystemConnectionsHero({
               <div className="space-y-2">
                 <h2 className="text-2xl font-semibold tracking-tight">把共享端点和独立 Key 放在同一个工作台里维护</h2>
                 <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                  左侧专注填写共享连接参数与 Key 池，右侧同步展示草稿摘要和验证结果。减少大段空白、来回滚动和横向挤压。
+                  按顺序填写共享连接参数、Key 池和验证结果，优先保证可读性，不再强行把主要内容并排塞进同一行。
                 </p>
               </div>
             </div>
@@ -43,7 +43,7 @@ export function SystemConnectionsHero({
             </div>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <StatTile label="端点组" value={connectionCount} />
           <StatTile label="已配置 Key" value={totalConfiguredKeys} />
           <StatTile label="启用中" value={enabledConfiguredKeys} />
@@ -154,7 +154,7 @@ export function EditorSummary({
           <div className="text-xs text-muted-foreground">端点</div>
           <div className="mt-2 break-all font-medium text-foreground">{endpoint || "尚未填写"}</div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-3">
           <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
             <div className="text-xs text-muted-foreground">Provider</div>
             <div className="mt-1.5 font-medium">{provider}</div>
@@ -169,9 +169,7 @@ export function EditorSummary({
           </div>
           <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
             <div className="text-xs text-muted-foreground">Key 数量</div>
-            <div className="mt-1.5 font-medium">
-              {enabledKeyCount}/{keyCount} 已启用
-            </div>
+            <div className="mt-1.5 font-medium">{enabledKeyCount}/{keyCount} 已启用</div>
           </div>
         </div>
         <div className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
