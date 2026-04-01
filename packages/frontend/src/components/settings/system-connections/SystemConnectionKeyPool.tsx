@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ChevronDown, KeyRound, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -54,21 +54,15 @@ export function SystemConnectionKeyPool({
 
   return (
     <Card className="border-border/80 bg-card/95 shadow-none">
-      <CardHeader className="space-y-3">
-        <div className="space-y-2">
-          <CardTitle className="text-lg">Key 池</CardTitle>
-          <CardDescription>
-            同端点下的每个 Key 都可以保留自己绑定的模型范围，适合 NewAPI 一类按 Key 分组的网关。
-          </CardDescription>
-        </div>
-        <div>
-          <Button type="button" variant="outline" onClick={onAddKey} className="min-h-11 w-full sm:w-auto">
+      <CardContent className="space-y-3 pt-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-sm font-semibold tracking-tight">Key 池</h3>
+          <Button type="button" variant="outline" onClick={onAddKey} className="min-h-10 w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             添加 Key
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+
         <AnimatePresence initial={false}>
           {keys.map((key, index) => {
             const expanded = expandedKeyId === key.clientId

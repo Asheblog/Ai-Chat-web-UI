@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { VerifyConnectionResult } from "@/services/system-connections"
 import { cn } from "@/lib/utils"
@@ -40,32 +40,24 @@ export function SystemConnectionVerifyPanel({
 
   return (
     <Card className="border-border/80 bg-card/95 shadow-none">
-      <CardHeader className="space-y-2">
-        <CardTitle className="text-lg">验证结果</CardTitle>
-        <CardDescription>
-          每个 Key 单独返回状态、错误信息和模型列表，不再只有一个总结果。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 pt-5">
+        <h3 className="text-sm font-semibold tracking-tight">验证结果</h3>
         {!verifyResult ? (
-          <div className="rounded-2xl border border-dashed border-border/70 bg-[hsl(var(--surface))/0.32] px-4 py-6 text-sm leading-6 text-muted-foreground">
-            还没有验证结果。点击“并发验证全部 Key”后，这里会展示每个 Key 的成功/失败、告警和模型数。
+          <div className="rounded-2xl border border-dashed border-border/70 bg-[hsl(var(--surface))/0.26] px-4 py-4 text-sm text-muted-foreground">
+            还没有验证结果。
           </div>
         ) : (
           <>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] px-4 py-3">
-                <div className="text-xs text-muted-foreground">成功</div>
-                <div className="mt-1 text-xl font-semibold">{verifyResult.successCount}</div>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] px-4 py-3">
-                <div className="text-xs text-muted-foreground">失败</div>
-                <div className="mt-1 text-xl font-semibold">{verifyResult.failureCount}</div>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] px-4 py-3">
-                <div className="text-xs text-muted-foreground">总模型数</div>
-                <div className="mt-1 text-xl font-semibold">{verifyResult.totalModels}</div>
-              </div>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
+                成功 {verifyResult.successCount}
+              </span>
+              <span className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
+                失败 {verifyResult.failureCount}
+              </span>
+              <span className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
+                模型 {verifyResult.totalModels}
+              </span>
             </div>
 
             <div className="space-y-3">
