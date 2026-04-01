@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
+import { ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -18,6 +19,24 @@ export function SystemConnectionVerifyPanel({
   reducedMotion,
 }: SystemConnectionVerifyPanelProps) {
   const [expandedVerifyKey, setExpandedVerifyKey] = useState<string | null>(null)
+  const resultKeys = useMemo(
+    () =>
+      (verifyResult?.results ?? []).map((item, index) => ({
+        key: String(item.id || `${item.apiKeyLabel || "key"}-${index}`),
+        item,
+      })),
+    [verifyResult],
+  )
+
+  useEffect(() => {
+    if (!verifyResult) {
+      setExpandedVerifyKey(null)
+      return
+    }
+
+    const firstFailure = resultKeys.find(({ item }) => !item.success)
+    setExpandedVerifyKey(firstFailure?.key ?? null)
+  }, [resultKeys, verifyResult])
 
   return (
     <Card className="border-border/80 bg-card/95 shadow-none">
@@ -50,8 +69,7 @@ export function SystemConnectionVerifyPanel({
             </div>
 
             <div className="space-y-3">
-              {verifyResult.results.map((item, index) => {
-                const resultKey = String(item.id || `${item.apiKeyLabel || "key"}-${index}`)
+              {resultKeys.map(({ item, key: resultKey }, index) => {
                 const expanded = expandedVerifyKey === resultKey
                 return (
                   <div key={resultKey} className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.32]">
@@ -77,7 +95,10 @@ export function SystemConnectionVerifyPanel({
                           {item.success ? `模型 ${item.models.length} 个${item.warning ? "，带告警" : ""}` : item.error || "验证失败"}
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">{expanded ? "收起" : "展开"}</div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span>{expanded ? "收起" : item.success ? "查看" : "查看详情"}</span>
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} />
+                      </div>
                     </button>
 
                     <AnimatePresence initial={false}>
@@ -89,15 +110,26 @@ export function SystemConnectionVerifyPanel({
                           transition={{ duration: 0.2, ease: "easeOut" }}
                           className="overflow-hidden border-t border-border/70"
                         >
-                          {item.warning ? (
-                            <div className="px-4 pt-4 text-sm text-amber-600">{item.warning}</div>
-                          ) : null}
-                          {item.models.length === 0 ? (
+                          {!item.success ? (
+                            <div className="space-y-3 px-4 py-4">
+                              <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
+                                <div className="text-xs font-medium text-destructive">错误详情</div>
+                                <div className="mt-2 break-words text-sm text-foreground">{item.error || "验证失败"}</div>
+                              </div>
+                              {item.warning ? (
+                                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
+                                  {item.warning}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : item.models.length === 0 ? (
                             <div className="px-4 py-4 text-sm text-muted-foreground">
+                              {item.warning ? <div className="mb-3 text-amber-600">{item.warning}</div> : null}
                               没有返回模型列表。若上游不支持 <span className="font-mono">/models</span>，请直接在该 Key 下填写 Model IDs。
                             </div>
                           ) : (
                             <div className="overflow-auto px-4 py-4">
+                              {item.warning ? <div className="mb-3 text-sm text-amber-600">{item.warning}</div> : null}
                               <Table className="min-w-[720px]">
                                 <TableHeader>
                                   <TableRow>
