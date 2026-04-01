@@ -69,7 +69,7 @@ export function SystemConnectionGroupList({
               initial={reducedMotion ? false : { opacity: 0, y: 12 }}
               animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
               transition={{ duration: 0.22, delay: reducedMotion ? 0 : index * 0.03, ease: "easeOut" }}
-              className="rounded-[28px] border border-border/70 bg-card/92 p-5 shadow-[0_18px_48px_hsl(var(--background)/0.18)]"
+              className="rounded-[28px] border border-border/80 bg-card/95 p-5 shadow-none"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-3">
@@ -136,7 +136,7 @@ export function SystemConnectionGroupList({
                 {group.apiKeys.map((key) => (
                   <div
                     key={key.id || `${group.id}-${key.apiKeyLabel}`}
-                    className="grid gap-3 rounded-2xl border border-border/70 bg-[hsl(var(--background))/0.62] px-4 py-4 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)_auto]"
+                    className="grid gap-3 rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.34] px-4 py-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)_auto]"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 text-sm font-medium">

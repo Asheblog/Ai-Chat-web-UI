@@ -29,7 +29,7 @@ export function SystemConnectionKeyPool({
   onUpdateKey,
 }: SystemConnectionKeyPoolProps) {
   return (
-    <Card className="border-border/70 bg-background/55 shadow-none">
+    <Card className="border-border/80 bg-card/95 shadow-none">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
           <CardTitle className="text-lg">Key 池</CardTitle>
@@ -52,7 +52,7 @@ export function SystemConnectionKeyPool({
               animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
               exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="rounded-3xl border border-border/70 bg-[hsl(var(--background))/0.72] p-4"
+              className="rounded-[26px] border border-border/75 bg-[hsl(var(--surface))/0.38] p-4 sm:p-5"
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
@@ -71,7 +71,7 @@ export function SystemConnectionKeyPool({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="inline-flex items-center gap-2 rounded-full border border-border/70 px-3 py-1.5 text-sm">
+                  <label className="inline-flex min-h-10 items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-sm">
                     <Checkbox
                       checked={key.enable}
                       onCheckedChange={(checked) =>
@@ -96,7 +96,7 @@ export function SystemConnectionKeyPool({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
