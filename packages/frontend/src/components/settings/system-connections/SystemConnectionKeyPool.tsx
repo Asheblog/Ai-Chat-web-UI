@@ -1,13 +1,15 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { KeyRound, Trash2, Plus } from "lucide-react"
+import { ChevronDown, KeyRound, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 import type { ConnectionKeyFormState } from "./use-system-connections"
 
 type SystemConnectionKeyPoolProps = {
@@ -28,6 +30,28 @@ export function SystemConnectionKeyPool({
   onRemoveKey,
   onUpdateKey,
 }: SystemConnectionKeyPoolProps) {
+  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(keys[0]?.clientId ?? null)
+  const previousKeyCountRef = useRef(keys.length)
+
+  useEffect(() => {
+    const firstKeyId = keys[0]?.clientId ?? null
+    const latestKeyId = keys[keys.length - 1]?.clientId ?? null
+
+    if (keys.length === 0) {
+      setExpandedKeyId(null)
+      previousKeyCountRef.current = 0
+      return
+    }
+
+    if (keys.length > previousKeyCountRef.current) {
+      setExpandedKeyId(latestKeyId)
+    } else if (expandedKeyId && !keys.some((key) => key.clientId === expandedKeyId)) {
+      setExpandedKeyId(firstKeyId)
+    }
+
+    previousKeyCountRef.current = keys.length
+  }, [expandedKeyId, keys])
+
   return (
     <Card className="border-border/80 bg-card/95 shadow-none">
       <CardHeader className="space-y-3">
@@ -46,113 +70,152 @@ export function SystemConnectionKeyPool({
       </CardHeader>
       <CardContent className="space-y-4">
         <AnimatePresence initial={false}>
-          {keys.map((key, index) => (
-            <motion.div
-              key={key.clientId}
-              layout={!reducedMotion}
-              initial={reducedMotion ? false : { opacity: 0, y: 10 }}
-              animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-              exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="rounded-[26px] border border-border/75 bg-[hsl(var(--surface))/0.38] p-4 sm:p-5"
-            >
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
-                    <KeyRound className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{key.apiKeyLabel || `Key ${index + 1}`}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {key.hasStoredApiKey
-                        ? `已保存 ${key.apiKeyMasked || "密钥摘要"}，留空表示继续沿用`
-                        : "新条目需要填写真实 API Key"}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-sm sm:justify-start">
-                    <Checkbox
-                      checked={key.enable}
-                      onCheckedChange={(checked) =>
-                        onUpdateKey(key.clientId, (current) => ({
-                          ...current,
-                          enable: Boolean(checked),
-                        }))
-                      }
-                    />
-                    <span>启用</span>
-                  </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-11 w-full justify-center px-3 text-destructive hover:text-destructive sm:w-auto"
-                    onClick={() => onRemoveKey(key.clientId)}
-                    aria-label={`删除 ${key.apiKeyLabel || `Key ${index + 1}`}`}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4 sm:mr-0" />
-                    <span className="sm:hidden">删除此 Key</span>
-                  </Button>
-                </div>
-              </div>
+          {keys.map((key, index) => {
+            const expanded = expandedKeyId === key.clientId
+            const modelCount = key.modelIds
+              .split(/[\n,]/)
+              .map((item) => item.trim())
+              .filter(Boolean).length
 
-              <div className="mt-5 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
-                  <Input
-                    id={`key-label-${key.clientId}`}
-                    value={key.apiKeyLabel}
-                    onChange={(event) =>
-                      onUpdateKey(key.clientId, (current) => ({
-                        ...current,
-                        apiKeyLabel: event.target.value,
-                      }))
-                    }
-                    placeholder={`Key ${index + 1}`}
-                  />
+            return (
+              <motion.div
+                key={key.clientId}
+                layout={!reducedMotion}
+                initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+                animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+                exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="rounded-[26px] border border-border/75 bg-[hsl(var(--surface))/0.38] p-4 sm:p-5"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedKeyId(expanded ? null : key.clientId)}
+                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-left"
+                  >
+                    <div className="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{key.apiKeyLabel || `Key ${index + 1}`}</span>
+                        <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] text-muted-foreground">
+                          {key.enable ? "启用中" : "已停用"}
+                        </span>
+                        <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] text-muted-foreground">
+                          {modelCount > 0 ? `${modelCount} 个模型` : "自动枚举模型"}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {key.hasStoredApiKey
+                          ? `已保存 ${key.apiKeyMasked || "密钥摘要"}，留空表示继续沿用`
+                          : "新条目需要填写真实 API Key"}
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                        expanded && "rotate-180",
+                      )}
+                    />
+                  </button>
+
+                  <div className="flex flex-col gap-2 sm:w-auto sm:min-w-[140px]">
+                    <label className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-sm">
+                      <Checkbox
+                        checked={key.enable}
+                        onCheckedChange={(checked) =>
+                          onUpdateKey(key.clientId, (current) => ({
+                            ...current,
+                            enable: Boolean(checked),
+                          }))
+                        }
+                      />
+                      <span>启用</span>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-11 w-full justify-center px-3 text-destructive hover:text-destructive"
+                      onClick={() => onRemoveKey(key.clientId)}
+                      aria-label={`删除 ${key.apiKeyLabel || `Key ${index + 1}`}`}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      删除
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`key-secret-${key.clientId}`}>API Key</Label>
-                  <Input
-                    id={`key-secret-${key.clientId}`}
-                    type="password"
-                    value={key.apiKey}
-                    onChange={(event) =>
-                      onUpdateKey(key.clientId, (current) => ({
-                        ...current,
-                        apiKey: event.target.value,
-                      }))
-                    }
-                    placeholder={key.hasStoredApiKey ? "留空则继续使用已保存的 Key" : "sk-..."}
-                  />
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    {key.hasStoredApiKey
-                      ? `当前已保存摘要：${key.apiKeyMasked || "已保存"}`
-                      : "新建时建议立即写明用途，例如 team-a、group-1、images。"}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`key-models-${key.clientId}`}>Model IDs</Label>
-                  <Textarea
-                    id={`key-models-${key.clientId}`}
-                    value={key.modelIds}
-                    onChange={(event) =>
-                      onUpdateKey(key.clientId, (current) => ({
-                        ...current,
-                        modelIds: event.target.value,
-                      }))
-                    }
-                    placeholder={"gpt-4o-mini\ngpt-4.1-mini\ntext-embedding-3-small"}
-                    className="min-h-[116px]"
-                  />
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    支持逗号或换行分隔。留空时会尝试从这个 Key 对应的上游接口自动枚举模型。
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          ))}
+
+                <AnimatePresence initial={false}>
+                  {expanded ? (
+                    <motion.div
+                      initial={reducedMotion ? false : { opacity: 0, height: 0 }}
+                      animate={reducedMotion ? undefined : { opacity: 1, height: "auto" }}
+                      exit={reducedMotion ? undefined : { opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-5 space-y-4 border-t border-border/60 pt-5">
+                        <div className="space-y-2">
+                          <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
+                          <Input
+                            id={`key-label-${key.clientId}`}
+                            value={key.apiKeyLabel}
+                            onChange={(event) =>
+                              onUpdateKey(key.clientId, (current) => ({
+                                ...current,
+                                apiKeyLabel: event.target.value,
+                              }))
+                            }
+                            placeholder={`Key ${index + 1}`}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`key-secret-${key.clientId}`}>API Key</Label>
+                          <Input
+                            id={`key-secret-${key.clientId}`}
+                            type="password"
+                            value={key.apiKey}
+                            onChange={(event) =>
+                              onUpdateKey(key.clientId, (current) => ({
+                                ...current,
+                                apiKey: event.target.value,
+                              }))
+                            }
+                            placeholder={key.hasStoredApiKey ? "留空则继续使用已保存的 Key" : "sk-..."}
+                          />
+                          <p className="text-xs leading-5 text-muted-foreground">
+                            {key.hasStoredApiKey
+                              ? `当前已保存摘要：${key.apiKeyMasked || "已保存"}`
+                              : "新建时建议立即写明用途，例如 team-a、group-1、images。"}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`key-models-${key.clientId}`}>Model IDs</Label>
+                          <Textarea
+                            id={`key-models-${key.clientId}`}
+                            value={key.modelIds}
+                            onChange={(event) =>
+                              onUpdateKey(key.clientId, (current) => ({
+                                ...current,
+                                modelIds: event.target.value,
+                              }))
+                            }
+                            placeholder={"gpt-4o-mini\ngpt-4.1-mini\ntext-embedding-3-small"}
+                            className="min-h-[116px]"
+                          />
+                          <p className="text-xs leading-5 text-muted-foreground">
+                            支持逗号或换行分隔。留空时会尝试从这个 Key 对应的上游接口自动枚举模型。
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </motion.div>
+            )
+          })}
         </AnimatePresence>
       </CardContent>
     </Card>

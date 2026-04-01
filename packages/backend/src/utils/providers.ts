@@ -180,11 +180,24 @@ export async function buildHeaders(provider: ProviderType, authType: AuthType, a
 
 const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
 
-const ensureJsonContentType = (res: { headers: { get: (name: string) => string | null } }, context: string) => {
+const ensureJsonContentType = async (
+  res: { headers: { get: (name: string) => string | null }; text: () => Promise<string> },
+  context: string,
+) => {
   const contentType = res.headers.get('content-type') || ''
-  if (!contentType.toLowerCase().includes('application/json')) {
-    throw new Error(`${context}: expected JSON response, received '${contentType || 'unknown'}'`)
+  if (/\bjson\b/i.test(contentType)) return
+
+  const body = await res.text().catch(() => '')
+  if (body.trim()) {
+    try {
+      JSON.parse(body)
+      return
+    } catch {
+      // ignore and throw the normalized error below
+    }
   }
+
+  throw new Error(`${context}: expected JSON response, received '${contentType || 'unknown'}'`)
 }
 
 const normalizeHttpBaseUrl = (baseUrl: string, label: string): string => {
@@ -232,7 +245,7 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
             }),
           })
           if (!probe.ok) throw new Error(`OpenAI（Responses）verify failed: ${probe.status}`)
-          ensureJsonContentType(probe, 'OpenAI（Responses）verify')
+          await ensureJsonContentType(probe, 'OpenAI（Responses）verify')
           return
         }
         const hint = (() => {
@@ -245,13 +258,13 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
         })()
         throw new Error(`OpenAI verify failed: ${res.status}${hint}`)
       }
-      ensureJsonContentType(res, 'OpenAI verify')
+      await ensureJsonContentType(res, 'OpenAI verify')
     } else if (cfg.provider === 'azure_openai') {
       const v = cfg.azureApiVersion || '2024-02-15-preview'
       const base = trimTrailingSlashes(cfg.baseUrl)
       const res = await fetchImpl(`${base}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Azure OpenAI verify failed: ${res.status}`)
-      ensureJsonContentType(res, 'Azure OpenAI verify')
+      await ensureJsonContentType(res, 'Azure OpenAI verify')
     } else if (cfg.provider === 'ollama') {
       const base = trimTrailingSlashes(cfg.baseUrl)
       const res = await fetchImpl(`${base}/api/version`, { headers, signal: ctrl.signal })
@@ -260,7 +273,7 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
       const base = trimTrailingSlashes(cfg.baseUrl)
       const res = await fetchImpl(`${base}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) throw new Error(`Google Generative verify failed: ${res.status}`)
-      ensureJsonContentType(res, 'Google Generative AI verify')
+      await ensureJsonContentType(res, 'Google Generative AI verify')
     } else {
       throw new Error('Unsupported provider')
     }
