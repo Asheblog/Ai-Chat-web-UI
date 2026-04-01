@@ -49,7 +49,8 @@ import {
   buildAgentUrlReaderConfig,
   buildAgentWorkspaceToolConfig,
 } from './agent-tool-config';
-import type { ProviderType } from '../../utils/providers';
+import { computeCapabilities, type ProviderType } from '../../utils/providers';
+import { parseCapabilityEnvelope } from '../../utils/capabilities';
 import { createSkillRegistry } from '../skills/skill-registry';
 import type { RequestedSkillsPayload } from '../skills/types';
 
@@ -66,6 +67,42 @@ export {
 };
 
 type ChatSessionWithConnection = ChatSession & { connection: Connection | null };
+
+const resolveModelCapabilities = async (session: ChatSessionWithConnection) => {
+  const connectionId = session.connection?.id
+  const rawModelId = session.modelRawId || ''
+  if (!connectionId || !rawModelId) {
+    return computeCapabilities(rawModelId, [])
+  }
+
+  try {
+    const catalog = await prisma.modelCatalog.findFirst({
+      where: {
+        connectionId,
+        rawId: rawModelId,
+      },
+      select: {
+        capabilitiesJson: true,
+        tagsJson: true,
+      },
+    })
+    const parsed = parseCapabilityEnvelope(catalog?.capabilitiesJson)
+    if (parsed?.flags) {
+      return parsed.flags
+    }
+    const tags = (() => {
+      try {
+        const value = JSON.parse(catalog?.tagsJson || '[]')
+        return Array.isArray(value) ? value : []
+      } catch {
+        return []
+      }
+    })()
+    return computeCapabilities(rawModelId, tags)
+  } catch {
+    return computeCapabilities(rawModelId, [])
+  }
+}
 
 export type AgentResponseParams = {
   session: ChatSessionWithConnection;
@@ -525,6 +562,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       });
 
       const workingMessages = JSON.parse(JSON.stringify(messagesPayload));
+      const modelCapabilities = await resolveModelCapabilities(session);
       const knowledgeBaseIds = params.knowledgeBaseIds || [];
       const toolRegistry = await createSkillRegistry({
         requestedSkills,
@@ -771,6 +809,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 actorIdentifier,
                 actorUserId: actorUserId ?? null,
                 messageId: activeAssistantMessageId,
+                provider,
+                connectionId: session.connection?.id ?? null,
+                modelRawId: session.modelRawId ?? null,
+                modelCapabilities,
                 emitReasoning,
                 sendToolEvent,
                 sendStreamEvent,

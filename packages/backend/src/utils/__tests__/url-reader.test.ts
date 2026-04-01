@@ -157,6 +157,66 @@ describe('readUrlContent error classification', () => {
     expect(formatted).toContain('https://example.com/images/a.png')
   })
 
+  test('supports direct image URL responses', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(Buffer.from('fake-image-binary'), {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'content-type': 'image/png',
+          'content-length': '17',
+        },
+      })
+    ) as typeof fetch
+
+    const result = await readUrlContent('https://example.com/image.png')
+
+    expect(result.error).toBeUndefined()
+    expect(result.resourceType).toBe('image')
+    expect(result.contentType).toBe('image/png')
+    expect(result.contentLength).toBe(17)
+    expect(result.leadImageUrl).toBe('https://example.com/image.png')
+    expect(result.images?.[0]?.source).toBe('direct')
+  })
+
+  test('filters private image URLs extracted from html', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(
+        `
+        <html>
+          <head>
+            <title>Unsafe Images</title>
+            <meta property="og:image" content="http://127.0.0.1/lead.png" />
+          </head>
+          <body>
+            <main>
+              <p>这段正文足够长，确保页面会被成功提取而不是提前失败。</p>
+              <p>第二段补充内容，避免正文长度不足触发空内容逻辑。</p>
+              <img src="http://localhost/a.png" alt="内网图" />
+              <img src="https://cdn.example.com/public.png" alt="公网图" />
+            </main>
+          </body>
+        </html>
+        `,
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        },
+      )
+    ) as typeof fetch
+
+    const result = await readUrlContent('https://example.com/article')
+
+    expect(result.error).toBeUndefined()
+    expect(result.leadImageUrl).toBe('https://cdn.example.com/public.png')
+    expect(result.images).toEqual([
+      expect.objectContaining({
+        url: 'https://cdn.example.com/public.png',
+      }),
+    ])
+  })
+
   test('does not treat 172.2.x.x as private network and allows fetching', async () => {
     global.fetch = jest.fn(async () =>
       new Response(

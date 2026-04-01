@@ -31,6 +31,9 @@ export interface UrlReadResult {
   url: string
   content: string
   textContent: string
+  resourceType?: 'page' | 'image' | 'text'
+  contentType?: string
+  contentLength?: number
   excerpt?: string
   byline?: string
   siteName?: string
@@ -56,7 +59,7 @@ export interface UrlReadImage {
   alt?: string
   width?: number
   height?: number
-  source: 'meta' | 'content' | 'crawler'
+  source: 'meta' | 'content' | 'crawler' | 'direct'
 }
 
 const DEFAULT_TIMEOUT = 30000
@@ -67,6 +70,7 @@ const CRAWLER_USER_AGENT =
 const CRAWLER_MIN_TEXT_LENGTH = 40
 const MAX_EXTRACTED_IMAGES = 8
 const MAX_HTML_PARSE_LENGTH = 1024 * 1024
+const MAX_FETCH_REDIRECTS = 5
 const JS_CHALLENGE_PATTERNS: RegExp[] = [
   /cf-chl/i,
   /cloudflare/i,
@@ -90,6 +94,8 @@ interface DomLikeElement {
   querySelectorAll(selector: string): ArrayLike<DomLikeElement> | Iterable<DomLikeElement>
   remove?: () => void
 }
+
+const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308])
 
 const URL_TRANSFORM_RULES: UrlTransformRule[] = [
   {
@@ -176,7 +182,7 @@ const trimHtmlForParsing = (html: string): string => {
 /**
  * 验证 URL 格式和安全性
  */
-function validateUrl(url: string): string {
+export function validatePublicHttpUrl(url: string): string {
   let normalized = url.trim()
 
   if (!/^https?:\/\//i.test(normalized)) {
@@ -282,6 +288,11 @@ const isTextLikeContentType = (contentType: string): boolean => {
   )
 }
 
+const isImageContentType = (contentType: string): boolean => {
+  const normalized = (contentType || '').toLowerCase()
+  return normalized.startsWith('image/')
+}
+
 const buildPrimaryHeaders = (userAgent: string): Record<string, string> => ({
   'User-Agent': userAgent,
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -325,15 +336,35 @@ const extractSrcFromSrcSet = (value: string | null): string | null => {
   return url || null
 }
 
+const sanitizeContentType = (contentType: string | null | undefined): string | undefined => {
+  const normalized = (contentType || '').trim().toLowerCase()
+  if (!normalized) return undefined
+  return normalized.split(';')[0]?.trim() || undefined
+}
+
 const normalizeImageUrl = (value: string | null | undefined, baseUrl: string): string | null => {
   if (!value) return null
   const raw = value.trim()
   if (!raw) return null
   if (/^data:image\//i.test(raw)) return raw
-  if (/^https?:\/\//i.test(raw)) return raw
-  if (raw.startsWith('//')) return `https:${raw}`
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      return validatePublicHttpUrl(raw)
+    } catch {
+      return null
+    }
+  }
+  if (raw.startsWith('//')) {
+    try {
+      return validatePublicHttpUrl(`https:${raw}`)
+    } catch {
+      return null
+    }
+  }
   try {
-    return new URL(raw, baseUrl).toString()
+    const normalized = new URL(raw, baseUrl).toString()
+    validatePublicHttpUrl(normalized)
+    return normalized
   } catch {
     return null
   }
@@ -347,6 +378,44 @@ const isLikelyDecorativeImage = (url: string): boolean => {
     normalized.includes('/logo') ||
     normalized.includes('icon')
   )
+}
+
+const resolveImageDimensionsFromResponse = (response: Response): { width?: number; height?: number } => {
+  const widthHeader = response.headers.get('x-img-width') || response.headers.get('width')
+  const heightHeader = response.headers.get('x-img-height') || response.headers.get('height')
+  const width = parsePositiveInt(widthHeader)
+  const height = parsePositiveInt(heightHeader)
+  return {
+    ...(width ? { width } : {}),
+    ...(height ? { height } : {}),
+  }
+}
+
+const buildDirectImageResult = (
+  response: Response,
+  validatedUrl: string,
+): UrlReadResult => {
+  const contentType = sanitizeContentType(response.headers.get('content-type'))
+  const contentLengthHeader = response.headers.get('content-length')
+  const contentLength = parsePositiveInt(contentLengthHeader)
+  const dims = resolveImageDimensionsFromResponse(response)
+  return {
+    title: '',
+    url: validatedUrl,
+    content: '',
+    textContent: '',
+    resourceType: 'image',
+    contentType,
+    ...(typeof contentLength === 'number' ? { contentLength } : {}),
+    leadImageUrl: validatedUrl,
+    images: [
+      {
+        url: validatedUrl,
+        source: 'direct',
+        ...dims,
+      },
+    ],
+  }
 }
 
 const collectImagesFromDocument = (
@@ -427,15 +496,45 @@ async function fetchPageBody(
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithValidatedRedirects(url, {
       headers,
       signal: controller.signal,
-      redirect: 'follow',
+      redirect: 'manual',
     })
-    const body = await response.text()
+    const contentType = response.headers.get('content-type') || ''
+    const shouldReadText = !response.ok || isHtmlContentType(contentType) || isTextLikeContentType(contentType)
+    const body = shouldReadText ? await response.text() : ''
     return { response, body }
   } finally {
     clearTimeout(timeoutId)
+  }
+}
+
+export async function fetchWithValidatedRedirects(
+  url: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  let currentUrl = validatePublicHttpUrl(url)
+  let redirects = 0
+
+  while (true) {
+    const response = await fetchImpl(currentUrl, {
+      ...init,
+      redirect: 'manual',
+    })
+    if (!REDIRECT_STATUS_CODES.has(response.status)) {
+      return response
+    }
+    const location = response.headers.get('location')
+    if (!location) {
+      return response
+    }
+    redirects += 1
+    if (redirects > MAX_FETCH_REDIRECTS) {
+      throw new Error(`Too many redirects while fetching URL: ${url}`)
+    }
+    currentUrl = validatePublicHttpUrl(new URL(location, currentUrl).toString())
   }
 }
 
@@ -444,6 +543,7 @@ const buildCrawlerResultFromText = (
   url: string,
   maxContentLength: number,
   title = '',
+  contentType?: string,
 ): UrlReadResult | null => {
   const normalized = normalizeTextContent(text, maxContentLength)
   if (normalized.length < CRAWLER_MIN_TEXT_LENGTH) return null
@@ -452,6 +552,8 @@ const buildCrawlerResultFromText = (
     url,
     content: '',
     textContent: normalized,
+    resourceType: 'text',
+    ...(contentType ? { contentType } : {}),
     excerpt: buildExcerpt(normalized),
     wordCount: countWords(normalized),
     fallbackUsed: 'crawler',
@@ -570,6 +672,8 @@ const extractCrawlerResultFromHtml = (
       url,
       content: bestHtml,
       textContent: bestText,
+      resourceType: 'page',
+      contentType: 'text/html',
       excerpt: buildExcerpt(bestText),
       wordCount: countWords(bestText),
       fallbackUsed: 'crawler',
@@ -610,6 +714,8 @@ const extractReadabilityResultFromHtml = (
       url,
       content: article.content || '',
       textContent,
+      resourceType: 'page',
+      contentType: 'text/html',
       excerpt: article.excerpt || buildExcerpt(textContent),
       byline: article.byline || undefined,
       siteName: article.siteName || undefined,
@@ -662,7 +768,7 @@ export async function readUrlContent(
   const userAgent = opts.userAgent || DEFAULT_USER_AGENT
 
   try {
-    validatedUrl = validateUrl(url)
+    validatedUrl = validatePublicHttpUrl(url)
     const transformed = applyUrlTransformRules(validatedUrl)
     fetchUrl = transformed.fetchUrl
 
@@ -722,9 +828,23 @@ export async function readUrlContent(
     }
 
     const contentType = response.headers.get('content-type') || ''
+    const normalizedContentType = sanitizeContentType(contentType)
+    if (isImageContentType(contentType)) {
+      log.debug('url reader: direct image detected', {
+        url: validatedUrl,
+        contentType: normalizedContentType,
+      })
+      return toPublicResult(buildDirectImageResult(response, validatedUrl))
+    }
     if (!isHtmlContentType(contentType)) {
       if (isTextLikeContentType(contentType)) {
-        const crawlerResult = buildCrawlerResultFromText(responseBody, validatedUrl, maxContentLength)
+        const crawlerResult = buildCrawlerResultFromText(
+          responseBody,
+          validatedUrl,
+          maxContentLength,
+          '',
+          normalizedContentType,
+        )
         if (crawlerResult) {
           log.debug('url reader: crawler fallback success for non-html text payload', {
             url: validatedUrl,
@@ -892,6 +1012,24 @@ export function formatUrlContentForModel(result: UrlReadResult): string {
     return suffix
       ? `无法读取网页 "${result.url}"：${result.error}（${suffix}）`
       : `无法读取网页 "${result.url}"：${result.error}`
+  }
+
+  if (result.resourceType === 'image') {
+    const parts: string[] = []
+    parts.push('## 图片资源')
+    parts.push(`- **URL**: ${result.url}`)
+    if (result.contentType) {
+      parts.push(`- **类型**: ${result.contentType}`)
+    }
+    if (typeof result.contentLength === 'number') {
+      parts.push(`- **大小**: ${result.contentLength} bytes`)
+    }
+    if (result.leadImageUrl) {
+      parts.push(`- **图片**: ${result.leadImageUrl}`)
+    }
+    parts.push('')
+    parts.push('该 URL 直接指向图片资源，没有可提取的网页正文。')
+    return parts.join('\n')
   }
 
   const parts: string[] = []

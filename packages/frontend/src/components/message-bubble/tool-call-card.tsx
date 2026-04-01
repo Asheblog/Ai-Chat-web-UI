@@ -125,6 +125,8 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
   const diagnosticText = resolveDiagnosticText(event)
   const eventUrl = pickString(event.details?.url)
   const eventTitle = pickString(event.details?.title) || eventUrl
+  const leadImageUrl = pickString(event.details?.leadImageUrl)
+  const imageCount = Array.isArray(event.details?.images) ? event.details.images.length : 0
   const engine = pickString(event.details?.engine)
   const language = toLanguageLabel(pickString(event.details?.queryLanguage))
   const taskType = pickString(event.details?.taskType)
@@ -164,14 +166,27 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
           参数: {argumentText}
         </p>
       )}
-      {resultText && event.status !== 'running' && event.status !== 'pending' && (
-        <p className="mt-1 break-words rounded bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
-          结果: {resultText}
-        </p>
-      )}
-      {eventUrl && (
-        <a
-          href={eventUrl}
+        {resultText && event.status !== 'running' && event.status !== 'pending' && (
+          <p className="mt-1 break-words rounded bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
+            结果: {resultText}
+          </p>
+        )}
+        {leadImageUrl && (
+          <div className="mt-2 rounded bg-background/80 p-2">
+            <img
+              src={leadImageUrl}
+              alt={eventTitle || 'read_url image'}
+              className="max-h-36 w-auto rounded border border-border/60 object-contain"
+              loading="lazy"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              主图{imageCount > 1 ? ` · 共 ${imageCount} 张` : ''}
+            </p>
+          </div>
+        )}
+        {eventUrl && (
+          <a
+            href={eventUrl}
           target="_blank"
           rel="noreferrer"
           className="mt-1 inline-block max-w-full truncate text-[11px] text-primary hover:underline"

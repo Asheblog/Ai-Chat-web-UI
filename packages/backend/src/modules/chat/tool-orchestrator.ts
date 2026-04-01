@@ -196,6 +196,7 @@ export async function runToolOrchestration(
           name: result.toolName,
           content: result.message.content,
         })
+        appendFollowupMessages(workingMessages, result.followupMessages)
       }
       toolRoundsUsed += 1
       continue
@@ -221,6 +222,7 @@ export async function runToolOrchestration(
             content: result.message.content,
           }),
         )
+        appendTextSchemaFollowupMessages(workingMessages, result.followupMessages)
       }
       toolRoundsUsed += 1
       continue
@@ -250,6 +252,7 @@ export async function runToolOrchestration(
         onUnsupportedTool: params.onUnsupportedTool,
       })
       workingMessages.push(result.message)
+      appendFollowupMessages(workingMessages, result.followupMessages)
     }
     toolRoundsUsed += 1
   }
@@ -261,6 +264,42 @@ function normalizeMaxToolRounds(raw: number): number {
     return Math.floor(raw)
   }
   return 1
+}
+
+function appendFollowupMessages(target: any[], messages?: any[]): void {
+  if (!Array.isArray(messages) || messages.length === 0) return
+  for (const message of messages) {
+    if (!message || typeof message !== 'object') continue
+    target.push(message)
+  }
+}
+
+function appendTextSchemaFollowupMessages(target: any[], messages?: any[]): void {
+  if (!Array.isArray(messages) || messages.length === 0) return
+  for (const message of messages) {
+    if (!message || typeof message !== 'object') continue
+    const role = typeof message.role === 'string' && message.role ? message.role : 'user'
+    const content = flattenFollowupMessageContent(message.content)
+    if (!content) continue
+    target.push({ role, content })
+  }
+}
+
+function flattenFollowupMessageContent(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((part: any) => {
+      if (!part || typeof part !== 'object') return ''
+      if (part.type === 'text') return typeof part.text === 'string' ? part.text : ''
+      if (part.type === 'image_url') {
+        const url = part?.image_url?.url
+        return typeof url === 'string' && url ? `[image:${url}]` : '[image]'
+      }
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
 }
 
 async function executeTurnWithFallback(params: {

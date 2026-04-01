@@ -248,4 +248,60 @@ describe('tool-orchestrator', () => {
     expect(assistantToolCallMessage).toBeDefined()
     expect(assistantToolCallMessage?.content).toBeNull()
   })
+
+  it('appends tool followup messages into next tool turn context', async () => {
+    const capturedMessages: any[][] = []
+    let requestCount = 0
+
+    const result = await runToolOrchestration({
+      provider: 'openai',
+      requestData: {},
+      initialMessages: [{ role: 'user', content: '请读图' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set<string>(['python_runner']),
+      maxIterations: 1,
+      stream: false,
+      requestTurn: async ({ messages }) => {
+        capturedMessages.push(JSON.parse(JSON.stringify(messages)))
+        requestCount += 1
+        if (requestCount === 1) {
+          return buildToolCallTurnResponse('python_runner', { code: 'print("ok")' }, 'call_followup')
+        }
+        return buildNonStreamResponseLike('done')
+      },
+      handleToolCall: async (_toolName, toolCall) => ({
+        toolCallId: toolCall.id || 'call_followup',
+        toolName: 'python_runner',
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id || 'call_followup',
+          name: 'python_runner',
+          content: JSON.stringify({ stdout: 'ok' }),
+        },
+        followupMessages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '请结合图片继续回答。' },
+              { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA=' } },
+            ],
+          },
+        ],
+      }),
+    })
+
+    expect(result.status).toBe('completed')
+    expect(capturedMessages).toHaveLength(2)
+    expect(capturedMessages[1]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: [
+            { type: 'text', text: '请结合图片继续回答。' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA=' } },
+          ],
+        }),
+      ]),
+    )
+  })
 })

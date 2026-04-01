@@ -36,6 +36,12 @@ export interface ToolCallContext {
   actorUserId?: number | null
   messageId?: number | null
   battleRunId?: number | null
+  provider?: string
+  connectionId?: number | null
+  modelRawId?: string | null
+  modelCapabilities?: {
+    vision?: boolean
+  }
   emitReasoning: (content: string, meta?: Record<string, unknown>) => void
   sendToolEvent: (payload: Record<string, unknown>) => void
   sendStreamEvent?: (payload: Record<string, unknown>) => void
@@ -53,6 +59,7 @@ export interface ToolHandlerResult {
     name: string
     content: string
   }
+  followupMessages?: any[]
 }
 
 /**

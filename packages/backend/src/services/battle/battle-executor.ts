@@ -18,6 +18,7 @@ import { safeParseJson } from './battle-serialization'
 import { createSkillRegistry } from '../../modules/skills/skill-registry'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../modules/skills/types'
 import { createLogger } from '../../utils/logger'
+import { computeCapabilities } from '../../utils/providers'
 
 export interface BattleExecutionContext {
   checkRunCancelled: () => void
@@ -622,6 +623,7 @@ export class BattleExecutor {
     })
     const toolDefinitions = toolRegistry.getToolDefinitions()
     const allowedToolNames = toolRegistry.getAllowedToolNames()
+    const modelCapabilities = computeCapabilities(prepared.providerRequest.rawModelId)
     if (toolDefinitions.length === 0) {
       throw new Error('当前 Battle 配置请求了 Skills，但未找到可执行工具')
     }
@@ -702,6 +704,10 @@ export class BattleExecutor {
           sessionId: 0,
           actorIdentifier: context.actorIdentifier || 'battle',
           actorUserId: context.actorUserId ?? null,
+          provider,
+          connectionId: prepared.baseRequestBody?.connectionId ?? context.connectionId ?? null,
+          modelRawId: prepared.providerRequest.rawModelId,
+          modelCapabilities,
           emitReasoning: () => {},
           sendToolEvent: (payload) => {
             context.sendToolEvent?.(payload)
