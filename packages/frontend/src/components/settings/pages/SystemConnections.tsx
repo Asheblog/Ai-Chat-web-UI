@@ -22,7 +22,7 @@ import { CONNECTION_CAP_KEYS, CONNECTION_CAP_LABELS } from "@/components/setting
 import { SystemConnectionKeyPool } from "@/components/settings/system-connections/SystemConnectionKeyPool"
 import { SystemConnectionVerifyPanel } from "@/components/settings/system-connections/SystemConnectionVerifyPanel"
 import { SystemConnectionGroupList } from "@/components/settings/system-connections/SystemConnectionGroupList"
-import { EditorSummary, Field, HelperText, SystemConnectionsHero } from "@/components/settings/system-connections/SystemConnectionsPageParts"
+import { Field, HelperText, SystemConnectionsHero } from "@/components/settings/system-connections/SystemConnectionsPageParts"
 import { cn } from "@/lib/utils"
 
 export function SystemConnectionsPage() {
@@ -61,14 +61,6 @@ export function SystemConnectionsPage() {
     [connections],
   )
   const draftEnabledKeys = useMemo(() => form.keys.filter((key) => key.enable).length, [form.keys])
-  const formTags = useMemo(
-    () =>
-      form.tags
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    [form.tags],
-  )
 
   const handleProviderChange = (value: string) => {
     setForm((prev) => {
@@ -288,18 +280,6 @@ export function SystemConnectionsPage() {
               </div>
             </CardContent>
           </Card>
-
-          <EditorSummary
-            modeLabel={editing ? "编辑中" : "新建中"}
-            endpoint={form.baseUrl}
-            provider={form.provider}
-            authType={form.authType}
-            connectionType={form.connectionType}
-            keyCount={form.keys.length}
-            enabledKeyCount={draftEnabledKeys}
-            labels={form.keys.map((key, index) => key.apiKeyLabel || `Key ${index + 1}`)}
-            tags={formTags}
-          />
 
           <SystemConnectionKeyPool
             keys={form.keys}

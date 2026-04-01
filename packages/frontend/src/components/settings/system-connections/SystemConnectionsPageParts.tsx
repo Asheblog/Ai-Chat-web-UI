@@ -2,8 +2,7 @@
 
 import type { ReactNode } from "react"
 import { Network, Sparkles } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
@@ -113,90 +112,4 @@ export function HelperText({ provider, specialProviderDeepseek }: { provider: st
     )
   }
   return null
-}
-
-export function EditorSummary({
-  modeLabel,
-  endpoint,
-  provider,
-  authType,
-  connectionType,
-  keyCount,
-  enabledKeyCount,
-  labels,
-  tags,
-}: {
-  modeLabel: string
-  endpoint: string
-  provider: string
-  authType: string
-  connectionType: string
-  keyCount: number
-  enabledKeyCount: number
-  labels: string[]
-  tags: string[]
-}) {
-  return (
-    <Card className="border-border/80 bg-card/95 shadow-none">
-      <CardHeader className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">当前草稿</CardTitle>
-            <CardDescription>保存前快速确认当前端点、认证方式和 Key 分布。</CardDescription>
-          </div>
-          <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
-            {modeLabel}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
-          <div className="text-xs text-muted-foreground">端点</div>
-          <div className="mt-2 break-all font-medium text-foreground">{endpoint || "尚未填写"}</div>
-        </div>
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
-            <div className="text-xs text-muted-foreground">Provider</div>
-            <div className="mt-1.5 font-medium">{provider}</div>
-          </div>
-          <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
-            <div className="text-xs text-muted-foreground">认证方式</div>
-            <div className="mt-1.5 font-medium">{authType}</div>
-          </div>
-          <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
-            <div className="text-xs text-muted-foreground">连接类型</div>
-            <div className="mt-1.5 font-medium">{connectionType}</div>
-          </div>
-          <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
-            <div className="text-xs text-muted-foreground">Key 数量</div>
-            <div className="mt-1.5 font-medium">{enabledKeyCount}/{keyCount} 已启用</div>
-          </div>
-        </div>
-        <div className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
-          <div className="text-xs text-muted-foreground">共享标签</div>
-          {tags.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag, index) => (
-                <Badge key={`${tag}-${index}`} variant="outline" className="rounded-full px-3 py-1">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">未设置共享标签</div>
-          )}
-        </div>
-        <div className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.38] p-4">
-          <div className="text-xs text-muted-foreground">Key 标签</div>
-          <div className="flex flex-wrap gap-2">
-            {labels.map((label, index) => (
-              <Badge key={`${label}-${index}`} variant="outline" className="rounded-full px-3 py-1">
-                {label}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
 }
