@@ -1,43 +1,21 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, Plus, Play, Square, Trash2, ListChecks, History, RefreshCw, Share2, Copy } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { ModelSelector } from '@/components/model-selector'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
 import { modelKeyFor } from '@/store/model-preference-store'
-import { formatDate } from '@/lib/utils'
 import { cancelBattleRun, createBattleShare, getBattleRun, listBattleRuns, streamBattle } from '@/features/battle/api'
 import type { BattleResult, BattleRunDetail, BattleRunSummary } from '@/types'
 import { DetailDrawer, type BattleAttemptDetail } from '../ui/DetailDrawer'
-import {
-  QuestionTrajectoryGraph,
-  type SingleAttemptNodeStatus,
-} from './QuestionTrajectoryGraph'
-
-type QuestionDraft = {
-  localId: string
-  questionId: string
-  title: string
-  prompt: string
-  expectedAnswer: string
-  runsPerQuestion: number
-  passK: number
-}
-
-type LiveAttempt = {
-  status: 'pending' | 'running' | 'success' | 'error' | 'judging'
-  output: string
-  reasoning: string
-  error?: string | null
-}
+import { type SingleAttemptNodeStatus } from './QuestionTrajectoryGraph'
+import { SingleModelBattleHero } from './SingleModelBattleHero'
+import { SingleModelBattleOverview } from './SingleModelBattleOverview'
+import { SingleModelBattleConfigPanel } from './SingleModelBattleConfigPanel'
+import { SingleModelQuestionWorkspace } from './SingleModelQuestionWorkspace'
+import { SingleModelBattleMonitorPanel } from './SingleModelBattleMonitorPanel'
+import { SingleModelBattleResultsPanel } from './SingleModelBattleResultsPanel'
+import { SingleModelBattleHistoryPanel } from './SingleModelBattleHistoryPanel'
+import type { LiveAttempt, QuestionDraft } from './types'
 
 const createDefaultQuestion = (): QuestionDraft => ({
   localId: `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -103,15 +81,6 @@ const parseExecutionStepIdentity = (stepId: unknown): { questionIndex: number; a
   return { questionIndex, attemptIndex }
 }
 
-const toStatusLabel = (status?: string) => {
-  if (status === 'pending') return '排队中'
-  if (status === 'running') return '运行中'
-  if (status === 'completed') return '已完成'
-  if (status === 'cancelled') return '已取消'
-  if (status === 'error') return '失败'
-  return '未开始'
-}
-
 const ACTIVE_SINGLE_RUN_STORAGE_KEY = 'battle:single-model:active-run-id'
 const LAST_VIEWED_SINGLE_RUN_STORAGE_KEY = 'battle:single-model:last-viewed-run-id'
 
@@ -140,6 +109,7 @@ export function SingleModelMultiQuestionPageClient() {
   const [history, setHistory] = useState<BattleRunSummary[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyLoadingRunId, setHistoryLoadingRunId] = useState<number | null>(null)
+  const [historyExpanded, setHistoryExpanded] = useState(false)
   const [sourceRunId, setSourceRunId] = useState<number | null>(null)
   const [selectedAttempt, setSelectedAttempt] = useState<{ questionIndex: number; attemptIndex: number } | null>(null)
   const [shareLink, setShareLink] = useState<string | null>(null)
@@ -151,6 +121,8 @@ export function SingleModelMultiQuestionPageClient() {
 
   const selectedModel = useMemo(() => models.find((item) => modelSelectKey(item) === modelKey) || null, [models, modelKey])
   const selectedJudge = useMemo(() => models.find((item) => modelSelectKey(item) === judgeKey) || null, [models, judgeKey])
+  const selectedModelLabel = useMemo(() => selectedModel?.name || selectedModel?.rawId || null, [selectedModel])
+  const selectedJudgeLabel = useMemo(() => selectedJudge?.name || selectedJudge?.rawId || null, [selectedJudge])
 
   const buildAttemptKey = useCallback((questionIndex: number, attemptIndex: number) => `${questionIndex}#${attemptIndex}`, [])
 
@@ -254,10 +226,11 @@ export function SingleModelMultiQuestionPageClient() {
     setModelKey(nextModelKey)
     setJudgeKey(nextJudgeKey)
     setJudgeThreshold(String(detail.judgeThreshold ?? 0.8))
-    setQuestions(buildQuestionsFromRunDetail(detail))
-    setSourceRunId(detail.id)
-    setSelectedAttempt(null)
-    setShareLink(null)
+      setQuestions(buildQuestionsFromRunDetail(detail))
+      setHistoryExpanded(false)
+      setSourceRunId(detail.id)
+      setSelectedAttempt(null)
+      setShareLink(null)
     setCopiedShareLink(false)
 
     const missingTargets: string[] = []
@@ -644,6 +617,7 @@ export function SingleModelMultiQuestionPageClient() {
 
   const handleNewTask = useCallback(() => {
     clearExecutionState('idle')
+    setHistoryExpanded(false)
   }, [clearExecutionState])
 
   const handleShare = useCallback(async () => {
@@ -777,288 +751,89 @@ export function SingleModelMultiQuestionPageClient() {
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto bg-[hsl(var(--background-alt))/0.32]">
-      <div className="mx-auto w-full max-w-[1200px] space-y-6 px-4 py-6 md:px-6">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
-            <Link href="/main/battle" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              返回模式选择
-            </Link>
-            <h1 className="text-2xl font-semibold tracking-tight">单模型多问题大乱斗</h1>
-            <p className="text-sm text-muted-foreground">给一个模型批量出题，观察按题通过率稳定性</p>
+      <div className="mx-auto w-full max-w-[1440px] space-y-6 px-4 py-6 md:px-6 xl:px-8">
+        <SingleModelBattleHero
+          runId={runId}
+          runStatus={runStatus}
+          isRunning={isRunning}
+          sharing={sharing}
+          shareLink={shareLink}
+          copiedShareLink={copiedShareLink}
+          sourceRunId={sourceRunId}
+          error={error}
+          onStart={() => void handleStart()}
+          onCancel={() => void handleCancel()}
+          onNewTask={handleNewTask}
+          onShare={() => void handleShare()}
+          onCopyShareLink={() => void handleCopyShareLink()}
+        />
+
+        <SingleModelBattleOverview
+          selectedModelLabel={selectedModelLabel}
+          selectedJudgeLabel={selectedJudgeLabel}
+          questions={questions}
+          questionViews={questionViews}
+          runStatus={runStatus}
+          summary={summary}
+          computedStability={computedStability}
+        />
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(360px,0.82fr)] xl:items-start">
+          <div className="space-y-6">
+            <SingleModelBattleConfigPanel
+              modelKey={modelKey}
+              judgeKey={judgeKey}
+              judgeThreshold={judgeThreshold}
+              maxConcurrency={maxConcurrency}
+              isRunning={isRunning}
+              selectedModelLabel={selectedModelLabel}
+              selectedJudgeLabel={selectedJudgeLabel}
+              onModelChange={(model) => setModelKey(modelSelectKey(model))}
+              onJudgeChange={(model) => setJudgeKey(modelSelectKey(model))}
+              onJudgeThresholdChange={setJudgeThreshold}
+              onMaxConcurrencyChange={setMaxConcurrency}
+            />
+
+            <SingleModelQuestionWorkspace
+              questions={questions}
+              isRunning={isRunning}
+              onAddQuestion={() => setQuestions((prev) => [...prev, createDefaultQuestion()])}
+              onRemoveQuestion={removeQuestion}
+              onUpdateQuestion={updateQuestion}
+            />
+
+            <SingleModelBattleHistoryPanel
+              history={history}
+              expanded={historyExpanded}
+              historyLoading={historyLoading}
+              historyLoadingRunId={historyLoadingRunId}
+              isRunning={isRunning}
+              onToggleExpanded={() => setHistoryExpanded((current) => !current)}
+              onRefresh={() => void refreshHistory()}
+              onViewRun={(targetRunId) => void handleLoadHistory(targetRunId, false)}
+              onReuseRun={(targetRunId) => void handleLoadHistory(targetRunId, true)}
+            />
           </div>
-          <Badge variant={runStatus === 'running' || runStatus === 'pending' ? 'default' : runStatus === 'error' ? 'destructive' : 'secondary'}>
-            {runStatus === 'idle'
-              ? '未开始'
-              : runStatus === 'pending'
-                ? '排队中'
-                : runStatus === 'running'
-                  ? '运行中'
-                  : runStatus === 'completed'
-                    ? '已完成'
-                    : runStatus === 'cancelled'
-                      ? '已取消'
-                      : '失败'}
-          </Badge>
-        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2"><History className="h-4 w-4" />历史记录</CardTitle>
-              <CardDescription>进入记录查看结果，或直接复用模型配置与题目创建新任务</CardDescription>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => void refreshHistory()} disabled={historyLoading || isRunning}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${historyLoading ? 'animate-spin' : ''}`} />
-              刷新
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {history.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">暂无单模型多问题历史记录</div>
-            ) : (
-              history.map((item) => (
-                <div key={`history-single-${item.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 p-3">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">{item.title || `任务 #${item.id}`}</div>
-                    <div className="text-xs text-muted-foreground">
-                      #{item.id} · {formatDate(item.createdAt)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={item.status === 'completed' ? 'default' : item.status === 'error' ? 'destructive' : 'secondary'}>
-                      {toStatusLabel(item.status)}
-                    </Badge>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleLoadHistory(item.id, false)}
-                      disabled={isRunning || historyLoadingRunId === item.id}
-                    >
-                      查看记录
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => void handleLoadHistory(item.id, true)}
-                      disabled={isRunning || historyLoadingRunId === item.id}
-                    >
-                      复用为新任务
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+          <div className="space-y-6 xl:sticky xl:top-6">
+            <SingleModelBattleMonitorPanel
+              runId={runId}
+              runStatus={runStatus}
+              error={error}
+              questionViews={questionViews}
+            />
 
-        {sourceRunId ? (
-          <div className="rounded-lg border border-border/70 bg-[hsl(var(--surface))/0.5] px-3 py-2 text-sm text-muted-foreground">
-            已加载历史记录 #{sourceRunId} 的模型配置与题目。点击“新任务”可清空执行结果并直接重跑。
-          </div>
-        ) : null}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>运行配置</CardTitle>
-            <CardDescription>选择参赛模型、裁判模型与并发参数</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label>参赛模型</Label>
-              <ModelSelector
-                selectedModelId={modelKey || null}
-                onModelChange={(model) => setModelKey(modelSelectKey(model))}
-                size="lg"
-                dropdownDirection="bottom"
-                disabled={isRunning}
-                className="w-full justify-between"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>裁判模型</Label>
-              <ModelSelector
-                selectedModelId={judgeKey || null}
-                onModelChange={(model) => setJudgeKey(modelSelectKey(model))}
-                size="lg"
-                dropdownDirection="bottom"
-                disabled={isRunning}
-                className="w-full justify-between"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>裁判阈值 (0-1)</Label>
-              <Input value={judgeThreshold} onChange={(e) => setJudgeThreshold(e.target.value)} disabled={isRunning} />
-            </div>
-
-            <div className="space-y-2">
-              <Label>并发上限 (1-6)</Label>
-              <Input value={maxConcurrency} onChange={(e) => setMaxConcurrency(e.target.value)} disabled={isRunning} />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2"><ListChecks className="h-4 w-4" />题目列表</CardTitle>
-              <CardDescription>每题独立设置 runs 与 passK（最多 3）</CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setQuestions((prev) => [...prev, createDefaultQuestion()])}
-              disabled={isRunning || questions.length >= 50}
-            >
-              <Plus className="mr-2 h-4 w-4" />新增题目
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {questions.map((question, idx) => (
-              <div key={question.localId} className="rounded-lg border border-border/70 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">题目 {idx + 1}</div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeQuestion(question.localId)}
-                    disabled={isRunning || questions.length <= 1}
-                  >
-                    <Trash2 className="mr-1 h-4 w-4" />删除
-                  </Button>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Question ID（可选）</Label>
-                    <Input
-                      value={question.questionId}
-                      onChange={(e) => updateQuestion(question.localId, (curr) => ({ ...curr, questionId: e.target.value }))}
-                      disabled={isRunning}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>标题（可选）</Label>
-                    <Input
-                      value={question.title}
-                      onChange={(e) => updateQuestion(question.localId, (curr) => ({ ...curr, title: e.target.value }))}
-                      disabled={isRunning}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>题目</Label>
-                    <Textarea
-                      rows={5}
-                      value={question.prompt}
-                      onChange={(e) => updateQuestion(question.localId, (curr) => ({ ...curr, prompt: e.target.value }))}
-                      disabled={isRunning}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>期望答案</Label>
-                    <Textarea
-                      rows={5}
-                      value={question.expectedAnswer}
-                      onChange={(e) => updateQuestion(question.localId, (curr) => ({ ...curr, expectedAnswer: e.target.value }))}
-                      disabled={isRunning}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Runs (1-3)</Label>
-                    <Input
-                      value={String(question.runsPerQuestion)}
-                      onChange={(e) => {
-                        const runs = normalizeInt(e.target.value, 1, 3, question.runsPerQuestion)
-                        updateQuestion(question.localId, (curr) => ({
-                          ...curr,
-                          runsPerQuestion: runs,
-                          passK: Math.min(curr.passK, runs),
-                        }))
-                      }}
-                      disabled={isRunning}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Pass K (1-3)</Label>
-                    <Input
-                      value={String(question.passK)}
-                      onChange={(e) => {
-                        const passK = normalizeInt(e.target.value, 1, 3, question.passK)
-                        updateQuestion(question.localId, (curr) => ({
-                          ...curr,
-                          passK: Math.min(passK, curr.runsPerQuestion),
-                        }))
-                      }}
-                      disabled={isRunning}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={handleStart} disabled={isRunning}>
-            <Play className="mr-2 h-4 w-4" />开始评测
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            disabled={!runId || (runStatus !== 'running' && runStatus !== 'pending')}
-          >
-            <Square className="mr-2 h-4 w-4" />取消
-          </Button>
-          <Button variant="outline" onClick={handleNewTask} disabled={isRunning}>
-            <RefreshCw className="mr-2 h-4 w-4" />新任务
-          </Button>
-          <Button variant="outline" onClick={() => void handleShare()} disabled={!runId || sharing}>
-            <Share2 className="mr-2 h-4 w-4" />{sharing ? '生成中...' : '分享'}
-          </Button>
-          {error ? <span className="text-sm text-destructive">{error}</span> : null}
-        </div>
-
-        {shareLink ? (
-          <Card className="bg-muted/30">
-            <CardContent className="flex flex-col gap-3 pt-4 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0 text-sm text-muted-foreground">
-                <span>分享链接：</span>
-                <a className="ml-1 break-all text-primary hover:underline" href={shareLink} target="_blank" rel="noreferrer">
-                  {shareLink}
-                </a>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => void handleCopyShareLink()}>
-                <Copy className="mr-2 h-4 w-4" />{copiedShareLink ? '已复制' : '复制链接'}
-              </Button>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>结果总览</CardTitle>
-            <CardDescription>
-              {summary?.stabilityScore != null
-                ? `稳定性 ${(summary.stabilityScore * 100).toFixed(1)}%（${summary.passedQuestions ?? 0}/${summary.totalQuestions ?? 0}）`
-                : `稳定性 ${(computedStability * 100).toFixed(1)}%`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">轨迹节点可点击，弹窗可查看实时输出、推理与裁判结果。</p>
-            <QuestionTrajectoryGraph
-              questions={questionViews}
+            <SingleModelBattleResultsPanel
+              runId={runId}
+              isRunning={isRunning}
+              summary={summary}
+              computedStability={computedStability}
+              questionViews={questionViews}
               selectedNodeKey={selectedNodeKey}
               onNodeClick={(questionIndex, attemptIndex) => setSelectedAttempt({ questionIndex, attemptIndex })}
-              isRunning={isRunning}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       <DetailDrawer
