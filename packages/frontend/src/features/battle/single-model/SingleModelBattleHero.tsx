@@ -75,13 +75,13 @@ export function SingleModelBattleHero({
           <Button onClick={onStart} disabled={isRunning} className="gap-2 bg-emerald-500 text-slate-950 hover:bg-emerald-400">
             <Play className="h-4 w-4" />开始评测
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={!runId || (runStatus !== 'running' && runStatus !== 'pending')} className="gap-2 border-slate-700 bg-slate-950/30 text-slate-100 hover:bg-slate-900">
+          <Button variant="outlineInverse" onClick={onCancel} disabled={!runId || (runStatus !== 'running' && runStatus !== 'pending')} className="gap-2">
             <Square className="h-4 w-4" />取消
           </Button>
-          <Button variant="outline" onClick={onNewTask} disabled={isRunning} className="gap-2 border-slate-700 bg-slate-950/30 text-slate-100 hover:bg-slate-900">
+          <Button variant="outlineInverse" onClick={onNewTask} disabled={isRunning} className="gap-2">
             <RefreshCw className="h-4 w-4" />新任务
           </Button>
-          <Button variant="outline" onClick={onShare} disabled={!runId || sharing} className="gap-2 border-slate-700 bg-slate-950/30 text-slate-100 hover:bg-slate-900">
+          <Button variant="outlineInverse" onClick={onShare} disabled={!runId || sharing} className="gap-2">
             <Share2 className="h-4 w-4" />{sharing ? '生成中...' : '分享'}
           </Button>
         </div>
