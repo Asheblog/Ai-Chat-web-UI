@@ -112,6 +112,19 @@ describe('useSingleModelBattleController', () => {
     expect(result.current.sourceRunId).toBe(1)
   })
 
+  it('restores model and judge selections from loaded history detail', async () => {
+    const { result } = renderHook(() => useSingleModelBattleController())
+
+    await act(async () => {
+      await result.current.handleLoadHistory(1, true)
+    })
+
+    expect(result.current.selectedModel?.id).toBe('model-a')
+    expect(result.current.selectedJudge?.id).toBe('judge-a')
+    expect(result.current.selectedModelLabel).toBe('Model A')
+    expect(result.current.selectedJudgeLabel).toBe('Judge A')
+  })
+
   it('clears execution state when creating a new task', async () => {
     const { result } = renderHook(() => useSingleModelBattleController())
 
