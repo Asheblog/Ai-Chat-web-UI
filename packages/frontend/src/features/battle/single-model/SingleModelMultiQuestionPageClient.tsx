@@ -16,6 +16,8 @@ import { SingleModelBattleMonitorPanel } from './SingleModelBattleMonitorPanel'
 import { SingleModelBattleResultsPanel } from './SingleModelBattleResultsPanel'
 import { SingleModelBattleHistoryPanel } from './SingleModelBattleHistoryPanel'
 import type { LiveAttempt, QuestionDraft } from './types'
+import { buildQuestionViews, buildSelectedDetail, buildSelectedNodeKey, computeStability } from './single-model-derived'
+import { buildQuestionsFromRunDetail, clampPassSettings, parseExecutionStepIdentity } from './single-model-runtime'
 
 const createDefaultQuestion = (): QuestionDraft => ({
   localId: `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -33,12 +35,6 @@ const normalizeInt = (value: string, min: number, max: number, fallback: number)
   const parsed = Number.parseInt(value, 10)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(max, Math.max(min, parsed))
-}
-
-const clampPassSettings = (runsPerQuestion: number, passK: number) => {
-  const nextRuns = Math.min(3, Math.max(1, Math.floor(runsPerQuestion)))
-  const nextPass = Math.min(nextRuns, Math.max(1, Math.floor(passK)))
-  return { runsPerQuestion: nextRuns, passK: nextPass }
 }
 
 const normalizeSingleRunStatus = (status?: string) => {
@@ -69,16 +65,6 @@ const asPositiveInt = (value: unknown): number | null => {
     }
   }
   return null
-}
-
-const parseExecutionStepIdentity = (stepId: unknown): { questionIndex: number; attemptIndex: number } | null => {
-  if (typeof stepId !== 'string' || stepId.trim().length === 0) return null
-  const matched = stepId.match(/:q(\d+):a(\d+)$/)
-  if (!matched) return null
-  const questionIndex = asPositiveInt(matched[1])
-  const attemptIndex = asPositiveInt(matched[2])
-  if (!questionIndex || !attemptIndex) return null
-  return { questionIndex, attemptIndex }
 }
 
 const ACTIVE_SINGLE_RUN_STORAGE_KEY = 'battle:single-model:active-run-id'
@@ -153,34 +139,6 @@ export function SingleModelMultiQuestionPageClient() {
     return matched ? modelSelectKey(matched) : ''
   }, [models])
 
-  const buildQuestionsFromRunDetail = useCallback((detail: BattleRunDetail): QuestionDraft[] => {
-    const fromConfig = Array.isArray(detail.config?.questions) ? detail.config?.questions : []
-    if (fromConfig && fromConfig.length > 0) {
-      return fromConfig.map((item, index) => {
-        const { runsPerQuestion, passK } = clampPassSettings(item.runsPerQuestion ?? 1, item.passK ?? 1)
-        return {
-          localId: `q-history-${detail.id}-${index + 1}-${Math.random().toString(36).slice(2, 8)}`,
-          questionId: item.questionId || '',
-          title: item.title || '',
-          prompt: item.prompt?.text || '',
-          expectedAnswer: item.expectedAnswer?.text || '',
-          runsPerQuestion,
-          passK,
-        }
-      })
-    }
-    const { runsPerQuestion, passK } = clampPassSettings(detail.runsPerModel ?? 1, detail.passK ?? 1)
-    return [{
-      localId: `q-history-${detail.id}-fallback-${Math.random().toString(36).slice(2, 8)}`,
-      questionId: '',
-      title: '',
-      prompt: detail.prompt?.text || '',
-      expectedAnswer: detail.expectedAnswer?.text || '',
-      runsPerQuestion,
-      passK,
-    }]
-  }, [])
-
   const applyRunSnapshot = useCallback((detail: BattleRunDetail) => {
     const orderedResults = [...(detail.results || [])].sort((a, b) => {
       if (a.questionIndex !== b.questionIndex) return a.questionIndex - b.questionIndex
@@ -226,11 +184,11 @@ export function SingleModelMultiQuestionPageClient() {
     setModelKey(nextModelKey)
     setJudgeKey(nextJudgeKey)
     setJudgeThreshold(String(detail.judgeThreshold ?? 0.8))
-      setQuestions(buildQuestionsFromRunDetail(detail))
-      setHistoryExpanded(false)
-      setSourceRunId(detail.id)
-      setSelectedAttempt(null)
-      setShareLink(null)
+    setQuestions(buildQuestionsFromRunDetail(detail, (index) => `q-history-${detail.id}-${index + 1}-${Math.random().toString(36).slice(2, 8)}`))
+    setHistoryExpanded(false)
+    setSourceRunId(detail.id)
+    setSelectedAttempt(null)
+    setShareLink(null)
     setCopiedShareLink(false)
 
     const missingTargets: string[] = []
@@ -249,7 +207,7 @@ export function SingleModelMultiQuestionPageClient() {
     }
 
     applyRunSnapshot(detail)
-  }, [applyRunSnapshot, buildQuestionsFromRunDetail, clearExecutionState, resolveModelSelectKey, toast])
+  }, [applyRunSnapshot, clearExecutionState, resolveModelSelectKey, toast])
 
   const refreshHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -662,92 +620,19 @@ export function SingleModelMultiQuestionPageClient() {
     }
   }, [questions, selectedAttempt])
 
-  const questionViews = useMemo(() => {
-    return questions.map((question, idx) => {
-      const questionIndex = idx + 1
-      const attempts = Array.from({ length: question.runsPerQuestion }).map((_, attemptOffset) => {
-        const attemptIndex = attemptOffset + 1
-        const result = results.find((item) => item.questionIndex === questionIndex && item.attemptIndex === attemptIndex)
-        const live = liveAttempts.get(buildAttemptKey(questionIndex, attemptIndex))
-        const passed = result?.judgePass === true
-        const status: SingleAttemptNodeStatus = result
-          ? (result.error ? 'error' : (result.judgeStatus === 'error' ? 'judge_error' : 'done'))
-          : live?.status === 'running'
-            ? 'running'
-            : live?.status === 'judging'
-              ? 'judging'
-              : live?.status === 'error'
-                ? 'error'
-                : live?.status === 'success'
-                  ? 'done'
-                  : 'pending'
-        return {
-          attemptIndex,
-          status,
-          passed,
-          score: result?.judgeScore,
-          error: result?.error || result?.judgeError || live?.error,
-        }
-      })
-      const passCount = attempts.filter((item) => item.passed).length
-      const passed = passCount >= question.passK
-      return {
-        questionIndex,
-        title: question.title.trim() || `问题 ${questionIndex}`,
-        passCount,
-        passK: question.passK,
-        runsPerQuestion: question.runsPerQuestion,
-        passed,
-        attempts,
-      }
-    })
-  }, [questions, results, liveAttempts, buildAttemptKey])
+  const questionViews = useMemo(() => buildQuestionViews({ questions, results, liveAttempts }), [questions, results, liveAttempts])
 
-  const selectedNodeKey = selectedAttempt ? `${selectedAttempt.questionIndex}#${selectedAttempt.attemptIndex}` : null
+  const selectedNodeKey = useMemo(() => buildSelectedNodeKey(selectedAttempt), [selectedAttempt])
 
-  const selectedDetail = useMemo<BattleAttemptDetail | null>(() => {
-    if (!selectedAttempt) return null
-    const question = questions[selectedAttempt.questionIndex - 1]
-    if (!question) return null
+  const selectedDetail = useMemo<BattleAttemptDetail | null>(() => buildSelectedDetail({
+    selectedAttempt,
+    questions,
+    selectedModel,
+    results,
+    liveAttempts,
+  }), [selectedAttempt, questions, selectedModel, results, liveAttempts])
 
-    const questionTitle = question.title.trim() || `问题 ${selectedAttempt.questionIndex}`
-    const modelLabel = selectedModel?.name || selectedModel?.rawId || '参赛模型'
-    const detailLabel = `${questionTitle} · ${modelLabel}`
-    const modelKey = `question-${selectedAttempt.questionIndex}`
-
-    const matchedResult = results.find(
-      (item) =>
-        item.questionIndex === selectedAttempt.questionIndex &&
-        item.attemptIndex === selectedAttempt.attemptIndex,
-    )
-    if (matchedResult) {
-      return {
-        ...matchedResult,
-        modelKey,
-        modelLabel: detailLabel,
-      }
-    }
-
-    const live = liveAttempts.get(buildAttemptKey(selectedAttempt.questionIndex, selectedAttempt.attemptIndex))
-    return {
-      isLive: true,
-      modelKey,
-      modelId: selectedModel?.id || 'single-model',
-      modelLabel: detailLabel,
-      attemptIndex: selectedAttempt.attemptIndex,
-      output: live?.output || '',
-      reasoning: live?.reasoning || '',
-      durationMs: null,
-      error: live?.error ?? null,
-      status: live?.status || 'pending',
-    }
-  }, [selectedAttempt, questions, selectedModel, results, liveAttempts, buildAttemptKey])
-
-  const computedStability = useMemo(() => {
-    if (questionViews.length === 0) return 0
-    const passedCount = questionViews.filter((item) => item.passed).length
-    return passedCount / questionViews.length
-  }, [questionViews])
+  const computedStability = useMemo(() => computeStability(questionViews), [questionViews])
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto bg-[hsl(var(--background-alt))/0.32]">
