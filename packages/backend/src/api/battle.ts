@@ -55,16 +55,6 @@ const battleModelSchema = z.object({
   }
 })
 
-const battleQuestionSchema = z.object({
-  questionId: z.string().min(1).max(128).optional(),
-  title: z.string().max(200).optional(),
-  prompt: z.lazy(() => battleContentInputSchema),
-  expectedAnswer: z.lazy(() => battleContentInputSchema),
-  runsPerQuestion: z.number().int().min(1).max(3),
-  passK: z.number().int().min(1).max(3),
-}).refine((value) => value.passK <= value.runsPerQuestion, {
-  message: 'question passK must be <= runsPerQuestion',
-})
 
 const BATTLE_TEXT_MAX = 128 * 1024
 const BATTLE_TEXT_MAX_LABEL = '128K'
@@ -125,20 +115,8 @@ const multiModelBattleSchema = z.object({
   maxConcurrency: z.number().int().min(1).max(6).optional(),
 })
 
-const singleModelMultiQuestionBattleSchema = z.object({
-  mode: z.literal('single_model_multi_question'),
-  title: z.string().max(200).optional(),
-  judge: battleJudgeSchema,
-  judgeThreshold: z.number().min(0).max(1).optional(),
-  model: battleModelSchema,
-  questions: z.array(battleQuestionSchema).min(1).max(50),
-  maxConcurrency: z.number().int().min(1).max(6).optional(),
-})
+const battleStreamSchema = multiModelBattleSchema
 
-const battleStreamSchema = z.discriminatedUnion('mode', [
-  multiModelBattleSchema,
-  singleModelMultiQuestionBattleSchema,
-])
 
 const attemptActionSchema = z.object({
   modelId: z.string().min(1).optional(),

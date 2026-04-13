@@ -65,22 +65,6 @@ const makeMultiPayload = (overrides?: Record<string, unknown>) => ({
   ...overrides,
 })
 
-const makeSinglePayload = (overrides?: Record<string, unknown>) => ({
-  mode: 'single_model_multi_question',
-  title: 'single',
-  judge: { modelId: 'judge' },
-  model: { modelId: 'model-a' },
-  questions: [
-    {
-      prompt: { text: 'Q1' },
-      expectedAnswer: { text: 'A1' },
-      runsPerQuestion: 1,
-      passK: 1,
-    },
-  ],
-  ...overrides,
-})
-
 describe('battle api - mode routing', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -103,49 +87,30 @@ describe('battle api - mode routing', () => {
     expect(service.executeRun).not.toHaveBeenCalled()
   })
 
-  it('single_model_multi_question: 题目 passK > runsPerQuestion 会被 schema 拦截', async () => {
+  it('single_model_multi_question: 会被 schema 拦截', async () => {
     const service = createServiceMock()
     const app = createBattleApi({ battleService: service })
     const res = await app.request('http://localhost/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(
-        makeSinglePayload({
-          questions: [
-            {
-              prompt: { text: 'Q1' },
-              expectedAnswer: { text: 'A1' },
-              runsPerQuestion: 1,
-              passK: 2,
-            },
-          ],
-        }),
-      ),
+      body: JSON.stringify({
+        mode: 'single_model_multi_question',
+        title: 'single',
+        judge: { modelId: 'judge' },
+        model: { modelId: 'model-a' },
+        questions: [
+          {
+            prompt: { text: 'Q1' },
+            expectedAnswer: { text: 'A1' },
+            runsPerQuestion: 1,
+            passK: 1,
+          },
+        ],
+      }),
     })
 
     expect(res.status).toBe(400)
-    const text = await res.text()
-    expect(text).toContain('question passK must be <= runsPerQuestion')
     expect(service.executeRun).not.toHaveBeenCalled()
-  })
-
-  it('single_model_multi_question: 有效请求会进入 executeRun', async () => {
-    const service = createServiceMock()
-    const app = createBattleApi({ battleService: service })
-    const res = await app.request('http://localhost/stream', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(makeSinglePayload()),
-    })
-
-    expect(res.status).toBe(200)
-    await res.text()
-    expect(service.executeRun).toHaveBeenCalledTimes(1)
-    expect(service.executeRun).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 1, type: 'user' }),
-      expect.objectContaining({ mode: 'single_model_multi_question' }),
-      expect.any(Object),
-    )
   })
 
   it('stream 会输出统一 execution 协议事件', async () => {
@@ -239,30 +204,6 @@ describe('battle api - mode routing', () => {
         questionIndex: 4,
         attemptIndex: 1,
       }),
-    )
-  })
-
-  it('rejudge SSE 会透传 questionIndices', async () => {
-    const service = createServiceMock()
-    const app = createBattleApi({ battleService: service })
-    const res = await app.request('http://localhost/runs/9/rejudge', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        expectedAnswer: { text: 'new answer' },
-        questionIndices: [1, 3],
-      }),
-    })
-
-    expect(res.status).toBe(200)
-    await res.text()
-    expect(service.rejudgeWithNewAnswer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 1, type: 'user' }),
-      expect.objectContaining({
-        runId: 9,
-        questionIndices: [1, 3],
-      }),
-      expect.any(Object),
     )
   })
 })

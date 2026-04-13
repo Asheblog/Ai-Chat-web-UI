@@ -30,15 +30,6 @@ interface BattleModelPayload {
   ollamaThink?: boolean
 }
 
-export interface SingleBattleQuestionPayload {
-  questionId?: string
-  title?: string
-  prompt: BattleContentInput
-  expectedAnswer: BattleContentInput
-  runsPerQuestion: number
-  passK: number
-}
-
 export interface MultiModelBattleStreamPayload {
   mode: 'multi_model'
   title?: string
@@ -56,23 +47,7 @@ export interface MultiModelBattleStreamPayload {
   maxConcurrency?: number
 }
 
-export interface SingleModelMultiQuestionBattleStreamPayload {
-  mode: 'single_model_multi_question'
-  title?: string
-  judge: {
-    modelId: string
-    connectionId?: number
-    rawId?: string
-  }
-  judgeThreshold?: number
-  model: BattleModelPayload
-  questions: SingleBattleQuestionPayload[]
-  maxConcurrency?: number
-}
-
-export type BattleStreamPayload =
-  | MultiModelBattleStreamPayload
-  | SingleModelMultiQuestionBattleStreamPayload
+export type BattleStreamPayload = MultiModelBattleStreamPayload
 
 const buildValidationMessage = (payload: any): string | null => {
   if (!payload) return null

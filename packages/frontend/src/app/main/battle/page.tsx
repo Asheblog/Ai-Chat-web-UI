@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-import { Trophy, ListChecks, ArrowRight } from 'lucide-react'
+import { Trophy, ArrowRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -14,7 +14,7 @@ export default function BattlePage() {
           <p className="text-sm text-muted-foreground">选择评测模式</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4">
           <Card className="border-border/70 bg-[hsl(var(--surface))/0.7]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -26,24 +26,6 @@ export default function BattlePage() {
             <CardContent>
               <Button asChild className="gap-2">
                 <Link href="/main/battle/multi-model">
-                  进入
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-[hsl(var(--surface))/0.7]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ListChecks className="h-5 w-5 text-primary" />
-                单模型多问题大乱斗
-              </CardTitle>
-              <CardDescription>批量题目稳定性评测，支持每题独立 pass 配置（最多 3）</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="gap-2">
-                <Link href="/main/battle/single-model">
                   进入
                   <ArrowRight className="h-4 w-4" />
                 </Link>
