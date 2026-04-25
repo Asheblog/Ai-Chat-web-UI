@@ -1,13 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import type { ApiResponse, ChatShare, MessageMeta, ShareMessage, ShareMessagesPage, ToolEvent } from '@/types'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import type { ApiResponse, ChatShare, MessageMeta, RichMessagePayload, ShareMessage, ShareMessagesPage, ToolEvent } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { ReasoningSection } from '@/components/message-bubble/reasoning-section'
 import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
 import { RichMessageRenderer } from '@/components/message-content/rich-message-renderer'
 import { cn, formatDate } from '@/lib/utils'
-import { User, Bot } from 'lucide-react'
+import { User, Bot, Loader2 } from 'lucide-react'
 
 interface ShareViewerProps {
   share: ChatShare
@@ -150,6 +150,31 @@ function buildToolSummary(toolEvents?: ToolEvent[]) {
     searchQueryCount: searchQueries.size,
     readTaskCount,
   }
+}
+
+function mergeRichPayloadText(
+  richPayload: RichMessagePayload | null | undefined,
+  content: string,
+): RichMessagePayload | null | undefined {
+  if (!richPayload || !Array.isArray(richPayload.parts)) return richPayload
+
+  let hasTextPart = false
+  const parts = richPayload.parts.map((part) => {
+    if (part.type !== 'text') return part
+    hasTextPart = true
+    return { ...part, text: content, format: part.format ?? 'markdown' }
+  })
+
+  if (!hasTextPart && content.trim().length > 0) {
+    const hasImages = parts.some((part) => part.type === 'image')
+    return {
+      ...richPayload,
+      layout: hasImages ? 'side-by-side' : 'auto',
+      parts: [{ type: 'text', text: content, format: 'markdown' }, ...parts],
+    }
+  }
+
+  return { ...richPayload, parts }
 }
 
 interface ShareMessageItemProps {
@@ -303,7 +328,127 @@ export function ShareViewer({
   const [messages, setMessages] = useState<ShareMessage[]>(initialMessages)
   const [pagination, setPagination] = useState(initialPagination)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [liveDeltas, setLiveDeltas] = useState<Map<number, { content: string; reasoning: string }>>(new Map())
+  const [liveToolEvents, setLiveToolEvents] = useState<Map<number, ToolEvent[]>>(new Map())
+  const [isLive, setIsLive] = useState(share.isLive ?? false)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const mountedRef = useRef(true)
   const hasMore = pagination.page < pagination.totalPages
+
+  const fetchFinalMessages = useCallback(async () => {
+    if (!token) return
+    try {
+      const response = await fetch(`/api/shares/${encodeURIComponent(token)}/messages?page=1&limit=${Math.max(pagination.limit, initialMessages.length)}`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      })
+      if (!response.ok || !mountedRef.current) return
+      const payload = (await response.json()) as ApiResponse<ShareMessagesPage>
+      if (!payload?.success || !payload.data) return
+      setMessages(payload.data.messages)
+      setPagination(payload.data.pagination)
+      setLiveDeltas(new Map())
+      setLiveToolEvents(new Map())
+    } catch {}
+  }, [token, pagination.limit, initialMessages.length])
+
+  const fetchFinalMessagesRef = useRef(fetchFinalMessages)
+  fetchFinalMessagesRef.current = fetchFinalMessages
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    if (!isLive || !token) return
+
+    const streamUrl = `/api/shares/${encodeURIComponent(token)}/stream`
+    const source = new EventSource(streamUrl)
+    eventSourceRef.current = source
+
+    source.onmessage = (event) => {
+      if (!event?.data || event.data === '[DONE]') return
+      let eventPayload: any = null
+      try { eventPayload = JSON.parse(event.data) } catch { return }
+      if (!eventPayload || !mountedRef.current) return
+
+      const msgId = typeof eventPayload.messageId === 'number' ? eventPayload.messageId : null
+
+      switch (eventPayload.type) {
+        case 'content_delta':
+          if (typeof eventPayload.delta !== 'string' || !msgId) return
+          setLiveDeltas((prev) => {
+            const next = new Map(prev)
+            const cur = next.get(msgId) || { content: '', reasoning: '' }
+            next.set(msgId, { ...cur, content: cur.content + eventPayload.delta })
+            return next
+          })
+          break
+        case 'reasoning_delta':
+          if (typeof eventPayload.delta !== 'string' || !msgId) return
+          setLiveDeltas((prev) => {
+            const next = new Map(prev)
+            const cur = next.get(msgId) || { content: '', reasoning: '' }
+            next.set(msgId, { ...cur, reasoning: cur.reasoning + eventPayload.delta })
+            return next
+          })
+          break
+        case 'tool_call':
+          if (!msgId) return
+          setLiveToolEvents((prev) => {
+            const next = new Map(prev)
+            const current = next.get(msgId) || []
+            next.set(msgId, [...current, eventPayload.toolEvent as ToolEvent])
+            return next
+          })
+          break
+        case 'message_complete':
+          break
+        case 'share_complete':
+          setIsLive(false)
+          fetchFinalMessagesRef.current()
+          source.close()
+          break
+        case 'stream_error':
+          setIsLive(false)
+          fetchFinalMessagesRef.current()
+          source.close()
+          break
+        default:
+          break
+      }
+    }
+
+    source.onerror = () => {
+      source.close()
+      eventSourceRef.current = null
+      setIsLive(false)
+      fetchFinalMessagesRef.current()
+    }
+
+    return () => {
+      source.close()
+      eventSourceRef.current = null
+    }
+  }, [isLive, token])
+
+  const mergedMessages = useMemo(() => {
+    if (liveDeltas.size === 0 && liveToolEvents.size === 0) return messages
+    return messages.map((msg) => {
+      const deltas = liveDeltas.get(msg.id)
+      const tools = liveToolEvents.get(msg.id)
+      if (!deltas && !tools) return msg
+      const content = deltas ? msg.content + deltas.content : msg.content
+      return {
+        ...msg,
+        content,
+        reasoning: deltas ? (msg.reasoning || '') + deltas.reasoning : msg.reasoning,
+        toolEvents: tools ? [...(msg.toolEvents || []), ...tools] : msg.toolEvents,
+        richPayload: deltas ? mergeRichPayloadText(msg.richPayload, content) : msg.richPayload,
+      }
+    })
+  }, [messages, liveDeltas, liveToolEvents])
 
   const handleLoadMore = async () => {
     if (loadingMore || !hasMore) return
@@ -332,6 +477,12 @@ export function ShareViewer({
             AI
           </span>
           {brandText} 分享
+          {isLive && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs text-primary">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              实时
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 self-start text-xs text-muted-foreground sm:self-auto">
           <span className="rounded-md bg-[hsl(var(--surface-hover))] px-2.5 py-1">{share.messageCount} 条消息</span>
@@ -342,12 +493,12 @@ export function ShareViewer({
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-6 sm:py-8')}>
         <h1 className="mb-6 text-2xl font-semibold tracking-tight">{share.title || share.sessionTitle}</h1>
         <section>
-          {messages.length === 0 ? (
+          {mergedMessages.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-muted-foreground">
               分享中暂无可展示的内容
             </div>
           ) : (
-            messages.map((msg) => (
+            mergedMessages.map((msg) => (
               <ShareMessageItem
                 key={`${msg.id}-${msg.createdAt}`}
                 msg={msg}

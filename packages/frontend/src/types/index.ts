@@ -285,6 +285,8 @@ export interface ChatShare {
   sessionTitle: string;
   messageCount: number;
   messages: ShareMessage[];
+  isLive?: boolean;
+  streamingMessageIds?: number[];
   createdAt: string;
   expiresAt?: string | null;
   revokedAt?: string | null;

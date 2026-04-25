@@ -6,6 +6,7 @@ import {
   determineChatImageBaseUrl as defaultDetermineChatImageBaseUrl,
   resolveChatImageUrls,
 } from '../../utils/chat-images'
+import { CHAT_IMAGE_PUBLIC_PATH } from '../../config/storage'
 import { buildRichMessagePayload, type GeneratedImageRecord } from '../../modules/chat/rich-payload'
 
 export class ShareServiceError extends Error {
@@ -58,6 +59,8 @@ export interface ShareDetail {
   sessionTitle: string
   messageCount: number
   messages: ShareMessageSnapshot[]
+  isLive?: boolean
+  streamingMessageIds?: number[]
   createdAt: string
   expiresAt: string | null
   revokedAt: string | null
@@ -100,6 +103,9 @@ export interface ShareListResult {
 type SharePayload = {
   sessionTitle: string
   messages: ShareMessageSnapshot[]
+  isLive?: boolean
+  streamingMessageIds?: number[]
+  imageBaseUrl?: string
 }
 
 export interface ShareServiceDeps {
@@ -115,6 +121,7 @@ const messageSelect = {
   content: true,
   reasoning: true,
   toolLogsJson: true,
+  streamStatus: true,
   createdAt: true,
   attachments: {
     select: {
@@ -209,13 +216,22 @@ export class ShareService {
       : ''
 
     const snapshots = this.buildMessageSnapshots(messages, normalizedIds, baseUrl)
+
+    const streamingMessageIds = messages
+      .filter((m) => m.streamStatus === 'streaming' || m.streamStatus === 'pending')
+      .map((m) => m.id)
+
+    const isLive = streamingMessageIds.length > 0
+
     const expiresAt = this.computeExpiry(params.expiresInHours)
     const token = await this.generateToken()
     const resolvedTitle = this.resolveTitle(params.title, session.title)
 
-    const payload: SharePayload = {
+    const payload: SharePayload & { isLive?: boolean; streamingMessageIds?: number[] } = {
       sessionTitle: session.title,
       messages: snapshots,
+      ...(baseUrl ? { imageBaseUrl: baseUrl } : {}),
+      ...(isLive ? { isLive: true, streamingMessageIds } : {}),
     }
 
     const record = await this.prisma.chatShare.create({
@@ -238,6 +254,8 @@ export class ShareService {
       title: resolvedTitle,
       sessionTitle: session.title,
       messages: snapshots,
+      isLive: payload.isLive ?? false,
+      streamingMessageIds: payload.streamingMessageIds,
       messageCount: snapshots.length,
       createdAt: record.createdAt.toISOString(),
       expiresAt: record.expiresAt ? record.expiresAt.toISOString() : null,
@@ -348,6 +366,8 @@ export class ShareService {
       title: record.title,
       sessionTitle: payload.sessionTitle || record.title,
       messages: includeMessages ? payloadMessages : [],
+      isLive: payload.isLive ?? false,
+      streamingMessageIds: payload.streamingMessageIds,
       messageCount: payloadMessages.length,
       createdAt: record.createdAt.toISOString(),
       expiresAt: record.expiresAt ? record.expiresAt.toISOString() : null,
@@ -382,12 +402,104 @@ export class ShareService {
     }
   }
 
+  async refreshLiveSharePayload(token: string): Promise<ShareDetail | null> {
+    const record = await this.prisma.chatShare.findFirst({
+      where: { token },
+    })
+    if (!record) return null
+    if (record.revokedAt) return null
+    if (record.expiresAt && record.expiresAt.getTime() < Date.now()) return null
+
+    const payload = this.parseSharePayload(record.payloadJson, record.id)
+    if (!payload?.isLive) return null
+
+    const messageIds = this.parseMessageIds(record.messageIdsJson)
+    if (messageIds.length === 0) return null
+
+    const messages = await this.prisma.message.findMany({
+      where: { id: { in: messageIds } },
+      select: messageSelect,
+    })
+
+    const baseUrl = this.resolveRefreshImageBaseUrl(payload)
+
+    const snapshots = this.buildMessageSnapshots(messages, messageIds, baseUrl)
+    const stillStreaming = messages.some(
+      (m) => m.streamStatus === 'streaming' || m.streamStatus === 'pending',
+    )
+
+    const updatedPayload: SharePayload & { isLive?: boolean; streamingMessageIds?: number[] } = {
+      sessionTitle: payload.sessionTitle,
+      messages: snapshots,
+      ...(baseUrl ? { imageBaseUrl: baseUrl } : {}),
+      ...(stillStreaming
+        ? {
+            isLive: true,
+            streamingMessageIds: messages
+              .filter((m) => m.streamStatus === 'streaming' || m.streamStatus === 'pending')
+              .map((m) => m.id),
+          }
+        : {}),
+    }
+
+    await this.prisma.chatShare.update({
+      where: { id: record.id },
+      data: { payloadJson: JSON.stringify(updatedPayload) },
+    })
+
+    return {
+      id: record.id,
+      sessionId: record.sessionId,
+      token: record.token,
+      title: record.title,
+      sessionTitle: updatedPayload.sessionTitle,
+      messages: snapshots,
+      isLive: updatedPayload.isLive ?? false,
+      streamingMessageIds: updatedPayload.streamingMessageIds,
+      messageCount: snapshots.length,
+      createdAt: record.createdAt.toISOString(),
+      expiresAt: record.expiresAt?.toISOString() ?? null,
+      revokedAt: (record.revokedAt as Date | null)?.toISOString() ?? null,
+    }
+  }
+
   private normalizeMessageIds(messageIds: number[]): number[] {
     const numbers = messageIds
       .map((id) => (typeof id === 'number' ? Math.trunc(id) : Number.NaN))
       .filter((id) => Number.isFinite(id) && id > 0)
     const unique = Array.from(new Set(numbers))
     return unique
+  }
+
+  private resolveRefreshImageBaseUrl(payload: SharePayload): string {
+    const storedBaseUrl =
+      typeof payload.imageBaseUrl === 'string'
+        ? payload.imageBaseUrl.trim().replace(/\/+$/, '')
+        : ''
+    if (storedBaseUrl) return storedBaseUrl
+    return this.inferImageBaseUrlFromPayload(payload)
+  }
+
+  private inferImageBaseUrlFromPayload(payload: SharePayload): string {
+    const publicPrefix = `${CHAT_IMAGE_PUBLIC_PATH.replace(/\/+$/, '')}/`
+    const messages = Array.isArray(payload.messages) ? payload.messages : []
+    for (const message of messages) {
+      const imageUrls = [
+        ...(Array.isArray(message.images) ? message.images : []),
+        ...(Array.isArray(message.richPayload?.parts)
+          ? message.richPayload.parts
+              .filter((part): part is RichMessageImagePart => part.type === 'image')
+              .map((part) => part.url)
+          : []),
+      ]
+      for (const rawUrl of imageUrls) {
+        if (typeof rawUrl !== 'string' || !/^https?:\/\//i.test(rawUrl)) continue
+        const publicPathIndex = rawUrl.indexOf(publicPrefix)
+        if (publicPathIndex <= 0) continue
+        return rawUrl.slice(0, publicPathIndex).replace(/\/+$/, '')
+      }
+    }
+    return ''
   }
 
   private resolveTitle(customTitle: string | null | undefined, fallback: string): string {

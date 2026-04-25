@@ -21,6 +21,9 @@ import {
   type ChatStreamRoutesDeps,
 } from '../use-cases/chat-stream-use-case'
 import { proxyChatStreamToExecution } from '../../execution/chat-stream-proxy'
+import { chatSessionEventBus } from '../services/chat-session-event-bus'
+import { normalizeToolCallEventPayload } from '../tool-call-event'
+import type { ExecutionSseEvent } from '@aichat/shared/execution-contract'
 
 export type { ChatStreamRoutesDeps }
 
@@ -45,11 +48,87 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
       typeof payload?.clientMessageId === 'string' && payload.clientMessageId.trim()
         ? payload.clientMessageId.trim()
         : String(sessionId)
+    const normalizedClientMessageId =
+      typeof payload?.clientMessageId === 'string' && payload.clientMessageId.trim()
+        ? payload.clientMessageId.trim()
+        : null
     return proxyChatStreamToExecution({
       legacyResponse,
       sessionId,
       runKey,
       sourceId,
+      onEvent: (event: ExecutionSseEvent) => {
+        if (!chatSessionEventBus.hasSubscribers(sessionId)) return
+
+        const streamMeta = normalizedClientMessageId
+          ? findStreamMetaByClientMessageId(sessionId, normalizedClientMessageId)
+          : null
+        const messageId = streamMeta?.assistantMessageId ?? null
+        const ts = Date.now()
+
+        if (event.type === 'step_delta') {
+          const payload = event.payload as { channel?: string; delta?: string }
+          if (payload.channel === 'content' && payload.delta) {
+            chatSessionEventBus.publish(sessionId, {
+              type: 'content_delta',
+              sessionId,
+              messageId,
+              delta: payload.delta,
+              ts,
+            })
+          } else if (payload.channel === 'reasoning' && payload.delta) {
+            chatSessionEventBus.publish(sessionId, {
+              type: 'reasoning_delta',
+              sessionId,
+              messageId,
+              delta: payload.delta,
+              ts,
+            })
+          }
+        } else if (event.type === 'step_artifact') {
+          const payload = event.payload as { kind?: string; data?: Record<string, unknown> }
+          if (payload.kind === 'tool_call' && payload.data) {
+            const rawToolEvent =
+              payload.data.event && typeof payload.data.event === 'object' && !Array.isArray(payload.data.event)
+                ? (payload.data.event as Record<string, unknown>)
+                : payload.data
+            chatSessionEventBus.publish(sessionId, {
+              type: 'tool_call',
+              sessionId,
+              messageId,
+              toolEvent: normalizeToolCallEventPayload(rawToolEvent),
+              ts,
+            })
+          }
+        } else if (event.type === 'step_complete') {
+          const payload = event.payload as { error?: string }
+          if (event.status !== 'completed') {
+            chatSessionEventBus.publish(sessionId, {
+              type: 'stream_error',
+              sessionId,
+              messageId,
+              error: payload.error ?? 'Stream error',
+              ts,
+            })
+            return
+          }
+          chatSessionEventBus.publish(sessionId, {
+            type: 'message_complete',
+            sessionId,
+            messageId,
+            ts,
+          })
+        } else if (event.type === 'run_error') {
+          const payload = event.payload as { message?: string }
+          chatSessionEventBus.publish(sessionId, {
+            type: 'stream_error',
+            sessionId,
+            messageId,
+            error: payload.message ?? 'Stream error',
+            ts,
+          })
+        }
+      },
     })
   })
 
