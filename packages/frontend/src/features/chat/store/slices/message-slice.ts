@@ -578,66 +578,127 @@ export const createMessageSlice: ChatSliceCreator<
       return false
     }
 
-    let resolvedMessageId: number | string = messageId
+    let resolvedMessageId = messageId
 
-    try {
-      let result = await updateUserMessage(sessionId, resolvedMessageId as number, nextContent)
-      if (!result?.success) {
-        const errorMsg = (result as any)?.error || ''
-        // 如果是占位 ID（停止后未收到 start 事件导致本地 ID 未同步为真实 DB ID），
-        // 尝试通过 clientMessageId 查找真实消息后重试
-        if (
-          result &&
-          typeof (result as any).error === 'string' &&
-          (result as any).error === 'Message not found' &&
-          meta.clientMessageId
-        ) {
-          try {
-            const lookup = await getMessageByClientId(sessionId, meta.clientMessageId)
-            const serverMsg = lookup?.data?.message
-            if (serverMsg && typeof serverMsg.id === 'number') {
-              resolvedMessageId = serverMsg.id
-              result = await updateUserMessage(sessionId, resolvedMessageId, nextContent)
-              if (result?.success) {
-                // 更新本地 meta 中的占位 ID 为真实 DB ID
-                set((state) => {
-                  const oldKey = messageKey(messageId)
-                  const newKey = messageKey(resolvedMessageId)
-                  const metaIdx = state.messageMetas.findIndex(
-                    (item) => messageKey(item.id) === oldKey,
-                  )
-                  if (metaIdx === -1) return state
-                  const nextMetas = state.messageMetas.slice()
-                  nextMetas[metaIdx] = { ...nextMetas[metaIdx], id: resolvedMessageId }
-                  const nextBodies = { ...state.messageBodies }
-                  if (nextBodies[oldKey]) {
-                    nextBodies[newKey] = { ...nextBodies[oldKey], id: resolvedMessageId }
-                    delete nextBodies[oldKey]
-                  }
-                  const nextRenderCache = { ...state.messageRenderCache }
-                  if (nextRenderCache[oldKey]) {
-                    nextRenderCache[newKey] = nextRenderCache[oldKey]
-                    delete nextRenderCache[oldKey]
-                  }
-                  return {
-                    messageMetas: nextMetas,
-                    messageBodies: nextBodies,
-                    messageRenderCache: nextRenderCache,
-                  }
-                })
-              }
-            }
-          } catch {
-            // 查找失败则使用原始错误
+    const getUpdateErrorMessage = (failure: any) =>
+      failure?.response?.data?.error ||
+      failure?.data?.error ||
+      failure?.error ||
+      failure?.message ||
+      ''
+
+    const isMessageNotFoundFailure = (failure: any) => {
+      const status = failure?.response?.status ?? failure?.status
+      return getUpdateErrorMessage(failure) === 'Message not found' || status === 404
+    }
+
+    const remapLocalUserMessageId = (fromId: number, toId: number) => {
+      const oldKey = messageKey(fromId)
+      const newKey = messageKey(toId)
+      if (oldKey === newKey) return
+
+      set((state) => {
+        let nextMetas = state.messageMetas
+        let metasChanged = false
+
+        const ensureMetas = () => {
+          if (!metasChanged) {
+            nextMetas = state.messageMetas.slice()
+            metasChanged = true
+          }
+          return nextMetas
+        }
+
+        const userMetaIdx = state.messageMetas.findIndex(
+          (item) =>
+            item.sessionId === sessionId &&
+            item.role === 'user' &&
+            messageKey(item.id) === oldKey,
+        )
+        if (userMetaIdx !== -1) {
+          const metas = ensureMetas()
+          metas[userMetaIdx] = { ...metas[userMetaIdx], id: toId }
+        }
+
+        for (let i = 0; i < state.messageMetas.length; i += 1) {
+          const item = state.messageMetas[i]
+          if (
+            item.sessionId === sessionId &&
+            item.role === 'assistant' &&
+            item.parentMessageId != null &&
+            messageKey(item.parentMessageId) === oldKey
+          ) {
+            const metas = ensureMetas()
+            metas[i] = { ...metas[i], parentMessageId: toId }
           }
         }
-        if (!result?.success) {
-          set({ error: (result as any)?.error || errorMsg || '编辑消息失败' })
-          return false
+
+        const nextBodies = { ...state.messageBodies }
+        let bodiesChanged = false
+        const previousBody = nextBodies[oldKey]
+        if (previousBody) {
+          nextBodies[newKey] = { ...(nextBodies[newKey] ?? previousBody), id: toId }
+          delete nextBodies[oldKey]
+          bodiesChanged = true
         }
+
+        const nextRenderCache = { ...state.messageRenderCache }
+        let renderCacheChanged = false
+        if (nextRenderCache[oldKey]) {
+          if (!nextRenderCache[newKey]) {
+            nextRenderCache[newKey] = nextRenderCache[oldKey]
+          }
+          delete nextRenderCache[oldKey]
+          renderCacheChanged = true
+        }
+
+        if (!metasChanged && !bodiesChanged && !renderCacheChanged) {
+          return state
+        }
+
+        return {
+          ...(metasChanged
+            ? {
+                messageMetas: nextMetas,
+                assistantVariantSelections: buildVariantSelections(nextMetas),
+              }
+            : {}),
+          ...(bodiesChanged ? { messageBodies: nextBodies } : {}),
+          ...(renderCacheChanged ? { messageRenderCache: nextRenderCache } : {}),
+        }
+      })
+    }
+
+    const tryUpdateUserMessage = async (targetMessageId: number) => {
+      try {
+        const result = await updateUserMessage(sessionId, targetMessageId, nextContent)
+        return {
+          success: Boolean(result?.success),
+          failure: result?.success ? null : result,
+        }
+      } catch (failure) {
+        return { success: false, failure }
       }
-    } catch (error: any) {
-      set({ error: error?.response?.data?.error || error?.message || '编辑消息失败' })
+    }
+
+    let updateAttempt = await tryUpdateUserMessage(resolvedMessageId)
+    if (!updateAttempt.success && isMessageNotFoundFailure(updateAttempt.failure) && meta.clientMessageId) {
+      try {
+        const lookup = await getMessageByClientId(sessionId, meta.clientMessageId)
+        const serverMsg = lookup?.data?.message
+        if (serverMsg && typeof serverMsg.id === 'number') {
+          resolvedMessageId = serverMsg.id
+          updateAttempt = await tryUpdateUserMessage(resolvedMessageId)
+          if (updateAttempt.success) {
+            remapLocalUserMessageId(messageId, resolvedMessageId)
+          }
+        }
+      } catch {
+        // 保留原始编辑失败原因。
+      }
+    }
+    if (!updateAttempt.success) {
+      set({ error: getUpdateErrorMessage(updateAttempt.failure) || '编辑消息失败' })
       return false
     }
 

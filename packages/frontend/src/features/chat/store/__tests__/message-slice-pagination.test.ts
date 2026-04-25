@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createChatStoreInstance } from '@/features/chat/store'
 import * as chatApi from '@/features/chat/api'
+import { messageKey } from '@/features/chat/store/utils'
 import type { ChatSession, Message } from '@/types'
 
 vi.mock('@/features/chat/api', () => ({
+  getMessageByClientId: vi.fn(),
   getMessages: vi.fn(),
   getSessionArtifacts: vi.fn(),
   updateUserMessage: vi.fn(),
@@ -33,8 +35,9 @@ const buildMessages = (start: number, end: number, sessionId = 1): Message[] =>
 
 describe('message slice pagination', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     vi.mocked(chatApi.getSessionArtifacts).mockResolvedValue([])
+    vi.mocked(chatApi.getMessageByClientId).mockResolvedValue({ data: null } as any)
   })
 
   it('fetchMessages should default to latest page and mark hasOlder', async () => {
@@ -120,5 +123,127 @@ describe('message slice pagination', () => {
       hasOlder: false,
       isLoadingOlder: false,
     })
+  })
+
+  it('editLastUserMessage should resolve placeholder id by clientMessageId before resend', async () => {
+    const store = createChatStoreInstance()
+    const session = buildSession(9)
+    const clientMessageId = 'client-stop-before-start'
+    const placeholderId = 1714000000000
+    const realMessageId = 42
+    const assistantId = placeholderId + 1
+    const createdAt = new Date(Date.UTC(2026, 1, 20, 0, 0, 1)).toISOString()
+    const resend = vi.fn().mockResolvedValue(undefined)
+    store.setState({
+      sessions: [session],
+      currentSession: session,
+      streamMessage: resend,
+      messageMetas: [
+        {
+          id: placeholderId,
+          sessionId: session.id,
+          role: 'user',
+          createdAt,
+          clientMessageId,
+          stableKey: `client:${clientMessageId}`,
+        },
+        {
+          id: assistantId,
+          sessionId: session.id,
+          role: 'assistant',
+          createdAt,
+          parentMessageId: placeholderId,
+          stableKey: 'assistant-local',
+          streamStatus: 'cancelled',
+        },
+      ],
+      messageBodies: {
+        [messageKey(placeholderId)]: {
+          id: placeholderId,
+          stableKey: `client:${clientMessageId}`,
+          content: 'old question',
+          reasoning: '',
+          version: 1,
+          reasoningVersion: 0,
+        },
+        [messageKey(assistantId)]: {
+          id: assistantId,
+          stableKey: 'assistant-local',
+          content: 'partial answer',
+          reasoning: '',
+          version: 1,
+          reasoningVersion: 0,
+        },
+      },
+      messageRenderCache: {
+        [messageKey(placeholderId)]: {
+          contentHtml: '<p>old question</p>',
+          reasoningHtml: null,
+          contentVersion: 1,
+          reasoningVersion: 0,
+          updatedAt: Date.now(),
+        },
+      },
+    } as any)
+
+    const notFoundError: any = new Error('Request failed with status code 404')
+    notFoundError.response = {
+      status: 404,
+      data: { success: false, error: 'Message not found' },
+    }
+    vi.mocked(chatApi.updateUserMessage)
+      .mockRejectedValueOnce(notFoundError)
+      .mockResolvedValueOnce({
+        success: true,
+        data: { messageId: realMessageId, deletedAssistantMessageIds: [assistantId] },
+      } as any)
+    vi.mocked(chatApi.getMessageByClientId).mockResolvedValue({
+      success: true,
+      data: {
+        message: {
+          id: realMessageId,
+          sessionId: session.id,
+          role: 'user',
+          content: 'old question',
+          createdAt,
+          clientMessageId,
+        },
+      },
+    } as any)
+
+    const ok = await store
+      .getState()
+      .editLastUserMessage(session.id, placeholderId, 'updated question')
+
+    expect(ok).toBe(true)
+    expect(chatApi.updateUserMessage).toHaveBeenNthCalledWith(
+      1,
+      session.id,
+      placeholderId,
+      'updated question',
+    )
+    expect(chatApi.getMessageByClientId).toHaveBeenCalledWith(session.id, clientMessageId)
+    expect(chatApi.updateUserMessage).toHaveBeenNthCalledWith(
+      2,
+      session.id,
+      realMessageId,
+      'updated question',
+    )
+    expect(resend).toHaveBeenCalledWith(
+      session.id,
+      '',
+      undefined,
+      expect.objectContaining({
+        replyToMessageId: realMessageId,
+        replyToClientMessageId: clientMessageId,
+      }),
+    )
+
+    const state = store.getState()
+    expect(state.messageMetas.find((item) => messageKey(item.id) === messageKey(placeholderId))).toBeUndefined()
+    expect(state.messageMetas.find((item) => messageKey(item.id) === messageKey(assistantId))).toBeUndefined()
+    expect(state.messageBodies[messageKey(placeholderId)]).toBeUndefined()
+    expect(state.messageBodies[messageKey(assistantId)]).toBeUndefined()
+    expect(state.messageBodies[messageKey(realMessageId)]?.content).toBe('updated question')
   })
 })
