@@ -65,11 +65,11 @@ export async function generateImageOpenAI(params: OpenAIImageGenerationParams): 
   }
   
   // 确定 API 端点
-  // Google Imagen 使用 /v1beta/openai/images/generations
-  // 其他使用标准 /v1/images/generations
+  // Google Imagen 使用 /openai/images/generations（baseUrl 已含 /v1beta）
+  // 其他使用标准 /images/generations（baseUrl 已含 /v1）
   const isGoogleImagen = baseUrl.includes('generativelanguage.googleapis.com')
   const endpoint = isGoogleImagen
-    ? `${baseUrl.replace(/\/$/, '')}/v1beta/openai/images/generations`
+    ? `${baseUrl.replace(/\/$/, '')}/openai/images/generations`
     : `${baseUrl.replace(/\/$/, '')}/images/generations`
   
   log.debug('[ImageGeneration] OpenAI compat request', { endpoint, model, promptLength: prompt.length })

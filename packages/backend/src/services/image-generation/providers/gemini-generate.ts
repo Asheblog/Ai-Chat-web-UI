@@ -12,6 +12,7 @@ import { BackendLogger as log } from '../../../utils/logger'
 import type { GeneratedImage, ImageGenerationResult } from './openai-compat'
 
 export interface GeminiImageGenerationParams {
+  baseUrl: string
   apiKey: string
   model: string
   prompt: string
@@ -20,11 +21,11 @@ export interface GeminiImageGenerationParams {
 
 /**
  * 使用 Gemini GenerateContent API 生成图片
- * 
- * POST /v1beta/models/{model}:generateContent
+ *
+ * POST {baseUrl}/models/{model}:generateContent
  */
 export async function generateImageGemini(params: GeminiImageGenerationParams): Promise<ImageGenerationResult> {
-  const { apiKey, model, prompt, inputImage } = params
+  const { baseUrl, apiKey, model, prompt, inputImage } = params
   
   // 构建 parts 数组
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = []
@@ -54,7 +55,7 @@ export async function generateImageGemini(params: GeminiImageGenerationParams): 
   // 文本提示
   parts.push({ text: prompt })
   
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+  const endpoint = `${baseUrl.replace(/\/$/, '')}/models/${encodeURIComponent(model)}:generateContent`
   
   log.debug('[ImageGeneration] Gemini request', { endpoint, model, promptLength: prompt.length, hasInputImage: !!inputImage })
   

@@ -72,6 +72,7 @@ export class ImageGenerationService {
     try {
       if (apiType === 'gemini-generate') {
         return await generateImageGemini({
+          baseUrl: connection.baseUrl,
           apiKey: connection.apiKey || '',
           model: modelId,
           prompt,

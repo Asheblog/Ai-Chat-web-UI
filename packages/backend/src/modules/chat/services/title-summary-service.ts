@@ -154,6 +154,8 @@ export class TitleSummaryService {
       )}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
     } else if (provider === 'openai_responses') {
       url = `${endpoint}/responses`
+    } else if (provider === 'google_genai') {
+      url = `${endpoint}/models/${encodeURIComponent(modelId)}:generateContent`
     } else {
       url = `${endpoint}/chat/completions`
     }

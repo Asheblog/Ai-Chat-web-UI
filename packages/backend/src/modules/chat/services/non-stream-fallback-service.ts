@@ -68,7 +68,7 @@ export class NonStreamFallbackService {
         url = `${params.baseUrl}/chat/completions`
       } else if (params.provider === 'google_genai') {
         body = convertOpenAIReasoningPayload(body)
-        url = `${params.baseUrl}/chat/completions`
+        url = `${params.baseUrl}/models/${encodeURIComponent(params.modelRawId)}:generateContent`
       } else if (params.provider === 'openai_responses') {
         body = convertChatCompletionsRequestToResponses(convertOpenAIReasoningPayload(body))
         url = `${params.baseUrl}/responses`
