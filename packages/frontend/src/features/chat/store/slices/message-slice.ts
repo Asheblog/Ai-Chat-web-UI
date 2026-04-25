@@ -1,4 +1,4 @@
-import { getMessages, getSessionArtifacts, updateUserMessage } from '@/features/chat/api'
+import { getMessageByClientId, getMessages, getSessionArtifacts, updateUserMessage } from '@/features/chat/api'
 import type { Message } from '@/types'
 import type { MessageSlice } from '../types'
 import type { ChatSliceCreator, MessageId } from '../types'
@@ -578,11 +578,63 @@ export const createMessageSlice: ChatSliceCreator<
       return false
     }
 
+    let resolvedMessageId: number | string = messageId
+
     try {
-      const result = await updateUserMessage(sessionId, messageId, nextContent)
+      let result = await updateUserMessage(sessionId, resolvedMessageId as number, nextContent)
       if (!result?.success) {
-        set({ error: (result as any)?.error || '编辑消息失败' })
-        return false
+        const errorMsg = (result as any)?.error || ''
+        // 如果是占位 ID（停止后未收到 start 事件导致本地 ID 未同步为真实 DB ID），
+        // 尝试通过 clientMessageId 查找真实消息后重试
+        if (
+          result &&
+          typeof (result as any).error === 'string' &&
+          (result as any).error === 'Message not found' &&
+          meta.clientMessageId
+        ) {
+          try {
+            const lookup = await getMessageByClientId(sessionId, meta.clientMessageId)
+            const serverMsg = lookup?.data?.message
+            if (serverMsg && typeof serverMsg.id === 'number') {
+              resolvedMessageId = serverMsg.id
+              result = await updateUserMessage(sessionId, resolvedMessageId, nextContent)
+              if (result?.success) {
+                // 更新本地 meta 中的占位 ID 为真实 DB ID
+                set((state) => {
+                  const oldKey = messageKey(messageId)
+                  const newKey = messageKey(resolvedMessageId)
+                  const metaIdx = state.messageMetas.findIndex(
+                    (item) => messageKey(item.id) === oldKey,
+                  )
+                  if (metaIdx === -1) return state
+                  const nextMetas = state.messageMetas.slice()
+                  nextMetas[metaIdx] = { ...nextMetas[metaIdx], id: resolvedMessageId }
+                  const nextBodies = { ...state.messageBodies }
+                  if (nextBodies[oldKey]) {
+                    nextBodies[newKey] = { ...nextBodies[oldKey], id: resolvedMessageId }
+                    delete nextBodies[oldKey]
+                  }
+                  const nextRenderCache = { ...state.messageRenderCache }
+                  if (nextRenderCache[oldKey]) {
+                    nextRenderCache[newKey] = nextRenderCache[oldKey]
+                    delete nextRenderCache[oldKey]
+                  }
+                  return {
+                    messageMetas: nextMetas,
+                    messageBodies: nextBodies,
+                    messageRenderCache: nextRenderCache,
+                  }
+                })
+              }
+            }
+          } catch {
+            // 查找失败则使用原始错误
+          }
+        }
+        if (!result?.success) {
+          set({ error: (result as any)?.error || errorMsg || '编辑消息失败' })
+          return false
+        }
       }
     } catch (error: any) {
       set({ error: error?.response?.data?.error || error?.message || '编辑消息失败' })
@@ -590,11 +642,11 @@ export const createMessageSlice: ChatSliceCreator<
     }
 
     set((state) => {
-      const targetKey = messageKey(messageId)
+      const targetKey = messageKey(resolvedMessageId)
       const prevBody = state.messageBodies[targetKey]
       const nextBodies = { ...state.messageBodies }
       nextBodies[targetKey] = {
-        ...(prevBody ?? { id: messageId, stableKey: meta.stableKey, content: '', reasoning: '', version: 0, reasoningVersion: 0 }),
+        ...(prevBody ?? { id: resolvedMessageId, stableKey: meta.stableKey, content: '', reasoning: '', version: 0, reasoningVersion: 0 }),
         content: nextContent,
         version: (prevBody?.version ?? 0) + 1,
       }
@@ -648,7 +700,7 @@ export const createMessageSlice: ChatSliceCreator<
     }
 
     await get().streamMessage(sessionId, '', undefined, {
-      replyToMessageId: messageId,
+      replyToMessageId: resolvedMessageId,
       replyToClientMessageId: meta.clientMessageId ?? undefined,
       skills:
         enabledSkills.length > 0
