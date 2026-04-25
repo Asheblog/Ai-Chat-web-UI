@@ -17,6 +17,9 @@ export type ToolLogEntry = {
   id: string;
   tool: string;
   stage: ToolLogStage;
+  status?: 'running' | 'success' | 'error' | 'pending' | 'rejected' | 'aborted';
+  phase?: string;
+  callId?: string;
   query?: string;
   hits?: WebSearchHit[];
   error?: string;
@@ -89,6 +92,18 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
           query,
           createdAt: createdAtRaw,
         };
+        if (
+          typeof entry.status === 'string' &&
+          ['running', 'success', 'error', 'pending', 'rejected', 'aborted'].includes(entry.status)
+        ) {
+          log.status = entry.status as ToolLogEntry['status'];
+        }
+        if (typeof entry.phase === 'string' && entry.phase.trim()) {
+          log.phase = entry.phase;
+        }
+        if (typeof entry.callId === 'string' && entry.callId.trim()) {
+          log.callId = entry.callId;
+        }
         if (Array.isArray(entry.hits)) {
           log.hits = entry.hits
             .map((hit: any) => {

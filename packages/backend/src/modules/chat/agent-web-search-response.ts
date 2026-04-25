@@ -447,10 +447,17 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (stage !== 'start' && stage !== 'result' && stage !== 'error') return;
         const tool = typeof payload.tool === 'string' && payload.tool.trim() ? payload.tool : null;
         if (!tool) return;
+        const VALID_STATUSES = new Set(['running', 'success', 'error', 'pending', 'rejected', 'aborted']);
         const entry: ToolLogEntry = {
           id: ensureToolLogId(payload),
           tool,
           stage,
+          status:
+            typeof payload.status === 'string' && VALID_STATUSES.has(payload.status)
+              ? (payload.status as ToolLogEntry['status'])
+              : undefined,
+          phase: typeof payload.phase === 'string' ? payload.phase : undefined,
+          callId: typeof payload.callId === 'string' ? payload.callId : undefined,
           query: typeof payload.query === 'string' ? payload.query : undefined,
           createdAt: Date.now(),
         };
@@ -474,6 +481,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           toolLogs[existingIndex] = {
             ...existing,
             stage: entry.stage,
+            status: entry.status ?? existing.status,
+            phase: entry.phase ?? existing.phase,
+            callId: entry.callId ?? existing.callId,
             query: entry.query ?? existing.query,
             hits: entry.hits ?? existing.hits,
             error: entry.error ?? existing.error,

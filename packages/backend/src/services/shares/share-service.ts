@@ -545,19 +545,28 @@ export class ShareService {
       if (!Array.isArray(parsed)) return []
       return parsed
         .filter((item): item is Record<string, unknown> => item && typeof item === 'object')
-        .map((item) => ({
-          id: String(item.id ?? ''),
-          tool: String(item.tool ?? ''),
-          stage: (item.stage as 'start' | 'result' | 'error') ?? 'start',
-          status: (item.status as 'running' | 'success' | 'error') ?? 'running',
-          query: typeof item.query === 'string' ? item.query : undefined,
-          url: typeof item.url === 'string' ? item.url : undefined,
-          summary: typeof item.summary === 'string' ? item.summary : undefined,
-          error: typeof item.error === 'string' ? item.error : undefined,
-          createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-          hits: Array.isArray(item.hits) ? item.hits : undefined,
-          details: item.details as Record<string, unknown> | undefined,
-        }))
+        .map((item) => {
+          const stage = (item.stage as 'start' | 'result' | 'error') ?? 'start'
+          const resolveStatus = (raw: unknown): 'running' | 'success' | 'error' => {
+            if (raw === 'running' || raw === 'success' || raw === 'error') return raw
+            if (stage === 'result') return 'success'
+            if (stage === 'error') return 'error'
+            return 'running'
+          }
+          return {
+            id: String(item.id ?? ''),
+            tool: String(item.tool ?? ''),
+            stage,
+            status: resolveStatus(item.status),
+            query: typeof item.query === 'string' ? item.query : undefined,
+            url: typeof item.url === 'string' ? item.url : undefined,
+            summary: typeof item.summary === 'string' ? item.summary : undefined,
+            error: typeof item.error === 'string' ? item.error : undefined,
+            createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
+            hits: Array.isArray(item.hits) ? item.hits : undefined,
+            details: item.details as Record<string, unknown> | undefined,
+          }
+        })
     } catch {
       return []
     }
