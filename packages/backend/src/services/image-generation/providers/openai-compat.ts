@@ -70,7 +70,7 @@ export async function generateImageOpenAI(params: OpenAIImageGenerationParams): 
   const isGoogleImagen = baseUrl.includes('generativelanguage.googleapis.com')
   const endpoint = isGoogleImagen
     ? `${baseUrl.replace(/\/$/, '')}/v1beta/openai/images/generations`
-    : `${baseUrl.replace(/\/$/, '')}/v1/images/generations`
+    : `${baseUrl.replace(/\/$/, '')}/images/generations`
   
   log.debug('[ImageGeneration] OpenAI compat request', { endpoint, model, promptLength: prompt.length })
   
