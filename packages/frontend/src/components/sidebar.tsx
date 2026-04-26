@@ -294,11 +294,14 @@ export function Sidebar() {
     <div className="flex h-full w-full flex-col border-r border-slate-200/80 bg-white/80 text-foreground shadow-[10px_0_28px_rgba(15,23,42,0.035)] lg:w-[248px]">
       {/* 顶部文字LOGO + 折叠按钮 */}
       <div className="flex h-[78px] items-center justify-between px-4">
-        <Link href="/main" className="flex min-w-0 flex-1 select-none items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.22)]">
-            <MessageCircle className="h-5 w-5" />
+        <Link href="/main" className="flex min-w-0 flex-1 select-none items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.22)]">
+            <MessageCircle className="h-[18px] w-[18px]" />
           </span>
-          <span className="truncate text-xl font-semibold tracking-tight text-slate-900">
+          <span
+            className="truncate text-[15px] font-semibold leading-tight tracking-normal text-slate-900"
+            title={(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
+          >
             {(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
           </span>
         </Link>

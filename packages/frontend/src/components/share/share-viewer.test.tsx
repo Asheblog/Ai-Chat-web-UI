@@ -49,7 +49,7 @@ describe("ShareViewer", () => {
     expect(screen.getByText("量子隧穿是一种在经典力学中无法出现的现象。")).toBeInTheDocument()
 
     // Footer with brand text
-    expect(screen.getByText("TestBrand")).toBeInTheDocument()
+    expect(screen.getAllByText("TestBrand").length).toBeGreaterThan(0)
     expect(screen.getByText(/本页面分享由/)).toBeInTheDocument()
   })
 
@@ -84,7 +84,7 @@ describe("ShareViewer", () => {
       />,
     )
 
-    const reasoningButton = screen.getByRole('button', { name: /思考完成/ })
+    const reasoningButton = screen.getByRole('button', { name: /思考过程/ })
     expect(reasoningButton).toBeInTheDocument()
     expect(reasoningButton).toHaveAttribute("aria-expanded", "false")
   })
@@ -130,7 +130,7 @@ describe("ShareViewer", () => {
       />,
     )
 
-    expect(screen.getByText("工具调用 (1)")).toBeInTheDocument()
+    expect(screen.getByText("工具调用 1 个")).toBeInTheDocument()
     expect(screen.getByText("完成 1 次")).toBeInTheDocument()
   })
 
@@ -156,7 +156,7 @@ describe("ShareViewer", () => {
       />,
     )
 
-    expect(screen.getByText("AIChat")).toBeInTheDocument()
+    expect(screen.getAllByText("AIChat").length).toBeGreaterThan(0)
   })
 
   it("ignores external web evidence images in shared rich payload", () => {

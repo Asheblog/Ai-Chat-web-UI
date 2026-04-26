@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ToolCallCard } from '@/components/message-bubble/tool-call-card'
 import type { ToolEvent } from '@/types'
@@ -26,8 +27,11 @@ const createEvent = (override: Partial<ToolEvent> = {}): ToolEvent => ({
 })
 
 describe('ToolCallCard', () => {
-  it('renders read_url lead image preview', () => {
+  it('opens read_url details with lead image preview', async () => {
+    const user = userEvent.setup()
     render(<ToolCallCard event={createEvent()} />)
+
+    await user.click(screen.getByRole('button', { name: '查看网页读取工具调用详情' }))
 
     expect(screen.getByAltText('示例文章')).toHaveAttribute('src', 'https://cdn.example.com/lead.png')
     expect(screen.getByText('主图 · 共 2 张')).toBeInTheDocument()
