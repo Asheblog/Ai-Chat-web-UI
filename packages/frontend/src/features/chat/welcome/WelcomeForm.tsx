@@ -161,10 +161,10 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
   const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
 
   return (
-    <div className="w-full max-w-4xl">
+    <div className="w-full max-w-[940px]">
       <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
 
-      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex items-center gap-2 px-2 py-1.5 md:py-2')}>
+      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex min-h-[128px] items-start gap-2 px-5 py-4 md:items-center md:px-5 md:py-4')}>
         <div className="flex shrink-0 items-center gap-1">
           <AdvancedOptions {...advancedOptions} />
           {showExpand && (
@@ -172,7 +172,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-lg text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground md:h-10 md:w-10 md:rounded-xl"
+              className="h-10 w-10 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
               onClick={onOpenExpand}
               disabled={creationDisabled}
               aria-label="全屏编辑"
@@ -187,7 +187,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             disableDocuments={creationDisabled}
             hasImages={attachments.selectedImages.length > 0}
             hasDocuments={attachments.documents.length > 0}
-            className="h-9 w-9 rounded-lg border-0 bg-transparent md:h-10 md:w-10 md:rounded-xl"
+            className="h-10 w-10 rounded-[8px] border-0 bg-transparent"
             ariaLabel="添加附件"
             onOpenManager={() => setAttachmentViewerOpen(true)}
             manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
@@ -210,7 +210,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           onPaste={attachments.onPaste}
           className={cn(
             COMPOSER_TEXTAREA_BASE_CLASS,
-            'min-h-[44px] max-h-[220px] flex-1 px-2 py-2.5 text-sm md:min-h-[56px] md:py-3 md:text-base'
+            'min-h-[72px] max-h-[220px] flex-1 px-3 py-3 text-sm md:text-base'
           )}
           rows={1}
         />
@@ -219,7 +219,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           type="button"
           onClick={onSubmit}
           disabled={creationDisabled}
-          className="h-10 w-10 shrink-0 rounded-xl p-0 shadow-[0_10px_24px_hsl(var(--background)/0.24)] md:h-11 md:w-11"
+          className="h-12 w-12 shrink-0 rounded-[8px] p-0 shadow-[0_10px_24px_rgba(37,99,235,0.24)]"
           aria-label={isCreating ? '正在创建会话' : '发送'}
         >
           {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}

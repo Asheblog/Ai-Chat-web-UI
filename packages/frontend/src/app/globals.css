@@ -5,10 +5,10 @@
 @layer base {
   :root {
     --background: 210 40% 98%;
-    --background-alt: 210 40% 96.1%;
+    --background-alt: 210 40% 96.8%;
     --surface: 0 0% 100%;
-    --surface-hover: 210 40% 96.1%;
-    --foreground: 217.2 32.6% 17.5%;
+    --surface-hover: 214 95% 96%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 217.2 32.6% 17.5%;
     --popover: 0 0% 100%;
@@ -17,26 +17,26 @@
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 217.2 32.6% 17.5%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
+    --muted: 213 58% 95%;
+    --muted-foreground: 215 20% 46%;
+    --accent: 199 89% 94%;
     --accent-foreground: 217.2 32.6% 17.5%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
     --ring: 221.2 83.2% 53.3%;
-    --radius: 0.75rem;
+    --radius: 0.625rem;
 
-    --primary-hover: 217.2 91.2% 59.8%;
-    --accent-color: 258.3 89.5% 66.3%;
+    --primary-hover: 224 76% 48%;
+    --accent-color: 199 89% 48%;
     --success: 142.1 70.6% 45.3%;
     --warning: 37.7 92.1% 50.2%;
     --sidebar-bg: 210 40% 98%;
-    --sidebar-hover: 214.3 31.8% 91.4%;
-    --sidebar-active: 217.2 91.2% 59.8%;
-    --hero-from: 217.2 32.6% 17.5%;
-    --hero-to: 215.4 16.3% 46.9%;
+    --sidebar-hover: 214 95% 96%;
+    --sidebar-active: 221.2 83.2% 53.3%;
+    --hero-from: 222 47% 11%;
+    --hero-to: 221.2 83.2% 53.3%;
     --code-bg: 210 28.6% 97.3%;
     --code-header: 214.3 25.9% 94.7%;
     --code-border: 210 17.5% 84.3%;
@@ -95,10 +95,7 @@
   body {
     @apply text-foreground;
     --font-ui: var(--font-inter);
-    background:
-      radial-gradient(1400px 500px at 0% -10%, hsl(var(--primary) / 0.09), transparent 40%),
-      radial-gradient(1000px 480px at 100% -20%, hsl(var(--accent-color) / 0.08), transparent 42%),
-      hsl(var(--background));
+    background: hsl(var(--background));
     font-family: var(--font-ui, "Inter"), var(--font-noto-sc), "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "HarmonyOS Sans", "Segoe UI", "Helvetica Neue", system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -107,6 +104,157 @@
   ::selection {
     background: hsl(var(--primary) / 0.25);
     color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  .v2-app-surface {
+    position: relative;
+    isolation: isolate;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 250, 252, 0.94)),
+      radial-gradient(900px 420px at 100% 24%, rgba(191, 229, 255, 0.5), transparent 72%),
+      linear-gradient(160deg, rgba(219, 234, 254, 0.64) 0%, rgba(248, 250, 252, 0) 42%),
+      #f8fafc;
+  }
+
+  .v2-app-surface::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      linear-gradient(155deg, transparent 0 50%, rgba(186, 230, 253, 0.18) 50% 58%, transparent 58%),
+      linear-gradient(165deg, transparent 0 58%, rgba(219, 234, 254, 0.42) 58% 66%, transparent 66%);
+  }
+
+  .v2-panel {
+    border: 1px solid hsl(var(--border) / 0.86);
+    border-radius: 10px;
+    background: hsl(var(--surface) / 0.9);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+  }
+
+  .v2-panel-soft {
+    border: 1px solid hsl(var(--border) / 0.74);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.78));
+  }
+
+  .v2-toolbar {
+    height: 52px;
+    border-bottom: 1px solid hsl(var(--border) / 0.82);
+    background: rgba(255, 255, 255, 0.86);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+
+  .v2-icon-button {
+    display: inline-flex;
+    height: 36px;
+    width: 36px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid hsl(var(--border) / 0.82);
+    background: hsl(var(--surface) / 0.72);
+    color: hsl(var(--muted-foreground));
+    transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+  }
+
+  .v2-icon-button:hover {
+    border-color: hsl(var(--primary) / 0.28);
+    background: hsl(var(--accent));
+    color: hsl(var(--foreground));
+  }
+
+  .v2-chip {
+    display: inline-flex;
+    min-height: 32px;
+    align-items: center;
+    gap: 0.42rem;
+    border-radius: 8px;
+    border: 1px solid hsl(var(--border) / 0.82);
+    background: hsl(var(--surface) / 0.86);
+    padding: 0.35rem 0.72rem;
+    font-size: 0.875rem;
+    line-height: 1.1;
+    color: hsl(var(--foreground));
+    transition: background 0.16s ease, border-color 0.16s ease;
+  }
+
+  .v2-chip:hover {
+    border-color: hsl(var(--primary) / 0.3);
+    background: hsl(var(--accent));
+  }
+
+  .v2-chip-active {
+    border-color: hsl(var(--primary) / 0.42);
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+  }
+
+  .v2-status {
+    display: inline-flex;
+    min-height: 22px;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    border: 1px solid hsl(var(--border) / 0.78);
+    background: hsl(var(--surface-hover) / 0.72);
+    padding: 0.14rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1;
+    font-weight: 500;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .v2-status-success {
+    border-color: rgba(16, 185, 129, 0.25);
+    background: rgba(16, 185, 129, 0.11);
+    color: #059669;
+  }
+
+  .v2-status-warning {
+    border-color: rgba(245, 158, 11, 0.26);
+    background: rgba(245, 158, 11, 0.11);
+    color: #d97706;
+  }
+
+  .v2-status-danger {
+    border-color: rgba(239, 68, 68, 0.28);
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+  }
+
+  .v2-table-wrap {
+    overflow: hidden;
+    border: 1px solid hsl(var(--border) / 0.78);
+    border-radius: 10px;
+    background: hsl(var(--surface) / 0.88);
+  }
+
+  .v2-slide-over {
+    border-left: 1px solid hsl(var(--border) / 0.88);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: -18px 0 40px rgba(15, 23, 42, 0.1);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+
+  .v2-section-title {
+    font-size: 1rem;
+    font-weight: 650;
+    letter-spacing: 0;
+    color: hsl(var(--foreground));
+  }
+
+  .v2-muted-line {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    line-height: 1.55;
   }
 }
 

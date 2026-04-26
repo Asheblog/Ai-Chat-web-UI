@@ -132,7 +132,7 @@ export function ReasoningSection({
   const isAssistant = meta.role === 'assistant'
   const isActiveReasoning =
     isAssistant && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming')
-  const statusText = meta.reasoningStatus ? statusTextMap[meta.reasoningStatus] : '思考轨迹'
+  const statusText = meta.reasoningStatus ? statusTextMap[meta.reasoningStatus] : '思考过程'
   const showStreamingIndicator = meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming'
   const durationText =
     typeof meta.reasoningDurationSeconds === 'number' && Number.isFinite(meta.reasoningDurationSeconds)
@@ -162,10 +162,10 @@ export function ReasoningSection({
   }
 
   return (
-    <div className="mb-3 rounded-lg border border-border/70 bg-muted/20" data-message-panel="interactive">
+    <div className="mb-3 overflow-hidden rounded-[8px] border border-blue-200 bg-blue-50/70" data-message-panel="interactive">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-blue-100/45"
         onClick={() => {
           dispatch({ type: 'toggle' })
           const next = !expanded
@@ -174,9 +174,9 @@ export function ReasoningSection({
         aria-expanded={expanded}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
             <Brain className="h-4 w-4" />
-            <span>{statusText}</span>
+            <span>{statusText === '思考完成' ? '思考过程' : statusText}</span>
             {showStreamingIndicator && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             {durationText && <span className="text-xs text-muted-foreground">· {durationText}</span>}
           </div>
@@ -187,7 +187,7 @@ export function ReasoningSection({
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="space-y-2 border-t border-border/60 px-3 py-2">
+        <div className="space-y-2 border-t border-blue-200/80 px-4 py-3">
           {hasUnavailableReason && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200">
               <div className="flex items-center gap-1 font-medium">
@@ -203,11 +203,11 @@ export function ReasoningSection({
           {reasoningTextLength > 0 ? (
             !showStreamingIndicator && reasoningHtml ? (
               <div
-                className="markdown-body markdown-body--reasoning text-sm"
+                className="markdown-body markdown-body--reasoning text-sm text-slate-700"
                 dangerouslySetInnerHTML={{ __html: reasoningHtml }}
               />
             ) : (
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm leading-7 text-slate-600">
                 <TypewriterReasoning
                   text={reasoningRaw}
                   isStreaming={showStreamingIndicator}

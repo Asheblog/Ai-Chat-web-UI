@@ -419,18 +419,18 @@ export function SystemRAGPage() {
     : "选择 Embedding 模型..."
 
   return (
-    <div className="space-y-6 p-1">
+    <div className="space-y-5">
       <div className="flex items-start gap-3">
-        <FileText className="h-6 w-6 text-muted-foreground mt-0.5" />
+        <FileText className="mt-0.5 h-6 w-6 text-primary" />
         <div>
-          <CardTitle className="text-lg">RAG 文档解析</CardTitle>
+          <CardTitle className="text-xl">RAG 解析</CardTitle>
           <CardDescription className="mt-1">
             启用后，用户可以在聊天中附加文档，AI 将基于文档内容回答问题
           </CardDescription>
         </div>
       </div>
 
-      <Alert>
+      <Alert className="v2-panel-soft border-slate-200 bg-white/78">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           {hasEmbeddingModels
@@ -440,9 +440,9 @@ export function SystemRAGPage() {
         </AlertDescription>
       </Alert>
 
-      <div className="space-y-4">
+      <div className="v2-panel space-y-4 bg-white/90 p-4">
         {/* 启用开关 */}
-        <div className="flex items-center justify-between border-b pb-4">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>
             <p className="font-medium">启用 RAG 文档解析</p>
             <p className="text-sm text-muted-foreground">
@@ -518,9 +518,9 @@ export function SystemRAGPage() {
             </div>
 
             {/* Embedding 性能参数 */}
-            <div className="border-t pt-4">
+            <div className="border-t border-slate-200 pt-4">
               <h4 className="font-medium mb-3">Embedding 性能参数</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">批量大小</label>
                   <Input
@@ -544,9 +544,9 @@ export function SystemRAGPage() {
             </div>
 
             {/* 检索参数 */}
-            <div className="border-t pt-4">
+            <div className="border-t border-slate-200 pt-4">
               <h4 className="font-medium mb-3">检索参数</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Top K</label>
                   <Input
@@ -580,9 +580,9 @@ export function SystemRAGPage() {
             </div>
 
             {/* 分块参数 */}
-            <div className="border-t pt-4">
+            <div className="border-t border-slate-200 pt-4">
               <h4 className="font-medium mb-3">文档分块参数</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">分块大小</label>
                   <Input

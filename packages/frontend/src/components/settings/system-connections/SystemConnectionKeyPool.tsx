@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ChevronDown, KeyRound, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -53,8 +52,8 @@ export function SystemConnectionKeyPool({
   }, [expandedKeyId, keys])
 
   return (
-    <Card className="border-border/80 bg-card/95 shadow-none">
-      <CardContent className="space-y-3 pt-5">
+    <section className="v2-panel bg-white/90 p-4 shadow-none">
+      <div className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-sm font-semibold tracking-tight">Key 池</h3>
           <Button type="button" variant="outline" onClick={onAddKey} className="min-h-10 w-full sm:w-auto">
@@ -79,7 +78,7 @@ export function SystemConnectionKeyPool({
                 animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
                 exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="rounded-[26px] border border-border/75 bg-[hsl(var(--surface))/0.38] p-4 sm:p-5"
+                className="rounded-[10px] border border-border/75 bg-[hsl(var(--surface))/0.38] p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <button
@@ -211,7 +210,7 @@ export function SystemConnectionKeyPool({
             )
           })}
         </AnimatePresence>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

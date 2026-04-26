@@ -50,74 +50,46 @@ export function FlowStepper({ currentStep, onStepClick, isRunning = false }: Flo
     }
 
     return (
-        <div className="w-full px-4 md:px-8 lg:px-12">
-            <nav aria-label="Progress" className="w-full">
-                <ol className="flex items-center justify-between w-full">
+        <div className="w-full">
+            <nav aria-label="Progress" className="v2-panel overflow-hidden bg-white/90">
+                <ol className="grid grid-cols-4">
                     {steps.map((step, index) => {
                         const status = getStepStatus(step.key)
                         const Icon = step.icon
                         const isClickable = !isRunning && stepOrder[step.key] <= currentIndex
-                        const isLast = index === steps.length - 1
 
                         return (
-                            <li key={step.key} className={cn("flex items-center", !isLast && "flex-1")}>
-                                {/* Step Circle */}
+                            <li key={step.key} className="min-w-0">
                                 <button
                                     type="button"
                                     onClick={() => handleStepClick(step.key)}
                                     disabled={!isClickable}
                                     className={cn(
-                                        'group relative flex items-center justify-center flex-shrink-0',
+                                        'group relative flex h-12 w-full items-center justify-center gap-2 border-r border-slate-200 px-2 text-sm transition last:border-r-0',
+                                        status === 'completed' && 'bg-white text-slate-700',
+                                        status === 'current' && 'bg-blue-50 text-primary',
+                                        status === 'upcoming' && 'bg-white/70 text-slate-400',
                                         isClickable && 'cursor-pointer',
                                         !isClickable && 'cursor-default'
                                     )}
                                 >
-                                    <span
-                                        className={cn(
-                                            'flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300',
-                                            status === 'completed' && 'border-primary bg-primary text-primary-foreground',
-                                            status === 'current' && 'border-primary bg-primary/10 text-primary animate-pulse',
-                                            status === 'upcoming' && 'border-muted-foreground/30 bg-muted text-muted-foreground'
-                                        )}
-                                    >
+                                    <span className={cn(
+                                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                                        status === 'completed' && 'bg-primary text-primary-foreground',
+                                        status === 'current' && 'bg-primary text-primary-foreground',
+                                        status === 'upcoming' && 'bg-slate-200 text-slate-500'
+                                    )}>
                                         {status === 'completed' ? (
-                                            <Check className="h-5 w-5" />
+                                            <Check className="h-4 w-4" />
                                         ) : (
-                                            <Icon className="h-5 w-5" />
+                                            index + 1
                                         )}
                                     </span>
-
-                                    {/* Label */}
-                                    <span
-                                        className={cn(
-                                            'absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-medium transition-colors',
-                                            status === 'completed' && 'text-primary',
-                                            status === 'current' && 'text-primary',
-                                            status === 'upcoming' && 'text-muted-foreground'
-                                        )}
-                                    >
-                                        {step.label}
+                                    <Icon className="hidden h-4 w-4 sm:block" />
+                                    <span className="hidden truncate sm:inline">
+                                        {index + 1}. {step.label}
                                     </span>
                                 </button>
-
-                                {/* Connector Line */}
-                                {index < steps.length - 1 && (
-                                    <div
-                                        className={cn(
-                                            'mx-3 h-0.5 flex-1 min-w-[2rem] transition-colors duration-500',
-                                            stepOrder[steps[index + 1].key] <= currentIndex
-                                                ? 'bg-primary'
-                                                : 'bg-muted-foreground/30'
-                                        )}
-                                    >
-                                        {/* Animated flow effect for active connector */}
-                                        {status === 'current' && (
-                                            <div className="h-full w-full overflow-hidden">
-                                                <div className="h-full w-full animate-flow-line bg-gradient-to-r from-transparent via-primary to-transparent" />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
                             </li>
                         )
                     })}

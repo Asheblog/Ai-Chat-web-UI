@@ -60,9 +60,9 @@ export default function MainLayout({
   const isActorReady = actorState !== 'loading'
 
   return (
-    <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-[hsl(var(--background))]">
+    <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-[#f8fafc]">
       <Sidebar />
-      <MainContent className="relative border-l border-border/60 bg-transparent">
+      <MainContent className="v2-app-surface relative border-l border-slate-200/70">
         <SetupWizard />
         <SkillApprovalInbox />
         {!isActorReady ? (
@@ -74,13 +74,13 @@ export default function MainLayout({
           </div>
         ) : (
           <div className="flex flex-col h-full min-h-0">
-            <div className="sticky top-0 z-40 grid grid-cols-3 items-center gap-2 border-b border-border/70 bg-[hsl(var(--background-alt))/0.88] px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background-alt))/0.7] lg:hidden">
+            <div className="v2-toolbar sticky top-0 z-40 grid grid-cols-3 items-center gap-2 px-4 lg:hidden">
               <div className="justify-self-start">
                 <Button
                   variant="ghost"
                   size="icon"
                   aria-label={sidebarCollapsed ? '展开侧边栏' : '打开侧边栏'}
-                  className="h-10 w-10 rounded-full border border-border/70 bg-[hsl(var(--surface))/0.45] hover:bg-[hsl(var(--surface-hover))]"
+                  className="h-10 w-10 rounded-[10px] border border-slate-200 bg-white hover:bg-blue-50 hover:text-primary"
                   onClick={() => {
                     try {
                       if (sidebarCollapsed) {

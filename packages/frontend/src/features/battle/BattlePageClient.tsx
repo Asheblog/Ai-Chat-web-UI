@@ -426,14 +426,14 @@ export function BattlePageClient() {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto bg-[hsl(var(--background-alt))/0.32]">
-      <div className="mx-auto w-full max-w-[1200px] space-y-8 px-4 py-6 md:px-6">
+    <div className="flex flex-1 flex-col overflow-y-auto bg-transparent">
+      <div className="mx-auto w-full max-w-[1240px] space-y-5 px-4 py-5 md:px-6">
         {/* Header */}
-        <div className="flex flex-col justify-between gap-4 rounded-[calc(var(--radius)+0.35rem)] border border-border/70 bg-[hsl(var(--surface))/0.7] p-4 md:flex-row md:items-center md:p-5">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Trophy className="h-6 w-6 text-yellow-500" />
-              <h1 className="text-2xl font-semibold tracking-tight">模型大乱斗</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">新建对战</h1>
             </div>
             <p className="text-sm text-muted-foreground">
               同题多模型对战，使用裁判模型评估一致性与准确率，并支持 pass@k 统计
@@ -557,7 +557,7 @@ export function BattlePageClient() {
         </div>
 
         {/* Stepper */}
-        <div className="pb-8">
+        <div>
           <FlowStepper
             currentStep={flow.step}
             onStepClick={handleStepClick}

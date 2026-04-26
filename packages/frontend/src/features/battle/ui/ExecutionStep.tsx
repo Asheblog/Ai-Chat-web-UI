@@ -87,7 +87,7 @@ export function ExecutionStep({
     const progressPercentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0
 
     return (
-        <div className="space-y-6 w-full">
+        <div className="w-full space-y-4">
             {/* Header with Cancel */}
             <div className="flex items-center justify-between">
                 <div>
@@ -149,9 +149,10 @@ export function ExecutionStep({
             )}
 
             {/* Question Preview */}
-            <Card className="bg-muted/30">
-                <CardContent className="pt-4 space-y-2">
-                    <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-[0.58fr_0.42fr]">
+            <Card className="v2-panel bg-white/90 shadow-none">
+                <CardContent className="space-y-2 pt-4">
+                    <div className="grid gap-4">
                         <BattleContentBlock
                             title="题目"
                             text={prompt}
@@ -169,7 +170,7 @@ export function ExecutionStep({
             </Card>
 
             {/* Flow Graph */}
-            <Card>
+            <Card className="v2-panel bg-white/90 shadow-none">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">执行流程</CardTitle>
                 </CardHeader>
@@ -183,50 +184,26 @@ export function ExecutionStep({
                     />
                 </CardContent>
             </Card>
+            </div>
 
             {/* Real-time Statistics */}
-            <div className="grid gap-4 sm:grid-cols-4">
-                <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5">
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 text-blue-500" />
-                            <span className="text-xs text-muted-foreground">进行中</span>
-                        </div>
-                        <div className="text-2xl font-bold text-blue-500">{stats.running}</div>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5">
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span className="text-xs text-muted-foreground">通过</span>
-                        </div>
-                        <div className="text-2xl font-bold text-green-500">{stats.success}</div>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-br from-red-500/10 to-red-600/5">
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-2">
-                            <XCircle className="h-4 w-4 text-destructive" />
-                            <span className="text-xs text-muted-foreground">失败</span>
-                        </div>
-                        <div className="text-2xl font-bold text-destructive">{stats.failed}</div>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5">
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-amber-500" />
-                            <span className="text-xs text-muted-foreground">平均耗时</span>
-                        </div>
-                        <div className="text-2xl font-bold text-amber-500">
-                            {stats.avgDuration > 0 ? `${(stats.avgDuration / 1000).toFixed(1)}s` : '--'}
-                        </div>
-                    </CardContent>
-                </Card>
+            <div className="v2-panel-soft grid gap-3 px-4 py-3 sm:grid-cols-4">
+                <div className="flex items-center gap-3 border-r border-slate-200 last:border-r-0">
+                    <Loader2 className="h-5 w-5 text-blue-500" />
+                    <div><p className="text-xs text-slate-500">进行中</p><p className="text-lg font-semibold text-slate-900">{stats.running}</p></div>
+                </div>
+                <div className="flex items-center gap-3 border-r border-slate-200 last:border-r-0">
+                    <CheckCircle className="h-5 w-5 text-emerald-500" />
+                    <div><p className="text-xs text-slate-500">通过</p><p className="text-lg font-semibold text-slate-900">{stats.success}</p></div>
+                </div>
+                <div className="flex items-center gap-3 border-r border-slate-200 last:border-r-0">
+                    <XCircle className="h-5 w-5 text-destructive" />
+                    <div><p className="text-xs text-slate-500">失败</p><p className="text-lg font-semibold text-slate-900">{stats.failed}</p></div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <Clock className="h-5 w-5 text-amber-500" />
+                    <div><p className="text-xs text-slate-500">平均耗时</p><p className="text-lg font-semibold text-slate-900">{stats.avgDuration > 0 ? `${(stats.avgDuration / 1000).toFixed(1)}s` : '--'}</p></div>
+                </div>
             </div>
 
             {/* Overall Progress */}

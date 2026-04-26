@@ -137,14 +137,14 @@ export function DesktopComposer({
 
   return (
     <div className="hidden md:block">
-      <div className="mx-auto max-w-4xl px-4 pb-6 md:px-6">
+      <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-4 pt-3 md:px-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
-        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex items-center gap-2 px-2 py-2')}>
+        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex min-h-[72px] items-center gap-2 px-3 py-2')}>
           <div className="flex shrink-0 items-center gap-1">
             <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
+                  className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
                   aria-label="更多操作"
                 >
                   <Plus className="h-[18px] w-[18px]" />
@@ -194,7 +194,7 @@ export function DesktopComposer({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
-                      className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground"
+                      className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
                       onClick={onExpandOpen}
                       aria-label="全屏编辑"
                     >
@@ -217,7 +217,7 @@ export function DesktopComposer({
               manageDisabled={!hasDocuments && selectedImages.length === 0}
               manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
               ariaLabel="上传附件"
-              className="h-10 w-10 rounded-xl border-0 bg-transparent"
+              className="h-10 w-10 rounded-[8px] border-0 bg-transparent"
               onOpenKnowledgeBase={onOpenKnowledgeBase}
               knowledgeBaseEnabled={knowledgeBaseEnabled}
               knowledgeBaseCount={knowledgeBaseCount}
@@ -236,7 +236,7 @@ export function DesktopComposer({
             disabled={textareaDisabled}
             className={cn(
               COMPOSER_TEXTAREA_BASE_CLASS,
-              'min-h-[52px] max-h-[240px] flex-1 px-2 py-2.5 text-sm lg:min-h-[56px] lg:py-3 lg:text-base'
+              'min-h-[50px] max-h-[180px] flex-1 px-2 py-2.5 text-sm lg:min-h-[52px] lg:py-3'
             )}
             rows={1}
           />
@@ -248,7 +248,7 @@ export function DesktopComposer({
                   onClick={isStreaming ? onStop : onSend}
                   disabled={isStreaming ? false : desktopSendDisabled}
                   aria-label={isStreaming ? '停止生成' : '发送'}
-                  className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-[0_10px_22px_hsl(var(--background)/0.24)] transition-colors ${
+                  className={`inline-flex h-12 min-w-[112px] shrink-0 items-center justify-center gap-2 rounded-[8px] px-4 shadow-[0_10px_22px_rgba(37,99,235,0.2)] transition-colors ${
                     isStreaming
                       ? 'bg-destructive text-destructive-foreground hover:opacity-90'
                       : 'bg-primary text-primary-foreground hover:bg-primary/90'
@@ -259,6 +259,7 @@ export function DesktopComposer({
                   whileTap={!isStreaming ? 'tap' : undefined}
                 >
                   {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+                  <span className="text-sm font-semibold">{isStreaming ? '停止生成' : '发送'}</span>
                 </motion.button>
               </TooltipTrigger>
               <TooltipContent>{sendTooltip}</TooltipContent>

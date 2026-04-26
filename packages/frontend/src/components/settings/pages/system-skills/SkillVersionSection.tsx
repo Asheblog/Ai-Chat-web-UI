@@ -3,7 +3,6 @@
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CardDescription, CardTitle } from '@/components/ui/card'
 import type { SkillCatalogItem } from '@/types'
 import { formatDateTime, SKILL_STATUS_BADGE_VARIANT } from './shared'
 
@@ -27,24 +26,28 @@ export function SkillVersionSection({
   onUninstallSkill,
 }: SkillVersionSectionProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-        <FileText className="h-5 w-5 text-primary" />
+    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+      <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <FileText className="h-5 w-5" />
+        </span>
         <div>
-          <CardTitle className="text-lg font-semibold tracking-tight">Skill 版本管理</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">
+          <h2 className="v2-section-title">Skill 版本管理</h2>
+          <p className="v2-muted-line mt-1">
             审批通过后可激活版本。激活时会覆盖该 Skill 的默认版本。
-          </CardDescription>
+          </p>
         </div>
       </div>
-      <div className="space-y-5">
+      <div className="space-y-3">
         {loading ? (
           <div className="text-sm text-muted-foreground">加载中...</div>
         ) : catalog.length === 0 ? (
-          <div className="text-sm text-muted-foreground">当前没有可管理的 Skill。</div>
+          <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 p-5 text-sm text-muted-foreground">
+            当前没有可管理的 Skill。
+          </div>
         ) : (
           catalog.map((skill) => (
-            <div key={skill.id} className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4 sm:p-5">
+            <div key={skill.id} className="space-y-3 rounded-[10px] border border-border/70 bg-slate-50/65 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-semibold">{skill.displayName}</h3>
                 <Badge variant="outline">{skill.slug}</Badge>
@@ -87,7 +90,7 @@ export function SkillVersionSection({
                     return (
                       <div
                         key={version.id}
-                        className="flex flex-col gap-3 rounded-md border border-border/60 bg-muted/20 p-3 md:flex-row md:items-center md:justify-between"
+                        className="flex flex-col gap-3 rounded-[8px] border border-border/70 bg-white/90 p-3 md:flex-row md:items-center md:justify-between"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
@@ -130,6 +133,6 @@ export function SkillVersionSection({
           ))
         )}
       </div>
-    </div>
+    </section>
   )
 }

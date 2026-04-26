@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { VerifyConnectionResult } from "@/services/system-connections"
 import { cn } from "@/lib/utils"
@@ -39,11 +38,11 @@ export function SystemConnectionVerifyPanel({
   }, [resultKeys, verifyResult])
 
   return (
-    <Card className="border-border/80 bg-card/95 shadow-none">
-      <CardContent className="space-y-3 pt-5">
+    <section className="v2-panel bg-white/90 p-4 shadow-none">
+      <div className="space-y-3">
         <h3 className="text-sm font-semibold tracking-tight">验证结果</h3>
         {!verifyResult ? (
-          <div className="rounded-2xl border border-dashed border-border/70 bg-[hsl(var(--surface))/0.26] px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-[10px] border border-dashed border-border/70 bg-[hsl(var(--surface))/0.26] px-4 py-4 text-sm text-muted-foreground">
             还没有验证结果。
           </div>
         ) : (
@@ -64,7 +63,7 @@ export function SystemConnectionVerifyPanel({
               {resultKeys.map(({ item, key: resultKey }, index) => {
                 const expanded = expandedVerifyKey === resultKey
                 return (
-                  <div key={resultKey} className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.32]">
+                  <div key={resultKey} className="rounded-[10px] border border-border/70 bg-[hsl(var(--surface))/0.32]">
                     <button
                       type="button"
                       className="flex w-full cursor-pointer items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-[hsl(var(--surface-hover))/0.45]"
@@ -104,12 +103,12 @@ export function SystemConnectionVerifyPanel({
                         >
                           {!item.success ? (
                             <div className="space-y-3 px-4 py-4">
-                              <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
+                              <div className="rounded-[10px] border border-destructive/20 bg-destructive/5 p-4">
                                 <div className="text-xs font-medium text-destructive">错误详情</div>
                                 <div className="mt-2 break-words text-sm text-foreground">{item.error || "验证失败"}</div>
                               </div>
                               {item.warning ? (
-                                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
+                                <div className="rounded-[10px] border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
                                   {item.warning}
                                 </div>
                               ) : null}
@@ -164,7 +163,7 @@ export function SystemConnectionVerifyPanel({
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

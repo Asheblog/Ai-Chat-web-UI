@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Copy, Pencil, RefreshCw, Share2 } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Copy, Pencil, RefreshCw, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface MessageHeaderProps {
@@ -75,69 +75,82 @@ export function MessageHeader({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1 mt-2 text-xs text-muted-foreground">
-      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCopy} title="复制消息">
-        {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
-      </Button>
-      {shareEntryAvailable && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          title="进入分享选择模式"
-          onClick={() => onShareStart?.()}
-        >
-          <Share2 className="h-3 w-3" />
-        </Button>
+    <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 text-xs text-slate-500">
+      <span className="inline-flex items-center gap-1.5 text-emerald-600">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        已完成
+      </span>
+      <span className="h-3 w-px bg-slate-200" />
+      <span className="inline-flex items-center gap-1.5">
+        <Clock3 className="h-3.5 w-3.5" />
+        {metrics?.latencyText != null ? `${(metrics.latencyText / 1000).toFixed(2)}s` : timestamp}
+      </span>
+      {metrics?.speedText != null && (
+        <>
+          <span className="h-3 w-px bg-slate-200" />
+          <span>{metrics.speedText} tokens/s</span>
+        </>
       )}
-      {showVariantControls && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          title="重新生成回答"
-          onClick={() => variantInfo?.onRegenerate()}
-          disabled={Boolean(isStreaming)}
-        >
-          <RefreshCw className="h-3 w-3" />
+      <div className="ml-auto flex items-center gap-1">
+        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" onClick={onCopy} title="复制消息">
+          {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
         </Button>
-      )}
-      {showVariantNavigation && (
-        <div className="flex items-center gap-1 ml-1">
+        {shareEntryAvailable && (
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
-            onClick={() => variantInfo?.onPrev()}
-            title="查看更早的回答"
-            disabled={Boolean(isStreaming)}
+            className="h-7 w-7 rounded-[8px]"
+            title="进入分享选择模式"
+            onClick={() => onShareStart?.()}
           >
-            <ChevronLeft className="h-3 w-3" />
+            <Share2 className="h-3 w-3" />
           </Button>
-          <span className="w-12 text-center">
-            {(variantInfo?.index ?? 0) + 1}/{variantInfo?.total ?? 1}
-          </span>
+        )}
+        {showVariantControls && (
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
-            onClick={() => variantInfo?.onNext()}
-            title="查看最新回答"
+            className="h-7 w-7 rounded-[8px]"
+            title="重新生成回答"
+            onClick={() => variantInfo?.onRegenerate()}
             disabled={Boolean(isStreaming)}
           >
-            <ChevronRight className="h-3 w-3" />
+            <RefreshCw className="h-3 w-3" />
           </Button>
-        </div>
-      )}
-      <div className="ml-auto flex items-center gap-2">
-        {metrics && (metrics.latencyText != null || metrics.speedText != null) && (
-          <div className="inline-flex items-center gap-2 rounded-full bg-muted/70 px-2.5 py-1 text-[11px]">
-            {metrics.latencyText != null && <span>首字时延 {metrics.latencyText} ms</span>}
-            {metrics.latencyText != null && metrics.speedText != null && <span className="opacity-60">|</span>}
-            {metrics.speedText != null && <span>每秒 {metrics.speedText} tokens</span>}
+        )}
+        {showVariantNavigation && (
+          <div className="ml-1 flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-[8px]"
+              onClick={() => variantInfo?.onPrev()}
+              title="查看更早的回答"
+              disabled={Boolean(isStreaming)}
+            >
+              <ChevronLeft className="h-3 w-3" />
+            </Button>
+            <span className="w-12 text-center">
+              {(variantInfo?.index ?? 0) + 1}/{variantInfo?.total ?? 1}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-[8px]"
+              onClick={() => variantInfo?.onNext()}
+              title="查看最新回答"
+              disabled={Boolean(isStreaming)}
+            >
+              <ChevronRight className="h-3 w-3" />
+            </Button>
           </div>
         )}
-        <span>{timestamp}</span>
+        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="有帮助">
+          <ThumbsUp className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="无帮助">
+          <ThumbsDown className="h-3.5 w-3.5" />
+        </Button>
       </div>
     </div>
   )

@@ -44,8 +44,8 @@ export function SystemConnectionGroupList({
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold tracking-tight">已配置端点</h3>
-          <p className="text-sm text-muted-foreground">查看、编辑或删除现有端点组。</p>
+          <h3 className="text-xl font-semibold tracking-tight">连接管理</h3>
+          <p className="text-sm text-muted-foreground">按 Provider 查看 API Key、模型数量与启用状态。</p>
         </div>
         <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading} className="min-h-11">
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -56,17 +56,17 @@ export function SystemConnectionGroupList({
       {loading && connections.length === 0 ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="rounded-[26px] border border-border/70 bg-card/80 px-5 py-5">
+            <div key={index} className="rounded-[10px] border border-border/70 bg-card/80 px-5 py-5">
               <div className="h-4 w-52 rounded bg-muted" />
               <div className="mt-3 h-3 w-72 rounded bg-muted/70" />
-              <div className="mt-5 h-24 rounded-2xl bg-muted/50" />
+              <div className="mt-5 h-24 rounded-[10px] bg-muted/50" />
             </div>
           ))}
         </div>
       ) : null}
 
       {!loading && connections.length === 0 ? (
-        <div className="rounded-[26px] border border-dashed border-border/70 bg-card/70 px-6 py-12 text-center text-sm leading-6 text-muted-foreground">
+        <div className="rounded-[10px] border border-dashed border-border/70 bg-card/70 px-6 py-12 text-center text-sm leading-6 text-muted-foreground">
           暂无端点配置。先在上面创建一个端点组，再把不同的 Key 作为子项放进去。
         </div>
       ) : null}
@@ -83,7 +83,7 @@ export function SystemConnectionGroupList({
               initial={reducedMotion ? false : { opacity: 0, y: 12 }}
               animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
               transition={{ duration: 0.22, delay: reducedMotion ? 0 : index * 0.03, ease: "easeOut" }}
-              className="rounded-[28px] border border-border/80 bg-card/95 p-5 shadow-none"
+              className="rounded-[10px] border border-slate-200 bg-white/90 p-4 shadow-none"
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <button
@@ -108,10 +108,10 @@ export function SystemConnectionGroupList({
                     </div>
                     <div className="text-base font-semibold break-all">{group.baseUrl}</div>
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span className="rounded-full bg-muted px-3 py-1">{group.apiKeys.length} Keys</span>
-                      <span className="rounded-full bg-muted px-3 py-1">启用 {enabledCount}</span>
-                      <span className="rounded-full bg-muted px-3 py-1">{group.authType}</span>
-                      <span className="rounded-full bg-muted px-3 py-1">{group.connectionType}</span>
+                      <span className="v2-status">{group.apiKeys.length} Keys</span>
+                      <span className="v2-status v2-status-success">启用 {enabledCount}</span>
+                      <span className="v2-status">{group.authType}</span>
+                      <span className="v2-status">{group.connectionType}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">更新于 {formatDate(group.updatedAt)}</div>
                   </div>
@@ -147,7 +147,7 @@ export function SystemConnectionGroupList({
                   {group.apiKeys.map((key) => (
                     <div
                       key={key.id || `${group.id}-${key.apiKeyLabel}`}
-                      className="grid gap-3 rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.34] px-4 py-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)_auto]"
+                      className="grid gap-3 rounded-[8px] border border-slate-200 bg-slate-50/70 px-4 py-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)_auto]"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm font-medium">

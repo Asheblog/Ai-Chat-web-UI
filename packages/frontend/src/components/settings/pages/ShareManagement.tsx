@@ -1,20 +1,20 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Copy, Loader2, RefreshCw, ShieldOff } from "lucide-react"
+import { Clock3, Copy, ExternalLink, Loader2, RefreshCw, Search, Trash2 } from "lucide-react"
 import { listChatShares, revokeChatShare, updateChatShare } from '@/features/share/api'
 import type { ChatShareSummary } from '@/types'
 import { copyToClipboard, formatDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
+import { cn } from '@/lib/utils'
 
 const EXPIRATION_SHORTCUTS: Array<{ label: string; value: number | null }> = [
   { label: "24 小时", value: 24 },
@@ -43,6 +43,7 @@ export function ShareManagementPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const [query, setQuery] = useState("")
 
   const fetchShares = useCallback(async () => {
     setLoading(true)
@@ -68,7 +69,17 @@ export function ShareManagementPanel() {
     fetchShares()
   }, [fetchShares])
 
-  const activeShares = useMemo(() => shares.length, [shares])
+  const filteredShares = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return shares
+    return shares.filter((share) => {
+      return [share.title, share.sessionTitle, share.token]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalized))
+    })
+  }, [query, shares])
+
+  const recentShares = useMemo(() => filteredShares.slice(0, 6), [filteredShares])
 
   const handleCopy = async (share: ChatShareSummary) => {
     try {
@@ -137,36 +148,45 @@ export function ShareManagementPanel() {
 
   const renderStatus = (share: ChatShareSummary) => {
     if (share.revokedAt) {
-      return <Badge variant="destructive">已撤销</Badge>
+      return <span className="v2-status v2-status-danger">已撤销</span>
     }
     if (share.expiresAt && new Date(share.expiresAt).getTime() < Date.now()) {
-      return <Badge variant="secondary">已过期</Badge>
+      return <span className="v2-status v2-status-warning">已过期</span>
     }
-    return <Badge>生效中</Badge>
+    return <span className="v2-status v2-status-success">有效</span>
   }
 
   return (
-    <Card className="border-dashed border-primary/30 bg-muted/10">
-      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <CardTitle className="text-xl">分享链接管理</CardTitle>
-          <CardDescription>
-            已生成 {activeShares} 条分享链接，可在此处复制、调整有效期或立即撤销。
-          </CardDescription>
+    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <h2 className="v2-section-title shrink-0">最近分享</h2>
+          <div className="relative w-full sm:w-[320px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索分享内容或备注"
+              className="h-9 bg-white pl-9"
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchShares} disabled={loading}>
-            <RefreshCw className="mr-1 h-4 w-4" />
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
+          <span className="text-xs text-slate-500">共 {shares.length} 条</span>
+          {error ? <span className="v2-status v2-status-warning">同步失败</span> : null}
+          <Button variant="ghost" size="sm" onClick={fetchShares} disabled={loading} className="h-8 px-2">
+            <RefreshCw className={cn("mr-1 h-4 w-4", loading ? "animate-spin" : "")} />
             刷新
           </Button>
         </div>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      </div>
+
+      <div>
+        {error && shares.length > 0 ? (
+          <div className="mb-3 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
             {error}
           </div>
-        )}
+        ) : null}
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -174,50 +194,86 @@ export function ShareManagementPanel() {
           </div>
         ) : shares.length === 0 ? (
           <div className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-            暂无分享记录，您可以在聊天气泡的分享按钮中创建。
+            {error ? '分享服务暂不可用，请稍后刷新。' : '暂无分享记录，您可以在聊天气泡的分享按钮中创建。'}
+          </div>
+        ) : recentShares.length === 0 ? (
+          <div className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+            没有匹配的分享记录。
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <div className="v2-table-wrap overflow-x-auto border-slate-200/80">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
-                <tr className="text-xs uppercase text-muted-foreground">
-                  <th className="py-2 pr-2 font-medium">标题</th>
-                  <th className="py-2 pr-2 font-medium">所属会话</th>
-                  <th className="py-2 pr-2 font-medium">创建时间</th>
-                  <th className="py-2 pr-2 font-medium">有效期</th>
-                  <th className="py-2 pr-2 font-medium">状态</th>
-                  <th className="py-2 pr-2 font-medium text-right">操作</th>
+                <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs text-slate-500">
+                  <th className="px-4 py-3 font-medium">名称</th>
+                  <th className="px-4 py-3 font-medium">分享内容</th>
+                  <th className="px-4 py-3 font-medium">创建时间</th>
+                  <th className="px-4 py-3 font-medium">消息数</th>
+                  <th className="px-4 py-3 font-medium">状态</th>
+                  <th className="px-4 py-3 font-medium text-right">操作</th>
                 </tr>
               </thead>
               <tbody>
-                {shares.map((share) => (
-                  <tr key={share.id} className="border-t border-border/60 text-sm">
-                    <td className="py-3 pr-2 font-medium text-foreground">{share.title}</td>
-                    <td className="py-3 pr-2 text-muted-foreground">{share.sessionTitle}</td>
-                    <td className="py-3 pr-2 text-muted-foreground">{formatDate(share.createdAt)}</td>
-                    <td className="py-3 pr-2 text-muted-foreground">
-                      {share.expiresAt ? formatDate(share.expiresAt) : '不自动失效'}
+                {recentShares.map((share, index) => (
+                  <tr
+                    key={share.id}
+                    className={cn(
+                      "border-b border-slate-100 text-sm last:border-b-0",
+                      index === 0 ? "bg-blue-50/55" : "bg-white/70"
+                    )}
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      <span className="line-clamp-1">{share.title}</span>
                     </td>
-                    <td className="py-3 pr-2">{renderStatus(share)}</td>
-                    <td className="py-3 pl-2">
-                      <div className="flex flex-wrap items-center justify-end gap-2">
+                    <td className="px-4 py-3 text-slate-600">
+                      <span className="line-clamp-1">对话内容：{share.sessionTitle}</span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">{formatDate(share.createdAt)}</td>
+                    <td className="px-4 py-3 text-slate-500">{share.messageCount}</td>
+                    <td className="px-4 py-3">{renderStatus(share)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="icon"
                           onClick={() => handleCopy(share)}
                           disabled={Boolean(share.revokedAt)}
+                          aria-label="复制分享链接"
+                          title="复制分享链接"
+                          className="h-8 w-8 bg-white"
                         >
-                          <Copy className="mr-1 h-3 w-3" />
-                          复制
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          asChild
+                          aria-label="打开分享"
+                          title="打开分享"
+                          className={cn(
+                            "h-8 w-8 bg-white",
+                            share.revokedAt ? "pointer-events-none opacity-45" : ""
+                          )}
+                        >
+                          <a href={buildShareUrl(share.token)} target="_blank" rel="noreferrer">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="outline"
-                              size="sm"
+                              size="icon"
                               disabled={Boolean(share.revokedAt) || updatingId === share.id}
+                              aria-label="调整有效期"
+                              title={share.expiresAt ? `有效期：${formatDate(share.expiresAt)}` : '不自动失效'}
+                              className="h-8 w-8 bg-white"
                             >
-                              调整有效期
+                              {updatingId === share.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Clock3 className="h-3.5 w-3.5" />
+                              )}
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -233,12 +289,14 @@ export function ShareManagementPanel() {
                         </DropdownMenu>
                         <Button
                           variant="destructive"
-                          size="sm"
+                          size="icon"
                           onClick={() => handleRevoke(share.id)}
                           disabled={Boolean(share.revokedAt) || updatingId === share.id}
+                          aria-label="撤销分享"
+                          title="撤销分享"
+                          className="h-8 w-8"
                         >
-                          <ShieldOff className="mr-1 h-3 w-3" />
-                          撤销
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </td>
@@ -248,8 +306,8 @@ export function ShareManagementPanel() {
             </table>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 

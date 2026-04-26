@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/use-toast"
 // import { PersonalModelsPage } from "./pages/PersonalModels"
 import { PersonalPreferencesPage } from "./pages/PersonalPreferences"
 import { PersonalSecurityPage } from "./pages/PersonalSecurity"
+import { ShareManagementPanel } from "./pages/ShareManagement"
 import { AboutPage } from "./pages/About"
 import { SystemSettings } from "@/components/system-settings"
 
@@ -199,7 +200,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="h-[100dvh] w-screen max-w-none border-0 bg-[hsl(var(--surface))/0.96] p-0 shadow-none sm:h-[84vh] sm:max-h-[86vh] sm:w-[92vw] sm:max-w-5xl sm:rounded-[calc(var(--radius)+0.4rem)] sm:border sm:border-border/80 sm:bg-card/95 sm:shadow-[0_30px_80px_hsl(var(--background)/0.5)] flex min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+        className="v2-app-surface flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:w-[96vw] sm:max-w-[1320px] sm:rounded-[10px] sm:border sm:border-slate-200 sm:shadow-[0_28px_80px_rgba(15,23,42,0.18)]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>设置</DialogTitle>
@@ -229,6 +230,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
               switch (activeSub) {
                 // case 'personal.models': return <PersonalModelsPage />
                 case 'personal.preferences': return <PersonalPreferencesPage />
+                case 'personal.shares': return <ShareManagementPanel />
                 case 'personal.security': return <PersonalSecurityPage />
                 case 'personal.about': return <AboutPage />
                 case 'system.workspace': return <SystemSettings />

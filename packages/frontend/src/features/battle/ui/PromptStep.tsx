@@ -4,13 +4,12 @@ import { useEffect, useRef } from 'react'
 import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { ImagePreviewList } from '@/features/chat/welcome/ImagePreviewList'
 import { useImageAttachments } from '@/features/chat/composer'
-import { ChevronLeft, ImagePlus, Rocket, Settings, Zap } from 'lucide-react'
+import { ChevronLeft, FileText, ImagePlus, Rocket, Settings, Zap } from 'lucide-react'
 import type { BattleDraftImage, JudgeConfig, ModelConfigState } from '../hooks/useBattleFlow'
 
 interface PromptStepProps {
@@ -119,15 +118,18 @@ export function PromptStep({
     }
 
     return (
-        <div className="space-y-6 w-full">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                        📝 输入题目
-                    </CardTitle>
-                    <CardDescription>题目和答案都支持文本、图片、或文本+图片</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
+        <div className="w-full space-y-5">
+            <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+                <div className="mb-5 flex items-start gap-3 border-b border-border/70 pb-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+                        <FileText className="h-5 w-5 text-primary" />
+                    </span>
+                    <div>
+                        <h2 className="v2-section-title">输入题目</h2>
+                        <p className="v2-muted-line mt-1">题目和答案支持文本、图片或组合内容。</p>
+                    </div>
+                </div>
+                <div className="space-y-5">
                     <div className="space-y-2">
                         <Label>题目内容</Label>
                         <Textarea
@@ -199,17 +201,15 @@ export function PromptStep({
                             onChange={expectedAnswerAttachments.onFilesSelected}
                         />
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </section>
 
-            <Card className="bg-muted/30">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+            <section className="v2-panel-soft p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
                         <Settings className="h-4 w-4" />
                         配置预览
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
+                </div>
+                <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs text-muted-foreground">参赛模型:</span>
                         {selectedModels.map((item) => (
@@ -243,8 +243,8 @@ export function PromptStep({
                             <span className="font-medium text-foreground">{judgeConfig.maxConcurrency}</span>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </section>
 
             <div className="flex items-center justify-between gap-4">
                 <Button variant="outline" onClick={onBack} className="gap-2">

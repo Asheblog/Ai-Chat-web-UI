@@ -277,7 +277,7 @@ export function ResultStep({
     const isCancelled = status === 'cancelled'
 
     return (
-        <div className="space-y-6 w-full">
+        <div className="w-full space-y-4">
             {/* Header */}
             <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -345,7 +345,7 @@ export function ResultStep({
 
             {/* Share Link */}
             {shareLink && (
-                <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm">
+                <div className="rounded-[8px] border border-slate-200 bg-white/80 px-4 py-3 text-sm">
                     分享链接：<a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
                         {shareLink}</a>
                 </div>
@@ -360,7 +360,7 @@ export function ResultStep({
                     </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-3">
-                    <div className="rounded-lg bg-muted/30 p-4 space-y-3">
+                    <div className="v2-panel-soft space-y-3 p-4">
                         <BattleContentBlock title="题目" text={prompt} images={promptImages} />
                         <div className="space-y-2">
                             <div className="flex items-center justify-between mb-1">
@@ -418,14 +418,14 @@ export function ResultStep({
                         <div
                             key={group.key}
                             className={cn(
-                                "rounded-xl border transition-all",
+                                "rounded-[8px] border transition-all",
                                 rank.bg,
                                 isExpanded && "shadow-sm"
                             )}
                         >
                             {/* 模型主行*/}
                             <button
-                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-black/5 dark:hover:bg-white/5 rounded-xl transition-colors"
+                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-blue-50/60 rounded-[8px] transition-colors"
                                 onClick={() => toggleExpand(group.key)}
                             >
                                 {/* 排名 */}
@@ -476,7 +476,7 @@ export function ResultStep({
                                     {group.attempts.map((attempt) => (
                                         <div
                                             key={`${group.key}-${attempt.attemptIndex}`}
-                                            className="flex items-center justify-between gap-4 py-2 px-4 rounded-lg bg-background/60 cursor-pointer hover:bg-background transition-colors"
+                                            className="flex cursor-pointer items-center justify-between gap-4 rounded-[8px] bg-white/70 px-4 py-2 transition-colors hover:bg-blue-50"
                                             onClick={() => onSelectResult(attempt)}
                                         >
                                             <div className="flex items-center gap-3">
@@ -490,7 +490,8 @@ export function ResultStep({
                                                 ) : attempt.judgeStatus === 'error' ? (
                                                     <Badge variant="secondary">裁判失败</Badge>
                                                 ) : attempt.judgePass != null ? (<Badge variant={attempt.judgePass ? 'outline' : 'secondary'}>
-                                                        {attempt.judgePass ? '✓' : '✗'} {attempt.judgeScore?.toFixed(2) ?? '--'}
+                                                        {attempt.judgePass ? <Check className="mr-1 h-3 w-3" /> : <X className="mr-1 h-3 w-3" />}
+                                                        {attempt.judgeScore?.toFixed(2) ?? '--'}
                                                     </Badge>
                                                 ) : (
                                                     <Badge variant="secondary">--</Badge>

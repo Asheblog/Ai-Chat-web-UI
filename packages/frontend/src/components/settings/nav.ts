@@ -15,6 +15,7 @@ export const settingsNav: SettingsNavItem[] = [
     label: '个人设置',
     children: [
       { key: 'personal.preferences', label: '偏好设置', requiresAuth: true },
+      { key: 'personal.shares', label: '分享管理', requiresAuth: true },
       { key: 'personal.security', label: '账号安全', requiresAuth: true },
       { key: 'personal.about', label: '关于' },
     ],

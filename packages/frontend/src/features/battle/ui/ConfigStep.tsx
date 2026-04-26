@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -87,17 +86,18 @@ export function ConfigStep({
     }
 
     return (
-        <div className="space-y-6 w-full">
-            {/* Model Selection */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
+        <div className="w-full space-y-5">
+            <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+                <div className="mb-4 flex flex-col gap-2 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                    <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
                         选择参赛模型
                         <Badge variant="outline">{selectedModels.length}/8</Badge>
-                    </CardTitle>
-                    <CardDescription>最多选择 8 个模型参与对战，每个模型可单独配置</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                    </h2>
+                    <p className="v2-muted-line mt-1">最多选择 8 个模型参与对战，每个模型可单独配置。</p>
+                    </div>
+                </div>
+                <div className="space-y-4">
                     <ModelSelector
                         selectedModelId={null}
                         onModelChange={onAddModel}
@@ -107,7 +107,7 @@ export function ConfigStep({
                     />
 
                     {selectedModels.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-border/70 p-8 text-center">
+                        <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 p-8 text-center">
                             <p className="text-sm text-muted-foreground">点击上方选择器添加参赛模型</p>
                         </div>
                     ) : (
@@ -117,7 +117,7 @@ export function ConfigStep({
                                 return (
                                     <div
                                         key={item.key}
-                                        className="rounded-xl border border-border/70 p-4 space-y-3 hover:border-primary/50 transition-colors"
+                                        className="space-y-3 rounded-[10px] border border-border/70 bg-slate-50/70 p-4 transition-colors hover:border-primary/50"
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
@@ -242,7 +242,7 @@ export function ConfigStep({
 
                                         {item.advancedOpen && (
                                             <div className="space-y-3">
-                                                <div className="rounded-2xl border border-border/60 bg-muted/40 p-3 space-y-2">
+                                                <div className="space-y-2 rounded-[10px] border border-border/70 bg-white/80 p-3">
                                                     <div>
                                                         <p className="text-sm font-medium">额外提示词</p>
                                                         <p className="text-xs text-muted-foreground">仅当前模型生效，会追加为系统提示。</p>
@@ -300,16 +300,15 @@ export function ConfigStep({
                             })}
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </section>
 
-            {/* Judge Configuration */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">裁判设置</CardTitle>
-                    <CardDescription>配置裁判模型和评判规则</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+            <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+                <div className="mb-4 border-b border-border/70 pb-4">
+                    <h2 className="v2-section-title">裁判设置</h2>
+                    <p className="v2-muted-line mt-1">配置裁判模型和评判规则。</p>
+                </div>
+                <div className="space-y-4">
                     <div className="space-y-2">
                         <Label>裁判模型</Label>
                         <ModelSelector
@@ -390,8 +389,8 @@ export function ConfigStep({
                             />
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </section>
 
             {/* Next Button */}
             <div className="flex justify-end">

@@ -28,7 +28,7 @@ export function SettingRow({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-border/60 bg-card/40 px-4 py-4 sm:px-5 sm:py-5 flex flex-col gap-4 sm:flex-row sm:gap-6",
+        "rounded-[10px] border border-border/70 bg-white/85 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.035)] sm:px-5 sm:py-4 flex flex-col gap-4 sm:flex-row sm:gap-6",
         align === "center" ? "sm:items-center" : "sm:items-start",
         className,
       )}

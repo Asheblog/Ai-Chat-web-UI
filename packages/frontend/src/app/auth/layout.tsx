@@ -1,4 +1,5 @@
 import { getServerBranding } from '@/lib/server-branding'
+import { Boxes, MessageCircle } from 'lucide-react'
 
 export default async function AuthLayout({
   children,
@@ -7,42 +8,52 @@ export default async function AuthLayout({
 }) {
   const branding = await getServerBranding()
   const brandText = branding.text.trim() || 'AIChat'
-  const brandBadge = brandText.replace(/\s+/g, '').slice(0, 2).toUpperCase() || 'AI'
+  const aiPrefixed = /^ai/i.test(brandText)
+  const brandRest = aiPrefixed ? brandText.replace(/^ai/i, '') : brandText
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1200px]">
-        <aside className="relative hidden flex-1 overflow-hidden border-r border-border/70 lg:flex lg:flex-col lg:items-center lg:justify-center lg:px-14">
-          <div className="pointer-events-none absolute -left-20 -top-20 h-96 w-96 rounded-full bg-[radial-gradient(circle,hsl(var(--primary)/0.18),transparent_68%)]" />
-          <div className="pointer-events-none absolute -bottom-20 -right-16 h-80 w-80 rounded-full bg-[radial-gradient(circle,hsl(var(--accent-color)/0.16),transparent_68%)]" />
-          <div className="relative z-10 max-w-md text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-2xl font-bold text-primary-foreground shadow-[0_16px_44px_hsl(var(--primary)/0.35)]">
-              {brandBadge}
+    <div className="min-h-screen bg-[#f8fafc] text-foreground">
+      <div className="flex min-h-screen w-full">
+        <aside className="relative hidden w-[410px] shrink-0 overflow-hidden border-r border-slate-200/80 bg-[linear-gradient(180deg,#eff6ff_0%,#f8fbff_74%,#f8fafc_100%)] lg:flex lg:flex-col lg:justify-center lg:px-16">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(158deg,transparent_0_32%,rgba(219,234,254,0.7)_32%_54%,transparent_54%)]" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_14px_30px_rgba(37,99,235,0.24)]">
+                <MessageCircle className="h-7 w-7" />
+              </div>
+              <h1 className="text-[40px] font-semibold leading-none tracking-tight">
+                {aiPrefixed ? <span className="text-primary">AI</span> : null}{brandRest}
+              </h1>
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight bg-[linear-gradient(135deg,hsl(var(--hero-from)),hsl(var(--hero-to)))] bg-clip-text text-transparent">
-              {brandText}
-            </h1>
-            <p className="mt-4 text-sm leading-7 text-muted-foreground">
-              多模型接入、流式聊天、会话分享与系统配置一体化。登录后继续你上次的对话上下文。
+            <p className="mt-8 max-w-[280px] text-base leading-8 text-slate-500">
+              智能对话，高效创作，让 AI 助力每一次思考。
             </p>
-            <div className="mt-8 space-y-3 text-left">
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-primary" />
-                流式聊天：SSE 实时输出、Markdown/代码高亮、LaTeX、图片上传
+
+            <div className="mt-14 space-y-7">
+              <div className="flex items-center gap-5">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-blue-100 text-primary">
+                  <MessageCircle className="h-7 w-7" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-slate-900">流式对话</p>
+                  <p className="mt-1 text-sm text-slate-500">实时响应，流畅高效的对话体验</p>
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-primary" />
-                多模型接入：OpenAI、Azure OpenAI、Ollama、Google Generative AI
-              </div>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-primary" />
-                模型大乱斗、任务追踪与连接/模型/配额等系统设置
+              <div className="h-px w-80 bg-slate-200/80" />
+              <div className="flex items-center gap-5">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-blue-100 text-primary">
+                  <Boxes className="h-7 w-7" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-slate-900">多模型管理</p>
+                  <p className="mt-1 text-sm text-slate-500">聚合多种模型，灵活切换与管理</p>
+                </div>
               </div>
             </div>
           </div>
         </aside>
-        <main className="flex w-full items-center justify-center px-5 py-10 lg:w-[440px] lg:px-10">
-          <div className="w-full max-w-[360px]">
+        <main className="v2-app-surface flex min-h-screen flex-1 items-center justify-center px-5 py-10">
+          <div className="w-full max-w-[450px]">
             {children}
           </div>
         </main>

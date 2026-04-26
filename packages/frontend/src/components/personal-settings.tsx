@@ -10,10 +10,16 @@ import { ShareManagementPanel } from "@/components/settings/pages/ShareManagemen
 
 export function PersonalSettings() {
   return (
-    <div className="space-y-6">
-      <PersonalPreferencesPage />
-      <PersonalSecurityPage />
-      <ShareManagementPanel />
+    <div className="space-y-3">
+      <div id="settings-personal-preferences" className="scroll-mt-6">
+        <PersonalPreferencesPage />
+      </div>
+      <div id="settings-personal-security" className="scroll-mt-6">
+        <PersonalSecurityPage />
+      </div>
+      <div id="settings-share-management" className="scroll-mt-6">
+        <ShareManagementPanel />
+      </div>
     </div>
   )
 }

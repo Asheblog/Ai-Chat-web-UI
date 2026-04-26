@@ -139,7 +139,7 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
   ].filter((item): item is string => Boolean(item))
 
   return (
-    <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
+    <div className="rounded-[8px] border border-slate-200 bg-slate-50/70 px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium text-foreground">{toolLabel}</span>

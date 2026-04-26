@@ -7,7 +7,7 @@ import { ReasoningSection } from '@/components/message-bubble/reasoning-section'
 import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
 import { RichMessageRenderer } from '@/components/message-content/rich-message-renderer'
 import { cn, formatDate } from '@/lib/utils'
-import { User, Bot, Loader2 } from 'lucide-react'
+import { User, Bot, Copy, Loader2 } from 'lucide-react'
 
 interface ShareViewerProps {
   share: ChatShare
@@ -22,7 +22,7 @@ interface ShareViewerProps {
   brandText?: string
 }
 
-const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-10'
+const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[900px] px-4 sm:px-6'
 
 /** 格式化相对时间 */
 function formatRelativeTime(dateStr: string): string {
@@ -245,7 +245,7 @@ function ShareMessageItem({
       : null
 
   return (
-    <article className={cn('flex gap-3 border-b border-border/70 py-5', isUser && 'flex-row-reverse')}>
+    <article className={cn('flex gap-3 border-b border-slate-200 py-5 last:border-b-0', isUser && 'flex-row-reverse')}>
       <div
         className={cn(
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
@@ -288,7 +288,7 @@ function ShareMessageItem({
           className={cn(
             'max-w-none text-sm leading-7',
             isUser &&
-              'ml-auto inline-block rounded-2xl rounded-tr-md border border-border/80 bg-[hsl(var(--surface-hover))] px-4 py-2.5'
+              'ml-auto inline-block rounded-[10px] border border-primary/15 bg-primary/10 px-4 py-2.5'
           )}
         >
           {richPayload ? (
@@ -470,13 +470,14 @@ export function ShareViewer({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[hsl(var(--background))] text-foreground">
-      <header className={cn(SHARE_CONTAINER_CLASS, 'flex flex-col gap-3 border-b border-border/80 py-5 sm:flex-row sm:items-center sm:justify-between')}>
+    <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
+      <header className={cn(SHARE_CONTAINER_CLASS, 'pt-4')}>
+        <div className="v2-panel flex flex-col gap-3 bg-white/90 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 font-semibold">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
             AI
           </span>
-          {brandText} 分享
+          {brandText}
           {isLive && (
             <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs text-primary">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -487,12 +488,27 @@ export function ShareViewer({
         <div className="flex items-center gap-3 self-start text-xs text-muted-foreground sm:self-auto">
           <span className="rounded-md bg-[hsl(var(--surface-hover))] px-2.5 py-1">{share.messageCount} 条消息</span>
           <span>{formatRelativeTime(share.createdAt)}</span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-[8px] border border-primary/30 bg-white px-3 py-1.5 text-primary transition hover:bg-blue-50"
+            onClick={() => {
+              if (typeof window === 'undefined') return
+              void navigator.clipboard?.writeText(window.location.href)
+            }}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            复制分享链接
+          </button>
+        </div>
         </div>
       </header>
 
-      <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-6 sm:py-8')}>
-        <h1 className="mb-6 text-2xl font-semibold tracking-tight">{share.title || share.sessionTitle}</h1>
-        <section>
+      <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-2 sm:py-3')}>
+        <section className="v2-panel bg-white/90 p-5 sm:p-7">
+          <div className="mb-6 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{share.title || share.sessionTitle}</h1>
+            <p className="mt-3 text-sm text-slate-500">公开分享 · {formatDate(share.createdAt)}</p>
+          </div>
           {mergedMessages.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-muted-foreground">
               分享中暂无可展示的内容

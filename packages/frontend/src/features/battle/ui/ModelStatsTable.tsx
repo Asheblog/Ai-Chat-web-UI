@@ -140,17 +140,17 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
   const maxAttempts = Math.max(...modelStats.map(s => s.attempts.length), 1)
 
   return (
-    <div className={cn("rounded-lg border bg-card", className)}>
-      <div className="p-4 border-b">
-        <h3 className="text-base font-semibold">模型统计总表</h3>
+    <div className={cn("v2-table-wrap bg-white/90", className)}>
+      <div className="border-b border-slate-200 p-4">
+        <h3 className="text-base font-semibold">对战结果（实时排名）</h3>
         <p className="text-sm text-muted-foreground">各模型的 Pass@k、耗时、Token 使用等指标</p>
       </div>
       <ScrollArea className="w-full">
         <div className="min-w-[800px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="text-left py-3 px-4 font-medium sticky left-0 bg-muted/30 z-10 min-w-[140px]">
+              <tr className="border-b bg-slate-50">
+                <th className="text-left py-3 px-4 font-medium sticky left-0 bg-slate-50 z-10 min-w-[140px]">
                   模型
                 </th>
                 <th className="text-center py-3 px-3 font-medium min-w-[80px]">Pass@k</th>
@@ -176,9 +176,9 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
             </thead>
             <tbody>
               {modelStats.map((model, index) => (
-                <tr key={model.key} className="border-b hover:bg-muted/20transition-colors">
+                <tr key={model.key} className="border-b transition-colors hover:bg-blue-50/55">
                   {/* 模型名称 */}
-                  <td className="py-3 px-4 sticky left-0 bg-background z-10">
+                  <td className="py-3 px-4 sticky left-0 bg-white z-10">
                     <div className="flex items-center gap-2">
                       {getRankIcon(index + 1)}
                       <span className="font-medium break-words">{model.label}</span>
@@ -229,10 +229,11 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                             <Badge variant="destructive" className="text-xs">错误</Badge>
                           ) : attempt.passed != null ? (
                             <span className={cn(
-                              "text-xs font-medium",
+                              "inline-flex items-center gap-1 text-xs font-medium",
                               attempt.passed ? "text-[hsl(var(--success))]" : "text-destructive"
                             )}>
-                              {attempt.passed ? '✓' : '✗'} {attempt.score?.toFixed(2) ?? '--'}
+                              {attempt.passed ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                              {attempt.score?.toFixed(2) ?? '--'}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">--</span>

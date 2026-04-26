@@ -74,9 +74,9 @@ export function ModelNode({
             type="button"
             onClick={onClick}
             className={cn(
-                'relative flex flex-col items-center justify-center gap-1',
-                'rounded-xl border-2 p-3 min-w-[100px] min-h-[80px]',
-                'transition-all duration-300 hover:scale-105',
+                'relative flex min-h-[38px] w-full items-center justify-between gap-3',
+                'rounded-[8px] border px-3 py-2',
+                'transition-all duration-300 hover:border-primary/50 hover:bg-blue-50',
                 config.borderClass,
                 config.bgClass,
                 config.animationClass,
@@ -85,17 +85,17 @@ export function ModelNode({
             )}
         >
             {/* Status Icon */}
-            <div className={cn('flex items-center justify-center h-6 w-6', config.iconClass)}>
-                <Icon className="h-5 w-5" />
+            <div className={cn('flex h-5 w-5 items-center justify-center', config.iconClass)}>
+                <Icon className="h-4 w-4" />
             </div>
 
             {/* Model Name */}
-            <div className="text-xs font-medium text-center line-clamp-2 max-w-[90px]">
+            <div className="min-w-0 flex-1 truncate text-left text-xs font-medium">
                 {modelLabel}
             </div>
 
             {/* Duration / Attempt */}
-            <div className="text-[10px] text-muted-foreground">
+            <div className="shrink-0 text-[10px] text-muted-foreground">
                 {attemptIndex && `#${attemptIndex}`}
                 {durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
             </div>
@@ -144,12 +144,12 @@ export function FlowGraph({
     }, [nodeStates])
 
     return (
-        <div className="flex flex-col items-center gap-6 battle-flow-graph">
+        <div className="battle-flow-graph flex flex-col items-center gap-4">
             {/* Judge Node */}
             <div className="flex flex-col items-center gap-2">
                 <div className={cn(
-                    'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
-                    'border-2 border-primary bg-primary/10'
+                    'flex items-center justify-center gap-2 rounded-[8px] px-4 py-2',
+                    'border border-primary/30 bg-primary/10'
                 )}>
                     <Scale className="h-4 w-4 text-primary" />
                     <span className="text-sm font-medium">{judgeLabel}</span>
@@ -158,7 +158,7 @@ export function FlowGraph({
             </div>
 
             {/* Connection Lines */}
-            <div className="relative w-full flex justify-center">
+            <div className="relative flex w-full justify-center">
                 <svg
                     className="absolute top-0 left-1/2 -translate-x-1/2"
                     width="100%"
@@ -190,11 +190,11 @@ export function FlowGraph({
             </div>
 
             {/* Model Nodes Grid */}
-            <div className="flex flex-wrap justify-center gap-4 w-full">
+            <div className="grid w-full gap-2">
                 {modelKeys.map((modelKey) => {
                     const attempts = nodeStates.get(modelKey) || []
                     return (
-                        <div key={modelKey} className="flex flex-col items-center gap-2">
+                        <div key={modelKey} className="grid gap-2">
                             {attempts.map((attempt) => (
                                 <ModelNode
                                     key={`${modelKey}-${attempt.attemptIndex}`}

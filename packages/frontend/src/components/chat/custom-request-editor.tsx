@@ -26,7 +26,7 @@ export function CustomRequestEditor({
 }: CustomRequestEditorProps) {
   return (
     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-      <div className="rounded-2xl border border-border/60 bg-muted/40 p-3 space-y-2">
+      <div className="space-y-2 rounded-[10px] border border-border/60 bg-muted/40 p-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">自定义请求头</p>
@@ -81,7 +81,7 @@ export function CustomRequestEditor({
         )}
       </div>
 
-      <div className="rounded-2xl border border-border/60 bg-muted/40 p-3 space-y-2">
+      <div className="space-y-2 rounded-[10px] border border-border/60 bg-muted/40 p-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">自定义请求体</p>

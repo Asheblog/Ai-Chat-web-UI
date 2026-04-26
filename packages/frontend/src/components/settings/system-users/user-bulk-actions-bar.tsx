@@ -1,6 +1,5 @@
 "use client"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { UserCheck, UserX, Trash2 } from "lucide-react"
 
 type UserBulkActionsBarProps = {
@@ -23,7 +22,7 @@ export function UserBulkActionsBar({
   if (selectedCount === 0) return null
 
   return (
-    <Card className="px-4 py-3 sm:px-5 sm:py-3 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+    <div className="rounded-[10px] border border-primary/20 bg-primary/5 px-4 py-3 sm:px-5 sm:py-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-medium">
           已选择 {selectedCount} 个用户
@@ -46,6 +45,6 @@ export function UserBulkActionsBar({
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

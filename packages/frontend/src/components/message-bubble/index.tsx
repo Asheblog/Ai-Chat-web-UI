@@ -199,14 +199,14 @@ function MessageBubbleComponent({
     meta.id,
   ])
 
-  const bubbleClass = `inline-block max-w-full box-border rounded-lg ${
-    isUser ? 'px-4 py-3' : isCodeOnly ? 'p-0' : 'px-4 py-3'
+  const bubbleClass = `inline-block max-w-full box-border ${
+    isUser ? 'rounded-[10px] border border-primary/15 bg-primary/10 px-4 py-3 text-slate-900 ml-auto' : isCodeOnly ? 'p-0' : 'px-0 py-1'
   } ${
     isUser
-      ? 'bg-muted text-foreground ml-auto'
+      ? ''
       : isCodeOnly
       ? 'bg-transparent border-0 text-foreground'
-      : 'bg-background text-foreground'
+      : 'bg-transparent text-foreground'
   }`
 
   const avatarSrc = isUser ? currentUser?.avatarUrl ?? undefined : assistantAvatarUrl ?? undefined
@@ -311,10 +311,30 @@ function MessageBubbleComponent({
         </Avatar>
 
         <div
-          className={`flex-1 min-w-0 max-w-full ${
-            isUser ? 'lg:max-w-3xl text-right' : 'text-left'
+          className={`min-w-0 max-w-full ${
+            isUser
+              ? 'flex-1 text-right lg:max-w-3xl'
+              : 'v2-panel flex-1 bg-white/90 px-4 py-3 text-left'
           }`}
         >
+          {!isUser && (
+            <MessageHeader
+              isUser={isUser}
+              timestamp={formatDate(meta.createdAt)}
+              isCopied={isCopied}
+              onCopy={handleCopy}
+              shareEntryAvailable={shareEntryAvailable}
+              onShareStart={shareEntryHandler}
+              showVariantControls={showVariantControls}
+              showVariantNavigation={showVariantNavigation}
+              variantInfo={variantInfo}
+              isStreaming={Boolean(isStreaming)}
+              metrics={{
+                latencyText,
+                speedText,
+              }}
+            />
+          )}
           {!isUser && shouldShowReasoningSection && (
             <ReasoningSection
               meta={meta}
@@ -381,34 +401,28 @@ function MessageBubbleComponent({
             </div>
           )}
 
-          <MessageHeader
-            isUser={isUser}
-            timestamp={formatDate(meta.createdAt)}
-            isCopied={isCopied}
-            onCopy={handleCopy}
-            onEdit={
-              canEdit
-                ? () => {
-                    setEditDraft(content)
-                    setEditOpen(true)
-                  }
-                : undefined
-            }
-            shareEntryAvailable={shareEntryAvailable}
-            onShareStart={shareEntryHandler}
-            showVariantControls={showVariantControls}
-            showVariantNavigation={showVariantNavigation}
-            variantInfo={variantInfo}
-            isStreaming={Boolean(isStreaming)}
-            metrics={
-              !isUser
-                ? {
-                    latencyText,
-                    speedText,
-                  }
-                : undefined
-            }
-          />
+          {isUser && (
+            <MessageHeader
+              isUser={isUser}
+              timestamp={formatDate(meta.createdAt)}
+              isCopied={isCopied}
+              onCopy={handleCopy}
+              onEdit={
+                canEdit
+                  ? () => {
+                      setEditDraft(content)
+                      setEditOpen(true)
+                    }
+                  : undefined
+              }
+              shareEntryAvailable={shareEntryAvailable}
+              onShareStart={shareEntryHandler}
+              showVariantControls={showVariantControls}
+              showVariantNavigation={showVariantNavigation}
+              variantInfo={variantInfo}
+              isStreaming={Boolean(isStreaming)}
+            />
+          )}
           {!isUser && meta.pendingSync && (
             <div className="text-xs text-amber-600 mt-1">等待后端同步</div>
           )}

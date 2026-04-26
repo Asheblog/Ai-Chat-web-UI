@@ -1,6 +1,19 @@
 "use client"
-import { ReactNode, useEffect, useMemo, useRef } from "react"
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
+import {
+  BarChart3,
+  Boxes,
+  Cloud,
+  ClipboardList,
+  KeyRound,
+  PlugZap,
+  Router,
+  Settings2,
+  Share2,
+  User,
+  Users,
+} from "lucide-react"
 import { SettingsShell, type SettingsSection } from "@/components/settings/shell"
 import { useAuthStore } from "@/store/auth-store"
 
@@ -30,14 +43,72 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
 
   const isAdmin = actorState === "authenticated" && user?.role === "ADMIN"
   const activeSection = deriveSection(pathname)
+  const [personalSub, setPersonalSub] = useState("profile")
+  const [systemSub, setSystemSub] = useState("connections")
 
   const sections = useMemo<SettingsSection[]>(() => {
-    const base: SettingsSection[] = [{ key: "personal", label: "个人设置" }]
-    if (isAdmin) {
-      base.push({ key: "system", label: "系统设置" })
+    if (activeSection === "system") {
+      return [
+        {
+          key: "overview",
+          label: "概览",
+          icon: <BarChart3 className="h-full w-full" />,
+        },
+        {
+          key: "models",
+          label: "模型管理",
+          icon: <Boxes className="h-full w-full" />,
+        },
+        {
+          key: "connections",
+          label: "连接管理",
+          icon: <PlugZap className="h-full w-full" />,
+        },
+        {
+          key: "api-routing",
+          label: "API 路由",
+          icon: <Router className="h-full w-full" />,
+        },
+        {
+          key: "token-management",
+          label: "令牌管理",
+          icon: <KeyRound className="h-full w-full" />,
+        },
+        {
+          key: "members",
+          label: "成员与权限",
+          icon: <Users className="h-full w-full" />,
+        },
+        {
+          key: "audit",
+          label: "审计日志",
+          icon: <ClipboardList className="h-full w-full" />,
+        },
+        {
+          key: "system-config",
+          label: "系统配置",
+          icon: <Settings2 className="h-full w-full" />,
+        },
+        {
+          key: "backup",
+          label: "备份与恢复",
+          icon: <Cloud className="h-full w-full" />,
+        },
+      ]
     }
-    return base
-  }, [isAdmin])
+    return [
+      {
+        key: "profile",
+        label: "个人资料与偏好",
+        icon: <User className="h-full w-full" />,
+      },
+      {
+        key: "shares",
+        label: "分享管理",
+        icon: <Share2 className="h-full w-full" />,
+      },
+    ]
+  }, [activeSection])
 
   useEffect(() => {
     if (!isAdmin && activeSection === "system") {
@@ -48,7 +119,38 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     }
   }, [isAdmin, activeSection, pathname, router])
 
+  useEffect(() => {
+    if (activeSection !== "system") return
+    const onActiveChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string }>).detail
+      if (detail?.key) {
+        setSystemSub(detail.key)
+      }
+    }
+    window.addEventListener("aichat:system-settings-active", onActiveChange as EventListener)
+    return () => {
+      window.removeEventListener("aichat:system-settings-active", onActiveChange as EventListener)
+    }
+  }, [activeSection])
+
   const handleChange = (key: string) => {
+    if (activeSection === "personal") {
+      setPersonalSub(key)
+      const targetId =
+        key === "shares" ? "settings-share-management" : "settings-personal-preferences"
+      const target = typeof document !== "undefined" ? document.getElementById(targetId) : null
+      target?.scrollIntoView({ behavior: "smooth", block: "start" })
+      return
+    }
+
+    if (activeSection === "system") {
+      setSystemSub(key)
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail: { key } }))
+      }
+      return
+    }
+
     const target = SECTION_PATH[key]
     if (!target) return
     if (target === pathname) return
@@ -63,14 +165,15 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     )
   }
 
-  const resolvedActive = isAdmin ? activeSection : "personal"
+  const resolvedActive = activeSection === "personal" ? personalSub : systemSub
 
   return (
     <SettingsShell
-      title="设置"
+      title={activeSection === "system" ? "系统设置" : "个人设置"}
       sections={sections}
       active={resolvedActive}
       onChange={handleChange}
+      showNavTitle={activeSection === "system"}
     >
       {children}
     </SettingsShell>

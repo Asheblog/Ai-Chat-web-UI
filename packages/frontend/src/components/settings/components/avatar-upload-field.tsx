@@ -4,6 +4,7 @@ import { useRef, type ChangeEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+import { Camera } from 'lucide-react'
 
 export interface AvatarUploadResult {
   data: string
@@ -25,6 +26,7 @@ interface AvatarUploadFieldProps {
   className?: string
   onError?: (message: string) => void
   avatarSize?: number
+  variant?: 'default' | 'profile'
 }
 
 const MAX_AVATAR_BYTES = 1024 * 1024
@@ -43,6 +45,7 @@ export function AvatarUploadField({
   className,
   onError,
   avatarSize = 64,
+  variant = 'default',
 }: AvatarUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -80,6 +83,62 @@ export function AvatarUploadField({
     reader.readAsDataURL(file)
   }
 
+  const input = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={handleFileChange}
+      disabled={disabled || uploading}
+    />
+  )
+
+  if (variant === 'profile') {
+    return (
+      <div className={cn('flex flex-col items-center gap-2 text-center', className)}>
+        <div className="relative rounded-full bg-gradient-to-b from-blue-400 to-blue-600 p-1 shadow-[0_16px_32px_rgba(37,99,235,0.16)]">
+          <Avatar
+            className="border-4 border-white bg-blue-50"
+            style={{ height: avatarSize, width: avatarSize }}
+          >
+            <AvatarImage src={imageUrl || undefined} alt="头像" />
+            <AvatarFallback className="text-lg font-semibold text-slate-700">{fallbackText}</AvatarFallback>
+          </Avatar>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            aria-label={uploading ? '头像上传中' : uploadText}
+            title={uploading ? '头像上传中' : uploadText}
+            disabled={uploading || disabled}
+            onClick={() => inputRef.current?.click()}
+            className="absolute bottom-1 right-1 h-8 w-8 rounded-full border-white bg-white text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.16)] hover:bg-blue-50 hover:text-primary"
+          >
+            <Camera className="h-4 w-4" />
+          </Button>
+        </div>
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+        <div className="min-h-[22px] text-xs text-slate-500">
+          {uploading ? '上传中...' : imageUrl ? '头像已设置' : '点击相机上传'}
+        </div>
+        {onClear ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={uploading || disabled || clearDisabled}
+            onClick={() => onClear?.()}
+            className="h-8 text-xs"
+          >
+            {clearText}
+          </Button>
+        ) : null}
+        {input}
+      </div>
+    )
+  }
+
   return (
     <div className={cn('flex items-center gap-4', className)}>
       <Avatar className="shrink-0" style={{ height: avatarSize, width: avatarSize }}>
@@ -109,14 +168,7 @@ export function AvatarUploadField({
           ) : null}
         </div>
       </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileChange}
-        disabled={disabled || uploading}
-      />
+      {input}
     </div>
   )
 }

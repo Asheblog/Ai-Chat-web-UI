@@ -2,20 +2,23 @@
 import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { CardTitle, CardDescription } from "@/components/ui/card"
 import { useSettingsStore } from "@/store/settings-store"
-import { Settings2, Save } from "lucide-react"
-import { SettingRow } from "../components/setting-row"
+import { Edit3, Moon, Monitor, Sun } from "lucide-react"
 import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 import { updatePersonalSettings } from '@/features/settings/api'
-import { Button } from '@/components/ui/button'
 
 export function PersonalPreferencesPage(){
-  const { theme, setTheme, contextEnabled, setContextEnabled } = useSettingsStore()
+  const {
+    theme,
+    setTheme,
+    contextEnabled,
+    setContextEnabled,
+    newConversationContextEnabled,
+    setNewConversationContextEnabled,
+  } = useSettingsStore()
   const { toast } = useToast()
   const { user, fetchActor } = useAuthStore((state) => ({ user: state.user, fetchActor: state.fetchActor }))
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl ?? null)
@@ -23,7 +26,6 @@ export function PersonalPreferencesPage(){
   const [username, setUsername] = useState(user?.username ?? "")
   const [usernameSaving, setUsernameSaving] = useState(false)
   const [usernameError, setUsernameError] = useState<string | null>(null)
-  const [preferencesSaving, setPreferencesSaving] = useState(false)
   const [personalPromptDraft, setPersonalPromptDraft] = useState(user?.personalPrompt ?? "")
   const [personalPromptSaving, setPersonalPromptSaving] = useState(false)
   const [personalPromptError, setPersonalPromptError] = useState<string | null>(null)
@@ -104,20 +106,6 @@ export function PersonalPreferencesPage(){
     }
   }
 
-  const handleSavePreferences = async () => {
-    if (!user || preferencesSaving) return
-    setPreferencesSaving(true)
-    try {
-      const usernameOk = await handleUsernameSave({ silent: true })
-      const promptOk = await handlePersonalPromptSave({ silent: true })
-      if (usernameOk && promptOk) {
-        toast({ title: '偏好设置已保存' })
-      }
-    } finally {
-      setPreferencesSaving(false)
-    }
-  }
-
   const handleAvatarUpload = async ({ data, mime, previewUrl }: AvatarUploadResult) => {
     if (!user || avatarSaving) return
     const previous = avatarPreview
@@ -160,145 +148,120 @@ export function PersonalPreferencesPage(){
     }
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold tracking-tight text-slate-950">个人设置</h1>
 
-      {/* 个人资料区块 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b">
-          <Settings2 className="w-5 h-5 text-primary" />
-          <div>
-            <CardTitle className="text-lg">个人资料</CardTitle>
-            <CardDescription>上传头像以便在菜单和对话中展示</CardDescription>
-          </div>
-        </div>
-        <SettingRow
-          title="用户头像"
-          description="支持 JPG/PNG/WebP，大小不超过 1MB"
-        >
-          <AvatarUploadField
-            imageUrl={avatarPreview}
-            fallbackText={user?.username?.charAt(0).toUpperCase() || 'U'}
-            uploading={avatarSaving}
-            disabled={!user}
-            onUpload={handleAvatarUpload}
-            onClear={handleAvatarClear}
-            clearDisabled={!avatarPreview && !user?.avatarUrl}
-            onError={(message) => toast({ title: '上传失败', description: message, variant: 'destructive' })}
-          />
-        </SettingRow>
-
-        <SettingRow
-          title="用户名"
-          description="用于登录和展示，可修改默认管理员用户名"
-          align="start"
-        >
-          <Input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            onBlur={() => handleUsernameSave()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                handleUsernameSave()
-              }
-            }}
-            className="w-full sm:w-[240px]"
-            placeholder="请输入新的用户名"
-            disabled={!user || usernameSaving}
-          />
-          {usernameError && (
-            <p className="mt-2 text-sm text-destructive">{usernameError}</p>
-          )}
-        </SettingRow>
-      </div>
-
-      {/* 外观设置区块 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b">
-          <Settings2 className="w-5 h-5 text-primary" />
-          <div>
-            <CardTitle className="text-lg">外观设置</CardTitle>
-            <CardDescription>控制界面主题和显示效果</CardDescription>
-          </div>
-        </div>
-
-        <SettingRow
-          title="主题"
-          description="选择浅色或深色模式，也可跟随系统设置"
-        >
-          <Select value={theme} onValueChange={(v:any)=>setTheme(v)}>
-            <SelectTrigger className="w-full sm:w-[220px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="system">跟随系统</SelectItem>
-              <SelectItem value="light">浅色模式</SelectItem>
-              <SelectItem value="dark">深色模式</SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingRow>
-      </div>
-
-      {/* 对话设置区块 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b">
-          <Settings2 className="w-5 h-5 text-primary" />
-          <div>
-            <CardTitle className="text-lg">对话设置</CardTitle>
-            <CardDescription>管理对话上下文和历史消息</CardDescription>
-          </div>
-        </div>
-
-        <SettingRow
-          title="上下文开关"
-          description={
-            contextEnabled ? '已开启，会保留历史消息作为对话上下文' : '已关闭，仅发送当前消息不包含历史记录'
-          }
-        >
-          <Switch checked={contextEnabled} onCheckedChange={(v)=>setContextEnabled(!!v)} />
-        </SettingRow>
-
-        <SettingRow
-          title="个人提示词"
-          description="为所有会话提供默认系统提示词，若某个会话设置了提示词则优先生效"
-          align="start"
-        >
-          <div className="w-full space-y-2">
-            <Textarea
-              value={personalPromptDraft}
-              onChange={(event) => {
-                setPersonalPromptDraft(event.target.value)
-                if (personalPromptError) {
-                  setPersonalPromptError(null)
-                }
-              }}
-              onBlur={() => handlePersonalPromptSave()}
-              placeholder="为空时继承系统级提示词"
-              className="min-h-[120px] resize-none"
-              disabled={!user || personalPromptSaving}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <section className="v2-panel bg-white/90 p-5 md:p-6">
+          <h3 className="v2-section-title">个人资料</h3>
+          <div className="mt-5 grid gap-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
+            <AvatarUploadField
+              variant="profile"
+              imageUrl={avatarPreview}
+              fallbackText={user?.username?.charAt(0).toUpperCase() || 'U'}
+              uploading={avatarSaving}
+              disabled={!user}
+              onUpload={handleAvatarUpload}
+              onClear={handleAvatarClear}
+              clearDisabled={!avatarPreview && !user?.avatarUrl}
+              onError={(message) => toast({ title: '上传失败', description: message, variant: 'destructive' })}
+              avatarSize={104}
             />
-            {personalPromptError && (
-              <p className="text-sm text-destructive">{personalPromptError}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {'建议描述语气/身份/回复风格；会话提示词优先于个人提示词，个人提示词优先于系统提示词。支持使用 {day time}（替换为服务器当前时间），三层均为空时默认使用“今天日期是{day time}”。'}
-            </p>
+            <div className="min-w-0 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">用户名</label>
+                <div className="relative">
+                  <Input
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    onBlur={() => handleUsernameSave()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleUsernameSave()
+                      }
+                    }}
+                    className="h-10 bg-white pr-10"
+                    placeholder="请输入新的用户名"
+                    disabled={!user || usernameSaving}
+                  />
+                  <Edit3 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+                <p className="text-xs text-slate-400">3-20 个字符，可包含字母、数字和下划线</p>
+                {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">主题</label>
+                <div className="grid grid-cols-3 overflow-hidden rounded-[8px] border border-slate-200 bg-slate-50">
+                  {[
+                    { value: 'light', label: '浅色', icon: Sun },
+                    { value: 'system', label: '跟随系统', icon: Monitor },
+                    { value: 'dark', label: '深色', icon: Moon },
+                  ].map((item) => {
+                    const Icon = item.icon
+                    const active = theme === item.value
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        className={`flex h-10 items-center justify-center gap-1.5 whitespace-nowrap text-xs transition ${active ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:bg-white/70'}`}
+                        onClick={() => setTheme(item.value as any)}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
-        </SettingRow>
-      </div>
+        </section>
 
-      <div className="flex justify-end pt-4">
-        <Button
-          type="button"
-          onClick={handleSavePreferences}
-          disabled={!user || preferencesSaving || usernameSaving || avatarSaving || personalPromptSaving}
-          className="w-full sm:w-auto"
-        >
-          {preferencesSaving ? '保存中...' : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              保存偏好设置
-            </>
-          )}
-        </Button>
+        <section className="v2-panel bg-white/90 p-5 md:p-6">
+          <h3 className="v2-section-title">对话与上下文</h3>
+          <div className="mt-5 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-slate-800">记住对话上下文</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {contextEnabled ? 'AI 将记住所有对话中的上下文信息' : '仅发送当前消息'}
+                </p>
+              </div>
+              <Switch checked={contextEnabled} onCheckedChange={(v)=>setContextEnabled(!!v)} />
+            </div>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-800">新对话继承上下文</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  开启后，新对话将基于最近的上下文
+                </p>
+              </div>
+              <Switch
+                checked={newConversationContextEnabled}
+                onCheckedChange={(v)=>setNewConversationContextEnabled(!!v)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">个人系统提示词</label>
+              <Textarea
+                value={personalPromptDraft}
+                onChange={(event) => {
+                  setPersonalPromptDraft(event.target.value)
+                  if (personalPromptError) {
+                    setPersonalPromptError(null)
+                  }
+                }}
+                onBlur={() => handlePersonalPromptSave()}
+                placeholder="你是一个专业、友善且高效的 AI 助手。"
+                className="min-h-[82px] resize-none bg-white"
+                disabled={!user || personalPromptSaving}
+              />
+              {personalPromptError && <p className="text-sm text-destructive">{personalPromptError}</p>}
+              <p className="text-right text-xs text-slate-400">{personalPromptDraft.length}/500</p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   )

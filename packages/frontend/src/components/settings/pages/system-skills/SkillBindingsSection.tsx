@@ -2,7 +2,6 @@
 
 import { Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -58,18 +57,20 @@ export function SkillBindingsSection({
   onDeleteBinding,
 }: SkillBindingsSectionProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-        <Link2 className="h-5 w-5 text-primary" />
+    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+      <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <Link2 className="h-5 w-5" />
+        </span>
         <div>
-          <CardTitle className="text-lg font-semibold tracking-tight">绑定策略</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">
+          <h2 className="v2-section-title">绑定策略</h2>
+          <p className="v2-muted-line mt-1">
             创建/更新 Skill 绑定，并可查看现有绑定。
-          </CardDescription>
+          </p>
         </div>
       </div>
-      <div className="space-y-5 rounded-lg border border-border/70 bg-card/30 p-4 sm:p-5">
-        <div className="space-y-3 rounded-lg border border-border/60 bg-background/60 p-4">
+      <div className="space-y-5">
+        <div className="space-y-3 rounded-[10px] border border-border/70 bg-slate-50/70 p-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <Label>Skill</Label>
@@ -169,9 +170,11 @@ export function SkillBindingsSection({
 
         <div className="space-y-2">
           {bindings.length === 0 ? (
-            <div className="text-sm text-muted-foreground">暂无绑定。</div>
+            <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 p-5 text-sm text-muted-foreground">
+              暂无绑定。
+            </div>
           ) : (
-            <div className="overflow-auto rounded-md border border-border/60">
+            <div className="v2-table-wrap overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -213,6 +216,6 @@ export function SkillBindingsSection({
           )}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

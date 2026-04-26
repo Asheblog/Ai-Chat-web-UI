@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { ChevronDown, Image as ImageIcon } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { cn } from '@/lib/utils'
 import type {
@@ -134,6 +136,7 @@ export function RichMessageRenderer({
   isStreaming = false,
   isRendering = false,
 }: RichMessageRendererProps) {
+  const [imagesExpanded, setImagesExpanded] = useState(false)
   const textParts = payload.parts.filter((part) => part.type === 'text')
   const imageParts = payload.parts
     .filter((part): part is RichMessageImagePart => part.type === 'image')
@@ -168,16 +171,43 @@ export function RichMessageRenderer({
 
       {hasImages && (
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-5')}>
-          <div
-            className={cn(
-              'grid gap-3',
-              imageParts.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1',
-            )}
+          <button
+            type="button"
+            className="mt-3 flex w-full items-center justify-between gap-3 rounded-[8px] border border-slate-200 bg-white/90 px-4 py-2.5 text-left text-sm transition hover:bg-blue-50"
+            onClick={() => setImagesExpanded((value) => !value)}
+            aria-expanded={imagesExpanded}
           >
-            {imageParts.map((image, index) => (
-              <EvidenceImageCard key={`${image.url}-${index}`} image={image} index={index} />
-            ))}
-          </div>
+            <span className="flex min-w-0 items-center gap-2 font-medium text-slate-700">
+              <ImageIcon className="h-4 w-4 text-slate-500" />
+              查看图片（{imageParts.length} 张）
+            </span>
+            {!imagesExpanded && (
+              <span className="ml-auto hidden max-w-[180px] items-center gap-1 sm:flex">
+                {imageParts.slice(0, 3).map((image, index) => (
+                  <img
+                    key={`${image.url}-thumb-${index}`}
+                    src={image.url}
+                    alt=""
+                    className="h-7 w-10 rounded border border-slate-200 object-cover"
+                    loading="lazy"
+                  />
+                ))}
+              </span>
+            )}
+            <ChevronDown className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform', imagesExpanded && 'rotate-180')} />
+          </button>
+          {imagesExpanded && (
+            <div
+              className={cn(
+                'mt-3 grid gap-3',
+                imageParts.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1',
+              )}
+            >
+              {imageParts.map((image, index) => (
+                <EvidenceImageCard key={`${image.url}-${index}`} image={image} index={index} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

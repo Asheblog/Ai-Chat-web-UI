@@ -6,7 +6,6 @@ import type { BattleShare, BattleResult, ToolEvent } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/utils'
-import { Card, CardContent } from '@/components/ui/card'
 import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Loader2, AlertTriangle, ArrowDown } from 'lucide-react'
 import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
 import { FlowGraph } from '@/features/battle/ui/FlowGraph'
@@ -50,13 +49,13 @@ const formatRelativeTime = (dateStr: string): string => {
 const getRankDisplay = (rank: number) => {
   switch (rank) {
     case 1:
-      return { icon: <Trophy className="h-6 w-6 text-yellow-500" />, bg: 'bg-yellow-500/10 border-yellow-500/20' }
+      return { icon: <Trophy className="h-5 w-5 text-amber-500" />, bg: 'border-primary/20 bg-white/90' }
     case 2:
-      return { icon: <Medal className="h-6 w-6 text-muted-foreground" />, bg: 'bg-[hsl(var(--surface-hover))] border-border/70' }
+      return { icon: <Medal className="h-5 w-5 text-slate-500" />, bg: 'border-border/70 bg-white/90' }
     case 3:
-      return { icon: <Award className="h-6 w-6 text-amber-600" />, bg: 'bg-amber-600/10 border-amber-600/20' }
+      return { icon: <Award className="h-5 w-5 text-amber-600" />, bg: 'border-border/70 bg-white/90' }
     default:
-      return { icon: <span className="text-base font-semibold text-muted-foreground">#{rank}</span>, bg: 'bg-muted/30 border-border/50' }
+      return { icon: <span className="text-sm font-semibold text-muted-foreground">#{rank}</span>, bg: 'border-border/70 bg-white/90' }
   }
 }
 
@@ -520,8 +519,9 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   }, [])
 
   return (
-    <div className="flex min-h-screen flex-col bg-[hsl(var(--background))] text-foreground"><div className="mx-auto flex-1 w-full max-w-[1100px] px-4 py-8 md:px-6 lg:px-8 space-y-6">
-        <div className="flex items-center justify-between border-b border-border/80 pb-4">
+    <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
+      <div className="mx-auto flex w-full max-w-[980px] flex-1 flex-col gap-4 px-4 py-4 sm:px-6">
+        <div className="v2-panel flex flex-col gap-3 bg-white/90 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 text-sm font-semibold">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
               AI
@@ -530,10 +530,13 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           </div>
           <span className="text-xs text-muted-foreground">{formatRelativeTime(shareState.createdAt)}</span>
         </div>
-        {/* Header */}
-        <header className="flex flex-col gap-3">
-          {/* Summary line */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+        <header className="v2-panel bg-white/90 p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0 space-y-3">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+                {shareState.title || '模型对战分享'}
+              </h1>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               {statusMeta.icon}
               <span className="font-semibold text-foreground">{statusMeta.label}</span>
@@ -565,26 +568,29 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
             <span>阈值 {payload.judge.threshold.toFixed(2)}</span>
             <span className="text-muted-foreground/40">·</span>
             <span>{formatRelativeTime(shareState.createdAt)}</span>
-          </div>
-          <div>
-            <Button variant="outline" size="sm" className="gap-2" onClick={scrollToResults}>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="gap-2 self-start" onClick={scrollToResults}>
               <ArrowDown className="h-4 w-4" />
               直达结果
             </Button>
           </div>
         </header>
 
-        {/* Question - collapsible */}
-        <div>
+        <section className="v2-panel bg-white/90 p-4">
           <button
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+            type="button"
+            className="flex w-full items-center justify-between gap-3 rounded-[8px] px-1 py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
             onClick={() => setShowQuestion(!showQuestion)}
           >
-            {showQuestion ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}<FileText className="h-4 w-4" />
-            查看题目与期望答案
+            <span className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              题目与期望答案
+            </span>
+            {showQuestion ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
           {showQuestion && (
-            <div className="mt-3 rounded-lg bg-muted/30 p-4 space-y-3">
+            <div className="mt-3 space-y-3 rounded-[10px] border border-border/70 bg-slate-50/70 p-4">
               <BattleContentBlock
                 title="题目"
                 text={payload.prompt.text}
@@ -595,15 +601,15 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                 text={payload.expectedAnswer.text}
                 images={payload.expectedAnswer.images}
               />
-              <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border/50">
+              <div className="flex items-center gap-4 border-t border-border/50 pt-2 text-xs text-muted-foreground">
                 <span>裁判模型：{payload.judge.modelLabel || payload.judge.modelId}</span></div>
             </div>
           )}
-        </div>
+        </section>
 
         {isLive && (
           <div className="space-y-4">
-            <div className="rounded-lg border bg-muted/30 p-4">
+            <div className="v2-panel bg-white/90 p-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">对战进度</span>
                 <span className="font-medium">
@@ -622,34 +628,20 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
             </div>
 
             <div className="grid gap-3 sm:grid-cols-4">
-              <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5">
-                <CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">进行中</div>
-                  <div className="text-2xl font-bold text-blue-500">{payload.progress.runningAttempts}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5">
-                <CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">已完成</div>
-                  <div className="text-2xl font-bold text-green-500">{payload.progress.completedAttempts}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5">
-                <CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">等待</div>
-                  <div className="text-2xl font-bold text-amber-500">{payload.progress.pendingAttempts}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5">
-                <CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">通过</div>
-                  <div className="text-2xl font-bold text-purple-500">{payload.progress.successAttempts}</div>
-                </CardContent>
-              </Card>
+              {[
+                { label: '进行中', value: payload.progress.runningAttempts, color: 'text-primary' },
+                { label: '已完成', value: payload.progress.completedAttempts, color: 'text-emerald-600' },
+                { label: '等待', value: payload.progress.pendingAttempts, color: 'text-amber-600' },
+                { label: '通过', value: payload.progress.successAttempts, color: 'text-sky-600' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="rounded-[10px] border border-border/70 bg-white/90 p-4">
+                  <div className="text-xs text-muted-foreground">{label}</div>
+                  <div className={cn('mt-1 text-2xl font-semibold', color)}>{value}</div>
+                </div>
+              ))}
             </div>
 
-            <Card>
-              <CardContent className="pt-4">
+            <section className="v2-panel bg-white/90 p-4">
                 <FlowGraph
                   judgeLabel={payload.judge.modelLabel || payload.judge.modelId}
                   nodeStates={mergedNodeStates}
@@ -657,8 +649,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                   selectedNodeKey={selectedNodeKey || undefined}
                   onNodeClick={handleNodeClick}
                 />
-              </CardContent>
-            </Card>
+            </section>
 
             <div ref={resultsRef} id="battle-results" className="scroll-mt-24" />
             <div className="space-y-3">
@@ -670,13 +661,13 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                 if (!latest) return null
                 const summary = getOutputSummary(latest.output || '')
                 return (
-                  <Card key={modelKey} className="bg-background/70 border-border/60">
+                  <div key={modelKey} className="rounded-[10px] border border-border/70 bg-white/90">
                     <button
                       type="button"
-                      className="w-full text-left hover:bg-muted/30 transition-colors rounded-lg"
+                      className="w-full rounded-[10px] text-left transition-colors hover:bg-blue-50/70"
                       onClick={() => handleNodeClick(modelKey, latest.attemptIndex)}
                     >
-                      <CardContent className="pt-4">
+                      <div className="p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 mb-1">
@@ -699,9 +690,9 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                             </div>
                           )}
                         </div>
-                      </CardContent>
+                      </div>
                     </button>
-                  </Card>
+                  </div>
                 )
               })}
             </div>
@@ -739,22 +730,20 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
               <div
                 key={group.key}
                 className={cn(
-                  "rounded-xl border transition-all",
+                  "rounded-[10px] border transition-all",
                   rank.bg,
-                  isExpanded && "shadow-sm"
+                  isExpanded && "shadow-[0_14px_30px_rgba(15,23,42,0.06)]"
                 )}
               >
-                {/* Model row */}
                 <button
-                  className="w-full flex items-center gap-4 p-4 text-left hover:bg-black/5 dark:hover:bg-white/5 rounded-xl transition-colors"
+                  type="button"
+                  className="flex w-full items-center gap-4 rounded-[10px] p-4 text-left transition-colors hover:bg-blue-50/70"
                   onClick={() => toggleExpand(group.key)}
                 >
-                  {/* Rank */}
-                  <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-background/80 border border-border/50">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[10px] border border-border/70 bg-slate-50/90">
                     {rank.icon}
                   </div>
 
-                  {/* Model info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold text-sm break-words">{group.label}</span>
@@ -776,7 +765,6 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                     )}
                   </div>
 
-                  {/* Accuracy */}
                   <div className="flex-shrink-0 text-right px-2">
                     <div className="text-base font-bold">
                       {stat ? `${(stat.accuracy * 100).toFixed(0)}%` : '--'}
@@ -786,7 +774,6 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                     </div>
                   </div>
 
-                  {/* Expand indicator */}
                   <div className="flex-shrink-0">
                     {isExpanded ? (
                       <ChevronDown className="h-5 w-5 text-muted-foreground" />
@@ -796,14 +783,14 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                   </div>
                 </button>
 
-                {/* Expanded attempts -简单行列表 */}
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-2">
                     <div className="border-t border-border/50 mb-3" />
                     {group.attempts.map((attempt) => (
-                      <div
+                      <button
+                        type="button"
                         key={`${attempt.modelId}-${attempt.attemptIndex}`}
-                        className="flex items-center justify-between gap-4 py-2 px-4 rounded-lg bg-background/60 cursor-pointer hover:bg-background transition-colors"
+                        className="flex w-full cursor-pointer items-center justify-between gap-4 rounded-[8px] border border-border/60 bg-slate-50/70 px-4 py-2 text-left transition-colors hover:bg-white"
                         onClick={() => handleAttemptClick(attempt)}
                       >
                         <div className="flex items-center gap-3">
@@ -814,7 +801,8 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                             <Badge variant="destructive">错误</Badge>
                           ) : attempt.judgePass != null ? (
                             <Badge variant={attempt.judgePass ? 'outline' : 'secondary'}>
-                              {attempt.judgePass ? '✓' : '✗'} {attempt.judgeScore?.toFixed(2) ?? '--'}
+                              {attempt.judgePass ? <Check className="mr-1 h-3 w-3" /> : <X className="mr-1 h-3 w-3" />}
+                              {attempt.judgeScore?.toFixed(2) ?? '--'}
                             </Badge>
                           ) : (
                             <Badge variant="secondary">--</Badge>
@@ -823,7 +811,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                         <div className="text-sm text-muted-foreground">
                           {attempt.durationMs != null ? `${(attempt.durationMs / 1000).toFixed(1)}s` : '--'}
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -832,8 +820,9 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           })}
           </div>
         )}
-      </div><footer className="border-t border-border/80 py-4">
-        <div className="mx-auto w-full max-w-[1100px] px-4 text-center text-sm text-muted-foreground md:px-6 lg:px-8">
+      </div>
+      <footer className="border-t border-border/80 py-4">
+        <div className="mx-auto w-full max-w-[980px] px-4 text-center text-sm text-muted-foreground md:px-6">
           由<span className="font-medium text-foreground">{brandText}</span> 生成 · {formatDate(shareState.createdAt)}
         </div>
       </footer>

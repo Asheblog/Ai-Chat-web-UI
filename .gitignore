@@ -67,3 +67,6 @@ packages/backend/storage/chat-images/
 packages/shared/node-compile-cache/
 packages/frontend/preview/
 .packy-image.env
+packages/frontend/public/ai-reference
+.playwright-cli/
+output/playwright/

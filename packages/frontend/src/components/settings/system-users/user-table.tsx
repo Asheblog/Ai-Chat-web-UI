@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
@@ -69,7 +68,7 @@ export function UserTable({
   const { page, limit, totalPages } = pagination
 
   return (
-    <Card className="px-4 py-4 sm:px-5 sm:py-5">
+    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
       {loading && rows.length === 0 ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -83,7 +82,7 @@ export function UserTable({
           ))}
         </div>
       ) : !loading && rows.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 py-12 text-center">
           <Users className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
           <p className="text-sm text-muted-foreground mb-2">暂无用户数据</p>
           <p className="text-xs text-muted-foreground">
@@ -91,7 +90,7 @@ export function UserTable({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="v2-table-wrap overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -218,7 +217,7 @@ export function UserTable({
           </Table>
           {/* 分页 */}
           {rows.length > 0 && (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-2 pt-4">
+            <div className="flex flex-col gap-3 border-t border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-muted-foreground">
                 第 {page} / {totalPages} 页
               </div>
@@ -267,6 +266,6 @@ export function UserTable({
           )}
         </div>
       )}
-    </Card>
+    </section>
   )
 }

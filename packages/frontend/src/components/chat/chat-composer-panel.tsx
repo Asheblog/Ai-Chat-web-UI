@@ -431,7 +431,7 @@ export function ChatComposerPanel({
   }
 
   return (
-    <div className="sticky bottom-0 w-full bg-[hsl(var(--background-alt))/0.88] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--background-alt))/0.72]">
+    <div className="sticky bottom-0 w-full border-t border-slate-200/70 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/70">
       {advancedOpen && portalRoot
         ? createPortal(
           <div

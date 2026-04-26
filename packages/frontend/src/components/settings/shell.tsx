@@ -14,6 +14,7 @@ type BaseProps = {
   title?: string
   className?: string
   bare?: boolean
+  showNavTitle?: boolean
   children: ReactNode
 }
 
@@ -54,6 +55,7 @@ function SettingsShellLayout({
   nav,
   content,
   asideClassName,
+  showNavTitle,
 }: {
   title: string
   bare?: boolean
@@ -61,25 +63,28 @@ function SettingsShellLayout({
   nav: ReactNode
   content: ReactNode
   asideClassName?: string
+  showNavTitle?: boolean
 }) {
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-5xl flex-1 min-h-0 bg-[hsl(var(--surface))/0.96]",
-        bare ? "" : "rounded-[calc(var(--radius)+0.35rem)] border border-border/80 shadow-[0_24px_56px_hsl(var(--background)/0.4)]",
+        "mx-auto flex min-h-0 w-full max-w-none flex-1 bg-transparent",
+        bare ? "" : "",
         className
       )}
     >
-      <div className="flex h-full min-h-0 min-w-0 flex-col md:flex-row">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col md:flex-row">
         <aside
           className={cn(
-            "w-full shrink-0 border-b border-border/80 bg-[hsl(var(--background-alt))/0.65] flex min-h-0 flex-col overflow-y-auto md:w-60 md:border-b-0 md:border-r",
+            "flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-b border-slate-200/80 bg-white/70 px-3 py-4 md:w-[200px] md:border-b-0 md:border-r md:px-3 md:py-6",
             asideClassName
           )}
         >
-          <div className="sticky top-0 z-10 bg-[hsl(var(--background-alt))/0.95] px-4 py-6 text-lg font-semibold md:static">
-            {title}
-          </div>
+          {showNavTitle ? (
+            <div className="mb-6 px-2 text-xl font-semibold tracking-tight text-slate-950">
+              {title}
+            </div>
+          ) : null}
           {nav}
         </aside>
         {content}
@@ -96,25 +101,24 @@ function SettingsShellFlatImpl({
   children,
   className,
   bare,
+  showNavTitle,
 }: BaseProps & FlatModeProps) {
-  const activeLabel = sections.find((s) => s.key === active)?.label || ""
-
   const nav = (
-    <nav className="px-2 pb-4 space-y-0.5">
+    <nav className="space-y-2">
       {sections.map((s) => (
         <button
           key={s.key}
           type="button"
           onClick={() => onChange(s.key)}
           className={cn(
-            "w-full flex items-center gap-3 rounded-md px-4 py-2.5 text-left text-sm transition-all mx-2",
+            "flex w-full items-center gap-3 rounded-[8px] px-3 py-3 text-left text-sm transition-all",
             active === s.key
-              ? "bg-primary/90 text-primary-foreground font-medium shadow-sm"
-              : "text-foreground hover:bg-[hsl(var(--surface-hover))]"
+              ? "bg-blue-50 text-primary font-medium shadow-sm"
+              : "text-slate-600 hover:bg-blue-50 hover:text-slate-900"
           )}
         >
           {s.icon && <span className="shrink-0 w-[1.125rem] h-[1.125rem]">{s.icon}</span>}
-          <span className="flex-1">{s.label}</span>
+          <span className="flex-1 whitespace-nowrap">{s.label}</span>
         </button>
       ))}
     </nav>
@@ -122,8 +126,7 @@ function SettingsShellFlatImpl({
 
   const content = (
     <section className="flex-1 min-h-0 min-w-0 flex flex-col">
-      <div className="border-b border-border/80 px-8 py-6 text-2xl font-semibold">{activeLabel}</div>
-      <div className="flex-1 min-h-0 min-w-0 overflow-auto px-8 py-6">{children}</div>
+      <div className="flex-1 min-h-0 min-w-0 overflow-auto px-4 py-5 md:px-6 md:py-6">{children}</div>
     </section>
   )
 
@@ -134,6 +137,8 @@ function SettingsShellFlatImpl({
       className={className}
       nav={nav}
       content={content}
+      showNavTitle={showNavTitle}
+      asideClassName={showNavTitle ? "md:w-[228px] md:px-4" : undefined}
     />
   )
 }
@@ -150,6 +155,7 @@ function SettingsShellNestedImpl({
   children,
   className,
   bare,
+  showNavTitle,
 }: BaseProps & NestedModeProps) {
   const [openKey, setOpenKey] = useState<string>("")
 
@@ -158,7 +164,7 @@ function SettingsShellNestedImpl({
   }, [activeMain])
 
   const nav = (
-    <nav className="px-2 pb-4 space-y-1">
+    <nav className="space-y-2">
       {tree.map((m) => {
         const isOpen = openKey === m.key
         const isActiveMain = activeMain === m.key
@@ -168,17 +174,17 @@ function SettingsShellNestedImpl({
               type="button"
               onClick={() => setOpenKey(isOpen ? "" : m.key)}
               className={cn(
-                "w-full flex items-center gap-2 rounded-md px-4 py-2.5 text-left text-sm font-medium transition-all",
+                "flex w-full items-center gap-2 rounded-[8px] px-3 py-3 text-left text-sm font-medium transition-all",
                 isActiveMain
-                  ? "bg-[hsl(var(--surface-hover))] text-foreground"
-                  : "text-foreground hover:bg-[hsl(var(--surface-hover))/0.75]"
+                  ? "bg-blue-50 text-slate-900"
+                  : "text-slate-600 hover:bg-blue-50 hover:text-slate-900"
               )}
             >
               {isOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
               <span className="flex-1">{m.label}</span>
             </button>
             {isOpen && (
-              <div className="ml-2 mt-1 space-y-0.5">
+              <div className="mt-1 space-y-1 pl-2">
                 {m.children?.map((s) => {
                   const isActive = activeSub === s.key
                   return (
@@ -190,10 +196,10 @@ function SettingsShellNestedImpl({
                         onChangeSub(s.key)
                       }}
                       className={cn(
-                        "w-full flex items-center gap-3 rounded-md px-4 py-2.5 text-left text-sm transition-all",
+                        "flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm transition-all",
                         isActive
-                          ? "bg-primary/90 text-primary-foreground font-medium shadow-sm"
-                          : "text-foreground hover:bg-[hsl(var(--surface-hover))]"
+                          ? "bg-primary text-primary-foreground font-medium shadow-sm"
+                          : "text-slate-600 hover:bg-blue-50 hover:text-slate-900"
                       )}
                     >
                       {s.icon && <span className="shrink-0 w-[1.125rem] h-[1.125rem]">{s.icon}</span>}
@@ -235,7 +241,11 @@ function SettingsShellNestedImpl({
       className={className}
       nav={nav}
       content={content}
-      asideClassName="scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground"
+      showNavTitle={showNavTitle}
+      asideClassName={cn(
+        "scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground",
+        showNavTitle ? "md:w-[228px] md:px-4" : ""
+      )}
     />
   )
 }

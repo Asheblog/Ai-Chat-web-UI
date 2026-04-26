@@ -175,10 +175,10 @@ export function ToolCallsSection({
   if (!hasToolCalls) return null
 
   return (
-    <div className="mb-3 rounded-lg border border-border/70 bg-muted/20" data-message-panel="interactive">
+    <div className="mb-2 overflow-hidden rounded-[8px] border border-slate-200 bg-white/80" data-message-panel="interactive">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-blue-50"
         onClick={() => {
           dispatch({ type: 'toggle' })
           const next = !expanded
@@ -187,9 +187,10 @@ export function ToolCallsSection({
         aria-expanded={expanded}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-            <Wrench className="h-4 w-4" />
-            <span>工具调用 ({timeline.length})</span>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Wrench className="h-4 w-4 text-slate-500" />
+            <span>工具调用 {timeline.length} 个</span>
+            {hasActiveCalls ? <span className="v2-status v2-status-warning">运行中</span> : <span className="v2-status v2-status-success">已完成</span>}
           </div>
           {summary?.summaryText && (
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{summary.summaryText}</p>
@@ -198,7 +199,7 @@ export function ToolCallsSection({
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="space-y-2 border-t border-border/60 px-2 py-2">
+        <div className="space-y-2 border-t border-slate-200 px-3 py-3">
           {groupedTimeline.map((group) => (
             <div key={group.key} className="space-y-1.5">
               {group.events.length > 1 && group.label && (

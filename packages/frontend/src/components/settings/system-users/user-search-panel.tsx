@@ -3,7 +3,6 @@ import { RefreshCw, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card } from "@/components/ui/card"
 import { STATUS_OPTIONS, type StatusFilter } from "./constants"
 
 type UserSearchPanelProps = {
@@ -30,7 +29,7 @@ export function UserSearchPanel({
   onRefresh,
 }: UserSearchPanelProps) {
   return (
-    <Card className="px-4 py-4 sm:px-5 sm:py-5">
+    <div className="rounded-[10px] border border-border/70 bg-slate-50/70 px-4 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 flex-1">
           <div className="relative flex-1 max-w-sm">
@@ -70,6 +69,6 @@ export function UserSearchPanel({
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

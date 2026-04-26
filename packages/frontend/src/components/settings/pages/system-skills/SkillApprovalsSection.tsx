@@ -2,7 +2,6 @@
 
 import { ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { CardDescription, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { SkillApprovalRequestItem } from '@/types'
 import { formatDateTime } from './shared'
@@ -21,23 +20,27 @@ export function SkillApprovalsSection({
   onRespondApproval,
 }: SkillApprovalsSectionProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-        <ShieldCheck className="h-5 w-5 text-primary" />
+    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+      <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <ShieldCheck className="h-5 w-5" />
+        </span>
         <div>
-          <CardTitle className="text-lg font-semibold tracking-tight">待审批调用</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">
+          <h2 className="v2-section-title">待审批调用</h2>
+          <p className="v2-muted-line mt-1">
             高风险 Skill 调用会在此出现，处理后调用继续或终止。
-          </CardDescription>
+          </p>
         </div>
       </div>
-      <div className="rounded-lg border border-border/70 bg-card/30 p-4 sm:p-5">
+      <div>
         {loading ? (
           <div className="text-sm text-muted-foreground">加载中...</div>
         ) : approvals.length === 0 ? (
-          <div className="text-sm text-muted-foreground">当前没有待审批请求。</div>
+          <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 p-5 text-sm text-muted-foreground">
+            当前没有待审批请求。
+          </div>
         ) : (
-          <div className="overflow-auto rounded-md border border-border/60">
+          <div className="v2-table-wrap overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -83,6 +86,6 @@ export function SkillApprovalsSection({
           </div>
         )}
       </div>
-    </div>
+    </section>
   )
 }

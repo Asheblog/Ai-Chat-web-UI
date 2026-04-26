@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -134,18 +133,20 @@ export function SystemSkillAuditsPage() {
   }
 
   return (
-    <div className="space-y-6 min-w-0">
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-          <ShieldCheck className="h-5 w-5 text-primary" />
+    <div className="min-w-0 space-y-4">
+      <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+        <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+            <ShieldCheck className="h-5 w-5" />
+          </span>
           <div>
-            <CardTitle className="text-lg font-semibold tracking-tight">Skill 审计日志</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground">
+            <h2 className="v2-section-title">Skill 审计日志</h2>
+            <p className="v2-muted-line mt-1">
               查询 SkillExecutionAudit，定位审批、执行错误与耗时问题。
-            </CardDescription>
+            </p>
           </div>
         </div>
-        <div className="space-y-4 rounded-lg border border-border/70 bg-card/30 p-4 sm:p-5">
+        <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
             <div className="space-y-1 lg:col-span-2">
               <Label>Skill</Label>
@@ -223,26 +224,28 @@ export function SystemSkillAuditsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-          <FileText className="h-5 w-5 text-primary" />
+      <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+        <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+            <FileText className="h-5 w-5" />
+          </span>
           <div>
-            <CardTitle className="text-lg font-semibold tracking-tight">审计结果</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground">
+            <h2 className="v2-section-title">审计结果</h2>
+            <p className="v2-muted-line mt-1">
               支持展开请求/响应载荷，快速定位执行异常和审批链路问题。
-            </CardDescription>
+            </p>
           </div>
         </div>
-        <div className="rounded-lg border border-border/70 bg-card/30 p-4 sm:p-5">
+        <div>
           {loading && items.length === 0 ? (
             <div className="text-sm text-muted-foreground">加载中...</div>
           ) : items.length === 0 ? (
             <div className="text-sm text-muted-foreground">没有匹配的审计日志。</div>
           ) : (
             <div className="space-y-3">
-              <div className="overflow-auto rounded-md border border-border/60">
+              <div className="v2-table-wrap overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -350,7 +353,7 @@ export function SystemSkillAuditsPage() {
             </div>
           )}
         </div>
-      </div>
+      </section>
     </div>
   )
 }

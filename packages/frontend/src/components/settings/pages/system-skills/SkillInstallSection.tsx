@@ -1,8 +1,7 @@
 'use client'
 
-import { Download } from 'lucide-react'
+import { Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -28,19 +27,21 @@ export function SkillInstallSection({
   onRefresh,
 }: SkillInstallSectionProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-        <Download className="h-5 w-5 text-primary" />
+    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+      <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <Download className="h-5 w-5" />
+        </span>
         <div>
-          <CardTitle className="text-lg font-semibold tracking-tight">Skill 安装</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">
+          <h2 className="v2-section-title">Skill 安装</h2>
+          <p className="v2-muted-line mt-1">
             支持 GitHub `owner/repo@ref[:subdir]` 或 `github.com/.../(tree|blob)/...`，例如
             `anthropics/skills@main:skills/pptx`。
-          </CardDescription>
+          </p>
         </div>
       </div>
-      <div className="space-y-4 rounded-lg border border-border/70 bg-card/30 p-4 sm:p-5">
-        <div className="grid gap-3 md:grid-cols-[1fr_280px_auto]">
+      <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-[1fr_minmax(220px,280px)_auto]">
           <div className="space-y-1">
             <Label>GitHub Source</Label>
             <Input
@@ -59,17 +60,18 @@ export function SkillInstallSection({
             />
           </div>
           <div className="flex items-end">
-            <Button onClick={onInstall} disabled={installing} className="w-full md:w-auto">
+            <Button type="button" onClick={onInstall} disabled={installing} className="w-full md:w-auto">
               {installing ? '安装中...' : '安装'}
             </Button>
           </div>
         </div>
         <div className="flex justify-end border-t border-border/60 pt-4">
-          <Button variant="outline" onClick={onRefresh} disabled={refreshing}>
+          <Button type="button" variant="outline" onClick={onRefresh} disabled={refreshing} className="gap-2">
+            <RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
             {refreshing ? '刷新中...' : '刷新数据'}
           </Button>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

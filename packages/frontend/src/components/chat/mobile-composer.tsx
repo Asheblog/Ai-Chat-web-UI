@@ -137,8 +137,8 @@ export function MobileComposer({
   }
 
   return (
-    <div className="md:hidden px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+18px)]">
-      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'rounded-[1.5rem]')}>
+    <div className="px-3 pb-[calc(env(safe-area-inset-bottom)+14px)] pt-2 md:hidden">
+      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'rounded-[10px]')}>
         <div className="space-y-3 px-3 pt-3">
           <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-0" />
           <Textarea
@@ -165,8 +165,8 @@ export function MobileComposer({
                   variant="ghost"
                   className={`h-9 w-9 rounded-lg p-0 transition-colors ${
                     plusOpen
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground'
+                    ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-blue-50 hover:text-foreground'
                   }`}
                   aria-label="更多操作"
                 >
@@ -225,7 +225,7 @@ export function MobileComposer({
               manageDisabled={!hasDocuments && selectedImages.length === 0}
               manageCount={attachmentsCount}
               ariaLabel="上传附件"
-              className="h-9 w-9 rounded-lg border-0 bg-transparent"
+              className="h-9 w-9 rounded-[8px] border-0 bg-transparent"
               menuMode="sheet"
               onOpenKnowledgeBase={onOpenKnowledgeBase}
               knowledgeBaseEnabled={knowledgeBaseEnabled}

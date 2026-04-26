@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowRight, Eye, EyeOff, Loader2, Lock, User } from 'lucide-react'
 import { AuthFormLayout } from '@/components/auth-form-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [rememberLogin, setRememberLogin] = useState(true)
   const [savePassword, setSavePassword] = useState(false)
+  const [passwordVisible, setPasswordVisible] = useState(false)
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -111,45 +112,66 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
 
   return (
     <AuthFormLayout
-      title={`${brandText} 登录`}
-      description="使用你的账号继续当前对话与配置。"
-      error={errorMessage}
+      title={`欢迎登录 ${brandText}`}
+      description="登录账号以继续使用"
+      error={
+        errorMessage ? (
+          <span className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {errorMessage}
+          </span>
+        ) : null
+      }
       footer={
         <>
           <div>
             还没有账户？{' '}
             <Link href="/auth/register" className="text-primary hover:text-[hsl(var(--primary-hover))] hover:underline">立即注册</Link>
           </div>
-          <div>界面已适配桌面与移动端。</div>
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="username" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">用户名</Label>
-          <Input
-            id="username"
-            type="text"
-            placeholder="请输入用户名"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            disabled={isLoading}
-            className="h-11"
-          />
+          <Label htmlFor="username" className="text-sm font-medium text-slate-800">用户名</Label>
+          <div className="relative">
+            <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+            <Input
+              id="username"
+              type="text"
+              placeholder="请输入用户名"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              disabled={isLoading}
+              className="h-12 rounded-[8px] bg-white pl-12"
+            />
+          </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">密码</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="请输入密码"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={isLoading}
-            className="h-11"
-          />
+          <Label htmlFor="password" className="text-sm font-medium text-slate-800">密码</Label>
+          <div className="relative">
+            <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+            <Input
+              id="password"
+              type={passwordVisible ? 'text' : 'password'}
+              placeholder="请输入密码"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={isLoading}
+              className="h-12 rounded-[8px] bg-white pl-12 pr-12"
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              onClick={() => setPasswordVisible((value) => !value)}
+              aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
+              disabled={isLoading}
+            >
+              {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -163,7 +185,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         </div>
         <Button
           type="submit"
-          className="h-11 w-full"
+          className="h-12 w-full rounded-[8px] text-base shadow-[0_12px_24px_rgba(37,99,235,0.22)]"
           disabled={isLoading || !username || !password}
         >
           {isLoading ? (
@@ -172,7 +194,10 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
               正在登录...
             </>
           ) : (
-            '登录'
+            <>
+              登录
+              <ArrowRight className="ml-3 h-5 w-5" />
+            </>
           )}
         </Button>
       </form>
