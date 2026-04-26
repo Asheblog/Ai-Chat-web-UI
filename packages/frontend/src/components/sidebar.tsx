@@ -3,13 +3,14 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronRight, Folder, Github, Info, MessageCircle, PanelLeftClose, PanelRightOpen, Pin, PinOff, Plus, Search, Settings, Trash2, Trophy } from 'lucide-react'
+import { ChevronRight, Folder, Github, Info, MessageCircle, Pin, PinOff, Plus, Search, Settings, Trash2, Trophy } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { SidebarCollapseIcon, SidebarExpandIcon } from '@/components/sidebar-toggle-icon'
 import {
   AlertDialog,
 } from '@/components/ui/alert-dialog'
@@ -311,23 +312,23 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="折叠侧边栏"
-            className="v2-icon-button lg:hidden"
+            className="v2-icon-button group/sidebar-toggle lg:hidden"
             onClick={() => {
               setSidebarCollapsed(true)
               setIsMobileMenuOpen(false)
             }}
           >
-            <PanelLeftClose className="h-5 w-5" />
+            <SidebarCollapseIcon className="h-5 w-5" />
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon"
             aria-label="收起侧边栏"
-            className="hidden h-10 w-10 rounded-[10px] border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-blue-50 hover:text-primary lg:inline-flex"
+            className="group/sidebar-toggle hidden h-10 w-10 rounded-[10px] border border-slate-200/85 bg-white/90 text-slate-500 shadow-[0_8px_18px_rgba(37,99,235,0.08)] hover:border-blue-200 hover:bg-blue-50 hover:text-primary lg:inline-flex"
             onClick={() => setSidebarCollapsed(true)}
           >
-            <PanelLeftClose className="h-5 w-5" />
+            <SidebarCollapseIcon className="h-5 w-5" />
           </Button>
         </div>
       </div>
@@ -556,11 +557,11 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-[10px] text-slate-500 hover:bg-blue-50 hover:text-primary"
+                className="group/sidebar-toggle h-10 w-10 rounded-[10px] border border-transparent text-slate-500 hover:border-blue-200/80 hover:bg-blue-50 hover:text-primary"
                 aria-label="展开侧边栏"
                 onClick={() => setSidebarCollapsed(false)}
               >
-                <PanelRightOpen className="h-5 w-5" />
+                <SidebarExpandIcon className="h-5 w-5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">展开侧边栏</TooltipContent>
@@ -741,13 +742,13 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="展开侧边栏"
-            className="h-12 w-12 rounded-[12px] border border-slate-200 bg-white text-slate-600 shadow-lg hover:bg-blue-50 hover:text-primary"
+            className="group/sidebar-toggle h-12 w-12 rounded-[12px] border border-slate-200 bg-white text-slate-600 shadow-lg hover:border-blue-200 hover:bg-blue-50 hover:text-primary"
             onClick={() => {
               setSidebarCollapsed(false)
               setIsMobileMenuOpen(true)
             }}
           >
-            <PanelRightOpen className="h-6 w-6" />
+            <SidebarExpandIcon className="h-6 w-6" />
           </Button>
         </div>
       )}

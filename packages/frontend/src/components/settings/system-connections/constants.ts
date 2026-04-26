@@ -1,3 +1,6 @@
+export const SPECIAL_PROVIDER_DEEPSEEK = "deepseek_interleave"
+export const SPECIAL_VENDOR_DEEPSEEK = "deepseek"
+
 export const CONNECTION_CAP_KEYS = ['vision', 'image_generation'] as const
 export type ConnectionCapKey = typeof CONNECTION_CAP_KEYS[number]
 

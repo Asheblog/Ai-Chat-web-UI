@@ -38,11 +38,14 @@ export function SystemConnectionVerifyPanel({
   }, [resultKeys, verifyResult])
 
   return (
-    <section className="v2-panel bg-white/90 p-4 shadow-none">
+    <section className="space-y-3">
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold tracking-tight">验证结果</h3>
+        <div>
+          <h3 className="text-sm font-semibold tracking-tight">验证结果</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">失败项会自动展开，成功项可按需查看模型明细。</p>
+        </div>
         {!verifyResult ? (
-          <div className="rounded-[10px] border border-dashed border-border/70 bg-[hsl(var(--surface))/0.26] px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 px-4 py-4 text-sm text-muted-foreground">
             还没有验证结果。
           </div>
         ) : (

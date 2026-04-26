@@ -29,7 +29,7 @@ export function SystemConnectionKeyPool({
   onRemoveKey,
   onUpdateKey,
 }: SystemConnectionKeyPoolProps) {
-  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(keys[0]?.clientId ?? null)
+  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null)
   const previousKeyCountRef = useRef(keys.length)
 
   useEffect(() => {
@@ -52,10 +52,13 @@ export function SystemConnectionKeyPool({
   }, [expandedKeyId, keys])
 
   return (
-    <section className="v2-panel bg-white/90 p-4 shadow-none">
+    <section className="space-y-3">
       <div className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-sm font-semibold tracking-tight">Key 池</h3>
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">Key 池</h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">单个 Key 默认收起，展开后可编辑密钥和模型白名单。</p>
+          </div>
           <Button type="button" variant="outline" onClick={onAddKey} className="min-h-10 w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             添加 Key
@@ -78,7 +81,7 @@ export function SystemConnectionKeyPool({
                 animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
                 exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="rounded-[10px] border border-border/75 bg-[hsl(var(--surface))/0.38] p-4"
+                className="rounded-[10px] border border-border/75 bg-slate-50/70 p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <button
