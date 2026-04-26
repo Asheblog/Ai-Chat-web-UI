@@ -5,7 +5,6 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { getBuiltinSkillPreset } from '@/features/skills/presets'
 
 interface SkillOption {
   slug: string
@@ -18,14 +17,12 @@ interface SkillPanelSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   webSearchEnabled?: boolean
-  onToggleWebSearch?: (value: boolean) => void
   canUseWebSearch?: boolean
   showWebSearchScope?: boolean
   webSearchScope?: string
   onWebSearchScopeChange?: (value: string) => void
   webSearchDisabledNote?: string
   pythonToolEnabled?: boolean
-  onTogglePythonTool?: (value: boolean) => void
   canUsePythonTool?: boolean
   pythonToolDisabledNote?: string
   skillOptions?: SkillOption[]
@@ -36,14 +33,12 @@ export function SkillPanelSheet({
   open,
   onOpenChange,
   webSearchEnabled = false,
-  onToggleWebSearch,
   canUseWebSearch = true,
   showWebSearchScope = false,
   webSearchScope = 'webpage',
   onWebSearchScopeChange,
   webSearchDisabledNote,
   pythonToolEnabled = false,
-  onTogglePythonTool,
   canUsePythonTool = true,
   pythonToolDisabledNote,
   skillOptions = [],
@@ -75,8 +70,11 @@ export function SkillPanelSheet({
     (webSearchEnabled && canUseWebSearch ? 1 : 0) +
     (pythonToolEnabled && canUsePythonTool ? 1 : 0) +
     skillOptions.filter((item) => item.enabled).length
-  const webSearchPreset = getBuiltinSkillPreset('web-search')
-  const pythonPreset = getBuiltinSkillPreset('python-runner')
+  const hasBuiltinDetails = Boolean(
+    (shouldShowWebSearchScope && onWebSearchScopeChange) ||
+      webSearchDisabledNote ||
+      pythonToolDisabledNote,
+  )
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -99,75 +97,40 @@ export function SkillPanelSheet({
           </div>
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            <section className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
-              <p className="text-[11px] tracking-wide text-muted-foreground">内置预设</p>
-              {onToggleWebSearch ? (
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{webSearchPreset?.label || '联网搜索'}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {webSearchPreset?.description || '调用搜索引擎获取最新网页信息'}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/80">
-                      slug: web-search / tool: {webSearchPreset?.toolName || 'web_search'}
-                    </p>
+            {hasBuiltinDetails ? (
+              <section className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
+                <p className="text-[11px] tracking-wide text-muted-foreground">内置工具细项</p>
+                {shouldShowWebSearchScope && onWebSearchScopeChange ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">搜索范围（联网搜索）</p>
+                    <Select
+                      value={webSearchScope}
+                      onValueChange={(value) => onWebSearchScopeChange(value)}
+                      disabled={!canUseWebSearch}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="选择范围" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="webpage">网页</SelectItem>
+                        <SelectItem value="document">文档</SelectItem>
+                        <SelectItem value="paper">论文</SelectItem>
+                        <SelectItem value="image">图片</SelectItem>
+                        <SelectItem value="video">视频</SelectItem>
+                        <SelectItem value="podcast">播客</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Switch
-                    checked={Boolean(webSearchEnabled && canUseWebSearch)}
-                    onCheckedChange={(checked) => onToggleWebSearch(Boolean(checked))}
-                    disabled={!canUseWebSearch}
-                  />
-                </div>
-              ) : null}
-              {onTogglePythonTool ? (
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{pythonPreset?.label || 'Python 工具'}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {pythonPreset?.description || '执行 Python 代码进行计算与数据处理'}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/80">
-                      slug: python-runner / tool: {pythonPreset?.toolName || 'python_runner'}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={Boolean(pythonToolEnabled && canUsePythonTool)}
-                    onCheckedChange={(checked) => onTogglePythonTool(Boolean(checked))}
-                    disabled={!canUsePythonTool}
-                  />
-                </div>
-              ) : null}
+                ) : null}
 
-              {shouldShowWebSearchScope && onWebSearchScopeChange ? (
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">搜索范围（联网搜索）</p>
-                  <Select
-                    value={webSearchScope}
-                    onValueChange={(value) => onWebSearchScopeChange(value)}
-                    disabled={!canUseWebSearch}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="选择范围" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="webpage">网页</SelectItem>
-                      <SelectItem value="document">文档</SelectItem>
-                      <SelectItem value="paper">论文</SelectItem>
-                      <SelectItem value="image">图片</SelectItem>
-                      <SelectItem value="video">视频</SelectItem>
-                      <SelectItem value="podcast">播客</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-
-              {webSearchDisabledNote ? (
-                <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
-              ) : null}
-              {pythonToolDisabledNote ? (
-                <p className="text-[11px] text-muted-foreground">{pythonToolDisabledNote}</p>
-              ) : null}
-            </section>
+                {webSearchDisabledNote ? (
+                  <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
+                ) : null}
+                {pythonToolDisabledNote ? (
+                  <p className="text-[11px] text-muted-foreground">{pythonToolDisabledNote}</p>
+                ) : null}
+              </section>
+            ) : null}
 
             {skillOptions.length > 0 ? (
               <section className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">

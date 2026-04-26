@@ -6,40 +6,17 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 
 interface PlusMenuContentProps {
-  thinkingEnabled: boolean
-  onToggleThinking: (value: boolean) => void
   effort?: 'low' | 'medium' | 'high' | 'unset'
   onEffortChange?: (value: 'low' | 'medium' | 'high' | 'unset') => void
-  webSearchEnabled?: boolean
-  onToggleWebSearch?: (value: boolean) => void
-  canUseWebSearch?: boolean
-  showWebSearchScope?: boolean
-  webSearchScope?: string
-  onWebSearchScopeChange?: (value: string) => void
   traceEnabled?: boolean
   canUseTrace?: boolean
   onToggleTrace?: (value: boolean) => void
-  webSearchDisabledNote?: string
-  pythonToolEnabled?: boolean
-  onTogglePythonTool?: (value: boolean) => void
-  canUsePythonTool?: boolean
-  pythonToolDisabledNote?: string
-  skillOptions?: Array<{
-    slug: string
-    label: string
-    description?: string
-    enabled: boolean
-  }>
-  onToggleSkillOption?: (slug: string, enabled: boolean) => void
   contentClassName?: string
   bodyClassName?: string
   onOpenSkillPanel?: () => void
   onOpenAdvanced?: () => void
   onOpenSessionPrompt?: () => void
-  showThinkingToggle?: boolean
-  showWebSearchToggle?: boolean
   showControlCard?: boolean
-  showCapabilitySummary?: boolean
   showSkillPanelAction?: boolean
   showAdvancedRequestAction?: boolean
   showSessionPromptAction?: boolean
@@ -79,26 +56,17 @@ function ActionCardButton({
 }
 
 export function PlusMenuContent({
-  thinkingEnabled,
-  onToggleThinking,
   effort = 'unset',
   onEffortChange,
-  webSearchEnabled = false,
-  canUseWebSearch = true,
   traceEnabled,
   canUseTrace = false,
   onToggleTrace,
-  pythonToolEnabled,
-  canUsePythonTool = true,
-  skillOptions = [],
   contentClassName,
   bodyClassName,
   onOpenSkillPanel,
   onOpenAdvanced,
   onOpenSessionPrompt,
-  showThinkingToggle = true,
   showControlCard = true,
-  showCapabilitySummary = true,
   showSkillPanelAction = true,
   showAdvancedRequestAction = true,
   showSessionPromptAction = true,
@@ -107,28 +75,17 @@ export function PlusMenuContent({
   align = 'start',
   onActionComplete,
 }: PlusMenuContentProps) {
-  const enabledSkillCount =
-    (webSearchEnabled && canUseWebSearch ? 1 : 0) +
-    (pythonToolEnabled && canUsePythonTool ? 1 : 0) +
-    skillOptions.filter((item) => item.enabled).length
-
   const handleAction = (action?: () => void) => {
     action?.()
     onActionComplete?.()
   }
+  const hasSecondaryControls = Boolean(onEffortChange || (canUseTrace && onToggleTrace))
 
   const body = (
     <div className={cn('space-y-3', bodyClassName)}>
-      {showControlCard ? (
+      {showControlCard && hasSecondaryControls ? (
         <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.72] p-3">
           <div className="space-y-3">
-            {showThinkingToggle ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">思考模式</span>
-                <Switch checked={thinkingEnabled} onCheckedChange={(checked) => onToggleThinking(Boolean(checked))} />
-              </div>
-            ) : null}
-
             {onEffortChange ? (
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-medium text-muted-foreground">思考深度</span>
@@ -152,12 +109,6 @@ export function PlusMenuContent({
                 <Switch checked={Boolean(traceEnabled)} onCheckedChange={(checked) => onToggleTrace(Boolean(checked))} />
               </div>
             ) : null}
-
-            {showCapabilitySummary ? (
-              <p className="text-[11px] leading-5 text-muted-foreground">
-                已启用 {enabledSkillCount} 个能力（内置 + 第三方技能）。
-              </p>
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -165,8 +116,8 @@ export function PlusMenuContent({
       <div className="space-y-2">
         {showSkillPanelAction ? (
           <ActionCardButton
-            title="打开技能面板"
-            description="管理联网检索、Python 工具与第三方技能。"
+            title="第三方技能"
+            description="管理第三方 Skill 与工具细项。"
             onClick={() => handleAction(onOpenSkillPanel)}
             disabled={!onOpenSkillPanel}
           />

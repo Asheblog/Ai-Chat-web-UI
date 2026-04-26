@@ -191,21 +191,6 @@ export function DesktopComposer({
                   </button>
                 </DropdownMenuTrigger>
                 <PlusMenuContent
-                  thinkingEnabled={thinkingEnabled}
-                  onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
-                  webSearchEnabled={webSearchEnabled}
-                  onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-                  canUseWebSearch={canUseWebSearch}
-                  showWebSearchScope={showWebSearchScope}
-                  webSearchScope={webSearchScope}
-                  onWebSearchScopeChange={onWebSearchScopeChange}
-                  webSearchDisabledNote={webSearchDisabledNote}
-                  pythonToolEnabled={pythonToolEnabled}
-                  onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-                  canUsePythonTool={canUsePythonTool}
-                  pythonToolDisabledNote={pythonToolDisabledNote}
-                  skillOptions={skillOptions}
-                  onToggleSkillOption={onToggleSkillOption}
                   canUseTrace={canUseTrace}
                   traceEnabled={traceEnabled}
                   onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
@@ -294,14 +279,12 @@ export function DesktopComposer({
           open={skillPanelOpen}
           onOpenChange={setSkillPanelOpen}
           webSearchEnabled={webSearchEnabled}
-          onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
           canUseWebSearch={canUseWebSearch}
           showWebSearchScope={showWebSearchScope}
           webSearchScope={webSearchScope}
           onWebSearchScopeChange={onWebSearchScopeChange}
           webSearchDisabledNote={webSearchDisabledNote}
           pythonToolEnabled={pythonToolEnabled}
-          onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
           canUsePythonTool={canUsePythonTool}
           pythonToolDisabledNote={pythonToolDisabledNote}
           skillOptions={skillOptions}

@@ -179,23 +179,8 @@ export function MobileComposer({
                 className="w-[min(92vw,22rem)] rounded-2xl border-border/80 bg-popover/95 p-2 shadow-[0_18px_40px_hsl(var(--background)/0.35)] backdrop-blur-xl"
               >
                 <PlusMenuContent
-                  thinkingEnabled={thinkingEnabled}
-                  onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
                   effort={effort}
                   onEffortChange={onEffortChange}
-                  webSearchEnabled={webSearchEnabled}
-                  onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-                  canUseWebSearch={canUseWebSearch}
-                  showWebSearchScope={showWebSearchScope}
-                  webSearchScope={webSearchScope}
-                  onWebSearchScopeChange={onWebSearchScopeChange}
-                  webSearchDisabledNote={webSearchDisabledNote}
-                  pythonToolEnabled={pythonToolEnabled}
-                  onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-                  canUsePythonTool={canUsePythonTool}
-                  pythonToolDisabledNote={pythonToolDisabledNote}
-                  skillOptions={skillOptions}
-                  onToggleSkillOption={onToggleSkillOption}
                   onOpenSkillPanel={openSkillPanelFromMenu}
                   canUseTrace={canUseTrace}
                   traceEnabled={traceEnabled}
@@ -282,14 +267,12 @@ export function MobileComposer({
         open={skillPanelOpen}
         onOpenChange={setSkillPanelOpen}
         webSearchEnabled={webSearchEnabled}
-        onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
         canUseWebSearch={canUseWebSearch}
         showWebSearchScope={showWebSearchScope}
         webSearchScope={webSearchScope}
         onWebSearchScopeChange={onWebSearchScopeChange}
         webSearchDisabledNote={webSearchDisabledNote}
         pythonToolEnabled={pythonToolEnabled}
-        onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
         skillOptions={skillOptions}
@@ -308,30 +291,7 @@ export function MobileComposer({
           </div>
           <div className="max-h-[70vh] overflow-y-auto px-4 pb-2">
             <PlusMenuContent
-              thinkingEnabled={thinkingEnabled}
-              onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
-              effort={effort}
-              onEffortChange={onEffortChange}
-              webSearchEnabled={webSearchEnabled}
-              onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-              canUseWebSearch={canUseWebSearch}
-              showWebSearchScope={showWebSearchScope}
-              webSearchScope={webSearchScope}
-              onWebSearchScopeChange={onWebSearchScopeChange}
-              webSearchDisabledNote={webSearchDisabledNote}
-              pythonToolEnabled={pythonToolEnabled}
-              onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-              canUsePythonTool={canUsePythonTool}
-              pythonToolDisabledNote={pythonToolDisabledNote}
-              skillOptions={skillOptions}
-              onToggleSkillOption={onToggleSkillOption}
-              canUseTrace={canUseTrace}
-              traceEnabled={traceEnabled}
-              onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
-              showThinkingToggle={false}
-              showWebSearchToggle={false}
               showControlCard={false}
-              showCapabilitySummary={false}
               showSkillPanelAction={false}
               onOpenAdvanced={onOpenAdvanced}
               onOpenSessionPrompt={onOpenSessionPrompt}

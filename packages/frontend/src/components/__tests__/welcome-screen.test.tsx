@@ -171,7 +171,7 @@ describe('WelcomeScreen', () => {
 
   it('renders hero section and reacts to textarea input', () => {
     render(<WelcomeScreen />)
-    expect(screen.getByText('有什么可以帮忙的?')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /欢迎使用\s*AIChat/ })).toBeInTheDocument()
     expect(screen.getByPlaceholderText('测试占位符')).toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText('测试占位符'), { target: { value: 'hello' } })
     expect(mockTextareaChange).toHaveBeenCalledWith('hello')

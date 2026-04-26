@@ -39,19 +39,15 @@ interface AdvancedOptionsProps {
 
 export function AdvancedOptions({
   disabled,
-  thinkingEnabled,
-  onToggleThinking,
   effort,
   onEffortChange,
   webSearchEnabled,
-  onToggleWebSearch,
   canUseWebSearch,
   showWebSearchScope,
   webSearchScope,
   onWebSearchScopeChange,
   webSearchDisabledNote,
   pythonToolEnabled,
-  onTogglePythonTool,
   canUsePythonTool,
   pythonToolDisabledNote,
   skillOptions,
@@ -119,23 +115,8 @@ export function AdvancedOptions({
             className="w-[min(92vw,22rem)] rounded-2xl border-border/80 bg-popover/95 p-2 shadow-[0_18px_40px_hsl(var(--background)/0.35)] backdrop-blur-xl"
           >
             <PlusMenuContent
-              thinkingEnabled={thinkingEnabled}
-              onToggleThinking={onToggleThinking}
               effort={effort}
               onEffortChange={onEffortChange}
-              webSearchEnabled={webSearchEnabled}
-              onToggleWebSearch={onToggleWebSearch}
-              canUseWebSearch={canUseWebSearch}
-              showWebSearchScope={showWebSearchScope}
-              webSearchScope={webSearchScope}
-              onWebSearchScopeChange={onWebSearchScopeChange}
-              webSearchDisabledNote={webSearchDisabledNote}
-              pythonToolEnabled={pythonToolEnabled}
-              onTogglePythonTool={onTogglePythonTool}
-              canUsePythonTool={canUsePythonTool}
-              pythonToolDisabledNote={pythonToolDisabledNote}
-              skillOptions={skillOptions}
-              onToggleSkillOption={onToggleSkillOption}
               onOpenSkillPanel={openSkillPanelFromMenu}
               onOpenAdvanced={() => {
                 setPlusOpen(false)
@@ -175,23 +156,8 @@ export function AdvancedOptions({
             </Button>
           </DropdownMenuTrigger>
           <PlusMenuContent
-            thinkingEnabled={thinkingEnabled}
-            onToggleThinking={onToggleThinking}
             effort={effort}
             onEffortChange={onEffortChange}
-            webSearchEnabled={webSearchEnabled}
-            onToggleWebSearch={onToggleWebSearch}
-            canUseWebSearch={canUseWebSearch}
-            showWebSearchScope={showWebSearchScope}
-            webSearchScope={webSearchScope}
-            onWebSearchScopeChange={onWebSearchScopeChange}
-            webSearchDisabledNote={webSearchDisabledNote}
-            pythonToolEnabled={pythonToolEnabled}
-            onTogglePythonTool={onTogglePythonTool}
-            canUsePythonTool={canUsePythonTool}
-            pythonToolDisabledNote={pythonToolDisabledNote}
-            skillOptions={skillOptions}
-            onToggleSkillOption={onToggleSkillOption}
             onOpenSkillPanel={openSkillPanelFromMenu}
             onOpenAdvanced={() => {
               setPlusOpen(false)
@@ -212,14 +178,12 @@ export function AdvancedOptions({
         open={skillPanelOpen}
         onOpenChange={setSkillPanelOpen}
         webSearchEnabled={webSearchEnabled}
-        onToggleWebSearch={onToggleWebSearch}
         canUseWebSearch={canUseWebSearch}
         showWebSearchScope={showWebSearchScope}
         webSearchScope={webSearchScope}
         onWebSearchScopeChange={onWebSearchScopeChange}
         webSearchDisabledNote={webSearchDisabledNote}
         pythonToolEnabled={pythonToolEnabled}
-        onTogglePythonTool={onTogglePythonTool}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
         skillOptions={skillOptions}
@@ -238,25 +202,7 @@ export function AdvancedOptions({
           </div>
           <div className="max-h-[70vh] overflow-y-auto px-4 pb-2">
             <PlusMenuContent
-              thinkingEnabled={thinkingEnabled}
-              onToggleThinking={onToggleThinking}
-              effort={effort}
-              onEffortChange={onEffortChange}
-              webSearchEnabled={webSearchEnabled}
-              onToggleWebSearch={onToggleWebSearch}
-              canUseWebSearch={canUseWebSearch}
-              showWebSearchScope={showWebSearchScope}
-              webSearchScope={webSearchScope}
-              onWebSearchScopeChange={onWebSearchScopeChange}
-              webSearchDisabledNote={webSearchDisabledNote}
-              pythonToolEnabled={pythonToolEnabled}
-              onTogglePythonTool={onTogglePythonTool}
-              canUsePythonTool={canUsePythonTool}
-              pythonToolDisabledNote={pythonToolDisabledNote}
-              skillOptions={skillOptions}
-              onToggleSkillOption={onToggleSkillOption}
               showControlCard={false}
-              showCapabilitySummary={false}
               showSkillPanelAction={false}
               onOpenAdvanced={() => {
                 setPlusAdvancedOpen(false)
