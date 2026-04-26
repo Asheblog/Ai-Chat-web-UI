@@ -4,6 +4,7 @@ import { useEffect, useMemo, useReducer } from 'react'
 import { AlertTriangle, Brain, ChevronDown, Loader2 } from 'lucide-react'
 import type { MessageMeta } from '@/types'
 import { TypewriterReasoning } from '@/components/typewriter-reasoning'
+import { formatDurationSeconds } from './message-metrics'
 
 const REASONING_VISIBILITY_STORAGE_KEY = 'aichat.reasoning_visibility'
 const REASONING_VISIBILITY_LIMIT = 200
@@ -134,10 +135,7 @@ export function ReasoningSection({
     isAssistant && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming')
   const statusText = meta.reasoningStatus ? statusTextMap[meta.reasoningStatus] : '思考过程'
   const showStreamingIndicator = meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming'
-  const durationText =
-    typeof meta.reasoningDurationSeconds === 'number' && Number.isFinite(meta.reasoningDurationSeconds)
-      ? `${meta.reasoningDurationSeconds.toFixed(1)}s`
-      : null
+  const durationText = formatDurationSeconds(meta.reasoningDurationSeconds)
 
   useEffect(() => {
     if (!persistenceKey) return

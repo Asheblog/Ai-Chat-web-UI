@@ -88,4 +88,16 @@ describe('ReasoningSection 展开逻辑', () => {
       expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
     })
   })
+
+  it('长思考耗时使用可读格式', () => {
+    render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done', reasoningDurationSeconds: 1101 })}
+        reasoningRaw="reasoning"
+        defaultExpanded={false}
+      />,
+    )
+
+    expect(screen.getByText('· 18m21s')).toBeInTheDocument()
+  })
 })

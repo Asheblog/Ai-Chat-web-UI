@@ -18,6 +18,7 @@ import { ToolCallsSection } from './tool-calls-section'
 import { MessageBodyContent } from './message-body-content'
 import { MessageHeader } from './message-header'
 import { ShareBadge } from './share-badge'
+import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
 
 const toReasoningMarkdown = (input: string) =>
   input
@@ -268,16 +269,8 @@ function MessageBubbleComponent({
     [toolTimeline],
   )
 
-  const normalizeLatency = (value?: number | null) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return null
-    return Math.max(0, Math.round(value))
-  }
-  const normalizeSpeed = (value?: number | null) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return null
-    return value
-  }
-  const latencyText = normalizeLatency(metrics?.firstTokenLatencyMs)
-  const speedValue = normalizeSpeed(metrics?.tokensPerSecond)
+  const durationMs = normalizeMetricMs(metrics?.responseTimeMs)
+  const speedValue = normalizeMetricNumber(metrics?.tokensPerSecond)
   const speedText =
     speedValue != null ? (speedValue >= 10 ? speedValue.toFixed(0) : speedValue.toFixed(1)) : null
 
@@ -331,7 +324,7 @@ function MessageBubbleComponent({
               variantInfo={variantInfo}
               isStreaming={Boolean(isStreaming)}
               metrics={{
-                latencyText,
+                durationMs,
                 speedText,
               }}
             />

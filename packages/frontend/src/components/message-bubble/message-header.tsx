@@ -2,6 +2,7 @@
 
 import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Copy, Pencil, RefreshCw, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { formatDurationMs } from './message-metrics'
 
 interface MessageHeaderProps {
   isUser: boolean
@@ -23,7 +24,7 @@ interface MessageHeaderProps {
   }
   isStreaming: boolean
   metrics?: {
-    latencyText?: number | null
+    durationMs?: number | null
     speedText?: string | null
   } | null
 }
@@ -158,7 +159,7 @@ export function MessageHeader({
       <span className="h-3 w-px bg-slate-200" />
       <span className="inline-flex items-center gap-1.5">
         <Clock3 className="h-3.5 w-3.5" />
-        {metrics?.latencyText != null ? `${(metrics.latencyText / 1000).toFixed(2)}s` : timestamp}
+        {formatDurationMs(metrics?.durationMs) ?? timestamp}
       </span>
       {metrics?.speedText != null && (
         <>
