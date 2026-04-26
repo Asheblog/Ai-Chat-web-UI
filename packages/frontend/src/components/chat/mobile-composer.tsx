@@ -137,9 +137,9 @@ export function MobileComposer({
   }
 
   return (
-    <div className="px-3 pb-[calc(env(safe-area-inset-bottom)+14px)] pt-2 md:hidden">
-      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'rounded-[10px]')}>
-        <div className="space-y-3 px-3 pt-3">
+    <div className="px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 md:hidden">
+      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'rounded-[12px]')}>
+        <div className="space-y-2.5 px-3 pt-3">
           <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-0" />
           <Textarea
             ref={textareaRef}
@@ -150,13 +150,13 @@ export function MobileComposer({
             onPaste={onPaste}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
-            className={cn(COMPOSER_TEXTAREA_BASE_CLASS, 'min-h-[52px] max-h-[220px] w-full px-1 pb-1 pt-0 text-sm')}
+            className={cn(COMPOSER_TEXTAREA_BASE_CLASS, 'min-h-[48px] max-h-[220px] w-full px-1 pb-1 pt-0 text-sm')}
             rows={1}
             disabled={isStreaming}
           />
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2.5 pb-2.5 pt-2">
+        <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2.5 pb-2.5 pt-2">
           <div className="flex items-center gap-1.5">
             <Popover open={plusOpen} onOpenChange={setPlusOpen}>
               <PopoverTrigger asChild>
@@ -242,7 +242,7 @@ export function MobileComposer({
           >
             <Button
               type="button"
-              className={`h-10 w-10 rounded-xl p-0 shadow-[0_10px_24px_hsl(var(--background)/0.24)] ${
+              className={`h-9 w-9 rounded-[10px] p-0 shadow-[0_10px_22px_rgba(37,99,235,0.18)] ${
                 isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
               }`}
               onClick={() => {
@@ -256,7 +256,7 @@ export function MobileComposer({
               title={!isStreaming && sendLocked && sendLockedReason ? sendLockedReason : undefined}
               aria-label={isStreaming ? '停止' : '发送'}
             >
-              {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+              {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
             </Button>
           </motion.div>
         </div>

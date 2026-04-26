@@ -99,7 +99,7 @@ export function AdvancedOptions({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-10 w-10 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+              className="h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
               disabled={disabled}
               aria-label="更多操作"
             >
@@ -158,7 +158,7 @@ export function AdvancedOptions({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-10 w-10 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+              className="h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
               disabled={disabled}
               aria-label="更多操作"
             >

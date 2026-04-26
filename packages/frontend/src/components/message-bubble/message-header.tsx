@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 
 interface MessageHeaderProps {
   isUser: boolean
+  mode?: 'full' | 'status' | 'actions'
   timestamp: string
   isCopied: boolean
   onCopy: () => void
@@ -29,6 +30,7 @@ interface MessageHeaderProps {
 
 export function MessageHeader({
   isUser,
+  mode = 'full',
   timestamp,
   isCopied,
   onCopy,
@@ -74,6 +76,79 @@ export function MessageHeader({
     )
   }
 
+  const actions = (
+    <>
+      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" onClick={onCopy} title="复制消息">
+        {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
+      </Button>
+      {shareEntryAvailable && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-[8px]"
+          title="进入分享选择模式"
+          onClick={() => onShareStart?.()}
+        >
+          <Share2 className="h-3 w-3" />
+        </Button>
+      )}
+      {showVariantControls && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-[8px]"
+          title="重新生成回答"
+          onClick={() => variantInfo?.onRegenerate()}
+          disabled={Boolean(isStreaming)}
+        >
+          <RefreshCw className="h-3 w-3" />
+        </Button>
+      )}
+      {showVariantNavigation && (
+        <div className="ml-1 flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-[8px]"
+            onClick={() => variantInfo?.onPrev()}
+            title="查看更早的回答"
+            disabled={Boolean(isStreaming)}
+          >
+            <ChevronLeft className="h-3 w-3" />
+          </Button>
+          <span className="w-12 text-center">
+            {(variantInfo?.index ?? 0) + 1}/{variantInfo?.total ?? 1}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-[8px]"
+            onClick={() => variantInfo?.onNext()}
+            title="查看最新回答"
+            disabled={Boolean(isStreaming)}
+          >
+            <ChevronRight className="h-3 w-3" />
+          </Button>
+        </div>
+      )}
+      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="有帮助">
+        <ThumbsUp className="h-3.5 w-3.5" />
+      </Button>
+      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="无帮助">
+        <ThumbsDown className="h-3.5 w-3.5" />
+      </Button>
+    </>
+  )
+
+  if (mode === 'actions') {
+    return (
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-1 text-xs text-muted-foreground">
+        {actions}
+        <span className="pl-1">{timestamp}</span>
+      </div>
+    )
+  }
+
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 text-xs text-slate-500">
       <span className="inline-flex items-center gap-1.5 text-emerald-600">
@@ -91,67 +166,7 @@ export function MessageHeader({
           <span>{metrics.speedText} tokens/s</span>
         </>
       )}
-      <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" onClick={onCopy} title="复制消息">
-          {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
-        </Button>
-        {shareEntryAvailable && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-[8px]"
-            title="进入分享选择模式"
-            onClick={() => onShareStart?.()}
-          >
-            <Share2 className="h-3 w-3" />
-          </Button>
-        )}
-        {showVariantControls && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-[8px]"
-            title="重新生成回答"
-            onClick={() => variantInfo?.onRegenerate()}
-            disabled={Boolean(isStreaming)}
-          >
-            <RefreshCw className="h-3 w-3" />
-          </Button>
-        )}
-        {showVariantNavigation && (
-          <div className="ml-1 flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-[8px]"
-              onClick={() => variantInfo?.onPrev()}
-              title="查看更早的回答"
-              disabled={Boolean(isStreaming)}
-            >
-              <ChevronLeft className="h-3 w-3" />
-            </Button>
-            <span className="w-12 text-center">
-              {(variantInfo?.index ?? 0) + 1}/{variantInfo?.total ?? 1}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-[8px]"
-              onClick={() => variantInfo?.onNext()}
-              title="查看最新回答"
-              disabled={Boolean(isStreaming)}
-            >
-              <ChevronRight className="h-3 w-3" />
-            </Button>
-          </div>
-        )}
-        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="有帮助">
-          <ThumbsUp className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="无帮助">
-          <ThumbsDown className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+      {mode === 'full' && <div className="ml-auto flex items-center gap-1">{actions}</div>}
     </div>
   )
 }

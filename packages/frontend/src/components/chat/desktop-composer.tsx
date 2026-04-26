@@ -139,91 +139,7 @@ export function DesktopComposer({
     <div className="hidden md:block">
       <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-4 pt-3 md:px-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
-        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex min-h-[72px] items-center gap-2 px-3 py-2')}>
-          <div className="flex shrink-0 items-center gap-1">
-            <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
-                  aria-label="更多操作"
-                >
-                  <Plus className="h-[18px] w-[18px]" />
-                </button>
-              </DropdownMenuTrigger>
-              <PlusMenuContent
-                thinkingEnabled={thinkingEnabled}
-                onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
-                webSearchEnabled={webSearchEnabled}
-                onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
-                canUseWebSearch={canUseWebSearch}
-                showWebSearchScope={showWebSearchScope}
-                webSearchScope={webSearchScope}
-                onWebSearchScopeChange={onWebSearchScopeChange}
-                webSearchDisabledNote={webSearchDisabledNote}
-                pythonToolEnabled={pythonToolEnabled}
-                onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
-                canUsePythonTool={canUsePythonTool}
-                pythonToolDisabledNote={pythonToolDisabledNote}
-                skillOptions={skillOptions}
-                onToggleSkillOption={onToggleSkillOption}
-                canUseTrace={canUseTrace}
-                traceEnabled={traceEnabled}
-                onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
-                effort={effort}
-                onEffortChange={(value) => onEffortChange(value as typeof effort)}
-                contentClassName="rounded-2xl"
-                bodyClassName="text-sm"
-                onOpenSkillPanel={openSkillPanelFromMenu}
-                onOpenAdvanced={() => {
-                  setPlusOpen(false)
-                  onOpenAdvanced()
-                }}
-                onOpenSessionPrompt={
-                  onOpenSessionPrompt
-                    ? () => {
-                        setPlusOpen(false)
-                        onOpenSessionPrompt()
-                      }
-                    : undefined
-                }
-              />
-            </DropdownMenu>
-
-            {showExpand && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
-                      onClick={onExpandOpen}
-                      aria-label="全屏编辑"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>全屏编辑</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            <AttachmentMenu
-              onPickImages={pickImages}
-              onPickDocuments={pickDocuments}
-              disableImages={isStreaming || !isVisionEnabled}
-              disableDocuments={isStreaming}
-              hasImages={selectedImages.length > 0}
-              hasDocuments={hasDocuments}
-              onOpenManager={onOpenAttachmentManager}
-              manageDisabled={!hasDocuments && selectedImages.length === 0}
-              manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
-              ariaLabel="上传附件"
-              className="h-10 w-10 rounded-[8px] border-0 bg-transparent"
-              onOpenKnowledgeBase={onOpenKnowledgeBase}
-              knowledgeBaseEnabled={knowledgeBaseEnabled}
-              knowledgeBaseCount={knowledgeBaseCount}
-            />
-          </div>
-
+        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-2.5')}>
           <Textarea
             ref={textareaRef}
             value={input}
@@ -236,35 +152,120 @@ export function DesktopComposer({
             disabled={textareaDisabled}
             className={cn(
               COMPOSER_TEXTAREA_BASE_CLASS,
-              'min-h-[50px] max-h-[180px] flex-1 px-2 py-2.5 text-sm lg:min-h-[52px] lg:py-3'
+              'min-h-[44px] max-h-[180px] w-full px-2 pb-1 pt-1 text-sm lg:min-h-[48px]'
             )}
             rows={1}
           />
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  onClick={isStreaming ? onStop : onSend}
-                  disabled={isStreaming ? false : desktopSendDisabled}
-                  aria-label={isStreaming ? '停止生成' : '发送'}
-                  className={`inline-flex h-12 min-w-[112px] shrink-0 items-center justify-center gap-2 rounded-[8px] px-4 shadow-[0_10px_22px_rgba(37,99,235,0.2)] transition-colors ${
-                    isStreaming
-                      ? 'bg-destructive text-destructive-foreground hover:opacity-90'
-                      : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  }`}
-                  variants={sendButtonVariants}
-                  animate="idle"
-                  whileHover={!isStreaming ? 'hover' : undefined}
-                  whileTap={!isStreaming ? 'tap' : undefined}
-                >
-                  {isStreaming ? <Square className="h-5 w-5" /> : <Send className="h-5 w-5" />}
-                  <span className="text-sm font-semibold">{isStreaming ? '停止生成' : '发送'}</span>
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent>{sendTooltip}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <div className="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+            <div className="flex min-w-0 shrink-0 items-center gap-1">
+              <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+                    aria-label="更多操作"
+                  >
+                    <Plus className="h-[18px] w-[18px]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <PlusMenuContent
+                  thinkingEnabled={thinkingEnabled}
+                  onToggleThinking={(checked) => onToggleThinking(Boolean(checked))}
+                  webSearchEnabled={webSearchEnabled}
+                  onToggleWebSearch={(checked) => onToggleWebSearch(Boolean(checked))}
+                  canUseWebSearch={canUseWebSearch}
+                  showWebSearchScope={showWebSearchScope}
+                  webSearchScope={webSearchScope}
+                  onWebSearchScopeChange={onWebSearchScopeChange}
+                  webSearchDisabledNote={webSearchDisabledNote}
+                  pythonToolEnabled={pythonToolEnabled}
+                  onTogglePythonTool={(checked) => onTogglePythonTool(Boolean(checked))}
+                  canUsePythonTool={canUsePythonTool}
+                  pythonToolDisabledNote={pythonToolDisabledNote}
+                  skillOptions={skillOptions}
+                  onToggleSkillOption={onToggleSkillOption}
+                  canUseTrace={canUseTrace}
+                  traceEnabled={traceEnabled}
+                  onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
+                  effort={effort}
+                  onEffortChange={(value) => onEffortChange(value as typeof effort)}
+                  contentClassName="rounded-2xl"
+                  bodyClassName="text-sm"
+                  onOpenSkillPanel={openSkillPanelFromMenu}
+                  onOpenAdvanced={() => {
+                    setPlusOpen(false)
+                    onOpenAdvanced()
+                  }}
+                  onOpenSessionPrompt={
+                    onOpenSessionPrompt
+                      ? () => {
+                          setPlusOpen(false)
+                          onOpenSessionPrompt()
+                        }
+                      : undefined
+                  }
+                />
+              </DropdownMenu>
+
+              <AttachmentMenu
+                onPickImages={pickImages}
+                onPickDocuments={pickDocuments}
+                disableImages={isStreaming || !isVisionEnabled}
+                disableDocuments={isStreaming}
+                hasImages={selectedImages.length > 0}
+                hasDocuments={hasDocuments}
+                onOpenManager={onOpenAttachmentManager}
+                manageDisabled={!hasDocuments && selectedImages.length === 0}
+                manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
+                ariaLabel="上传附件"
+                className="h-9 w-9 rounded-[8px] border-0 bg-transparent"
+                onOpenKnowledgeBase={onOpenKnowledgeBase}
+                knowledgeBaseEnabled={knowledgeBaseEnabled}
+                knowledgeBaseCount={knowledgeBaseCount}
+              />
+
+              {showExpand && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+                        onClick={onExpandOpen}
+                        aria-label="全屏编辑"
+                      >
+                        <Maximize2 className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>全屏编辑</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <motion.button
+                    onClick={isStreaming ? onStop : onSend}
+                    disabled={isStreaming ? false : desktopSendDisabled}
+                    aria-label={isStreaming ? '停止生成' : '发送'}
+                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] shadow-[0_10px_22px_rgba(37,99,235,0.18)] transition-colors ${
+                      isStreaming
+                        ? 'bg-destructive text-destructive-foreground hover:opacity-90'
+                        : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    }`}
+                    variants={sendButtonVariants}
+                    animate="idle"
+                    whileHover={!isStreaming ? 'hover' : undefined}
+                    whileTap={!isStreaming ? 'tap' : undefined}
+                  >
+                    {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
+                  </motion.button>
+                </TooltipTrigger>
+                <TooltipContent>{sendTooltip}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
 
         <SkillPanelSheet

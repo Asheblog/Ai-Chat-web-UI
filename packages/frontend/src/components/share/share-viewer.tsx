@@ -22,7 +22,7 @@ interface ShareViewerProps {
   brandText?: string
 }
 
-const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[900px] px-4 sm:px-6'
+const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[1280px] px-3 sm:px-5 lg:px-6'
 
 /** 格式化相对时间 */
 function formatRelativeTime(dateStr: string): string {
@@ -472,41 +472,43 @@ export function ShareViewer({
   return (
     <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
       <header className={cn(SHARE_CONTAINER_CLASS, 'pt-4')}>
-        <div className="v2-panel flex flex-col gap-3 bg-white/90 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 font-semibold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
-            AI
-          </span>
-          {brandText}
-          {isLive && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs text-primary">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              实时
+        <div className="v2-panel flex flex-col gap-3 bg-white/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="flex min-w-0 items-center gap-3 font-semibold">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
+              AI
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 self-start text-xs text-muted-foreground sm:self-auto">
-          <span className="rounded-md bg-[hsl(var(--surface-hover))] px-2.5 py-1">{share.messageCount} 条消息</span>
-          <span>{formatRelativeTime(share.createdAt)}</span>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-[8px] border border-primary/30 bg-white px-3 py-1.5 text-primary transition hover:bg-blue-50"
-            onClick={() => {
-              if (typeof window === 'undefined') return
-              void navigator.clipboard?.writeText(window.location.href)
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            复制分享链接
-          </button>
-        </div>
+            <span className="truncate">{brandText}</span>
+            {isLive && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs text-primary">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                实时
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 self-start text-xs text-muted-foreground sm:self-auto">
+            <span className="rounded-md bg-[hsl(var(--surface-hover))] px-2.5 py-1">{share.messageCount} 条消息</span>
+            <span>{formatRelativeTime(share.createdAt)}</span>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-[8px] border border-primary/30 bg-white px-3 py-1.5 text-primary transition hover:bg-blue-50"
+              onClick={() => {
+                if (typeof window === 'undefined') return
+                void navigator.clipboard?.writeText(window.location.href)
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              复制分享链接
+            </button>
+          </div>
         </div>
       </header>
 
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-2 sm:py-3')}>
-        <section className="v2-panel bg-white/90 p-5 sm:p-7">
+        <section className="v2-panel bg-white/90 p-4 sm:p-6">
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{share.title || share.sessionTitle}</h1>
+            <h1 className="mx-auto max-w-5xl text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl">
+              {share.title || share.sessionTitle}
+            </h1>
             <p className="mt-3 text-sm text-slate-500">公开分享 · {formatDate(share.createdAt)}</p>
           </div>
           {mergedMessages.length === 0 ? (

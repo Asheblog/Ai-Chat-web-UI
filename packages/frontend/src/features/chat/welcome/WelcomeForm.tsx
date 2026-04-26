@@ -164,40 +164,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     <div className="w-full max-w-[940px]">
       <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
 
-      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'flex min-h-[128px] items-start gap-2 px-5 py-4 md:items-center md:px-5 md:py-4')}>
-        <div className="flex shrink-0 items-center gap-1">
-          <AdvancedOptions {...advancedOptions} />
-          {showExpand && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
-              onClick={onOpenExpand}
-              disabled={creationDisabled}
-              aria-label="全屏编辑"
-            >
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-          )}
-          <AttachmentMenu
-            onPickImages={attachments.onPickImages}
-            onPickDocuments={attachments.onPickDocuments}
-            disableImages={creationDisabled}
-            disableDocuments={creationDisabled}
-            hasImages={attachments.selectedImages.length > 0}
-            hasDocuments={attachments.documents.length > 0}
-            className="h-10 w-10 rounded-[8px] border-0 bg-transparent"
-            ariaLabel="添加附件"
-            onOpenManager={() => setAttachmentViewerOpen(true)}
-            manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
-            manageCount={attachments.selectedImages.length + attachments.documents.length}
-            onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
-            knowledgeBaseEnabled={knowledgeBase.enabled}
-            knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
-          />
-        </div>
-
+      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-3 md:px-4')}>
         <Textarea
           ref={textareaRef}
           value={query}
@@ -210,20 +177,55 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           onPaste={attachments.onPaste}
           className={cn(
             COMPOSER_TEXTAREA_BASE_CLASS,
-            'min-h-[72px] max-h-[220px] flex-1 px-3 py-3 text-sm md:text-base'
+            'min-h-[72px] max-h-[220px] w-full px-2 pb-1 pt-1 text-sm md:text-base'
           )}
           rows={1}
         />
 
-        <Button
-          type="button"
-          onClick={onSubmit}
-          disabled={creationDisabled}
-          className="h-12 w-12 shrink-0 rounded-[8px] p-0 shadow-[0_10px_24px_rgba(37,99,235,0.24)]"
-          aria-label={isCreating ? '正在创建会话' : '发送'}
-        >
-          {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-        </Button>
+        <div className="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <AdvancedOptions {...advancedOptions} />
+            <AttachmentMenu
+              onPickImages={attachments.onPickImages}
+              onPickDocuments={attachments.onPickDocuments}
+              disableImages={creationDisabled}
+              disableDocuments={creationDisabled}
+              hasImages={attachments.selectedImages.length > 0}
+              hasDocuments={attachments.documents.length > 0}
+              className="h-9 w-9 rounded-[8px] border-0 bg-transparent"
+              ariaLabel="添加附件"
+              onOpenManager={() => setAttachmentViewerOpen(true)}
+              manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
+              manageCount={attachments.selectedImages.length + attachments.documents.length}
+              onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
+              knowledgeBaseEnabled={knowledgeBase.enabled}
+              knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
+            />
+            {showExpand && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+                onClick={onOpenExpand}
+                disabled={creationDisabled}
+                aria-label="全屏编辑"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={creationDisabled}
+            className="h-10 w-10 shrink-0 rounded-[10px] p-0 shadow-[0_10px_22px_rgba(37,99,235,0.18)]"
+            aria-label={isCreating ? '正在创建会话' : '发送'}
+          >
+            {isCreating ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
+          </Button>
+        </div>
       </div>
 
       {mobileQuotaNotice ? (

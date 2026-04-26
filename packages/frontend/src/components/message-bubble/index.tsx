@@ -320,6 +320,7 @@ function MessageBubbleComponent({
           {!isUser && (
             <MessageHeader
               isUser={isUser}
+              mode="status"
               timestamp={formatDate(meta.createdAt)}
               isCopied={isCopied}
               onCopy={handleCopy}
@@ -399,6 +400,22 @@ function MessageBubbleComponent({
                 )
               })}
             </div>
+          )}
+
+          {!isUser && (
+            <MessageHeader
+              isUser={isUser}
+              mode="actions"
+              timestamp={formatDate(meta.createdAt)}
+              isCopied={isCopied}
+              onCopy={handleCopy}
+              shareEntryAvailable={shareEntryAvailable}
+              onShareStart={shareEntryHandler}
+              showVariantControls={showVariantControls}
+              showVariantNavigation={showVariantNavigation}
+              variantInfo={variantInfo}
+              isStreaming={Boolean(isStreaming)}
+            />
           )}
 
           {isUser && (
