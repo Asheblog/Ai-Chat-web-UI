@@ -12,6 +12,13 @@ import type { AttachedDocument } from '@/features/chat/composer/use-document-att
 import { KnowledgeBaseSelector, type KnowledgeBaseItem } from '@/components/chat/knowledge-base-selector'
 import { cn } from '@/lib/utils'
 import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
+import {
+  ComposerFeatureControls,
+  ComposerIconButton,
+  composerInnerEditorClass,
+  composerToolbarButtonClass,
+  composerToolbarScrollClass,
+} from '@/components/chat/composer-toolbar-primitives'
 
 type Effort = 'unset' | 'low' | 'medium' | 'high'
 
@@ -165,26 +172,42 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
       <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
 
       <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-3 md:px-4')}>
-        <Textarea
-          ref={textareaRef}
-          value={query}
-          placeholder={activePlaceholder}
-          disabled={creationDisabled}
-          onChange={(event) => onTextareaChange(event.target.value)}
-          onKeyDown={onKeyDown}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          onPaste={attachments.onPaste}
-          className={cn(
-            COMPOSER_TEXTAREA_BASE_CLASS,
-            'min-h-[72px] max-h-[220px] w-full px-2 pb-1 pt-1 text-sm md:text-base'
-          )}
-          rows={1}
-        />
+        <div className={composerInnerEditorClass}>
+          <Textarea
+            ref={textareaRef}
+            value={query}
+            placeholder={activePlaceholder}
+            aria-label="输入消息"
+            disabled={creationDisabled}
+            onChange={(event) => onTextareaChange(event.target.value)}
+            onKeyDown={onKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            onPaste={attachments.onPaste}
+            className={cn(
+              COMPOSER_TEXTAREA_BASE_CLASS,
+              'min-h-[64px] max-h-[220px] w-full px-3 py-3 text-sm md:min-h-[68px] md:text-base',
+              showExpand && 'pr-12',
+            )}
+            rows={1}
+          />
 
-        <div className="mt-2 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
-          <div className="flex min-w-0 items-center gap-1">
-            <AdvancedOptions {...advancedOptions} />
+          {showExpand && (
+            <ComposerIconButton
+              className="absolute right-2 top-2 h-8 w-8 rounded-[7px]"
+              onClick={onOpenExpand}
+              disabled={creationDisabled}
+              aria-label="全屏编辑"
+              title="全屏编辑"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </ComposerIconButton>
+          )}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className={cn(composerToolbarScrollClass, 'flex-1')}>
+            <AdvancedOptions {...advancedOptions} triggerClassName={composerToolbarButtonClass} />
             <AttachmentMenu
               onPickImages={attachments.onPickImages}
               onPickDocuments={attachments.onPickDocuments}
@@ -192,7 +215,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               disableDocuments={creationDisabled}
               hasImages={attachments.selectedImages.length > 0}
               hasDocuments={attachments.documents.length > 0}
-              className="h-9 w-9 rounded-[8px] border-0 bg-transparent"
+              className={composerToolbarButtonClass}
               ariaLabel="添加附件"
               onOpenManager={() => setAttachmentViewerOpen(true)}
               manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
@@ -201,26 +224,30 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               knowledgeBaseEnabled={knowledgeBase.enabled}
               knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
             />
-            {showExpand && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
-                onClick={onOpenExpand}
-                disabled={creationDisabled}
-                aria-label="全屏编辑"
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
-            )}
+
+            <ComposerFeatureControls
+              disabled={creationDisabled}
+              thinkingEnabled={advancedOptions.thinkingEnabled}
+              onToggleThinking={advancedOptions.onToggleThinking}
+              webSearchEnabled={advancedOptions.webSearchEnabled}
+              onToggleWebSearch={advancedOptions.onToggleWebSearch}
+              canUseWebSearch={advancedOptions.canUseWebSearch}
+              webSearchDisabledNote={advancedOptions.webSearchDisabledNote}
+              pythonToolEnabled={advancedOptions.pythonToolEnabled}
+              onTogglePythonTool={advancedOptions.onTogglePythonTool}
+              canUsePythonTool={advancedOptions.canUsePythonTool}
+              pythonToolDisabledNote={advancedOptions.pythonToolDisabledNote}
+              knowledgeBaseEnabled={knowledgeBase.enabled}
+              knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
+              onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
+            />
           </div>
 
           <Button
             type="button"
             onClick={onSubmit}
             disabled={creationDisabled}
-            className="h-10 w-10 shrink-0 rounded-[10px] p-0 shadow-[0_10px_22px_rgba(37,99,235,0.18)]"
+            className="h-10 w-10 shrink-0 rounded-[10px] p-0 shadow-[0_10px_22px_rgba(37,99,235,0.18)] disabled:shadow-none"
             aria-label={isCreating ? '正在创建会话' : '发送'}
           >
             {isCreating ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
@@ -231,11 +258,6 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
       {mobileQuotaNotice ? (
         <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm md:hidden">
           {mobileQuotaNotice}
-        </p>
-      ) : null}
-      {creationDisabled && basePlaceholder ? (
-        <p className="mx-auto mt-3 hidden max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm md:block">
-          {basePlaceholder}
         </p>
       ) : null}
       <input

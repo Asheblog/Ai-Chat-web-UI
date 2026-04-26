@@ -3,7 +3,7 @@
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Maximize2, Send, Square } from 'lucide-react'
+import { Maximize2, Plus, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Textarea } from '@/components/ui/textarea'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -16,6 +16,13 @@ import type { ComposerSkillOption } from './chat-composer-panel'
 import { SkillPanelSheet } from './skill-panel-sheet'
 import { cn } from '@/lib/utils'
 import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
+import {
+  ComposerFeatureControls,
+  ComposerIconButton,
+  composerInnerEditorClass,
+  composerToolbarButtonClass,
+  composerToolbarScrollClass,
+} from './composer-toolbar-primitives'
 
 interface DesktopComposerProps {
   input: string
@@ -139,30 +146,45 @@ export function DesktopComposer({
     <div className="hidden md:block">
       <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-4 pt-3 md:px-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
-        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-2.5')}>
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            onCompositionStart={onCompositionStart}
-            onCompositionEnd={onCompositionEnd}
-            placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
-            disabled={textareaDisabled}
-            className={cn(
-              COMPOSER_TEXTAREA_BASE_CLASS,
-              'min-h-[44px] max-h-[180px] w-full px-2 pb-1 pt-1 text-sm lg:min-h-[48px]'
-            )}
-            rows={1}
-          />
+        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-3')}>
+          <div className={composerInnerEditorClass}>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              onCompositionStart={onCompositionStart}
+              onCompositionEnd={onCompositionEnd}
+              placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
+              aria-label="输入消息"
+              disabled={textareaDisabled}
+              className={cn(
+                COMPOSER_TEXTAREA_BASE_CLASS,
+                'min-h-[64px] max-h-[200px] w-full px-3 py-3 text-sm lg:min-h-[68px]',
+                showExpand && 'pr-12',
+              )}
+              rows={1}
+            />
 
-          <div className="mt-1 flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
-            <div className="flex min-w-0 shrink-0 items-center gap-1">
+            {showExpand && (
+              <ComposerIconButton
+                className="absolute right-2 top-2 h-8 w-8 rounded-[7px]"
+                onClick={onExpandOpen}
+                aria-label="全屏编辑"
+                title="全屏编辑"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </ComposerIconButton>
+            )}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className={composerToolbarScrollClass}>
               <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+                    className={composerToolbarButtonClass}
                     aria-label="更多操作"
                   >
                     <Plus className="h-[18px] w-[18px]" />
@@ -218,28 +240,28 @@ export function DesktopComposer({
                 manageDisabled={!hasDocuments && selectedImages.length === 0}
                 manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
                 ariaLabel="上传附件"
-                className="h-9 w-9 rounded-[8px] border-0 bg-transparent"
+                className={composerToolbarButtonClass}
                 onOpenKnowledgeBase={onOpenKnowledgeBase}
                 knowledgeBaseEnabled={knowledgeBaseEnabled}
                 knowledgeBaseCount={knowledgeBaseCount}
               />
 
-              {showExpand && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
-                        onClick={onExpandOpen}
-                        aria-label="全屏编辑"
-                      >
-                        <Maximize2 className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>全屏编辑</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+              <ComposerFeatureControls
+                disabled={textareaDisabled}
+                thinkingEnabled={thinkingEnabled}
+                onToggleThinking={onToggleThinking}
+                webSearchEnabled={webSearchEnabled}
+                onToggleWebSearch={onToggleWebSearch}
+                canUseWebSearch={canUseWebSearch}
+                webSearchDisabledNote={webSearchDisabledNote}
+                pythonToolEnabled={pythonToolEnabled}
+                onTogglePythonTool={onTogglePythonTool}
+                canUsePythonTool={canUsePythonTool}
+                pythonToolDisabledNote={pythonToolDisabledNote}
+                knowledgeBaseEnabled={knowledgeBaseEnabled}
+                knowledgeBaseCount={knowledgeBaseCount}
+                onOpenKnowledgeBase={onOpenKnowledgeBase}
+              />
             </div>
 
             <TooltipProvider>
@@ -249,7 +271,7 @@ export function DesktopComposer({
                     onClick={isStreaming ? onStop : onSend}
                     disabled={isStreaming ? false : desktopSendDisabled}
                     aria-label={isStreaming ? '停止生成' : '发送'}
-                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] shadow-[0_10px_22px_rgba(37,99,235,0.18)] transition-colors ${
+                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] shadow-[0_10px_22px_rgba(37,99,235,0.18)] transition-colors disabled:shadow-none disabled:opacity-45 ${
                       isStreaming
                         ? 'bg-destructive text-destructive-foreground hover:opacity-90'
                         : 'bg-primary text-primary-foreground hover:bg-primary/90'

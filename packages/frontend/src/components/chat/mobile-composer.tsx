@@ -3,7 +3,7 @@
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Square, Plus } from 'lucide-react'
+import { Plus, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,6 +17,13 @@ import type { ComposerSkillOption } from './chat-composer-panel'
 import { SkillPanelSheet } from './skill-panel-sheet'
 import { cn } from '@/lib/utils'
 import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
+import {
+  ComposerFeatureControls,
+  ComposerIconButton,
+  composerInnerEditorClass,
+  composerToolbarButtonClass,
+  composerToolbarScrollClass,
+} from './composer-toolbar-primitives'
 
 interface MobileComposerProps {
   input: string
@@ -138,40 +145,32 @@ export function MobileComposer({
 
   return (
     <div className="px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 md:hidden">
-      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'rounded-[12px]')}>
-        <div className="space-y-2.5 px-3 pt-3">
-          <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-0" />
+      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'rounded-[12px] px-2.5 py-2.5')}>
+        <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-2" />
+        <div className={composerInnerEditorClass}>
           <Textarea
             ref={textareaRef}
             placeholder={placeholder}
+            aria-label="输入消息"
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
-            className={cn(COMPOSER_TEXTAREA_BASE_CLASS, 'min-h-[48px] max-h-[220px] w-full px-1 pb-1 pt-0 text-sm')}
+            className={cn(COMPOSER_TEXTAREA_BASE_CLASS, 'min-h-[64px] max-h-[220px] w-full px-3 py-3 text-sm')}
             rows={1}
             disabled={isStreaming}
           />
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2.5 pb-2.5 pt-2">
-          <div className="flex items-center gap-1.5">
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className={cn(composerToolbarScrollClass, 'flex-1')}>
             <Popover open={plusOpen} onOpenChange={setPlusOpen}>
               <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={`h-9 w-9 rounded-lg p-0 transition-colors ${
-                    plusOpen
-                    ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-blue-50 hover:text-foreground'
-                  }`}
-                  aria-label="更多操作"
-                >
+                <ComposerIconButton active={plusOpen} aria-label="更多操作">
                   <Plus className="h-4 w-4" />
-                </Button>
+                </ComposerIconButton>
               </PopoverTrigger>
               <PopoverContent
                 side="top"
@@ -225,11 +224,28 @@ export function MobileComposer({
               manageDisabled={!hasDocuments && selectedImages.length === 0}
               manageCount={attachmentsCount}
               ariaLabel="上传附件"
-              className="h-9 w-9 rounded-[8px] border-0 bg-transparent"
+              className={composerToolbarButtonClass}
               menuMode="sheet"
               onOpenKnowledgeBase={onOpenKnowledgeBase}
               knowledgeBaseEnabled={knowledgeBaseEnabled}
               knowledgeBaseCount={knowledgeBaseCount}
+            />
+
+            <ComposerFeatureControls
+              disabled={isStreaming}
+              thinkingEnabled={thinkingEnabled}
+              onToggleThinking={onToggleThinking}
+              webSearchEnabled={webSearchEnabled}
+              onToggleWebSearch={onToggleWebSearch}
+              canUseWebSearch={canUseWebSearch}
+              webSearchDisabledNote={webSearchDisabledNote}
+              pythonToolEnabled={pythonToolEnabled}
+              onTogglePythonTool={onTogglePythonTool}
+              canUsePythonTool={canUsePythonTool}
+              pythonToolDisabledNote={pythonToolDisabledNote}
+              knowledgeBaseEnabled={knowledgeBaseEnabled}
+              knowledgeBaseCount={knowledgeBaseCount}
+              onOpenKnowledgeBase={onOpenKnowledgeBase}
             />
           </div>
 

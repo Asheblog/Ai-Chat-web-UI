@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import { SkillPanelSheet } from '@/components/chat/skill-panel-sheet'
 import { useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 interface AdvancedOptionsProps {
   disabled: boolean
@@ -33,6 +34,7 @@ interface AdvancedOptionsProps {
   onToggleSkillOption: (slug: string, enabled: boolean) => void
   onOpenAdvanced: () => void
   onOpenSessionPrompt: () => void
+  triggerClassName?: string
 }
 
 export function AdvancedOptions({
@@ -56,6 +58,7 @@ export function AdvancedOptions({
   onToggleSkillOption,
   onOpenAdvanced,
   onOpenSessionPrompt,
+  triggerClassName,
 }: AdvancedOptionsProps) {
   const [plusOpen, setPlusOpen] = useState(false)
   const [plusAdvancedOpen, setPlusAdvancedOpen] = useState(false)
@@ -99,7 +102,10 @@ export function AdvancedOptions({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+              className={cn(
+                'h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground',
+                triggerClassName,
+              )}
               disabled={disabled}
               aria-label="更多操作"
             >
@@ -158,7 +164,10 @@ export function AdvancedOptions({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground"
+              className={cn(
+                'h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-blue-50 hover:text-foreground',
+                triggerClassName,
+              )}
               disabled={disabled}
               aria-label="更多操作"
             >
