@@ -313,9 +313,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         });
       }
 
-      // RAG 文档检索增强（包括会话文档和知识库）
+      // RAG 知识库检索增强（会话文档已改由 workspace 直接文件访问，不再走分块嵌入管线）
       let ragContext: string | null = null;
-      let hasSessionDocuments = false;
       let hasKnowledgeBases = false;
       let sessionRagService: RAGService | null = null;
       const knowledgeBaseIds = Array.isArray(payload?.knowledgeBaseIds) ? payload.knowledgeBaseIds : [];
@@ -329,32 +328,26 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             enhancedRagService: docServices.enhancedRagService,
           });
 
-          // 检查会话文档
-          hasSessionDocuments = await ragContextBuilder.shouldEnhance(sessionId);
-          // 检查知识库
+          // 仅检查知识库（会话文档不再走 RAG 管线）
           hasKnowledgeBases = await ragContextBuilder.hasKnowledgeBases(knowledgeBaseIds);
 
-          if (hasSessionDocuments || hasKnowledgeBases) {
-            log.debug('RAG enhancement enabled', {
+          if (hasKnowledgeBases) {
+            log.debug('KB RAG enhancement enabled', {
               sessionId,
-              hasSessionDocuments,
-              hasKnowledgeBases,
               knowledgeBaseIds: knowledgeBaseIds.length,
             });
 
-            // 组合检索：同时检索会话文档和知识库
-            const ragResult = await ragContextBuilder.enhanceCombined(
-              sessionId,
+            // 仅检索知识库
+            const ragResult = await ragContextBuilder.enhanceFromKnowledgeBases(
               knowledgeBaseIds,
               content
             );
 
             if (ragResult.context) {
               ragContext = ragContextBuilder.buildSystemPrompt(ragResult.context);
-              log.debug('RAG context built', {
+              log.debug('KB RAG context built', {
                 sessionId,
-                sessionHits: ragResult.sessionResult?.hits.length ?? 0,
-                kbHits: ragResult.kbResult?.hits.length ?? 0,
+                kbHits: ragResult.result.hits.length,
               });
             }
           }
@@ -526,8 +519,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       const pythonSkillRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER);
       const urlReaderSkillRequested =
         requestedSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchSkillRequested;
-      const documentSkillRequested =
-        requestedSkillSet.has(BUILTIN_SKILL_SLUGS.DOCUMENT_SEARCH) || hasSessionDocuments;
       const knowledgeBaseSkillRequested =
         requestedSkillSet.has(BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH) || hasKnowledgeBases;
       const webSearchEnginesWithKeys = (agentWebSearchConfig.engines || []).filter((engine) =>
@@ -541,8 +532,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         pythonSkillRequested && pythonToolConfig.enabled;
       const workspaceToolsActive = pythonToolActive && workspaceToolConfig.enabled;
       const urlReaderActive = urlReaderSkillRequested;
-      // 文档工具和知识库工具也需要进入 agent 模式
-      const documentToolsActive = documentSkillRequested && hasSessionDocuments;
+      // 会话文档工具已废弃（改为 workspace 直接文件访问），保留仅用于兼容
+      const documentToolsActive = false;
       const knowledgeBaseToolsActive = knowledgeBaseSkillRequested && hasKnowledgeBases;
       const builtinSkillSlugs = new Set<string>([
           BUILTIN_SKILL_SLUGS.WEB_SEARCH,

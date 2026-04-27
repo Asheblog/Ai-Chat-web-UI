@@ -7,8 +7,8 @@ import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { AdvancedOptions } from './AdvancedOptions'
 import { ImagePreviewList } from './ImagePreviewList'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
-import { AttachmentTray, DocumentAttachmentInput } from '@/features/chat/composer'
-import type { AttachedDocument } from '@/features/chat/composer/use-document-attachments'
+import { WorkspaceFileTray } from '@/features/chat/composer'
+import type { WorkspaceFile } from '@/features/chat/composer'
 import { KnowledgeBaseSelector, type KnowledgeBaseItem } from '@/components/chat/knowledge-base-selector'
 import { cn } from '@/lib/utils'
 import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
@@ -52,12 +52,11 @@ interface WelcomeFormProps {
       onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
       onPickImages: () => void
       onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void
-      documents: AttachedDocument[]
-      onRemoveDocument: (id: number) => void
-      onCancelDocument: (id: number) => void
-      onPickDocuments: () => void
-      onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
-      documentInputRef: RefObject<HTMLInputElement>
+      workspaceFiles: WorkspaceFile[]
+      onRemoveWorkspaceFile: (workspacePath: string) => void
+      pickWorkspaceFiles: () => void
+      onWorkspaceFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
+      workspaceFileInputRef: RefObject<HTMLInputElement>
     }
     knowledgeBase: {
       enabled: boolean
@@ -210,16 +209,16 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             <AdvancedOptions {...advancedOptions} triggerClassName={composerToolbarButtonClass} />
             <AttachmentMenu
               onPickImages={attachments.onPickImages}
-              onPickDocuments={attachments.onPickDocuments}
+              onPickDocuments={attachments.pickWorkspaceFiles}
               disableImages={creationDisabled}
               disableDocuments={creationDisabled}
               hasImages={attachments.selectedImages.length > 0}
-              hasDocuments={attachments.documents.length > 0}
+              hasDocuments={attachments.workspaceFiles.length > 0}
               className={composerToolbarButtonClass}
               ariaLabel="添加附件"
               onOpenManager={() => setAttachmentViewerOpen(true)}
-              manageDisabled={attachments.selectedImages.length + attachments.documents.length === 0}
-              manageCount={attachments.selectedImages.length + attachments.documents.length}
+              manageDisabled={attachments.selectedImages.length + attachments.workspaceFiles.length === 0}
+              manageCount={attachments.selectedImages.length + attachments.workspaceFiles.length}
               onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
               knowledgeBaseEnabled={knowledgeBase.enabled}
               knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
@@ -270,15 +269,21 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         disabled={creationDisabled}
       />
       {attachmentViewerOpen && (
-        <AttachmentTray
-          documents={attachments.documents}
-          onRemove={attachments.onRemoveDocument}
-          onCancel={attachments.onCancelDocument}
+        <WorkspaceFileTray
+          files={attachments.workspaceFiles}
+          onRemove={attachments.onRemoveWorkspaceFile}
           open={attachmentViewerOpen}
           onOpenChange={setAttachmentViewerOpen}
         />
       )}
-      <DocumentAttachmentInput inputRef={attachments.documentInputRef} onFilesSelected={attachments.onDocumentFilesSelected} />
+      <input
+        ref={attachments.workspaceFileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={attachments.onWorkspaceFilesSelected}
+        disabled={creationDisabled}
+      />
 
       {/* 知识库选择对话框 */}
       <KnowledgeBaseSelector

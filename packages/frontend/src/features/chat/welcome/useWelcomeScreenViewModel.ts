@@ -15,7 +15,7 @@ import {
 } from '@/store/model-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
-import { useAdvancedRequest, useDocumentAttachments, useImageAttachments } from '@/features/chat/composer'
+import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 import { listSkillCatalog } from '@/features/skills/api'
 
@@ -118,26 +118,47 @@ export const useWelcomeScreenViewModel = () => {
     toast,
   })
 
-  const {
-    fileInputRef: documentInputRef,
-    documents: attachedDocuments,
-    pickDocuments,
-    onFilesSelected: onDocumentFilesSelected,
-    removeDocument,
-    cancelDocument,
-    clearDocuments,
-  } = useDocumentAttachments({
-    sessionId: null,
-    draftKey:
-      actor?.type === 'user'
-        ? `aichat:welcome:documents:draft:user:${actor.id}`
-        : 'aichat:welcome:documents:draft:anon',
-    limits: {
-      maxFileSize: (Number(systemSettings?.ragMaxFileSizeMb) || 50) * 1024 * 1024,
-      allowedTypes: ['pdf', 'docx', 'doc', 'csv', 'txt', 'md'],
+  // 工作区文件草稿（欢迎页无 session，先暂存 File 对象，创建会话后上传）
+  const workspaceFileInputRef = useRef<HTMLInputElement>(null)
+  const [draftFiles, setDraftFiles] = useState<Array<{ id: string; file: File }>>([])
+  const pickWorkspaceFiles = useCallback(() => {
+    workspaceFileInputRef.current?.click()
+  }, [])
+  const onWorkspaceFilesSelected = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = Array.from(event.target.files || [])
+      if (selectedFiles.length === 0) return
+      setDraftFiles((prev) => [
+        ...prev,
+        ...selectedFiles.map((f) => ({ id: crypto.randomUUID(), file: f })),
+      ])
+      if (workspaceFileInputRef.current) {
+        workspaceFileInputRef.current.value = ''
+      }
     },
-    toast,
-  })
+    [],
+  )
+  const removeWorkspaceFile = useCallback((workspacePath: string) => {
+    setDraftFiles((prev) => prev.filter((d) => d.id !== workspacePath))
+  }, [])
+  const clearWorkspaceFiles = useCallback(() => {
+    setDraftFiles([])
+    if (workspaceFileInputRef.current) {
+      workspaceFileInputRef.current.value = ''
+    }
+  }, [])
+  const draftWorkspaceFiles = useMemo(
+    () =>
+      draftFiles.map(({ id, file }) => ({
+        filename: file.name,
+        originalName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        fileSize: file.size,
+        workspacePath: id,
+        draftId: id,
+      })),
+    [draftFiles],
+  )
 
   // 知识库 hook
   const {
@@ -350,6 +371,13 @@ export const useWelcomeScreenViewModel = () => {
     }
   }, [canUsePythonTool, pythonToolEnabled, pythonToolTouched, storedPythonPreference])
 
+  // 当有草稿文件时自动启用 Python 工具，与聊天内行为一致
+  useEffect(() => {
+    if (draftFiles.length > 0 && canUsePythonTool && !pythonToolEnabled) {
+      setPythonToolEnabled(true)
+    }
+  }, [draftFiles.length, canUsePythonTool, pythonToolEnabled])
+
   useEffect(() => {
     if (!showWebSearchScope) {
       if (webSearchScope !== 'webpage') {
@@ -469,31 +497,62 @@ export const useWelcomeScreenViewModel = () => {
         selectedModel.rawId,
         normalizedPrompt || undefined,
       )
+      let allUploadsFailed = false
+      let uploadSuccesses = 0
       if (created?.id) {
-        if (attachedDocuments.length) {
-          for (const doc of attachedDocuments) {
+        let uploadFailures = 0
+        if (draftFiles.length) {
+          for (const { file } of draftFiles) {
             try {
-              await fetch(`/api/documents/${doc.id}/attach`, {
+              const formData = new FormData()
+              formData.append('file', file)
+              const response = await fetch(`/api/chat/sessions/${created.id}/files`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                body: formData,
                 credentials: 'include',
-                body: JSON.stringify({ sessionId: created.id }),
               })
+              if (!response.ok) {
+                uploadFailures++
+                const body = await response.json().catch(() => ({}))
+                toast({
+                  title: '文件上传失败',
+                  description: `${file.name}: ${(body as any)?.error || `HTTP ${response.status}`}`,
+                  variant: 'destructive',
+                })
+                continue
+              }
+              const result = await response.json()
+              if (!result.success) {
+                uploadFailures++
+                toast({
+                  title: '文件上传失败',
+                  description: `${file.name}: ${result.error || '未知错误'}`,
+                  variant: 'destructive',
+                })
+              } else {
+                uploadSuccesses++
+              }
             } catch (error) {
-              console.warn('Attach document failed', error)
+              uploadFailures++
+              console.warn('Workspace file upload failed', error)
               toast({
-                title: '文档附加失败',
-                description: `${doc.originalName} 未能附加到会话，可稍后在会话内重试`,
+                title: '文件上传失败',
+                description: `${file.name} 未能上传到工作区，可稍后在会话内重试`,
                 variant: 'destructive',
               })
             }
           }
+          const allFilesFailed = uploadFailures > 0 && uploadFailures === draftFiles.length
+          if (allFilesFailed) {
+            toast({
+              title: '全部文件上传失败',
+              description: '工作区文件未能上传，可稍后在会话内重试',
+              variant: 'destructive',
+            })
+          }
         }
-        clearDocuments()
-        if (documentInputRef.current) {
-          documentInputRef.current.value = ''
-        }
-        router.push(`/main/${created.id}`)
+        const hadFiles = draftFiles.length > 0
+        allUploadsFailed = hadFiles && uploadFailures === draftFiles.length
       }
 
       try {
@@ -511,9 +570,22 @@ export const useWelcomeScreenViewModel = () => {
         // ignore preference sync errors
       }
 
-      if (text) {
+      if (text || uploadSuccesses > 0) {
+        if (uploadSuccesses > 0 && !canUsePythonTool) {
+          toast({
+            title: '无法分析文件',
+            description: '管理员未启用 Python 工具，无法读取工作区文件',
+            variant: 'destructive',
+          })
+          if (created?.id) {
+            clearWorkspaceFiles()
+            router.push(`/main/${created.id}`)
+          }
+          return
+        }
         const session = useChatStore.getState().currentSession
         if (session) {
+          const message = text || '请分析工作区中的文件'
           const imagesPayload =
             selectedImages.length > 0
               ? selectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
@@ -530,7 +602,7 @@ export const useWelcomeScreenViewModel = () => {
               skillOverrides['web-search'] = webSearchOverride
             }
           }
-          if (pythonToolEnabled && canUsePythonTool) {
+          if ((pythonToolEnabled || uploadSuccesses > 0) && canUsePythonTool) {
             enabledSkills.push('python-runner')
           }
           const options: Record<string, any> = {}
@@ -548,7 +620,7 @@ export const useWelcomeScreenViewModel = () => {
           }
           await streamMessage(
             session.id,
-            text,
+            message,
             imagesPayload,
             Object.keys(options).length ? options : undefined,
           )
@@ -557,6 +629,11 @@ export const useWelcomeScreenViewModel = () => {
             fileInputRef.current.value = ''
           }
         }
+      }
+
+      if (created?.id) {
+        clearWorkspaceFiles()
+        router.push(`/main/${created!.id}`)
       }
     } catch (error) {
       console.error('Failed to create session:', error)
@@ -593,9 +670,8 @@ export const useWelcomeScreenViewModel = () => {
     canUsePythonTool,
     pythonToolEnabled,
     fileInputRef,
-    attachedDocuments,
-    clearDocuments,
-    documentInputRef,
+    draftFiles,
+    clearWorkspaceFiles,
   ])
 
   const handleKeyDown = useCallback(
@@ -661,12 +737,11 @@ export const useWelcomeScreenViewModel = () => {
         onFilesSelected,
         onPickImages: handlePickImages,
         onPaste: handlePaste,
-        documents: attachedDocuments,
-        onRemoveDocument: removeDocument,
-        onCancelDocument: cancelDocument,
-        onPickDocuments: pickDocuments,
-        onDocumentFilesSelected,
-        documentInputRef,
+        workspaceFiles: draftWorkspaceFiles,
+        onRemoveWorkspaceFile: removeWorkspaceFile,
+        pickWorkspaceFiles,
+        onWorkspaceFilesSelected,
+        workspaceFileInputRef,
       },
       knowledgeBase: {
         enabled: knowledgeBaseEnabled && knowledgeBaseHasPermission,

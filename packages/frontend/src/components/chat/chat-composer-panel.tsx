@@ -11,14 +11,14 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import type { ChatComposerImage, AttachedDocument } from '@/hooks/use-chat-composer'
+import type { ChatComposerImage, WorkspaceFile } from '@/hooks/use-chat-composer'
 import { MobileComposer } from './mobile-composer'
 import { DesktopComposer } from './desktop-composer'
 import { ExpandEditorDialog } from './expand-editor-dialog'
 import { CustomRequestEditor } from './custom-request-editor'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { AttachmentTray, DocumentAttachmentInput } from '@/features/chat/composer'
+import { WorkspaceFileTray } from '@/features/chat/composer'
 import {
   createPromptTemplate,
   deletePromptTemplate,
@@ -101,16 +101,14 @@ export interface ChatComposerPanelProps {
   onSessionPromptChange: (value: string) => void
   onSessionPromptSave: () => void
   sessionPromptSaving: boolean
-  // 文档附件
-  documentInputRef: MutableRefObject<HTMLInputElement | null>
-  attachedDocuments: AttachedDocument[]
-  isUploadingDocuments: boolean
-  hasDocuments: boolean
-  hasProcessingDocuments: boolean
-  pickDocuments: () => void
-  onDocumentFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
-  onRemoveDocument: (documentId: number) => void
-  onCancelDocument: (documentId: number) => void
+  // 工作区文件上传
+  workspaceFileInputRef: MutableRefObject<HTMLInputElement | null>
+  workspaceFiles: WorkspaceFile[]
+  isUploadingWorkspaceFiles: boolean
+  hasWorkspaceFiles: boolean
+  pickWorkspaceFiles: () => void
+  onWorkspaceFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
+  onRemoveWorkspaceFile: (workspacePath: string) => void
   // 知识库
   knowledgeBaseEnabled?: boolean
   knowledgeBases?: KnowledgeBaseItem[]
@@ -215,16 +213,14 @@ export function ChatComposerPanel({
   sessionPromptPlaceholder,
   onSessionPromptChange,
   onSessionPromptSave,
-  // 文档附件
-  documentInputRef,
-  attachedDocuments,
-  isUploadingDocuments,
-  hasDocuments,
-  hasProcessingDocuments,
-  pickDocuments,
-  onDocumentFilesSelected,
-  onRemoveDocument,
-  onCancelDocument,
+  // 工作区文件上传
+  workspaceFileInputRef,
+  workspaceFiles,
+  isUploadingWorkspaceFiles,
+  hasWorkspaceFiles,
+  pickWorkspaceFiles,
+  onWorkspaceFilesSelected,
+  onRemoveWorkspaceFile,
   // 知识库
   knowledgeBaseEnabled,
   knowledgeBases,
@@ -251,7 +247,7 @@ export function ChatComposerPanel({
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false)
   const [kbSelectorOpen, setKbSelectorOpen] = useState(false)
-  const attachmentsCount = selectedImages.length + attachedDocuments.length
+  const attachmentsCount = selectedImages.length + workspaceFiles.length
 
   const filteredPromptTemplates = useMemo(() => {
     const keyword = promptTemplateSearch.trim().toLowerCase()
@@ -671,9 +667,8 @@ export function ChatComposerPanel({
         onWebSearchScopeChange={onWebSearchScopeChange}
         showWebSearchScope={showWebSearchScope}
         pickImages={pickImages}
-        pickDocuments={pickDocuments}
-        hasDocuments={hasDocuments}
-        hasProcessingDocuments={hasProcessingDocuments}
+        pickDocuments={pickWorkspaceFiles}
+        hasDocuments={hasWorkspaceFiles}
         canUseWebSearch={canUseWebSearch}
         webSearchDisabledNote={webSearchDisabledNote}
         pythonToolEnabled={pythonToolEnabled}
@@ -741,10 +736,10 @@ export function ChatComposerPanel({
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}
         sendLockedReason={sendLockedReason}
-        hasDocuments={hasDocuments}
-        pickDocuments={pickDocuments}
+        hasDocuments={hasWorkspaceFiles}
+        pickDocuments={pickWorkspaceFiles}
         onOpenAttachmentManager={() => setAttachmentViewerOpen(true)}
-        attachedDocumentsLength={attachedDocuments.length}
+        attachedDocumentsLength={workspaceFiles.length}
         // 知识库
         onOpenKnowledgeBase={() => setKbSelectorOpen(true)}
         knowledgeBaseEnabled={knowledgeBaseEnabled}
@@ -766,10 +761,9 @@ export function ChatComposerPanel({
       />
 
       {attachmentViewerOpen && (
-        <AttachmentTray
-          documents={attachedDocuments}
-          onRemove={onRemoveDocument}
-          onCancel={onCancelDocument}
+        <WorkspaceFileTray
+          files={workspaceFiles}
+          onRemove={onRemoveWorkspaceFile}
           open={attachmentViewerOpen}
           onOpenChange={setAttachmentViewerOpen}
         />
@@ -785,10 +779,13 @@ export function ChatComposerPanel({
         disabled={!isVisionEnabled}
       />
 
-      {/* 文档上传输入框 */}
-      <DocumentAttachmentInput
-        inputRef={documentInputRef}
-        onFilesSelected={onDocumentFilesSelected}
+      {/* 文件上传输入框（无格式限制，直接写入 workspace） */}
+      <input
+        ref={workspaceFileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={onWorkspaceFilesSelected}
       />
 
       <ExpandEditorDialog

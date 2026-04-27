@@ -119,8 +119,8 @@ export function AttachmentMenu({
                   <FilePlus2 className="h-4 w-4" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium text-foreground">文档上传</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">上传文档后可在会话中引用内容。</span>
+                  <span className="block text-sm font-medium text-foreground">文件上传</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">上传文件到工作区，AI 可通过 Python 读取任意格式。</span>
                 </span>
               </button>
 
@@ -183,7 +183,7 @@ export function AttachmentMenu({
           disabled={disableDocuments || !onPickDocuments}
         >
           <FilePlus2 className="mr-2 h-4 w-4" />
-          <span>文档上传</span>
+          <span>文件上传</span>
         </DropdownMenuItem>
         {onOpenManager ? (
           <DropdownMenuItem className="cursor-pointer" onSelect={onOpenManager} disabled={manageDisabled}>

@@ -14,14 +14,14 @@ import {
   useAdvancedRequest,
   useComposerFeatureFlags,
   useImageAttachments,
-  useDocumentAttachments,
+  useWorkspaceFiles,
 } from '@/features/chat/composer'
-import type { ComposerImage, AttachedDocument } from '@/features/chat/composer'
+import type { ComposerImage, WorkspaceFile } from '@/features/chat/composer'
 import { useSkillsSelection } from './use-skills-selection'
 import { useSendCommand } from './use-send-command'
 import { useScrollPersistence } from './use-scroll-persistence'
 
-export type { AttachedDocument }
+export type { WorkspaceFile }
 
 
 export type ChatComposerImage = ComposerImage
@@ -247,27 +247,27 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     toast,
   })
 
-  // 文档附件
+  // 工作区文件上传（直接写入 workspace，不走分块嵌入管线）
   const {
-    fileInputRef: documentInputRef,
-    documents: attachedDocuments,
-    isUploading: isUploadingDocuments,
-    isLoading: isLoadingDocuments,
-    hasReadyDocuments,
-    hasProcessingDocuments,
-    pickDocuments,
-    onFilesSelected: onDocumentFilesSelected,
-    removeDocument,
-    cancelDocument,
-    clearDocuments,
-  } = useDocumentAttachments({
+    fileInputRef: workspaceFileInputRef,
+    files: workspaceFiles,
+    isUploading: isUploadingWorkspaceFiles,
+    hasFiles,
+    pickFiles: pickWorkspaceFiles,
+    onFilesSelected: onWorkspaceFilesSelected,
+    removeFile: removeWorkspaceFile,
+    clearFiles: clearWorkspaceFiles,
+  } = useWorkspaceFiles({
     sessionId: currentSession?.id ?? null,
-    limits: {
-      maxFileSize: (Number(systemSettings?.ragMaxFileSizeMb) || 50) * 1024 * 1024,
-      allowedTypes: ['pdf', 'docx', 'doc', 'csv', 'txt', 'md'],
-    },
     toast,
   })
+
+  // 当有工作区文件时自动启用 Python 工具
+  useEffect(() => {
+    if (hasFiles && canUsePythonTool && !pythonToolEnabled) {
+      setPythonToolEnabled(true)
+    }
+  }, [hasFiles, canUsePythonTool, pythonToolEnabled, setPythonToolEnabled])
 
   const handleAddCustomHeader = useCallback(() => {
     const result = appendCustomHeader()
@@ -309,9 +309,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const concurrencyLocked = totalActiveStreams >= maxConcurrentStreams
   const sendLockedReason = concurrencyLocked
     ? `当前已有 ${totalActiveStreams}/${maxConcurrentStreams} 个请求生成中，请稍后再试或先停止部分任务。`
-    : hasProcessingDocuments
-      ? '文档正在解析中，请等待解析完成后再发送消息。'
-      : null
+    : null
 
   const systemPromptFallback = (systemSettings?.chatSystemPrompt ?? '').trim()
   const personalPromptFallback = (user?.personalPrompt ?? '').trim()
@@ -330,6 +328,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
   const handleSend = useSendCommand({
     input,
+    hasWorkspaceFiles: hasFiles,
     currentSession,
     concurrencyLocked,
     totalActiveStreams,
@@ -462,17 +461,14 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     canUseTrace,
     onSaveSessionPrompt: handleSessionPromptSave,
     canAddCustomHeader: canAddHeader,
-    // 文档附件
-    documentInputRef,
-    attachedDocuments,
-    isUploadingDocuments,
-    isLoadingDocuments,
-    hasReadyDocuments,
-    hasProcessingDocuments,
-    pickDocuments,
-    onDocumentFilesSelected,
-    removeDocument,
-    cancelDocument,
-    clearDocuments,
+    // 工作区文件上传
+    workspaceFileInputRef,
+    workspaceFiles,
+    isUploadingWorkspaceFiles,
+    hasWorkspaceFiles: hasFiles,
+    pickWorkspaceFiles,
+    onWorkspaceFilesSelected,
+    removeWorkspaceFile,
+    clearWorkspaceFiles,
   }
 }

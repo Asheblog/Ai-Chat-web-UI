@@ -90,16 +90,15 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     traceEnabled,
     canUseTrace,
     onToggleTrace,
-    // 文档附件
-    documentInputRef,
-    attachedDocuments,
-    isUploadingDocuments,
-    hasReadyDocuments,
-    hasProcessingDocuments,
-    pickDocuments,
-    onDocumentFilesSelected,
-    removeDocument,
-    cancelDocument,
+    // 工作区文件上传
+    workspaceFileInputRef,
+    workspaceFiles,
+    isUploadingWorkspaceFiles,
+    hasWorkspaceFiles,
+    pickWorkspaceFiles,
+    onWorkspaceFilesSelected,
+    removeWorkspaceFile,
+    clearWorkspaceFiles,
   } = useChatComposer({ knowledgeBaseIds: knowledgeBase.selectedKbIds })
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
@@ -167,7 +166,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     return null
   }
 
-  const desktopSendDisabled = sendLocked || hasProcessingDocuments || ((!input.trim() && selectedImages.length === 0) && !isStreaming)
+  const desktopSendDisabled = sendLocked || ((!input.trim() && selectedImages.length === 0 && workspaceFiles.length === 0) && !isStreaming)
   const textareaDisabled = isStreaming || sessionControls.quotaExhausted
   const imageLimits = {
     maxCount: MAX_IMAGE_COUNT,
@@ -259,16 +258,14 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     sessionPromptPlaceholder,
     onSessionPromptChange: setSessionPromptDraft,
     onSessionPromptSave: onSaveSessionPrompt,
-    // 文档附件
-    documentInputRef,
-    attachedDocuments,
-    isUploadingDocuments,
-    hasDocuments: attachedDocuments.length > 0,
-    hasProcessingDocuments,
-    pickDocuments,
-    onDocumentFilesSelected,
-    onRemoveDocument: removeDocument,
-    onCancelDocument: cancelDocument,
+    // 工作区文件上传
+    workspaceFileInputRef,
+    workspaceFiles,
+    isUploadingWorkspaceFiles,
+    hasWorkspaceFiles,
+    pickWorkspaceFiles,
+    onWorkspaceFilesSelected,
+    onRemoveWorkspaceFile: removeWorkspaceFile,
     // 知识库
     knowledgeBaseEnabled: knowledgeBase.isEnabled,
     knowledgeBases: knowledgeBase.availableKbs,

@@ -5,6 +5,7 @@ import type { ComposerImage } from '@/features/chat/composer'
 
 interface UseSendCommandParams {
   input: string
+  hasWorkspaceFiles?: boolean
   currentSession: { id: number } | null
   concurrencyLocked: boolean
   totalActiveStreams: number
@@ -44,6 +45,7 @@ interface UseSendCommandParams {
 export const useSendCommand = (params: UseSendCommandParams) => {
   const {
     input,
+    hasWorkspaceFiles = false,
     currentSession,
     concurrencyLocked,
     totalActiveStreams,
@@ -76,7 +78,16 @@ export const useSendCommand = (params: UseSendCommandParams) => {
   } = params
 
   return useCallback(async () => {
-    if (!input.trim() || !currentSession) return
+    if (!input.trim() && !hasWorkspaceFiles) return
+    if (!currentSession) return
+    if (hasWorkspaceFiles && !canUsePythonTool) {
+      toast({
+        title: '无法分析文件',
+        description: '管理员未启用 Python 工具，无法读取工作区文件',
+        variant: 'destructive',
+      })
+      return
+    }
     if (concurrencyLocked) {
       toast({
         title: '生成任务已达上限',
@@ -85,9 +96,8 @@ export const useSendCommand = (params: UseSendCommandParams) => {
       })
       return
     }
-    const message = input.trim()
+    const message = input.trim() || (hasWorkspaceFiles ? '请分析工作区中的文件' : '')
     const prevSelectedImages = selectedImages
-    setInput('')
     clearError()
     try {
       const imagesPayload =
@@ -102,6 +112,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
         toast({ title: '发送失败', description: requestPayload.reason, variant: 'destructive' })
         return
       }
+      setInput('')
       const enabledSkills: string[] = [...enabledExtraSkills]
       const skillOverrides: Record<string, Record<string, unknown>> = {}
       if (webSearchEnabled && canUseWebSearch) {
@@ -114,7 +125,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
           skillOverrides['web-search'] = webSearchOverride
         }
       }
-      if (pythonToolEnabled && canUsePythonTool) {
+      if ((pythonToolEnabled || hasWorkspaceFiles) && canUsePythonTool) {
         enabledSkills.push('python-runner')
       }
       const skillsPayload =
@@ -150,6 +161,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     }
   }, [
     input,
+    hasWorkspaceFiles,
     currentSession,
     concurrencyLocked,
     totalActiveStreams,

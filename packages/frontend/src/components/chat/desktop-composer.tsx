@@ -68,7 +68,7 @@ interface DesktopComposerProps {
   onStop: () => void
   desktopSendDisabled: boolean
   sendLockedReason: string | null
-  // 文档附件
+  // 文件附件
   hasDocuments?: boolean
   pickDocuments?: () => void
   onOpenAttachmentManager?: () => void
