@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { cn, deriveChannelName, formatDate } from "@/lib/utils"
 import type { SystemConnectionGroup } from "@/services/system-connections"
 import {
-  getEnabledKeyCount,
   getGroupHealth,
   getModelCount,
   healthLabel,
@@ -99,14 +98,13 @@ function ConnectionRow({
   children: ReactNode
 }) {
   const health = getGroupHealth(group)
-  const enabledCount = getEnabledKeyCount(group)
   const modelCount = getModelCount(group)
   const channelName = deriveChannelName(group.provider, group.baseUrl)
   const tags = group.tags.map((tag) => tag.name).filter(Boolean).slice(0, 3)
 
   return (
     <article className={cn("bg-white transition-colors", expanded ? "bg-blue-50/30" : "hover:bg-slate-50/70")}>
-      <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(160px,0.5fr)_minmax(180px,0.6fr)_auto] lg:items-center">
+      <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(200px,0.8fr)_auto] lg:items-center">
         <button type="button" onClick={onToggle} className="flex min-w-0 cursor-pointer items-start gap-3 text-left">
           <span
             className={cn(
@@ -117,8 +115,11 @@ function ConnectionRow({
                   ? "border-amber-200 bg-amber-50 text-amber-600"
                   : "border-red-200 bg-red-50 text-red-600",
             )}
+            role="img"
+            aria-label={healthLabel[health]}
           >
             {health === "error" ? <ShieldAlert className="h-5 w-5" /> : <Server className="h-5 w-5" />}
+            <span className="sr-only">{healthLabel[health]}</span>
           </span>
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2">
@@ -139,21 +140,7 @@ function ConnectionRow({
           </span>
         </button>
 
-        <div className="flex flex-wrap gap-2 lg:block lg:space-y-2">
-          <span className={enabledCount > 0 ? "v2-status v2-status-success" : "v2-status v2-status-danger"}>
-            {enabledCount > 0 ? `启用 ${enabledCount}` : "未启用"}
-          </span>
-          <span
-            className={cn(
-              "v2-status",
-              health === "healthy" ? "v2-status-success" : health === "warning" ? "v2-status-warning" : "v2-status-danger",
-            )}
-          >
-            {healthLabel[health]}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2 text-sm text-slate-500 sm:max-w-md lg:max-w-none">
+        <div className="grid grid-cols-3 gap-2 text-sm text-slate-500">
           <Metric label="Keys" value={group.apiKeys.length} />
           <Metric label="模型" value={modelCount || "自动"} />
           <Metric label="更新" value={formatDate(group.updatedAt)} />
@@ -164,8 +151,9 @@ function ConnectionRow({
             <Edit3 className="mr-2 h-4 w-4" />
             编辑
           </Button>
-          <Button variant="ghost" size="icon" onClick={onDelete} className="h-9 w-9 text-red-600 hover:text-red-700" aria-label="删除连接">
-            <Trash2 className="h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={onDelete} className="h-9 bg-white text-red-600 hover:text-red-700">
+            <Trash2 className="mr-2 h-4 w-4" />
+            删除
           </Button>
           <Button variant={expanded ? "secondary" : "outline"} size="sm" onClick={onToggle} className="h-9 bg-white">
             <KeyRound className="mr-2 h-4 w-4" />
