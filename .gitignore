@@ -70,3 +70,4 @@ packages/frontend/preview/
 packages/frontend/public/ai-reference
 .playwright-cli/
 output/playwright/
+.codex
