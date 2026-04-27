@@ -24,8 +24,25 @@ export function ModelSelectorSearchControls({
   onCapabilityFilterChange,
   searchInputRef,
 }: ModelSelectorSearchControlsProps) {
+  const allActive = selectorView === "all" && capabilityFilter === "all"
+
+  const activateAll = () => {
+    onSelectorViewChange("all")
+    onCapabilityFilterChange("all")
+  }
+
+  const activateView = (view: SelectorView) => {
+    onSelectorViewChange(view)
+    onCapabilityFilterChange("all")
+  }
+
+  const activateCapability = (capability: CapabilityFilter) => {
+    onSelectorViewChange("all")
+    onCapabilityFilterChange(capability)
+  }
+
   return (
-    <div className="space-y-2 border-b border-border/60 bg-background/95 px-2.5 py-2.5">
+    <div className="space-y-2 border-b border-border/60 bg-background/95 px-3 py-3">
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -33,7 +50,7 @@ export function ModelSelectorSearchControls({
           value={searchTerm}
           onChange={(event) => onSearchTermChange(event.target.value)}
           placeholder="搜索模型 / 厂商 / 能力"
-          className="h-9 rounded-md bg-background pl-9 pr-8 text-sm"
+          className="h-10 rounded-[8px] border-border/80 bg-background pl-9 pr-8 text-sm shadow-none"
         />
         {searchTerm && (
           <button
@@ -47,23 +64,29 @@ export function ModelSelectorSearchControls({
         )}
       </div>
 
-      <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-        {VIEW_FILTER_OPTIONS.map((option) => (
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <Button
+          type="button"
+          size="sm"
+          variant={allActive ? "default" : "outline"}
+          className="h-8 shrink-0 rounded-[8px] px-3 text-xs"
+          onClick={activateAll}
+        >
+          全部
+        </Button>
+        {VIEW_FILTER_OPTIONS.filter((option) => option.id !== "all").map((option) => (
           <Button
             key={option.id}
             type="button"
             size="sm"
             variant={selectorView === option.id ? "default" : "outline"}
-            className="h-7 shrink-0 rounded-full px-2.5 text-xs"
-            onClick={() => onSelectorViewChange(option.id)}
+            className="h-8 shrink-0 rounded-[8px] px-3 text-xs"
+            onClick={() => activateView(option.id)}
           >
             {option.label}
           </Button>
         ))}
-      </div>
-
-      <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-        {CAPABILITY_FILTER_OPTIONS.map((option) => {
+        {CAPABILITY_FILTER_OPTIONS.filter((option) => option.id !== "all").map((option) => {
           const Icon = option.icon
           return (
             <Button
@@ -71,11 +94,11 @@ export function ModelSelectorSearchControls({
               type="button"
               size="sm"
               variant={capabilityFilter === option.id ? "default" : "outline"}
-              className="h-7 shrink-0 rounded-full px-2.5 text-xs"
-              onClick={() => onCapabilityFilterChange(option.id)}
+              className="h-8 shrink-0 rounded-[8px] px-3 text-xs"
+              onClick={() => activateCapability(option.id)}
             >
               {Icon && <Icon className="mr-1 h-3 w-3" />}
-              <span className="sm:inline">{option.label}</span>
+              {option.label}
             </Button>
           )
         })}

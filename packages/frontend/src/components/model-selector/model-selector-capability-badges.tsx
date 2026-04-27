@@ -1,4 +1,3 @@
-import { MessageCircle } from "lucide-react"
 import type { ModelItem } from "@/store/models-store"
 import { Badge } from "@/components/ui/badge"
 import { CAPABILITY_ICONS } from "./model-selector-types"
@@ -18,19 +17,7 @@ export function ModelSelectorCapabilityBadges({
   )
 
   if (activeCapabilities.length === 0) {
-    return (
-      <Badge
-        variant="secondary"
-        className={compact
-          ? "h-5 w-5 rounded-full border border-border/70 bg-muted/55 p-0 text-muted-foreground"
-          : "h-5 rounded-full border border-border/60 bg-muted/55 px-1.5 text-[10px] text-muted-foreground"
-        }
-        title="通用对话"
-      >
-        <MessageCircle className="h-3 w-3" />
-        {!compact && <span className="ml-1">General</span>}
-      </Badge>
-    )
+    return null
   }
 
   const visibleCapabilities = compact ? activeCapabilities.slice(0, 3) : activeCapabilities
