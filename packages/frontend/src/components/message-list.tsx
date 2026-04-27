@@ -264,7 +264,8 @@ function MessageListComponent({
         const shareSelectable =
           meta.role !== 'compressedGroup' &&
           typeof meta.id === 'number' &&
-          !meta.pendingSync
+          !meta.pendingSync &&
+          !meta.isPlaceholder
         const shareSelected =
           shareModeActive && shareSelectable && shareSelectedKeys.has(messageKey(meta.id))
         const canEditUserMessage =

@@ -93,4 +93,77 @@ describe("ShareDialog", () => {
     expect(screen.getByText("生成分享链接")).toBeDisabled()
     expect(screen.getByText("暂无选中内容，请在聊天界面勾选要分享的消息。")).toBeInTheDocument()
   })
+
+  it("filters out placeholder messages and shows warning", async () => {
+    useChatStore.setState((state) => ({
+      ...state,
+      messageMetas: [
+        {
+          id: 1,
+          sessionId: 42,
+          role: "user",
+          createdAt: "2024-01-01T00:00:00.000Z",
+        } as any,
+        {
+          id: 2,
+          sessionId: 42,
+          role: "assistant",
+          createdAt: "2024-01-01T00:01:00.000Z",
+          isPlaceholder: true,
+        } as any,
+      ],
+    }))
+
+    const createSpy = mockCreateShare()
+
+    render(
+      <ShareDialog
+        sessionId={42}
+        sessionTitle="测试会话"
+        selectedMessageIds={[1, 2]}
+        open
+        onOpenChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/有 1 条消息仍在生成中/)).toBeInTheDocument()
+    expect(screen.getByText("生成分享链接")).not.toBeDisabled()
+
+    fireEvent.click(screen.getByText("生成分享链接"))
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalled())
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageIds: [1],
+      }),
+    )
+  })
+
+  it("shows error when all selected messages are placeholders", () => {
+    useChatStore.setState((state) => ({
+      ...state,
+      messageMetas: [
+        {
+          id: 2,
+          sessionId: 42,
+          role: "assistant",
+          createdAt: "2024-01-01T00:00:00.000Z",
+          isPlaceholder: true,
+        } as any,
+      ],
+    }))
+
+    render(
+      <ShareDialog
+        sessionId={42}
+        sessionTitle="测试会话"
+        selectedMessageIds={[2]}
+        open
+        onOpenChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByText("所选消息暂无法分享，请等待 AI 生成完成后再试。")).toBeInTheDocument()
+    expect(screen.getByText("生成分享链接")).toBeDisabled()
+  })
 })

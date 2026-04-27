@@ -92,7 +92,7 @@ export function ChatMessageViewport({
     const seen = new Set<number>()
     metas.forEach((meta) => {
       if (meta.sessionId !== sessionId || typeof meta.id !== 'number') return
-      if (!Number.isFinite(meta.id) || meta.pendingSync) return
+      if (!Number.isFinite(meta.id) || meta.pendingSync || meta.isPlaceholder) return
       if (seen.has(meta.id)) return
       ids.push(meta.id)
       seen.add(meta.id)

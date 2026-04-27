@@ -61,18 +61,33 @@ export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open,
   const sortedMessageIds = useMemo(() => {
     if (!selectedMessageIds?.length) return []
     const orderMap = new Map<number, number>()
+    const placeholderIds = new Set<number>()
     messageMetas.forEach((meta, index) => {
       if (typeof meta.id === 'number' && meta.sessionId === sessionId) {
         orderMap.set(Number(meta.id), index)
+        if (meta.isPlaceholder) {
+          placeholderIds.add(Number(meta.id))
+        }
       }
     })
     return [...new Set(selectedMessageIds)]
-      .filter((id) => Number.isFinite(id))
+      .filter((id) => Number.isFinite(id) && !placeholderIds.has(id))
       .sort((a, b) => {
         const orderA = orderMap.get(a) ?? a
         const orderB = orderMap.get(b) ?? b
         return orderA - orderB
       })
+  }, [messageMetas, selectedMessageIds, sessionId])
+
+  const placeholderSelectionCount = useMemo(() => {
+    if (!selectedMessageIds?.length) return 0
+    const placeholderIds = new Set<number>()
+    messageMetas.forEach((meta) => {
+      if (typeof meta.id === 'number' && meta.sessionId === sessionId && meta.isPlaceholder) {
+        placeholderIds.add(Number(meta.id))
+      }
+    })
+    return selectedMessageIds.filter((id) => placeholderIds.has(id)).length
   }, [messageMetas, selectedMessageIds, sessionId])
   const previewMessageId = sortedMessageIds[0] ?? null
   const previewBodyEvents = useMemo(() => {
@@ -227,7 +242,15 @@ export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open,
               <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary/80">
                 当前已选 {sortedMessageIds.length} 条消息。如需调整，请先关闭本对话框返回聊天界面。
               </div>
-              {sortedMessageIds.length === 0 && (
+              {placeholderSelectionCount > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  有 {placeholderSelectionCount} 条消息仍在生成中，生成完成后可重新选择分享。
+                </p>
+              )}
+              {sortedMessageIds.length === 0 && selectedMessageIds.length > 0 && (
+                <p className="text-xs text-destructive">所选消息暂无法分享，请等待 AI 生成完成后再试。</p>
+              )}
+              {sortedMessageIds.length === 0 && selectedMessageIds.length === 0 && (
                 <p className="text-xs text-destructive">暂无选中内容，请在聊天界面勾选要分享的消息。</p>
               )}
             </div>
