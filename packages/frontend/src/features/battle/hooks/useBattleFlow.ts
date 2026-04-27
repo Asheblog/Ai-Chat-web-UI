@@ -24,7 +24,7 @@ export interface ModelConfigState {
   webSearchEnabled: boolean
   pythonEnabled: boolean
   reasoningEnabled: boolean
-  reasoningEffort: 'low' | 'medium' | 'high'
+  reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
   ollamaThink: boolean
   extraPrompt: string
   customBody: string
@@ -196,7 +196,7 @@ export type BattleNodeModel = {
 
 type ReasoningDefaults = {
   reasoningEnabled: boolean
-  reasoningEffort: 'low' | 'medium' | 'high'
+  reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
   ollamaThink: boolean
 }
 
@@ -212,7 +212,7 @@ type BattleRunConfigModel = {
   customHeaders?: Array<{ name: string; value: string }>
   customBody?: Record<string, any> | null
   reasoningEnabled?: boolean | null
-  reasoningEffort?: 'low' | 'medium' | 'high' | null
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
   ollamaThink?: boolean | null
 }
 
@@ -283,8 +283,8 @@ const buildConfigStateFromConfig = (
   }
 }
 
-const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | null => {
-  if (value === 'low' || value === 'medium' || value === 'high') {
+const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'xhigh' | null => {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'max' || value === 'xhigh') {
     return value
   }
   return null
@@ -1383,7 +1383,7 @@ export function useBattleFlow() {
         customBody?: Record<string, any> | null
         extraPrompt?: string | null
         reasoningEnabled?: boolean | null
-        reasoningEffort?: 'low' | 'medium' | 'high' | null
+        reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
         ollamaThink?: boolean | null
       }>
     }

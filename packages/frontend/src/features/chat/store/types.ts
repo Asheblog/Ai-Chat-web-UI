@@ -15,7 +15,7 @@ export type MessageId = number | string
 
 export type StreamSendOptions = {
   reasoningEnabled?: boolean
-  reasoningEffort?: 'low' | 'medium' | 'high'
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
   ollamaThink?: boolean
   saveReasoning?: boolean
   skills?: {
@@ -118,7 +118,7 @@ export interface SessionSlice {
     sessionId: number,
     prefs: Partial<{
       reasoningEnabled: boolean
-      reasoningEffort: 'low' | 'medium' | 'high'
+      reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
       ollamaThink: boolean
       systemPrompt: string | null
       knowledgeBaseIds: number[]

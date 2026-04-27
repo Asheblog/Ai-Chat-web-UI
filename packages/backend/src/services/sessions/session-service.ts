@@ -86,7 +86,7 @@ const composeModelLabel = (
 }
 
 const normalizeEffort = (value?: string | null) => {
-  if (value === 'low' || value === 'medium' || value === 'high') {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'max' || value === 'xhigh') {
     return value
   }
   return null

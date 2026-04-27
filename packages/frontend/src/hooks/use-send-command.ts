@@ -25,7 +25,7 @@ interface UseSendCommandParams {
   canUsePythonTool: boolean
   pythonToolEnabled: boolean
   thinkingEnabled: boolean
-  effort: 'low' | 'medium' | 'high' | 'unset'
+  effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
   ollamaThink: boolean
   noSaveThisRound: boolean
   setNoSaveThisRound: (value: boolean) => void

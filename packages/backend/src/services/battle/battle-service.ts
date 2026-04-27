@@ -210,8 +210,8 @@ const normalizeConfigSkills = (raw: unknown): BattleModelSkills | undefined => {
   }
 }
 
-const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | null => {
-  if (value === 'low' || value === 'medium' || value === 'high') {
+const normalizeReasoningEffort = (value: unknown): 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null => {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'max' || value === 'xhigh') {
     return value
   }
   return null

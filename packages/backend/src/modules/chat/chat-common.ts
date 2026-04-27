@@ -24,7 +24,7 @@ export const sendMessageSchema = z.object({
   replyToClientMessageId: z.string().min(1).max(128).optional(),
   images: z.array(z.object({ data: z.string().min(1), mime: z.string().min(1) })).max(4).optional(),
   reasoningEnabled: z.boolean().optional(),
-  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
   ollamaThink: z.boolean().optional(),
   saveReasoning: z.boolean().optional(),
   clientMessageId: z.string().min(1).max(128).optional(),

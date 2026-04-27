@@ -90,7 +90,7 @@ export interface ChatSession {
   createdAt: string;
   pinnedAt?: string | null;
   reasoningEnabled?: boolean | null;
-  reasoningEffort?: 'low' | 'medium' | 'high' | null;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null;
   ollamaThink?: boolean | null;
   systemPrompt?: string | null;
   knowledgeBaseIds?: number[];
@@ -375,7 +375,7 @@ export interface SystemSettings {
   streamReasoningFlushIntervalMs?: number;
   streamKeepaliveIntervalMs?: number;
   // 供应商参数（可选）
-  openaiReasoningEffort?: 'low' | 'medium' | 'high' | '' | 'unset';
+  openaiReasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | '' | 'unset';
   reasoningMaxOutputTokensDefault?: number | null;
   temperatureDefault?: number | null;
   ollamaThink?: boolean;

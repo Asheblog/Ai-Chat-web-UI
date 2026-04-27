@@ -28,7 +28,7 @@ export const useComposerFeatureFlags = ({
   scopePreferenceKey = DEFAULT_SCOPE_KEY,
 }: UseComposerFeatureFlagsOptions) => {
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
-  const [effort, setEffort] = useState<'low' | 'medium' | 'high' | 'unset'>('unset')
+  const [effort, setEffort] = useState<'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'>('unset')
   const [ollamaThink, setOllamaThink] = useState(false)
   const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
@@ -68,7 +68,7 @@ export const useComposerFeatureFlags = ({
     if (!currentSession) return
     const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
     const sysEffortRaw = (systemSettings?.openaiReasoningEffort ?? '') as any
-    const sysEffort: 'low' | 'medium' | 'high' | 'unset' = sysEffortRaw && sysEffortRaw !== '' ? sysEffortRaw : 'unset'
+    const sysEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset' = sysEffortRaw && sysEffortRaw !== '' ? sysEffortRaw : 'unset'
     const sysOllamaThink = Boolean(systemSettings?.ollamaThink ?? false)
 
     setThinkingEnabled(

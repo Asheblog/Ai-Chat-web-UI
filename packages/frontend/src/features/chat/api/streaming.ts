@@ -20,7 +20,7 @@ export const streamChat = async function* streamChat(
   images?: ImageAttachmentPayload[],
   options?: {
     reasoningEnabled?: boolean
-    reasoningEffort?: 'low' | 'medium' | 'high'
+    reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
     ollamaThink?: boolean
     saveReasoning?: boolean
     contextEnabled?: boolean
@@ -195,7 +195,7 @@ export const chatCompletion = async (
   images?: ImageAttachmentPayload[],
   options?: {
     reasoningEnabled?: boolean
-    reasoningEffort?: 'low' | 'medium' | 'high'
+    reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
     ollamaThink?: boolean
     saveReasoning?: boolean
     contextEnabled?: boolean

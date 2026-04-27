@@ -137,7 +137,7 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     // 服务端流分片大小（可选）
     stream_delta_chunk_size: z.number().int().min(1).max(100).optional(),
     // 供应商参数（可选）
-    openai_reasoning_effort: z.enum(['low', 'medium', 'high', 'unset']).optional(),
+    openai_reasoning_effort: z.enum(['low', 'medium', 'high', 'max', 'xhigh', 'unset']).optional(),
     reasoning_max_output_tokens_default: z.number().int().min(1).max(256000).nullable().optional(),
     temperature_default: z.number().min(0).max(2).nullable().optional(),
     ollama_think: z.boolean().optional(),

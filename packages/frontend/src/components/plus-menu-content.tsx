@@ -6,8 +6,8 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 
 interface PlusMenuContentProps {
-  effort?: 'low' | 'medium' | 'high' | 'unset'
-  onEffortChange?: (value: 'low' | 'medium' | 'high' | 'unset') => void
+  effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
+  onEffortChange?: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
   traceEnabled?: boolean
   canUseTrace?: boolean
   onToggleTrace?: (value: boolean) => void
@@ -98,6 +98,8 @@ export function PlusMenuContent({
                     <SelectItem value="low">low</SelectItem>
                     <SelectItem value="medium">medium</SelectItem>
                     <SelectItem value="high">high</SelectItem>
+                    <SelectItem value="max">max</SelectItem>
+                    <SelectItem value="xhigh">xhigh</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

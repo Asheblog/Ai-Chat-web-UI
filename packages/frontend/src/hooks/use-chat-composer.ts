@@ -173,7 +173,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
     const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
     const sysEffortRaw = (systemSettings?.openaiReasoningEffort ?? '') as any
-    const sysEffort: 'low' | 'medium' | 'high' | 'unset' =
+    const sysEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset' =
       sysEffortRaw && sysEffortRaw !== '' ? sysEffortRaw : 'unset'
     const sysOllamaThink = Boolean(systemSettings?.ollamaThink ?? false)
 

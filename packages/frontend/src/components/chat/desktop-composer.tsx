@@ -58,8 +58,8 @@ interface DesktopComposerProps {
   traceEnabled: boolean
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
-  effort: 'low' | 'medium' | 'high' | 'unset'
-  onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
+  effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
+  onEffortChange: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
   showExpand: boolean
   onExpandOpen: () => void
   onOpenAdvanced: () => void

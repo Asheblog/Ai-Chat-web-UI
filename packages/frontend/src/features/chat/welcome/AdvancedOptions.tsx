@@ -12,8 +12,8 @@ interface AdvancedOptionsProps {
   disabled: boolean
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
-  effort: 'unset' | 'low' | 'medium' | 'high'
-  onEffortChange: (value: 'unset' | 'low' | 'medium' | 'high') => void
+  effort: 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh'
+  onEffortChange: (value: 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh') => void
   webSearchEnabled: boolean
   onToggleWebSearch: (value: boolean) => void
   canUseWebSearch: boolean

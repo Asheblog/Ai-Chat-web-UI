@@ -26,7 +26,7 @@ interface BattleModelPayload {
   custom_body?: Record<string, any>
   custom_headers?: Array<{ name: string; value: string }>
   reasoningEnabled?: boolean
-  reasoningEffort?: 'low' | 'medium' | 'high'
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
   ollamaThink?: boolean
 }
 

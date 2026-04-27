@@ -204,7 +204,7 @@ export interface BattleRunDetail extends BattleRunSummary {
       customHeaders?: Array<{ name: string; value: string }>
       customBody?: Record<string, any> | null
       reasoningEnabled?: boolean | null
-      reasoningEffort?: 'low' | 'medium' | 'high' | null
+      reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
       ollamaThink?: boolean | null
     }>
     model?: {
@@ -216,7 +216,7 @@ export interface BattleRunDetail extends BattleRunSummary {
       customHeaders?: Array<{ name: string; value: string }>
       customBody?: Record<string, any> | null
       reasoningEnabled?: boolean | null
-      reasoningEffort?: 'low' | 'medium' | 'high' | null
+      reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
       ollamaThink?: boolean | null
     }
     questions?: Array<{

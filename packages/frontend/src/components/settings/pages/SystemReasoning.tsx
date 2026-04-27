@@ -29,7 +29,7 @@ export function SystemReasoningPage() {
   const [streamDeltaFlushIntervalMs, setStreamDeltaFlushIntervalMs] = useState('')
   const [streamReasoningFlushIntervalMs, setStreamReasoningFlushIntervalMs] = useState('')
   const [streamKeepaliveIntervalMs, setStreamKeepaliveIntervalMs] = useState('')
-  const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<'unset'|'low'|'medium'|'high'>('unset')
+  const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<'unset'|'low'|'medium'|'high'|'max'|'xhigh'>('unset')
   const [ollamaThink, setOllamaThink] = useState(false)
   const [reasoningMaxTokens, setReasoningMaxTokens] = useState('')
   const [temperatureDefault, setTemperatureDefault] = useState('')
@@ -325,6 +325,8 @@ export function SystemReasoningPage() {
               <SelectItem value="low">low</SelectItem>
               <SelectItem value="medium">medium</SelectItem>
               <SelectItem value="high">high</SelectItem>
+              <SelectItem value="max">max</SelectItem>
+              <SelectItem value="xhigh">xhigh</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>

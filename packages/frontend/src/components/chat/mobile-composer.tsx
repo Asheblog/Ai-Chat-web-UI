@@ -42,8 +42,8 @@ interface MobileComposerProps {
   onRemoveImage: (index: number) => void
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
-  effort: 'low' | 'medium' | 'high' | 'unset'
-  onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
+  effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
+  onEffortChange: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
   webSearchEnabled: boolean
   onToggleWebSearch: (value: boolean) => void
   webSearchScope: string

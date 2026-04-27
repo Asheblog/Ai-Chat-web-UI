@@ -62,7 +62,7 @@ export const useWelcomeScreenViewModel = () => {
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [thinkingTouched, setThinkingTouched] = useState(false)
-  const [effort, setEffort] = useState<'unset' | 'low' | 'medium' | 'high'>('unset')
+  const [effort, setEffort] = useState<'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh'>('unset')
   const [effortTouched, setEffortTouched] = useState(false)
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [webSearchTouched, setWebSearchTouched] = useState(false)
@@ -311,7 +311,7 @@ export const useWelcomeScreenViewModel = () => {
   useEffect(() => {
     const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
     const raw = (systemSettings?.openaiReasoningEffort ?? '') as any
-    const sysEffort: 'unset' | 'low' | 'medium' | 'high' = raw && raw !== '' ? raw : 'unset'
+    const sysEffort: 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh' = raw && raw !== '' ? raw : 'unset'
     if (!thinkingTouched) setThinkingEnabled(sysEnabled)
     if (!effortTouched) setEffort(sysEffort)
     if (!sessionPromptTouched) {
@@ -765,7 +765,7 @@ export const useWelcomeScreenViewModel = () => {
           setThinkingEnabled(value)
         },
         effort,
-        onEffortChange: (value: 'unset' | 'low' | 'medium' | 'high') => {
+        onEffortChange: (value: 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh') => {
           setEffortTouched(true)
           setEffort(value)
         },

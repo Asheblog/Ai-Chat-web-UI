@@ -20,7 +20,7 @@ import {
   composerToolbarScrollClass,
 } from '@/components/chat/composer-toolbar-primitives'
 
-type Effort = 'unset' | 'low' | 'medium' | 'high'
+type Effort = 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh'
 
 interface WelcomeFormProps {
   form: {

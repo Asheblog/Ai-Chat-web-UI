@@ -12,7 +12,7 @@ interface UseChatSessionControlsOptions {
   canUseWebSearch: boolean
   setThinkingEnabled: (value: boolean) => void
   setWebSearchEnabled: (value: boolean) => void
-  setEffort: (value: 'low' | 'medium' | 'high' | 'unset') => void
+  setEffort: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
 }
 
 export function useChatSessionControls({
@@ -82,7 +82,7 @@ export function useChatSessionControls({
   )
 
   const updateEffort = useCallback(
-    (value: 'low' | 'medium' | 'high' | 'unset') => {
+    (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => {
       if (!currentSession) return
       setEffort(value)
       useChatStore.getState().updateSessionPrefs(currentSession.id, {

@@ -194,7 +194,7 @@ export function ConfigStep({
                                                         onValueChange={(v) =>
                                                             onUpdateModelConfig(item.key, (prev) => ({
                                                                 ...prev,
-                                                                reasoningEffort: v as 'low' | 'medium' | 'high',
+                                                                reasoningEffort: v as 'low' | 'medium' | 'high' | 'max' | 'xhigh',
                                                             }))
                                                         }
                                                     >
@@ -205,6 +205,8 @@ export function ConfigStep({
                                                             <SelectItem value="low">低</SelectItem>
                                                             <SelectItem value="medium">中</SelectItem>
                                                             <SelectItem value="high">高</SelectItem>
+                                                            <SelectItem value="max">最高</SelectItem>
+                                                            <SelectItem value="xhigh">极高</SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 </div>

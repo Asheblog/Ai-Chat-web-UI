@@ -65,7 +65,7 @@ export interface ChatComposerPanelProps {
   isVisionEnabled: boolean
   traceEnabled: boolean
   canUseTrace: boolean
-  effort: 'low' | 'medium' | 'high' | 'unset'
+  effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
   basePlaceholder: string
   mobilePlaceholder: string
   textareaDisabled: boolean
@@ -83,7 +83,7 @@ export interface ChatComposerPanelProps {
   onToggleWebSearch: (value: boolean) => void
   onWebSearchScopeChange: (value: string) => void
   onToggleTrace: (value: boolean) => void
-  onEffortChange: (value: 'low' | 'medium' | 'high' | 'unset') => void
+  onEffortChange: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
   fileInputRef: MutableRefObject<HTMLInputElement | null>
   onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
   imageLimits: ImageLimitConfig

@@ -43,7 +43,7 @@ const battleModelSchema = z.object({
   custom_body: z.record(z.any()).optional(),
   custom_headers: z.array(headerSchema).max(10).optional(),
   reasoningEnabled: z.boolean().optional(),
-  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
   ollamaThink: z.boolean().optional(),
 }).superRefine((value, ctx) => {
   if (typeof value.features !== 'undefined') {

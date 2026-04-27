@@ -50,7 +50,7 @@ export const updateSession = async (
     title: string
     pinned: boolean
     reasoningEnabled: boolean
-    reasoningEffort: 'low' | 'medium' | 'high'
+    reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
     ollamaThink: boolean
     systemPrompt: string | null
     knowledgeBaseIds: number[]
