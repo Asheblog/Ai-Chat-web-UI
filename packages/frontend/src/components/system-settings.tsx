@@ -3,15 +3,22 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import dynamic from "next/dynamic"
 import {
+  BookOpen,
   Boxes,
   Cloud,
   ClipboardList,
+  Database,
+  Globe,
   KeyRound,
   LayoutDashboard,
   PlugZap,
+  Puzzle,
   Router,
+  ScrollText,
   Settings2,
+  Terminal,
   Users,
+  Wrench,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -61,6 +68,92 @@ const SystemMonitoringPage = dynamic(
   () => import("@/components/settings/pages/SystemMonitoring").then((m) => m.SystemMonitoringPage),
   { loading: pageLoading },
 )
+const SystemWebSearchPage = dynamic(
+  () => import("@/components/settings/pages/SystemWebSearch").then((m) => m.SystemWebSearchPage),
+  { loading: pageLoading },
+)
+const SystemRAGPage = dynamic(
+  () => import("@/components/settings/pages/SystemRAG").then((m) => m.SystemRAGPage),
+  { loading: pageLoading },
+)
+const SystemKnowledgeBasePage = dynamic(
+  () => import("@/components/settings/pages/SystemKnowledgeBase").then((m) => m.SystemKnowledgeBasePage),
+  { loading: pageLoading },
+)
+const SystemLogsPage = dynamic(
+  () => import("@/components/settings/pages/SystemLogsPage").then((m) => m.SystemLogsPage),
+  { loading: pageLoading },
+)
+const SystemPythonRuntimePage = dynamic(
+  () => import("@/components/settings/pages/SystemPythonRuntime").then((m) => m.SystemPythonRuntimePage),
+  { loading: pageLoading },
+)
+
+function ModuleSubTabs({
+  tabs,
+  activeKey,
+  onSelect,
+}: {
+  tabs: { key: string; label: string; icon: ReactNode }[]
+  activeKey: string
+  onSelect: (key: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-2 mb-5">
+      {tabs.map((tab) => {
+        const active = tab.key === activeKey
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => onSelect(tab.key)}
+            className={cn(
+              "inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border px-3 text-xs font-medium transition-colors",
+              active
+                ? "border-primary/80 bg-primary/10 text-primary"
+                : "border-slate-200 bg-white/70 text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+            )}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function KnowledgeDocsModule() {
+  const [sub, setSub] = useState("rag")
+
+  const subTabs = [
+    { key: "rag", label: "RAG 文档解析", icon: <Database className="h-3.5 w-3.5" /> },
+    { key: "knowledge-base", label: "知识库管理", icon: <BookOpen className="h-3.5 w-3.5" /> },
+  ]
+
+  return (
+    <div className="min-w-0">
+      <ModuleSubTabs tabs={subTabs} activeKey={sub} onSelect={setSub} />
+      {sub === "rag" ? <SystemRAGPage /> : <SystemKnowledgeBasePage />}
+    </div>
+  )
+}
+
+function ToolsRuntimeModule() {
+  const [sub, setSub] = useState("web-search")
+
+  const subTabs = [
+    { key: "web-search", label: "联网搜索", icon: <Globe className="h-3.5 w-3.5" /> },
+    { key: "python-runtime", label: "Python 运行时", icon: <Terminal className="h-3.5 w-3.5" /> },
+  ]
+
+  return (
+    <div className="min-w-0">
+      <ModuleSubTabs tabs={subTabs} activeKey={sub} onSelect={setSub} />
+      {sub === "web-search" ? <SystemWebSearchPage /> : <SystemPythonRuntimePage />}
+    </div>
+  )
+}
 
 type SystemModule = {
   key: string
@@ -150,10 +243,34 @@ const SYSTEM_MODULES: SystemModule[] = [
     content: <SystemNetworkPage />,
   },
   {
+    key: "knowledge-docs",
+    label: "知识库与文档",
+    description: "管理 RAG 文档解析参数与知识库文档和公开访问权限。",
+    icon: BookOpen,
+    content: <KnowledgeDocsModule />,
+    topLevel: true,
+  },
+  {
+    key: "tools-runtime",
+    label: "工具与运行时",
+    description: "配置联网搜索引擎、Python 运行环境和工具调用策略。",
+    icon: Wrench,
+    content: <ToolsRuntimeModule />,
+    topLevel: true,
+  },
+  {
+    key: "logs",
+    label: "日志查看器",
+    description: "按级别与模块检索系统运行日志与上下文。",
+    icon: ScrollText,
+    content: <SystemLogsPage />,
+    topLevel: true,
+  },
+  {
     key: "skills",
     label: "Skill 管理",
     description: "安装、审批、激活 Skill 并维护绑定策略。",
-    icon: KeyRound,
+    icon: Puzzle,
     content: <SystemSkillsPage />,
   },
 ]

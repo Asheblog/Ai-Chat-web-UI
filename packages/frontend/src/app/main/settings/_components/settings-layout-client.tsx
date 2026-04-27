@@ -3,16 +3,19 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   BarChart3,
+  BookOpen,
   Boxes,
   Cloud,
   ClipboardList,
   KeyRound,
   PlugZap,
   Router,
+  ScrollText,
   Settings2,
   Share2,
   User,
   Users,
+  Wrench,
 } from "lucide-react"
 import { SettingsShell, type SettingsSection } from "@/components/settings/shell"
 import { useAuthStore } from "@/store/auth-store"
@@ -93,6 +96,21 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
           key: "backup",
           label: "备份与恢复",
           icon: <Cloud className="h-full w-full" />,
+        },
+        {
+          key: "knowledge-docs",
+          label: "知识库与文档",
+          icon: <BookOpen className="h-full w-full" />,
+        },
+        {
+          key: "tools-runtime",
+          label: "工具与运行时",
+          icon: <Wrench className="h-full w-full" />,
+        },
+        {
+          key: "logs",
+          label: "日志查看器",
+          icon: <ScrollText className="h-full w-full" />,
         },
       ]
     }
