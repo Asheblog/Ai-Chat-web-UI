@@ -8,9 +8,12 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/components/ui/use-toast'
-import { FileText, ShieldCheck } from 'lucide-react'
+import { FileText, ShieldCheck, TerminalSquare } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { listSkillAudits, listSkillCatalog } from '@/features/skills/api'
 import type { SkillCatalogItem, SkillExecutionAuditItem } from '@/types'
+import { TaskTraceConsole } from '@/components/task-trace/TaskTraceConsole'
+import { SystemLogsPage } from '@/components/settings/pages/SystemLogsPage'
 
 const APPROVAL_OPTIONS = [
   { value: 'all', label: '全部审批状态' },
@@ -50,7 +53,31 @@ const normalizePayload = (raw: string | null | undefined) => {
   }
 }
 
+type AuditTab = 'skill-audit' | 'task-trace' | 'system-logs'
+
+const AUDIT_TABS: { key: AuditTab; label: string; icon: typeof ShieldCheck; description: string }[] = [
+  {
+    key: 'skill-audit',
+    label: 'Skill 审计',
+    icon: ShieldCheck,
+    description: '查询 SkillExecutionAudit，定位审批、执行错误与耗时问题。',
+  },
+  {
+    key: 'task-trace',
+    label: '任务追踪',
+    icon: FileText,
+    description: '查看、导出和管理后台 Task Trace 记录，用于性能诊断和问题排查。',
+  },
+  {
+    key: 'system-logs',
+    label: '运行日志',
+    icon: TerminalSquare,
+    description: '查看后端服务运行日志，用于监控和排障。',
+  },
+]
+
 export function SystemSkillAuditsPage() {
+  const [activeTab, setActiveTab] = useState<AuditTab>('skill-audit')
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<SkillExecutionAuditItem[]>([])
@@ -132,228 +159,263 @@ export function SystemSkillAuditsPage() {
     })
   }
 
+  const activeTabDef = AUDIT_TABS.find((t) => t.key === activeTab) || AUDIT_TABS[0]
+  const ActiveIcon = activeTabDef.icon
+
   return (
     <div className="min-w-0 space-y-4">
       <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
-            <ShieldCheck className="h-5 w-5" />
+            <ActiveIcon className="h-5 w-5" />
           </span>
-          <div>
-            <h2 className="v2-section-title">Skill 审计日志</h2>
-            <p className="v2-muted-line mt-1">
-              查询 SkillExecutionAudit，定位审批、执行错误与耗时问题。
-            </p>
+          <div className="flex-1">
+            <h2 className="v2-section-title">{activeTabDef.label}日志</h2>
+            <p className="v2-muted-line mt-1">{activeTabDef.description}</p>
           </div>
         </div>
-        <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
-            <div className="space-y-1 lg:col-span-2">
-              <Label>Skill</Label>
-              <Select value={skillId} onValueChange={setSkillId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部 Skill" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部 Skill</SelectItem>
-                  {skills.map((skill) => (
-                    <SelectItem key={skill.id} value={String(skill.id)}>
-                      {skill.displayName} ({skill.slug})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            <div className="space-y-1">
-              <Label>Tool</Label>
-              <Input
-                value={toolName}
-                onChange={(event) => setToolName(event.target.value)}
-                placeholder="tool 名称"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label>Session ID</Label>
-              <Input
-                value={sessionId}
-                onChange={(event) => setSessionId(event.target.value)}
-                placeholder="例如 123"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label>Battle Run ID</Label>
-              <Input
-                value={battleRunId}
-                onChange={(event) => setBattleRunId(event.target.value)}
-                placeholder="例如 456"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label>审批状态</Label>
-              <Select value={approvalStatus} onValueChange={(value) => setApprovalStatus(value as typeof approvalStatus)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部审批状态" />
-                </SelectTrigger>
-                <SelectContent>
-                  {APPROVAL_OPTIONS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-            <Button variant={hasErrorOnly ? 'default' : 'outline'} onClick={() => setHasErrorOnly((prev) => !prev)}>
-              {hasErrorOnly ? '仅错误：开' : '仅错误：关'}
-            </Button>
-            <Button onClick={handleSearch} disabled={loading}>
-              查询
-            </Button>
-            <Button variant="outline" onClick={() => fetchAudits(page)} disabled={loading}>
-              刷新
-            </Button>
-            <div className="ml-auto text-xs text-muted-foreground">
-              共 {total} 条，页码 {page}/{totalPages}
-            </div>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {AUDIT_TABS.map((tab) => {
+            const Icon = tab.icon
+            const active = tab.key === activeTab
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  'inline-flex min-h-9 items-center gap-2 rounded-[8px] border px-4 text-sm font-medium transition-colors',
+                  active
+                    ? 'border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.18)]'
+                    : 'border-slate-200 bg-white/80 text-slate-600 hover:bg-blue-50 hover:text-slate-950',
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            )
+          })}
         </div>
       </section>
 
-      <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
-        <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
-            <FileText className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="v2-section-title">审计结果</h2>
-            <p className="v2-muted-line mt-1">
-              支持展开请求/响应载荷，快速定位执行异常和审批链路问题。
-            </p>
-          </div>
-        </div>
-        <div>
-          {loading && items.length === 0 ? (
-            <div className="text-sm text-muted-foreground">加载中...</div>
-          ) : items.length === 0 ? (
-            <div className="text-sm text-muted-foreground">没有匹配的审计日志。</div>
-          ) : (
-            <div className="space-y-3">
-              <div className="v2-table-wrap overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>时间</TableHead>
-                      <TableHead>Skill</TableHead>
-                      <TableHead>Tool</TableHead>
-                      <TableHead>审批</TableHead>
-                      <TableHead>耗时</TableHead>
-                      <TableHead>上下文</TableHead>
-                      <TableHead>结果</TableHead>
-                      <TableHead className="text-right">详情</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((item) => {
-                      const expanded = expandedIds.has(item.id)
-                      const resultText = item.error ? 'error' : 'ok'
-                      return (
-                        <TableRow key={item.id}>
-                          <TableCell className="text-xs">{formatDateTime(item.createdAt)}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="text-sm">{item.skill?.slug || item.skillId}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {item.version?.version || item.versionId || '-'}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{item.toolName}</TableCell>
-                          <TableCell>
-                            <Badge variant={STATUS_BADGE_VARIANT[item.approvalStatus || ''] || 'outline'}>
-                              {item.approvalStatus || '-'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {typeof item.durationMs === 'number' ? `${item.durationMs}ms` : '-'}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            <div>session: {item.sessionId ?? '-'}</div>
-                            <div>battle: {item.battleRunId ?? '-'}</div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={item.error ? 'destructive' : 'secondary'}>{resultText}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button size="sm" variant="outline" onClick={() => toggleExpand(item.id)}>
-                              {expanded ? '收起' : '展开'}
-                            </Button>
-                          </TableCell>
+      {activeTab === 'skill-audit' && (
+        <>
+          <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+                <div className="space-y-1 lg:col-span-2">
+                  <Label>Skill</Label>
+                  <Select value={skillId} onValueChange={setSkillId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="全部 Skill" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部 Skill</SelectItem>
+                      {skills.map((skill) => (
+                        <SelectItem key={skill.id} value={String(skill.id)}>
+                          {skill.displayName} ({skill.slug})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Tool</Label>
+                  <Input
+                    value={toolName}
+                    onChange={(event) => setToolName(event.target.value)}
+                    placeholder="tool 名称"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Session ID</Label>
+                  <Input
+                    value={sessionId}
+                    onChange={(event) => setSessionId(event.target.value)}
+                    placeholder="例如 123"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Battle Run ID</Label>
+                  <Input
+                    value={battleRunId}
+                    onChange={(event) => setBattleRunId(event.target.value)}
+                    placeholder="例如 456"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label>审批状态</Label>
+                  <Select value={approvalStatus} onValueChange={(value) => setApprovalStatus(value as typeof approvalStatus)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="全部审批状态" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {APPROVAL_OPTIONS.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+                <Button variant={hasErrorOnly ? 'default' : 'outline'} onClick={() => setHasErrorOnly((prev) => !prev)}>
+                  {hasErrorOnly ? '仅错误：开' : '仅错误：关'}
+                </Button>
+                <Button onClick={handleSearch} disabled={loading}>
+                  查询
+                </Button>
+                <Button variant="outline" onClick={() => fetchAudits(page)} disabled={loading}>
+                  刷新
+                </Button>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  共 {total} 条，页码 {page}/{totalPages}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+            <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+                <FileText className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="v2-section-title">审计结果</h2>
+                <p className="v2-muted-line mt-1">
+                  支持展开请求/响应载荷，快速定位执行异常和审批链路问题。
+                </p>
+              </div>
+            </div>
+            <div>
+              {loading && items.length === 0 ? (
+                <div className="text-sm text-muted-foreground">加载中...</div>
+              ) : items.length === 0 ? (
+                <div className="text-sm text-muted-foreground">没有匹配的审计日志。</div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="v2-table-wrap overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>时间</TableHead>
+                          <TableHead>Skill</TableHead>
+                          <TableHead>Tool</TableHead>
+                          <TableHead>审批</TableHead>
+                          <TableHead>耗时</TableHead>
+                          <TableHead>上下文</TableHead>
+                          <TableHead>结果</TableHead>
+                          <TableHead className="text-right">详情</TableHead>
                         </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {items.map((item) => {
-                if (!expandedIds.has(item.id)) return null
-                return (
-                  <div key={`detail-${item.id}`} className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs space-y-3">
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <div>
-                        <div className="mb-1 font-medium">Request Payload</div>
-                        <pre className="max-h-64 overflow-auto rounded border border-border/70 bg-background p-2">
-                          {normalizePayload(item.requestPayloadJson)}
-                        </pre>
-                      </div>
-                      <div>
-                        <div className="mb-1 font-medium">Response Payload</div>
-                        <pre className="max-h-64 overflow-auto rounded border border-border/70 bg-background p-2">
-                          {normalizePayload(item.responsePayloadJson)}
-                        </pre>
-                      </div>
-                    </div>
-                    {item.error ? (
-                      <div>
-                        <div className="mb-1 font-medium text-destructive">Error</div>
-                        <pre className="max-h-40 overflow-auto rounded border border-destructive/30 bg-destructive/10 p-2 text-destructive">
-                          {item.error}
-                        </pre>
-                      </div>
-                    ) : null}
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((item) => {
+                          const expanded = expandedIds.has(item.id)
+                          const resultText = item.error ? 'error' : 'ok'
+                          return (
+                            <TableRow key={item.id}>
+                              <TableCell className="text-xs">{formatDateTime(item.createdAt)}</TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <div className="text-sm">{item.skill?.slug || item.skillId}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {item.version?.version || item.versionId || '-'}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">{item.toolName}</TableCell>
+                              <TableCell>
+                                <Badge variant={STATUS_BADGE_VARIANT[item.approvalStatus || ''] || 'outline'}>
+                                  {item.approvalStatus || '-'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {typeof item.durationMs === 'number' ? `${item.durationMs}ms` : '-'}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                <div>session: {item.sessionId ?? '-'}</div>
+                                <div>battle: {item.battleRunId ?? '-'}</div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={item.error ? 'destructive' : 'secondary'}>{resultText}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button size="sm" variant="outline" onClick={() => toggleExpand(item.id)}>
+                                  {expanded ? '收起' : '展开'}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
                   </div>
-                )
-              })}
 
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page <= 1 || loading}
-                  onClick={() => fetchAudits(Math.max(1, page - 1))}
-                >
-                  上一页
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!hasMore || loading}
-                  onClick={() => fetchAudits(page + 1)}
-                >
-                  下一页
-                </Button>
-              </div>
+                  {items.map((item) => {
+                    if (!expandedIds.has(item.id)) return null
+                    return (
+                      <div key={`detail-${item.id}`} className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs space-y-3">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div>
+                            <div className="mb-1 font-medium">Request Payload</div>
+                            <pre className="max-h-64 overflow-auto rounded border border-border/70 bg-background p-2">
+                              {normalizePayload(item.requestPayloadJson)}
+                            </pre>
+                          </div>
+                          <div>
+                            <div className="mb-1 font-medium">Response Payload</div>
+                            <pre className="max-h-64 overflow-auto rounded border border-border/70 bg-background p-2">
+                              {normalizePayload(item.responsePayloadJson)}
+                            </pre>
+                          </div>
+                        </div>
+                        {item.error ? (
+                          <div>
+                            <div className="mb-1 font-medium text-destructive">Error</div>
+                            <pre className="max-h-40 overflow-auto rounded border border-destructive/30 bg-destructive/10 p-2 text-destructive">
+                              {item.error}
+                            </pre>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={page <= 1 || loading}
+                      onClick={() => fetchAudits(Math.max(1, page - 1))}
+                    >
+                      上一页
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!hasMore || loading}
+                      onClick={() => fetchAudits(page + 1)}
+                    >
+                      下一页
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </section>
+          </section>
+        </>
+      )}
+
+      {activeTab === 'task-trace' && <TaskTraceConsole />}
+
+      {activeTab === 'system-logs' && <SystemLogsPage />}
     </div>
   )
 }
