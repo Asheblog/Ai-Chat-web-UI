@@ -627,6 +627,7 @@ export const useWelcomeScreenViewModel = () => {
     },
     hero: {
       quotaExhausted,
+      brandText,
     },
     form: {
       query,

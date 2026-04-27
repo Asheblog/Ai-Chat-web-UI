@@ -40,6 +40,7 @@ const createMockViewModel = () => ({
   },
   hero: {
     quotaExhausted: false,
+    brandText: 'AIChat',
   },
   form: {
     query: '',

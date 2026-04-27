@@ -325,7 +325,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="收起侧边栏"
-            className="group/sidebar-toggle hidden h-10 w-10 rounded-[10px] border border-slate-200/85 bg-white/90 text-slate-500 shadow-[0_8px_18px_rgba(37,99,235,0.08)] hover:border-blue-200 hover:bg-blue-50 hover:text-primary lg:inline-flex"
+            className="group/sidebar-toggle hidden h-10 w-10 rounded-[10px] bg-white/90 text-slate-500 hover:bg-blue-50 hover:text-primary lg:inline-flex"
             onClick={() => setSidebarCollapsed(true)}
           >
             <SidebarCollapseIcon className="h-5 w-5" />
