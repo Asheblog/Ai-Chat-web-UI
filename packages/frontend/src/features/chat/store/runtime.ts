@@ -355,18 +355,23 @@ export const createChatStoreRuntime = (
     const serverContentPayload = message.content || ''
     const reasoningPayload = message.reasoning ?? message.streamReasoning ?? ''
     const hasReasoningPayload = typeof reasoningPayload === 'string' && reasoningPayload.length > 0
+    let resolvedContent = serverContentPayload
+    let resolvedReasoning = reasoningPayload
     set((state) => {
       const serverMeta = createMeta(message)
       const key = messageKey(message.id)
       const prevBody = ensureBody(state.messageBodies[key], message.id, serverMeta.stableKey)
 
-      // 智能内容合并：如果当前内容比服务器内容更新（更长），保留当前内容
-      // 这处理了持久化延迟导致的内容回退问题（刷新页面后轮询获取的数据库内容可能比 localStorage 快照旧）
+      // 智能内容合并：如果本地内容比服务器内容更新（本地更长且服务器内容是前缀），保留本地内容
+      // 同时防止服务器返回空内容时覆盖本地已有内容（刷新页面后轮询获取的数据库内容可能因持久化延迟而为空）
+      const serverContentEmpty = serverContentPayload.length === 0
+      const localContentLonger =
+        prevBody.content.length > serverContentPayload.length &&
+        prevBody.content.startsWith(serverContentPayload)
       const shouldPreserveLocalContent =
         message.streamStatus === 'streaming' &&
-        prevBody.content.length > serverContentPayload.length &&
-        serverContentPayload.length > 0 &&
-        prevBody.content.startsWith(serverContentPayload)
+        prevBody.content.length > 0 &&
+        (serverContentEmpty || localContentLonger)
 
       const contentPayload = shouldPreserveLocalContent ? prevBody.content : serverContentPayload
       const contentChanged = prevBody.content !== contentPayload
@@ -376,15 +381,21 @@ export const createChatStoreRuntime = (
           ? Math.max(0, Math.min(prevBody.reasoningPlayedLength, prevReasoningText.length))
           : prevReasoningText.length
 
-      // 智能推理内容合并：如果当前推理内容比服务器内容更新（更长），保留当前内容
-      // 这处理了持久化延迟导致的推理内容回退问题（刷新页面后轮询获取的数据库内容可能比 localStorage 快照旧）
+      // 智能推理内容合并：防止服务器返回空推理时覆盖本地已有推理内容
+      const reasoningEmpty = reasoningPayload.length === 0
+      const localReasoningLonger =
+        prevReasoningText.length > reasoningPayload.length &&
+        prevReasoningText.startsWith(reasoningPayload)
       const shouldPreserveLocalReasoning =
         message.streamStatus === 'streaming' &&
-        prevReasoningText.length > reasoningPayload.length &&
-        reasoningPayload.length > 0 &&
-        prevReasoningText.startsWith(reasoningPayload)
+        prevReasoningText.length > 0 &&
+        (reasoningEmpty || localReasoningLonger)
 
       const finalReasoningPayload = shouldPreserveLocalReasoning ? prevReasoningText : reasoningPayload
+      // 捕获实际合并后的内容，供 set() 外部 persistCompletionSnapshot 使用
+      // 避免使用可能为空或更短的 serverContentPayload / reasoningPayload
+      resolvedContent = contentPayload
+      resolvedReasoning = hasReasoningPayload ? finalReasoningPayload : prevReasoningText
       const reasoningChanged = hasReasoningPayload && prevReasoningText !== finalReasoningPayload
       const nextPlayedLength = hasReasoningPayload ? finalReasoningPayload.length : prevPlayedLength
       const playedChanged = nextPlayedLength !== prevPlayedLength
@@ -557,18 +568,20 @@ export const createChatStoreRuntime = (
       return partial
     })
     if (message.streamStatus === 'streaming') {
+      const actualContent = resolvedContent || serverContentPayload
+      const actualReasoning = resolvedReasoning || reasoningPayload
       const shouldPersist =
-        serverContentPayload.length > 0 ||
-        reasoningPayload.length > 0 ||
+        actualContent.length > 0 ||
+        actualReasoning.length > 0 ||
         normalizedToolEvents.length > 0
       if (shouldPersist) {
         persistCompletionSnapshot({
           sessionId: message.sessionId,
           messageId: typeof message.id === 'number' ? Number(message.id) : null,
           clientMessageId: message.clientMessageId ?? null,
-          content: serverContentPayload,
-          reasoning: reasoningPayload,
-          reasoningPlayedLength: reasoningPayload.length,
+          content: actualContent,
+          reasoning: actualReasoning,
+          reasoningPlayedLength: actualReasoning.length,
           toolEvents: normalizedToolEvents.length > 0 ? normalizedToolEvents : undefined,
           reasoningStatus: message.reasoningStatus,
           streamStatus: message.streamStatus,
