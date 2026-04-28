@@ -212,21 +212,21 @@
   }
 
   .v2-status-success {
-    border-color: rgba(16, 185, 129, 0.25);
-    background: rgba(16, 185, 129, 0.11);
-    color: #059669;
+    border-color: hsl(var(--success) / 0.25);
+    background: hsl(var(--success) / 0.11);
+    color: hsl(var(--success));
   }
 
   .v2-status-warning {
-    border-color: rgba(245, 158, 11, 0.26);
-    background: rgba(245, 158, 11, 0.11);
-    color: #d97706;
+    border-color: hsl(var(--warning) / 0.26);
+    background: hsl(var(--warning) / 0.11);
+    color: hsl(var(--warning));
   }
 
   .v2-status-danger {
-    border-color: rgba(239, 68, 68, 0.28);
-    background: rgba(239, 68, 68, 0.1);
-    color: #dc2626;
+    border-color: hsl(var(--destructive) / 0.28);
+    background: hsl(var(--destructive) / 0.1);
+    color: hsl(var(--destructive));
   }
 
   .v2-table-wrap {
@@ -432,18 +432,18 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .reasoning-status-icon.idle {
-  background: rgba(147, 197, 253, 0.25);
-  color: #2563eb;
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
 }
 
 .reasoning-status-icon.streaming {
-  background: rgba(250, 204, 21, 0.25);
-  color: #ca8a04;
+  background: hsl(var(--warning) / 0.15);
+  color: hsl(var(--warning));
 }
 
 .reasoning-status-icon.done {
-  background: rgba(134, 239, 172, 0.2);
-  color: #15803d;
+  background: hsl(var(--success) / 0.15);
+  color: hsl(var(--success));
 }
 
 .reasoning-status-icon.none {
@@ -569,21 +569,21 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .reasoning-activity-item__status--success {
-  color: #059669;
-  border-color: rgba(5, 150, 105, 0.28);
-  background: rgba(5, 150, 105, 0.08);
+  color: hsl(var(--success));
+  border-color: hsl(var(--success) / 0.28);
+  background: hsl(var(--success) / 0.08);
 }
 
 .reasoning-activity-item__status--running {
-  color: #d97706;
-  border-color: rgba(217, 119, 6, 0.28);
-  background: rgba(217, 119, 6, 0.08);
+  color: hsl(var(--warning));
+  border-color: hsl(var(--warning) / 0.28);
+  background: hsl(var(--warning) / 0.08);
 }
 
 .reasoning-activity-item__status--error {
-  color: #dc2626;
-  border-color: rgba(220, 38, 38, 0.28);
-  background: rgba(220, 38, 38, 0.08);
+  color: hsl(var(--destructive));
+  border-color: hsl(var(--destructive) / 0.28);
+  background: hsl(var(--destructive) / 0.08);
 }
 
 .reasoning-activity-item__domains {

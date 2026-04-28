@@ -117,23 +117,23 @@ export function CollapsibleEditorSection({
   children: ReactNode
 }) {
   return (
-    <section className="overflow-hidden rounded-[8px] border border-slate-200 bg-white">
+    <section className="overflow-hidden rounded-[8px] border border-border bg-card">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-blue-50/55"
+        className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/55"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-blue-50 text-primary">{icon}</span>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">{icon}</span>
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-slate-950">{title}</span>
-            <span className="mt-0.5 block truncate text-xs text-slate-500">{summary}</span>
+            <span className="block text-sm font-semibold text-foreground">{title}</span>
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground">{summary}</span>
           </span>
         </span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-500 transition-transform", open && "rotate-180")} />
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
-      {open ? <div className="border-t border-slate-200 p-4">{children}</div> : null}
+      {open ? <div className="border-t border-border p-4">{children}</div> : null}
     </section>
   )
 }

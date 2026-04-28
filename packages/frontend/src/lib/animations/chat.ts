@@ -37,12 +37,12 @@ export const messageTransition: Transition = {
 export const inputFocusVariants: Variants = {
   unfocused: {
     scale: 1,
-    boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    boxShadow: '0 1px 2px 0 hsl(var(--background) / 0.45)',
   },
   focused: {
     scale: 1.01,
     boxShadow:
-      '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+      '0 10px 15px -3px hsl(var(--background) / 0.45), 0 4px 6px -4px hsl(var(--background) / 0.45)',
   },
 }
 

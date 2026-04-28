@@ -345,7 +345,7 @@ export function ResultStep({
 
             {/* Share Link */}
             {shareLink && (
-                <div className="rounded-[8px] border border-slate-200 bg-white/80 px-4 py-3 text-sm">
+                <div className="rounded-[8px] border border-border bg-card/80 px-4 py-3 text-sm">
                     分享链接：<a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
                         {shareLink}</a>
                 </div>
@@ -476,7 +476,7 @@ export function ResultStep({
                                     {group.attempts.map((attempt) => (
                                         <div
                                             key={`${group.key}-${attempt.attemptIndex}`}
-                                            className="flex cursor-pointer items-center justify-between gap-4 rounded-[8px] bg-white/70 px-4 py-2 transition-colors hover:bg-blue-50"
+                                            className="flex cursor-pointer items-center justify-between gap-4 rounded-[8px] bg-card/70 px-4 py-2 transition-colors hover:bg-accent"
                                             onClick={() => onSelectResult(attempt)}
                                         >
                                             <div className="flex items-center gap-3">

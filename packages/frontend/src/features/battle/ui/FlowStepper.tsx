@@ -65,10 +65,10 @@ export function FlowStepper({ currentStep, onStepClick, isRunning = false }: Flo
                                     onClick={() => handleStepClick(step.key)}
                                     disabled={!isClickable}
                                     className={cn(
-                                        'group relative flex h-12 w-full items-center justify-center gap-2 border-r border-slate-200 px-2 text-sm transition last:border-r-0',
-                                        status === 'completed' && 'bg-white text-slate-700',
-                                        status === 'current' && 'bg-blue-50 text-primary',
-                                        status === 'upcoming' && 'bg-white/70 text-slate-400',
+                                        'group relative flex h-12 w-full items-center justify-center gap-2 border-r border-border px-2 text-sm transition last:border-r-0',
+                                        status === 'completed' && 'bg-card text-foreground',
+                                        status === 'current' && 'bg-accent text-primary',
+                                        status === 'upcoming' && 'bg-card/70 text-muted-foreground',
                                         isClickable && 'cursor-pointer',
                                         !isClickable && 'cursor-default'
                                     )}
@@ -77,7 +77,7 @@ export function FlowStepper({ currentStep, onStepClick, isRunning = false }: Flo
                                         'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
                                         status === 'completed' && 'bg-primary text-primary-foreground',
                                         status === 'current' && 'bg-primary text-primary-foreground',
-                                        status === 'upcoming' && 'bg-slate-200 text-slate-500'
+                                        status === 'upcoming' && 'bg-muted text-muted-foreground'
                                     )}>
                                         {status === 'completed' ? (
                                             <Check className="h-4 w-4" />

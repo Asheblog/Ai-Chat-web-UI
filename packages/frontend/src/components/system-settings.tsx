@@ -337,8 +337,8 @@ export function SystemSettings() {
     <div id="settings-system-workspace" className="min-w-0 space-y-5">
       <section className="space-y-5">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-950">配置中心</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">配置中心</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
             集中管理模型、连接、路由、令牌和系统运行策略。
           </p>
         </div>

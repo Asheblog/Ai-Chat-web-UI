@@ -17,10 +17,10 @@
 /* Node pulse animation for running state */
 @keyframes node-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.5);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
   }
 }
 
@@ -96,8 +96,8 @@
 }
 
 .battle-node-success {
-  border-color: hsl(142.1, 76.2%, 36.3%);
-  background-color: hsl(142.1, 76.2%, 36.3% / 0.1);
+  border-color: hsl(var(--success));
+  background-color: hsl(var(--success) / 0.1);
 }
 
 .battle-node-error {
@@ -106,8 +106,8 @@
 }
 
 .battle-node-judging {
-  border-color: hsl(47.9, 95.8%, 53.1%);
-  background-color: hsl(47.9, 95.8%, 53.1% / 0.1);
+  border-color: hsl(var(--warning));
+  background-color: hsl(var(--warning) / 0.1);
 }
 
 /* Progress bar animation */
@@ -145,7 +145,7 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.3),
+    hsl(var(--foreground) / 0.22),
     transparent
   );
   animation: medal-shine 2s ease-in-out infinite;
@@ -211,15 +211,15 @@
 
 /* Rank badge colors */
 .battle-rank-1 {
-  background: linear-gradient(135deg, hsl(47.9, 95.8%, 53.1% / 0.2), hsl(47.9, 95.8%, 53.1% / 0.05));
+  background: linear-gradient(135deg, hsl(var(--warning) / 0.2), hsl(var(--warning) / 0.05));
 }
 
 .battle-rank-2 {
-  background: linear-gradient(135deg, hsl(0, 0%, 70% / 0.2), hsl(0, 0%, 70% / 0.05));
+  background: linear-gradient(135deg, hsl(var(--muted-foreground) / 0.2), hsl(var(--muted-foreground) / 0.05));
 }
 
 .battle-rank-3 {
-  background: linear-gradient(135deg, hsl(30, 80%, 50% / 0.2), hsl(30, 80%, 50% / 0.05));
+  background: linear-gradient(135deg, hsl(var(--warning) / 0.2), hsl(var(--warning) / 0.05));
 }
 
 /* Subtle separator */

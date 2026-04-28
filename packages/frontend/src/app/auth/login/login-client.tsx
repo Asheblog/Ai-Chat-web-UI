@@ -133,7 +133,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="username" className="text-sm font-medium text-slate-800">用户名</Label>
+          <Label htmlFor="username" className="text-sm font-medium text-foreground">用户名</Label>
           <div className="relative">
             <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
             <Input
@@ -144,12 +144,12 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
               onChange={(e) => setUsername(e.target.value)}
               required
               disabled={isLoading}
-              className="h-12 rounded-[8px] bg-white pl-12"
+              className="h-12 rounded-[8px] bg-card pl-12"
             />
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-sm font-medium text-slate-800">密码</Label>
+          <Label htmlFor="password" className="text-sm font-medium text-foreground">密码</Label>
           <div className="relative">
             <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
             <Input
@@ -160,11 +160,11 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={isLoading}
-              className="h-12 rounded-[8px] bg-white pl-12 pr-12"
+              className="h-12 rounded-[8px] bg-card pl-12 pr-12"
             />
             <button
               type="button"
-              className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
               onClick={() => setPasswordVisible((value) => !value)}
               aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
               disabled={isLoading}

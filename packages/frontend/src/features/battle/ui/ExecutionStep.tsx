@@ -188,21 +188,21 @@ export function ExecutionStep({
 
             {/* Real-time Statistics */}
             <div className="v2-panel-soft grid gap-3 px-4 py-3 sm:grid-cols-4">
-                <div className="flex items-center gap-3 border-r border-slate-200 last:border-r-0">
+                <div className="flex items-center gap-3 border-r border-border last:border-r-0">
                     <Loader2 className="h-5 w-5 text-blue-500" />
-                    <div><p className="text-xs text-slate-500">进行中</p><p className="text-lg font-semibold text-slate-900">{stats.running}</p></div>
+                    <div><p className="text-xs text-muted-foreground">进行中</p><p className="text-lg font-semibold text-foreground">{stats.running}</p></div>
                 </div>
-                <div className="flex items-center gap-3 border-r border-slate-200 last:border-r-0">
+                <div className="flex items-center gap-3 border-r border-border last:border-r-0">
                     <CheckCircle className="h-5 w-5 text-emerald-500" />
-                    <div><p className="text-xs text-slate-500">通过</p><p className="text-lg font-semibold text-slate-900">{stats.success}</p></div>
+                    <div><p className="text-xs text-muted-foreground">通过</p><p className="text-lg font-semibold text-foreground">{stats.success}</p></div>
                 </div>
-                <div className="flex items-center gap-3 border-r border-slate-200 last:border-r-0">
+                <div className="flex items-center gap-3 border-r border-border last:border-r-0">
                     <XCircle className="h-5 w-5 text-destructive" />
-                    <div><p className="text-xs text-slate-500">失败</p><p className="text-lg font-semibold text-slate-900">{stats.failed}</p></div>
+                    <div><p className="text-xs text-muted-foreground">失败</p><p className="text-lg font-semibold text-foreground">{stats.failed}</p></div>
                 </div>
                 <div className="flex items-center gap-3">
                     <Clock className="h-5 w-5 text-amber-500" />
-                    <div><p className="text-xs text-slate-500">平均耗时</p><p className="text-lg font-semibold text-slate-900">{stats.avgDuration > 0 ? `${(stats.avgDuration / 1000).toFixed(1)}s` : '--'}</p></div>
+                    <div><p className="text-xs text-muted-foreground">平均耗时</p><p className="text-lg font-semibold text-foreground">{stats.avgDuration > 0 ? `${(stats.avgDuration / 1000).toFixed(1)}s` : '--'}</p></div>
                 </div>
             </div>
 

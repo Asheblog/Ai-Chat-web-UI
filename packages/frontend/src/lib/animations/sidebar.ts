@@ -46,7 +46,7 @@ export const sessionItemVariants: Variants = {
   },
   hover: {
     x: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: 'hsl(var(--surface-hover))',
   },
   exit: {
     opacity: 0,

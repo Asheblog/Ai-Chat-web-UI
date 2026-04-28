@@ -76,12 +76,12 @@ function SettingsShellLayout({
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col md:flex-row">
         <aside
           className={cn(
-            "flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-b border-slate-200/80 bg-white/70 px-3 py-4 md:w-[200px] md:border-b-0 md:border-r md:px-3 md:py-6",
+            "flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-b border-border bg-surface/70 px-3 py-4 md:w-[200px] md:border-b-0 md:border-r md:px-3 md:py-6",
             asideClassName
           )}
         >
           {showNavTitle ? (
-            <div className="mb-6 px-2 text-xl font-semibold tracking-tight text-slate-950">
+            <div className="mb-6 px-2 text-xl font-semibold tracking-tight text-foreground">
               {title}
             </div>
           ) : null}
@@ -113,8 +113,8 @@ function SettingsShellFlatImpl({
           className={cn(
             "flex w-full items-center gap-3 rounded-[8px] px-3 py-3 text-left text-sm transition-all",
             active === s.key
-              ? "bg-blue-50 text-primary font-medium shadow-sm"
-              : "text-slate-600 hover:bg-blue-50 hover:text-slate-900"
+              ? "bg-accent text-foreground font-medium shadow-sm"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
         >
           {s.icon && <span className="shrink-0 w-[1.125rem] h-[1.125rem]">{s.icon}</span>}
@@ -176,8 +176,8 @@ function SettingsShellNestedImpl({
               className={cn(
                 "flex w-full items-center gap-2 rounded-[8px] px-3 py-3 text-left text-sm font-medium transition-all",
                 isActiveMain
-                  ? "bg-blue-50 text-slate-900"
-                  : "text-slate-600 hover:bg-blue-50 hover:text-slate-900"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
               {isOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
@@ -199,7 +199,7 @@ function SettingsShellNestedImpl({
                         "flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm transition-all",
                         isActive
                           ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                          : "text-slate-600 hover:bg-blue-50 hover:text-slate-900"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground"
                       )}
                     >
                       {s.icon && <span className="shrink-0 w-[1.125rem] h-[1.125rem]">{s.icon}</span>}

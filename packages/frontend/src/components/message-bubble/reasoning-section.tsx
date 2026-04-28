@@ -160,10 +160,10 @@ export function ReasoningSection({
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-[8px] border border-blue-200 bg-blue-50/70" data-message-panel="interactive">
+    <div className="mb-3 overflow-hidden rounded-[8px] border border-primary/20 bg-primary/5" data-message-panel="interactive">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-blue-100/45"
+        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-primary/10"
         onClick={() => {
           dispatch({ type: 'toggle' })
           const next = !expanded

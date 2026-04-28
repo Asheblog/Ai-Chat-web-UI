@@ -113,7 +113,7 @@ export function AvatarUploadField({
             title={uploading ? '头像上传中' : uploadText}
             disabled={uploading || disabled}
             onClick={() => inputRef.current?.click()}
-            className="absolute bottom-1 right-1 h-8 w-8 rounded-full border-white bg-white text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.16)] hover:bg-blue-50 hover:text-primary"
+            className="absolute bottom-1 right-1 h-8 w-8 rounded-full border-background bg-card text-foreground shadow-[0_8px_18px_hsl(var(--background)/0.55)] hover:bg-accent hover:text-primary"
           >
             <Camera className="h-4 w-4" />
           </Button>

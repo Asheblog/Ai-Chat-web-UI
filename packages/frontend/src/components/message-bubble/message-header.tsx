@@ -151,7 +151,7 @@ export function MessageHeader({
   }
 
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 text-xs text-slate-500">
+    <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border pb-2 text-xs text-muted-foreground">
       {isStreaming ? (
         <span className="inline-flex items-center gap-1.5 text-blue-600">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -163,14 +163,14 @@ export function MessageHeader({
           已完成
         </span>
       )}
-      <span className="h-3 w-px bg-slate-200" />
+      <span className="h-3 w-px bg-border" />
       <span className="inline-flex items-center gap-1.5">
         <Clock3 className="h-3.5 w-3.5" />
         {formatDurationMs(metrics?.durationMs) ?? timestamp}
       </span>
       {metrics?.speedText != null && (
         <>
-          <span className="h-3 w-px bg-slate-200" />
+          <span className="h-3 w-px bg-border" />
           <span>{metrics.speedText} tokens/s</span>
         </>
       )}

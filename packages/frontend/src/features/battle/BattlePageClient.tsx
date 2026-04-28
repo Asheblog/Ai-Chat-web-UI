@@ -433,7 +433,7 @@ export function BattlePageClient() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Trophy className="h-6 w-6 text-yellow-500" />
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">新建对战</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">新建对战</h1>
             </div>
             <p className="text-sm text-muted-foreground">
               同题多模型对战，使用裁判模型评估一致性与准确率，并支持 pass@k 统计

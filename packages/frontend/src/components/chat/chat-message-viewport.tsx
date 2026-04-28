@@ -182,7 +182,7 @@ export function ChatMessageViewport({
                 type="button"
                 size="sm"
                 variant="ghost"
-              className="rounded-[8px] border border-slate-200 bg-white/80 hover:bg-blue-50"
+              className="rounded-[8px] border border-border bg-card/80 hover:bg-accent"
                 onClick={() => enterShareSelectionMode(sessionId)}
               >
                 <Share2 className="mr-2 h-4 w-4" />

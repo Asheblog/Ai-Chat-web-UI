@@ -164,10 +164,10 @@ function DetailBlock({ title, children, mono = false }: DetailBlockProps) {
   if (!children) return null
   return (
     <section className="space-y-2">
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>
       <pre
         className={cn(
-          'max-h-[32vh] overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-700 [overflow-wrap:anywhere]',
+          'max-h-[32vh] overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-border bg-muted/40 px-3 py-2.5 text-xs leading-5 text-foreground [overflow-wrap:anywhere]',
           mono && 'font-mono text-[11px]',
         )}
       >
@@ -225,15 +225,15 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
       <DialogTrigger asChild>
         <button
           type="button"
-          className="group flex w-full items-center gap-3 rounded-[8px] border border-slate-200 bg-white px-3 py-2.5 text-left transition-colors duration-200 hover:border-primary/30 hover:bg-blue-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2"
+          className="group flex w-full items-center gap-3 rounded-[8px] border border-border bg-card px-3 py-2.5 text-left transition-colors duration-200 hover:border-primary/30 hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2"
           aria-label={`查看${toolLabel}工具调用详情`}
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-slate-100 text-slate-500 transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
             <StatusIcon className={`h-4 w-4 ${event.status === 'running' ? 'animate-spin' : ''}`} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold text-slate-800">{toolLabel}</span>
+              <span className="truncate text-sm font-semibold text-foreground">{toolLabel}</span>
               <span className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] ${meta.className}`}>
                 {meta.label}
               </span>
@@ -241,11 +241,11 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
                 {formatClock(event.updatedAt ?? event.createdAt)}
               </span>
             </span>
-            <span className="mt-1 block truncate text-xs text-slate-500">{primaryText}</span>
+            <span className="mt-1 block truncate text-xs text-muted-foreground">{primaryText}</span>
             {visibleContextTags.length > 0 && (
               <span className="mt-1 hidden min-w-0 flex-wrap gap-1.5 sm:flex">
                 {visibleContextTags.map((tag) => (
-                  <span key={tag} className="max-w-[220px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
+                  <span key={tag} className="max-w-[220px] truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                     {tag}
                   </span>
                 ))}
@@ -253,18 +253,18 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
             )}
           </span>
           {leadImageUrl && (
-            <span className="hidden h-10 w-14 shrink-0 overflow-hidden rounded-[8px] border border-slate-200 bg-slate-50 sm:block">
+            <span className="hidden h-10 w-14 shrink-0 overflow-hidden rounded-[8px] border border-border bg-muted/40 sm:block">
               <img src={leadImageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
             </span>
           )}
-          <span className="flex shrink-0 items-center gap-1 text-xs text-slate-400 transition-colors group-hover:text-primary">
+          <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-primary">
             <span className="hidden sm:inline">详情</span>
             <ChevronRight className="h-4 w-4" />
           </span>
         </button>
       </DialogTrigger>
-      <DialogContent className="bottom-0 left-0 top-auto flex h-[88dvh] max-h-[88dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-b-none rounded-t-[14px] border-slate-200 bg-white p-0 shadow-[0_-20px_70px_rgba(15,23,42,0.18)] sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[86vh] sm:w-[92vw] sm:max-w-[900px] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-[10px] sm:shadow-[0_28px_80px_rgba(15,23,42,0.18)]">
-        <DialogHeader className="border-b border-slate-200 px-4 py-4 pr-12 text-left sm:px-5">
+      <DialogContent className="bottom-0 left-0 top-auto flex h-[88dvh] max-h-[88dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-b-none rounded-t-[14px] border-border bg-card p-0 shadow-[0_-20px_70px_hsl(var(--background)/0.55)] sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[86vh] sm:w-[92vw] sm:max-w-[900px] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-[10px] sm:shadow-[0_28px_80px_hsl(var(--background)/0.55)]">
+        <DialogHeader className="border-b border-border px-4 py-4 pr-12 text-left sm:px-5">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
               <StatusIcon className={`h-4 w-4 ${event.status === 'running' ? 'animate-spin' : ''}`} />
@@ -274,29 +274,29 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
               {meta.label}
             </span>
           </DialogTitle>
-          <DialogDescription className="line-clamp-2 text-xs leading-5 text-slate-500">
+          <DialogDescription className="line-clamp-2 text-xs leading-5 text-muted-foreground">
             {detailDescription || '参数、诊断与结果'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          <div className="mb-4 grid gap-2 rounded-[8px] border border-slate-200 bg-slate-50/70 px-3 py-3 text-xs text-slate-500 sm:grid-cols-2">
+          <div className="mb-4 grid gap-2 rounded-[8px] border border-border bg-muted/30 px-3 py-3 text-xs text-muted-foreground sm:grid-cols-2">
             <div className="min-w-0">
-              <span className="text-slate-400">时间</span>
-              <p className="mt-1 truncate font-medium text-slate-700">{formatClock(event.updatedAt ?? event.createdAt) || '未知'}</p>
+              <span className="text-muted-foreground">时间</span>
+              <p className="mt-1 truncate font-medium text-foreground">{formatClock(event.updatedAt ?? event.createdAt) || '未知'}</p>
             </div>
             <div className="min-w-0">
-              <span className="text-slate-400">标识</span>
-              <p className="mt-1 truncate font-mono text-[11px] text-slate-700" title={detailIdText}>
+              <span className="text-muted-foreground">标识</span>
+              <p className="mt-1 truncate font-mono text-[11px] text-foreground" title={detailIdText}>
                 {detailIdText}
               </p>
             </div>
             {contextTags.length > 0 && (
               <div className="min-w-0 sm:col-span-2">
-                <span className="text-slate-400">上下文</span>
+                <span className="text-muted-foreground">上下文</span>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {contextTags.map((tag) => (
-                    <span key={tag} className="max-w-full truncate rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-600">
+                    <span key={tag} className="max-w-full truncate rounded bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
                       {tag}
                     </span>
                   ))}
@@ -321,15 +321,15 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
             )}
             {leadImageUrl && (
               <section className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">来源预览</h4>
-                <div className="rounded-[8px] border border-slate-200 bg-slate-50 p-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">来源预览</h4>
+                <div className="rounded-[8px] border border-border bg-muted/40 p-2">
                   <img
                     src={leadImageUrl}
                     alt={eventTitle || '工具调用来源图片'}
                     className="max-h-56 w-full rounded-[6px] object-contain"
                     loading="lazy"
                   />
-                  <p className="mt-2 inline-flex items-center gap-1 text-xs text-slate-500">
+                  <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <ImageIcon className="h-3.5 w-3.5" />
                     主图{imageCount > 1 ? ` · 共 ${imageCount} 张` : ''}
                   </p>
@@ -338,12 +338,12 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
             )}
             {eventUrl && (
               <section className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">来源链接</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">来源链接</h4>
                 <a
                   href={eventUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex max-w-full items-center gap-1 rounded-[8px] border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-blue-50"
+                  className="inline-flex max-w-full items-center gap-1 rounded-[8px] border border-border bg-card px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-accent"
                   title={eventUrl}
                 >
                   <span className="truncate">{eventTitle}</span>

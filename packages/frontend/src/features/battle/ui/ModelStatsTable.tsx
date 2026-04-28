@@ -149,8 +149,8 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
         <div className="min-w-[800px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-slate-50">
-                <th className="text-left py-3 px-4 font-medium sticky left-0 bg-slate-50 z-10 min-w-[140px]">
+              <tr className="border-b bg-muted">
+                <th className="text-left py-3 px-4 font-medium sticky left-0 bg-muted z-10 min-w-[140px]">
                   模型
                 </th>
                 <th className="text-center py-3 px-3 font-medium min-w-[80px]">Pass@k</th>
@@ -176,9 +176,9 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
             </thead>
             <tbody>
               {modelStats.map((model, index) => (
-                <tr key={model.key} className="border-b transition-colors hover:bg-blue-50/55">
+                <tr key={model.key} className="border-b transition-colors hover:bg-accent/60">
                   {/* 模型名称 */}
-                  <td className="py-3 px-4 sticky left-0 bg-white z-10">
+                  <td className="py-3 px-4 sticky left-0 bg-card z-10">
                     <div className="flex items-center gap-2">
                       {getRankIcon(index + 1)}
                       <span className="font-medium break-words">{model.label}</span>

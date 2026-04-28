@@ -107,10 +107,10 @@ export function SystemConnectionEditor({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-[8px] border border-blue-100 bg-white px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-[8px] border border-accent bg-card px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-slate-950">
+            <span className="text-sm font-semibold text-foreground">
               {detailIntent === "create" ? "新增连接" : group ? deriveChannelName(group.provider, group.baseUrl) : "连接配置"}
             </span>
             <span className="v2-status">{detailIntent === "create" ? "新建模式" : "展开编辑"}</span>
@@ -126,7 +126,7 @@ export function SystemConnectionEditor({
         ) : null}
       </div>
 
-      <div className="grid gap-4 rounded-[8px] border border-slate-200 bg-white p-4 lg:grid-cols-2">
+      <div className="grid gap-4 rounded-[8px] border border-border bg-card p-4 lg:grid-cols-2">
         <Field label="Provider" htmlFor="connection-provider">
           <Select value={form.provider} onValueChange={onProviderChange}>
             <SelectTrigger id="connection-provider">
@@ -193,27 +193,27 @@ export function SystemConnectionEditor({
             {modelIds.length > 0 ? (
               <>
                 {modelIds.map((modelId) => (
-                  <span key={modelId} className="rounded-[8px] bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                  <span key={modelId} className="rounded-[8px] bg-muted px-2.5 py-1 text-xs text-muted-foreground">
                     {modelId}
                   </span>
                 ))}
                 {group && getModelCount(group) > modelIds.length ? (
-                  <span className="rounded-[8px] bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                  <span className="rounded-[8px] bg-muted px-2.5 py-1 text-xs text-muted-foreground">
                     +{getModelCount(group) - modelIds.length}
                   </span>
                 ) : null}
               </>
             ) : (
-              <span className="text-sm text-slate-500">自动枚举或未配置显式模型</span>
+              <span className="text-sm text-muted-foreground">自动枚举或未配置显式模型</span>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 rounded-[8px] border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs leading-5 text-slate-500">保存前可以先验证连接；验证结果会自动展开到下方区域。</p>
+      <div className="flex flex-col gap-2 rounded-[8px] border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs leading-5 text-muted-foreground">保存前可以先验证连接；验证结果会自动展开到下方区域。</p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button onClick={() => void onVerify()} variant="outline" disabled={submitting || verifying} className="justify-center bg-white">
+          <Button onClick={() => void onVerify()} variant="outline" disabled={submitting || verifying} className="justify-center">
             {verifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
             {verifying ? "验证中..." : "验证连接"}
           </Button>
