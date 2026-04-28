@@ -6,7 +6,7 @@ import { AlertDialog } from "@/components/ui/alert-dialog"
 import { DestructiveConfirmDialogContent } from "@/components/ui/destructive-confirm-dialog"
 import type { SystemConnectionGroup } from "@/services/system-connections"
 import {
-  SPECIAL_PROVIDER_DEEPSEEK,
+  SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
   useSystemConnections,
 } from "@/components/settings/system-connections/use-system-connections"
 import { SystemConnectionEditor } from "@/components/settings/system-connections/SystemConnectionEditor"
@@ -115,17 +115,12 @@ export function SystemConnectionsPage() {
 
   const handleProviderChange = (value: string) => {
     setForm((prev) => {
-      const isGoogle = value === "google_genai"
-      const isDeepseek = value === SPECIAL_PROVIDER_DEEPSEEK
-      const next = {
+      const forceBearer = value === "google_genai" || value === SPECIAL_PROVIDER_OPENAI_INTERLEAVE
+      return {
         ...prev,
         provider: value,
-        authType: isGoogle || isDeepseek ? "bearer" : prev.authType,
+        authType: forceBearer ? "bearer" : prev.authType,
       }
-      if (isDeepseek && (!prev.baseUrl || prev.provider !== SPECIAL_PROVIDER_DEEPSEEK)) {
-        next.baseUrl = "https://api.deepseek.com/v1"
-      }
-      return next
     })
   }
 

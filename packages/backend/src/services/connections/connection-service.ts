@@ -29,7 +29,7 @@ export class ConnectionServiceError extends Error {
   }
 }
 
-type VendorType = 'deepseek'
+type VendorType = 'deepseek' | 'openai_interleave'
 
 type TagItem = { name: string }
 

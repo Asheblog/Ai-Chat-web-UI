@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { deriveChannelName } from "@/lib/utils"
 import type { SystemConnectionGroup, VerifyConnectionResult } from "@/services/system-connections"
 import {
-  SPECIAL_PROVIDER_DEEPSEEK,
+  SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
   type ConnectionCapKey,
 } from "./constants"
 import { AdvancedFields, CollapsibleEditorSection } from "./SystemConnectionEditorParts"
@@ -138,7 +138,7 @@ export function SystemConnectionEditor({
               <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
               <SelectItem value="ollama">Ollama</SelectItem>
               <SelectItem value="google_genai">Google Generative AI</SelectItem>
-              <SelectItem value={SPECIAL_PROVIDER_DEEPSEEK}>DeepSeek（交错思考）</SelectItem>
+              <SelectItem value={SPECIAL_PROVIDER_OPENAI_INTERLEAVE}>OpenAI（交错思考兼容）</SelectItem>
             </SelectContent>
           </Select>
         </Field>
@@ -160,7 +160,7 @@ export function SystemConnectionEditor({
             onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value }))}
             placeholder={baseUrlPlaceholder(form.provider)}
           />
-          <HelperText provider={form.provider} specialProviderDeepseek={SPECIAL_PROVIDER_DEEPSEEK} />
+          <HelperText provider={form.provider} specialProviderOpenaiInterleave={SPECIAL_PROVIDER_OPENAI_INTERLEAVE} />
         </Field>
 
         <Field label="API Key" htmlFor="connection-api-key">

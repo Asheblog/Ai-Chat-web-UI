@@ -1,6 +1,6 @@
 import { deriveChannelName } from "@/lib/utils"
 import type { SystemConnectionGroup } from "@/services/system-connections"
-import { SPECIAL_VENDOR_DEEPSEEK } from "./constants"
+import { SPECIAL_VENDOR_DEEPSEEK, SPECIAL_VENDOR_OPENAI_INTERLEAVE } from "./constants"
 
 export type HealthState = "healthy" | "warning" | "error"
 export type DetailIntent = "view" | "create"
@@ -26,6 +26,7 @@ export const healthLabel: Record<HealthState, string> = {
 }
 
 export function providerLabel(group: Pick<SystemConnectionGroup, "provider" | "vendor">) {
+  if (group.vendor === SPECIAL_VENDOR_OPENAI_INTERLEAVE) return "OpenAI（交错思考）"
   if (group.vendor === SPECIAL_VENDOR_DEEPSEEK) return "DeepSeek"
   if (group.provider === "azure_openai") return "Azure"
   if (group.provider === "google_genai") return "Google"
@@ -54,7 +55,6 @@ export function getModelCount(group: SystemConnectionGroup) {
 }
 
 export function baseUrlPlaceholder(provider: string) {
-  if (provider === "deepseek_interleave") return "https://api.deepseek.com/v1"
   if (provider === "ollama") return "http://localhost:11434"
   if (provider === "google_genai") return "https://generativelanguage.googleapis.com/v1beta"
   return "https://api.openai.com/v1"

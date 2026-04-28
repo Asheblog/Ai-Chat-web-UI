@@ -1,4 +1,6 @@
-export const SPECIAL_PROVIDER_DEEPSEEK = "deepseek_interleave"
+export const SPECIAL_PROVIDER_OPENAI_INTERLEAVE = "openai_interleave"
+export const SPECIAL_VENDOR_OPENAI_INTERLEAVE = "openai_interleave"
+/** @deprecated 保留以兼容已有的 vendor=deepseek 连接 */
 export const SPECIAL_VENDOR_DEEPSEEK = "deepseek"
 
 export const CONNECTION_CAP_KEYS = ['vision', 'image_generation'] as const

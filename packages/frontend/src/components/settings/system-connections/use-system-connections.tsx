@@ -16,7 +16,7 @@ import {
 import {
   createEmptyConnectionCaps,
   parseConnectionCaps,
-  SPECIAL_PROVIDER_DEEPSEEK,
+  SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
   SPECIAL_VENDOR_DEEPSEEK,
   type ConnectionCapKey,
 } from "./constants"
@@ -30,7 +30,7 @@ import {
   type ConnectionKeyFormState,
 } from "./form-state"
 
-export { SPECIAL_PROVIDER_DEEPSEEK, SPECIAL_VENDOR_DEEPSEEK }
+export { SPECIAL_PROVIDER_OPENAI_INTERLEAVE, SPECIAL_VENDOR_DEEPSEEK }
 export type { ConnectionFormState, ConnectionKeyFormState } from "./form-state"
 
 export function useSystemConnections() {
@@ -122,7 +122,7 @@ export function useSystemConnections() {
       return false
     }
 
-    const payload = buildPayload(form, capabilities)
+    const payload = buildPayload(form, capabilities, editing?.vendor)
     setSubmitting(true)
     try {
       if (editing) {
@@ -159,7 +159,7 @@ export function useSystemConnections() {
       return false
     }
 
-    const payload = buildPayload(form, capabilities)
+    const payload = buildPayload(form, capabilities, editing?.vendor)
     setVerifying(true)
     try {
       const res = await verifySystemConnection(payload)

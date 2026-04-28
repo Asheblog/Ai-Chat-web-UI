@@ -3,7 +3,8 @@ import type {
   SystemConnectionPayload,
 } from "@/services/system-connections"
 import {
-  SPECIAL_PROVIDER_DEEPSEEK,
+  SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
+  SPECIAL_VENDOR_OPENAI_INTERLEAVE,
   SPECIAL_VENDOR_DEEPSEEK,
   type ConnectionCapKey,
 } from "./constants"
@@ -74,8 +75,15 @@ const buildModelIds = (raw: string) => {
     .filter(Boolean)
 }
 
-const mapProviderSelection = (value: string): Pick<SystemConnectionPayload, "provider" | "vendor"> => {
-  if (value === SPECIAL_PROVIDER_DEEPSEEK) {
+const mapProviderSelection = (
+  value: string,
+  editingVendor?: string | null,
+): Pick<SystemConnectionPayload, "provider" | "vendor"> => {
+  if (value === SPECIAL_PROVIDER_OPENAI_INTERLEAVE) {
+    return { provider: "openai", vendor: SPECIAL_VENDOR_OPENAI_INTERLEAVE }
+  }
+  // 旧 deepseek vendor 连接在表单中显示为普通 OpenAI，保存时保留 vendor 避免静默清除
+  if (value === "openai" && editingVendor === SPECIAL_VENDOR_DEEPSEEK) {
     return { provider: "openai", vendor: SPECIAL_VENDOR_DEEPSEEK }
   }
   return { provider: value, vendor: undefined }
@@ -84,8 +92,9 @@ const mapProviderSelection = (value: string): Pick<SystemConnectionPayload, "pro
 export const buildPayload = (
   form: ConnectionFormState,
   capabilities: Record<ConnectionCapKey, boolean>,
+  editingVendor?: string | null,
 ): SystemConnectionPayload => {
-  const { provider, vendor } = mapProviderSelection(form.provider)
+  const { provider, vendor } = mapProviderSelection(form.provider, editingVendor)
   return {
     provider,
     ...(vendor ? { vendor } : {}),
@@ -108,7 +117,9 @@ export const buildPayload = (
 
 export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFormState => {
   const providerSelection =
-    group.vendor === SPECIAL_VENDOR_DEEPSEEK ? SPECIAL_PROVIDER_DEEPSEEK : group.provider || "openai"
+    group.vendor === SPECIAL_VENDOR_OPENAI_INTERLEAVE
+      ? SPECIAL_PROVIDER_OPENAI_INTERLEAVE
+      : group.provider || "openai"
 
   return {
     provider: providerSelection,

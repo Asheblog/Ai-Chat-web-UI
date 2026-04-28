@@ -13,7 +13,7 @@ const capabilitySchema = z.object({
   image_generation: z.boolean().optional(),
 })
 
-const vendorEnum = z.enum(['deepseek'])
+const vendorEnum = z.enum(['deepseek', 'openai_interleave'])
 
 const apiKeySchema = z.object({
   id: z.number().int().positive().optional(),

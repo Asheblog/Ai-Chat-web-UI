@@ -22,7 +22,7 @@ export function Field({
   )
 }
 
-export function HelperText({ provider, specialProviderDeepseek }: { provider: string; specialProviderDeepseek: string }) {
+export function HelperText({ provider, specialProviderOpenaiInterleave }: { provider: string; specialProviderOpenaiInterleave: string }) {
   if (provider === "openai" || provider === "openai_responses") {
     return (
       <p className="text-xs leading-5 text-muted-foreground">
@@ -38,10 +38,12 @@ export function HelperText({ provider, specialProviderDeepseek }: { provider: st
       </p>
     )
   }
-  if (provider === specialProviderDeepseek) {
+  if (provider === specialProviderOpenaiInterleave) {
     return (
       <p className="text-xs leading-5 text-muted-foreground">
-        DeepSeek 推理模式建议直接指向官方 OpenAI 兼容入口。
+        适用于支持 Thinking Mode 的第三方 OpenAI 兼容 API。填写对应服务的 Base URL，例如
+        DeepSeek 填 <span className="font-mono">https://api.deepseek.com/v1</span>，
+        SiliconFlow 填 <span className="font-mono">https://api.siliconflow.cn/v1</span>。
       </p>
     )
   }
