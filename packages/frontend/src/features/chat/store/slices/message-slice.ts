@@ -206,6 +206,10 @@ export const createMessageSlice: ChatSliceCreator<
           const existingBodyEntry = bodyEntryByStableKey.get(stableKey)
           if (existingBodyEntry) {
             const prevBody = existingBodyEntry.body
+            if ((body.content == null || body.content.length === 0) && prevBody.content) {
+              body.content = prevBody.content
+              body.version = prevBody.version
+            }
             if ((body.reasoning == null || body.reasoning.length === 0) && prevBody.reasoning) {
               body.reasoning = prevBody.reasoning
               body.reasoningVersion = prevBody.reasoningVersion

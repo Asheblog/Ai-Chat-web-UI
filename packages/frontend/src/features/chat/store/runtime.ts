@@ -206,9 +206,25 @@ export const createChatStoreRuntime = (
         const prevBody = ensureBody(nextBodies[key], meta.id, meta.stableKey)
         const snapshotContent = snapshot.content || ''
         const snapshotReasoning = snapshot.reasoning || ''
-        const contentChanged = snapshotContent.length > 0 && snapshotContent !== prevBody.content
+        // 使用前缀比较避免快照覆盖服务器已持久化的更新内容：
+        // 只在服务器内容为空，或快照内容更长且服务器内容是快照前缀时才应用快照
+        // 修复刷新页面后正文不自动更新的问题：快照数据可能比服务器 DB 数据更旧
+        const serverContentEmpty = prevBody.content.length === 0
+        const snapshotExtendsServer =
+          snapshotContent.length > prevBody.content.length &&
+          snapshotContent.startsWith(prevBody.content)
+        const contentChanged =
+          snapshotContent.length > 0 &&
+          snapshotContent !== prevBody.content &&
+          (serverContentEmpty || snapshotExtendsServer)
+        const serverReasoningEmpty = (prevBody.reasoning ?? '').length === 0
+        const snapshotReasoningExtendsServer =
+          snapshotReasoning.length > (prevBody.reasoning ?? '').length &&
+          snapshotReasoning.startsWith(prevBody.reasoning ?? '')
         const reasoningChanged =
-          snapshotReasoning.length > 0 && snapshotReasoning !== (prevBody.reasoning ?? '')
+          snapshotReasoning.length > 0 &&
+          snapshotReasoning !== (prevBody.reasoning ?? '') &&
+          (serverReasoningEmpty || snapshotReasoningExtendsServer)
         const prevReasoningText = prevBody.reasoning ?? ''
         const prevPlayedLength =
           typeof prevBody.reasoningPlayedLength === 'number'
