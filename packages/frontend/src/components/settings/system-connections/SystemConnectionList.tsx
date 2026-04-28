@@ -104,7 +104,7 @@ function ConnectionRow({
 
   return (
     <article className={cn("bg-white transition-colors", expanded ? "bg-blue-50/30" : "hover:bg-slate-50/70")}>
-      <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(200px,0.8fr)_auto] lg:items-center">
+      <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(250px,0.9fr)_auto] lg:items-center">
         <button type="button" onClick={onToggle} className="flex min-w-0 cursor-pointer items-start gap-3 text-left">
           <span
             className={cn(
@@ -170,7 +170,7 @@ function ConnectionRow({
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="min-w-0 rounded-[8px] bg-slate-50 px-3 py-2">
+    <div className="min-w-[4.5rem] rounded-[8px] bg-slate-50 px-3 py-2">
       <div className="text-[11px] text-slate-400">{label}</div>
       <div className="mt-0.5 truncate text-sm font-medium text-slate-700">{value}</div>
     </div>

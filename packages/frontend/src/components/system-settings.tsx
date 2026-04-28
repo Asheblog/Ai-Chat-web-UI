@@ -192,7 +192,7 @@ const SYSTEM_MODULES: SystemModule[] = [
   },
   {
     key: "api-routing",
-    label: "API 路由",
+    label: "模型权限",
     description: "设置匿名/注册用户的模型访问策略与路由覆写。",
     icon: Router,
     content: <SystemModelAccessPage />,
@@ -200,7 +200,7 @@ const SYSTEM_MODULES: SystemModule[] = [
   },
   {
     key: "token-management",
-    label: "令牌管理",
+    label: "推理配置",
     description: "配置推理输出 Tokens、安装 Token 与相关能力开关。",
     icon: KeyRound,
     content: <SystemReasoningPage />,

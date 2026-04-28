@@ -69,12 +69,12 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
         },
         {
           key: "api-routing",
-          label: "API 路由",
+          label: "模型权限",
           icon: <Router className="h-full w-full" />,
         },
         {
           key: "token-management",
-          label: "令牌管理",
+          label: "推理配置",
           icon: <KeyRound className="h-full w-full" />,
         },
         {
