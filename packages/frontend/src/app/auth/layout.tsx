@@ -1,5 +1,5 @@
 import { getServerBranding } from '@/lib/server-branding'
-import { Boxes, MessageCircle } from 'lucide-react'
+import { Boxes, MessageCircle, Sparkles } from 'lucide-react'
 
 export default async function AuthLayout({
   children,
@@ -19,7 +19,7 @@ export default async function AuthLayout({
           <div className="relative z-10">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_14px_30px_rgba(37,99,235,0.24)]">
-                <MessageCircle className="h-7 w-7" />
+                <Sparkles className="h-7 w-7" />
               </div>
               <h1 className="text-[40px] font-semibold leading-none tracking-tight">
                 {aiPrefixed ? <span className="text-primary">AI</span> : null}{brandRest}
