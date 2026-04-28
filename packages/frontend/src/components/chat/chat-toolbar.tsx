@@ -11,11 +11,13 @@ export interface ChatToolbarProps {
 
 export function ChatToolbar({ selectedModelId, onModelChange }: ChatToolbarProps) {
   return (
-    <div className="v2-toolbar hidden items-center px-5 lg:flex">
-      <div className="flex w-full items-center justify-between gap-4">
+    <>
+      <div className="hidden lg:block absolute top-3 left-4 z-30">
         <ModelSelector selectedModelId={selectedModelId} onModelChange={onModelChange} />
+      </div>
+      <div className="hidden lg:block absolute top-3 right-4 z-30">
         <UserMenu />
       </div>
-    </div>
+    </>
   )
 }

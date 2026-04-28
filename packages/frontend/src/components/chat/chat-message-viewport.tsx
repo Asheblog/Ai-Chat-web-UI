@@ -125,7 +125,7 @@ export function ChatMessageViewport({
 
   return (
     <ScrollArea ref={scrollAreaRef} className="chat-message-viewport flex-1 px-3 sm:px-4 md:px-6">
-      <div className={cn('mx-auto w-full max-w-[1440px] pt-4 md:pt-6', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
+      <div className={cn('mx-auto w-full max-w-[1440px] pt-4 md:pt-6 lg:pt-14', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
         {hasOlder && (
           <div className="mb-2 text-center text-xs text-muted-foreground">
             {isLoadingOlder ? '正在加载更早消息…' : '上滑可加载更早消息'}

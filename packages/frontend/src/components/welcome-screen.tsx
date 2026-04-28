@@ -10,16 +10,16 @@ export function WelcomeScreen() {
   const { header, hero, form, footerNote } = useWelcomeScreenViewModel()
   return (
     <div className="relative flex-1 flex flex-col">
-      <header className="v2-toolbar hidden items-center px-5 lg:flex">
-        <div className="flex w-full items-center justify-between gap-4">
-          <ModelSelector
-            selectedModelId={header.selectedModelId}
-            onModelChange={header.onModelChange}
-            disabled={header.disabled}
-          />
-          <UserMenu />
-        </div>
-      </header>
+      <div className="hidden lg:block absolute top-3 left-4 z-30">
+        <ModelSelector
+          selectedModelId={header.selectedModelId}
+          onModelChange={header.onModelChange}
+          disabled={header.disabled}
+        />
+      </div>
+      <div className="hidden lg:block absolute top-3 right-4 z-30">
+        <UserMenu />
+      </div>
 
       <div className="relative flex flex-1 flex-col items-center justify-center px-4 pb-6 sm:px-6 lg:px-8">
         <WelcomeHero {...hero} />
