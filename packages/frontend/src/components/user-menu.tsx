@@ -10,8 +10,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useTheme } from 'next-themes'
 import { useAuthStore } from '@/store/auth-store'
-import { useSettingsStore } from '@/store/settings-store'
 import { cn } from '@/lib/utils'
 
 interface UserMenuProps {
@@ -25,11 +25,7 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
     user: state.user,
     logout: state.logout,
   }))
-  const { setTheme } = useSettingsStore()
-
-  const handleThemeChange = (mode: 'light' | 'dark' | 'system') => {
-    setTheme(mode)
-  }
+  const { setTheme } = useTheme()
 
   const showLabel = variant === 'label'
 
@@ -91,15 +87,15 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={() => handleThemeChange('light')}>
+        <DropdownMenuItem onClick={() => setTheme('light')}>
           <Sun className="mr-2 h-4 w-4" />
           浅色模式
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleThemeChange('dark')}>
+        <DropdownMenuItem onClick={() => setTheme('dark')}>
           <Moon className="mr-2 h-4 w-4" />
           深色模式
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleThemeChange('system')}>
+        <DropdownMenuItem onClick={() => setTheme('system')}>
           <Monitor className="mr-2 h-4 w-4" />
           跟随系统
         </DropdownMenuItem>

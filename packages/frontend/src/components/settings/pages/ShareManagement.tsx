@@ -157,7 +157,7 @@ export function ShareManagementPanel() {
   }
 
   return (
-    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+    <section className="v2-panel p-4 shadow-none sm:p-5">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <h2 className="v2-section-title shrink-0">最近分享</h2>

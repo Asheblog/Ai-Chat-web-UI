@@ -850,7 +850,6 @@ export interface AuthState {
 }
 
 export interface SettingsState {
-  theme: 'light' | 'dark' | 'system';
   contextEnabled: boolean;
   newConversationContextEnabled: boolean;
   systemSettings: SystemSettings | null;

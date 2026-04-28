@@ -307,7 +307,7 @@ function MessageBubbleComponent({
           className={`min-w-0 max-w-full ${
             isUser
               ? 'flex-1 text-right lg:max-w-3xl'
-              : 'v2-panel flex-1 bg-white/90 px-4 py-3 text-left'
+              : 'v2-panel flex-1 px-4 py-3 text-left'
           }`}
         >
           {!isUser && (

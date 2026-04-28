@@ -26,7 +26,7 @@ export function SkillVersionSection({
   onUninstallSkill,
 }: SkillVersionSectionProps) {
   return (
-    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+    <section className="v2-panel p-4 shadow-none sm:p-5">
       <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
           <FileText className="h-5 w-5" />
@@ -90,7 +90,7 @@ export function SkillVersionSection({
                     return (
                       <div
                         key={version.id}
-                        className="flex flex-col gap-3 rounded-[8px] border border-border/70 bg-white/90 p-3 md:flex-row md:items-center md:justify-between"
+                        className="flex flex-col gap-3 rounded-[8px] border border-border/70 bg-surface p-3 md:flex-row md:items-center md:justify-between"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">

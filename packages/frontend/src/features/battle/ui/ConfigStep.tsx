@@ -87,7 +87,7 @@ export function ConfigStep({
 
     return (
         <div className="w-full space-y-5">
-            <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+            <section className="v2-panel p-4 shadow-none sm:p-5">
                 <div className="mb-4 flex flex-col gap-2 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                     <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
@@ -305,7 +305,7 @@ export function ConfigStep({
                 </div>
             </section>
 
-            <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+            <section className="v2-panel p-4 shadow-none sm:p-5">
                 <div className="mb-4 border-b border-border/70 pb-4">
                     <h2 className="v2-section-title">裁判设置</h2>
                     <p className="v2-muted-line mt-1">配置裁判模型和评判规则。</p>

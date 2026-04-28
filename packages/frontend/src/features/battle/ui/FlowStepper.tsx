@@ -51,7 +51,7 @@ export function FlowStepper({ currentStep, onStepClick, isRunning = false }: Flo
 
     return (
         <div className="w-full">
-            <nav aria-label="Progress" className="v2-panel overflow-hidden bg-white/90">
+            <nav aria-label="Progress" className="v2-panel overflow-hidden">
                 <ol className="grid grid-cols-4">
                     {steps.map((step, index) => {
                         const status = getStepStatus(step.key)

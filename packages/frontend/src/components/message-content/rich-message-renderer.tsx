@@ -173,7 +173,7 @@ export function RichMessageRenderer({
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-5')}>
           <button
             type="button"
-            className="mt-3 flex w-full items-center justify-between gap-3 rounded-[8px] border border-slate-200 bg-white/90 px-4 py-2.5 text-left text-sm transition hover:bg-blue-50"
+            className="mt-3 flex w-full items-center justify-between gap-3 rounded-[8px] border border-border bg-surface px-4 py-2.5 text-left text-sm transition hover:bg-accent"
             onClick={() => setImagesExpanded((value) => !value)}
             aria-expanded={imagesExpanded}
           >

@@ -20,7 +20,7 @@ export function SkillApprovalsSection({
   onRespondApproval,
 }: SkillApprovalsSectionProps) {
   return (
-    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+    <section className="v2-panel p-4 shadow-none sm:p-5">
       <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
           <ShieldCheck className="h-5 w-5" />

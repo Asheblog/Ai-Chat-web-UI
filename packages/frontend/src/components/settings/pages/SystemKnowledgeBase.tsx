@@ -553,7 +553,7 @@ export function SystemKnowledgeBasePage() {
         </AlertDescription>
       </Alert>
 
-      <div className="v2-panel bg-white/90 p-4">
+      <div className="v2-panel p-4">
         {/* 启用开关 */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>

@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
+import { useTheme } from "next-themes"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -11,9 +12,8 @@ import { useToast } from "@/components/ui/use-toast"
 import { updatePersonalSettings } from '@/features/settings/api'
 
 export function PersonalPreferencesPage(){
+  const { theme, setTheme } = useTheme()
   const {
-    theme,
-    setTheme,
     contextEnabled,
     setContextEnabled,
     newConversationContextEnabled,
@@ -149,10 +149,10 @@ export function PersonalPreferencesPage(){
   }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-950">个人设置</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">个人设置</h1>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <section className="v2-panel bg-white/90 p-5 md:p-6">
+        <section className="v2-panel p-5 md:p-6">
           <h3 className="v2-section-title">个人资料</h3>
           <div className="mt-5 grid gap-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
             <AvatarUploadField
@@ -169,7 +169,7 @@ export function PersonalPreferencesPage(){
             />
             <div className="min-w-0 space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">用户名</label>
+                <label className="text-sm font-medium text-foreground/80">用户名</label>
                 <div className="relative">
                   <Input
                     value={username}
@@ -181,18 +181,18 @@ export function PersonalPreferencesPage(){
                         handleUsernameSave()
                       }
                     }}
-                    className="h-10 bg-white pr-10"
+                    className="h-10 bg-surface pr-10"
                     placeholder="请输入新的用户名"
                     disabled={!user || usernameSaving}
                   />
-                  <Edit3 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Edit3 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                <p className="text-xs text-slate-400">3-20 个字符，可包含字母、数字和下划线</p>
+                <p className="text-xs text-muted-foreground">3-20 个字符，可包含字母、数字和下划线</p>
                 {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">主题</label>
-                <div className="grid grid-cols-3 overflow-hidden rounded-[8px] border border-slate-200 bg-slate-50">
+                <label className="text-sm font-medium text-foreground/80">主题</label>
+                <div className="grid grid-cols-3 overflow-hidden rounded-[8px] border border-border bg-muted">
                   {[
                     { value: 'light', label: '浅色', icon: Sun },
                     { value: 'system', label: '跟随系统', icon: Monitor },
@@ -204,7 +204,7 @@ export function PersonalPreferencesPage(){
                       <button
                         key={item.value}
                         type="button"
-                        className={`flex h-10 items-center justify-center gap-1.5 whitespace-nowrap text-xs transition ${active ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:bg-white/70'}`}
+                        className={`flex h-10 items-center justify-center gap-1.5 whitespace-nowrap text-xs transition ${active ? 'bg-surface text-primary shadow-sm' : 'text-muted-foreground hover:bg-surface/70'}`}
                         onClick={() => setTheme(item.value as any)}
                       >
                         <Icon className="h-4 w-4" />
@@ -218,22 +218,22 @@ export function PersonalPreferencesPage(){
           </div>
         </section>
 
-        <section className="v2-panel bg-white/90 p-5 md:p-6">
+        <section className="v2-panel p-5 md:p-6">
           <h3 className="v2-section-title">对话与上下文</h3>
           <div className="mt-5 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-slate-800">记住对话上下文</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-sm font-medium text-foreground">记住对话上下文</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   {contextEnabled ? 'AI 将记住所有对话中的上下文信息' : '仅发送当前消息'}
                 </p>
               </div>
               <Switch checked={contextEnabled} onCheckedChange={(v)=>setContextEnabled(!!v)} />
             </div>
-            <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
               <div>
-                <p className="text-sm font-medium text-slate-800">新对话继承上下文</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-sm font-medium text-foreground">新对话继承上下文</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   开启后，新对话将基于最近的上下文
                 </p>
               </div>
@@ -243,7 +243,7 @@ export function PersonalPreferencesPage(){
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">个人系统提示词</label>
+              <label className="text-sm font-medium text-foreground/80">个人系统提示词</label>
               <Textarea
                 value={personalPromptDraft}
                 onChange={(event) => {
@@ -254,11 +254,11 @@ export function PersonalPreferencesPage(){
                 }}
                 onBlur={() => handlePersonalPromptSave()}
                 placeholder="你是一个专业、友善且高效的 AI 助手。"
-                className="min-h-[82px] resize-none bg-white"
+                className="min-h-[82px] resize-none bg-surface"
                 disabled={!user || personalPromptSaving}
               />
               {personalPromptError && <p className="text-sm text-destructive">{personalPromptError}</p>}
-              <p className="text-right text-xs text-slate-400">{personalPromptDraft.length}/500</p>
+              <p className="text-right text-xs text-muted-foreground">{personalPromptDraft.length}/500</p>
             </div>
           </div>
         </section>

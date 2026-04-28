@@ -34,7 +34,7 @@ export function SystemConnectionList({
 }: SystemConnectionListProps) {
   if (loading && connections.length === 0) {
     return (
-      <section className="v2-panel overflow-hidden bg-white/90 shadow-none">
+      <section className="v2-panel overflow-hidden shadow-none">
         <div className="space-y-3 p-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="h-20 rounded-[8px] bg-slate-100" />
@@ -46,7 +46,7 @@ export function SystemConnectionList({
 
   if (connections.length === 0) {
     return (
-      <section className="v2-panel bg-white/90 p-4 shadow-none">
+      <section className="v2-panel p-4 shadow-none">
         <div className="rounded-[8px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-12 text-center text-sm leading-6 text-slate-500">
           暂无匹配连接。可以调整筛选条件，或新增一个 Provider 端点和 API Key。
         </div>

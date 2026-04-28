@@ -472,7 +472,7 @@ export function ShareViewer({
   return (
     <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
       <header className={cn(SHARE_CONTAINER_CLASS, 'pt-4')}>
-        <div className="v2-panel flex flex-col gap-3 bg-white/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="v2-panel flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div className="flex min-w-0 items-center gap-3 font-semibold">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
               AI
@@ -504,9 +504,9 @@ export function ShareViewer({
       </header>
 
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-2 sm:py-3')}>
-        <section className="v2-panel bg-white/90 p-4 sm:p-6">
+        <section className="v2-panel p-4 sm:p-6">
           <div className="mb-6 text-center">
-            <h1 className="mx-auto max-w-5xl text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl">
+            <h1 className="mx-auto max-w-5xl text-xl font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
               {share.title || share.sessionTitle}
             </h1>
             <p className="mt-3 text-sm text-slate-500">公开分享 · {formatDate(share.createdAt)}</p>

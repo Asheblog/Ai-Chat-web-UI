@@ -68,7 +68,7 @@ export function UserTable({
   const { page, limit, totalPages } = pagination
 
   return (
-    <section className="v2-panel bg-white/90 p-4 shadow-none sm:p-5">
+    <section className="v2-panel p-4 shadow-none sm:p-5">
       {loading && rows.length === 0 ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (

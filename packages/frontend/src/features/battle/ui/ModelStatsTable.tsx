@@ -140,8 +140,8 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
   const maxAttempts = Math.max(...modelStats.map(s => s.attempts.length), 1)
 
   return (
-    <div className={cn("v2-table-wrap bg-white/90", className)}>
-      <div className="border-b border-slate-200 p-4">
+    <div className={cn("v2-table-wrap", className)}>
+      <div className="border-b border-border p-4">
         <h3 className="text-base font-semibold">对战结果（实时排名）</h3>
         <p className="text-sm text-muted-foreground">各模型的 Pass@k、耗时、Token 使用等指标</p>
       </div>

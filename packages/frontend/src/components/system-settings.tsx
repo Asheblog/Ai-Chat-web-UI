@@ -385,7 +385,7 @@ function SystemOverviewContent() {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {overviewItems.map((item) => (
-        <div key={item.label} className="v2-panel bg-white/90 p-5">
+        <div key={item.label} className="v2-panel p-5">
           <div className="text-sm font-medium text-slate-500">{item.label}</div>
           <div className={cn("mt-3 text-lg font-semibold", item.tone)}>{item.value}</div>
           <div className="mt-2 text-xs text-slate-500">从左侧系统设置进入对应工作区。</div>

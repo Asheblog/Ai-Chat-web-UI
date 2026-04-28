@@ -150,7 +150,7 @@ export function ExecutionStep({
 
             {/* Question Preview */}
             <div className="grid gap-4 lg:grid-cols-[0.58fr_0.42fr]">
-            <Card className="v2-panel bg-white/90 shadow-none">
+            <Card className="v2-panel shadow-none">
                 <CardContent className="space-y-2 pt-4">
                     <div className="grid gap-4">
                         <BattleContentBlock
@@ -170,7 +170,7 @@ export function ExecutionStep({
             </Card>
 
             {/* Flow Graph */}
-            <Card className="v2-panel bg-white/90 shadow-none">
+            <Card className="v2-panel shadow-none">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">执行流程</CardTitle>
                 </CardHeader>

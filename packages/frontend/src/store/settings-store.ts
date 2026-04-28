@@ -23,7 +23,6 @@ interface SettingsStore extends SettingsState {
   updateSystemSettings: (settings: SystemSettingsUpdatePayload) => Promise<void>
   fetchPublicBranding: () => Promise<boolean>
   bootstrapBrandText: (brandText?: string | null) => void
-  setTheme: (theme: 'light' | 'dark' | 'system') => void
   setContextEnabled: (enabled: boolean) => void
   setNewConversationContextEnabled: (enabled: boolean) => void
   // UI：侧边栏折叠
@@ -95,7 +94,6 @@ export const useSettingsStore = create<SettingsStore>()(
       let publicBrandingInFlight: Promise<boolean> | null = null
 
       return {
-        theme: 'system',
         contextEnabled: true,
         newConversationContextEnabled: false,
         sidebarCollapsed: false,
@@ -193,24 +191,6 @@ export const useSettingsStore = create<SettingsStore>()(
         }))
       },
 
-      setTheme: (theme: 'light' | 'dark' | 'system') => {
-        set({ theme })
-        // 应用主题到DOM
-        if (typeof window !== 'undefined') {
-          const root = window.document.documentElement
-          root.classList.remove('light', 'dark')
-
-          if (theme === 'system') {
-            const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-              ? 'dark'
-              : 'light'
-            root.classList.add(systemTheme)
-          } else {
-            root.classList.add(theme)
-          }
-        }
-      },
-
       setContextEnabled: (enabled: boolean) => {
         set({ contextEnabled: !!enabled })
       },
@@ -229,7 +209,6 @@ export const useSettingsStore = create<SettingsStore>()(
     {
       name: 'settings-storage',
       partialize: (state) => ({
-        theme: state.theme,
         contextEnabled: state.contextEnabled,
         newConversationContextEnabled: state.newConversationContextEnabled,
         sidebarCollapsed: state.sidebarCollapsed,

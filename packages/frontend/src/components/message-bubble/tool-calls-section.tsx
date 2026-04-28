@@ -175,7 +175,7 @@ export function ToolCallsSection({
   if (!hasToolCalls) return null
 
   return (
-    <div className="mb-2 overflow-hidden rounded-[8px] border border-slate-200 bg-white/90 shadow-[0_10px_28px_rgba(15,23,42,0.04)]" data-message-panel="interactive">
+    <div className="mb-2 overflow-hidden rounded-[8px] border border-border bg-surface shadow-[0_10px_28px_rgba(15,23,42,0.04)]" data-message-panel="interactive">
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-blue-50/70 sm:px-4"

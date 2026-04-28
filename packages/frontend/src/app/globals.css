@@ -112,10 +112,10 @@
     position: relative;
     isolation: isolate;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 250, 252, 0.94)),
-      radial-gradient(900px 420px at 100% 24%, rgba(191, 229, 255, 0.5), transparent 72%),
-      linear-gradient(160deg, rgba(219, 234, 254, 0.64) 0%, rgba(248, 250, 252, 0) 42%),
-      #f8fafc;
+      linear-gradient(180deg, hsl(var(--surface) / 0.86), hsl(var(--background) / 0.94)),
+      radial-gradient(900px 420px at 100% 24%, hsl(var(--accent) / 0.5), transparent 72%),
+      linear-gradient(160deg, hsl(var(--accent) / 0.64) 0%, transparent 42%),
+      hsl(var(--background));
   }
 
   .v2-app-surface::before {
@@ -125,8 +125,8 @@
     z-index: -1;
     pointer-events: none;
     background:
-      linear-gradient(155deg, transparent 0 50%, rgba(186, 230, 253, 0.18) 50% 58%, transparent 58%),
-      linear-gradient(165deg, transparent 0 58%, rgba(219, 234, 254, 0.42) 58% 66%, transparent 66%);
+      linear-gradient(155deg, transparent 0 50%, hsl(var(--accent) / 0.18) 50% 58%, transparent 58%),
+      linear-gradient(165deg, transparent 0 58%, hsl(var(--accent) / 0.42) 58% 66%, transparent 66%);
   }
 
   .v2-panel {
@@ -139,13 +139,13 @@
   .v2-panel-soft {
     border: 1px solid hsl(var(--border) / 0.74);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.78));
+    background: linear-gradient(180deg, hsl(var(--surface) / 0.92), hsl(var(--background) / 0.78));
   }
 
   .v2-toolbar {
     height: 52px;
     border-bottom: 1px solid hsl(var(--border) / 0.82);
-    background: rgba(255, 255, 255, 0.86);
+    background: hsl(var(--surface) / 0.86);
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
@@ -238,7 +238,7 @@
 
   .v2-slide-over {
     border-left: 1px solid hsl(var(--border) / 0.88);
-    background: rgba(255, 255, 255, 0.96);
+    background: hsl(var(--surface) / 0.96);
     box-shadow: -18px 0 40px rgba(15, 23, 42, 0.1);
     -webkit-backdrop-filter: blur(16px);
     backdrop-filter: blur(16px);

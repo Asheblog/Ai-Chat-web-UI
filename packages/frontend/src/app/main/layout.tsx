@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { useSettingsStore } from '@/store/settings-store'
 import { useChatStore } from '@/store/chat-store'
 import { Button } from '@/components/ui/button'
@@ -20,16 +21,33 @@ export default function MainLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { theme, setTheme, sidebarCollapsed, setSidebarCollapsed, fetchSystemSettings } = useSettingsStore()
+  const { sidebarCollapsed, setSidebarCollapsed, fetchSystemSettings } = useSettingsStore()
   const currentSession = useChatStore((state) => state.currentSession)
   const actorState = useAuthStore((state) => state.actorState)
   const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
   const [mounted, setMounted] = useState(false)
   const router = useRouter()
+  const { setTheme } = useTheme()
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // 迁移旧 Zustand 主题设置到 next-themes（仅执行一次）
+  useEffect(() => {
+    if (!mounted) return
+    try {
+      if (localStorage.getItem('theme-migrated')) return
+      const raw = localStorage.getItem('settings-storage')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed?.state?.theme) {
+          setTheme(parsed.state.theme)
+        }
+      }
+    } catch {}
+    localStorage.setItem('theme-migrated', '1')
+  }, [mounted, setTheme])
 
   const hasRequestedSettings = useRef(false)
   useEffect(() => {
@@ -45,13 +63,6 @@ export default function MainLayout({
     })
   }, [actorState, fetchSystemSettings, mounted])
 
-  useEffect(() => {
-    // 应用主题设置
-    if (mounted) {
-      setTheme(theme)
-    }
-  }, [theme, setTheme, mounted])
-
   // 防止服务端渲染hydration问题
   if (!mounted) {
     return null
@@ -60,9 +71,9 @@ export default function MainLayout({
   const isActorReady = actorState !== 'loading'
 
   return (
-    <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-[#f8fafc]">
+    <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-background">
       <Sidebar />
-      <MainContent className="v2-app-surface relative border-l border-slate-200/70">
+      <MainContent className="v2-app-surface relative border-l border-border">
         <SetupWizard />
         <SkillApprovalInbox />
         {!isActorReady ? (
@@ -80,7 +91,7 @@ export default function MainLayout({
                   variant="ghost"
                   size="icon"
                   aria-label={sidebarCollapsed ? '展开侧边栏' : '打开侧边栏'}
-                  className="group/sidebar-toggle h-10 w-10 rounded-[10px] border border-slate-200 bg-white hover:bg-blue-50 hover:text-primary"
+                  className="group/sidebar-toggle h-10 w-10 rounded-[10px] border border-border bg-surface hover:bg-accent hover:text-primary"
                   onClick={() => {
                     try {
                       if (sidebarCollapsed) {

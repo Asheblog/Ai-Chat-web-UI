@@ -292,7 +292,7 @@ export function Sidebar() {
   }, [sessionSearch, sessions])
 
   const sidebarContent = (
-    <div className="flex h-full w-full flex-col border-r border-slate-200/80 bg-white/80 text-foreground shadow-[10px_0_28px_rgba(15,23,42,0.035)] lg:w-[248px]">
+    <div className="flex h-full w-full flex-col border-r border-border bg-surface text-foreground shadow-[10px_0_28px_rgba(15,23,42,0.035)] lg:w-[248px]">
       {/* 顶部文字LOGO + 折叠按钮 */}
       <div className="flex h-[78px] items-center justify-between px-4">
         <Link href="/main" className="flex min-w-0 flex-1 select-none items-center gap-2.5">
@@ -325,7 +325,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="收起侧边栏"
-            className="group/sidebar-toggle hidden h-10 w-10 rounded-[10px] bg-white/90 text-slate-500 hover:bg-blue-50 hover:text-primary lg:inline-flex"
+            className="group/sidebar-toggle hidden h-10 w-10 rounded-[10px] bg-surface text-muted-foreground hover:bg-accent hover:text-primary lg:inline-flex"
             onClick={() => setSidebarCollapsed(true)}
           >
             <SidebarCollapseIcon className="h-5 w-5" />
@@ -354,7 +354,7 @@ export function Sidebar() {
             router.push('/main/battle')
             setIsMobileMenuOpen(false)
           }}
-          className="h-10 w-full justify-center rounded-[8px] border border-slate-200 bg-white text-slate-700 shadow-none hover:bg-blue-50 hover:text-primary"
+          className="h-10 w-full justify-center rounded-[8px] border border-border bg-surface text-foreground/80 shadow-none hover:bg-accent hover:text-primary"
           variant="outline"
         >
           <Trophy className="mr-2 h-4 w-4" />
@@ -362,7 +362,7 @@ export function Sidebar() {
         </Button>
         <Button
           onClick={() => setIsSettingsOpen(true)}
-          className="h-10 w-full justify-center rounded-[8px] border border-slate-200 bg-white text-slate-700 shadow-none hover:bg-blue-50 hover:text-primary"
+          className="h-10 w-full justify-center rounded-[8px] border border-border bg-surface text-foreground/80 shadow-none hover:bg-accent hover:text-primary"
           variant="outline"
         >
           <Settings className="mr-2 h-4 w-4" />
@@ -387,7 +387,7 @@ export function Sidebar() {
       )}
 
       <div className="px-4 pb-4">
-        <div className="border-t border-slate-200" />
+        <div className="border-t border-border" />
       </div>
       <div className="px-4 pb-3">
         <div className="relative">
@@ -396,7 +396,7 @@ export function Sidebar() {
             value={sessionSearch}
             onChange={(e) => setSessionSearch(e.target.value)}
             placeholder="搜索对话"
-            className="h-9 w-full rounded-[8px] border border-slate-200 bg-white px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
+            className="h-9 w-full rounded-[8px] border border-border bg-surface px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
             aria-label="搜索会话"
           />
         </div>
@@ -522,8 +522,8 @@ export function Sidebar() {
         </div>
       </ScrollArea>
 
-      <div className="border-t border-slate-200 bg-white/70 px-4 pb-5 pt-4">
-        <div className="rounded-[8px] border border-slate-200 bg-slate-50/70 px-3 py-3">
+      <div className="border-t border-border bg-surface/70 px-4 pb-5 pt-4">
+        <div className="rounded-[8px] border border-border bg-muted/70 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Info className="h-4 w-4 text-slate-400" />
@@ -548,7 +548,7 @@ export function Sidebar() {
   )
 
   const collapsedSidebar = (
-    <div className="flex h-full w-14 flex-col items-center justify-between border-r border-slate-200 bg-white/90 py-4 text-foreground">
+    <div className="flex h-full w-14 flex-col items-center justify-between border-r border-border bg-surface py-4 text-foreground">
       {/* 顶部：展开按钮 + 新建聊天 + 系统设置 */}
       <div className="flex flex-col items-center gap-2">
         <TooltipProvider>
@@ -658,7 +658,7 @@ export function Sidebar() {
       <div className="hidden lg:flex">
         <div
           className={cn(
-            "relative h-full overflow-hidden bg-white/90 transition-[width] duration-300 ease-in-out will-change-[width]",
+            "relative h-full overflow-hidden bg-surface transition-[width] duration-300 ease-in-out will-change-[width]",
             sidebarCollapsed ? "w-14" : "w-[248px]"
           )}
         >
@@ -691,7 +691,7 @@ export function Sidebar() {
           side="left"
           showCloseButton={false}
           dialogTitle="侧边栏导航"
-          className="w-[248px] border-r border-slate-200 bg-white p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
+          className="w-[248px] border-r border-border bg-surface p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
         >
           {sidebarContent}
         </SheetContent>
@@ -742,7 +742,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="展开侧边栏"
-            className="group/sidebar-toggle h-12 w-12 rounded-[12px] border border-slate-200 bg-white text-slate-600 shadow-lg hover:border-blue-200 hover:bg-blue-50 hover:text-primary"
+            className="group/sidebar-toggle h-12 w-12 rounded-[12px] border border-border bg-surface text-muted-foreground shadow-lg hover:border-primary/30 hover:bg-accent hover:text-primary"
             onClick={() => {
               setSidebarCollapsed(false)
               setIsMobileMenuOpen(true)

@@ -44,7 +44,7 @@ export function PersonalSecurityPage() {
   }
 
   return (
-    <section className="v2-panel overflow-hidden bg-white/90 shadow-none">
+    <section className="v2-panel overflow-hidden shadow-none">
       <button
         type="button"
         aria-expanded={open}
