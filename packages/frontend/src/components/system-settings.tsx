@@ -80,8 +80,8 @@ const SystemKnowledgeBasePage = dynamic(
   () => import("@/components/settings/pages/SystemKnowledgeBase").then((m) => m.SystemKnowledgeBasePage),
   { loading: pageLoading },
 )
-const SystemLogsPage = dynamic(
-  () => import("@/components/settings/pages/SystemLogsPage").then((m) => m.SystemLogsPage),
+const LogViewerPage = dynamic(
+  () => import("@/components/settings/pages/LogViewerPage").then((m) => m.LogViewerPage),
   { loading: pageLoading },
 )
 const SystemPythonRuntimePage = dynamic(
@@ -263,7 +263,7 @@ const SYSTEM_MODULES: SystemModule[] = [
     label: "日志查看器",
     description: "按级别与模块检索系统运行日志与上下文。",
     icon: ScrollText,
-    content: <SystemLogsPage />,
+    content: <LogViewerPage />,
     topLevel: true,
   },
   {
