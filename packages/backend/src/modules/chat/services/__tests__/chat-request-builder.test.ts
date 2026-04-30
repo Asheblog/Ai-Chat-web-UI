@@ -248,4 +248,90 @@ describe('ChatRequestBuilder', () => {
 
     expect(prepared.baseRequestBody.temperature).toBe(1)
   })
+
+  it('adds thinking enabled for deepseek vendor when reasoning is on', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'provider_timeout_ms', value: '60000' },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hello' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(4000)
+    resolveCompletionLimit.mockResolvedValue(2048)
+
+    const deepseekSession = {
+      ...baseSession,
+      connection: {
+        ...baseSession.connection,
+        vendor: 'deepseek',
+      },
+    }
+
+    const prepared = await builder.prepare({
+      session: deepseekSession as any,
+      payload: { sessionId: 1, content: 'hello', reasoningEnabled: true, reasoningEffort: 'high' } as any,
+      content: 'hello',
+      mode: 'stream',
+    })
+
+    expect(prepared.baseRequestBody.thinking).toEqual({ type: 'enabled' })
+    expect(prepared.baseRequestBody.reasoning_effort).toBe('high')
+    expect(prepared.reasoning.enabled).toBe(true)
+  })
+
+  it('adds thinking disabled for openai_interleave vendor when reasoning is off', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'provider_timeout_ms', value: '60000' },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hello' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(4000)
+    resolveCompletionLimit.mockResolvedValue(2048)
+
+    const interleaveSession = {
+      ...baseSession,
+      connection: {
+        ...baseSession.connection,
+        vendor: 'openai_interleave',
+      },
+    }
+
+    const prepared = await builder.prepare({
+      session: interleaveSession as any,
+      payload: { sessionId: 1, content: 'hello', reasoningEnabled: false } as any,
+      content: 'hello',
+      mode: 'stream',
+    })
+
+    expect(prepared.baseRequestBody.thinking).toEqual({ type: 'disabled' })
+    expect(prepared.baseRequestBody.reasoning_effort).toBeUndefined()
+    expect(prepared.reasoning.enabled).toBe(false)
+  })
+
+  it('does not add thinking parameter for non-DeepSeek vendor', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'provider_timeout_ms', value: '60000' },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hello' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(4000)
+    resolveCompletionLimit.mockResolvedValue(2048)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: 'hello' } as any,
+      content: 'hello',
+      mode: 'stream',
+    })
+
+    expect(prepared.baseRequestBody.thinking).toBeUndefined()
+  })
 })
