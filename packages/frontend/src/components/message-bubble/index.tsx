@@ -66,6 +66,7 @@ function MessageBubbleComponent({
   const { toast } = useToast()
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
+  const activeStreamCount = useChatStore((state) => state.activeStreamCount ?? 0)
   const currentUser = useAuthStore((state) => state.user)
   const { reasoningDefaultExpand, assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
     reasoningDefaultExpand: Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
@@ -150,9 +151,11 @@ function MessageBubbleComponent({
     if (!hasContent && body.reasoningVersion === 0) return
     // 严格命中才跳过；宽松命中仅用于先展示，仍应触发一次 Worker 重新渲染以保证结构完整
     if (strictCacheMatches) return
-    // 流式传输期间跳过 Worker 渲染，因为内容在不断变化
-    // 使用 ReactMarkdown fallback 进行实时渲染，流式结束后再用 Worker 渲染
-    if (isStreaming) return
+    // 本地 SSE 流式传输期间跳过 Worker 渲染，因为内容在不断变化
+    // 但刷新页面后通过轮询更新的场景（activeStreamCount === 0）允许 Worker 渲染
+    // 以解决刷新页面后正文内容排版混乱 / 未及时应用 markdown 格式的问题
+    const isLocalStreaming = isStreaming && activeStreamCount > 0
+    if (isLocalStreaming) return
 
     let cancelled = false
     const delay = 40
@@ -196,6 +199,7 @@ function MessageBubbleComponent({
     strictCacheMatches,
     hasContent,
     isStreaming,
+    activeStreamCount,
     isUser,
     meta.id,
   ])

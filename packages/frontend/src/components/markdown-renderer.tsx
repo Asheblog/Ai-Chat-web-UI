@@ -131,10 +131,19 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     if (/(^|\n)(?:\t| {4,})\S/.test(fallback)) return true
     return false
   }, [fallback])
+  const fallbackHasUnclosedCodeBlock = useMemo(() => {
+    if (!fallback) return false
+    const backtickFences = fallback.match(/(^|\n)\s*```/g)
+    if (backtickFences && backtickFences.length % 2 !== 0) return true
+    const tildeFences = fallback.match(/(^|\n)\s*~~~/g)
+    if (tildeFences && tildeFences.length % 2 !== 0) return true
+    return false
+  }, [fallback])
   const preferPlainStreamingFallback = useMemo(() => {
     if (!isStreaming || !fallback) return false
-    return fallback.length > 1200 || fallbackHasCodeBlocks || needsMathSupport
-  }, [fallback, fallbackHasCodeBlocks, isStreaming, needsMathSupport])
+    // 仅在内容极长（>50k 字符）或存在未闭合代码块时降级为纯文本，避免 ReactMarkdown 性能问题
+    return fallback.length > 50000 || fallbackHasUnclosedCodeBlock
+  }, [fallback, fallbackHasUnclosedCodeBlock, isStreaming])
 
   const handleCopyCode = async (code: string) => {
     try {
