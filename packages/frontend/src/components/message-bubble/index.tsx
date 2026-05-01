@@ -120,7 +120,7 @@ function MessageBubbleComponent({
     renderCache.contentHtml.length > 0 &&
     body.version - renderCache.contentVersion <= 3 &&
     body.reasoningVersion - renderCache.reasoningVersion <= 3
-  const cacheUsableForDisplay = strictCacheMatches || (!isStreaming && looseCacheMatches)
+  const cacheUsableForDisplay = strictCacheMatches || looseCacheMatches
   const contentHtml = cacheUsableForDisplay ? renderCache.contentHtml ?? '' : ''
   const reasoningHtml =
     cacheUsableForDisplay && renderCache?.reasoningHtml ? renderCache.reasoningHtml : ''

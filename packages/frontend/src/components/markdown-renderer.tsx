@@ -141,9 +141,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   }, [fallback])
   const preferPlainStreamingFallback = useMemo(() => {
     if (!isStreaming || !fallback) return false
-    // 仅在内容极长（>50k 字符）或存在未闭合代码块时降级为纯文本，避免 ReactMarkdown 性能问题
-    return fallback.length > 50000 || fallbackHasUnclosedCodeBlock
-  }, [fallback, fallbackHasUnclosedCodeBlock, isStreaming])
+    // 流式期间对可能产生错误渲染的内容降级为纯文本：
+    // 长度过大、包含代码块、未闭合代码块、数学公式等中间态内容优先保证正确性
+    return fallback.length > 2000 || fallbackHasCodeBlocks || fallbackHasUnclosedCodeBlock || needsMathSupport
+  }, [fallback, fallbackHasCodeBlocks, fallbackHasUnclosedCodeBlock, isStreaming, needsMathSupport])
 
   const handleCopyCode = async (code: string) => {
     try {
@@ -407,7 +408,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     )
   }
 
-  if (fallbackHasCodeBlocks) {
+  if (fallbackHasCodeBlocks && !isStreaming) {
     return renderFallback()
   }
 

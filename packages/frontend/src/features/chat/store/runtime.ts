@@ -277,8 +277,11 @@ export const createChatStoreRuntime = (
                 ? normalizedToolEvents
                 : prevBody.toolEvents,
           }
-          const cache = ensureRenderCache()
-          delete cache[key]
+          // 流式传输期间保留旧的渲染 HTML，避免 ReactMarkdown 对不完整内容产生错误输出
+          if (meta.streamStatus !== 'streaming') {
+            const cache = ensureRenderCache()
+            delete cache[key]
+          }
         }
 
         if (normalizedToolEvents && normalizedToolEvents.length > 0) {
@@ -472,8 +475,13 @@ export const createChatStoreRuntime = (
           toolEvents: hasToolUpdates ? normalizedToolEvents : prevBody.toolEvents,
           artifacts: hasArtifactUpdates ? normalizedArtifacts : prevBody.artifacts,
         }
-        const cache = ensureRenderCache()
-        delete cache[key]
+        // 流式传输期间保留旧的渲染 HTML，避免 ReactMarkdown 对不完整内容产生错误输出
+        const currentMetaForStreamCheck = nextMetas.find((m) => messageKey(m.id) === key)
+        const effectiveStreamStatus = message.streamStatus ?? currentMetaForStreamCheck?.streamStatus
+        if (effectiveStreamStatus !== 'streaming') {
+          const cache = ensureRenderCache()
+          delete cache[key]
+        }
       }
 
       if (hasToolUpdates) {
