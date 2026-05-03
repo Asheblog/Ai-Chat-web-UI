@@ -485,6 +485,10 @@ export const createStreamSlice: ChatSliceCreator<
         if (!active) break
 
         if (evt?.type === 'start') {
+          const normalizedAssistantClientId =
+            typeof evt.assistantClientMessageId === 'string' && evt.assistantClientMessageId.trim()
+              ? evt.assistantClientMessageId.trim()
+              : null
           if (
             typeof evt.messageId === 'number' &&
             Number.isFinite(evt.messageId) &&
@@ -559,6 +563,7 @@ export const createStreamSlice: ChatSliceCreator<
             if (messageKey(active.assistantId) !== messageKey(nextId)) {
               const prevKey = messageKey(active.assistantId)
               const nextKey = messageKey(nextId)
+              const nextStableKey = normalizedAssistantClientId ? `client:${normalizedAssistantClientId}` : null
               set((state) => {
                 const metaIndex = state.messageMetas.findIndex((meta) => messageKey(meta.id) === prevKey)
                 const nextMetas = metaIndex === -1 ? state.messageMetas : state.messageMetas.slice()
@@ -566,6 +571,8 @@ export const createStreamSlice: ChatSliceCreator<
                   nextMetas[metaIndex] = {
                     ...nextMetas[metaIndex],
                     id: nextId,
+                    clientMessageId: normalizedAssistantClientId ?? nextMetas[metaIndex].clientMessageId,
+                    stableKey: nextStableKey ?? nextMetas[metaIndex].stableKey,
                     streamStatus: 'streaming',
                     isPlaceholder: false,
                   }
@@ -574,7 +581,11 @@ export const createStreamSlice: ChatSliceCreator<
                 const nextBodies = { ...state.messageBodies }
                 if (prevBody) {
                   delete nextBodies[prevKey]
-                  nextBodies[nextKey] = { ...prevBody, id: nextId }
+                  nextBodies[nextKey] = {
+                    ...prevBody,
+                    id: nextId,
+                    stableKey: nextStableKey ?? prevBody.stableKey,
+                  }
                 }
                 const nextRenderCache = { ...state.messageRenderCache }
                 if (nextRenderCache[prevKey]) {
@@ -605,8 +616,40 @@ export const createStreamSlice: ChatSliceCreator<
               assistantPlaceholder.id = nextId
             }
           }
-          if (typeof evt.assistantClientMessageId === 'string') {
-            active.assistantClientMessageId = evt.assistantClientMessageId
+          if (normalizedAssistantClientId) {
+            active.assistantClientMessageId = normalizedAssistantClientId
+            const assistantKey = messageKey(active.assistantId)
+            const nextStableKey = `client:${normalizedAssistantClientId}`
+            set((state) => {
+              const metaIndex = state.messageMetas.findIndex((meta) => messageKey(meta.id) === assistantKey)
+              const body = state.messageBodies[assistantKey]
+              if (metaIndex === -1 && !body) return state
+
+              const partial: Partial<import('@/types').ChatState> = {}
+              if (metaIndex !== -1) {
+                const prevMeta = state.messageMetas[metaIndex]
+                if (prevMeta.clientMessageId !== normalizedAssistantClientId || prevMeta.stableKey !== nextStableKey) {
+                  const nextMetas = state.messageMetas.slice()
+                  nextMetas[metaIndex] = {
+                    ...prevMeta,
+                    clientMessageId: normalizedAssistantClientId,
+                    stableKey: nextStableKey,
+                  }
+                  partial.messageMetas = nextMetas
+                  partial.assistantVariantSelections = buildVariantSelections(nextMetas)
+                }
+              }
+              if (body && body.stableKey !== nextStableKey) {
+                partial.messageBodies = {
+                  ...state.messageBodies,
+                  [assistantKey]: {
+                    ...body,
+                    stableKey: nextStableKey,
+                  },
+                }
+              }
+              return Object.keys(partial).length > 0 ? partial : state
+            })
           }
           continue
         }

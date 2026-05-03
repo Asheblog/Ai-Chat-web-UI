@@ -11,6 +11,7 @@ describe('chat execution event bridge', () => {
 
     const start = bridge.consume({
       type: 'start',
+      messageId: 42,
       assistantMessageId: 99,
       assistantClientMessageId: 'assistant-client-99',
     })
@@ -26,6 +27,15 @@ describe('chat execution event bridge', () => {
     expect(start[2]).toMatchObject({
       stepId: 'assistant-client-99',
       agentRole: 'assistant',
+      payload: {
+        metadata: {
+          sessionId: 123,
+          userMessageId: 42,
+          assistantMessageId: 99,
+          assistantClientMessageId: 'assistant-client-99',
+        },
+        title: 'assistant_response',
+      },
     })
 
     const content = bridge.consume({

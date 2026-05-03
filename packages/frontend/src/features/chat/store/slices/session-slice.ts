@@ -31,6 +31,22 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
 }> = (set, get, runtime) => {
   let fetchSessionsInFlight: Promise<void> | null = null
 
+  const resumeStreamingMessagesForSession = (sessionId: number) => {
+    const state = get()
+    state.messageMetas
+      .filter(
+        (meta) =>
+          meta.sessionId === sessionId &&
+          meta.role === 'assistant' &&
+          meta.streamStatus === 'streaming' &&
+          typeof meta.id === 'number',
+      )
+      .forEach((meta) => {
+        runtime.startMessageProgressWatcher(sessionId, Number(meta.id))
+      })
+    runtime.recomputeStreamingState()
+  }
+
   return {
   currentSession: null,
   sessions: [],
@@ -117,6 +133,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
         currentSession: session,
         isStreaming: snapshot.activeStreamSessionId === session.id,
       }))
+      resumeStreamingMessagesForSession(sessionId)
       get().fetchUsage(sessionId)
       return
     }
@@ -135,6 +152,8 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
 
     if (shouldFetchMessages) {
       get().fetchMessages(sessionId)
+    } else {
+      resumeStreamingMessagesForSession(sessionId)
     }
     get().fetchUsage(sessionId)
   },

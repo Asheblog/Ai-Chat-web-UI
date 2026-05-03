@@ -10,6 +10,8 @@ import { Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ensureKatexResources } from '@/lib/load-katex'
+import { rehypeLinkBoundaries } from '@/lib/markdown-link-boundary'
+import { closeOpenMarkdownBlocks } from '@/lib/markdown-streaming'
 import {
   remarkKatexTokenizer,
   containsLatexTokens,
@@ -123,7 +125,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     }
   }, [needsMathSupport, rehypeKatexPlugin])
 
-  const preparedFallback = useMemo(() => encodeLatexPlaceholders(fallback || ''), [fallback])
+  const preparedFallback = useMemo(() => {
+    const source = isStreaming ? closeOpenMarkdownBlocks(fallback || '') : fallback || ''
+    return encodeLatexPlaceholders(source)
+  }, [fallback, isStreaming])
+  const fallbackRehypePlugins = useMemo(
+    () => (rehypeKatexPlugin ? [rehypeLinkBoundaries, rehypeKatexPlugin] : [rehypeLinkBoundaries]),
+    [rehypeKatexPlugin],
+  )
 
   const fallbackHasCodeBlocks = useMemo(() => {
     if (!fallback) return false
@@ -131,20 +140,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     if (/(^|\n)(?:\t| {4,})\S/.test(fallback)) return true
     return false
   }, [fallback])
-  const fallbackHasUnclosedCodeBlock = useMemo(() => {
-    if (!fallback) return false
-    const backtickFences = fallback.match(/(^|\n)\s*```/g)
-    if (backtickFences && backtickFences.length % 2 !== 0) return true
-    const tildeFences = fallback.match(/(^|\n)\s*~~~/g)
-    if (tildeFences && tildeFences.length % 2 !== 0) return true
-    return false
-  }, [fallback])
   const preferPlainStreamingFallback = useMemo(() => {
     if (!isStreaming || !fallback) return false
-    // 流式期间对可能产生错误渲染的内容降级为纯文本：
-    // 长度过大、包含代码块、未闭合代码块、数学公式等中间态内容优先保证正确性
-    return fallback.length > 2000 || fallbackHasCodeBlocks || fallbackHasUnclosedCodeBlock || needsMathSupport
-  }, [fallback, fallbackHasCodeBlocks, fallbackHasUnclosedCodeBlock, isStreaming, needsMathSupport])
+    return fallback.length > 50000
+  }, [fallback, isStreaming])
 
   const handleCopyCode = async (code: string) => {
     try {
@@ -323,8 +322,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       >
         <ReactMarkdown
           remarkPlugins={[remarkKatexTokenizer, [remarkMath, defaultRemarkMathOptions], remarkGfm]}
-          rehypePlugins={rehypeKatexPlugin ? [rehypeKatexPlugin] : undefined}
+          rehypePlugins={fallbackRehypePlugins}
           components={{
+            a({ href, children, ...props }: any) {
+              return (
+                <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                  {children}
+                </a>
+              )
+            },
             pre({ children }: any) {
               return <>{children}</>
             },

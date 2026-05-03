@@ -84,6 +84,22 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const asString = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value : null
 
+const asNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+const assistantIdFromStepId = (stepId: string | null): number | null => {
+  if (!stepId) return null
+  const match = /^assistant:(\d+)$/.exec(stepId)
+  if (!match) return null
+  return asNumber(match[1])
+}
+
 const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
   const eventType = asString(payload?.type)
   if (!eventType) return null
@@ -103,6 +119,26 @@ const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
       return {
         type: 'content',
         content: delta,
+      }
+    }
+  }
+
+  if (eventType === 'step_start') {
+    const stepId = asString(payload?.stepId)
+    const metadata = asRecord(eventPayload.metadata) ?? {}
+    const assistantMessageId =
+      asNumber(metadata.assistantMessageId) ?? assistantIdFromStepId(stepId)
+    const assistantClientMessageId =
+      asString(metadata.assistantClientMessageId) ??
+      (stepId && assistantMessageId == null ? stepId : null)
+    const messageId = asNumber(metadata.userMessageId) ?? asNumber(metadata.messageId)
+
+    if (assistantMessageId != null || assistantClientMessageId != null || messageId != null) {
+      return {
+        type: 'start',
+        messageId,
+        assistantMessageId,
+        assistantClientMessageId,
       }
     }
   }
@@ -154,6 +190,38 @@ const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
         meta: event.meta as Record<string, unknown> | undefined,
       }
     }
+
+    if (kind === 'result') {
+      const name = asString(eventPayload.name)
+      const data = asRecord(eventPayload.data)
+      if (!name || !data) return null
+      if (name === 'image') {
+        return {
+          type: 'image',
+          generatedImages: Array.isArray(data.generatedImages) ? data.generatedImages : undefined,
+          messageId: asNumber(data.messageId),
+        }
+      }
+      if (name === 'artifact') {
+        return {
+          type: 'artifact',
+          artifacts: Array.isArray(data.artifacts) ? data.artifacts : [],
+          messageId: asNumber(data.messageId),
+        }
+      }
+      if (name === 'compression_applied') {
+        return {
+          type: 'compression_applied',
+          compression: data.compression as ChatStreamChunk['compression'],
+        }
+      }
+      if (name === 'skill_approval_request' || name === 'skill_approval_result') {
+        return {
+          ...(data as ChatStreamChunk),
+          type: name,
+        }
+      }
+    }
   }
 
   if (eventType === 'run_metrics') {
@@ -168,6 +236,10 @@ const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
 
   if (eventType === 'run_complete') {
     return { type: 'complete' }
+  }
+
+  if (eventType === 'complete') {
+    return null
   }
 
   if (eventType === 'run_error') {
@@ -262,6 +334,9 @@ export const normalizeChunk = (payload: any): ChatStreamChunk | null => {
   const executionChunk = normalizeExecutionEventChunk(payload)
   if (executionChunk) {
     return executionChunk
+  }
+  if (payload?.type === 'complete' && payload?.runId && payload?.eventId) {
+    return null
   }
   if (payload?.type === 'content' && payload.content) {
     return { type: 'content', content: payload.content }

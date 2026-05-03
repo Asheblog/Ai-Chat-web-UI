@@ -2,6 +2,32 @@ import { describe, expect, it } from 'vitest'
 import { normalizeChunk } from '../stream-reader'
 
 describe('stream-reader unified execution events', () => {
+  it('maps step_start metadata into start chunk', () => {
+    const chunk = normalizeChunk({
+      type: 'step_start',
+      runId: 'chat-run-1',
+      eventId: 'evt-start',
+      ts: Date.now(),
+      status: 'running',
+      stepId: 'assistant-client-302',
+      payload: {
+        title: 'assistant_response',
+        metadata: {
+          userMessageId: 301,
+          assistantMessageId: 302,
+          assistantClientMessageId: 'assistant-client-302',
+        },
+      },
+    })
+
+    expect(chunk).toEqual({
+      type: 'start',
+      messageId: 301,
+      assistantMessageId: 302,
+      assistantClientMessageId: 'assistant-client-302',
+    })
+  })
+
   it('maps step_delta content into content chunk', () => {
     const chunk = normalizeChunk({
       type: 'step_delta',
@@ -73,6 +99,19 @@ describe('stream-reader unified execution events', () => {
     })
 
     expect(chunk).toEqual({ type: 'complete' })
+  })
+
+  it('ignores terminal execution complete wrapper after run_complete', () => {
+    const chunk = normalizeChunk({
+      type: 'complete',
+      runId: 'chat-run-1',
+      eventId: 'evt-terminal',
+      ts: Date.now(),
+      status: 'completed',
+      payload: {},
+    })
+
+    expect(chunk).toBeNull()
   })
 
   it('maps run_error into error chunk', () => {

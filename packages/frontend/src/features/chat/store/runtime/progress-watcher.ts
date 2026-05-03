@@ -58,6 +58,9 @@ export const createProgressWatcherRuntime = (deps: {
           if (payload.streamStatus && payload.streamStatus !== 'streaming') {
             stopMessagePoller(messageId)
             activeWatchers.delete(messageId)
+            setTimeout(() => {
+              deps.get().fetchMessages(sessionId, { page: 'latest', mode: 'replace' }).catch(() => {})
+            }, 350)
             deps.get().fetchUsage(sessionId).catch(() => {})
             deps.get().fetchSessionsUsage().catch(() => {})
             return

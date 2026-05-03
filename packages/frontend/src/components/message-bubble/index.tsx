@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { copyToClipboard, formatDate } from '@/lib/utils'
@@ -29,6 +29,8 @@ const toReasoningMarkdown = (input: string) =>
       return trimmed.startsWith('>') ? trimmed : `> ${trimmed}`
     })
     .join('\n')
+
+const STREAMING_MARKDOWN_RENDER_INTERVAL_MS = 280
 
 interface MessageBubbleProps {
   meta: MessageMeta
@@ -78,6 +80,7 @@ function MessageBubbleComponent({
   const [editOpen, setEditOpen] = useState(false)
   const [editDraft, setEditDraft] = useState('')
   const [editApplying, setEditApplying] = useState(false)
+  const lastStreamingRenderAtRef = useRef(0)
   const reasoningRaw = body.reasoning || ''
   const artifacts = body.artifacts ?? meta.artifacts ?? []
   const reasoningPlayedLength =
@@ -151,15 +154,17 @@ function MessageBubbleComponent({
     if (!hasContent && body.reasoningVersion === 0) return
     // 严格命中才跳过；宽松命中仅用于先展示，仍应触发一次 Worker 重新渲染以保证结构完整
     if (strictCacheMatches) return
-    // 本地 SSE 流式传输期间跳过 Worker 渲染，因为内容在不断变化
-    // 但刷新页面后通过轮询更新的场景（activeStreamCount === 0）允许 Worker 渲染
-    // 以解决刷新页面后正文内容排版混乱 / 未及时应用 markdown 格式的问题
     const isLocalStreaming = isStreaming && activeStreamCount > 0
-    if (isLocalStreaming) return
 
     let cancelled = false
-    const delay = 40
+    const elapsedSinceStreamingRender = Date.now() - lastStreamingRenderAtRef.current
+    const delay = isLocalStreaming
+      ? Math.max(0, STREAMING_MARKDOWN_RENDER_INTERVAL_MS - elapsedSinceStreamingRender)
+      : 40
     const timer = window.setTimeout(() => {
+      if (isLocalStreaming) {
+        lastStreamingRenderAtRef.current = Date.now()
+      }
       setIsRendering(true)
       const reasoningMarkdown = hasReasoning ? toReasoningMarkdown(body.reasoning!) : ''
       requestMarkdownRender({
@@ -168,6 +173,7 @@ function MessageBubbleComponent({
         reasoning: reasoningMarkdown,
         contentVersion: body.version,
         reasoningVersion: body.reasoningVersion,
+        isStreaming: Boolean(isStreaming),
       })
         .then((result) => {
           if (cancelled) return

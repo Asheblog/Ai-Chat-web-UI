@@ -37,4 +37,23 @@ describe('MarkdownRenderer', () => {
     expect(container.textContent).toContain('print(\"hi\")')
     expect(container.textContent).toContain('after')
   })
+
+  it('keeps CJK text after a bare URL outside the link', () => {
+    const { container } = render(
+      <MarkdownRenderer html={null} fallback="访问 https://example.com后续正文" />,
+    )
+    const link = container.querySelector('a')
+
+    expect(link?.getAttribute('href')).toBe('https://example.com')
+    expect(link?.textContent).toBe('https://example.com')
+    expect(container.textContent).toContain('后续正文')
+  })
+
+  it('renders an unfinished streaming fence as a markdown code block', () => {
+    const fallback = ['```ts', 'const value = 1'].join('\n')
+    const { container } = render(<MarkdownRenderer html="" fallback={fallback} isStreaming />)
+
+    expect(container.querySelector('.rs-terminal')).toBeTruthy()
+    expect(container.textContent).toContain('const value = 1')
+  })
 })

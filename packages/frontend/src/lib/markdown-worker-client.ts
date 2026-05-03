@@ -8,6 +8,7 @@ interface RenderRequest {
   reasoning?: string
   contentVersion: number
   reasoningVersion: number
+  isStreaming?: boolean
 }
 
 interface RenderResponse {
@@ -157,6 +158,7 @@ export const requestMarkdownRender = async (payload: RenderRequest): Promise<Ren
     reasoning: payload.reasoning,
     contentVersion: payload.contentVersion,
     reasoningVersion: payload.reasoningVersion,
+    isStreaming: Boolean(payload.isStreaming),
   })
 
   return response

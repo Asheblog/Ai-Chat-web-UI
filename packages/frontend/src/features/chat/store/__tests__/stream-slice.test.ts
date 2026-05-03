@@ -114,7 +114,12 @@ describe('stream slice', () => {
     })
 
     vi.mocked(chatApi.streamChat).mockImplementation(async function* mockStream() {
-      yield { type: 'start', messageId: session.id + 100, assistantMessageId: session.id + 200 }
+      yield {
+        type: 'start',
+        messageId: session.id + 100,
+        assistantMessageId: session.id + 200,
+        assistantClientMessageId: 'assistant-client-201',
+      }
       yield { type: 'content', content: 'Hello ' }
       yield { type: 'content', content: 'World' }
       yield { type: 'usage', usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }
@@ -135,6 +140,8 @@ describe('stream slice', () => {
     expect(assistantMeta).toBeTruthy()
     expect(assistantMeta?.streamStatus).toBe('done')
     expect(assistantMeta?.isPlaceholder).toBeFalsy()
+    expect(assistantMeta?.clientMessageId).toBe('assistant-client-201')
+    expect(assistantMeta?.stableKey).toBe('client:assistant-client-201')
     if (!assistantMeta) {
       throw new Error('assistant meta missing')
     }

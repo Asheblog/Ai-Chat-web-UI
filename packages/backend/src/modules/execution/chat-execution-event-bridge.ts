@@ -48,7 +48,11 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
     payload,
   })
 
-  const ensureBootEvents = (meta?: { assistantMessageId?: unknown; assistantClientMessageId?: unknown }) => {
+  const ensureBootEvents = (meta?: {
+    userMessageId?: unknown
+    assistantMessageId?: unknown
+    assistantClientMessageId?: unknown
+  }) => {
     const events: ExecutionSseEvent[] = []
     if (!runStarted) {
       runStarted = true
@@ -98,6 +102,9 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
             title: 'assistant_response',
             metadata: {
               sessionId: options.sessionId,
+              userMessageId: asNumber(meta?.userMessageId),
+              assistantMessageId: asNumber(meta?.assistantMessageId),
+              assistantClientMessageId: asString(meta?.assistantClientMessageId),
             },
           },
           { stepId, agentRole },
@@ -122,6 +129,7 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
     if (type === 'start') {
       events.push(
         ...ensureBootEvents({
+          userMessageId: legacyEvent.messageId,
           assistantMessageId: legacyEvent.assistantMessageId,
           assistantClientMessageId: legacyEvent.assistantClientMessageId,
         }),

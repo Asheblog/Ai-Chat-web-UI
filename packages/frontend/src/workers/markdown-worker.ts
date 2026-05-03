@@ -12,6 +12,8 @@ import {
   defaultRemarkMathOptions,
   encodeLatexPlaceholders,
 } from '@aichat/shared/latex-normalizer'
+import { rehypeLinkBoundaries } from '@/lib/markdown-link-boundary'
+import { closeOpenMarkdownBlocks } from '@/lib/markdown-streaming'
 
 interface WorkerRequest {
   jobId: string
@@ -20,6 +22,7 @@ interface WorkerRequest {
   reasoning?: string
   contentVersion: number
   reasoningVersion: number
+  isStreaming?: boolean
 }
 
 interface WorkerResponse {
@@ -123,6 +126,7 @@ const createProcessor = () => {
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeKatex, { strict: false })
+    .use(rehypeLinkBoundaries)
     .use(extractCodeBlocks)
     .use(enhanceNodes)
     .use(rehypeStringify)
@@ -157,8 +161,9 @@ const ensureMhchem = async () => {
   await mhchemLoading
 }
 
-const renderMarkdown = async (markdown: string): Promise<{ html: string }> => {
-  const trimmed = markdown.trim()
+const renderMarkdown = async (markdown: string, isStreaming?: boolean): Promise<{ html: string }> => {
+  const preparedMarkdown = isStreaming ? closeOpenMarkdownBlocks(markdown) : markdown
+  const trimmed = preparedMarkdown.trim()
   if (trimmed.length === 0) {
     return { html: '' }
   }
@@ -185,6 +190,18 @@ const processingMessages = new Set<string>()
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 const toMessageKey = (messageId: WorkerRequest['messageId']) => String(messageId)
 
+const postSupersededJob = (payload: WorkerRequest) => {
+  const response: WorkerResponse = {
+    jobId: payload.jobId,
+    messageId: toMessageKey(payload.messageId),
+    contentHtml: '',
+    reasoningHtml: payload.reasoning ? '' : undefined,
+    contentVersion: -1,
+    reasoningVersion: -1,
+  }
+  self.postMessage(response)
+}
+
 const scheduleFlush = () => {
   if (flushTimer) return
   flushTimer = setTimeout(() => {
@@ -198,23 +215,32 @@ const scheduleFlush = () => {
 }
 
 const queueJob = (payload: WorkerRequest) => {
-  pendingByMessage.set(toMessageKey(payload.messageId), payload)
+  const messageKey = toMessageKey(payload.messageId)
+  const previous = pendingByMessage.get(messageKey)
+  if (previous && previous.jobId !== payload.jobId) {
+    postSupersededJob(previous)
+  }
+  pendingByMessage.set(messageKey, payload)
   scheduleFlush()
 }
 
 const processJob = async (payload: WorkerRequest) => {
   const messageKey = toMessageKey(payload.messageId)
   if (processingMessages.has(messageKey)) {
+    const previous = deferredByMessage.get(messageKey)
+    if (previous && previous.jobId !== payload.jobId) {
+      postSupersededJob(previous)
+    }
     deferredByMessage.set(messageKey, payload)
     return
   }
   processingMessages.add(messageKey)
 
-  const { jobId, messageId, content, reasoning, contentVersion, reasoningVersion } = payload
+  const { jobId, messageId, content, reasoning, contentVersion, reasoningVersion, isStreaming } = payload
   const responseMessageId = toMessageKey(messageId)
 
   try {
-    const contentResult = await renderMarkdown(content || '')
+    const contentResult = await renderMarkdown(content || '', isStreaming)
     const response: WorkerResponse = {
       jobId,
       messageId: responseMessageId,
@@ -224,7 +250,7 @@ const processJob = async (payload: WorkerRequest) => {
     }
 
     if (reasoning) {
-      const reasoningResult = await renderMarkdown(reasoning)
+      const reasoningResult = await renderMarkdown(reasoning, isStreaming)
       response.reasoningHtml = reasoningResult.html
     }
 
