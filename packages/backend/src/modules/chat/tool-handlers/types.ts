@@ -165,6 +165,10 @@ export interface UrlReaderHandlerConfig {
   enabled: boolean
   timeout?: number
   maxContentLength?: number
+  maxBodyBytes?: number
+  enableBrowser?: boolean
+  browserExecutablePath?: string
+  renderWaitMs?: number
 }
 
 /**

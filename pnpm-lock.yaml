@@ -68,6 +68,9 @@ importers:
       pdf-parse:
         specifier: ^1.1.1
         version: 1.1.4
+      playwright-core:
+        specifier: ^1.60.0
+        version: 1.60.0
       prisma:
         specifier: ^5.22.0
         version: 5.22.0
@@ -8320,6 +8323,12 @@ packages:
     engines: {node: '>=6.8.1'}
     dependencies:
       node-ensure: 0.0.0
+    dev: false
+
+  /playwright-core@1.60.0:
+    resolution: {integrity: sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==}
+    engines: {node: '>=18'}
+    hasBin: true
     dev: false
 
   /picocolors@1.1.1:

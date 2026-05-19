@@ -67,6 +67,10 @@ export interface AgentPythonToolConfig {
 export interface AgentUrlReaderConfig {
   timeout: number;
   maxContentLength: number;
+  maxBodyBytes: number;
+  enableBrowser: boolean;
+  browserExecutablePath?: string;
+  renderWaitMs: number;
 }
 
 /**
@@ -352,9 +356,41 @@ export const buildAgentUrlReaderConfig = (
     500000
   );
 
+  const maxBodyBytes = clampNumber(
+    parseNumberSetting(
+      sysMap.url_reader_max_body_bytes ?? env.URL_READER_MAX_BODY_BYTES,
+      { fallback: 8 * 1024 * 1024 }
+    ),
+    1024 * 1024,
+    64 * 1024 * 1024
+  );
+
+  const enableBrowser = parseBooleanSetting(
+    sysMap.url_reader_browser_enable ?? env.URL_READER_BROWSER_ENABLE,
+    true,
+  );
+
+  const renderWaitMs = clampNumber(
+    parseNumberSetting(
+      sysMap.url_reader_render_wait_ms ?? env.URL_READER_RENDER_WAIT_MS,
+      { fallback: 1200 }
+    ),
+    0,
+    8000
+  );
+
+  const browserExecutablePath =
+    sysMap.url_reader_browser_executable_path ??
+    env.URL_READER_BROWSER_EXECUTABLE_PATH ??
+    undefined;
+
   return {
     timeout,
     maxContentLength,
+    maxBodyBytes,
+    enableBrowser,
+    browserExecutablePath,
+    renderWaitMs,
   };
 };
 

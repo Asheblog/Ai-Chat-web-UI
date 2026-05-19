@@ -36,7 +36,7 @@ interface AutoReadEvidenceItem {
   error?: string
   errorCode?: UrlReadErrorCode
   httpStatus?: number
-  fallbackUsed: 'none' | 'search_snippet' | 'crawler'
+  fallbackUsed: 'none' | 'search_snippet' | 'crawler' | 'browser' | 'document'
   rank: number
 }
 
@@ -1003,6 +1003,8 @@ export class WebSearchToolHandler implements IToolHandler {
               errorCode: readResult.errorCode,
               httpStatus: readResult.httpStatus,
               fallbackUsed: evidenceItem.fallbackUsed,
+              attempts: readResult.attempts,
+              finalUrl: readResult.finalUrl,
             }
             if (fallbackText) {
               details.resultText = fallbackText
@@ -1046,7 +1048,12 @@ export class WebSearchToolHandler implements IToolHandler {
             byline: readResult.byline || undefined,
             wordCount: readResult.wordCount,
             content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
-            fallbackUsed: readResult.fallbackUsed === 'crawler' ? 'crawler' : 'none',
+            fallbackUsed:
+              readResult.fallbackUsed === 'crawler' ||
+              readResult.fallbackUsed === 'browser' ||
+              readResult.fallbackUsed === 'document'
+                ? readResult.fallbackUsed
+                : 'none',
             rank,
           }
           context.emitReasoning(
@@ -1093,6 +1100,11 @@ export class WebSearchToolHandler implements IToolHandler {
               siteName: readResult.siteName,
               byline: readResult.byline,
               fallbackUsed: evidenceItem.fallbackUsed,
+              engine: readResult.engine,
+              attempts: readResult.attempts,
+              finalUrl: readResult.finalUrl,
+              rendered: readResult.rendered,
+              contentFormat: readResult.contentFormat,
             },
           })
           return evidenceItem

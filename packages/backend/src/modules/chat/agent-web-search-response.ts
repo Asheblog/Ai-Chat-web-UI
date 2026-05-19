@@ -585,6 +585,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             enabled: true,
             timeout: urlReaderConfig.timeout,
             maxContentLength: urlReaderConfig.maxContentLength,
+            maxBodyBytes: urlReaderConfig.maxBodyBytes,
+            enableBrowser: urlReaderConfig.enableBrowser,
+            browserExecutablePath: urlReaderConfig.browserExecutablePath,
+            renderWaitMs: urlReaderConfig.renderWaitMs,
           } : null,
           workspace: toolFlags.workspace ? {
             enabled: true,

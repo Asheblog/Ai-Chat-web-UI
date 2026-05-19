@@ -6,6 +6,7 @@ ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 ENV DATABASE_URL="file:/app/data/app.db"
 ENV APP_DATA_DIR="/app/data"
+ENV URL_READER_BROWSER_EXECUTABLE_PATH="/usr/bin/chromium"
 
 # 安装必要的系统依赖（最小化安装）
 RUN apt-get update && \
@@ -98,6 +99,7 @@ RUN apt-get update && \
         dumb-init \
         docker.io \
         git \
+        chromium \
         python3 \
         python3-venv \
         python3-pip \

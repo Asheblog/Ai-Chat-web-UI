@@ -277,6 +277,100 @@ describe('readUrlContent error classification', () => {
     expect(firstCallUrl).toBe('https://scribe.rip/someone/some-post')
   })
 
+  test('uses final redirected URL as base for relative assets', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('', {
+          status: 302,
+          headers: { location: 'https://example.com/news/final' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          `
+          <html>
+            <head>
+              <title>Redirected Article</title>
+              <meta property="og:image" content="/assets/cover.jpg" />
+            </head>
+            <body>
+              <article>
+                <p>重定向后的页面正文内容足够长，用于验证相对资源基于最终地址解析。</p>
+                <p>第二段继续提供正文，让提取器稳定得到可读文本。</p>
+              </article>
+            </body>
+          </html>
+          `,
+          {
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+          },
+        ),
+      ) as unknown as typeof fetch
+    global.fetch = fetchMock
+
+    const result = await readUrlContent('https://example.com/news/start')
+
+    expect(result.error).toBeUndefined()
+    expect(result.url).toBe('https://example.com/news/start')
+    expect(result.finalUrl).toBe('https://example.com/news/final')
+    expect(result.leadImageUrl).toBe('https://example.com/assets/cover.jpg')
+    expect(result.attempts?.some((attempt) => attempt.status === 'success')).toBe(true)
+  })
+
+  test('reads JSON responses as structured text', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(JSON.stringify({ title: 'API result', items: [{ id: 1, value: 'alpha' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+      }),
+    ) as typeof fetch
+
+    const result = await readUrlContent('https://example.com/api/data')
+
+    expect(result.error).toBeUndefined()
+    expect(result.resourceType).toBe('text')
+    expect(result.contentFormat).toBe('json')
+    expect(result.textContent).toContain('"title": "API result"')
+  })
+
+  test('reads RSS feed entries as feed content', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(
+        `
+        <rss version="2.0">
+          <channel>
+            <title>Example Feed</title>
+            <item>
+              <title>第一条新闻</title>
+              <link>https://example.com/a</link>
+              <description>这里是第一条新闻的摘要内容，长度足够用于验证 feed 提取。</description>
+            </item>
+            <item>
+              <title>第二条新闻</title>
+              <link>https://example.com/b</link>
+              <description>这里是第二条新闻的摘要内容。</description>
+            </item>
+          </channel>
+        </rss>
+        `,
+        {
+          status: 200,
+          headers: { 'content-type': 'application/rss+xml; charset=utf-8' },
+        },
+      ),
+    ) as typeof fetch
+
+    const result = await readUrlContent('https://example.com/feed.xml')
+
+    expect(result.error).toBeUndefined()
+    expect(result.resourceType).toBe('feed')
+    expect(result.title).toBe('Example Feed')
+    expect(result.textContent).toContain('第一条新闻')
+    expect(result.textContent).toContain('https://example.com/a')
+  })
+
   test('rejects localhost URL without attempting fetch', async () => {
     const fetchMock = jest.fn(async () =>
       new Response('<html><body>should not be fetched</body></html>', {

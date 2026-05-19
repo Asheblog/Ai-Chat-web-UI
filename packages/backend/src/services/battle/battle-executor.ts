@@ -617,6 +617,10 @@ export class BattleExecutor {
               enabled: true,
               timeout: toolFlags.urlReaderConfig.timeout,
               maxContentLength: toolFlags.urlReaderConfig.maxContentLength,
+              maxBodyBytes: toolFlags.urlReaderConfig.maxBodyBytes,
+              enableBrowser: toolFlags.urlReaderConfig.enableBrowser,
+              browserExecutablePath: toolFlags.urlReaderConfig.browserExecutablePath,
+              renderWaitMs: toolFlags.urlReaderConfig.renderWaitMs,
             }
           : null,
       },

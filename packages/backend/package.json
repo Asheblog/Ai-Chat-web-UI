@@ -43,6 +43,7 @@
     "node-fetch": "^3.3.2",
     "papaparse": "^5.4.1",
     "pdf-parse": "^1.1.1",
+    "playwright-core": "^1.60.0",
     "prisma": "^5.22.0",
     "sharp": "^0.34.5",
     "tsx": "^4.19.2",

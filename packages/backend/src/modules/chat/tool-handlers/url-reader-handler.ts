@@ -22,6 +22,10 @@ export interface UrlReaderHandlerConfig {
   enabled: boolean
   timeout?: number
   maxContentLength?: number
+  maxBodyBytes?: number
+  enableBrowser?: boolean
+  browserExecutablePath?: string
+  renderWaitMs?: number
 }
 
 export class UrlReaderToolHandler implements IToolHandler {
@@ -181,6 +185,10 @@ export class UrlReaderToolHandler implements IToolHandler {
       const result = await readUrlContent(url, {
         timeout: this.config.timeout,
         maxContentLength: this.config.maxContentLength,
+        maxBodyBytes: this.config.maxBodyBytes,
+        enableBrowser: this.config.enableBrowser,
+        browserExecutablePath: this.config.browserExecutablePath,
+        renderWaitMs: this.config.renderWaitMs,
       })
 
       if (result.error) {
@@ -206,6 +214,8 @@ export class UrlReaderToolHandler implements IToolHandler {
             errorCode: result.errorCode,
             httpStatus: result.httpStatus,
             fallbackUsed: 'none',
+            attempts: result.attempts,
+            finalUrl: result.finalUrl,
           },
         })
         return {
@@ -220,17 +230,20 @@ export class UrlReaderToolHandler implements IToolHandler {
               error: result.error,
               errorCode: result.errorCode,
               httpStatus: result.httpStatus,
+              attempts: result.attempts,
+              finalUrl: result.finalUrl,
             }),
           },
         }
       }
 
-      const extractionMode =
-        result.resourceType === 'image'
-          ? 'direct-image'
-          : result.fallbackUsed === 'crawler'
-            ? 'crawler'
-            : 'readability'
+      const extractionMode = (() => {
+        if (result.resourceType === 'image') return 'direct-image'
+        if (result.fallbackUsed === 'browser') return 'browser'
+        if (result.fallbackUsed === 'document') return result.engine || 'document'
+        if (result.fallbackUsed === 'crawler') return 'crawler'
+        return 'readability'
+      })()
       const followupMessages = await this.buildVisionFollowupMessages(result, context)
       context.emitReasoning(
         result.resourceType === 'image'
@@ -273,6 +286,12 @@ export class UrlReaderToolHandler implements IToolHandler {
           byline: result.byline,
           fallbackUsed: result.fallbackUsed || 'none',
           resourceType: result.resourceType || 'page',
+          engine: result.engine,
+          attempts: result.attempts,
+          finalUrl: result.finalUrl,
+          rendered: result.rendered,
+          confidence: result.confidence,
+          contentFormat: result.contentFormat,
           contentType: result.contentType,
           contentLength: result.contentLength,
           leadImageUrl: result.leadImageUrl,
