@@ -316,6 +316,14 @@ const normalizeTextContent = (value: string, maxContentLength: number): string =
   return normalized
 }
 
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
 const countWords = (value: string): number => value.split(/\s+/).filter(Boolean).length
 
 const isHtmlContentType = (contentType: string): boolean => {
@@ -1012,6 +1020,98 @@ const buildJsonResultFromText = (
   }
 }
 
+const normalizeUrlForFeedMatch = (value: string): string | null => {
+  try {
+    const parsed = new URL(value)
+    parsed.hash = ''
+    parsed.search = ''
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/'
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return null
+  }
+}
+
+const getFeedEntryLink = (entry: any, baseUrl: string): string => {
+  const href = entry.querySelector('link[href]')?.getAttribute('href')
+  const text = getElementText(entry, 'link')
+  const raw = href || text
+  if (!raw) return ''
+  try {
+    return new URL(raw, baseUrl).toString()
+  } catch {
+    return raw
+  }
+}
+
+const extractFeedEntryHtml = (entry: any): string => {
+  const candidates = [
+    entry.getElementsByTagName('content:encoded')?.[0]?.textContent,
+    entry.querySelector('encoded')?.textContent,
+    entry.querySelector('content')?.textContent,
+    entry.querySelector('description')?.textContent,
+    entry.querySelector('summary')?.textContent,
+  ]
+  return candidates.map((item) => (item || '').trim()).find(Boolean) || ''
+}
+
+const buildFeedItemResultFromXml = (
+  xml: string,
+  targetUrl: string,
+  maxContentLength: number,
+  feedUrl: string,
+): UrlReadResult | null => {
+  try {
+    const targetKey = normalizeUrlForFeedMatch(targetUrl)
+    if (!targetKey) return null
+
+    const dom = new JSDOM(xml, {
+      url: feedUrl,
+      contentType: 'text/xml',
+    })
+    try {
+      const doc = dom.window.document
+      const entries = Array.from(doc.querySelectorAll('item, entry') as any) as any[]
+      for (const entry of entries) {
+        const link = getFeedEntryLink(entry, feedUrl)
+        const linkKey = normalizeUrlForFeedMatch(link)
+        if (!linkKey || linkKey !== targetKey) continue
+
+        const title = getElementText(entry, 'title')
+        const publishedTime =
+          getElementText(entry, 'pubDate') ||
+          getElementText(entry, 'published') ||
+          getElementText(entry, 'updated') ||
+          undefined
+        const html = extractFeedEntryHtml(entry)
+        if (!html) return null
+        const wrappedHtml = `<article><h1>${escapeHtml(title)}</h1>${html}</article>`
+        const extracted =
+          extractReadabilityResultFromHtml(wrappedHtml, targetUrl, maxContentLength) ||
+          extractCrawlerResultFromHtml(wrappedHtml, targetUrl, maxContentLength)
+        if (!extracted) return null
+        return {
+          ...extracted,
+          title: extracted.title || title,
+          url: targetUrl,
+          resourceType: 'page',
+          contentType: 'application/rss+xml',
+          publishedTime,
+          fallbackUsed: 'document',
+          engine: 'feed',
+          contentFormat: 'feed',
+          confidence: 0.86,
+        }
+      }
+      return null
+    } finally {
+      dom.window.close()
+    }
+  } catch {
+    return null
+  }
+}
+
 const buildJsonFeedResultFromText = (
   text: string,
   url: string,
@@ -1375,6 +1475,50 @@ async function tryBrowserRenderedRead(
   }
 }
 
+const buildSameOriginFeedCandidates = (url: string): string[] => {
+  try {
+    const parsed = new URL(url)
+    const origin = parsed.origin
+    return [
+      '/rss/',
+      '/feed/',
+      '/rss.xml',
+      '/feed.xml',
+      '/atom.xml',
+      '/index.xml',
+    ].map((pathname) => new URL(pathname, origin).toString())
+  } catch {
+    return []
+  }
+}
+
+async function trySameOriginFeedFallback(
+  url: string,
+  timeout: number,
+  maxContentLength: number,
+  maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+): Promise<UrlReadResult | null> {
+  const candidates = buildSameOriginFeedCandidates(url)
+  for (const feedUrl of candidates) {
+    try {
+      const { response, body, finalUrl } = await fetchPageBody(
+        feedUrl,
+        timeout,
+        buildCrawlerHeaders(),
+        maxBodyBytes,
+      )
+      if (!response.ok || !body) continue
+      const contentType = response.headers.get('content-type') || ''
+      if (!isFeedContentType(contentType) && !/^\s*<(rss|feed)\b/i.test(body)) continue
+      const result = buildFeedItemResultFromXml(body, url, maxContentLength, finalUrl)
+      if (result) return result
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
 async function tryCrawlerRefetch(
   url: string,
   timeout: number,
@@ -1477,6 +1621,23 @@ export async function readUrlContent(
     return null
   }
 
+  const tryFeedFallback = async (reason: string): Promise<UrlReadResult | null> => {
+    const feedStartedAt = Date.now()
+    const feedResult = await trySameOriginFeedFallback(validatedUrl, timeout, maxContentLength, maxBodyBytes)
+    if (feedResult) {
+      recordAttempt(feedStartedAt, 'feed', 'success', {
+        finalUrl: feedResult.finalUrl || feedResult.url,
+        contentType: feedResult.contentType,
+      })
+      log.debug('url reader: same-origin feed fallback success', { url: validatedUrl, reason })
+      return toPublicResult(feedResult)
+    }
+    recordAttempt(feedStartedAt, 'feed', 'skipped', {
+      error: `Same-origin feed fallback did not match readable content after ${reason}`,
+    })
+    return null
+  }
+
   try {
     validatedUrl = validatePublicHttpUrl(url)
     const transformed = applyUrlTransformRules(validatedUrl)
@@ -1532,6 +1693,8 @@ export async function readUrlContent(
         })
       }
       if (status !== 404 && finalCode !== 'ROBOTS_DENIED') {
+        const feedResult = await tryFeedFallback(`HTTP ${status}`)
+        if (feedResult) return feedResult
         const browserResult = await tryBrowserFallback(`HTTP ${status}`)
         if (browserResult) return browserResult
       }
@@ -1700,6 +1863,8 @@ export async function readUrlContent(
       recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
         error: 'Crawler fallback did not extract readable content after JS challenge detection',
       })
+      const feedResult = await tryFeedFallback('JS challenge detection')
+      if (feedResult) return feedResult
       const browserResult = await tryBrowserFallback('JS challenge detection')
       if (browserResult) return browserResult
       const message = 'The page appears to be protected by a JavaScript challenge or anti-bot verification'
@@ -1730,6 +1895,8 @@ export async function readUrlContent(
       recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
         error: 'Crawler fallback did not extract readable content after empty content',
       })
+      const feedResult = await tryFeedFallback('empty content')
+      if (feedResult) return feedResult
       const browserResult = await tryBrowserFallback('empty content')
       if (browserResult) return browserResult
       const message = 'Page content is empty or too short'
@@ -1794,6 +1961,9 @@ export async function readUrlContent(
       error: 'Crawler refetch did not extract readable content after readability parse miss',
     })
 
+    const feedResult = await tryFeedFallback('readability parse miss')
+    if (feedResult) return feedResult
+
     const browserResult = await tryBrowserFallback('readability parse miss')
     if (browserResult) return browserResult
 
@@ -1829,6 +1999,8 @@ export async function readUrlContent(
       recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
         error: 'Crawler fallback did not extract readable content after thrown error',
       })
+      const feedResult = await tryFeedFallback(`thrown error: ${classified.errorCode}`)
+      if (feedResult) return feedResult
       const browserResult = await tryBrowserFallback(`thrown error: ${classified.errorCode}`)
       if (browserResult) return browserResult
     }

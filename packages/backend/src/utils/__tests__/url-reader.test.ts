@@ -54,6 +54,53 @@ describe('readUrlContent error classification', () => {
     expect(result.error).toContain('JavaScript challenge')
   })
 
+  test('falls back to same-origin feed entry when article page is behind JS challenge', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const requestUrl = String(input)
+      if (requestUrl.endsWith('/rss/')) {
+        return new Response(
+          `
+          <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+            <channel>
+              <title>Cloudflare Blog</title>
+              <item>
+                <title>Cyber Frontier Models</title>
+                <link>https://blog.cloudflare.com/cyber-frontier-models/</link>
+                <pubDate>Tue, 19 May 2026 01:00:00 GMT</pubDate>
+                <content:encoded><![CDATA[
+                  <article>
+                    <p>Cyber Frontier Models 是一篇用于验证同源 RSS 兜底的文章正文。</p>
+                    <p>即使原始页面返回 JavaScript challenge，也应该从站点自己的 feed 中稳定提取全文内容。</p>
+                  </article>
+                ]]></content:encoded>
+              </item>
+            </channel>
+          </rss>
+          `,
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'application/rss+xml; charset=utf-8' },
+          },
+        )
+      }
+      return new Response('<html><title>Just a moment...</title><body>cf-chl-bypass</body></html>', {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })
+    }) as typeof fetch
+
+    const result = await readUrlContent('https://blog.cloudflare.com/cyber-frontier-models/')
+
+    expect(result.error).toBeUndefined()
+    expect(result.engine).toBe('feed')
+    expect(result.fallbackUsed).toBe('document')
+    expect(result.contentFormat).toBe('feed')
+    expect(result.textContent).toContain('Cyber Frontier Models 是一篇用于验证同源 RSS 兜底的文章正文')
+    expect(result.attempts?.some((attempt) => attempt.engine === 'feed' && attempt.status === 'success')).toBe(true)
+  })
+
   test('falls back to crawler extraction when readability parsing returns null', async () => {
     global.fetch = jest.fn(async () =>
       new Response(
