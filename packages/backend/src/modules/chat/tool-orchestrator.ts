@@ -171,6 +171,7 @@ export async function runToolOrchestration(
 
     const reasoningPayload = turn.parsed.reasoning.trim()
     if (toolSchema === 'functions') {
+      // Push all assistant messages with function_call first (order matters)
       let isFirstToolCall = true
       for (const toolCall of turn.parsed.toolCalls) {
         const toolName = toolCall?.function?.name || ''
@@ -184,19 +185,44 @@ export async function runToolOrchestration(
           },
         })
         isFirstToolCall = false
-        const result = await executeToolCall({
-          toolName,
-          toolCall,
-          handleToolCall: params.handleToolCall,
-          allowedToolNames: params.allowedToolNames,
-          onUnsupportedTool: params.onUnsupportedTool,
-        })
-        workingMessages.push({
-          role: 'function',
-          name: result.toolName,
-          content: result.message.content,
-        })
-        appendFollowupMessages(workingMessages, result.followupMessages)
+      }
+
+      // Execute all tool calls in parallel
+      const settled = await Promise.allSettled(
+        turn.parsed.toolCalls.map((toolCall) => {
+          const toolName = toolCall?.function?.name || ''
+          return executeToolCall({
+            toolName,
+            toolCall,
+            handleToolCall: params.handleToolCall,
+            allowedToolNames: params.allowedToolNames,
+            onUnsupportedTool: params.onUnsupportedTool,
+          })
+        }),
+      )
+
+      // Collect results in original order
+      for (let i = 0; i < settled.length; i++) {
+        const result = settled[i]
+        const toolName = turn.parsed.toolCalls[i]?.function?.name || 'unknown'
+        if (result.status === 'fulfilled') {
+          workingMessages.push({
+            role: 'function',
+            name: result.value.toolName,
+            content: result.value.message.content,
+          })
+          appendFollowupMessages(workingMessages, result.value.followupMessages)
+        } else {
+          const errorMsg =
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason)
+          workingMessages.push({
+            role: 'function',
+            name: toolName,
+            content: JSON.stringify({ error: errorMsg }),
+          })
+        }
       }
       toolRoundsUsed += 1
       continue
@@ -207,22 +233,45 @@ export async function runToolOrchestration(
         role: 'assistant',
         content: turn.parsed.content,
       })
-      for (const toolCall of turn.parsed.toolCalls) {
-        const toolName = toolCall?.function?.name || ''
-        const result = await executeToolCall({
-          toolName,
-          toolCall,
-          handleToolCall: params.handleToolCall,
-          allowedToolNames: params.allowedToolNames,
-          onUnsupportedTool: params.onUnsupportedTool,
-        })
-        workingMessages.push(
-          buildTextToolResultMessage({
-            toolName: result.toolName,
-            content: result.message.content,
-          }),
-        )
-        appendTextSchemaFollowupMessages(workingMessages, result.followupMessages)
+
+      // Execute all tool calls in parallel
+      const settled = await Promise.allSettled(
+        turn.parsed.toolCalls.map((toolCall) => {
+          const toolName = toolCall?.function?.name || ''
+          return executeToolCall({
+            toolName,
+            toolCall,
+            handleToolCall: params.handleToolCall,
+            allowedToolNames: params.allowedToolNames,
+            onUnsupportedTool: params.onUnsupportedTool,
+          })
+        }),
+      )
+
+      // Collect results in original order
+      for (let i = 0; i < settled.length; i++) {
+        const result = settled[i]
+        const toolName = turn.parsed.toolCalls[i]?.function?.name || 'unknown'
+        if (result.status === 'fulfilled') {
+          workingMessages.push(
+            buildTextToolResultMessage({
+              toolName: result.value.toolName,
+              content: result.value.message.content,
+            }),
+          )
+          appendTextSchemaFollowupMessages(workingMessages, result.value.followupMessages)
+        } else {
+          const errorMsg =
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason)
+          workingMessages.push(
+            buildTextToolResultMessage({
+              toolName,
+              content: JSON.stringify({ error: errorMsg }),
+            }),
+          )
+        }
       }
       toolRoundsUsed += 1
       continue
@@ -242,17 +291,39 @@ export async function runToolOrchestration(
       tool_calls: turn.parsed.toolCalls,
     })
 
-    for (const toolCall of turn.parsed.toolCalls) {
-      const toolName = toolCall?.function?.name || ''
-      const result = await executeToolCall({
-        toolName,
-        toolCall,
-        handleToolCall: params.handleToolCall,
-        allowedToolNames: params.allowedToolNames,
-        onUnsupportedTool: params.onUnsupportedTool,
-      })
-      workingMessages.push(result.message)
-      appendFollowupMessages(workingMessages, result.followupMessages)
+    // Execute all tool calls in parallel
+    const settled = await Promise.allSettled(
+      turn.parsed.toolCalls.map((toolCall) => {
+        const toolName = toolCall?.function?.name || ''
+        return executeToolCall({
+          toolName,
+          toolCall,
+          handleToolCall: params.handleToolCall,
+          allowedToolNames: params.allowedToolNames,
+          onUnsupportedTool: params.onUnsupportedTool,
+        })
+      }),
+    )
+
+    // Collect results in original order
+    for (let i = 0; i < settled.length; i++) {
+      const result = settled[i]
+      if (result.status === 'fulfilled') {
+        workingMessages.push(result.value.message)
+        appendFollowupMessages(workingMessages, result.value.followupMessages)
+      } else {
+        const toolCall = turn.parsed.toolCalls[i]
+        const toolCallId = toolCall?.id || `call_${i}`
+        const errorMsg =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason)
+        workingMessages.push({
+          role: 'tool',
+          tool_call_id: toolCallId,
+          content: JSON.stringify({ error: errorMsg }),
+        })
+      }
     }
     toolRoundsUsed += 1
   }

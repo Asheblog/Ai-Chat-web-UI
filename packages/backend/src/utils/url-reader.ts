@@ -40,6 +40,8 @@ export type UrlReadEngineName =
   | 'pdf'
   | 'docx'
   | 'csv'
+  | 'google_cache'
+  | 'wayback'
 
 export interface UrlReadAttempt {
   engine: UrlReadEngineName
@@ -70,7 +72,7 @@ export interface UrlReadResult {
   error?: string
   errorCode?: UrlReadErrorCode
   httpStatus?: number
-  fallbackUsed?: 'none' | 'crawler' | 'browser' | 'document'
+  fallbackUsed?: 'none' | 'crawler' | 'browser' | 'document' | 'google_cache' | 'wayback'
   engine?: UrlReadEngineName
   attempts?: UrlReadAttempt[]
   finalUrl?: string
@@ -105,6 +107,10 @@ const DEFAULT_MAX_BODY_BYTES = 8 * 1024 * 1024
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (compatible; AIChat/1.0; +https://github.com/Asheblog/aichat)'
 const CRAWLER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+const GOOGLE_CACHE_TIMEOUT = 15000
+const WAYBACK_TIMEOUT = 20000
+const WAYBACK_CHECK_TIMEOUT = 10000
+const WAYBACK_RATE_LIMIT_DELAY_MS = 1200
 const CRAWLER_MIN_TEXT_LENGTH = 40
 const MAX_EXTRACTED_IMAGES = 8
 const MAX_HTML_PARSE_LENGTH = 1024 * 1024
@@ -1475,6 +1481,131 @@ async function tryBrowserRenderedRead(
   }
 }
 
+async function fetchGoogleCache(
+  url: string,
+  options: UrlReaderOptions,
+): Promise<UrlReadResult | null> {
+  const { timeout = GOOGLE_CACHE_TIMEOUT, maxContentLength = DEFAULT_MAX_CONTENT_LENGTH } = options
+  const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`
+
+  try {
+    const { response, body, finalUrl } = await fetchPageBody(
+      cacheUrl,
+      timeout,
+      buildCrawlerHeaders(),
+      DEFAULT_MAX_BODY_BYTES,
+    )
+
+    if (!response.ok || !body || body.length < CRAWLER_MIN_TEXT_LENGTH) return null
+
+    const contentType = response.headers.get('content-type') || ''
+    if (isHtmlContentType(contentType)) {
+      const readabilityResult = extractReadabilityResultFromHtml(body, finalUrl, maxContentLength)
+      const crawlerResult = readabilityResult || extractCrawlerResultFromHtml(body, finalUrl, maxContentLength)
+      if (crawlerResult) {
+        return {
+          ...crawlerResult,
+          url,
+          finalUrl,
+          fallbackUsed: 'google_cache',
+          engine: 'google_cache',
+          contentFormat: 'html',
+          confidence: readabilityResult ? 0.65 : 0.5,
+        }
+      }
+      return null
+    }
+
+    return buildCrawlerResultFromText(body, finalUrl, maxContentLength, '', contentType)
+  } catch (error) {
+    log.debug('url reader: Google Cache fetch failed', {
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+async function fetchWaybackMachine(
+  url: string,
+  options: UrlReaderOptions,
+): Promise<UrlReadResult | null> {
+  const { timeout = WAYBACK_TIMEOUT, maxContentLength = DEFAULT_MAX_CONTENT_LENGTH } = options
+
+  try {
+    const checkUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`
+
+    const checkController = new AbortController()
+    const checkTimeoutId = setTimeout(() => checkController.abort(), WAYBACK_CHECK_TIMEOUT)
+
+    let checkResponse: Response
+    try {
+      checkResponse = await fetch(checkUrl, {
+        headers: {
+          'User-Agent': CRAWLER_USER_AGENT,
+          Accept: 'application/json',
+        },
+        signal: checkController.signal,
+      })
+    } finally {
+      clearTimeout(checkTimeoutId)
+    }
+
+    if (!checkResponse.ok) return null
+
+    const availability = (await checkResponse.json()) as {
+      archived_snapshots?: {
+        closest?: {
+          available?: boolean
+          url?: string
+          status?: string
+        }
+      }
+    }
+
+    const snapshot = availability?.archived_snapshots?.closest
+    if (!snapshot?.available || !snapshot.url) return null
+
+    // Wayback Machine has rate limits; brief pause before fetching snapshot
+    await new Promise((resolve) => setTimeout(resolve, WAYBACK_RATE_LIMIT_DELAY_MS))
+
+    const { response, body, finalUrl } = await fetchPageBody(
+      snapshot.url,
+      timeout,
+      buildCrawlerHeaders(),
+      DEFAULT_MAX_BODY_BYTES,
+    )
+
+    if (!response.ok || !body || body.length < CRAWLER_MIN_TEXT_LENGTH) return null
+
+    const contentType = response.headers.get('content-type') || ''
+    if (isHtmlContentType(contentType)) {
+      const readabilityResult = extractReadabilityResultFromHtml(body, finalUrl, maxContentLength)
+      const crawlerResult = readabilityResult || extractCrawlerResultFromHtml(body, finalUrl, maxContentLength)
+      if (crawlerResult) {
+        return {
+          ...crawlerResult,
+          url,
+          finalUrl,
+          fallbackUsed: 'wayback',
+          engine: 'wayback',
+          contentFormat: 'html',
+          confidence: readabilityResult ? 0.6 : 0.45,
+        }
+      }
+      return null
+    }
+
+    return buildCrawlerResultFromText(body, finalUrl, maxContentLength, '', contentType)
+  } catch (error) {
+    log.debug('url reader: Wayback Machine fetch failed', {
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
 const buildSameOriginFeedCandidates = (url: string): string[] => {
   try {
     const parsed = new URL(url)
@@ -1638,6 +1769,45 @@ export async function readUrlContent(
     return null
   }
 
+  const tryCachedFallbacks = async (reason: string): Promise<UrlReadResult | null> => {
+    const googleCacheStartedAt = Date.now()
+    const googleCacheResult = await fetchGoogleCache(validatedUrl, {
+      timeout: GOOGLE_CACHE_TIMEOUT,
+      maxContentLength,
+      userAgent: CRAWLER_USER_AGENT,
+    })
+    if (googleCacheResult) {
+      recordAttempt(googleCacheStartedAt, 'google_cache', 'success', {
+        finalUrl: googleCacheResult.finalUrl || googleCacheResult.url,
+        contentType: googleCacheResult.contentType,
+      })
+      log.debug('url reader: Google Cache fallback success', { url: validatedUrl, reason })
+      return toPublicResult(googleCacheResult)
+    }
+    recordAttempt(googleCacheStartedAt, 'google_cache', 'skipped', {
+      error: `Google Cache did not return readable content after ${reason}`,
+    })
+
+    const waybackStartedAt = Date.now()
+    const waybackResult = await fetchWaybackMachine(validatedUrl, {
+      timeout: WAYBACK_TIMEOUT,
+      maxContentLength,
+    })
+    if (waybackResult) {
+      recordAttempt(waybackStartedAt, 'wayback', 'success', {
+        finalUrl: waybackResult.finalUrl || waybackResult.url,
+        contentType: waybackResult.contentType,
+      })
+      log.debug('url reader: Wayback Machine fallback success', { url: validatedUrl, reason })
+      return toPublicResult(waybackResult)
+    }
+    recordAttempt(waybackStartedAt, 'wayback', 'skipped', {
+      error: `Wayback Machine did not return readable content after ${reason}`,
+    })
+
+    return null
+  }
+
   try {
     validatedUrl = validatePublicHttpUrl(url)
     const transformed = applyUrlTransformRules(validatedUrl)
@@ -1692,11 +1862,13 @@ export async function readUrlContent(
           error: 'Crawler fallback did not extract readable content after non-2xx response',
         })
       }
-      if (status !== 404 && finalCode !== 'ROBOTS_DENIED') {
+      if (finalCode !== 'ROBOTS_DENIED') {
         const feedResult = await tryFeedFallback(`HTTP ${status}`)
         if (feedResult) return feedResult
         const browserResult = await tryBrowserFallback(`HTTP ${status}`)
         if (browserResult) return browserResult
+        const cachedResult = await tryCachedFallbacks(`HTTP ${status}`)
+        if (cachedResult) return cachedResult
       }
       const message =
         finalCode === 'ROBOTS_DENIED'
@@ -1867,6 +2039,8 @@ export async function readUrlContent(
       if (feedResult) return feedResult
       const browserResult = await tryBrowserFallback('JS challenge detection')
       if (browserResult) return browserResult
+      const cachedResult = await tryCachedFallbacks('JS challenge detection')
+      if (cachedResult) return cachedResult
       const message = 'The page appears to be protected by a JavaScript challenge or anti-bot verification'
       log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'JS_CHALLENGE' })
       return buildErrorResult(message, 'JS_CHALLENGE')
@@ -1899,6 +2073,8 @@ export async function readUrlContent(
       if (feedResult) return feedResult
       const browserResult = await tryBrowserFallback('empty content')
       if (browserResult) return browserResult
+      const cachedResult = await tryCachedFallbacks('empty content')
+      if (cachedResult) return cachedResult
       const message = 'Page content is empty or too short'
       log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'EMPTY_CONTENT' })
       return buildErrorResult(message, 'EMPTY_CONTENT')
@@ -1967,6 +2143,9 @@ export async function readUrlContent(
     const browserResult = await tryBrowserFallback('readability parse miss')
     if (browserResult) return browserResult
 
+    const cachedResult = await tryCachedFallbacks('readability parse miss')
+    if (cachedResult) return cachedResult
+
     {
       const message = 'Failed to extract article content. The page structure may not be suitable for reading mode.'
       recordAttempt(nativeStartedAt, 'native', 'error', {
@@ -2003,6 +2182,8 @@ export async function readUrlContent(
       if (feedResult) return feedResult
       const browserResult = await tryBrowserFallback(`thrown error: ${classified.errorCode}`)
       if (browserResult) return browserResult
+      const cachedResult = await tryCachedFallbacks(`thrown error: ${classified.errorCode}`)
+      if (cachedResult) return cachedResult
     }
 
     const message =
@@ -2080,6 +2261,10 @@ export function formatUrlContentForModel(result: UrlReadResult): string {
     parts.push(`- **提取方式**: 本地浏览器渲染`)
   } else if (result.fallbackUsed === 'document') {
     parts.push(`- **提取方式**: ${result.engine || '文档/结构化内容'} 引擎`)
+  } else if (result.fallbackUsed === 'google_cache') {
+    parts.push(`- **提取方式**: Google 缓存快照`)
+  } else if (result.fallbackUsed === 'wayback') {
+    parts.push(`- **提取方式**: Wayback Machine 存档`)
   } else {
     parts.push(`- **提取方式**: 标准正文提取`)
   }
