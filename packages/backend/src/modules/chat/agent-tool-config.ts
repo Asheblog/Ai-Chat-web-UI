@@ -13,7 +13,7 @@ import {
 /**
  * Web 搜索配置
  */
-export type AgentWebSearchEngine = 'tavily' | 'brave' | 'metaso'
+export type AgentWebSearchEngine = 'tavily' | 'brave' | 'metaso' | 'exa'
 export type AgentWebSearchMergeStrategy = 'hybrid_score_v1'
 export type AgentWebSearchBilingualMode = 'off' | 'conditional' | 'always'
 export type AgentWebSearchConflictEscalation = 'off' | 'auto'
@@ -84,7 +84,7 @@ export interface AgentWorkspaceToolConfig {
 }
 
 const WEB_SEARCH_SCOPES = ['webpage', 'document', 'paper', 'image', 'video', 'podcast'] as const;
-const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso'];
+const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso', 'exa'];
 
 const parseEngineList = (
   raw: string | undefined | null,

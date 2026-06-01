@@ -290,9 +290,9 @@ const HIGH_RISK_QUERY_RE = new RegExp(
 )
 
 const LANGUAGE_ENGINE_PRIORITY: Record<'zh' | 'en' | 'unknown', string[]> = {
-  zh: ['metaso', 'tavily', 'brave'],
-  en: ['tavily', 'brave', 'metaso'],
-  unknown: ['tavily', 'metaso', 'brave'],
+  zh: ['metaso', 'tavily', 'brave', 'exa'],
+  en: ['tavily', 'brave', 'exa', 'metaso'],
+  unknown: ['tavily', 'metaso', 'brave', 'exa'],
 }
 
 const MIN_OVERLAP_RATIO_FOR_STABLE = 0.25

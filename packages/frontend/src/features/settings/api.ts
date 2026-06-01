@@ -40,7 +40,7 @@ export const getSystemSettings = async () => {
     const normalize = (item: unknown): WebSearchEngine | null => {
       if (typeof item !== 'string') return null
       const lowered = item.trim().toLowerCase()
-      if (lowered === 'tavily' || lowered === 'brave' || lowered === 'metaso') {
+      if (lowered === 'tavily' || lowered === 'brave' || lowered === 'metaso' || lowered === 'exa') {
         return lowered
       }
       return null
@@ -241,8 +241,9 @@ export const getSystemSettings = async () => {
   const webSearchHasApiKeyTavily = Boolean(raw.web_search_has_api_key_tavily ?? webSearchHasApiKey)
   const webSearchHasApiKeyBrave = Boolean(raw.web_search_has_api_key_brave ?? webSearchHasApiKey)
   const webSearchHasApiKeyMetaso = Boolean(raw.web_search_has_api_key_metaso ?? webSearchHasApiKey)
+  const webSearchHasApiKeyExa = Boolean(raw.web_search_has_api_key_exa ?? webSearchHasApiKey)
   const aggregatedHasKey =
-    webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKey
+    webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKeyExa || webSearchHasApiKey
   const webSearchScope =
     typeof raw.web_search_scope === 'string'
       ? raw.web_search_scope
@@ -430,6 +431,7 @@ export const getSystemSettings = async () => {
       webSearchHasApiKeyTavily,
       webSearchHasApiKeyBrave,
       webSearchHasApiKeyMetaso,
+      webSearchHasApiKeyExa,
       webSearchScope,
       webSearchIncludeSummary,
       webSearchIncludeRaw,
@@ -632,6 +634,7 @@ export const updateSystemSettings = async (
   if (typeof rest.webSearchApiKeyTavily === 'string') patch.webSearchApiKeyTavily = rest.webSearchApiKeyTavily
   if (typeof rest.webSearchApiKeyBrave === 'string') patch.webSearchApiKeyBrave = rest.webSearchApiKeyBrave
   if (typeof rest.webSearchApiKeyMetaso === 'string') patch.webSearchApiKeyMetaso = rest.webSearchApiKeyMetaso
+  if (typeof rest.webSearchApiKeyExa === 'string') patch.webSearchApiKeyExa = rest.webSearchApiKeyExa
   if (typeof rest.taskTraceEnabled === 'boolean') patch.taskTraceEnabled = rest.taskTraceEnabled
   if (typeof rest.taskTraceDefaultOn === 'boolean') patch.taskTraceDefaultOn = rest.taskTraceDefaultOn
   if (typeof rest.taskTraceAdminOnly === 'boolean') patch.taskTraceAdminOnly = rest.taskTraceAdminOnly

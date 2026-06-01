@@ -77,7 +77,7 @@ export interface WebSearchParallelResult {
 
 const DEFAULT_LIMIT = 4
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12_000
-const SUPPORTED_ENGINES = ['tavily', 'brave', 'metaso'] as const
+const SUPPORTED_ENGINES = ['tavily', 'brave', 'metaso', 'exa'] as const
 type SupportedSearchEngine = (typeof SUPPORTED_ENGINES)[number]
 const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'scholar', 'image', 'video', 'podcast'])
 
@@ -353,6 +353,51 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
   }))
 }
 
+const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
+  if (!opts.apiKey) {
+    throw new Error('Exa API key is not configured')
+  }
+  const endpoint = opts.endpoint || 'https://api.exa.ai/search'
+  const payload: Record<string, unknown> = {
+    query,
+    numResults: clampLimit(opts.limit),
+    type: 'auto',
+    contents: { highlights: true },
+  }
+  const domains = normalizeDomains(opts.domains)
+  if (domains.length > 0) {
+    payload.includeDomains = domains
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'x-api-key': opts.apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal: opts.signal,
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Exa search failed: ${response.status} ${text}`)
+  }
+  const data = await response.json() as any
+  const results = Array.isArray(data?.results) ? data.results : []
+  return results.map((item: any) => {
+    const highlights = Array.isArray(item?.highlights) ? item.highlights : []
+    const text = typeof item?.text === 'string' ? item.text : ''
+    return {
+      title: item?.title || item?.url || 'Untitled',
+      url: item?.url || '',
+      snippet: highlights[0] || text.slice(0, 300) || '',
+      content: text || highlights.join('\n') || item?.summary || '',
+      imageUrl: pickImageUrl(item),
+      thumbnailUrl: pickThumbnailUrl(item) || item?.favicon || '',
+    }
+  })
+}
+
 export const runWebSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
   const engine = normalizeEngine(opts.engine || '')
   log.debug('web search request', { engine, query })
@@ -363,6 +408,8 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
       return runBraveSearch(query, opts)
     case 'metaso':
       return runMetasoSearch(query, opts)
+    case 'exa':
+      return runExaSearch(query, opts)
     default:
       throw new Error(`Unsupported web search engine: ${engine || 'unknown'}`)
   }
@@ -456,6 +503,17 @@ export const runWebSearchParallel = async (
     ...engineCandidates.filter((engine) => !engineOrderRaw.includes(engine)),
   ].slice(0, maxEngines)
 
+  // 确保 queryPlans 中引用的引擎不被 top-N 截断
+  const planEngineSet = new Set(selectedEngines)
+  for (const plan of (opts.queryPlans || [])) {
+    for (const engine of (plan.engines || [])) {
+      const normalized = normalizeEngine(engine)
+      if (isSupportedEngine(normalized) && engineCandidates.includes(normalized as SupportedSearchEngine)) {
+        planEngineSet.add(normalized)
+      }
+    }
+  }
+
   const normalizedQueries = (opts.queries || [])
     .map((item) => ({
       query: (item.query || '').trim(),
@@ -469,7 +527,7 @@ export const runWebSearchParallel = async (
       queryLanguage: item.queryLanguage || 'unknown',
       engines: Array.from(
         new Set((item.engines || []).map((engine) => normalizeEngine(engine)).filter(Boolean)),
-      ).filter((engine): engine is SupportedSearchEngine => selectedEngines.includes(engine as SupportedSearchEngine)),
+      ).filter((engine): engine is SupportedSearchEngine => planEngineSet.has(engine as SupportedSearchEngine)),
     }))
     .filter((item) => item.query.length > 0 && item.engines.length > 0)
 
@@ -573,7 +631,10 @@ export const runWebSearchParallel = async (
     }),
   )
 
-  const mergeOrder = normalizeEngineOrderForMerge(selectedEngines, opts.engineOrder)
+  const executedEngines = Array.from(
+    new Set(taskResults.map((result) => result.task.engine).filter(Boolean)),
+  )
+  const mergeOrder = normalizeEngineOrderForMerge(executedEngines, opts.engineOrder)
   const mergedHits = mergeHits(taskResults.flatMap((result) => result.hits), opts.limit, mergeOrder)
 
   return {

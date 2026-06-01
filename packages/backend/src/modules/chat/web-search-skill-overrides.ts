@@ -5,16 +5,16 @@ import type {
   AgentWebSearchLocaleRouting,
 } from './agent-tool-config'
 
-const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso']
+const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso', 'exa']
 const ROUTING_CN_FIRST: AgentWebSearchLocaleRouting = {
-  zh: ['metaso', 'tavily', 'brave'],
-  en: ['tavily', 'brave', 'metaso'],
-  unknown: ['metaso', 'tavily', 'brave'],
+  zh: ['metaso', 'tavily', 'brave', 'exa'],
+  en: ['tavily', 'brave', 'exa', 'metaso'],
+  unknown: ['metaso', 'tavily', 'brave', 'exa'],
 }
 const ROUTING_GLOBAL_FIRST: AgentWebSearchLocaleRouting = {
-  zh: ['tavily', 'brave', 'metaso'],
-  en: ['tavily', 'brave', 'metaso'],
-  unknown: ['tavily', 'brave', 'metaso'],
+  zh: ['tavily', 'brave', 'exa', 'metaso'],
+  en: ['tavily', 'brave', 'exa', 'metaso'],
+  unknown: ['tavily', 'brave', 'exa', 'metaso'],
 }
 
 const getOverrideValue = (

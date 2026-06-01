@@ -59,7 +59,7 @@ export interface SettingsServiceDeps {
 }
 
 const BRAND_TEXT_CACHE_TTL_MS = 30_000
-const WEB_SEARCH_ENGINES = ['tavily', 'brave', 'metaso'] as const
+const WEB_SEARCH_ENGINES = ['tavily', 'brave', 'metaso', 'exa'] as const
 type WebSearchEngine = (typeof WEB_SEARCH_ENGINES)[number]
 
 export class SettingsService {
@@ -258,8 +258,11 @@ export class SettingsService {
     const webSearchHasApiKeyMetaso = Boolean(
       settingsObj.web_search_api_key_metaso || process.env.WEB_SEARCH_API_KEY_METASO || '',
     )
+    const webSearchHasApiKeyExa = Boolean(
+      settingsObj.web_search_api_key_exa || process.env.WEB_SEARCH_API_KEY_EXA || '',
+    )
     const webSearchHasApiKey =
-      webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso
+      webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKeyExa
     const webSearchParallelMergeStrategy = this.parseWebSearchMergeStrategy(
       settingsObj.web_search_parallel_merge_strategy ?? process.env.WEB_SEARCH_PARALLEL_MERGE_STRATEGY,
     )
@@ -330,6 +333,7 @@ export class SettingsService {
       web_search_has_api_key_tavily: webSearchHasApiKeyTavily,
       web_search_has_api_key_brave: webSearchHasApiKeyBrave,
       web_search_has_api_key_metaso: webSearchHasApiKeyMetaso,
+      web_search_has_api_key_exa: webSearchHasApiKeyExa,
       web_search_has_api_key: webSearchHasApiKey,
       web_search_scope: settingsObj.web_search_scope || process.env.WEB_SEARCH_SCOPE || 'webpage',
       web_search_include_summary: this.parseBoolean(settingsObj.web_search_include_summary, process.env.WEB_SEARCH_INCLUDE_SUMMARY || 'false'),
@@ -477,6 +481,7 @@ export class SettingsService {
         web_search_has_api_key_tavily: formatted.web_search_has_api_key_tavily,
         web_search_has_api_key_brave: formatted.web_search_has_api_key_brave,
         web_search_has_api_key_metaso: formatted.web_search_has_api_key_metaso,
+        web_search_has_api_key_exa: formatted.web_search_has_api_key_exa,
         web_search_scope: formatted.web_search_scope,
         web_search_include_summary: formatted.web_search_include_summary,
         web_search_include_raw: formatted.web_search_include_raw,
@@ -636,6 +641,7 @@ export class SettingsService {
       { key: 'web_search_api_key_tavily', value: payload.web_search_api_key_tavily },
       { key: 'web_search_api_key_brave', value: payload.web_search_api_key_brave },
       { key: 'web_search_api_key_metaso', value: payload.web_search_api_key_metaso },
+      { key: 'web_search_api_key_exa', value: payload.web_search_api_key_exa },
       { key: 'web_search_domain_filter', value: Array.isArray(payload.web_search_domain_filter) ? JSON.stringify(payload.web_search_domain_filter) : undefined },
       { key: 'web_search_scope', value: payload.web_search_scope },
       { key: 'web_search_parallel_merge_strategy', value: payload.web_search_parallel_merge_strategy },

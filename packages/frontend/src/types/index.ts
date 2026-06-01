@@ -343,7 +343,7 @@ export interface SystemSetting {
   value: string;
 }
 
-export type WebSearchEngine = 'tavily' | 'brave' | 'metaso';
+export type WebSearchEngine = 'tavily' | 'brave' | 'metaso' | 'exa';
 export type WebSearchBilingualMode = 'off' | 'conditional' | 'always';
 export type WebSearchMergeStrategy = 'hybrid_score_v1';
 
@@ -401,6 +401,8 @@ export interface SystemSettings {
   webSearchHasApiKeyTavily?: boolean;
   webSearchHasApiKeyBrave?: boolean;
   webSearchHasApiKeyMetaso?: boolean;
+  webSearchHasApiKeyExa?: boolean;
+  webSearchApiKeyExa?: string;
   webSearchScope?: string;
   webSearchIncludeSummary?: boolean;
   webSearchIncludeRaw?: boolean;

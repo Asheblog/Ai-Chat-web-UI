@@ -24,6 +24,7 @@ const ENGINE_OPTIONS: Array<{ value: WebSearchEngine; label: string }> = [
   { value: "tavily", label: "Tavily" },
   { value: "brave", label: "Brave" },
   { value: "metaso", label: "Metaso（秘塔）" },
+  { value: "exa", label: "Exa" },
 ]
 
 const mergeStrategy = "hybrid_score_v1" as const
@@ -39,7 +40,7 @@ const normalizeEngineList = (
         .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
         .filter(
           (item): item is WebSearchEngine =>
-            item === "tavily" || item === "brave" || item === "metaso",
+            item === "tavily" || item === "brave" || item === "metaso" || item === "exa",
         ),
     ),
   )
@@ -92,9 +93,11 @@ export function SystemWebSearchPage() {
   const [apiKeyTavilyDraft, setApiKeyTavilyDraft] = useState("")
   const [apiKeyBraveDraft, setApiKeyBraveDraft] = useState("")
   const [apiKeyMetasoDraft, setApiKeyMetasoDraft] = useState("")
+  const [apiKeyExaDraft, setApiKeyExaDraft] = useState("")
   const [clearTavily, setClearTavily] = useState(false)
   const [clearBrave, setClearBrave] = useState(false)
   const [clearMetaso, setClearMetaso] = useState(false)
+  const [clearExa, setClearExa] = useState(false)
   const [scope, setScope] = useState("webpage")
   const [includeSummary, setIncludeSummary] = useState(false)
   const [includeRaw, setIncludeRaw] = useState(false)
@@ -128,9 +131,11 @@ export function SystemWebSearchPage() {
     setApiKeyTavilyDraft("")
     setApiKeyBraveDraft("")
     setApiKeyMetasoDraft("")
+    setApiKeyExaDraft("")
     setClearTavily(false)
     setClearBrave(false)
     setClearMetaso(false)
+    setClearExa(false)
     setScope(systemSettings.webSearchScope || "webpage")
     setIncludeSummary(Boolean(systemSettings.webSearchIncludeSummary ?? false))
     setIncludeRaw(Boolean(systemSettings.webSearchIncludeRaw ?? false))
@@ -238,9 +243,11 @@ export function SystemWebSearchPage() {
     apiKeyTavilyDraft.trim() !== "" ||
     apiKeyBraveDraft.trim() !== "" ||
     apiKeyMetasoDraft.trim() !== "" ||
+    apiKeyExaDraft.trim() !== "" ||
     clearTavily ||
     clearBrave ||
-    clearMetaso
+    clearMetaso ||
+    clearExa
 
   const toggleEngine = (engine: WebSearchEngine, checked: boolean) => {
     setEnabledEngines((prev) => {
@@ -345,14 +352,21 @@ export function SystemWebSearchPage() {
     } else if (clearMetaso) {
       payload.webSearchApiKeyMetaso = ""
     }
+    if (apiKeyExaDraft.trim()) {
+      payload.webSearchApiKeyExa = apiKeyExaDraft.trim()
+    } else if (clearExa) {
+      payload.webSearchApiKeyExa = ""
+    }
 
     await updateSystemSettings(payload)
     setApiKeyTavilyDraft("")
     setApiKeyBraveDraft("")
     setApiKeyMetasoDraft("")
+    setApiKeyExaDraft("")
     setClearTavily(false)
     setClearBrave(false)
     setClearMetaso(false)
+    setClearExa(false)
     toast({ title: "联网搜索设置已保存" })
   }
 
@@ -391,7 +405,9 @@ export function SystemWebSearchPage() {
                 ? systemSettings.webSearchHasApiKeyTavily
                 : engine.value === "brave"
                   ? systemSettings.webSearchHasApiKeyBrave
-                  : systemSettings.webSearchHasApiKeyMetaso
+                  : engine.value === "metaso"
+                    ? systemSettings.webSearchHasApiKeyMetaso
+                    : systemSettings.webSearchHasApiKeyExa
             return (
               <label
                 key={engine.value}
@@ -601,7 +617,7 @@ export function SystemWebSearchPage() {
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
             <label className="text-sm font-medium" htmlFor="web-search-key-tavily">
@@ -708,6 +724,42 @@ export function SystemWebSearchPage() {
             </Button>
           </div>
           {clearMetaso && <p className="text-xs text-destructive">保存后将删除 Metaso Key。</p>}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-sm font-medium" htmlFor="web-search-key-exa">
+              Exa API Key
+            </label>
+            <span className="text-xs text-muted-foreground">
+              {systemSettings.webSearchHasApiKeyExa && !clearExa ? "已配置" : "未配置"}
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              id="web-search-key-exa"
+              type="password"
+              value={apiKeyExaDraft}
+              placeholder="留空表示不修改"
+              onChange={(e) => {
+                setApiKeyExaDraft(e.target.value)
+                if (clearExa) setClearExa(false)
+              }}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setApiKeyExaDraft("")
+                setClearExa(true)
+              }}
+              disabled={!systemSettings.webSearchHasApiKeyExa && !clearExa}
+            >
+              清除
+            </Button>
+          </div>
+          {clearExa && <p className="text-xs text-destructive">保存后将删除 Exa Key。</p>}
         </div>
       </div>
 

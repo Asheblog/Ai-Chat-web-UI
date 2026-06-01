@@ -43,9 +43,9 @@ describe('applyWebSearchSkillOverrides', () => {
     expect(next.minSources).toBe(1)
     expect(next.conflictEscalation).toBe('off')
     expect(next.localeRouting).toEqual({
-      zh: ['metaso', 'tavily', 'brave'],
-      en: ['tavily', 'brave', 'metaso'],
-      unknown: ['metaso', 'tavily', 'brave'],
+      zh: ['metaso', 'tavily', 'brave', 'exa'],
+      en: ['tavily', 'brave', 'exa', 'metaso'],
+      unknown: ['metaso', 'tavily', 'brave', 'exa'],
     })
   })
 
