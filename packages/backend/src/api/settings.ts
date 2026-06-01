@@ -166,7 +166,7 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     web_search_scope: z.enum(['webpage', 'document', 'paper', 'image', 'video', 'podcast']).optional(),
     web_search_include_summary: z.boolean().optional(),
     web_search_include_raw: z.boolean().optional(),
-    web_search_parallel_max_engines: z.number().int().min(1).max(3).optional(),
+    web_search_parallel_max_engines: z.number().int().min(1).max(4).optional(),
     web_search_parallel_max_queries_per_call: z.number().int().min(1).max(3).optional(),
     web_search_parallel_timeout_ms: z.number().int().min(1000).max(120000).optional(),
     web_search_parallel_merge_strategy: z.enum(['hybrid_score_v1']).optional(),

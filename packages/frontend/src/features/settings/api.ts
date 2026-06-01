@@ -252,7 +252,7 @@ export const getSystemSettings = async () => {
   const webSearchIncludeRaw = Boolean(raw.web_search_include_raw ?? false)
   const webSearchParallelMaxEngines = (() => {
     const parsed = parseOptionalInt(raw.web_search_parallel_max_engines)
-    return typeof parsed === 'number' ? Math.max(1, Math.min(3, parsed)) : 3
+    return typeof parsed === 'number' ? Math.max(1, Math.min(4, parsed)) : 3
   })()
   const webSearchParallelMaxQueriesPerCall = (() => {
     const parsed = parseOptionalInt(raw.web_search_parallel_max_queries_per_call)

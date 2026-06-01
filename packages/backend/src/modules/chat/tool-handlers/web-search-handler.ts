@@ -51,7 +51,7 @@ const DEFAULT_MODEL_SNIPPET_CHARS = 360
 const DEFAULT_MODEL_SUMMARY_CHARS = 3200
 const DEFAULT_MODEL_EVIDENCE_ITEMS = 2
 const DEFAULT_MODEL_EVIDENCE_ITEM_CHARS = 900
-const DEFAULT_PARALLEL_MAX_ENGINES = 3
+const DEFAULT_PARALLEL_MAX_ENGINES = 4
 const DEFAULT_PARALLEL_MAX_QUERIES = 2
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12000
 
@@ -243,7 +243,7 @@ const pickActiveEngines = (config: WebSearchHandlerConfig): string[] => {
     config.parallelMaxEngines,
     DEFAULT_PARALLEL_MAX_ENGINES,
     1,
-    3,
+    4,
   )
   return withKeys.slice(0, maxEngines)
 }

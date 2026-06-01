@@ -190,7 +190,7 @@ export function SystemWebSearchPage() {
   }
 
   const limitRange = { min: 1, max: 10 }
-  const parallelEngineRange = { min: 1, max: 3 }
+  const parallelEngineRange = { min: 1, max: 4 }
   const parallelQueryRange = { min: 1, max: 3 }
   const parallelTimeoutRange = { min: 1000, max: 120000 }
   const autoReadParallelismRange = { min: 1, max: 4 }

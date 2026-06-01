@@ -170,7 +170,7 @@ export const buildAgentWebSearchConfig = (
       { fallback: 3 }
     ),
     1,
-    3
+    4
   );
 
   const parallelMaxQueriesPerCall = clampNumber(

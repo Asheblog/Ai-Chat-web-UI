@@ -494,7 +494,7 @@ export const runWebSearchParallel = async (
   const engineCandidates = Array.from(
     new Set((opts.engines || []).map((engine) => normalizeEngine(engine)).filter(Boolean))
   ).filter(isSupportedEngine)
-  const maxEngines = Math.max(1, Math.min(3, Math.floor(opts.parallelMaxEngines || engineCandidates.length || 1)))
+  const maxEngines = Math.max(1, Math.min(4, Math.floor(opts.parallelMaxEngines || engineCandidates.length || 1)))
   const engineOrderRaw = Array.from(
     new Set((opts.engineOrder || []).map((engine) => normalizeEngine(engine)).filter(Boolean))
   ).filter(isSupportedEngine)

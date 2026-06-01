@@ -342,7 +342,7 @@ export class SettingsService {
         settingsObj.web_search_parallel_max_engines,
         process.env.WEB_SEARCH_PARALLEL_MAX_ENGINES,
         1,
-        3,
+        4,
         3,
       ),
       web_search_parallel_max_queries_per_call: this.parseIntInRange(
