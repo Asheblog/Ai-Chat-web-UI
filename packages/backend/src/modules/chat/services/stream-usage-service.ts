@@ -10,6 +10,8 @@ export type ProviderUsageSnapshot = {
   eval_count?: number
   output_tokens?: number
   total_tokens?: number
+  prompt_cache_hit_tokens?: number
+  prompt_cache_miss_tokens?: number
 }
 
 export interface FinalizeParams {
@@ -28,6 +30,8 @@ export interface FinalizeParams {
   contextLimit: number
   providerUsageSeen: boolean
   providerUsageSnapshot: ProviderUsageSnapshot | null
+  promptCacheHitTokens: number
+  promptCacheMissTokens: number
   reasoningEnabled: boolean
   reasoningSaveToDb: boolean
   assistantReplyHistoryLimit: number
@@ -186,6 +190,8 @@ export class StreamUsageService {
           completionTokens: finalUsage.completion,
           totalTokens: finalUsage.total,
           contextLimit: params.contextLimit,
+          promptCacheHitTokens: params.promptCacheHitTokens,
+          promptCacheMissTokens: params.promptCacheMissTokens,
         },
         metrics: {
           firstTokenLatencyMs,

@@ -97,7 +97,7 @@ export class ChatRequestBuilder {
   private resolveCompletionLimit: typeof defaultResolveCompletionLimit
   private cleanupExpiredChatImages: typeof defaultCleanupExpiredChatImages
   private authUtils: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
-  private readonly defaultSessionPromptTemplate = '今天日期是{day time}'
+  private readonly defaultSessionPromptTemplate = '你是一位乐于助人的AI助手。'
 
   constructor(deps: ChatRequestBuilderDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
@@ -174,13 +174,21 @@ export class ChatRequestBuilder {
         '输出请使用 Markdown 语法。若在表格单元格内列出多条内容，请使用 Markdown 列表或换行（例如以 "- " 或 "• " 开头），不要输出 HTML 列表标签（如 <li>/<ul>/<ol>）。',
     })
 
-    // RAG 文档上下文增强
+    // RAG 文档上下文增强 — 移出 system prompt，改为注入用户消息前缀（避免破坏 DeepSeek 缓存前缀）
+    let ragUserPrefix = ''
     if (params.ragContext && params.ragContext.trim()) {
-      systemPrompts.push({
-        role: 'system',
-        content: params.ragContext.trim(),
-      })
+      ragUserPrefix = `[参考文档]\n${params.ragContext.trim()}\n\n`
     }
+
+    // 清理 system prompts 中的动态日期时间以优化 DeepSeek 上下文缓存命中率
+    // 日期会被注入到用户消息前缀中
+    // 同时匹配常见的日期前缀文本（如"今天日期是"），避免残留孤立的引导语
+    const DATE_TIME_PATTERN = /(?:今天日期是|当前日期是|当前时间是|今天是|日期：|时间：)?\s*\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}(?::\d{2})?\s\(UTC[+-]\d{2}:\d{2}\)/g
+    for (const sp of systemPrompts) {
+      sp.content = sp.content.replace(DATE_TIME_PATTERN, '').replace(/^[，,。、\s]+/, '').trim()
+    }
+    // 过滤掉清理后变为空的 system prompt
+    const cleanedSystemPrompts = systemPrompts.filter((sp) => sp.content.length > 0)
 
     const contextInfo = await this.buildContextMessages({
       sessionId: params.session.id,
@@ -190,7 +198,7 @@ export class ChatRequestBuilder {
       actorContent: params.content,
       contextEnabled,
       historyUpperBound: params.historyUpperBound ?? null,
-      pinnedSystemMessages: systemPrompts,
+      pinnedSystemMessages: cleanedSystemPrompts,
     })
 
     const contextMessages = contextInfo.truncatedContext
@@ -200,6 +208,14 @@ export class ChatRequestBuilder {
       params.content,
       params.images ?? [],
     )
+
+    // 注入当前日期时间和 RAG 上下文到用户消息前缀
+    // 放在 system prompt 之后、用户内容之前，不影响 DeepSeek 前缀缓存命中
+    const dateString = templateVariables['day time']
+    const cacheSafePrefix = ragUserPrefix + `[当前时间: ${dateString}]`
+    if (messagesPayload.length > 0) {
+      this.prependUserContent(messagesPayload, cacheSafePrefix)
+    }
 
     const temperature = await this.resolveTemperature({
       connectionId: params.session.connectionId,
@@ -272,6 +288,7 @@ export class ChatRequestBuilder {
     const remainingBudget = Math.max(0, contextLimit - pinnedTokens)
 
     let truncatedConversation: Array<{ role: string; content: string }>
+    let compressionSummaries: Array<{ role: string; content: string }> = []
     if (params.contextEnabled) {
       const messageWhere: Record<string, unknown> = {
         sessionId: params.sessionId,
@@ -317,6 +334,10 @@ export class ChatRequestBuilder {
         createdAt: msg.createdAt,
         sortKey: `m:${msg.id}`,
       }))
+
+      // 压缩摘要独立收集，将置于固定位置（system prompt 之后、对话历史之前），
+      // 而非按时间顺序插入对话中。此举可稳定 DeepSeek 缓存前缀。
+      compressionSummaries = []
 
       if (groupedMessageRefs.length > 0) {
         const groupedIds = Array.from(
@@ -372,11 +393,10 @@ export class ChatRequestBuilder {
               typeof countFromMetadata === 'number' && countFromMetadata > 0
                 ? countFromMetadata
                 : stats.count
-            conversationItems.push({
+            // 压缩摘要置于固定位置（system prompt 之后），不插入对话时间线中
+            compressionSummaries.push({
               role: 'system',
               content: this.buildCompressionSummaryMessage(group.summary, compressedCount),
-              createdAt: stats.lastCreatedAt,
-              sortKey: `g:${groupId}:${stats.lastMessageId}`,
             })
           }
         }
@@ -392,15 +412,20 @@ export class ChatRequestBuilder {
         .filter((msg) => msg.role !== 'user' || msg.content !== params.actorContent)
 
       const toTruncate = conversation.concat([{ role: 'user', content: params.actorContent }])
+      // 扣除压缩摘要的 token 预算，确保它们始终被包含
+      const compressionSummaryTokens = compressionSummaries.length > 0
+        ? await this.tokenizer.countConversationTokens(compressionSummaries)
+        : 0
+      const adjustedBudget = Math.max(1, remainingBudget - compressionSummaryTokens)
       truncatedConversation = await this.tokenizer.truncateMessages(
         toTruncate,
-        Math.max(1, remainingBudget),
+        adjustedBudget,
       )
     } else {
       truncatedConversation = [{ role: 'user', content: params.actorContent }]
     }
 
-    const combined = [...pinned, ...truncatedConversation]
+    const combined = [...pinned, ...compressionSummaries, ...truncatedConversation]
     const promptTokens = await this.tokenizer.countConversationTokens(combined)
     const contextRemaining = Math.max(0, contextLimit - promptTokens)
     const completionLimit = await this.resolveCompletionLimit({
@@ -419,6 +444,30 @@ export class ChatRequestBuilder {
       contextLimit,
       contextRemaining,
       appliedMaxTokens,
+    }
+  }
+
+  private prependUserContent(
+    payload: Array<{ role: string; content: unknown }>,
+    prefix: string,
+  ) {
+    if (!prefix) return
+    const lastMsg = payload[payload.length - 1]
+    if (!lastMsg || lastMsg.role !== 'user') return
+    if (typeof lastMsg.content === 'string') {
+      lastMsg.content = `${prefix}\n\n${lastMsg.content}`
+    } else if (Array.isArray(lastMsg.content)) {
+      const textPart = (lastMsg.content as Array<{ type: string; text?: string }>).find(
+        (p) => p.type === 'text',
+      )
+      if (textPart) {
+        textPart.text = `${prefix}\n\n${textPart.text || ''}`
+      } else {
+        ;(lastMsg.content as Array<{ type: string; text?: string }>).unshift({
+          type: 'text',
+          text: prefix,
+        })
+      }
     }
   }
 
@@ -476,16 +525,15 @@ export class ChatRequestBuilder {
     const day = pad(now.getDate())
     const hour = pad(now.getHours())
     const minute = pad(now.getMinutes())
-    const second = pad(now.getSeconds())
     const offsetMinutes = -now.getTimezoneOffset()
     const sign = offsetMinutes >= 0 ? '+' : '-'
     const absMinutes = Math.abs(offsetMinutes)
     const offsetHours = pad(Math.floor(absMinutes / 60))
     const offsetRest = pad(absMinutes % 60)
     const timezoneOffset = `UTC${sign}${offsetHours}:${offsetRest}`
-    const localTime = `${year}-${month}-${day} ${hour}:${minute}:${second}`
+    const localTime = `${year}-${month}-${day} ${hour}:${minute}`
     const dayTimeValue = `${localTime} (${timezoneOffset})`
-    return { 'day time': dayTimeValue }
+    return { 'day time': dayTimeValue, localTime, timezoneOffset }
   }
 
   private applyPromptTemplate(

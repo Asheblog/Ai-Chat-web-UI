@@ -255,7 +255,7 @@ export class NonStreamChatService {
   private async persistUsageMetric(params: {
     session: ChatSessionWithConnection
     assistantMessageId: number | null
-    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; context_limit: number }
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; context_limit: number; prompt_cache_hit_tokens?: number; prompt_cache_miss_tokens?: number }
     providerHost: string | null
   }) {
     try {
@@ -269,6 +269,8 @@ export class NonStreamChatService {
           completionTokens: params.usage.completion_tokens,
           totalTokens: params.usage.total_tokens,
           contextLimit: params.usage.context_limit,
+          promptCacheHitTokens: params.usage.prompt_cache_hit_tokens ?? 0,
+          promptCacheMissTokens: params.usage.prompt_cache_miss_tokens ?? 0,
         },
       })
     } catch (error) {

@@ -904,7 +904,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             0;
           const total =
             Number(usage?.total_tokens ?? (prompt + completion)) || prompt + completion;
-          return { prompt, completion, total };
+          const cacheHit = Number(usage?.prompt_cache_hit_tokens ?? 0) || 0;
+          const cacheMiss = Number(usage?.prompt_cache_miss_tokens ?? 0) || 0;
+          return { prompt, completion, total, cacheHit, cacheMiss };
         };
         const providerUsageNumbers =
           providerUsageSeen && finalUsageSnapshot ? toUsageNumbers(finalUsageSnapshot) : null;
@@ -917,6 +919,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           prompt: promptTokens,
           completion: completionTokensFallback,
           total: promptTokens + completionTokensFallback,
+          cacheHit: 0,
+          cacheMiss: 0,
         };
         const finalUsageNumbers = providerUsageValid ? providerUsageNumbers : fallbackUsageNumbers;
         const finalUsagePayload = {
@@ -983,6 +987,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 completionTokens: finalUsageNumbers.completion,
                 totalTokens: finalUsageNumbers.total,
                 contextLimit,
+                promptCacheHitTokens: finalUsageNumbers.cacheHit,
+                promptCacheMissTokens: finalUsageNumbers.cacheMiss,
               },
               metrics: {
                 firstTokenLatencyMs,

@@ -971,9 +971,21 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       // 提前记录是否已收到厂商 usage（优先使用）
       let providerUsageSeen = false as boolean;
       let providerUsageSnapshot: any = null;
+      // DeepSeek 缓存命中统计
+      let promptCacheHitTokens = 0 as number;
+      let promptCacheMissTokens = 0 as number;
       // 兜底：在结束前可统计 completion_tokens
       let completionTokensFallback = 0 as number;
       const encoder = new TextEncoder();
+      const extractCacheHitNumbers = (u: any): { hit: number; miss: number } => {
+        try {
+          const hit = Number(u?.prompt_cache_hit_tokens ?? 0) || 0
+          const miss = Number(u?.prompt_cache_miss_tokens ?? 0) || 0
+          return { hit, miss }
+        } catch {
+          return { hit: 0, miss: 0 }
+        }
+      };
       const extractUsageNumbers = (u: any): { prompt: number; completion: number; total: number } => {
         try {
           const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0;
@@ -1214,6 +1226,9 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             if (fallbackResult.usage) {
               providerUsageSeen = true;
               providerUsageSnapshot = fallbackResult.usage;
+              const cacheHit = extractCacheHitNumbers(fallbackResult.usage);
+              promptCacheHitTokens = cacheHit.hit;
+              promptCacheMissTokens = cacheHit.miss;
               traceMetadataExtras.finalUsage = fallbackResult.usage;
               traceMetadataExtras.providerUsageSource = 'fallback_non_stream';
               const usageEvent = `data: ${JSON.stringify({ type: 'usage', usage: fallbackResult.usage })}\n\n`;
@@ -1758,6 +1773,9 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
 	                      if (valid) {
 	                        providerUsageSeen = true
 	                        providerUsageSnapshot = usagePayload
+	                        const cacheHit = extractCacheHitNumbers(usagePayload)
+	                        promptCacheHitTokens = cacheHit.hit
+	                        promptCacheMissTokens = cacheHit.miss
 	                        traceMetadataExtras.finalUsage = usagePayload
 	                        traceMetadataExtras.providerUsageSource = 'provider'
 	                      }
@@ -1856,6 +1874,9 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
                   if (valid) {
                     providerUsageSeen = true;
                     providerUsageSnapshot = parsed.usage;
+                    const cacheHit = extractCacheHitNumbers(parsed.usage);
+                    promptCacheHitTokens = cacheHit.hit;
+                    promptCacheMissTokens = cacheHit.miss;
                     traceMetadataExtras.finalUsage = parsed.usage;
                     traceMetadataExtras.providerUsageSource = 'provider';
                   }
@@ -2034,6 +2055,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
                 contextLimit,
                 providerUsageSeen,
                 providerUsageSnapshot,
+                promptCacheHitTokens,
+                promptCacheMissTokens,
                 reasoningEnabled: REASONING_ENABLED,
                 reasoningSaveToDb:
                   typeof payload?.saveReasoning === 'boolean'

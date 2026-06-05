@@ -113,6 +113,8 @@ export interface PersistAssistantFinalResponseParams {
     completionTokens: number;
     totalTokens: number;
     contextLimit?: number | null;
+    promptCacheHitTokens?: number;
+    promptCacheMissTokens?: number;
   };
   metrics?: {
     firstTokenLatencyMs?: number | null;
@@ -275,6 +277,8 @@ export const persistAssistantFinalResponse = async ({
           promptTokens: Math.max(0, usage.promptTokens || 0),
           completionTokens: Math.max(0, usage.completionTokens || 0),
           totalTokens: Math.max(0, usage.totalTokens || 0),
+          promptCacheHitTokens: Math.max(0, usage.promptCacheHitTokens || 0),
+          promptCacheMissTokens: Math.max(0, usage.promptCacheMissTokens || 0),
           contextLimit:
             typeof usage.contextLimit === 'number' ? usage.contextLimit : usage.contextLimit ?? null,
           firstTokenLatencyMs:
