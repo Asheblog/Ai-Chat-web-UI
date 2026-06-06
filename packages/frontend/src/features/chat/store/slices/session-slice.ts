@@ -214,6 +214,8 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
           shareSelection: shouldClear ? createInitialShareSelection() : state.shareSelection,
         }
       })
+      // 删除后重新拉取会话列表，补位后端分页空缺
+      get().fetchSessions().catch(() => {})
     } catch (error: any) {
       set({
         error: error?.response?.data?.error || error?.message || '删除会话失败',
