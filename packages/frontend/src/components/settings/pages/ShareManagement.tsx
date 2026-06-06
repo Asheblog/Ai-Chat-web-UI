@@ -162,17 +162,17 @@ export function ShareManagementPanel() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <h2 className="v2-section-title shrink-0">最近分享</h2>
           <div className="relative w-full sm:w-[320px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="搜索分享内容或备注"
-              className="h-9 bg-white pl-9"
+              className="h-9 bg-background pl-9"
             />
           </div>
         </div>
         <div className="flex items-center justify-between gap-2 sm:justify-end">
-          <span className="text-xs text-slate-500">共 {shares.length} 条</span>
+          <span className="text-xs text-muted-foreground">共 {shares.length} 条</span>
           {error ? <span className="v2-status v2-status-warning">同步失败</span> : null}
           <Button variant="ghost" size="sm" onClick={fetchShares} disabled={loading} className="h-8 px-2">
             <RefreshCw className={cn("mr-1 h-4 w-4", loading ? "animate-spin" : "")} />
@@ -201,10 +201,10 @@ export function ShareManagementPanel() {
             没有匹配的分享记录。
           </div>
         ) : (
-          <div className="v2-table-wrap overflow-x-auto border-slate-200/80">
+          <div className="v2-table-wrap overflow-x-auto border-border">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs text-slate-500">
+                <tr className="border-b border-border bg-muted/60 text-xs text-muted-foreground">
                   <th className="px-4 py-3 font-medium">名称</th>
                   <th className="px-4 py-3 font-medium">分享内容</th>
                   <th className="px-4 py-3 font-medium">创建时间</th>
@@ -218,18 +218,18 @@ export function ShareManagementPanel() {
                   <tr
                     key={share.id}
                     className={cn(
-                      "border-b border-slate-100 text-sm last:border-b-0",
-                      index === 0 ? "bg-blue-50/55" : "bg-white/70"
+                      "border-b border-border/50 text-sm last:border-b-0",
+                      index === 0 ? "bg-primary/5" : "bg-background/70"
                     )}
                   >
-                    <td className="px-4 py-3 font-medium text-slate-900">
+                    <td className="px-4 py-3 font-medium text-foreground">
                       <span className="line-clamp-1">{share.title}</span>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">
+                    <td className="px-4 py-3 text-muted-foreground">
                       <span className="line-clamp-1">对话内容：{share.sessionTitle}</span>
                     </td>
-                    <td className="px-4 py-3 text-slate-500">{formatDate(share.createdAt)}</td>
-                    <td className="px-4 py-3 text-slate-500">{share.messageCount}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{formatDate(share.createdAt)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{share.messageCount}</td>
                     <td className="px-4 py-3">{renderStatus(share)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1.5">
@@ -240,7 +240,7 @@ export function ShareManagementPanel() {
                           disabled={Boolean(share.revokedAt)}
                           aria-label="复制分享链接"
                           title="复制分享链接"
-                          className="h-8 w-8 bg-white"
+                          className="h-8 w-8 bg-background"
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </Button>
@@ -251,7 +251,7 @@ export function ShareManagementPanel() {
                           aria-label="打开分享"
                           title="打开分享"
                           className={cn(
-                            "h-8 w-8 bg-white",
+                            "h-8 w-8 bg-background",
                             share.revokedAt ? "pointer-events-none opacity-45" : ""
                           )}
                         >
@@ -267,7 +267,7 @@ export function ShareManagementPanel() {
                               disabled={Boolean(share.revokedAt) || updatingId === share.id}
                               aria-label="调整有效期"
                               title={share.expiresAt ? `有效期：${formatDate(share.expiresAt)}` : '不自动失效'}
-                              className="h-8 w-8 bg-white"
+                              className="h-8 w-8 bg-background"
                             >
                               {updatingId === share.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

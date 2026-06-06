@@ -115,7 +115,7 @@ export function SystemConnectionEditor({
             </span>
             <span className="v2-status">{detailIntent === "create" ? "新建模式" : "展开编辑"}</span>
           </div>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
             基础信息保持可见，高级参数、Key 池和验证结果默认折叠，按需展开处理。
           </p>
         </div>
@@ -174,7 +174,7 @@ export function SystemConnectionEditor({
             }}
             placeholder={firstKey?.hasStoredApiKey ? "留空则继续使用已保存的 Key" : "sk-..."}
           />
-          {firstKey?.apiKeyMasked ? <p className="text-xs text-slate-500">当前摘要：{firstKey.apiKeyMasked}</p> : null}
+          {firstKey?.apiKeyMasked ? <p className="text-xs text-muted-foreground">当前摘要：{firstKey.apiKeyMasked}</p> : null}
         </Field>
 
         <Field label="标签 / 备注" htmlFor="connection-tags">

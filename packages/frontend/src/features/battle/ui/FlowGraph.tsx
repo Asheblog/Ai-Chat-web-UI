@@ -76,7 +76,7 @@ export function ModelNode({
             className={cn(
                 'relative flex min-h-[38px] w-full items-center justify-between gap-3',
                 'rounded-[8px] border px-3 py-2',
-                'transition-all duration-300 hover:border-primary/50 hover:bg-blue-50',
+                'transition-all duration-300 hover:border-primary/50 hover:bg-accent',
                 config.borderClass,
                 config.bgClass,
                 config.animationClass,

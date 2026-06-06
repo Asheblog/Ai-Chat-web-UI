@@ -29,7 +29,7 @@ export function UserSearchPanel({
   onRefresh,
 }: UserSearchPanelProps) {
   return (
-    <div className="rounded-[10px] border border-border/70 bg-slate-50/70 px-4 py-4">
+    <div className="rounded-[10px] border border-border/70 bg-muted/40 px-4 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 flex-1">
           <div className="relative flex-1 max-w-sm">

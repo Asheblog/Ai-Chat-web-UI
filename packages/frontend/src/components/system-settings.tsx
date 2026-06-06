@@ -111,7 +111,7 @@ function ModuleSubTabs({
               "inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border px-3 text-xs font-medium transition-colors",
               active
                 ? "border-primary/80 bg-primary/10 text-primary"
-                : "border-slate-200 bg-white/70 text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+                : "border-border bg-background/70 text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >
             {tab.icon}
@@ -356,7 +356,7 @@ export function SystemSettings() {
                   "inline-flex min-h-10 items-center gap-2 rounded-[8px] border px-4 text-sm font-medium transition-colors",
                   active
                     ? "border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.18)]"
-                    : "border-slate-200 bg-white/80 text-slate-600 hover:bg-blue-50 hover:text-slate-950",
+                    : "border-border bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -386,9 +386,9 @@ function SystemOverviewContent() {
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {overviewItems.map((item) => (
         <div key={item.label} className="v2-panel p-5">
-          <div className="text-sm font-medium text-slate-500">{item.label}</div>
+          <div className="text-sm font-medium text-muted-foreground">{item.label}</div>
           <div className={cn("mt-3 text-lg font-semibold", item.tone)}>{item.value}</div>
-          <div className="mt-2 text-xs text-slate-500">从左侧系统设置进入对应工作区。</div>
+          <div className="mt-2 text-xs text-muted-foreground">从左侧系统设置进入对应工作区。</div>
         </div>
       ))}
     </div>

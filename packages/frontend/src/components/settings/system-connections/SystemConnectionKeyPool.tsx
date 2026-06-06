@@ -81,7 +81,7 @@ export function SystemConnectionKeyPool({
                 animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
                 exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="rounded-[10px] border border-border/75 bg-slate-50/70 p-4"
+                className="rounded-[10px] border border-border/75 bg-muted/40 p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <button

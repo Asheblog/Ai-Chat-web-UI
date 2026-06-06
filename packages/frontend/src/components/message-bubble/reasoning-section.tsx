@@ -185,7 +185,7 @@ export function ReasoningSection({
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="space-y-2 border-t border-blue-200/80 px-4 py-3">
+        <div className="space-y-2 border-t border-primary/20 px-4 py-3">
           {hasUnavailableReason && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200">
               <div className="flex items-center gap-1 font-medium">
@@ -201,11 +201,11 @@ export function ReasoningSection({
           {reasoningTextLength > 0 ? (
             !showStreamingIndicator && reasoningHtml ? (
               <div
-                className="markdown-body markdown-body--reasoning text-sm text-slate-700"
+                className="markdown-body markdown-body--reasoning text-sm text-foreground/80"
                 dangerouslySetInnerHTML={{ __html: reasoningHtml }}
               />
             ) : (
-              <div className="text-sm leading-7 text-slate-600">
+              <div className="text-sm leading-7 text-muted-foreground">
                 <TypewriterReasoning
                   text={reasoningRaw}
                   isStreaming={showStreamingIndicator}

@@ -177,8 +177,8 @@ export function RichMessageRenderer({
             onClick={() => setImagesExpanded((value) => !value)}
             aria-expanded={imagesExpanded}
           >
-            <span className="flex min-w-0 items-center gap-2 font-medium text-slate-700">
-              <ImageIcon className="h-4 w-4 text-slate-500" />
+            <span className="flex min-w-0 items-center gap-2 font-medium text-foreground/80">
+              <ImageIcon className="h-4 w-4 text-muted-foreground" />
               查看图片（{imageParts.length} 张）
             </span>
             {!imagesExpanded && (
@@ -188,13 +188,13 @@ export function RichMessageRenderer({
                     key={`${image.url}-thumb-${index}`}
                     src={image.url}
                     alt=""
-                    className="h-7 w-10 rounded border border-slate-200 object-cover"
+                    className="h-7 w-10 rounded border border-border object-cover"
                     loading="lazy"
                   />
                 ))}
               </span>
             )}
-            <ChevronDown className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform', imagesExpanded && 'rotate-180')} />
+            <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', imagesExpanded && 'rotate-180')} />
           </button>
           {imagesExpanded && (
             <div

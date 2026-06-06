@@ -703,8 +703,8 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .python-call-detail__section pre {
-  background: #0f172a;
-  color: #f8fafc;
+  background: hsl(var(--code-bg));
+  color: hsl(var(--code-text));
   padding: 0.85rem;
   border-radius: 0.85rem;
   font-size: 0.78rem;
@@ -828,9 +828,9 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 .markdown-body .md-pre {
   margin: 1rem 0;
   border-radius: 0.75rem;
-  border: 1px solid #22262e;
-  background: #0d1117;
-  color: #e6edf3;
+  border: 1px solid hsl(var(--code-border));
+  background: hsl(var(--code-bg));
+  color: hsl(var(--code-text));
   overflow: hidden;
   position: relative;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);

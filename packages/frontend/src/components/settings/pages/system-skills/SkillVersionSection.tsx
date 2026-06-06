@@ -42,12 +42,12 @@ export function SkillVersionSection({
         {loading ? (
           <div className="text-sm text-muted-foreground">加载中...</div>
         ) : catalog.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 p-5 text-sm text-muted-foreground">
+          <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/40 p-5 text-sm text-muted-foreground">
             当前没有可管理的 Skill。
           </div>
         ) : (
           catalog.map((skill) => (
-            <div key={skill.id} className="space-y-3 rounded-[10px] border border-border/70 bg-slate-50/65 p-4">
+            <div key={skill.id} className="space-y-3 rounded-[10px] border border-border/70 bg-muted/40 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-semibold">{skill.displayName}</h3>
                 <Badge variant="outline">{skill.slug}</Badge>

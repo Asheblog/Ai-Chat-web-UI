@@ -153,7 +153,7 @@ export function MessageHeader({
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border pb-2 text-xs text-muted-foreground">
       {isStreaming ? (
-        <span className="inline-flex items-center gap-1.5 text-blue-600">
+        <span className="inline-flex items-center gap-1.5 text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           进行中
         </span>

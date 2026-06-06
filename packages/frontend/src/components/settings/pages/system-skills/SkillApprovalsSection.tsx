@@ -36,7 +36,7 @@ export function SkillApprovalsSection({
         {loading ? (
           <div className="text-sm text-muted-foreground">加载中...</div>
         ) : approvals.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 p-5 text-sm text-muted-foreground">
+          <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/40 p-5 text-sm text-muted-foreground">
             当前没有待审批请求。
           </div>
         ) : (

@@ -547,7 +547,7 @@ export function SystemKnowledgeBasePage() {
         </div>
       </div>
 
-      <Alert className="v2-panel-soft border-slate-200 bg-white/78">
+      <Alert className="v2-panel-soft border-border bg-background/78">
         <AlertDescription>
           知识库与文档附件不同，知识库是持久化的，可以在多个会话中使用。管理员可以在此创建系统级知识库供所有用户使用。
         </AlertDescription>
@@ -555,7 +555,7 @@ export function SystemKnowledgeBasePage() {
 
       <div className="v2-panel p-4">
         {/* 启用开关 */}
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div className="flex items-center justify-between border-b border-border pb-4">
           <div>
             <p className="font-medium">启用知识库功能</p>
             <p className="text-sm text-muted-foreground">
@@ -568,7 +568,7 @@ export function SystemKnowledgeBasePage() {
         {enabled && (
           <>
             {/* 权限设置 */}
-            <div className="space-y-3 border-b border-slate-200 py-4">
+            <div className="space-y-3 border-b border-border py-4">
               <h4 className="font-medium">用户权限</h4>
               <div className="flex items-center justify-between">
                 <div>
@@ -613,7 +613,7 @@ export function SystemKnowledgeBasePage() {
                   <Skeleton className="h-12 w-full" />
                 </div>
               ) : knowledgeBases.length === 0 ? (
-                <div className="rounded-[8px] border border-dashed border-slate-200 py-8 text-center text-muted-foreground">
+                <div className="rounded-[8px] border border-dashed border-border py-8 text-center text-muted-foreground">
                   <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>暂无知识库</p>
                   <p className="text-sm">点击上方按钮创建第一个知识库</p>
@@ -707,7 +707,7 @@ export function SystemKnowledgeBasePage() {
         )}
       </div>
 
-      <div className="flex justify-end border-t border-slate-200 pt-4">
+      <div className="flex justify-end border-t border-border pt-4">
         <Button onClick={handleSaveSettings}>保存设置</Button>
       </div>
 
@@ -752,7 +752,7 @@ export function SystemKnowledgeBasePage() {
       {/* 知识库详情对话框 */}
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
         <DialogContent className="v2-slide-over left-auto right-0 top-0 flex h-[100dvh] max-h-none w-[min(420px,100vw)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 p-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right">
-          <DialogHeader className="border-b border-slate-200 px-6 py-5">
+          <DialogHeader className="border-b border-border px-6 py-5">
             <DialogTitle>{selectedKb?.name}</DialogTitle>
             <DialogDescription>
               {selectedKb?.description || "管理知识库中的文档"}

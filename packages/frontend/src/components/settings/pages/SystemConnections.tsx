@@ -207,7 +207,7 @@ export function SystemConnectionsPage() {
       />
 
       {detailIntent === "create" ? (
-        <section className="v2-panel bg-white/92 p-4 shadow-none">
+        <section className="v2-panel bg-background/92 p-4 shadow-none">
           <SystemConnectionEditor
             group={null}
             detailIntent="create"

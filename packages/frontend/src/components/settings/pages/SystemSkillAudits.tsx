@@ -188,7 +188,7 @@ export function SystemSkillAuditsPage() {
                   'inline-flex min-h-9 items-center gap-2 rounded-[8px] border px-4 text-sm font-medium transition-colors',
                   active
                     ? 'border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.18)]'
-                    : 'border-slate-200 bg-white/80 text-slate-600 hover:bg-blue-50 hover:text-slate-950',
+                    : 'border-border bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground',
                 )}
               >
                 <Icon className="h-4 w-4" />

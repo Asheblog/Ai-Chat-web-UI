@@ -70,7 +70,7 @@ export function SkillBindingsSection({
         </div>
       </div>
       <div className="space-y-5">
-        <div className="space-y-3 rounded-[10px] border border-border/70 bg-slate-50/70 p-4">
+        <div className="space-y-3 rounded-[10px] border border-border/70 bg-muted/40 p-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <Label>Skill</Label>
@@ -170,7 +170,7 @@ export function SkillBindingsSection({
 
         <div className="space-y-2">
           {bindings.length === 0 ? (
-            <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 p-5 text-sm text-muted-foreground">
+            <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/40 p-5 text-sm text-muted-foreground">
               暂无绑定。
             </div>
           ) : (

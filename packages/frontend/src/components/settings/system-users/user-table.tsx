@@ -82,7 +82,7 @@ export function UserTable({
           ))}
         </div>
       ) : !loading && rows.length === 0 ? (
-        <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 py-12 text-center">
+        <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/40 py-12 text-center">
           <Users className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
           <p className="text-sm text-muted-foreground mb-2">暂无用户数据</p>
           <p className="text-xs text-muted-foreground">

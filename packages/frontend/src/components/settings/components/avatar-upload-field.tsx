@@ -97,13 +97,13 @@ export function AvatarUploadField({
   if (variant === 'profile') {
     return (
       <div className={cn('flex flex-col items-center gap-2 text-center', className)}>
-        <div className="relative rounded-full bg-gradient-to-b from-blue-400 to-blue-600 p-1 shadow-[0_16px_32px_rgba(37,99,235,0.16)]">
+        <div className="relative rounded-full bg-gradient-to-b from-primary/60 to-primary p-1 shadow-[0_16px_32px_rgba(37,99,235,0.16)]">
           <Avatar
-            className="border-4 border-white bg-blue-50"
+            className="border-4 border-background bg-muted"
             style={{ height: avatarSize, width: avatarSize }}
           >
             <AvatarImage src={imageUrl || undefined} alt="头像" />
-            <AvatarFallback className="text-lg font-semibold text-slate-700">{fallbackText}</AvatarFallback>
+            <AvatarFallback className="text-lg font-semibold text-foreground/80">{fallbackText}</AvatarFallback>
           </Avatar>
           <Button
             type="button"
@@ -119,7 +119,7 @@ export function AvatarUploadField({
           </Button>
         </div>
         {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-        <div className="min-h-[22px] text-xs text-slate-500">
+        <div className="min-h-[22px] text-xs text-muted-foreground">
           {uploading ? '上传中...' : imageUrl ? '头像已设置' : '点击相机上传'}
         </div>
         {onClear ? (

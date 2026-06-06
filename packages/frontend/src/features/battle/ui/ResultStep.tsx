@@ -425,7 +425,7 @@ export function ResultStep({
                         >
                             {/* 模型主行*/}
                             <button
-                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-blue-50/60 rounded-[8px] transition-colors"
+                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-accent rounded-[8px] transition-colors"
                                 onClick={() => toggleExpand(group.key)}
                             >
                                 {/* 排名 */}

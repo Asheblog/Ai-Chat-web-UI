@@ -245,7 +245,7 @@ function ShareMessageItem({
       : null
 
   return (
-    <article className={cn('flex gap-3 border-b border-slate-200 py-5 last:border-b-0', isUser && 'flex-row-reverse')}>
+    <article className={cn('flex gap-3 border-b border-border py-5 last:border-b-0', isUser && 'flex-row-reverse')}>
       <div
         className={cn(
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
@@ -490,7 +490,7 @@ export function ShareViewer({
             <span>{formatRelativeTime(share.createdAt)}</span>
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-[8px] border border-primary/30 bg-white px-3 py-1.5 text-primary transition hover:bg-blue-50"
+              className="inline-flex items-center gap-1 rounded-[8px] border border-primary/30 bg-background px-3 py-1.5 text-primary transition hover:bg-accent"
               onClick={() => {
                 if (typeof window === 'undefined') return
                 void navigator.clipboard?.writeText(window.location.href)
@@ -509,7 +509,7 @@ export function ShareViewer({
             <h1 className="mx-auto max-w-5xl text-xl font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
               {share.title || share.sessionTitle}
             </h1>
-            <p className="mt-3 text-sm text-slate-500">公开分享 · {formatDate(share.createdAt)}</p>
+            <p className="mt-3 text-sm text-muted-foreground">公开分享 · {formatDate(share.createdAt)}</p>
           </div>
           {mergedMessages.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-muted-foreground">

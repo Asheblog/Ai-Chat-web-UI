@@ -37,7 +37,7 @@ export function SystemConnectionList({
       <section className="v2-panel overflow-hidden shadow-none">
         <div className="space-y-3 p-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-20 rounded-[8px] bg-slate-100" />
+            <div key={index} className="h-20 rounded-[8px] bg-muted" />
           ))}
         </div>
       </section>
@@ -47,7 +47,7 @@ export function SystemConnectionList({
   if (connections.length === 0) {
     return (
       <section className="v2-panel p-4 shadow-none">
-        <div className="rounded-[8px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-12 text-center text-sm leading-6 text-slate-500">
+        <div className="rounded-[8px] border border-dashed border-border bg-muted/40 px-4 py-12 text-center text-sm leading-6 text-muted-foreground">
           暂无匹配连接。可以调整筛选条件，或新增一个 Provider 端点和 API Key。
         </div>
       </section>
@@ -55,13 +55,13 @@ export function SystemConnectionList({
   }
 
   return (
-    <section className="v2-panel overflow-hidden bg-white/92 shadow-none">
-      <div className="flex items-start gap-3 border-b border-blue-100 bg-blue-50/70 px-4 py-3 text-sm leading-6 text-blue-700">
+    <section className="v2-panel overflow-hidden bg-background/92 shadow-none">
+      <div className="flex items-start gap-3 border-b border-primary/20 bg-primary/5 px-4 py-3 text-sm leading-6 text-primary">
         <MoreHorizontal className="mt-1 h-4 w-4 shrink-0" />
         <span>连接行默认折叠。点击行尾“展开配置”，即可查看 Key 池、验证结果和高级设置。</span>
       </div>
 
-      <div className="divide-y divide-slate-200/80">
+      <div className="divide-y divide-border">
         {connections.map((group) => {
           const expanded = expandedGroupId === group.id
           return (
@@ -103,7 +103,7 @@ function ConnectionRow({
   const tags = group.tags.map((tag) => tag.name).filter(Boolean).slice(0, 3)
 
   return (
-    <article className={cn("bg-white transition-colors", expanded ? "bg-blue-50/30" : "hover:bg-slate-50/70")}>
+    <article className={cn("bg-background transition-colors", expanded ? "bg-primary/5" : "hover:bg-accent")}>
       <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(250px,0.9fr)_auto] lg:items-center">
         <button type="button" onClick={onToggle} className="flex min-w-0 cursor-pointer items-start gap-3 text-left">
           <span
@@ -123,15 +123,15 @@ function ConnectionRow({
           </span>
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-base font-semibold text-slate-950">{channelName}</span>
+              <span className="truncate text-base font-semibold text-foreground">{channelName}</span>
               <span className="v2-status">{providerLabel(group)}</span>
               {group.prefixId ? <span className="v2-status">{group.prefixId}</span> : null}
             </span>
-            <span className="mt-1 block truncate text-sm text-slate-500">{group.baseUrl}</span>
+            <span className="mt-1 block truncate text-sm text-muted-foreground">{group.baseUrl}</span>
             {tags.length > 0 ? (
               <span className="mt-2 flex flex-wrap gap-1.5">
                 {tags.map((tag) => (
-                  <span key={tag} className="rounded-[7px] bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                  <span key={tag} className="rounded-[7px] bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                     {tag}
                   </span>
                 ))}
@@ -140,22 +140,22 @@ function ConnectionRow({
           </span>
         </button>
 
-        <div className="grid grid-cols-3 gap-2 text-sm text-slate-500">
+        <div className="grid grid-cols-3 gap-2 text-sm text-muted-foreground">
           <Metric label="Keys" value={group.apiKeys.length} />
           <Metric label="模型" value={modelCount || "自动"} />
           <Metric label="更新" value={formatDate(group.updatedAt)} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <Button variant="outline" size="sm" onClick={() => onOpen("advanced")} className="h-9 bg-white">
+          <Button variant="outline" size="sm" onClick={() => onOpen("advanced")} className="h-9 bg-background">
             <Edit3 className="mr-2 h-4 w-4" />
             编辑
           </Button>
-          <Button variant="outline" size="sm" onClick={onDelete} className="h-9 bg-white text-red-600 hover:text-red-700">
+          <Button variant="outline" size="sm" onClick={onDelete} className="h-9 bg-background text-destructive hover:text-destructive/80">
             <Trash2 className="mr-2 h-4 w-4" />
             删除
           </Button>
-          <Button variant={expanded ? "secondary" : "outline"} size="sm" onClick={onToggle} className="h-9 bg-white">
+          <Button variant={expanded ? "secondary" : "outline"} size="sm" onClick={onToggle} className="h-9 bg-background">
             <KeyRound className="mr-2 h-4 w-4" />
             {expanded ? "收起" : "展开配置"}
             <ChevronDown className={cn("ml-2 h-4 w-4 transition-transform", expanded && "rotate-180")} />
@@ -163,16 +163,16 @@ function ConnectionRow({
         </div>
       </div>
 
-      {expanded ? <div className="border-t border-slate-200 bg-slate-50/55 px-4 py-4">{children}</div> : null}
+      {expanded ? <div className="border-t border-border bg-muted/40 px-4 py-4">{children}</div> : null}
     </article>
   )
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="min-w-[4.5rem] rounded-[8px] bg-slate-50 px-3 py-2">
-      <div className="text-[11px] text-slate-400">{label}</div>
-      <div className="mt-0.5 truncate text-sm font-medium text-slate-700">{value}</div>
+    <div className="min-w-[4.5rem] rounded-[8px] bg-muted px-3 py-2">
+      <div className="text-[11px] text-muted-foreground/70">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-medium text-foreground/80">{value}</div>
     </div>
   )
 }

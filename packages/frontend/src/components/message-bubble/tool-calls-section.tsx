@@ -178,7 +178,7 @@ export function ToolCallsSection({
     <div className="mb-2 overflow-hidden rounded-[8px] border border-border bg-surface shadow-[0_10px_28px_rgba(15,23,42,0.04)]" data-message-panel="interactive">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-blue-50/70 sm:px-4"
+        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-accent sm:px-4"
         onClick={() => {
           dispatch({ type: 'toggle' })
           const next = !expanded
@@ -187,8 +187,8 @@ export function ToolCallsSection({
         aria-expanded={expanded}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-700">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-slate-100 text-slate-500">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground/80">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground">
               <Wrench className="h-4 w-4" />
             </span>
             <span>工具调用 {timeline.length} 个</span>
@@ -201,7 +201,7 @@ export function ToolCallsSection({
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="space-y-2 border-t border-slate-200 bg-slate-50/45 px-2 py-2 sm:px-3 sm:py-3">
+        <div className="space-y-2 border-t border-border bg-muted/40 px-2 py-2 sm:px-3 sm:py-3">
           {groupedTimeline.map((group) => (
             <div key={group.key} className="space-y-1.5">
               {group.events.length > 1 && group.label && (

@@ -135,7 +135,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         <div className="space-y-2">
           <Label htmlFor="username" className="text-sm font-medium text-foreground">用户名</Label>
           <div className="relative">
-            <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+            <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="username"
               type="text"
@@ -151,7 +151,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         <div className="space-y-2">
           <Label htmlFor="password" className="text-sm font-medium text-foreground">密码</Label>
           <div className="relative">
-            <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+            <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="password"
               type={passwordVisible ? 'text' : 'password'}

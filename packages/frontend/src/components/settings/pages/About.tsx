@@ -25,7 +25,7 @@ export function AboutPage() {
         </div>
 
         <div className="space-y-3">
-        <div className="flex flex-col gap-4 rounded-[10px] border border-border/70 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="flex flex-col gap-4 rounded-[10px] border border-border/70 bg-muted/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div className="flex items-center gap-3">
             <Package className="w-5 h-5 text-muted-foreground" />
             <h3 className="text-sm font-semibold">版本</h3>
@@ -33,7 +33,7 @@ export function AboutPage() {
           <Badge variant="secondary" className="font-mono">{APP_VERSION}</Badge>
         </div>
 
-        <div className="flex flex-col gap-4 rounded-[10px] border border-border/70 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="flex flex-col gap-4 rounded-[10px] border border-border/70 bg-muted/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div className="flex items-center gap-3">
             <Code2 className="w-5 h-5 text-muted-foreground" />
             <h3 className="text-sm font-semibold">技术栈</h3>

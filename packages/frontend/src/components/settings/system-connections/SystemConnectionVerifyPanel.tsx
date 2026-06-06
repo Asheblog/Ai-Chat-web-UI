@@ -45,7 +45,7 @@ export function SystemConnectionVerifyPanel({
           <p className="mt-1 text-xs leading-5 text-muted-foreground">失败项会自动展开，成功项可按需查看模型明细。</p>
         </div>
         {!verifyResult ? (
-          <div className="rounded-[10px] border border-dashed border-border/70 bg-slate-50/70 px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/40 px-4 py-4 text-sm text-muted-foreground">
             还没有验证结果。
           </div>
         ) : (

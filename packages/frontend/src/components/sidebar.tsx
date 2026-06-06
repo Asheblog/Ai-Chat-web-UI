@@ -300,7 +300,7 @@ export function Sidebar() {
             <MessageCircle className="h-[18px] w-[18px]" />
           </span>
           <span
-            className="truncate text-[15px] font-semibold leading-tight tracking-normal text-slate-900"
+            className="truncate text-[15px] font-semibold leading-tight tracking-normal text-foreground"
             title={(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
           >
             {(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
@@ -391,7 +391,7 @@ export function Sidebar() {
       </div>
       <div className="px-4 pb-3">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
           <input
             value={sessionSearch}
             onChange={(e) => setSessionSearch(e.target.value)}
@@ -434,19 +434,19 @@ export function Sidebar() {
 
           {groupedSessions.map((group) => (
             <div key={group.key} className="space-y-2">
-              <div className="flex items-center justify-between px-1 text-sm font-semibold text-slate-800">
+              <div className="flex items-center justify-between px-1 text-sm font-semibold text-foreground/85">
                 <span className="inline-flex min-w-0 items-center gap-2">
                   <Folder className="h-4 w-4 shrink-0 text-primary" />
                   <span className="truncate">{group.label}</span>
                 </span>
-                <span className="text-xs font-medium text-slate-400">{group.sessions.length}</span>
+                <span className="text-xs font-medium text-muted-foreground/70">{group.sessions.length}</span>
               </div>
               {group.sessions.map((session) => (
                 <div
                   key={session.id}
                   className={cn(
-                    "group relative flex min-h-[46px] items-center justify-between rounded-[8px] border border-transparent px-2.5 py-2 transition-colors hover:bg-blue-50",
-                    currentSession?.id === session.id && "border-primary/25 bg-blue-50 text-primary"
+                    "group relative flex min-h-[46px] items-center justify-between rounded-[8px] border border-transparent px-2.5 py-2 transition-colors hover:bg-accent",
+                    currentSession?.id === session.id && "border-primary/25 bg-primary/5 text-primary"
                   )}
                 >
                   <button
@@ -460,10 +460,10 @@ export function Sidebar() {
                       ) : null}
                       <span className="truncate">{clipTitle(session.title, 28)}</span>
                     </p>
-                    <p className="mt-1 truncate text-xs text-slate-500" title={session.lastMessagePreview || ''}>
+                    <p className="mt-1 truncate text-xs text-muted-foreground" title={session.lastMessagePreview || ''}>
                       {session.lastMessagePreview?.trim() || '暂无消息摘要'}
                     </p>
-                    <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-400">
+                    <p className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground/70">
                       <span className="truncate">{formatSidebarDate(session.lastMessageAt || session.createdAt)}</span>
                       {sessionUsageTotalsMap?.[session.id] && (
                         <>
@@ -526,17 +526,17 @@ export function Sidebar() {
         <div className="rounded-[8px] border border-border bg-muted/70 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-slate-400" />
+              <Info className="h-4 w-4 text-muted-foreground/70" />
               <Badge variant="secondary" className="font-mono text-[11px] leading-none px-2 py-1">
                 {APP_VERSION}
               </Badge>
-              <span className="text-xs text-slate-500">版本</span>
+              <span className="text-xs text-muted-foreground">版本</span>
             </div>
             <Link
               href={PROJECT_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-primary"
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary"
             >
               <ChevronRight className="h-4 w-4" />
             </Link>
@@ -557,7 +557,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="group/sidebar-toggle h-10 w-10 rounded-[10px] border border-transparent text-slate-500 hover:border-blue-200/80 hover:bg-blue-50 hover:text-primary"
+                className="group/sidebar-toggle h-10 w-10 rounded-[10px] border border-transparent text-muted-foreground hover:border-primary/20 hover:bg-accent hover:text-primary"
                 aria-label="展开侧边栏"
                 onClick={() => setSidebarCollapsed(false)}
               >
@@ -596,7 +596,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-[10px] text-slate-500 hover:bg-blue-50 hover:text-primary"
+                className="h-10 w-10 rounded-[10px] text-muted-foreground hover:bg-accent hover:text-primary"
                 aria-label="模型大乱斗"
                 onClick={() => router.push('/main/battle')}
               >
@@ -613,7 +613,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-[10px] text-slate-500 hover:bg-blue-50 hover:text-primary"
+                className="h-10 w-10 rounded-[10px] text-muted-foreground hover:bg-accent hover:text-primary"
                 aria-label="系统设置"
                 onClick={() => setIsSettingsOpen(true)}
               >
@@ -634,7 +634,7 @@ export function Sidebar() {
                 href={PROJECT_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-slate-500 transition-colors hover:bg-blue-50 hover:text-primary"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
                 aria-label="项目地址"
               >
                 <Github className="h-5 w-5" />

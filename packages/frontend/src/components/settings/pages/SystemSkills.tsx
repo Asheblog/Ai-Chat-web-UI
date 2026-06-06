@@ -611,7 +611,7 @@ export function SystemSkillsPage() {
           </DialogHeader>
 
           <div className="max-h-[60vh] space-y-4 overflow-y-auto px-6 py-4">
-            <div className="rounded-[10px] border border-border/70 bg-white/85 p-3">
+            <div className="rounded-[10px] border border-border/70 bg-background/85 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-sm font-medium">Skill 声明依赖</span>
                 <Badge variant="outline">{uninstallPreview?.removedRequirements.length || 0}</Badge>

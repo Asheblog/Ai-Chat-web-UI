@@ -430,7 +430,7 @@ export function SystemRAGPage() {
         </div>
       </div>
 
-      <Alert className="v2-panel-soft border-slate-200 bg-white/78">
+      <Alert className="v2-panel-soft border-border bg-background/78">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           {hasEmbeddingModels
@@ -442,7 +442,7 @@ export function SystemRAGPage() {
 
       <div className="v2-panel space-y-4 p-4">
         {/* 启用开关 */}
-        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div className="flex items-center justify-between border-b border-border pb-4">
           <div>
             <p className="font-medium">启用 RAG 文档解析</p>
             <p className="text-sm text-muted-foreground">
@@ -518,7 +518,7 @@ export function SystemRAGPage() {
             </div>
 
             {/* Embedding 性能参数 */}
-            <div className="border-t border-slate-200 pt-4">
+            <div className="border-t border-border pt-4">
               <h4 className="font-medium mb-3">Embedding 性能参数</h4>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
@@ -544,7 +544,7 @@ export function SystemRAGPage() {
             </div>
 
             {/* 检索参数 */}
-            <div className="border-t border-slate-200 pt-4">
+            <div className="border-t border-border pt-4">
               <h4 className="font-medium mb-3">检索参数</h4>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
@@ -580,7 +580,7 @@ export function SystemRAGPage() {
             </div>
 
             {/* 分块参数 */}
-            <div className="border-t border-slate-200 pt-4">
+            <div className="border-t border-border pt-4">
               <h4 className="font-medium mb-3">文档分块参数</h4>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">

@@ -49,27 +49,27 @@ export function PersonalSecurityPage() {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-blue-50/45 sm:px-6"
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-accent sm:px-6"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-blue-50 text-slate-700 ring-1 ring-blue-100">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-foreground/80 ring-1 ring-primary/20">
             <Lock className="h-4 w-4" />
           </span>
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-slate-900">安全设置（密码与登录）</span>
-            <span className="mt-0.5 block text-xs text-slate-500">修改密码、管理登录设备等</span>
+            <span className="block text-sm font-semibold text-foreground">安全设置（密码与登录）</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">修改密码、管理登录设备等</span>
           </span>
         </span>
         <ChevronDown
           className={cn(
-            'h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200',
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
             open ? 'rotate-180' : ''
           )}
         />
       </button>
 
       {open ? (
-        <div className="border-t border-slate-200/80 px-5 py-5 sm:px-6">
+        <div className="border-t border-border px-5 py-5 sm:px-6">
           <div className="mb-4">
             <h2 className="v2-section-title">修改密码</h2>
             <p className="v2-muted-line mt-1">提交后立即更新账号密码，请使用包含字母与数字的新密码。</p>
