@@ -3,7 +3,7 @@ import { render } from '@testing-library/react'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 
 describe('MarkdownRenderer', () => {
-  it('prefers ReactMarkdown rendering for fenced code blocks even when html is provided', () => {
+  it('renders provided HTML directly even when fallback contains code blocks', () => {
     const fallback = [
       '下面是一个代码块：',
       '',
@@ -19,9 +19,10 @@ describe('MarkdownRenderer', () => {
         fallback={fallback}
       />,
     )
-    expect(container.querySelector('.rs-terminal')).toBeTruthy()
-    expect(container.textContent).toContain('hello')
-    expect(container.textContent).toContain('world')
+    // HTML 优先：直接渲染传入的 HTML
+    expect(container.querySelector('.md-pre')).toBeTruthy()
+    expect(container.textContent).toContain('worker html')
+    expect(container.textContent).toContain('noop')
   })
 
   it('renders code blocks from worker code markers', () => {

@@ -161,7 +161,7 @@ export function RichMessageRenderer({
       {hasText && (
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-7')}>
           <MarkdownRenderer
-            html={hasImages ? null : textHtml ?? null}
+            html={textHtml ?? null}
             fallback={textFallback}
             isStreaming={isStreaming}
             isRendering={isRendering}

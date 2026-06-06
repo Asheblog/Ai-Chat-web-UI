@@ -1,23 +1,14 @@
 'use client'
 
 import { memo, useEffect, useMemo, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ensureKatexResources } from '@/lib/load-katex'
-import { rehypeLinkBoundaries } from '@/lib/markdown-link-boundary'
-import { closeOpenMarkdownBlocks } from '@/lib/markdown-streaming'
-import {
-  remarkKatexTokenizer,
-  containsLatexTokens,
-  defaultRemarkMathOptions,
-  encodeLatexPlaceholders,
-} from '@aichat/shared/latex-normalizer'
+import { renderMarkdownToHtml } from '@/lib/markdown-pipeline'
+import { containsLatexTokens } from '@aichat/shared/latex-normalizer'
 
 interface MarkdownRendererProps {
   html?: string | null
@@ -65,10 +56,14 @@ const splitHtmlByCodeMarkers = (html: string): CodeMarkerPart[] | null => {
     const encoded = match[1]
     try {
       const decoded = decodeBase64Url(encoded)
-      const payload = JSON.parse(decoded) as { language?: string; code?: string }
+      const payload = JSON.parse(decoded) as {
+        language?: string
+        code?: string
+      }
       parts.push({
         type: 'code',
-        language: typeof payload.language === 'string' ? payload.language : '',
+        language:
+          typeof payload.language === 'string' ? payload.language : '',
         code: typeof payload.code === 'string' ? payload.code : '',
       })
     } catch {
@@ -89,9 +84,32 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 }: MarkdownRendererProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [rehypeKatexPlugin, setRehypeKatexPlugin] = useState<any>(null)
-  const trimmedHtml = html?.trim() ?? ''
-  const codeMarkerParts = useMemo(() => splitHtmlByCodeMarkers(trimmedHtml), [trimmedHtml])
 
+  // -------- 同步渲染的 HTML（共享 pipeline 降级，当 Worker HTML 不可用时） --------
+  const syncedHtml = useMemo(() => {
+    if ((html?.trim() ?? '').length > 0) return '' // Worker HTML 可用时跳过
+    if (!fallback) return ''
+    // 大流式内容跳过同步渲染，显示原始文本
+    if (isStreaming && fallback.length > 50000) return ''
+    try {
+      const result = renderMarkdownToHtml(fallback, {
+        isStreaming: Boolean(isStreaming),
+        rehypeKatexPlugin: rehypeKatexPlugin ?? undefined,
+      })
+      return result.html
+    } catch {
+      return ''
+    }
+  }, [fallback, isStreaming, html, rehypeKatexPlugin])
+
+  // 优先使用外部传入的 HTML（Worker 产出），否则使用同步 pipeline 降级
+  const trimmedHtml = (html?.trim() ?? '').length > 0 ? html!.trim() : syncedHtml
+  const codeMarkerParts = useMemo(
+    () => splitHtmlByCodeMarkers(trimmedHtml),
+    [trimmedHtml],
+  )
+
+  // -------- KaTeX 异步加载 --------
   const needsMathSupport = useMemo(() => {
     if (trimmedHtml && /katex/i.test(trimmedHtml)) {
       return true
@@ -125,29 +143,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     }
   }, [needsMathSupport, rehypeKatexPlugin])
 
-  const preparedFallback = useMemo(() => {
-    const source = isStreaming ? closeOpenMarkdownBlocks(fallback || '') : fallback || ''
-    return encodeLatexPlaceholders(source)
-  }, [fallback, isStreaming])
-  const fallbackRehypePlugins = useMemo(
-    () => (rehypeKatexPlugin ? [rehypeLinkBoundaries, rehypeKatexPlugin] : [rehypeLinkBoundaries]),
-    [rehypeKatexPlugin],
-  )
-
-  const fallbackHasCodeBlocks = useMemo(() => {
-    if (!fallback) return false
-    if (/(^|\n)\s*(```|~~~)/.test(fallback)) return true
-    if (/(^|\n)(?:\t| {4,})\S/.test(fallback)) return true
-    return false
-  }, [fallback])
-  const preferPlainStreamingFallback = useMemo(() => {
-    if (!isStreaming || !fallback) return false
-    return fallback.length > 50000
-  }, [fallback, isStreaming])
-
+  // -------- 复制代码 --------
   const handleCopyCode = async (code: string) => {
     try {
-      if (typeof window !== 'undefined' && navigator?.clipboard && (window.isSecureContext ?? true)) {
+      if (
+        typeof window !== 'undefined' &&
+        navigator?.clipboard &&
+        (window.isSecureContext ?? true)
+      ) {
         await navigator.clipboard.writeText(code)
       } else {
         if (typeof document === 'undefined') {
@@ -171,18 +174,34 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     }
   }
 
-  const TerminalCodeBlock = ({ code, language }: { code: string; language: string }) => {
+  // -------- 终端代码块组件（与之前完全一致） --------
+  const TerminalCodeBlock = ({
+    code,
+    language,
+  }: {
+    code: string
+    language: string
+  }) => {
     const lang0 = (language || '').toLowerCase()
-    const normalized = ['bash', 'sh', 'shell', 'zsh', 'console'].includes(lang0) ? 'bash' : lang0
-    const isPlain = !normalized || ['plaintext', 'text', 'txt', 'nohighlight'].includes(normalized)
+    const normalized = ['bash', 'sh', 'shell', 'zsh', 'console'].includes(
+      lang0,
+    )
+      ? 'bash'
+      : lang0
+    const isPlain =
+      !normalized ||
+      ['plaintext', 'text', 'txt', 'nohighlight'].includes(normalized)
     const codeContent = String(code || '').replace(/\n$/, '')
     if (!codeContent) return null
 
     const tooLargeForHL = Boolean(
-      isStreaming || codeContent.length > 20000 || codeContent.split('\n').length > 400,
+      isStreaming ||
+        codeContent.length > 20000 ||
+        codeContent.split('\n').length > 400,
     )
     const isSingleLine = !codeContent.includes('\n')
-    const isShortPlain = isPlain && isSingleLine && codeContent.trim().length <= 80
+    const isShortPlain =
+      isPlain && isSingleLine && codeContent.trim().length <= 80
 
     if (isShortPlain) {
       return (
@@ -210,7 +229,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
             <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
             <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
-            {!isPlain && <span className="ml-2 text-[11px] text-muted-foreground">{normalized}</span>}
+            {!isPlain && (
+              <span className="ml-2 text-[11px] text-muted-foreground">
+                {normalized}
+              </span>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -227,7 +250,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             </Button>
           </div>
           <pre
-            className={cn('m-0 text-sm px-3 py-3', isStreaming && 'typing-cursor')}
+            className={cn(
+              'm-0 text-sm px-3 py-3',
+              isStreaming && 'typing-cursor',
+            )}
             style={{
               background: 'transparent',
               color: 'hsl(var(--code-text))',
@@ -265,7 +291,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           <span className="w-3 h-3 rounded-full bg-[#ff5f56]" />
           <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
           <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
-          {!isPlain && <span className="ml-2 text-[11px] text-muted-foreground">{normalized}</span>}
+          {!isPlain && (
+            <span className="ml-2 text-[11px] text-muted-foreground">
+              {normalized}
+            </span>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -297,7 +327,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             wordBreak: 'break-word',
           }}
           codeTagProps={{
-            style: { background: 'transparent', whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
+            style: {
+              background: 'transparent',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            },
           }}
           showLineNumbers={false}
           wrapLongLines
@@ -309,91 +343,27 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     )
   }
 
-  const renderFallback = () => {
-    if (!fallback) return null
-
+  // -------- 渲染逻辑：统一走 HTML + 代码 marker 拆分 --------
+  // 大流式内容直接显示原始文本
+  if (
+    !trimmedHtml &&
+    isStreaming &&
+    fallback &&
+    fallback.length > 50000
+  ) {
     return (
-      <div
+      <pre
         className={cn(
-          'markdown-body prose prose-zinc dark:prose-invert max-w-none break-words',
-          '[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:whitespace-pre-wrap',
+          'my-0 max-w-full whitespace-pre-wrap break-words rounded-lg bg-muted/20 px-3 py-2 text-sm',
           (isStreaming || isRendering) && 'typing-cursor',
         )}
       >
-        <ReactMarkdown
-          remarkPlugins={[remarkKatexTokenizer, [remarkMath, defaultRemarkMathOptions], remarkGfm]}
-          rehypePlugins={fallbackRehypePlugins}
-          components={{
-            a({ href, children, ...props }: any) {
-              return (
-                <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-                  {children}
-                </a>
-              )
-            },
-            pre({ children }: any) {
-              return <>{children}</>
-            },
-            code({ inline, className, children, ...props }: any) {
-              const match = /language-([\w+-]+)/.exec(className || '')
-              const rawLang = match ? match[1] : ''
-              const codeContent = String(children).replace(/\n$/, '')
-              const isBlock = inline === false || Boolean(match) || codeContent.includes('\n')
-
-              if (isBlock && codeContent) {
-                return <TerminalCodeBlock code={codeContent} language={rawLang} />
-              }
-
-              return (
-                <code
-                  className={cn(
-                    'px-1.5 py-0.5 rounded text-sm font-mono bg-muted/30 break-words whitespace-pre-wrap',
-                    isStreaming && 'typing-cursor',
-                  )}
-                  {...props}
-                >
-                  {children}
-                </code>
-              )
-            },
-            // 处理图片，支持 data URL 和普通 URL
-            img({ src, alt, ...props }: any) {
-              if (!src) return null
-              // 对于 data URL 或普通 URL，使用原生 img 标签
-              return (
-                <img
-                  src={src}
-                  alt={alt || 'Generated Image'}
-                  className="max-w-full h-auto rounded-lg my-2"
-                  loading="lazy"
-                  {...props}
-                />
-              )
-            },
-          }}
-        >
-          {preparedFallback}
-        </ReactMarkdown>
-      </div>
+        {fallback}
+      </pre>
     )
   }
 
-  if (trimmedHtml.length === 0) {
-    if (preferPlainStreamingFallback) {
-      return (
-        <pre
-          className={cn(
-            'my-0 max-w-full whitespace-pre-wrap break-words rounded-lg bg-muted/20 px-3 py-2 text-sm',
-            (isStreaming || isRendering) && 'typing-cursor',
-          )}
-        >
-          {fallback}
-        </pre>
-      )
-    }
-    return renderFallback()
-  }
-
+  // 有代码 marker 的 HTML：拆分渲染
   if (codeMarkerParts) {
     return (
       <div
@@ -406,25 +376,62 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           if (part.type === 'html') {
             const htmlPart = part.html.trim()
             if (!htmlPart) return null
-            return <div key={`html-${idx}`} dangerouslySetInnerHTML={{ __html: htmlPart }} />
+            return (
+              <div
+                key={`html-${idx}`}
+                dangerouslySetInnerHTML={{ __html: htmlPart }}
+              />
+            )
           }
-          return <TerminalCodeBlock key={`code-${idx}`} code={part.code} language={part.language} />
+          return (
+            <TerminalCodeBlock
+              key={`code-${idx}`}
+              code={part.code}
+              language={part.language}
+            />
+          )
         })}
       </div>
     )
   }
 
-  if (fallbackHasCodeBlocks && !isStreaming) {
-    return renderFallback()
+  // 纯 HTML 无代码块（或空内容）：使用 dangerouslySetInnerHTML
+  if (trimmedHtml) {
+    return (
+      <div
+        className={cn(
+          'markdown-body prose prose-zinc dark:prose-invert max-w-none break-words',
+          isStreaming || isRendering ? 'markdown-body--pending' : null,
+        )}
+        dangerouslySetInnerHTML={{ __html: trimmedHtml }}
+      />
+    )
   }
 
-  return (
-    <div
-      className={cn(
-        'markdown-body prose prose-zinc dark:prose-invert max-w-none break-words',
-        isStreaming || isRendering ? 'markdown-body--pending' : null,
-      )}
-      dangerouslySetInnerHTML={{ __html: trimmedHtml }}
-    />
-  )
+  // 无内容：显示 loading 占位
+  if (isStreaming || isRendering) {
+    return (
+      <div className="flex items-center gap-1">
+        <div className="flex space-x-1">
+          <div
+            className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+            style={{ animationDelay: '0ms' }}
+          />
+          <div
+            className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+            style={{ animationDelay: '150ms' }}
+          />
+          <div
+            className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+            style={{ animationDelay: '300ms' }}
+          />
+        </div>
+        <span className="text-sm text-muted-foreground ml-2">
+          AI正在思考...
+        </span>
+      </div>
+    )
+  }
+
+  return null
 })
