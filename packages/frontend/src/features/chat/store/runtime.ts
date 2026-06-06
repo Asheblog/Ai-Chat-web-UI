@@ -126,6 +126,13 @@ export const createChatStoreRuntime = (
     const snapshots = getSessionCompletionSnapshots(sessionId)
     if (!snapshots.length) return
     snapshotDebug('apply:start', { sessionId, total: snapshots.length })
+
+    // 收集在快照应用过程中被标记为终态的消息，用于后续清理快照
+    const terminalSnapshotIds: Array<{
+      messageId: number | null
+      clientMessageId: string | null
+    }> = []
+
     set((state) => {
       const metaIndexByMessageKey = new Map<string, number>()
       const metaIndexByClientId = new Map<string, number>()
@@ -198,7 +205,14 @@ export const createChatStoreRuntime = (
           toolEvents: snapshot.toolEvents?.length ?? 0,
           streamStatus: snapshot.streamStatus,
         })
-        if (meta.streamStatus === 'done' && !meta.pendingSync) {
+        // 消息流状态已经处于终态（done/cancelled/error），且未等待服务端同步时
+        // 跳过快照应用，避免用旧的 streaming 快照覆盖已完成的终态
+        if (
+          meta.streamStatus &&
+          meta.streamStatus !== 'streaming' &&
+          meta.streamStatus !== 'pending' &&
+          !meta.pendingSync
+        ) {
           return
         }
 
@@ -297,7 +311,7 @@ export const createChatStoreRuntime = (
           }
         }
 
-        const baseStreamStatus = meta.streamStatus ?? (meta.pendingSync ? 'done' : 'streaming')
+        const baseStreamStatus = meta.streamStatus ?? 'done'
         const baseReasoningStatus = meta.reasoningStatus
         let nextStreamStatus =
           snapshot.streamStatus ?? baseStreamStatus
@@ -329,6 +343,21 @@ export const createChatStoreRuntime = (
             isPlaceholder: false,
             pendingSync: nextStreamStatus === 'done' ? true : meta.pendingSync,
           }
+        }
+
+        // 记录进入终态的消息，供外层清理对应的 localStorage 快照
+        if (
+          isTerminalStreamStatus &&
+          nextStreamStatus !== 'streaming' &&
+          nextStreamStatus !== 'pending'
+        ) {
+          terminalSnapshotIds.push({
+            messageId:
+              typeof meta.id === 'number' && Number.isFinite(meta.id)
+                ? Number(meta.id)
+                : snapshot.messageId,
+            clientMessageId: meta.clientMessageId ?? snapshot.clientMessageId ?? null,
+          })
         }
 
         if (snapshot.metrics) {
@@ -364,8 +393,42 @@ export const createChatStoreRuntime = (
       if (metricsMutated) {
         partial.messageMetrics = nextMetrics
       }
+
+      // 快照应用后重新计算 isStreaming，避免快照中的 streamStatus 修改
+      // 导致 isStreaming 与 messageMetas 不一致。
+      // 例如：刷新页面后关闭再打开，localStorage 中的 stale 快照可能
+      // 将已完成消息的 streamStatus 回退为 'streaming'，而此时
+      // fetchMessages 已在前面将 isStreaming 设为 false，造成状态分裂。
+      const effectiveMetas = metasMutated ? nextMetas : state.messageMetas
+      const currentSessionId = state.currentSession?.id ?? null
+      const hasStreamingMeta = effectiveMetas.some(
+        (meta) => meta.sessionId === currentSessionId && meta.streamStatus === 'streaming',
+      )
+      if (currentSessionId === sessionId) {
+        if (hasStreamingMeta !== state.isStreaming) {
+          partial.isStreaming = hasStreamingMeta
+        }
+        if (!hasStreamingMeta && state.activeStreamSessionId === sessionId) {
+          partial.activeStreamSessionId = null
+        }
+      }
+
       return partial
     })
+
+    // 清理已处理完毕的完成快照：对于 meta 已处于终态的消息，
+    // 其快照已完成使命，删除以减量并防止后续页面加载时产生 stale 状态。
+    // 使用 queueMicrotask 确保在 React 批处理状态更新后再执行清理操作。
+    if (typeof window !== 'undefined' && terminalSnapshotIds.length > 0) {
+      queueMicrotask(() => {
+        for (const id of terminalSnapshotIds) {
+          removeCompletionSnapshot(sessionId, {
+            messageId: id.messageId,
+            clientMessageId: id.clientMessageId,
+          })
+        }
+      })
+    }
   }
 
   const applyServerMessageSnapshot = (message: Message) => {
