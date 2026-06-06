@@ -329,6 +329,9 @@ export const createMessageSlice: ChatSliceCreator<
         runtime.recomputeStreamingState()
       }
       runtime.applyBufferedSnapshots(sessionId)
+      // 在快照应用的状态更新完成后重新计算 isStreaming，
+      // 避免 applyBufferedSnapshots 修改 metas 后 isStreaming 不一致
+      queueMicrotask(() => runtime.recomputeStreamingState())
 
       // 异步补齐附件，避免切会话时被额外请求阻塞首屏消息渲染。
       void artifactsPromise

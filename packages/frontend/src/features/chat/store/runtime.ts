@@ -681,7 +681,8 @@ export const createChatStoreRuntime = (
         clientMessageId: message.clientMessageId ?? null,
       })
     }
-    recomputeStreamingState()
+    // 延迟到状态批处理完成后重新计算 isStreaming，避免 get() 读到旧状态
+    queueMicrotask(() => recomputeStreamingState())
   }
   applyServerMessageSnapshotHandler = applyServerMessageSnapshot
 
@@ -706,7 +707,8 @@ export const createChatStoreRuntime = (
     if (typeof messageId === 'number' && Number.isFinite(messageId)) {
       stopMessagePoller(messageId)
     }
-    recomputeStreamingState()
+    // 延迟到状态批处理完成后重新计算 isStreaming，避免 get() 读到旧状态
+    queueMicrotask(() => recomputeStreamingState())
   }
 
   const flushStreamBuffer = (stream: ActiveStreamEntry | null, force = false) => {
