@@ -13,6 +13,7 @@ LOG_DIR="/app/logs"
 DEFAULT_DB_NAME="app.db"
 IMAGE_DIR_DEFAULT="/app/storage/chat-images"
 RESTORE_USER_PROFILE_MIGRATION_NAME="20260222183000_restore_user_profile_columns"
+USAGE_METRIC_CACHE_TOKENS_MIGRATION_NAME="20260606211140_add_usage_metric_cache_tokens"
 DOCKER_SOCKET_PATH="${DOCKER_SOCKET_PATH:-/var/run/docker.sock}"
 
 cd "$APP_ROOT"
@@ -182,6 +183,26 @@ ensure_restore_user_profile_columns() {
   fi
 }
 
+ensure_usage_metric_cache_tokens() {
+  if [ ! -f "$DB_FILE" ]; then
+    return 0
+  fi
+
+  if ! sqlite_table_exists "usage_metrics"; then
+    return 0
+  fi
+
+  if ! sqlite_table_has_column "usage_metrics" "promptCacheHitTokens"; then
+    echo "[entrypoint] Patching schema: add usage_metrics.promptCacheHitTokens"
+    sqlite3 "$DB_FILE" 'ALTER TABLE "usage_metrics" ADD COLUMN "promptCacheHitTokens" INTEGER NOT NULL DEFAULT 0;'
+  fi
+
+  if ! sqlite_table_has_column "usage_metrics" "promptCacheMissTokens"; then
+    echo "[entrypoint] Patching schema: add usage_metrics.promptCacheMissTokens"
+    sqlite3 "$DB_FILE" 'ALTER TABLE "usage_metrics" ADD COLUMN "promptCacheMissTokens" INTEGER NOT NULL DEFAULT 0;'
+  fi
+}
+
 should_resolve_restore_user_profile_migration() {
   if [ ! -f "$DB_FILE" ]; then
     return 1
@@ -209,6 +230,33 @@ try_resolve_restore_user_profile_migration() {
   run_prisma_command "migrate" "resolve" --applied "$RESTORE_USER_PROFILE_MIGRATION_NAME" --schema "$PRISMA_SCHEMA_PATH"
 }
 
+should_resolve_usage_metric_cache_tokens_migration() {
+  if [ ! -f "$DB_FILE" ]; then
+    return 1
+  fi
+
+  if ! sqlite_table_exists "_prisma_migrations"; then
+    return 1
+  fi
+
+  if ! sqlite_table_has_column "usage_metrics" "promptCacheHitTokens"; then
+    return 1
+  fi
+
+  if ! sqlite_table_has_column "usage_metrics" "promptCacheMissTokens"; then
+    return 1
+  fi
+
+  local tracked
+  tracked="$(sqlite3 "$DB_FILE" "SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name='${USAGE_METRIC_CACHE_TOKENS_MIGRATION_NAME}' LIMIT 1;" 2>/dev/null || true)"
+  [ "$tracked" = "1" ]
+}
+
+try_resolve_usage_metric_cache_tokens_migration() {
+  echo "[entrypoint] Attempting to resolve ${USAGE_METRIC_CACHE_TOKENS_MIGRATION_NAME} as applied..."
+  run_prisma_command "migrate" "resolve" --applied "$USAGE_METRIC_CACHE_TOKENS_MIGRATION_NAME" --schema "$PRISMA_SCHEMA_PATH"
+}
+
 run_as_backend() {
   if command -v su-exec >/dev/null 2>&1; then
     su-exec backend "$@"
@@ -232,9 +280,15 @@ if ! ensure_restore_user_profile_columns; then
   echo "[entrypoint] WARN: pre-migrate schema patch failed; continuing with migrate deploy" >&2
 fi
 
+if ! ensure_usage_metric_cache_tokens; then
+  echo "[entrypoint] WARN: usage_metric cache tokens schema patch failed; continuing with migrate deploy" >&2
+fi
+
 if ! run_prisma_migrate_deploy; then
   if should_resolve_restore_user_profile_migration && try_resolve_restore_user_profile_migration && run_prisma_migrate_deploy; then
     echo "[entrypoint] Migration deploy recovered after resolving ${RESTORE_USER_PROFILE_MIGRATION_NAME}"
+  elif should_resolve_usage_metric_cache_tokens_migration && try_resolve_usage_metric_cache_tokens_migration && run_prisma_migrate_deploy; then
+    echo "[entrypoint] Migration deploy recovered after resolving ${USAGE_METRIC_CACHE_TOKENS_MIGRATION_NAME}"
   else
     echo "[entrypoint] WARN: prisma migrate deploy failed, falling back to prisma db push" >&2
     run_prisma_command "db" "push" --schema "$PRISMA_SCHEMA_PATH" || npm run db:push || true
