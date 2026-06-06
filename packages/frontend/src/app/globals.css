@@ -230,7 +230,8 @@
   }
 
   .v2-table-wrap {
-    overflow: hidden;
+    overflow-y: hidden;
+    overflow-x: auto;
     border: 1px solid hsl(var(--border) / 0.78);
     border-radius: 10px;
     background: hsl(var(--surface) / 0.88);
@@ -774,6 +775,8 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   contain: content paint;
   will-change: contents;
   line-height: 1.6; /* 默认行距与主流产品一致 */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .markdown-body--reasoning {
