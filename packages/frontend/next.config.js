@@ -51,6 +51,32 @@ const nextConfig = {
     // 优化包大小
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
+
+  webpack: (config, { isServer }) => {
+    // decode-named-character-reference 的 browser 导出使用 document.createElement
+    // 在 Web Worker 中 document 不可用，强制使用非 DOM 版本（纯查表实现）
+    if (!isServer) {
+      const fs = require('fs')
+      const path = require('path')
+      const pnpmDir = path.resolve(__dirname, '../../node_modules/.pnpm')
+      const entries = fs.readdirSync(pnpmDir)
+      const pkgDir = entries.find((e) =>
+        e.startsWith('decode-named-character-reference@'),
+      )
+      if (pkgDir) {
+        const aliasPath = path.join(
+          pnpmDir,
+          pkgDir,
+          'node_modules/decode-named-character-reference/index.js',
+        )
+        config.resolve.alias = {
+          ...config.resolve.alias,
+          'decode-named-character-reference': aliasPath,
+        }
+      }
+    }
+    return config
+  },
 };
 
 module.exports = nextConfig;
