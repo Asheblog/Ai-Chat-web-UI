@@ -1355,7 +1355,20 @@ export const createStreamSlice: ChatSliceCreator<
             pendingSync: false,
           }
         })
-        return { messageMetas: nextMetas }
+
+        // 在 set 回调内基于最新 nextMetas 同步 isStreaming，避免批处理旧状态
+        const currentSid = state.currentSession?.id ?? null
+        const hasStreaming = nextMetas.some(
+          (meta) => meta.sessionId === currentSid && meta.streamStatus === 'streaming',
+        )
+        const partial: Partial<import('@/types').ChatState> = { messageMetas: nextMetas }
+        if (currentSid === currentSessionId) {
+          partial.isStreaming = hasStreaming
+          if (!hasStreaming) {
+            partial.activeStreamSessionId = null
+          }
+        }
+        return partial
       })
 
       // 后续副作用：发服务端取消请求、停止轮询、清理快照
@@ -1378,8 +1391,8 @@ export const createStreamSlice: ChatSliceCreator<
         })
       }
 
-      // 统一在最后重新计算 isStreaming 状态
-      runtime.recomputeStreamingState()
+      // 统一清理 isStreaming 状态（set 回调内已完成 isStreaming 同步，
+      // streamingFlagUpdate 作为冗余保护确保 activeStreamSessionId / toolEvents 被清理）
       set((state) => ({
         ...runtime.streamingFlagUpdate(state, currentSessionId, false),
         toolEvents: state.toolEvents.filter((event) => event.sessionId !== currentSessionId),
