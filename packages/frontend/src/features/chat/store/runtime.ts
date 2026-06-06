@@ -652,6 +652,23 @@ export const createChatStoreRuntime = (
       if (metricsMutated) {
         partial.messageMetrics = nextMetrics
       }
+
+      // 在 set 回调内基于最新的 nextMetas 同步 isStreaming，
+      // 避免外部 recomputeStreamingState() 读取到批处理前的旧状态
+      const currentSid = state.currentSession?.id ?? null
+      const effectiveMetas = metasMutated ? nextMetas : state.messageMetas
+      const hasStreaming = effectiveMetas.some(
+        (meta) => meta.sessionId === currentSid && meta.streamStatus === 'streaming',
+      )
+      if (currentSid === message.sessionId) {
+        if (hasStreaming !== state.isStreaming) {
+          partial.isStreaming = hasStreaming
+        }
+        if (!hasStreaming && state.activeStreamSessionId === message.sessionId) {
+          partial.activeStreamSessionId = null
+        }
+      }
+
       return partial
     })
     if (message.streamStatus === 'streaming') {
@@ -681,8 +698,6 @@ export const createChatStoreRuntime = (
         clientMessageId: message.clientMessageId ?? null,
       })
     }
-    // 延迟到状态批处理完成后重新计算 isStreaming，避免 get() 读到旧状态
-    queueMicrotask(() => recomputeStreamingState())
   }
   applyServerMessageSnapshotHandler = applyServerMessageSnapshot
 
@@ -702,13 +717,27 @@ export const createChatStoreRuntime = (
         streamError: streamError ?? null,
         pendingSync: status === 'done' ? false : nextMetas[idx].pendingSync,
       }
-      return { messageMetas: nextMetas }
+
+      // 在 set 回调内基于最新的 nextMetas 同步 isStreaming，
+      // 避免外部 recomputeStreamingState() 读取到批处理前的旧状态
+      const currentSid = state.currentSession?.id ?? null
+      const hasStreaming = nextMetas.some(
+        (meta) => meta.sessionId === currentSid && meta.streamStatus === 'streaming',
+      )
+      const partial: Partial<ChatState> = { messageMetas: nextMetas }
+      if (currentSid != null) {
+        if (hasStreaming !== state.isStreaming) {
+          partial.isStreaming = hasStreaming
+        }
+        if (!hasStreaming && state.activeStreamSessionId === currentSid) {
+          partial.activeStreamSessionId = null
+        }
+      }
+      return partial
     })
     if (typeof messageId === 'number' && Number.isFinite(messageId)) {
       stopMessagePoller(messageId)
     }
-    // 延迟到状态批处理完成后重新计算 isStreaming，避免 get() 读到旧状态
-    queueMicrotask(() => recomputeStreamingState())
   }
 
   const flushStreamBuffer = (stream: ActiveStreamEntry | null, force = false) => {
