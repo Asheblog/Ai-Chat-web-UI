@@ -7,6 +7,7 @@ import { ChevronRight, Folder, Github, Info, MessageCircle, Pin, PinOff, Plus, S
 import { shallow } from 'zustand/shallow'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -14,6 +15,7 @@ import { SidebarCollapseIcon, SidebarExpandIcon } from '@/components/sidebar-tog
 import {
   AlertDialog,
 } from '@/components/ui/alert-dialog'
+import { useToast } from '@/components/ui/use-toast'
 import { DestructiveConfirmDialogContent } from '@/components/ui/destructive-confirm-dialog'
 import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -55,10 +57,14 @@ const isRecentWithinDays = (date: string | Date, days: number) => {
 }
 
 export function Sidebar() {
+  const { toast } = useToast()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   // 修复：新建会话并发点击导致重复创建与延迟弹出（添加本地创建中锁）
   const [isCreating, setIsCreating] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null)
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [includePinned, setIncludePinned] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
   const {
@@ -69,6 +75,7 @@ export function Sidebar() {
     deleteSession,
     createSession,
     toggleSessionPin,
+    clearSessions,
     sessionUsageTotalsMap,
     isSessionsLoading,
   } = useChatStore(
@@ -80,6 +87,7 @@ export function Sidebar() {
       deleteSession: state.deleteSession,
       createSession: state.createSession,
       toggleSessionPin: state.toggleSessionPin,
+      clearSessions: state.clearSessions,
       sessionUsageTotalsMap: state.sessionUsageTotalsMap,
       isSessionsLoading: state.isSessionsLoading,
     }),
@@ -390,15 +398,39 @@ export function Sidebar() {
         <div className="border-t border-border" />
       </div>
       <div className="px-4 pb-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
-          <input
-            value={sessionSearch}
-            onChange={(e) => setSessionSearch(e.target.value)}
-            placeholder="搜索对话"
-            className="h-9 w-full rounded-[8px] border border-border bg-surface px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
-            aria-label="搜索会话"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+            <input
+              value={sessionSearch}
+              onChange={(e) => setSessionSearch(e.target.value)}
+              placeholder="搜索对话"
+              className="h-9 w-full rounded-[8px] border border-border bg-surface px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
+              aria-label="搜索会话"
+            />
+          </div>
+          {sessions.length > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 rounded-[8px] text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="清空聊天记录"
+                    onClick={() => {
+                      setIncludePinned(false)
+                      setClearDialogOpen(true)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">清空聊天记录</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </div>
       {/* 会话列表 */}
@@ -731,6 +763,75 @@ export function Sidebar() {
             })()
           }}
         />
+      </AlertDialog>
+
+      {/* 一键清空确认弹框 */}
+      <AlertDialog open={clearDialogOpen} onOpenChange={(open) => {
+        if (!open && !isClearing) {
+          setClearDialogOpen(false)
+          setIncludePinned(false)
+        }
+      }}>
+        <DestructiveConfirmDialogContent
+          title="清空聊天记录"
+          description={`将删除 ${includePinned ? sessions.length : sessions.filter((s) => !s.pinnedAt).length} 个会话及其关联的文件记录，此操作不可撤销。`}
+          warning={includePinned ? "已选择同时删除置顶会话，这些会话也将被永久删除。" : undefined}
+          cancelLabel="取消"
+          cancelDisabled={isClearing}
+          actionLabel={isClearing ? "清空中..." : "确认清空"}
+          actionDisabled={isClearing}
+          onAction={(event) => {
+            event.preventDefault()
+            void (async () => {
+              setIsClearing(true)
+              try {
+                const wasCurrentId = useChatStore.getState().currentSession?.id
+                const result = await clearSessions(!includePinned)
+                setClearDialogOpen(false)
+                setIncludePinned(false)
+                setIsClearing(false)
+                if (result) {
+                  if (result.deletedCount === 0 && result.failedCount === 0) {
+                    toast({ description: '没有可清空的会话' })
+                  } else if (result.failedCount > 0) {
+                    toast({ description: `已删除 ${result.deletedCount} 个会话，${result.failedCount} 个删除失败` })
+                  } else {
+                    toast({ description: `已清空 ${result.deletedCount} 个会话` })
+                  }
+                  // Handle navigation if current session was deleted
+                  const state = useChatStore.getState()
+                  if (wasCurrentId && !state.sessions.find((s) => s.id === wasCurrentId)) {
+                    if (state.sessions.length > 0) {
+                      const nextId = state.sessions[0].id
+                      state.selectSession(nextId)
+                      router.replace(`/main/${nextId}`)
+                    } else {
+                      router.replace('/main')
+                    }
+                  }
+                } else {
+                  toast({ description: '清空失败，请稍后重试', variant: 'destructive' })
+                }
+              } catch (e) {
+                console.error(e)
+                setIsClearing(false)
+                toast({ description: '清空失败，请稍后重试', variant: 'destructive' })
+              }
+            })()
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="include-pinned-clear"
+              checked={includePinned}
+              onCheckedChange={setIncludePinned}
+              disabled={isClearing}
+            />
+            <label htmlFor="include-pinned-clear" className="text-sm cursor-pointer select-none text-foreground/80">
+              同时删除置顶会话
+            </label>
+          </div>
+        </DestructiveConfirmDialogContent>
       </AlertDialog>
       {sidebarCollapsed && !isMobileMenuOpen && (
         <div

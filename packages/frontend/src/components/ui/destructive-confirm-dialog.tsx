@@ -25,6 +25,7 @@ type DestructiveConfirmDialogContentProps = {
   contentClassName?: string
   actionClassName?: string
   cancelClassName?: string
+  children?: React.ReactNode
 }
 
 export function DestructiveConfirmDialogContent({
@@ -39,6 +40,7 @@ export function DestructiveConfirmDialogContent({
   contentClassName,
   actionClassName,
   cancelClassName,
+  children,
 }: DestructiveConfirmDialogContentProps) {
   return (
     <AlertDialogContent className={cn("max-w-[560px] overflow-hidden border-destructive/25 p-0", contentClassName)}>
@@ -54,6 +56,7 @@ export function DestructiveConfirmDialogContent({
             </AlertDialogDescription>
           </AlertDialogHeader>
         </div>
+        {children ? <div className="mt-3">{children}</div> : null}
         {warning ? (
           <div className="mt-4 rounded-lg border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
             {warning}

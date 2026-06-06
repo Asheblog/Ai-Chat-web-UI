@@ -74,6 +74,13 @@ export const updateSessionModel = async (
   return response.data
 }
 
+export const deleteSessions = async (excludePinned: boolean) => {
+  const response = await client.delete<
+    ApiResponse<{ deletedCount: number; failedCount: number }>
+  >('/sessions', { data: { excludePinned } })
+  return response.data
+}
+
 export const summarizeSessionTitle = async (
   sessionId: number,
   content: string,

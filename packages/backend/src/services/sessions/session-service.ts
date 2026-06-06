@@ -377,6 +377,46 @@ export class SessionService {
     await this.prisma.chatSession.delete({ where: { id: sessionId } })
   }
 
+  async deleteSessions(actor: Actor, excludePinned: boolean) {
+    const where = {
+      ...sessionOwnershipClause(actor),
+      ...(excludePinned ? { pinnedAt: null } : {}),
+    }
+    const sessions = await this.prisma.chatSession.findMany({
+      where,
+      select: { id: true },
+    })
+
+    let deletedCount = 0
+    let failedCount = 0
+
+    for (const { id } of sessions) {
+      try {
+        // Cancel any active streams for this session before deleting
+        cancelAllStreamsForSession(id)
+        try {
+          await this.artifactService.cleanupArtifactsBySession(id)
+          await this.workspaceService.destroyWorkspace(id)
+        } catch (error) {
+          this.logger.error?.('Failed to cleanup workspace on batch delete', {
+            sessionId: id,
+            error: error instanceof Error ? error.message : error,
+          })
+        }
+        await this.prisma.chatSession.delete({ where: { id } })
+        deletedCount++
+      } catch (error) {
+        this.logger.error?.('Failed to delete session in batch', {
+          sessionId: id,
+          error: error instanceof Error ? error.message : error,
+        })
+        failedCount++
+      }
+    }
+
+    return { deletedCount, failedCount }
+  }
+
   async clearSessionMessages(actor: Actor, sessionId: number) {
     const existing = await this.prisma.chatSession.findFirst({
       where: { id: sessionId, ...sessionOwnershipClause(actor) },

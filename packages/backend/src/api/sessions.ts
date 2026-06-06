@@ -139,6 +139,23 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
     }
   })
 
+  router.delete('/', actorMiddleware, zValidator('json', z.object({
+    excludePinned: z.boolean().optional().default(true),
+  })), async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const { excludePinned } = c.req.valid('json')
+      const result = await svc.deleteSessions(actor, excludePinned)
+      return c.json<ApiResponse<typeof result>>({
+        success: true,
+        data: result,
+        message: `Deleted ${result.deletedCount} sessions${result.failedCount > 0 ? `, ${result.failedCount} failed` : ''}`,
+      })
+    } catch (error) {
+      return handleServiceError(c, error, 'Failed to delete sessions', 'Batch delete sessions error:')
+    }
+  })
+
   router.delete('/:id', actorMiddleware, async (c) => {
     try {
       const sessionId = parseInt(c.req.param('id'), 10)

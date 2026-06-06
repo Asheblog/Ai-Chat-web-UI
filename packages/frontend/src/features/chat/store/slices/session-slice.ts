@@ -1,6 +1,7 @@
 import {
   createSessionByModelId,
   deleteSession as deleteSessionApi,
+  deleteSessions as deleteSessionsApi,
   getSessions,
   updateSession as updateSessionApi,
   updateSessionModel as updateSessionModelApi,
@@ -321,6 +322,26 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
     } catch (error: any) {
       set({ error: error?.response?.data?.error || error?.message || '更新会话置顶状态失败' })
       return false
+    }
+  },
+
+  clearSessions: async (excludePinned) => {
+    try {
+      const currentSessionId = get().currentSession?.id
+      const resp = await deleteSessionsApi(excludePinned)
+      const { deletedCount = 0, failedCount = 0 } = resp?.data ?? {}
+
+      await get().fetchSessions()
+
+      const state = get()
+      if (currentSessionId && !state.sessions.find((s) => s.id === currentSessionId)) {
+        set({ currentSession: null })
+      }
+
+      return { deletedCount, failedCount }
+    } catch (error: any) {
+      set({ error: error?.response?.data?.error || error?.message || '清空会话失败' })
+      return null
     }
   },
   }
