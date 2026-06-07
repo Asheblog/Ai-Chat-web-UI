@@ -38,6 +38,8 @@ const MISSING_MODULE_PACKAGE_MAP: Record<string, string> = {
   lxml: 'lxml',
 }
 
+const AUTO_INSTALL_WHITELIST = new Set(Object.values(MISSING_MODULE_PACKAGE_MAP))
+
 const MAX_AUTO_INSTALL_ROUNDS = 3
 const PREVIEW_LIMIT = 4000
 
@@ -93,6 +95,10 @@ const packageNameFromMissingModule = (moduleName: string) => {
   const base = normalized.split('.')[0]
   const mapped = MISSING_MODULE_PACKAGE_MAP[base] || base
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(mapped)) {
+    return null
+  }
+  // Only auto-install whitelisted packages to prevent typosquatting.
+  if (!AUTO_INSTALL_WHITELIST.has(mapped)) {
     return null
   }
   return mapped
@@ -391,7 +397,7 @@ export class WorkspacePythonRuntime {
         stdin: params.input,
         timeoutMs: params.timeoutMs,
         maxOutputChars: params.maxOutputChars,
-        networkMode: this.config.runNetworkMode,
+        networkMode: 'none',
         env: {
           PYTHONUNBUFFERED: '1',
         },

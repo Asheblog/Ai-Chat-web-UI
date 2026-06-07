@@ -1,11 +1,14 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import fs from 'node:fs'
 import { getAppConfig, type WorkspaceConfig } from '../../config/app-config'
 import { WorkspaceServiceError } from './workspace-errors'
 import { createLogger } from '../../utils/logger'
 
 const DOCKER_CHECK_CACHE_MS = 30_000
 const DOCKER_MOUNT_CACHE_MS = 30_000
+const SECCOMP_PROFILE_PATH = path.resolve(__dirname, 'py-sandbox-seccomp.json')
+const SECCOMP_AVAILABLE = fs.existsSync(SECCOMP_PROFILE_PATH)
 const log = createLogger('WorkspaceDocker')
 const runtimeContainerUser = resolveRuntimeContainerUser()
 
@@ -46,6 +49,8 @@ export interface DockerRunOptions {
   maxOutputChars: number
   networkMode: 'none' | 'default'
   env?: Record<string, string>
+  workdir?: string
+  readOnlyMounts?: Array<{ source: string; target: string }>
 }
 
 export interface DockerRunResult {
@@ -107,11 +112,12 @@ export class DockerExecutor {
     const workspaceRoot = path.resolve(options.workspaceRoot)
     const dockerWorkspaceRoot = await this.resolveDockerWorkspaceRoot(workspaceRoot)
     const maxOutputChars = Math.max(256, options.maxOutputChars)
+    const workdir = options.workdir || '/workspace'
     const args: string[] = [
       'run',
       '--rm',
       '--workdir',
-      '/workspace',
+      workdir,
       '--cpus',
       this.config.dockerCpu,
       '--memory',
@@ -124,15 +130,24 @@ export class DockerExecutor {
       '--read-only',
       '--tmpfs',
       '/tmp:rw,noexec,nosuid,size=268435456',
-      '--volume',
-      `${dockerWorkspaceRoot}:/workspace`,
     ]
+
+    if (SECCOMP_AVAILABLE) {
+      args.push('--security-opt', `seccomp=${SECCOMP_PROFILE_PATH}`)
+    }
 
     // Keep file ownership/permissions consistent with the backend process user.
     // This avoids venv init/write failures under userns-remap and rootless daemon setups.
     if (runtimeContainerUser) {
       args.push('--user', runtimeContainerUser)
     }
+
+    for (const mount of options.readOnlyMounts || []) {
+      const source = await this.resolveDockerWorkspaceRoot(mount.source)
+      args.push('--volume', `${source}:${mount.target}:ro`)
+    }
+
+    args.push('--volume', `${dockerWorkspaceRoot}:/workspace`)
 
     if (options.networkMode === 'none') {
       args.push('--network', 'none')

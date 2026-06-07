@@ -1,6 +1,18 @@
 version: '3.8'
 
 services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: ai-chat-web-ui-docker-proxy
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    networks:
+      - ai-chat-web-ui-network
+
   backend:
     image: ghcr.io/asheblog/aichat-backend:latest
     container_name: ai-chat-web-ui-backend
@@ -25,7 +37,7 @@ services:
       - WORKSPACE_ARTIFACT_MAX_BYTES=${WORKSPACE_ARTIFACT_MAX_BYTES:-104857600}
       - WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE=${WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE:-20}
       - WORKSPACE_RUN_TIMEOUT_MS=${WORKSPACE_RUN_TIMEOUT_MS:-120000}
-      - WORKSPACE_RUN_NETWORK_MODE=${WORKSPACE_RUN_NETWORK_MODE:-none}
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
       - WORKSPACE_DOCKER_IMAGE=${WORKSPACE_DOCKER_IMAGE:-python:3.11-slim}
       - WORKSPACE_DOCKER_CPUS=${WORKSPACE_DOCKER_CPUS:-1.0}
       - WORKSPACE_DOCKER_MEMORY=${WORKSPACE_DOCKER_MEMORY:-1g}
@@ -45,7 +57,6 @@ services:
       - backend_data:/app/data
       - backend_logs:/app/logs
       - backend_images:/app/storage/chat-images
-      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${BACKEND_PORT:-8001}:8001"
     restart: unless-stopped
