@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { LogOut, Sun, Moon, Monitor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +21,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ variant = 'label', className }: UserMenuProps) {
+  const [open, setOpen] = useState(false)
   const { actorState, user, logout } = useAuthStore((state) => ({
     actorState: state.actorState,
     user: state.user,
@@ -62,7 +64,7 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
