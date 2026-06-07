@@ -70,8 +70,8 @@ const expandReducer = (state: ExpandState, action: ExpandAction): ExpandState =>
     case 'init':
       return { expanded: action.defaultExpanded, source: 'default' }
     case 'set-default':
-      if (state.source !== 'default') return state
-      return { ...state, expanded: action.defaultExpanded }
+      if (state.source === 'user') return state
+      return { ...state, expanded: action.defaultExpanded, source: 'default' }
     case 'load-persisted':
       if (action.expanded == null) return state
       return { expanded: action.expanded, source: 'user' }

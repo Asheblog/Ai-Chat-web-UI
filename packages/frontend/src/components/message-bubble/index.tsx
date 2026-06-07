@@ -272,11 +272,12 @@ function MessageBubbleComponent({
     return reasoningDefaultExpand
   }, [meta.reasoningStatus, meta.role, reasoningDefaultExpand, reasoningText])
   const defaultShouldShowToolCalls = useMemo(
-    () =>
-      toolTimeline.some(
-        (event) => event.status === 'running' || event.status === 'pending',
-      ),
-    [toolTimeline],
+    () => {
+      if (toolTimeline.length === 0) return false
+      if (toolTimeline.some(e => e.status === 'running' || e.status === 'pending')) return true
+      return reasoningDefaultExpand
+    },
+    [toolTimeline, reasoningDefaultExpand],
   )
 
   const durationMs = normalizeMetricMs(metrics?.responseTimeMs)

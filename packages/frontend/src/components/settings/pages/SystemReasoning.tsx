@@ -184,7 +184,7 @@ export function SystemReasoningPage() {
 
         <SettingRow
           title="默认展开"
-          description="仅影响默认展示，用户可手动折叠/展开"
+          description="关闭后推理链与工具调用均默认折叠，用户仍可手动展开"
         >
           <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v)=>setReasoningDefaultExpand(!!v)} />
         </SettingRow>

@@ -89,6 +89,63 @@ describe('ReasoningSection 展开逻辑', () => {
     })
   })
 
+  it('defaultExpanded 从 true 变为 false 时应折叠', async () => {
+    // 模拟真实场景：流式时 defaultExpanded=true，完成后变为 false
+    const { rerender } = render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'streaming' })}
+        reasoningRaw="thinking..."
+        defaultExpanded={true}
+      />,
+    )
+
+    // 流式时展示推理面板
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    // 推理完成，defaultExpanded 变为 false（模拟设置关闭）
+    rerender(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw="thinking..."
+        defaultExpanded={false}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
+    })
+  })
+
+  it('用户手动折叠后 defaultExpanded 变化不应覆盖用户选择', async () => {
+    const { rerender } = render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw="thinking..."
+        defaultExpanded={true}
+      />,
+    )
+
+    // 默认展开
+    expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
+
+    // 用户手动折叠
+    fireEvent.click(getToggleButton())
+    expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
+
+    // defaultExpanded 变化不应覆盖用户选择
+    rerender(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw="thinking..."
+        defaultExpanded={true}
+      />,
+    )
+
+    expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('长思考耗时使用可读格式', () => {
     render(
       <ReasoningSection
