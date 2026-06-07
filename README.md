@@ -27,6 +27,18 @@
 version: '3.8'
 
 services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: ai-chat-web-ui-docker-proxy
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    networks:
+      - ai-chat-web-ui-network
+
   backend:
     image: ghcr.io/asheblog/aichat-backend:latest
     container_name: ai-chat-web-ui-backend
@@ -42,6 +54,7 @@ services:
       - DB_INIT_ON_START=${DB_INIT_ON_START:-false}
       - PYTHON_RUNTIME_RECONCILE_ON_START=${PYTHON_RUNTIME_RECONCILE_ON_START:-true}
       - SKILL_STORAGE_ROOT=/app/data/skills
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
       - WORKSPACE_TOOL_ENABLE=${WORKSPACE_TOOL_ENABLE:-true}
       - WORKSPACE_ROOT_DIR=${WORKSPACE_ROOT_DIR:-/app/data/workspaces/chat}
       - WORKSPACE_ARTIFACT_TTL_MINUTES=${WORKSPACE_ARTIFACT_TTL_MINUTES:-60}
@@ -51,7 +64,6 @@ services:
       - WORKSPACE_ARTIFACT_MAX_BYTES=${WORKSPACE_ARTIFACT_MAX_BYTES:-104857600}
       - WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE=${WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE:-20}
       - WORKSPACE_RUN_TIMEOUT_MS=${WORKSPACE_RUN_TIMEOUT_MS:-120000}
-      - WORKSPACE_RUN_NETWORK_MODE=${WORKSPACE_RUN_NETWORK_MODE:-none}
       - WORKSPACE_DOCKER_IMAGE=${WORKSPACE_DOCKER_IMAGE:-python:3.11-slim}
       - WORKSPACE_DOCKER_CPUS=${WORKSPACE_DOCKER_CPUS:-1.0}
       - WORKSPACE_DOCKER_MEMORY=${WORKSPACE_DOCKER_MEMORY:-1g}
@@ -65,7 +77,6 @@ services:
       - backend_data:/app/data
       - backend_logs:/app/logs
       - backend_images:/app/storage/chat-images
-      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${BACKEND_PORT:-8001}:8001"
     restart: unless-stopped
@@ -261,18 +272,9 @@ npm run start:dev
 
 - 容器内有 `docker` CLI（官方镜像已内置）
 - 容器内有 `git` CLI（`workspace_git_clone` 依赖，官方镜像已内置）
-- 挂载 Docker socket：`/var/run/docker.sock:/var/run/docker.sock`
+- 通过 Docker socket proxy 安全访问 Docker API（编排模板已包含 `docker-socket-proxy` 服务，无需额外配置）
 
-默认 `docker-compose.yml` 若未挂载 socket，请在 backend 的 `volumes` 中补充：
-
-```yaml
-- /var/run/docker.sock:/var/run/docker.sock
-```
-
-网络策略：
-
-- 默认 `WORKSPACE_RUN_NETWORK_MODE=none`（执行代码不直连外网）
-- 需要 Python 代码联网时，改为 `WORKSPACE_RUN_NETWORK_MODE=default`
+Python 代码执行默认为网络隔离（`network: none`）。pip 安装依赖阶段自动开启网络，安装完成后恢复隔离。
 
 ---
 
