@@ -19,7 +19,6 @@ import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from './compo
 import {
   ComposerFeatureControls,
   ComposerIconButton,
-  composerInnerEditorClass,
   composerToolbarButtonClass,
   composerToolbarScrollClass,
 } from './composer-toolbar-primitives'
@@ -146,38 +145,36 @@ export function DesktopComposer({
     <div className="hidden md:block">
       <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-4 pt-3 md:px-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
-        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-3')}>
-          <div className={composerInnerEditorClass}>
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => onInputChange(e.target.value)}
-              onKeyDown={onKeyDown}
-              onPaste={onPaste}
-              onCompositionStart={onCompositionStart}
-              onCompositionEnd={onCompositionEnd}
-              placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
-              aria-label="输入消息"
-              disabled={textareaDisabled}
-              className={cn(
-                COMPOSER_TEXTAREA_BASE_CLASS,
-                'min-h-[64px] max-h-[200px] w-full px-3 py-3 text-sm lg:min-h-[68px]',
-                showExpand && 'pr-12',
-              )}
-              rows={1}
-            />
-
-            {showExpand && (
-              <ComposerIconButton
-                className="absolute right-2 top-2 h-8 w-8 rounded-[7px]"
-                onClick={onExpandOpen}
-                aria-label="全屏编辑"
-                title="全屏编辑"
-              >
-                <Maximize2 className="h-4 w-4" />
-              </ComposerIconButton>
+        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'relative p-4')}>
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => onInputChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={onCompositionEnd}
+            placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
+            aria-label="输入消息"
+            disabled={textareaDisabled}
+            className={cn(
+              COMPOSER_TEXTAREA_BASE_CLASS,
+              'min-h-[64px] max-h-[200px] w-full text-sm lg:min-h-[68px]',
+              showExpand && 'pr-12',
             )}
-          </div>
+            rows={1}
+          />
+
+          {showExpand && (
+            <ComposerIconButton
+              className="absolute right-4 top-4 h-8 w-8 rounded-[7px]"
+              onClick={onExpandOpen}
+              aria-label="全屏编辑"
+              title="全屏编辑"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </ComposerIconButton>
+          )}
 
           <div className="mt-2 flex items-center justify-between gap-2">
             <div className={composerToolbarScrollClass}>
