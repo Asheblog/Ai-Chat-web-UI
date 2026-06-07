@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import { getAppConfig, type WorkspaceConfig } from '../../config/app-config'
 import { WorkspaceServiceError } from './workspace-errors'
@@ -7,6 +8,8 @@ import { createLogger } from '../../utils/logger'
 
 const DOCKER_CHECK_CACHE_MS = 30_000
 const DOCKER_MOUNT_CACHE_MS = 30_000
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 const SECCOMP_PROFILE_PATH = path.resolve(__dirname, 'py-sandbox-seccomp.json')
 const SECCOMP_AVAILABLE = fs.existsSync(SECCOMP_PROFILE_PATH)
 const log = createLogger('WorkspaceDocker')
