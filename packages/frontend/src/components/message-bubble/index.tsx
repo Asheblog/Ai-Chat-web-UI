@@ -23,10 +23,12 @@ import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
 const toReasoningMarkdown = (input: string) =>
   input
     .trim()
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .split('\n')
+    .filter((line) => line.trimEnd().length > 0)
     .map((line) => {
       const trimmed = line.trimEnd()
-      if (trimmed.length === 0) return '>'
       return trimmed.startsWith('>') ? trimmed : `> ${trimmed}`
     })
     .join('\n')
