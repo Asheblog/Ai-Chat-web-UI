@@ -966,3 +966,12 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   -webkit-backdrop-filter: saturate(150%) blur(8px);
   backdrop-filter: saturate(150%) blur(8px);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .typewriter-cursor {
+    animation: none !important;
+  }
+  .animate-spin {
+    animation: none !important;
+  }
+}

@@ -152,6 +152,9 @@ const formatDuration = (durationMs: unknown) => {
 
 interface ToolCallCardProps {
   event: ToolEvent
+  /** 受控模式：外部控制 Dialog 开关（用于嵌入时间轴等场景） */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 interface DetailBlockProps {
@@ -177,7 +180,8 @@ function DetailBlock({ title, children, mono = false }: DetailBlockProps) {
   )
 }
 
-export function ToolCallCard({ event }: ToolCallCardProps) {
+export function ToolCallCard({ event, open, onOpenChange }: ToolCallCardProps) {
+  const isControlled = open !== undefined
   const meta = statusMeta[event.status]
   const StatusIcon = meta.icon
   const toolLabel = formatToolName(event.identifier || event.apiName || event.tool)
@@ -220,50 +224,52 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
     .join(' · ')
   const diagnostics = [diagnosticText, event.error, stderrText].filter(Boolean).join('\n')
 
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="group flex w-full items-center gap-3 rounded-[8px] border border-border bg-card px-3 py-2.5 text-left transition-colors duration-200 hover:border-primary/30 hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2"
-          aria-label={`查看${toolLabel}工具调用详情`}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-            <StatusIcon className={`h-4 w-4 ${event.status === 'running' ? 'animate-spin' : ''}`} />
+  const dialogProps = isControlled ? { open, onOpenChange } : {}
+
+  const triggerButton = (
+    <button
+      type="button"
+      className="group flex w-full items-center gap-3 rounded-[8px] border border-border bg-card px-3 py-2.5 text-left transition-colors duration-200 hover:border-primary/30 hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2"
+      aria-label={`查看${toolLabel}工具调用详情`}
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+        <StatusIcon className={`h-4 w-4 ${event.status === 'running' ? 'animate-spin' : ''}`} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-foreground">{toolLabel}</span>
+          <span className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] ${meta.className}`}>
+            {meta.label}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold text-foreground">{toolLabel}</span>
-              <span className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] ${meta.className}`}>
-                {meta.label}
-              </span>
-              <span className="ml-auto hidden shrink-0 text-[11px] text-muted-foreground sm:inline">
-                {formatClock(event.updatedAt ?? event.createdAt)}
-              </span>
-            </span>
-            <span className="mt-1 block truncate text-xs text-muted-foreground">{primaryText}</span>
-            {visibleContextTags.length > 0 && (
-              <span className="mt-1 hidden min-w-0 flex-wrap gap-1.5 sm:flex">
-                {visibleContextTags.map((tag) => (
-                  <span key={tag} className="max-w-[220px] truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                    {tag}
-                  </span>
-                ))}
-              </span>
-            )}
+          <span className="ml-auto hidden shrink-0 text-[11px] text-muted-foreground sm:inline">
+            {formatClock(event.updatedAt ?? event.createdAt)}
           </span>
-          {leadImageUrl && (
-            <span className="hidden h-10 w-14 shrink-0 overflow-hidden rounded-[8px] border border-border bg-muted/40 sm:block">
-              <img src={leadImageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-            </span>
-          )}
-          <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-primary">
-            <span className="hidden sm:inline">详情</span>
-            <ChevronRight className="h-4 w-4" />
+        </span>
+        <span className="mt-1 block truncate text-xs text-muted-foreground">{primaryText}</span>
+        {visibleContextTags.length > 0 && (
+          <span className="mt-1 hidden min-w-0 flex-wrap gap-1.5 sm:flex">
+            {visibleContextTags.map((tag) => (
+              <span key={tag} className="max-w-[220px] truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                {tag}
+              </span>
+            ))}
           </span>
-        </button>
-      </DialogTrigger>
-      <DialogContent className="bottom-0 left-0 top-auto flex h-[88dvh] max-h-[88dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-b-none rounded-t-[14px] border-border bg-card p-0 shadow-[0_-20px_70px_hsl(var(--background)/0.55)] sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[86vh] sm:w-[92vw] sm:max-w-[900px] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-[10px] sm:shadow-[0_28px_80px_hsl(var(--background)/0.55)]">
+        )}
+      </span>
+      {leadImageUrl && (
+        <span className="hidden h-10 w-14 shrink-0 overflow-hidden rounded-[8px] border border-border bg-muted/40 sm:block">
+          <img src={leadImageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+        </span>
+      )}
+      <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground transition-colors group-hover:text-primary">
+        <span className="hidden sm:inline">详情</span>
+        <ChevronRight className="h-4 w-4" />
+      </span>
+    </button>
+  )
+
+  const dialogContent = (
+    <DialogContent className="bottom-0 left-0 top-auto flex h-[88dvh] max-h-[88dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-b-none rounded-t-[14px] border-border bg-card p-0 shadow-[0_-20px_70px_hsl(var(--background)/0.55)] sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[86vh] sm:w-[92vw] sm:max-w-[900px] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-[10px] sm:shadow-[0_28px_80px_hsl(var(--background)/0.55)]">
         <DialogHeader className="border-b border-border px-4 py-4 pr-12 text-left sm:px-5">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
@@ -354,6 +360,22 @@ export function ToolCallCard({ event }: ToolCallCardProps) {
           </div>
         </div>
       </DialogContent>
+  )
+
+  if (isControlled) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        {dialogContent}
+      </Dialog>
+    )
+  }
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        {triggerButton}
+      </DialogTrigger>
+      {dialogContent}
     </Dialog>
   )
 }
