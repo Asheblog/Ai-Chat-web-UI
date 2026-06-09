@@ -22,6 +22,7 @@ import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
 
 const toReasoningMarkdown = (input: string) =>
   input
+    .trim()
     .split('\n')
     .map((line) => {
       const trimmed = line.trimEnd()
