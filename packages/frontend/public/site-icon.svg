@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect x="35" y="35" width="442" height="442" rx="81" ry="81" fill="#2563EB"/>
+  <rect x="118" y="123" width="276" height="204" rx="71" ry="71" fill="#FFFFFF"/>
+  <polygon points="317,327 386,327 408,371" fill="#FFFFFF"/>
+  <text x="256" y="225" font-family="'DejaVu Sans', 'Liberation Sans', Arial, sans-serif" font-size="112" font-weight="bold" fill="#2563EB" text-anchor="middle" dominant-baseline="central">AI</text>
+</svg>
