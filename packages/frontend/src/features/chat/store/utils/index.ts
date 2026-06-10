@@ -578,6 +578,7 @@ export const buildRenderCacheEntry = (
     reasoningHtml?: string | null
     contentVersion?: number
     reasoningVersion?: number
+    isStreaming?: boolean
   },
 ): MessageRenderCacheEntry => ({
   contentHtml: payload.contentHtml ?? null,
@@ -585,4 +586,5 @@ export const buildRenderCacheEntry = (
   contentVersion: payload.contentVersion ?? body.version,
   reasoningVersion: payload.reasoningVersion ?? body.reasoningVersion,
   updatedAt: Date.now(),
+  isStreaming: payload.isStreaming,
 })

@@ -151,6 +151,7 @@ export interface MessageSlice {
       reasoningHtml?: string | null
       contentVersion?: number
       reasoningVersion?: number
+      isStreaming?: boolean
     },
   ) => void
   invalidateRenderedContent: (messageId?: MessageId) => void

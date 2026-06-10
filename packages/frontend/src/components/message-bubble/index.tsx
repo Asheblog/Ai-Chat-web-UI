@@ -102,10 +102,12 @@ function MessageBubbleComponent({
   // 1. 严格匹配：版本完全相同
   // 2. 宽松匹配：缓存版本与当前版本差距不超过3，且有有效HTML内容（仅用于“先展示”，避免白屏/闪烁）
   // 注意：宽松匹配不应阻止后续重新渲染，否则可能长期卡在不完整的 HTML（例如代码块围栏跨 chunk 时）
+  const currentIsStreaming = Boolean(isStreaming)
   const strictCacheMatches =
     renderCache &&
     renderCache.contentVersion === body.version &&
-    renderCache.reasoningVersion === body.reasoningVersion
+    renderCache.reasoningVersion === body.reasoningVersion &&
+    (renderCache.isStreaming == null || renderCache.isStreaming === currentIsStreaming)
   const looseCacheMatches =
     renderCache &&
     renderCache.contentHtml &&
@@ -163,7 +165,7 @@ function MessageBubbleComponent({
       })
         .then((result) => {
           if (cancelled) return
-          applyRenderedContent(meta.id, result)
+          applyRenderedContent(meta.id, { ...result, isStreaming: currentIsStreaming })
         })
         .catch((error) => {
           if (process.env.NODE_ENV !== 'production') {

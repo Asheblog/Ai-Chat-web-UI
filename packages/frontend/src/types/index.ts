@@ -259,6 +259,8 @@ export interface MessageRenderCacheEntry {
   contentVersion: number;
   reasoningVersion: number;
   updatedAt: number;
+  /** 缓存创建时是否处于流式传输状态，用于在流式结束后强制刷新 */
+  isStreaming?: boolean;
 }
 
 export interface CreateMessageRequest {

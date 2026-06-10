@@ -502,6 +502,7 @@ export const createMessageSlice: ChatSliceCreator<
         reasoningHtml = null,
         contentVersion = body.version,
         reasoningVersion = body.reasoningVersion,
+        isStreaming,
       } = payload
 
       if (
@@ -516,6 +517,7 @@ export const createMessageSlice: ChatSliceCreator<
         reasoningHtml,
         contentVersion,
         reasoningVersion,
+        isStreaming,
       })
 
       return {
