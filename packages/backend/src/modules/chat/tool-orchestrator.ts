@@ -329,6 +329,83 @@ export async function runToolOrchestration(
   }
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function createTextProtocolStreamFilter(allowedToolNames: Set<string>) {
+  let pending = ''
+
+  const names = Array.from(allowedToolNames)
+  if (names.length === 0) {
+    return {
+      feed(chunk: string): string {
+        const result = pending + chunk
+        pending = ''
+        return result
+      },
+      flush(): string {
+        const result = pending
+        pending = ''
+        return result
+      },
+    }
+  }
+
+  const escapedNames = names.map(escapeRegex)
+  const toolBlockRe = new RegExp(
+    `<(${escapedNames.join('|')})>[\\s\\S]*?<\\/\\1>`,
+    'g',
+  )
+
+  const safeEndAfter = (text: string): number => {
+    const lastLt = text.lastIndexOf('<')
+    if (lastLt === -1) return text.length
+
+    const after = text.slice(lastLt)
+
+    // '<' or '</' alone - could start any tag
+    if (after === '<' || after === '</') return lastLt
+
+    // Extract candidate tag name from '<name' or '</name' (with or without '>')
+    const tagMatch = after.match(/^<\/?([a-zA-Z0-9_-]+)/)
+    if (!tagMatch || !tagMatch[1]) {
+      // '<' followed by non-alpha char (e.g. '< ', '<.') - not a tool tag
+      return text.length
+    }
+
+    const candidate = tagMatch[1]
+    if (allowedToolNames.has(candidate)) return lastLt
+
+    // Check if candidate is a prefix of any allowed tool name
+    for (const name of names) {
+      if (name.startsWith(candidate)) return lastLt
+    }
+
+    return text.length
+  }
+
+  return {
+    feed(chunk: string): string {
+      pending += chunk
+
+      const cleaned = pending.replace(toolBlockRe, '')
+      const end = safeEndAfter(cleaned)
+      const safe = cleaned.slice(0, end)
+      pending = cleaned.slice(end)
+
+      return safe
+    },
+
+    flush(): string {
+      const cleaned = pending.replace(toolBlockRe, '')
+      const end = safeEndAfter(cleaned)
+      pending = ''
+      return cleaned.slice(0, end)
+    },
+  }
+}
+
 function normalizeMaxToolRounds(raw: number): number {
   if (raw === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY
   if (Number.isFinite(raw) && raw >= 0) {
@@ -501,7 +578,10 @@ async function parseStreamingTurn(params: {
   }
 
   const decoder = new TextDecoder()
-  const bufferTextOutput = params.schema === 'text'
+  const textProtocolFilter =
+    params.schema === 'text'
+      ? createTextProtocolStreamFilter(params.allowedToolNames)
+      : null
   const toolCallBuffers = createToolCallBuffers()
   let buffer = ''
   let content = ''
@@ -615,7 +695,12 @@ async function parseStreamingTurn(params: {
               parsed.delta
             ) {
               content += parsed.delta
-              if (!bufferTextOutput) {
+              if (textProtocolFilter) {
+                const safe = textProtocolFilter.feed(parsed.delta)
+                if (safe) {
+                  await emitContentDelta(safe)
+                }
+              } else {
                 await emitContentDelta(parsed.delta)
                 contentAlreadySent = true
               }
@@ -642,7 +727,12 @@ async function parseStreamingTurn(params: {
           const { contentDelta, reasoningDelta } = extractDeltaPayload(parsed)
           if (typeof contentDelta === 'string' && contentDelta) {
             content += contentDelta
-            if (!bufferTextOutput) {
+            if (textProtocolFilter) {
+              const safe = textProtocolFilter.feed(contentDelta)
+              if (safe) {
+                await emitContentDelta(safe)
+              }
+            } else {
               await emitContentDelta(contentDelta)
               contentAlreadySent = true
             }
@@ -693,11 +783,12 @@ async function parseStreamingTurn(params: {
   })
   const cleanedContent = typeof textContent === 'string' ? textContent : content
 
-  if (!contentAlreadySent && !bufferTextOutput && cleanedContent) {
-    await emitContentDelta(cleanedContent)
-    contentAlreadySent = true
-  }
-  if (bufferTextOutput && toolCalls.length === 0 && cleanedContent) {
+  if (textProtocolFilter) {
+    const remaining = textProtocolFilter.flush()
+    if (remaining) {
+      await emitContentDelta(remaining)
+    }
+  } else if (!contentAlreadySent && cleanedContent) {
     await emitContentDelta(cleanedContent)
     contentAlreadySent = true
   }

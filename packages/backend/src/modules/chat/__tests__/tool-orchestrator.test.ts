@@ -11,6 +11,27 @@ const buildNonStreamResponseLike = (content: string, usage?: Record<string, unkn
       }),
   }) as any
 
+function buildSseStreamResponse(events: Record<string, unknown>[]): Response {
+  const encoder = new TextEncoder()
+  const chunks: Uint8Array[] = events.map((e) =>
+    encoder.encode(`data: ${JSON.stringify(e)}\n\n`),
+  )
+  chunks.push(encoder.encode('data: [DONE]\n\n'))
+
+  let i = 0
+  const stream = new ReadableStream({
+    pull(controller) {
+      if (i < chunks.length) {
+        controller.enqueue(chunks[i++])
+      } else {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, { status: 200 })
+}
+
 const buildToolCallTurnResponse = (toolName: string, args: Record<string, unknown>, toolCallId = 'call_1') =>
   ({
     ok: true,
@@ -247,6 +268,156 @@ describe('tool-orchestrator', () => {
     )
     expect(assistantToolCallMessage).toBeDefined()
     expect(assistantToolCallMessage?.content).toBeNull()
+  })
+
+  it('does not leak tool-tag prefix when tag name is split across SSE chunks', async () => {
+    const deltas: string[] = []
+    let requestCount = 0
+    const handleToolCall = jest.fn(async (_toolName, toolCall) => ({
+      toolCallId: toolCall.id || 'call_1',
+      toolName: 'python_runner',
+      message: {
+        role: 'tool',
+        tool_call_id: toolCall.id || 'call_1',
+        name: 'python_runner',
+        content: JSON.stringify({ stdout: '1' }),
+      },
+    }))
+
+    const result = await runToolOrchestration({
+      provider: 'anthropic',
+      requestData: { tool_schema: 'text' },
+      initialMessages: [{ role: 'user', content: 'run' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set<string>(['python_runner']),
+      maxIterations: 2,
+      stream: true,
+      requestTurn: async () => {
+        requestCount += 1
+        if (requestCount === 1) {
+          return buildSseStreamResponse([
+            { choices: [{ delta: { content: 'Answer: <py' } }] },
+            { choices: [{ delta: { content: 'thon_runner>' } }] },
+            {
+              choices: [
+                { delta: { content: '<code>print(1)</code></python_runner> done' } },
+              ],
+            },
+          ])
+        }
+        return buildSseStreamResponse([
+          { choices: [{ delta: { content: 'Result is 1' } }] },
+        ])
+      },
+      handleToolCall,
+      onContentDelta: async (delta) => {
+        deltas.push(delta)
+      },
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.content).toBe('Result is 1')
+    expect(handleToolCall).toHaveBeenCalledTimes(1)
+
+    const allDeltas = deltas.join('')
+    // Must NOT leak tag fragments
+    expect(allDeltas).not.toContain('<py')
+    expect(allDeltas).not.toContain('thon_runner>')
+    expect(allDeltas).not.toContain('<python_runner>')
+    expect(allDeltas).not.toContain('</python_runner>')
+    expect(allDeltas).not.toContain('<code>')
+    expect(allDeltas).not.toContain('</code>')
+    // Safe text should be present
+    expect(allDeltas).toContain('Answer:')
+    expect(allDeltas).toContain('done')
+  })
+
+  it('does not leak tool-call XML through onContentDelta for text schema and still executes tools', async () => {
+    const deltas: string[] = []
+    let requestCount = 0
+    const handleToolCall = jest.fn(async (_toolName, toolCall) => ({
+      toolCallId: toolCall.id || 'call_1',
+      toolName: 'python_runner',
+      message: {
+        role: 'tool',
+        tool_call_id: toolCall.id || 'call_1',
+        name: 'python_runner',
+        content: JSON.stringify({ stdout: '42' }),
+      },
+    }))
+
+    const result = await runToolOrchestration({
+      provider: 'anthropic',
+      requestData: { tool_schema: 'text' },
+      initialMessages: [{ role: 'user', content: 'calc' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set<string>(['python_runner']),
+      maxIterations: 2,
+      stream: true,
+      requestTurn: async () => {
+        requestCount += 1
+        if (requestCount === 1) {
+          return buildSseStreamResponse([
+            { choices: [{ delta: { content: 'Let me check.\n<python_runner>' } }] },
+            {
+              choices: [
+                { delta: { content: '<code>print(42)</code>\n</python_runner>\nDone.' } },
+              ],
+            },
+          ])
+        }
+        return buildSseStreamResponse([
+          { choices: [{ delta: { content: 'The answer is 42' } }] },
+        ])
+      },
+      handleToolCall,
+      onContentDelta: async (delta) => {
+        deltas.push(delta)
+      },
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.content).toBe('The answer is 42')
+    expect(handleToolCall).toHaveBeenCalledTimes(1)
+
+    // onContentDelta must NOT contain tool XML
+    const allDeltas = deltas.join('')
+    expect(allDeltas).not.toContain('<python_runner>')
+    expect(allDeltas).not.toContain('</python_runner>')
+    expect(allDeltas).not.toContain('<code>')
+    expect(allDeltas).not.toContain('</code>')
+    // Safe text should be present
+    expect(allDeltas).toContain('Let me check.')
+    expect(allDeltas).toContain('Done.')
+  })
+
+  it('streams text-schema plain-text deltas incrementally via onContentDelta', async () => {
+    const deltas: string[] = []
+
+    const response = buildSseStreamResponse([
+      { choices: [{ delta: { content: 'Hello' } }] },
+      { choices: [{ delta: { content: ' ' } }] },
+      { choices: [{ delta: { content: 'World' } }] },
+    ])
+
+    const result = await runToolOrchestration({
+      provider: 'anthropic',
+      requestData: { tool_schema: 'text' },
+      initialMessages: [{ role: 'user', content: 'hi' }],
+      toolDefinitions: [],
+      allowedToolNames: new Set<string>(),
+      maxIterations: 1,
+      stream: true,
+      requestTurn: async () => response,
+      handleToolCall: async () => null,
+      onContentDelta: async (delta) => {
+        deltas.push(delta)
+      },
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.content).toBe('Hello World')
+    expect(deltas).toEqual(['Hello', ' ', 'World'])
   })
 
   it('appends tool followup messages into next tool turn context', async () => {

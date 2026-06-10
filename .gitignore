@@ -72,3 +72,4 @@ packages/frontend/public/ai-reference
 output/playwright/
 .codex
 bp.md
+plan.md
