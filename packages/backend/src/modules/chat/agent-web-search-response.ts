@@ -473,6 +473,15 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (payload.details && typeof payload.details === 'object') {
           entry.details = payload.details as ToolLogEntry['details'];
         }
+        // 记录工具调用开始时已输出的推理文本长度，用于前端交错展示 CoT 与工具调用
+        if (stage === 'start') {
+          const offset = reasoningBuffer.length;
+          if (!entry.details) {
+            entry.details = { reasoningOffsetStart: offset };
+          } else {
+            entry.details.reasoningOffsetStart = offset;
+          }
+        }
         const existingIndex = toolLogs.findIndex((log) => log.id === entry.id);
         if (existingIndex === -1) {
           toolLogs.push(entry);
