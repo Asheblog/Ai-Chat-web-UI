@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { MessageMeta, ToolEvent } from '@/types'
-import type { TimelineNode } from '@/features/chat/tool-events/useCoTTimeline'
+import type { TimelineNode, ToolGroupNode } from '@/features/chat/tool-events/useCoTTimeline'
 import { TypewriterReasoning } from '@/components/typewriter-reasoning'
 import { formatDurationSeconds } from './message-metrics'
 import { cn } from '@/lib/utils'
@@ -360,6 +360,69 @@ function ToolNodeItem({ event, onViewDetail }: ToolNodeItemProps) {
 }
 
 // ============================================================
+// Tool group node (merged tool calls)
+// ============================================================
+
+interface ToolGroupNodeItemProps {
+  node: ToolGroupNode
+  onViewDetail: (event: ToolEvent) => void
+}
+
+function ToolGroupNodeItem({ node, onViewDetail }: ToolGroupNodeItemProps) {
+  const meta = statusMeta[node.status]
+  const StatusIcon = meta.icon
+  const toolLabel = formatToolName(node.toolType)
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="relative">
+      {/* Dot — uses same position as ToolNodeItem */}
+      <div className="absolute left-[-14px] top-[0.55rem] flex h-[10px] w-[10px] items-center justify-center rounded-full border border-border bg-background sm:left-[-16px]">
+        <StatusIcon
+          className={`h-[7px] w-[7px] ${node.status === 'running' ? 'animate-spin' : ''}`}
+        />
+      </div>
+
+      {/* Compact group card */}
+      <div
+        className={cn(
+          'ml-1 cursor-pointer rounded-[6px] border border-border bg-card/60 px-2.5 py-2 transition-colors hover:border-primary/30',
+        )}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
+          <span className="truncate text-sm font-medium text-foreground">{toolLabel}</span>
+          <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1 py-0.5 text-[10px] ${meta.className}`}
+          >
+            {meta.label}
+          </span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {node.events.length} 个调用
+          </span>
+        </div>
+        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground sm:line-clamp-1">
+          {node.summaryText}
+        </p>
+      </div>
+
+      {/* Expanded child events */}
+      {expanded && (
+        <div className="ml-1 mt-1.5 space-y-1.5 border-t border-border/60 px-2.5 pb-1.5 pt-1.5">
+          {node.events.map((event) => (
+            <ToolNodeItem
+              key={event.callId || event.id || `sub-${event.tool}`}
+              event={event}
+              onViewDetail={onViewDetail}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
 // Props
 // ============================================================
 
@@ -420,7 +483,14 @@ export function CoTTimeline({
     reasoningStatus === 'idle' || reasoningStatus === 'streaming'
   const durationText = formatDurationSeconds(reasoningDurationSeconds)
 
-  const toolCount = useMemo(() => nodes.filter((n) => n.type === 'tool').length, [nodes])
+  const toolCount = useMemo(() => {
+    let count = 0
+    for (const n of nodes) {
+      if (n.type === 'tool') count += 1
+      else if (n.type === 'toolGroup') count += n.events.length
+    }
+    return count
+  }, [nodes])
 
   // Expand state (same reducer pattern as ReasoningSection)
   const [{ expanded }, dispatch] = useReducer(
@@ -552,6 +622,16 @@ export function CoTTimeline({
                       <ToolNodeItem
                         key={`tool-${node.event.callId || node.event.id || index}`}
                         event={node.event}
+                        onViewDetail={setDetailEvent}
+                      />
+                    )
+                  }
+
+                  if (node.type === 'toolGroup') {
+                    return (
+                      <ToolGroupNodeItem
+                        key={`toolgroup-${node.toolType}-${index}`}
+                        node={node}
                         onViewDetail={setDetailEvent}
                       />
                     )

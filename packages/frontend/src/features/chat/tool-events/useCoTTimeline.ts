@@ -13,9 +13,88 @@ import {
   buildEventKey,
 } from './tool-event-utils'
 
+// ============================================================
+// Tool group types & helpers
+// ============================================================
+
+export interface ToolGroupNode {
+  type: 'toolGroup'
+  toolType: string
+  events: ToolEvent[]
+  summaryText: string
+  status: ToolEvent['status']
+}
+
 export type TimelineNode =
   | { type: 'reasoning'; text: string; charStart: number; charEnd: number }
   | { type: 'tool'; event: ToolEvent }
+  | ToolGroupNode
+
+const MERGEABLE_TOOLS = new Set(['web_search', 'read_url'])
+
+function resolveToolType(event: ToolEvent): string {
+  return event.identifier || event.apiName || event.tool || ''
+}
+
+const isActiveStatus = (s: string) => s === 'running' || s === 'pending'
+const isFailedStatus = (s: string) => s === 'error' || s === 'rejected' || s === 'aborted'
+
+function aggregateStatus(events: ToolEvent[]): ToolEvent['status'] {
+  if (events.length === 0) return 'success'
+  if (events.some((e) => isActiveStatus(e.status))) return 'running'
+  if (events.every((e) => isFailedStatus(e.status))) return 'error'
+  return 'success'
+}
+
+function buildSearchGroupSummary(searches: ToolEvent[], autoReads: ToolEvent[]): string {
+  const engineCount = searches.length
+  const doneCount = searches.filter((e) => e.status === 'success').length
+  const runningCount = searches.filter((e) => isActiveStatus(e.status)).length
+  const errorCount = searches.filter((e) => isFailedStatus(e.status)).length
+
+  const parts: string[] = []
+
+  if (runningCount > 0) {
+    parts.push(`并行搜索 ${engineCount} 个引擎，${doneCount}/${engineCount} 完成`)
+  } else {
+    const totalHits = searches.reduce((sum, e) => {
+      if (e.details?.hitsCount != null) return sum + e.details.hitsCount
+      if (Array.isArray(e.hits)) return sum + e.hits.length
+      if (e.resultJson && typeof e.resultJson === 'object') {
+        const json = e.resultJson as Record<string, unknown>
+        if (Array.isArray(json.hits)) return sum + json.hits.length
+      }
+      return sum
+    }, 0)
+    if (errorCount > 0) {
+      parts.push(`搜索 ${engineCount} 个引擎，命中 ${totalHits} 条，${errorCount} 个失败`)
+    } else {
+      parts.push(`搜索 ${engineCount} 个引擎，命中 ${totalHits} 条`)
+    }
+  }
+
+  if (autoReads.length > 0) {
+    const readDone = autoReads.filter((e) => e.status === 'success').length
+    const readRunning = autoReads.filter((e) => isActiveStatus(e.status)).length
+    if (readRunning > 0) {
+      parts.push(`自动读取 ${autoReads.length} 个网页，${readDone}/${autoReads.length} 完成`)
+    } else {
+      parts.push(`自动读取 ${autoReads.length} 个网页`)
+    }
+  }
+
+  return parts.join('，')
+}
+
+function buildReadUrlGroupSummary(reads: ToolEvent[]): string {
+  const doneCount = reads.filter((e) => e.status === 'success').length
+  const runningCount = reads.filter((e) => isActiveStatus(e.status)).length
+
+  if (runningCount > 0) {
+    return `读取 ${reads.length} 个网页，${doneCount}/${reads.length} 完成`
+  }
+  return `已读取 ${reads.length} 个网页`
+}
 
 interface UseCoTTimelineOptions {
   sessionId: number
@@ -95,9 +174,56 @@ export const useCoTTimeline = ({
         }
       }
 
-      // Tool events at this offset
+      // Tool events at this offset — merge by type
       const toolsAtOffset = offsetGroups.get(offset)!
-      for (const event of toolsAtOffset) {
+      const searchEvents = toolsAtOffset.filter((e) => resolveToolType(e) === 'web_search')
+      const readEvents = toolsAtOffset.filter((e) => resolveToolType(e) === 'read_url')
+      const otherEvents = toolsAtOffset.filter(
+        (e) => !MERGEABLE_TOOLS.has(resolveToolType(e)),
+      )
+
+      // Merge search + auto-reads into one group
+      if (searchEvents.length > 0 && readEvents.length > 0) {
+        const allEvents = [...searchEvents, ...readEvents]
+        nodes.push({
+          type: 'toolGroup',
+          toolType: 'web_search',
+          events: allEvents,
+          summaryText: buildSearchGroupSummary(searchEvents, readEvents),
+          status: aggregateStatus(allEvents),
+        })
+      }
+      // Merge standalone searches (2+ engines, no reads)
+      else if (searchEvents.length >= 2) {
+        nodes.push({
+          type: 'toolGroup',
+          toolType: 'web_search',
+          events: searchEvents,
+          summaryText: buildSearchGroupSummary(searchEvents, []),
+          status: aggregateStatus(searchEvents),
+        })
+      }
+      // Single search (no reads) — individual
+      else if (searchEvents.length === 1) {
+        nodes.push({ type: 'tool', event: searchEvents[0] })
+      }
+      // Merge standalone reads (2+ reads, no search)
+      else if (readEvents.length >= 2) {
+        nodes.push({
+          type: 'toolGroup',
+          toolType: 'read_url',
+          events: readEvents,
+          summaryText: buildReadUrlGroupSummary(readEvents),
+          status: aggregateStatus(readEvents),
+        })
+      }
+      // Single read (no search) — individual
+      else if (readEvents.length === 1) {
+        nodes.push({ type: 'tool', event: readEvents[0] })
+      }
+
+      // Non-mergeable events always individual
+      for (const event of otherEvents) {
         nodes.push({ type: 'tool', event })
       }
 
