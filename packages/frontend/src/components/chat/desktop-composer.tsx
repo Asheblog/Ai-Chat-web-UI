@@ -143,7 +143,7 @@ export function DesktopComposer({
 
   return (
     <div className="hidden md:block">
-      <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-4 pt-3 md:px-6">
+      <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-5 pt-3 md:px-6">
         <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
         <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'relative p-4')}>
           <Textarea

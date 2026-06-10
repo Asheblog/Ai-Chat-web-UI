@@ -3,7 +3,7 @@ import { BookOpen, Brain, Code2, Globe2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
-  'relative overflow-hidden rounded-[10px] border border-border bg-card shadow-[inset_0_1px_0_hsl(var(--background)/0.05)] transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
+  'relative overflow-hidden rounded-[10px] border border-border bg-card/75 shadow-[0_4px_16px_hsl(var(--background)/0.3)] backdrop-blur-md transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
 
 export const composerToolbarScrollClass =
   'flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-visible pr-0 sm:gap-1.5'
