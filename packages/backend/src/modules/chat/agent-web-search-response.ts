@@ -882,8 +882,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           throw new Error('AI provider did not return a response');
         }
 
-        reasoningText = reasoningChunks.join('\n\n').trim();
-        reasoningBuffer = reasoningText;
+        // 使用 reasoningBuffer（原始 delta 累积）而非 join('\n\n')，
+        // 避免 tool log offsets（基于 reasoningBuffer.length）与最终持久化文本不一致导致断字。
+        reasoningText = reasoningBuffer;
         if (reasoningText) {
           safeEnqueue({
             type: 'reasoning',
@@ -965,10 +966,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           };
 
           if (finalContent && (await sessionStillExists())) {
-            const reasoningTrimmed = reasoningText.trim();
-            const streamReasoningPayload = reasoningTrimmed.length > 0 ? reasoningTrimmed : null;
+            // 不再对 reasoningText 做 trim，保持与 tool event offsets 的一致性
+            const streamReasoningPayload = reasoningText.length > 0 ? reasoningText : null;
             const shouldPersistReasoning =
-              reasoningEnabled && reasoningSaveToDb && reasoningTrimmed.length > 0;
+              reasoningEnabled && reasoningSaveToDb && reasoningText.length > 0;
             const providerHost = (() => {
               try {
                 const u = new URL(baseUrl);
@@ -987,7 +988,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               replyHistoryLimit: assistantReplyHistoryLimit,
               content: finalContent,
               streamReasoning: streamReasoningPayload,
-              reasoning: shouldPersistReasoning ? reasoningText.trim() : null,
+              reasoning: shouldPersistReasoning ? reasoningText : null,
               reasoningDurationSeconds: shouldPersistReasoning ? reasoningDurationSeconds : null,
               streamError: null,
               toolLogsJson: finalToolLogsJson,

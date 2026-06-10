@@ -167,10 +167,13 @@ export const useCoTTimeline = ({
 
     for (const offset of sortedOffsets) {
       // Reasoning segment from prevOffset to current offset
-      if (offset > prevOffset && offset <= reasoningText.length) {
-        const text = reasoningText.slice(prevOffset, offset).trim()
+      // Clamp offset to reasoningText.length — guards against stale offsets
+      // from raw-delta buffer that may exceed the final text length.
+      const effectiveOffset = Math.min(offset, reasoningText.length)
+      if (effectiveOffset > prevOffset && effectiveOffset <= reasoningText.length) {
+        const text = reasoningText.slice(prevOffset, effectiveOffset).trim()
         if (text.length > 0) {
-          nodes.push({ type: 'reasoning', text, charStart: prevOffset, charEnd: offset })
+          nodes.push({ type: 'reasoning', text, charStart: prevOffset, charEnd: effectiveOffset })
         }
       }
 

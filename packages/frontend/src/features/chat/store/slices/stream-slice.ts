@@ -1024,14 +1024,8 @@ export const createStreamSlice: ChatSliceCreator<
       runtime.flushStreamBuffer(finalStream, true)
       if (finalStream) {
         const normalizedContent = finalStream.content.trim()
-        const normalizedReasoning = finalStream.reasoning.trim()
-        if (
-          normalizedContent !== finalStream.content ||
-          normalizedReasoning !== finalStream.reasoning
-        ) {
+        if (normalizedContent !== finalStream.content) {
           finalStream.content = normalizedContent
-          finalStream.reasoning = normalizedReasoning
-          finalStream.reasoningPlayedLength = normalizedReasoning.length
           runtime.flushStreamBuffer(finalStream, true)
         }
       }
