@@ -1114,6 +1114,28 @@ export const createStreamSlice: ChatSliceCreator<
       set((state) => runtime.streamingFlagUpdate(state, sessionId, false))
       get().fetchUsage(sessionId).catch(() => {})
       get().fetchSessionsUsage().catch(() => {})
+
+      // 流式结束后从服务端拉取完整消息覆盖本地内容，
+      // 避免本地累积的内容与数据库存储不一致导致渲染差异
+      if (finalStream && (finalStream.clientMessageId || finalStream.assistantClientMessageId)) {
+        const syncClientId = finalStream.assistantClientMessageId || finalStream.clientMessageId
+        if (syncClientId) {
+          setTimeout(() => {
+            getMessageByClientId(sessionId, syncClientId)
+              .then((res) => {
+                const serverMsg = res?.data?.message
+                if (serverMsg) {
+                  const merged = mergeImages(serverMsg, get().messageImageCache)
+                  runtime.applyServerMessageSnapshot(merged)
+                  if (typeof merged.id === 'number') {
+                    get().invalidateRenderedContent(merged.id)
+                  }
+                }
+              })
+              .catch(() => {})
+          }, 600)
+        }
+      }
     } catch (error: any) {
       const interruptedContext = runtime.activeStreams.get(streamEntry.streamKey) ?? null
       const manualStopRequested =
