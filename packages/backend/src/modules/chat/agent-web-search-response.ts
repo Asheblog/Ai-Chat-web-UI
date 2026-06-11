@@ -944,7 +944,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (!providerUsageSeen || !providerUsageValid) {
           safeEnqueue({ type: 'usage', usage: finalUsagePayload });
         }
-        safeEnqueue({ type: 'complete' });
+        safeEnqueue({ type: 'complete', content: finalContent });
         traceMetadataExtras.finalUsage = finalUsagePayload;
         traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
 

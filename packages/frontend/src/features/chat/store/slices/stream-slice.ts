@@ -1000,6 +1000,11 @@ export const createStreamSlice: ChatSliceCreator<
 
         if (evt?.type === 'complete') {
           const activeBuffer = active
+          // 如果后端在 complete 事件中下发了最终内容，直接覆盖本地累积的内容
+          if (typeof (evt as any).content === 'string' && (evt as any).content.length > 0) {
+            active.pendingContent = ''
+            active.content = (evt as any).content
+          }
           if (activeBuffer) {
             activeBuffer.pendingMeta.reasoningStatus = 'done'
             activeBuffer.completedAt = Date.now()

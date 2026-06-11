@@ -487,7 +487,7 @@ export const normalizeChunk = (payload: any): ChatStreamChunk | null => {
     return { type: 'end' }
   }
   if (payload?.type === 'complete') {
-    return { type: 'complete' }
+    return { type: 'complete', content: typeof payload.content === 'string' ? payload.content : undefined }
   }
   if (payload?.type === 'skill_approval_request') {
     return {
