@@ -170,6 +170,22 @@ export const renderMarkdownToHtml = (
     return { html: '' }
   }
 
+  // [DEBUG-d01b] 记录每次渲染调用的输入输出
+  if (typeof window !== 'undefined') {
+    const rec = {
+      time: Date.now(),
+      isStreaming,
+      hasKatex: Boolean(rehypeKatexPlugin),
+      inputLen: markdown.length,
+      trimmedLen: trimmed.length,
+      changed: preparedMarkdown !== markdown,
+      tableCount: (trimmed.match(/\|[-| ]+\|\n/g) || []).length,
+    }
+    const list = (window as any).__mdd_render_log || []
+    list.push(rec)
+    ;(window as any).__mdd_render_log = list
+  }
+
   try {
     // 按是否有 KaTeX 插件分别缓存 processor
     if (rehypeKatexPlugin) {
@@ -179,7 +195,17 @@ export const renderMarkdownToHtml = (
       const file = cachedProcessorWithKatex.processSync(
         encodeLatexPlaceholders(trimmed),
       )
-      return { html: String(file) }
+      const html = String(file)
+      // [DEBUG-d01b] 记录输出
+      if (typeof window !== 'undefined') {
+        const list = (window as any).__mdd_render_log || []
+        const last = list[list.length - 1]
+        if (last) {
+          last.htmlLen = html.length
+          last.tableTagCount = (html.match(/<table/g) || []).length
+        }
+      }
+      return { html }
     }
 
     if (!cachedProcessor) {
@@ -188,7 +214,16 @@ export const renderMarkdownToHtml = (
     const file = cachedProcessor.processSync(
       encodeLatexPlaceholders(trimmed),
     )
-    return { html: String(file) }
+    const html = String(file)
+    if (typeof window !== 'undefined') {
+      const list = (window as any).__mdd_render_log || []
+      const last = list[list.length - 1]
+      if (last) {
+        last.htmlLen = html.length
+        last.tableTagCount = (html.match(/<table/g) || []).length
+      }
+    }
+    return { html }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[markdown-pipeline] render failed', error)

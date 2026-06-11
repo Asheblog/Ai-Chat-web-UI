@@ -136,6 +136,48 @@
     return bubbles
   }
 
+  // 查看渲染管线日志
+  window.__mdd_render = () => {
+    const log = window.__mdd_render_log || []
+    if (log.length === 0) { log('无渲染记录'); return }
+    console.group('%c[MD-DIFF] 渲染管线调用记录', 'font-weight:bold')
+    console.table(log.map((r, i) => ({
+      i,
+      isStreaming: r.isStreaming,
+      hasKatex: r.hasKatex,
+      inputLen: r.inputLen,
+      trimmedLen: r.trimmedLen,
+      contentChanged: r.changed,
+      tableInMarkdown: r.tableCount,
+      htmlLen: r.htmlLen,
+      tableInHTML: r.tableTagCount,
+    })))
+    // 找出 isStreaming:true 和 isStreaming:false 的差异
+    const streamingCalls = log.filter(r => r.isStreaming)
+    const normalCalls = log.filter(r => !r.isStreaming)
+    console.log(`\n流式渲染: ${streamingCalls.length} 次, 非流式: ${normalCalls.length} 次`)
+    if (streamingCalls.length > 0 && normalCalls.length > 0) {
+      const lastStreaming = streamingCalls[streamingCalls.length - 1]
+      const lastNormal = normalCalls[normalCalls.length - 1]
+      console.log('\n最后一次流式 vs 非流式对比:')
+      console.table({
+        '流式-inputLen': lastStreaming.inputLen,
+        '非流式-inputLen': lastNormal.inputLen,
+        '流式-trimmedSame': !lastStreaming.changed,
+        '非流式-trimmedSame': !lastNormal.changed,
+        '流式-tableMD': lastStreaming.tableCount,
+        '非流式-tableMD': lastNormal.tableCount,
+        '流式-htmlLen': lastStreaming.htmlLen,
+        '非流式-htmlLen': lastNormal.htmlLen,
+        '流式-tableHTML': lastStreaming.tableTagCount,
+        '非流式-tableHTML': lastNormal.tableTagCount,
+      })
+    }
+    console.groupEnd()
+    return log
+  }
+
   log('就绪。流式结束后 → __mdd_save() → 刷新 → 重新粘贴脚本 → __mdd_compare()')
-  log('或输入 __mdd_all() 查看当前所有 Markdown 元素详情')
+  log('输入 __mdd_render() 查看渲染管线调用日志')
+  log('输入 __mdd_all() 查看当前所有 Markdown 元素详情')
 })()

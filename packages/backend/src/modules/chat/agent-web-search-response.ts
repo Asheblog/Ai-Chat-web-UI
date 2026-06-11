@@ -857,18 +857,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           throw new Error('AI provider did not return a response');
         }
         finalContent = orchestration.content.trim();
-        // [DEBUG-d01a] 诊断 streaming vs DB 内容差异
-        log.info('[DEBUG-d01a] Content comparison', {
-          sessionId,
-          aiResponseLen: aiResponseContent.length,
-          finalContentLen: finalContent.length,
-          aiResponsePreview: aiResponseContent.slice(0, 300),
-          finalContentPreview: finalContent.slice(0, 300),
-          aiResponseTail: aiResponseContent.slice(-200),
-          finalContentTail: finalContent.slice(-200),
-          tablesInSSE: (aiResponseContent.match(/\|[-| ]+\|\n/g) || []).length,
-          tablesInFinal: (finalContent.match(/\|[-| ]+\|\n/g) || []).length,
-        });
         if (!finalContent) {
           throw new Error('Model finished without producing a final answer');
         }
