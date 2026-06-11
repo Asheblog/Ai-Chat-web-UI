@@ -4,7 +4,7 @@ import {
 } from '@/lib/api'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
 import { parseEventStream } from './stream-reader'
-import type { ActorQuota, ApiResponse, ChatStreamChunk } from '@/types'
+import type { ActorQuota, ApiResponse, ChatStreamChunk, SkillRuntimeReference } from '@/types'
 
 const client = apiHttpClient
 const streamControllers = new Map<string, AbortController>()
@@ -29,7 +29,8 @@ export const streamChat = async function* streamChat(
     replyToMessageId?: number | string
     replyToClientMessageId?: string
     skills?: {
-      enabled: string[]
+      builtin?: string[]
+      enabled?: SkillRuntimeReference[]
       overrides?: Record<string, Record<string, unknown>>
     }
     customBody?: Record<string, any>

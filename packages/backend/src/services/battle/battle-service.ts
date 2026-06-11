@@ -187,25 +187,44 @@ const normalizeConfigSkills = (raw: unknown): BattleModelSkills | undefined => {
   if (!raw || typeof raw !== 'object') return undefined
   const data = raw as Record<string, any>
 
-  const enabledFromPayload = Array.isArray(data.enabled)
-    ? data.enabled
+  const builtinFromPayload = Array.isArray(data.builtin)
+    ? data.builtin
         .map((item) => (typeof item === 'string' ? item.trim().toLowerCase() : ''))
         .filter((item) => item.length > 0)
     : []
 
-  const legacyEnabled: string[] = []
-  if (data.web_search === true) legacyEnabled.push(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
-  if (data.python_tool === true) legacyEnabled.push(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
+  const enabled = Array.isArray(data.enabled)
+    ? data.enabled
+        .map((item): { skillId: number; versionId: number; overrides?: Record<string, unknown> } | null => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+          const skillId = Number(item.skillId)
+          const versionId = Number(item.versionId)
+          if (!Number.isInteger(skillId) || skillId <= 0) return null
+          if (!Number.isInteger(versionId) || versionId <= 0) return null
+          const overrides =
+            item.overrides && typeof item.overrides === 'object' && !Array.isArray(item.overrides)
+              ? (item.overrides as Record<string, unknown>)
+              : undefined
+          return { skillId, versionId, ...(overrides ? { overrides } : {}) }
+        })
+        .filter((item): item is { skillId: number; versionId: number; overrides?: Record<string, unknown> } => Boolean(item))
+    : []
 
-  const enabled = Array.from(new Set([...enabledFromPayload, ...legacyEnabled]))
   const overrides =
     data.overrides && typeof data.overrides === 'object' && !Array.isArray(data.overrides)
       ? (data.overrides as Record<string, Record<string, unknown>>)
       : undefined
 
-  if (enabled.length === 0 && !overrides) return undefined
+  const builtin = Array.from(new Set(builtinFromPayload))
+  const enabledMap = new Map<string, { skillId: number; versionId: number; overrides?: Record<string, unknown> }>()
+  for (const item of enabled) {
+    enabledMap.set(`${item.skillId}:${item.versionId}`, item)
+  }
+
+  if (builtin.length === 0 && enabledMap.size === 0 && !overrides) return undefined
   return {
-    enabled,
+    ...(builtin.length > 0 ? { builtin } : {}),
+    ...(enabledMap.size > 0 ? { enabled: Array.from(enabledMap.values()) } : {}),
     ...(overrides ? { overrides } : {}),
   }
 }
@@ -1841,7 +1860,7 @@ export class BattleService {
 
     const firstPersisted = persistedQuestions[0]
     const extraPrompt = typeof input.model.extraPrompt === 'string' ? input.model.extraPrompt.trim() : ''
-    const normalizedSkills = normalizeConfigSkills(input.model.skills) || { enabled: [] as string[] }
+    const normalizedSkills = normalizeConfigSkills(input.model.skills) || { builtin: [] as string[] }
     const modelConfig = {
       modelId: input.model.modelId,
       connectionId: input.model.connectionId ?? null,
@@ -2173,7 +2192,7 @@ export class BattleService {
       judgeThreshold,
       models: input.models.map((model) => {
         const extraPrompt = typeof model.extraPrompt === 'string' ? model.extraPrompt.trim() : ''
-        const normalizedSkills = normalizeConfigSkills(model.skills) || { enabled: [] as string[] }
+        const normalizedSkills = normalizeConfigSkills(model.skills) || { builtin: [] as string[] }
         return {
           modelId: model.modelId,
           connectionId: model.connectionId ?? null,
@@ -2304,6 +2323,7 @@ export class BattleService {
             connectionId: model.connectionId ?? null,
             rawId: model.rawId ?? null,
             skills: model.skills ? {
+              builtin: model.skills.builtin,
               enabled: model.skills.enabled,
             } : undefined,
             reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : undefined,

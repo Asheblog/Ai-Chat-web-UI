@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react'
 import type { ComposerImage } from '@/features/chat/composer'
+import type { SkillRuntimeReference } from '@/types'
 
 interface UseSendCommandParams {
   input: string
@@ -15,7 +16,7 @@ interface UseSendCommandParams {
   selectedImages: ComposerImage[]
   setSelectedImages: (images: ComposerImage[]) => void
   buildRequestPayload: () => { ok: true; customBody?: Record<string, unknown>; customHeaders?: Array<{ name: string; value: string }> } | { ok: false; reason: string }
-  enabledExtraSkills: string[]
+  enabledExtraSkills: SkillRuntimeReference[]
   webSearchEnabled: boolean
   canUseWebSearch: boolean
   webSearchScope: string
@@ -113,10 +114,10 @@ export const useSendCommand = (params: UseSendCommandParams) => {
         return
       }
       setInput('')
-      const enabledSkills: string[] = [...enabledExtraSkills]
+      const builtinSkills: string[] = []
       const skillOverrides: Record<string, Record<string, unknown>> = {}
       if (webSearchEnabled && canUseWebSearch) {
-        enabledSkills.push('web-search', 'url-reader')
+        builtinSkills.push('web-search', 'url-reader')
         const webSearchOverride: Record<string, unknown> = {}
         if (isMetasoEngine) webSearchOverride.scope = webSearchScope
         if (webSearchIncludeSummary) webSearchOverride.includeSummary = true
@@ -126,12 +127,13 @@ export const useSendCommand = (params: UseSendCommandParams) => {
         }
       }
       if ((pythonToolEnabled || hasWorkspaceFiles) && canUsePythonTool) {
-        enabledSkills.push('python-runner')
+        builtinSkills.push('python-runner')
       }
       const skillsPayload =
-        enabledSkills.length > 0
+        builtinSkills.length > 0 || enabledExtraSkills.length > 0
           ? {
-              enabled: Array.from(new Set(enabledSkills)),
+              builtin: Array.from(new Set(builtinSkills)),
+              enabled: enabledExtraSkills,
               ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
             }
           : undefined

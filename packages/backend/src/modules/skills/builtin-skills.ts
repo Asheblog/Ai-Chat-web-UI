@@ -238,20 +238,31 @@ export async function syncBuiltinSkills(
     const manifest = buildBuiltinManifest(skill)
 
     const skillRow = await prisma.skill.upsert({
-      where: { slug: skill.slug },
+      where: { namespaceKey: `system:${skill.slug}` },
       update: {
-        displayName: skill.displayName,
-        description: skill.description,
-        sourceType: 'builtin',
-        sourceUrl: `builtin://${skill.slug}`,
-        status: 'active',
-      },
-      create: {
         slug: skill.slug,
         displayName: skill.displayName,
         description: skill.description,
         sourceType: 'builtin',
         sourceUrl: `builtin://${skill.slug}`,
+        sourceKey: null,
+        storeItemKey: null,
+        visibility: 'system',
+        licenseName: 'Aichat built-in',
+        licenseUrl: null,
+        licenseStatus: 'approved',
+        status: 'active',
+      },
+      create: {
+        namespaceKey: `system:${skill.slug}`,
+        slug: skill.slug,
+        displayName: skill.displayName,
+        description: skill.description,
+        sourceType: 'builtin',
+        sourceUrl: `builtin://${skill.slug}`,
+        visibility: 'system',
+        licenseName: 'Aichat built-in',
+        licenseStatus: 'approved',
         status: 'active',
       },
     })

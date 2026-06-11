@@ -16,7 +16,7 @@ import {
 } from '../../../utils/providers'
 import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { sendMessageSchema } from '../chat-common'
-import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/types'
+import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../skills/types'
 import { buildTaskPlanningPrompt } from '../task-planning'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
@@ -54,6 +54,7 @@ export interface PreparedChatRequest {
     effort: string
     ollamaThink: boolean
   }
+  requestedSkills: RequestedSkillsPayload
 }
 
 export interface PrepareChatRequestParams {
@@ -65,6 +66,7 @@ export interface PrepareChatRequestParams {
   mode: 'stream' | 'completion'
   personalPrompt?: string | null
   extraSystemPrompts?: string[]
+  requestedSkills?: RequestedSkillsPayload
   /** RAG 增强上下文（从文档检索获取） */
   ragContext?: string | null
 }
@@ -141,8 +143,8 @@ export class ChatRequestBuilder {
       }
     }
 
-    const requestedSkills = normalizeRequestedSkills(params.payload?.skills)
-    const enabledSkillSet = new Set(requestedSkills.enabled)
+    const requestedSkills = params.requestedSkills ?? normalizeRequestedSkills(params.payload?.skills)
+    const enabledSkillSet = new Set(requestedSkills.builtin)
 
     if (enabledSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH)) {
       systemPrompts.push({
@@ -262,6 +264,7 @@ export class ChatRequestBuilder {
       messagesPayload,
       baseRequestBody: { ...baseRequestBody },
       reasoning,
+      requestedSkills,
     }
   }
 

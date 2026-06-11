@@ -10,6 +10,7 @@ import type {
   BattleStreamEvent,
   RejudgeExpectedAnswerInput,
   RejudgeStreamEvent,
+  SkillRuntimeReference,
 } from '@/types'
 
 const client = apiHttpClient
@@ -19,7 +20,8 @@ interface BattleModelPayload {
   connectionId?: number
   rawId?: string
   skills?: {
-    enabled: string[]
+    builtin?: string[]
+    enabled?: SkillRuntimeReference[]
     overrides?: Record<string, Record<string, unknown>>
   }
   extraPrompt?: string

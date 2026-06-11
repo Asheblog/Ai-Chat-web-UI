@@ -26,12 +26,14 @@ interface AdvancedOptionsProps {
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
   skillOptions: Array<{
+    skillId: number
+    versionId: number | null
     slug: string
     label: string
     description?: string
     enabled: boolean
   }>
-  onToggleSkillOption: (slug: string, enabled: boolean) => void
+  onToggleSkillOption: (skillId: number, enabled: boolean) => void
   onOpenAdvanced: () => void
   onOpenSessionPrompt: () => void
   triggerClassName?: string

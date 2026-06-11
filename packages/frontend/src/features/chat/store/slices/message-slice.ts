@@ -778,7 +778,7 @@ export const createMessageSlice: ChatSliceCreator<
       replyToClientMessageId: meta.clientMessageId ?? undefined,
       skills:
         enabledSkills.length > 0
-          ? { enabled: Array.from(new Set(enabledSkills)) }
+          ? { builtin: Array.from(new Set(enabledSkills)) }
           : undefined,
     })
 
@@ -823,7 +823,7 @@ export const createMessageSlice: ChatSliceCreator<
         (typeof meta.parentMessageId === 'string' ? meta.parentMessageId : undefined),
       skills:
         enabledSkills.length > 0
-          ? { enabled: Array.from(new Set(enabledSkills)) }
+          ? { builtin: Array.from(new Set(enabledSkills)) }
           : undefined,
     })
   },

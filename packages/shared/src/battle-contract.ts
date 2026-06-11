@@ -187,7 +187,12 @@ export interface BattleToolCallEvent {
 }
 
 export interface BattleModelSkills {
-  enabled: string[]
+  builtin?: string[]
+  enabled?: Array<{
+    skillId: number
+    versionId: number
+    overrides?: Record<string, unknown>
+  }>
   overrides?: Record<string, Record<string, unknown>>
 }
 

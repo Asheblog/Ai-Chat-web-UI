@@ -7,12 +7,16 @@ import React from "react"
 import { PersonalPreferencesPage } from "@/components/settings/pages/PersonalPreferences"
 import { PersonalSecurityPage } from "@/components/settings/pages/PersonalSecurity"
 import { ShareManagementPanel } from "@/components/settings/pages/ShareManagement"
+import { PersonalSkillsPage } from "@/components/settings/pages/PersonalSkills"
 
 export function PersonalSettings() {
   return (
     <div className="space-y-3">
       <div id="settings-personal-preferences" className="scroll-mt-6">
         <PersonalPreferencesPage />
+      </div>
+      <div id="settings-personal-skills" className="scroll-mt-6">
+        <PersonalSkillsPage />
       </div>
       <div id="settings-personal-security" className="scroll-mt-6">
         <PersonalSecurityPage />

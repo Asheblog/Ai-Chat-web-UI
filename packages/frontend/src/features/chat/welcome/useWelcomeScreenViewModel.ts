@@ -17,15 +17,6 @@ import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
-import { listSkillCatalog } from '@/features/skills/api'
-
-const BUILTIN_SKILL_SLUGS = new Set([
-  'web-search',
-  'python-runner',
-  'url-reader',
-  'document-search',
-  'knowledge-base-search',
-])
 
 export const useWelcomeScreenViewModel = () => {
   const router = useRouter()
@@ -69,10 +60,6 @@ export const useWelcomeScreenViewModel = () => {
   const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
   const [pythonToolTouched, setPythonToolTouched] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
-  const [extraSkillsCatalog, setExtraSkillsCatalog] = useState<
-    Array<{ slug: string; displayName: string; description?: string | null }>
-  >([])
-  const [enabledExtraSkills, setEnabledExtraSkills] = useState<string[]>([])
   const [sessionPromptOpen, setSessionPromptOpen] = useState(false)
   const [sessionPromptDraft, setSessionPromptDraft] = useState('')
   const [sessionPromptTouched, setSessionPromptTouched] = useState(false)
@@ -257,56 +244,15 @@ export const useWelcomeScreenViewModel = () => {
   )
   const showWebSearchScope = canUseWebSearch && isMetasoEngine
 
-  useEffect(() => {
-    let cancelled = false
-    listSkillCatalog()
-      .then((response) => {
-        if (cancelled) return
-        const list = Array.isArray(response?.data) ? response.data : []
-        const filtered = list
-          .map((item) => ({
-            slug: String(item.slug || '').trim(),
-            displayName: String(item.displayName || item.slug || '').trim(),
-            description: item.description || null,
-          }))
-          .filter((item) => item.slug.length > 0 && !BUILTIN_SKILL_SLUGS.has(item.slug))
-        setExtraSkillsCatalog(filtered)
-        setEnabledExtraSkills((prev) =>
-          prev.filter((slug) => filtered.some((item) => item.slug === slug)),
-        )
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setExtraSkillsCatalog([])
-          setEnabledExtraSkills([])
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const skillOptions = useMemo(() => {
-    return extraSkillsCatalog.map((item) => ({
-      slug: item.slug,
-      label: item.displayName || item.slug,
-      description: item.description || undefined,
-      enabled: enabledExtraSkills.includes(item.slug),
-    }))
-  }, [enabledExtraSkills, extraSkillsCatalog])
-
-  const toggleSkillOption = useCallback((slug: string, enabled: boolean) => {
-    const normalized = slug.trim()
-    if (!normalized) return
-    setEnabledExtraSkills((prev) => {
-      if (enabled) {
-        if (prev.includes(normalized)) return prev
-        return [...prev, normalized]
-      }
-      return prev.filter((item) => item !== normalized)
-    })
-  }, [])
+  const skillOptions = useMemo<Array<{
+    skillId: number
+    versionId: number | null
+    slug: string
+    label: string
+    description?: string
+    enabled: boolean
+  }>>(() => [], [])
+  const toggleSkillOption = useCallback((_skillId: number, _enabled: boolean) => {}, [])
 
   useEffect(() => {
     const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
@@ -590,10 +536,10 @@ export const useWelcomeScreenViewModel = () => {
             selectedImages.length > 0
               ? selectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
               : undefined
-          const enabledSkills: string[] = [...enabledExtraSkills]
+          const builtinSkills: string[] = []
           const skillOverrides: Record<string, Record<string, unknown>> = {}
           if (webSearchEnabled && canUseWebSearch) {
-            enabledSkills.push('web-search', 'url-reader')
+            builtinSkills.push('web-search', 'url-reader')
             const webSearchOverride: Record<string, unknown> = {}
             if (isMetasoEngine) webSearchOverride.scope = webSearchScope
             if (systemSettings?.webSearchIncludeSummary) webSearchOverride.includeSummary = true
@@ -603,14 +549,14 @@ export const useWelcomeScreenViewModel = () => {
             }
           }
           if ((pythonToolEnabled || uploadSuccesses > 0) && canUsePythonTool) {
-            enabledSkills.push('python-runner')
+            builtinSkills.push('python-runner')
           }
           const options: Record<string, any> = {}
           if (thinkingTouched) options.reasoningEnabled = thinkingEnabled
           if (effortTouched && effort !== 'unset') options.reasoningEffort = effort
-          if (enabledSkills.length > 0) {
+          if (builtinSkills.length > 0) {
             options.skills = {
-              enabled: Array.from(new Set(enabledSkills)),
+              builtin: Array.from(new Set(builtinSkills)),
               ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
             }
           }
@@ -660,7 +606,6 @@ export const useWelcomeScreenViewModel = () => {
     setSelectedImages,
     streamMessage,
     selectedImages,
-    enabledExtraSkills,
     canUseWebSearch,
     webSearchEnabled,
     isMetasoEngine,

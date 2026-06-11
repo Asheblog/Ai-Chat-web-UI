@@ -31,15 +31,26 @@ export const sendMessageSchema = z.object({
   contextEnabled: z.boolean().optional(),
   skills: z
     .object({
-      enabled: z
+      builtin: z
         .array(
           z
             .string()
             .min(1)
             .max(128)
-            .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'skill slug 必须为 kebab-case'),
+            .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'builtin skill slug 必须为 kebab-case'),
         )
-        .max(64),
+        .max(16)
+        .optional(),
+      enabled: z
+        .array(
+          z.object({
+            skillId: z.number().int().positive(),
+            versionId: z.number().int().positive(),
+            overrides: z.record(z.unknown()).optional(),
+          }),
+        )
+        .max(64)
+        .optional(),
       overrides: z.record(z.record(z.unknown())).optional(),
     })
     .optional(),
@@ -68,7 +79,7 @@ export const sendMessageSchema = z.object({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['features'],
-      message: '请求体中的 features 已废弃，请改用 skills.enabled / skills.overrides',
+      message: '请求体中的 features 已废弃，请改用 skills.builtin / skills.enabled / skills.overrides',
     })
   }
 }).refine((value) => {

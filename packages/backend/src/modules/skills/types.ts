@@ -43,8 +43,15 @@ export interface SkillManifest {
   risk_level: SkillRiskLevel
 }
 
+export interface RequestedSkillReference {
+  skillId: number
+  versionId: number
+  overrides?: Record<string, unknown>
+}
+
 export interface RequestedSkillsPayload {
-  enabled: string[]
+  builtin: string[]
+  enabled: RequestedSkillReference[]
   overrides?: Record<string, Record<string, unknown>>
 }
 
@@ -62,16 +69,38 @@ export function normalizeSkillSlug(value: string): string {
 
 export function normalizeRequestedSkills(input: unknown): RequestedSkillsPayload {
   if (!input || typeof input !== 'object') {
-    return { enabled: [] }
+    return { builtin: [], enabled: [] }
   }
   const raw = input as Record<string, unknown>
+  const builtinRaw = Array.isArray(raw.builtin) ? raw.builtin : []
+  const builtin = builtinRaw
+    .map((item) => (typeof item === 'string' ? normalizeSkillSlug(item) : ''))
+    .filter((item) => item.length > 0)
+    .filter((item) => Object.values(BUILTIN_SKILL_SLUGS).includes(item as any))
+
   const enabled = Array.isArray(raw.enabled)
     ? raw.enabled
-        .map((item) => (typeof item === 'string' ? normalizeSkillSlug(item) : ''))
-        .filter((item) => item.length > 0)
+        .map((item): RequestedSkillReference | null => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+          const record = item as Record<string, unknown>
+          const skillId = Number(record.skillId)
+          const versionId = Number(record.versionId)
+          if (!Number.isInteger(skillId) || skillId <= 0) return null
+          if (!Number.isInteger(versionId) || versionId <= 0) return null
+          const overrides =
+            record.overrides && typeof record.overrides === 'object' && !Array.isArray(record.overrides)
+              ? (record.overrides as Record<string, unknown>)
+              : undefined
+          return { skillId, versionId, ...(overrides ? { overrides } : {}) }
+        })
+        .filter((item): item is RequestedSkillReference => Boolean(item))
     : []
 
-  const uniqueEnabled = Array.from(new Set(enabled))
+  const uniqueBuiltin = Array.from(new Set(builtin))
+  const uniqueEnabledMap = new Map<string, RequestedSkillReference>()
+  for (const item of enabled) {
+    uniqueEnabledMap.set(`${item.skillId}:${item.versionId}`, item)
+  }
   const overridesRaw = raw.overrides
   const overrides: Record<string, Record<string, unknown>> = {}
   if (overridesRaw && typeof overridesRaw === 'object' && !Array.isArray(overridesRaw)) {
@@ -82,7 +111,8 @@ export function normalizeRequestedSkills(input: unknown): RequestedSkillsPayload
   }
 
   return {
-    enabled: uniqueEnabled,
+    builtin: uniqueBuiltin,
+    enabled: Array.from(uniqueEnabledMap.values()),
     overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
   }
 }

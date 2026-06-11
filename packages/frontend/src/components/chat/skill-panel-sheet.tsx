@@ -7,10 +7,15 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 
 interface SkillOption {
+  skillId: number
+  versionId: number | null
   slug: string
   label: string
   description?: string
   enabled: boolean
+  updating?: boolean
+  sourceLabel?: string
+  licenseName?: string | null
 }
 
 interface SkillPanelSheetProps {
@@ -26,7 +31,7 @@ interface SkillPanelSheetProps {
   canUsePythonTool?: boolean
   pythonToolDisabledNote?: string
   skillOptions?: SkillOption[]
-  onToggleSkillOption?: (slug: string, enabled: boolean) => void
+  onToggleSkillOption?: (skillId: number, enabled: boolean) => void
 }
 
 export function SkillPanelSheet({
@@ -136,15 +141,19 @@ export function SkillPanelSheet({
               <section className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
                 <p className="text-[11px] tracking-wide text-muted-foreground">第三方安装</p>
                 {skillOptions.map((skill) => (
-                  <div key={skill.slug} className="space-y-1">
+                  <div key={skill.skillId} className="space-y-1 border-b border-border/50 pb-2 last:border-b-0 last:pb-0">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">{skill.label}</p>
-                        <p className="text-[10px] text-muted-foreground/80">slug: {skill.slug}</p>
+                        <p className="text-[10px] text-muted-foreground/80">
+                          {skill.sourceLabel || 'github'} / {skill.slug}
+                          {skill.licenseName ? ` · ${skill.licenseName}` : ''}
+                        </p>
                       </div>
                       <Switch
                         checked={Boolean(skill.enabled)}
-                        onCheckedChange={(checked) => onToggleSkillOption?.(skill.slug, Boolean(checked))}
+                        disabled={!skill.versionId || skill.updating}
+                        onCheckedChange={(checked) => onToggleSkillOption?.(skill.skillId, Boolean(checked))}
                       />
                     </div>
                     {skill.description ? (
@@ -158,7 +167,7 @@ export function SkillPanelSheet({
             ) : (
               <section className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-3">
                 <p className="text-xs text-muted-foreground">
-                  暂无第三方技能。可在系统设置的 Skill 管理页安装 GitHub Skill。
+                  当前会话暂无可启用的第三方 Skill。请登录后在个人设置的 Skill 商店安装。
                 </p>
               </section>
             )}

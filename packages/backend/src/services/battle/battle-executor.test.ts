@@ -79,7 +79,7 @@ describe('BattleExecutor', () => {
     await executor.executeModel({
       prompt: '你好，求解这个题目',
       promptImages: [],
-      modelConfig: { modelId: 'glm-5', skills: { enabled: [] } },
+      modelConfig: { modelId: 'glm-5', skills: { builtin: [] } },
       resolved: { connection: { id: 1 } as any, rawModelId: 'glm-5' },
       systemSettings: {},
       context: buildContext(),

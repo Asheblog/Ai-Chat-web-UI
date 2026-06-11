@@ -10,6 +10,7 @@ import {
 } from './skill-github-fetcher'
 import { buildAnthropicCompatManifest } from './skill-anthropic-compat'
 import type { SkillManifest } from './types'
+import { readSkillLicenseInfo, type SkillLicenseInfo, type SkillLicensePolicy } from './skill-license'
 
 export interface SkillInstallerDeps {
   prisma?: typeof defaultPrisma
@@ -26,6 +27,10 @@ export interface InstallFromGithubInput {
   source: string
   actorUserId?: number | null
   token?: string
+  storeItemKey?: string | null
+  sourceKey?: string | null
+  licensePolicy?: SkillLicensePolicy | null
+  trustedSource?: boolean
 }
 
 export interface InstallSkillResult {
@@ -41,6 +46,7 @@ export interface InstallSkillResult {
     status: string
     packagePath: string | null
   }
+  license: SkillLicenseInfo
 }
 
 function resolveSkillStorageRoot(): string {
@@ -114,7 +120,8 @@ async function computeDirectorySha256(root: string): Promise<string> {
   return hash.digest('hex')
 }
 
-function resolveVersionStatusByRisk(manifest: SkillManifest): string {
+function resolveVersionStatusByRisk(manifest: SkillManifest, autoActivate: boolean): string {
+  if (autoActivate) return 'active'
   return manifest.risk_level === 'high' || manifest.risk_level === 'critical'
     ? 'pending_approval'
     : 'pending_validation'
@@ -133,18 +140,46 @@ function buildCompatVersionFromPackageHash(ref: string, packageHash: string): st
 
 async function persistInstalledPackage(params: {
   extractedDir: string
-  slug: string
-  versionId: number
+  packageHash: string
 }): Promise<string> {
   const storageRoot = resolveSkillStorageRoot()
-  const destinationDir = path.join(storageRoot, 'packages', params.slug, String(params.versionId))
+  const destinationDir = path.join(storageRoot, 'packages', params.packageHash.slice(0, 2), params.packageHash)
+  try {
+    const stat = await fs.stat(destinationDir)
+    if (stat.isDirectory()) return destinationDir
+  } catch {
+    // copy below
+  }
   await fs.mkdir(destinationDir, { recursive: true })
   await fs.cp(params.extractedDir, destinationDir, { recursive: true, force: true })
   return destinationDir
 }
 
 function toSourceUrl(source: GithubSkillSource): string {
-  return `https://github.com/${source.owner}/${source.repo}`
+  const base = `https://github.com/${source.owner}/${source.repo}`
+  if (!source.subdir) return base
+  return `${base}/tree/${encodeURIComponent(source.ref)}/${source.subdir}`
+}
+
+function buildNamespaceKey(input: {
+  source: GithubSkillSource
+  manifestId: string
+  actorUserId?: number | null
+  storeItemKey?: string | null
+}): string {
+  if (!input.actorUserId) {
+    return `system:${input.manifestId}`
+  }
+  const sourceIdentity = input.storeItemKey?.trim()
+    || `github:${input.source.owner}/${input.source.repo}:${input.source.ref}:${input.source.subdir || '.'}`
+  return `user:${input.actorUserId}:${sourceIdentity}`
+}
+
+function buildContentVersion(rawVersion: string, packageHash: string): string {
+  const base = (rawVersion || '1.0.0').trim().replace(/\s+/g, '-').slice(0, 44) || '1.0.0'
+  const suffix = `sha.${packageHash.slice(0, 12)}`
+  if (base.includes(packageHash.slice(0, 12))) return base.slice(0, 64)
+  return `${base}+${suffix}`.slice(0, 64)
 }
 
 export class SkillInstaller {
@@ -186,37 +221,119 @@ export class SkillInstaller {
           ...manifest,
           version: buildCompatVersionFromPackageHash(source.ref, packageHash),
         }
+      } else {
+        manifest = {
+          ...manifest,
+          version: buildContentVersion(manifest.version, packageHash),
+        }
       }
 
-      const status = resolveVersionStatusByRisk(manifest)
-      const skill = await (this.prisma as any).skill.upsert({
-        where: { slug: manifest.id },
-        update: {
-          displayName: manifest.name,
-          description: instruction ? instruction.slice(0, 4000) : undefined,
-          sourceType: 'github',
-          sourceUrl: toSourceUrl(source),
-        },
-        create: {
-          slug: manifest.id,
-          displayName: manifest.name,
-          description: instruction ? instruction.slice(0, 4000) : null,
-          sourceType: 'github',
-          sourceUrl: toSourceUrl(source),
-          status: 'active',
-          createdByUserId: input.actorUserId ?? null,
-        },
+      const license = await readSkillLicenseInfo(extractedDir, input.licensePolicy ?? undefined)
+      if (!license.installable) {
+        throw new SkillInstallerError(`Skill license blocked: ${license.reason}`)
+      }
+
+      const namespaceKey = buildNamespaceKey({
+        source,
+        manifestId: manifest.id,
+        actorUserId: input.actorUserId ?? null,
+        storeItemKey: input.storeItemKey ?? null,
       })
+      const sourceUrl = toSourceUrl(source)
+      const autoActivate = Boolean(input.trustedSource && license.installable)
+      const status = resolveVersionStatusByRisk(manifest, autoActivate)
+      const now = new Date()
+      const packagePath = await persistInstalledPackage({
+        extractedDir,
+        packageHash,
+      })
+
+      let skill = await (this.prisma as any).skill.findUnique({
+        where: { namespaceKey },
+      })
+      if (skill) {
+        skill = await (this.prisma as any).skill.update({
+          where: { id: skill.id },
+          data: {
+            slug: manifest.id,
+            displayName: manifest.name,
+            description: instruction ? instruction.slice(0, 4000) : undefined,
+            sourceType: 'github',
+            sourceUrl,
+            sourceKey: input.sourceKey ?? null,
+            storeItemKey: input.storeItemKey ?? null,
+            visibility: input.actorUserId ? 'user_private' : 'system',
+            licenseName: license.name,
+            licenseUrl: license.url,
+            licenseStatus: license.status,
+            status: 'active',
+          },
+        })
+      } else {
+        skill = await (this.prisma as any).skill.create({
+          data: {
+            namespaceKey,
+            slug: manifest.id,
+            displayName: manifest.name,
+            description: instruction ? instruction.slice(0, 4000) : null,
+            sourceType: 'github',
+            sourceUrl,
+            sourceKey: input.sourceKey ?? null,
+            storeItemKey: input.storeItemKey ?? null,
+            visibility: input.actorUserId ? 'user_private' : 'system',
+            licenseName: license.name,
+            licenseUrl: license.url,
+            licenseStatus: license.status,
+            status: 'active',
+            ownerUserId: input.actorUserId ?? null,
+          },
+        })
+      }
 
       const existing = await (this.prisma as any).skillVersion.findFirst({
         where: {
           skillId: skill.id,
           version: manifest.version,
         },
-        select: { id: true },
+        select: { id: true, version: true, status: true, packagePath: true },
       })
       if (existing) {
-        throw new SkillInstallerError(`Skill version already exists: ${manifest.id}@${manifest.version}`)
+        const version =
+          autoActivate && existing.status !== 'active'
+            ? await (this.prisma as any).skillVersion.update({
+                where: { id: existing.id },
+                data: {
+                  status: 'active',
+                  approvedAt: now,
+                  activatedAt: now,
+                },
+                select: { id: true, version: true, status: true, packagePath: true },
+              })
+            : existing
+        if (autoActivate && skill.defaultVersionId !== version.id) {
+          skill = await (this.prisma as any).skill.update({
+            where: { id: skill.id },
+            data: {
+              defaultVersionId: version.id,
+              status: 'active',
+            },
+          })
+        }
+        return {
+          skill: {
+            id: skill.id,
+            slug: skill.slug,
+            displayName: skill.displayName,
+            status: skill.status,
+          },
+          version: {
+            id: version.id,
+            version: version.version,
+            status: version.status,
+            packagePath: version.packagePath,
+          },
+          license,
+        }
       }
 
       const version = await (this.prisma as any).skillVersion.create({
@@ -229,24 +346,24 @@ export class SkillInstaller {
           instruction: instruction ?? null,
           manifestJson: JSON.stringify(manifest),
           packageHash,
+          packagePath,
           sourceRef: source.ref,
           sourceSubdir: source.subdir ?? null,
+          approvedAt: autoActivate ? now : null,
+          activatedAt: autoActivate ? now : null,
           createdByUserId: input.actorUserId ?? null,
         },
       })
 
-      const packagePath = await persistInstalledPackage({
-        extractedDir,
-        slug: skill.slug,
-        versionId: version.id,
-      })
-
-      const updatedVersion = await (this.prisma as any).skillVersion.update({
-        where: { id: version.id },
-        data: {
-          packagePath,
-        },
-      })
+      if (autoActivate) {
+        skill = await (this.prisma as any).skill.update({
+          where: { id: skill.id },
+          data: {
+            defaultVersionId: version.id,
+            status: 'active',
+          },
+        })
+      }
 
       return {
         skill: {
@@ -256,11 +373,12 @@ export class SkillInstaller {
           status: skill.status,
         },
         version: {
-          id: updatedVersion.id,
-          version: updatedVersion.version,
-          status: updatedVersion.status,
-          packagePath: updatedVersion.packagePath,
+          id: version.id,
+          version: version.version,
+          status: version.status,
+          packagePath: version.packagePath,
         },
+        license,
       }
     } finally {
       await fs.rm(extractedDir, { recursive: true, force: true }).catch(() => {})

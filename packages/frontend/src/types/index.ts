@@ -676,14 +676,27 @@ export interface ToolEvent {
 
 export interface SkillCatalogItem {
   id: number;
+  namespaceKey?: string;
   slug: string;
   displayName: string;
   description?: string | null;
   sourceType?: string | null;
   sourceUrl?: string | null;
+  sourceKey?: string | null;
+  storeItemKey?: string | null;
+  visibility?: 'system' | 'user_private' | string | null;
+  ownerUserId?: number | null;
+  licenseName?: string | null;
+  licenseUrl?: string | null;
+  licenseStatus?: string | null;
   status?: string | null;
   defaultVersion?: SkillVersionItem | null;
   versions?: SkillVersionItem[];
+  sessionBinding?: {
+    id: number;
+    enabled: boolean;
+    versionId?: number | null;
+  } | null;
 }
 
 export interface SkillVersionItem {
@@ -829,6 +842,59 @@ export interface SkillExecutionAuditItem {
     requestedByActor?: string;
     decidedByUserId?: number | null;
   } | null;
+}
+
+export interface SkillRuntimeReference {
+  skillId: number;
+  versionId: number;
+  overrides?: Record<string, unknown>;
+}
+
+export interface SkillStoreSourceItem {
+  key: string;
+  name: string;
+  repository: string;
+  ref: string;
+  description: string;
+  homepageUrl: string;
+  tags: string[];
+  status: 'live' | 'fallback';
+}
+
+export interface SkillStoreItem {
+  key: string;
+  sourceKey: string;
+  sourceName: string;
+  sourceUrl: string;
+  repository: string;
+  ref: string;
+  subdir: string;
+  slug: string;
+  displayName: string;
+  description: string;
+  skillUrl: string;
+  licenseName?: string | null;
+  licenseUrl?: string | null;
+  licenseStatus: string;
+  installable: boolean;
+  tags: string[];
+  installed?: {
+    skillId: number;
+    versionId?: number | null;
+    version?: string | null;
+    status: string;
+  } | null;
+}
+
+export interface SkillStoreResponseData {
+  items: SkillStoreItem[];
+  sources: SkillStoreSourceItem[];
+  refreshedAt: string;
+  anonymous: boolean;
+}
+
+export interface SessionSkillOptionsData {
+  items: SkillCatalogItem[];
 }
 
 export interface SkillApprovalEvent {

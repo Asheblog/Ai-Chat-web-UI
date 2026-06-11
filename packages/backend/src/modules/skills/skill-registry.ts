@@ -398,8 +398,20 @@ async function resolveActiveVersion(params: {
   prisma: typeof defaultPrisma
   skill: any
   binding?: any
+  requestedVersionId?: number | null
 }): Promise<any | null> {
-  const { prisma, skill, binding } = params
+  const { prisma, skill, binding, requestedVersionId } = params
+  if (requestedVersionId) {
+    const requestedVersion = await (prisma as any).skillVersion.findFirst({
+      where: {
+        id: requestedVersionId,
+        skillId: skill.id,
+        status: 'active',
+      },
+    })
+    if (requestedVersion) return requestedVersion
+  }
+
   if (binding?.versionId) {
     const boundVersion = await (prisma as any).skillVersion.findFirst({
       where: {
@@ -464,14 +476,19 @@ export async function createSkillRegistry(params: CreateSkillRegistryParams): Pr
     return registry
   }
 
-  const dynamicSkillSlugs = requested.enabled.filter((slug) => !isBuiltinSkill(slug))
-  if (dynamicSkillSlugs.length === 0) {
+  const dynamicSkillRefs = requested.enabled
+  if (dynamicSkillRefs.length === 0) {
     return registry
+  }
+
+  const requestedVersionBySkillId = new Map<number, number>()
+  for (const ref of dynamicSkillRefs) {
+    requestedVersionBySkillId.set(ref.skillId, ref.versionId)
   }
 
   const skills = await (prisma as any).skill.findMany({
     where: {
-      slug: { in: dynamicSkillSlugs },
+      id: { in: Array.from(requestedVersionBySkillId.keys()) },
       status: 'active',
     },
     select: {
@@ -528,6 +545,7 @@ export async function createSkillRegistry(params: CreateSkillRegistryParams): Pr
       prisma,
       skill,
       binding: selectedBinding,
+      requestedVersionId: requestedVersionBySkillId.get(skill.id) ?? null,
     })
     if (!activeVersion || !activeVersion.packagePath) continue
 

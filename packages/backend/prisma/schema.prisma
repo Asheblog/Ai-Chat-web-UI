@@ -40,7 +40,7 @@ model User {
   documents             Document[]
   knowledgeBases        KnowledgeBase[]
   promptTemplates       PromptTemplate[]
-  createdSkills         Skill[]                @relation("UserCreatedSkills")
+  ownedSkills           Skill[]                @relation("UserOwnedSkills")
   decidedSkillApprovals SkillApprovalRequest[] @relation("UserDecidedSkillApprovals")
 
   @@index([status])
@@ -79,6 +79,7 @@ model ChatSession {
   sessionDocuments   SessionDocument[]
   workspaceSession   WorkspaceSession?
   workspaceArtifacts WorkspaceArtifact[]
+  skillBindings      SkillBinding[]        @relation("SessionSkillBindings")
 
   @@index([expiresAt])
   @@index([anonymousKey])
@@ -325,18 +326,25 @@ model SystemSetting {
 
 model Skill {
   id               Int      @id @default(autoincrement())
-  slug             String   @unique
+  namespaceKey     String   @unique
+  slug             String
   displayName      String
   description      String?
   sourceType       String   @default("builtin") // builtin | github
   sourceUrl        String?
+  sourceKey        String?
+  storeItemKey     String?
+  visibility       String   @default("system") // system | user_private
+  licenseName      String?
+  licenseUrl       String?
+  licenseStatus    String   @default("approved") // approved | source_available | blocked | unknown
   status           String   @default("active") // active | disabled
   defaultVersionId Int?     @unique
-  createdByUserId  Int?
+  ownerUserId      Int?     @map("createdByUserId")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  createdBy      User?                  @relation("UserCreatedSkills", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  owner          User?                  @relation("UserOwnedSkills", fields: [ownerUserId], references: [id], onDelete: Cascade)
   versions       SkillVersion[]
   bindings       SkillBinding[]
   approvals      SkillApprovalRequest[]
@@ -344,7 +352,9 @@ model Skill {
   defaultVersion SkillVersion?          @relation("SkillDefaultVersion", fields: [defaultVersionId], references: [id], onDelete: SetNull)
 
   @@index([status])
-  @@index([createdByUserId])
+  @@index([ownerUserId, status])
+  @@index([storeItemKey])
+  @@unique([ownerUserId, storeItemKey])
   @@map("skills")
 }
 
@@ -383,6 +393,7 @@ model SkillBinding {
   id              Int      @id @default(autoincrement())
   skillId         Int
   versionId       Int?
+  sessionId       Int?
   scopeType       String // system | user | session | battle_model
   scopeId         String
   enabled         Boolean  @default(true)
@@ -394,11 +405,13 @@ model SkillBinding {
 
   skill     Skill                  @relation(fields: [skillId], references: [id], onDelete: Cascade)
   version   SkillVersion?          @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  session   ChatSession?           @relation("SessionSkillBindings", fields: [sessionId], references: [id], onDelete: Cascade)
   approvals SkillApprovalRequest[]
 
   @@unique([skillId, scopeType, scopeId])
   @@index([scopeType, scopeId])
   @@index([versionId])
+  @@index([sessionId])
   @@map("skill_bindings")
 }
 

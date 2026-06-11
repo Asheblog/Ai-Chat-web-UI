@@ -7,7 +7,12 @@ import type {
 } from '@aichat/shared/battle-contract'
 
 export type BattleModelSkills = {
-  enabled: string[]
+  builtin?: string[]
+  enabled?: Array<{
+    skillId: number
+    versionId: number
+    overrides?: Record<string, unknown>
+  }>
   overrides?: Record<string, Record<string, unknown>>
 }
 

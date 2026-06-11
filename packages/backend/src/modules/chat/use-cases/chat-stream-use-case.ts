@@ -70,7 +70,11 @@ import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
 import { GeneratedImageStorage, type GeneratedImage } from '../../../services/image-generation';
-import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../skills/types';
+import { BUILTIN_SKILL_SLUGS } from '../../skills/types';
+import {
+  RequestedSkillAccessError,
+  resolveRequestedSkillAccess,
+} from '../../skills/requested-skill-access';
 import { applyWebSearchSkillOverrides } from '../web-search-skill-overrides';
 import {
   ChatStreamRequestValidation,
@@ -141,9 +145,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       } = normalizedPayload
       let content = normalizedPayload.content
       let images = normalizedPayload.images
-      const requestedSkills = normalizeRequestedSkills(payload?.skills)
-      const requestedSkillSet = new Set(requestedSkills.enabled)
-
       // 验证会话是否存在且属于当前用户
       let session
       try {
@@ -162,6 +163,22 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       }
 
       await extendAnonymousSession(actor, sessionId)
+
+      let requestedSkills
+      try {
+        requestedSkills = await resolveRequestedSkillAccess({
+          prisma,
+          actor,
+          sessionId,
+          payload: payload?.skills,
+        })
+      } catch (error) {
+        if (error instanceof RequestedSkillAccessError) {
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any)
+        }
+        throw error
+      }
+      const requestedBuiltinSkillSet = new Set(requestedSkills.builtin)
 
       const now = new Date()
 
@@ -387,6 +404,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         mode: 'stream',
         historyUpperBound: userMessageRecord?.createdAt ?? null,
         personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
+        requestedSkills,
         ragContext,
       });
 
@@ -515,12 +533,12 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         'Access-Control-Allow-Headers': 'Cache-Control',
       };
 
-      const webSearchSkillRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH);
-      const pythonSkillRequested = requestedSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER);
+      const webSearchSkillRequested = requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH);
+      const pythonSkillRequested = requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER);
       const urlReaderSkillRequested =
-        requestedSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchSkillRequested;
+        requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchSkillRequested;
       const knowledgeBaseSkillRequested =
-        requestedSkillSet.has(BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH) || hasKnowledgeBases;
+        requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH) || hasKnowledgeBases;
       const webSearchEnginesWithKeys = (agentWebSearchConfig.engines || []).filter((engine) =>
         Boolean(agentWebSearchConfig.apiKeys?.[engine]),
       );
@@ -535,14 +553,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       // 会话文档工具已废弃（改为 workspace 直接文件访问），保留仅用于兼容
       const documentToolsActive = false;
       const knowledgeBaseToolsActive = knowledgeBaseSkillRequested && hasKnowledgeBases;
-      const builtinSkillSlugs = new Set<string>([
-          BUILTIN_SKILL_SLUGS.WEB_SEARCH,
-          BUILTIN_SKILL_SLUGS.PYTHON_RUNNER,
-          BUILTIN_SKILL_SLUGS.URL_READER,
-          BUILTIN_SKILL_SLUGS.DOCUMENT_SEARCH,
-          BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH,
-        ])
-      const dynamicSkillRequestedRaw = Array.from(requestedSkillSet).some((slug) => !builtinSkillSlugs.has(slug));
+      const dynamicSkillRequestedRaw = requestedSkills.enabled.length > 0;
       const dynamicSkillRuntimeEnabled =
         (sysMap.chat_dynamic_skill_runtime_enabled ||
           process.env.CHAT_DYNAMIC_SKILL_RUNTIME_ENABLED ||
@@ -556,7 +567,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         log.warn('[chat stream] dynamic skill runtime disabled in chat route', {
           sessionId,
           actor: actor.identifier,
-          requestedDynamicSkills: Array.from(requestedSkillSet).filter((slug) => !builtinSkillSlugs.has(slug)),
+          requestedDynamicSkills: requestedSkills.enabled,
         });
       }
       if (

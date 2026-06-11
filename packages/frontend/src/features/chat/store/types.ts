@@ -7,6 +7,7 @@ import type {
   MessageRenderCacheEntry,
   MessageStreamMetrics,
   ToolEvent,
+  SkillRuntimeReference,
 } from '@/types'
 import type { ModelItem } from '@/store/models-store'
 import type { StateCreator, StoreApi } from 'zustand'
@@ -19,7 +20,8 @@ export type StreamSendOptions = {
   ollamaThink?: boolean
   saveReasoning?: boolean
   skills?: {
-    enabled: string[]
+    builtin?: string[]
+    enabled?: SkillRuntimeReference[]
     overrides?: Record<string, Record<string, unknown>>
   }
   replyToMessageId?: number | string

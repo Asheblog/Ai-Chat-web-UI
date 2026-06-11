@@ -119,7 +119,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     }
   }, [modelsCount, fetchModels])
 
-  const { enabledExtraSkills, skillOptions, toggleSkillOption } = useSkillsSelection()
+  const { enabledExtraSkills, skillOptions, toggleSkillOption } = useSkillsSelection(currentSession?.id ?? null)
 
   const activeModel = useMemo(() => {
     if (!currentSession) return null

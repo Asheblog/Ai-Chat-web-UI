@@ -8,11 +8,13 @@ import {
   Cloud,
   ClipboardList,
   KeyRound,
+  PackageCheck,
   PlugZap,
   Router,
   ScrollText,
   Settings2,
   Share2,
+  ShieldCheck,
   User,
   Users,
   Wrench,
@@ -121,9 +123,19 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
         icon: <User className="h-full w-full" />,
       },
       {
+        key: "skills",
+        label: "个人 Skills",
+        icon: <PackageCheck className="h-full w-full" />,
+      },
+      {
         key: "shares",
         label: "分享管理",
         icon: <Share2 className="h-full w-full" />,
+      },
+      {
+        key: "security",
+        label: "账号安全",
+        icon: <ShieldCheck className="h-full w-full" />,
       },
     ]
   }, [activeSection])
@@ -154,8 +166,13 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
   const handleChange = (key: string) => {
     if (activeSection === "personal") {
       setPersonalSub(key)
-      const targetId =
-        key === "shares" ? "settings-share-management" : "settings-personal-preferences"
+      const targetIdByKey: Record<string, string> = {
+        profile: "settings-personal-preferences",
+        skills: "settings-personal-skills",
+        shares: "settings-share-management",
+        security: "settings-personal-security",
+      }
+      const targetId = targetIdByKey[key] || "settings-personal-preferences"
       const target = typeof document !== "undefined" ? document.getElementById(targetId) : null
       target?.scrollIntoView({ behavior: "smooth", block: "start" })
       return

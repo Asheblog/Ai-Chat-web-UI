@@ -3,7 +3,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ModelItem } from '@/store/models-store'
 import { useSettingsStore } from '@/store/settings-store'
-import type { BattleContent, BattleResult, BattleRunSummary, BattleToolCallEvent, BattleUploadImage, ToolEvent } from '@/types'
+import type {
+  BattleContent,
+  BattleResult,
+  BattleRunSummary,
+  BattleToolCallEvent,
+  BattleUploadImage,
+  SkillRuntimeReference,
+  ToolEvent,
+} from '@/types'
 import {
   cancelBattleAttempt,
   cancelBattleRun,
@@ -205,7 +213,8 @@ type BattleRunConfigModel = {
   connectionId?: number | null
   rawId?: string | null
   skills?: {
-    enabled: string[]
+    builtin?: string[]
+    enabled?: SkillRuntimeReference[]
     overrides?: Record<string, Record<string, unknown>>
   }
   extraPrompt?: string | null
@@ -271,8 +280,8 @@ const buildConfigStateFromConfig = (
   const advancedOpen = customHeaders.length > 0 || customBody.trim().length > 0 || extraPrompt.trim().length > 0
   return {
     ...base,
-    webSearchEnabled: Boolean(config?.skills?.enabled?.includes('web-search')),
-    pythonEnabled: Boolean(config?.skills?.enabled?.includes('python-runner')),
+    webSearchEnabled: Boolean(config?.skills?.builtin?.includes('web-search')),
+    pythonEnabled: Boolean(config?.skills?.builtin?.includes('python-runner')),
     reasoningEnabled,
     reasoningEffort,
     ollamaThink,
@@ -952,7 +961,8 @@ export function useBattleFlow() {
         connectionId: item.model.connectionId,
         rawId: item.model.rawId,
         skills: {
-          enabled: Array.from(new Set(enabledSkills)),
+          builtin: Array.from(new Set(enabledSkills)),
+          enabled: [],
         },
         ...(extraPrompt ? { extraPrompt } : {}),
         custom_body: bodyResult.value,
@@ -1376,7 +1386,8 @@ export function useBattleFlow() {
         connectionId: number | null
         rawId: string | null
         skills?: {
-          enabled: string[]
+          builtin?: string[]
+          enabled?: SkillRuntimeReference[]
           overrides?: Record<string, Record<string, unknown>>
         }
         customHeaders?: Array<{ name: string; value: string }>

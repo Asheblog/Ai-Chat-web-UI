@@ -61,7 +61,7 @@ interface MobileComposerProps {
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
   skillOptions: ComposerSkillOption[]
-  onToggleSkillOption: (slug: string, enabled: boolean) => void
+  onToggleSkillOption: (skillId: number, enabled: boolean) => void
   isVisionEnabled: boolean
   placeholder: string
   traceEnabled: boolean

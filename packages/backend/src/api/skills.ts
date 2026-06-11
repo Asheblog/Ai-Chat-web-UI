@@ -12,13 +12,28 @@ import {
 } from '../services/python-runtime'
 import type { SkillInstaller } from '../modules/skills/skill-installer'
 import type { SkillApprovalService } from '../modules/skills/skill-approval-service'
+import {
+  getCuratedSkillSource,
+  listSkillStoreCatalog,
+  resolveSkillStoreItem,
+} from '../modules/skills/skill-store'
+import type { SkillLicensePolicy } from '../modules/skills/skill-license'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('SkillsApi')
 
 const installSchema = z.object({
-  source: z.string().min(3).max(256),
+  source: z.string().min(3).max(512).optional(),
+  itemKey: z.string().min(3).max(512).optional(),
   token: z.string().min(1).max(512).optional(),
+}).refine((value) => Boolean(value.source || value.itemKey), {
+  message: 'source or itemKey is required',
+})
+
+const storeQuerySchema = z.object({
+  q: z.string().max(120).optional(),
+  sourceKey: z.string().max(120).optional(),
+  refresh: z.string().optional(),
 })
 
 const activateVersionSchema = z.object({
@@ -33,6 +48,12 @@ const bindingSchema = z.object({
   enabled: z.boolean().optional(),
   policy: z.record(z.unknown()).optional(),
   overrides: z.record(z.unknown()).optional(),
+})
+
+const sessionSkillBindingSchema = z.object({
+  skillId: z.number().int().positive(),
+  versionId: z.number().int().positive(),
+  enabled: z.boolean(),
 })
 
 const approvalRespondSchema = z.object({
@@ -69,6 +90,25 @@ const safeJsonObject = (raw: string | null | undefined): Record<string, unknown>
     // ignore parse errors
   }
   return {}
+}
+
+const isUserActor = (actor: Actor): actor is Extract<Actor, { type: 'user' }> => actor.type === 'user'
+
+const isSystemSkill = (skill: any): boolean => skill?.visibility === 'system' || skill?.sourceType === 'builtin'
+
+const canManageSkill = (actor: Actor, skill: any): boolean => {
+  if (!isUserActor(actor)) return false
+  if (skill?.ownerUserId === actor.id) return true
+  return actor.role === 'ADMIN' && isSystemSkill(skill)
+}
+
+const assertSessionOwner = async (prisma: PrismaClient, actor: Actor, sessionId: number): Promise<boolean> => {
+  if (!isUserActor(actor)) return false
+  const session = await (prisma as any).chatSession.findFirst({
+    where: { id: sessionId, userId: actor.id },
+    select: { id: true },
+  })
+  return Boolean(session)
 }
 
 const resolveSkillStorageRoot = (): string => {
@@ -126,8 +166,22 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
         return c.json<ApiResponse>({ success: false, error: 'Admin privilege required' }, 403)
       }
 
+      const visibleWhere =
+        actor.type === 'user'
+          ? {
+              status: 'active',
+              OR: [
+                { visibility: 'system' },
+                { ownerUserId: actor.id },
+              ],
+            }
+          : {
+              status: 'active',
+              visibility: 'system',
+            }
+
       const skills = await (prisma as any).skill.findMany({
-        where: includeAll ? undefined : { status: 'active' },
+        where: includeAll ? undefined : visibleWhere,
         include: {
           defaultVersion: {
             select: {
@@ -181,11 +235,19 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
           : undefined
         return {
           id: item.id,
+          namespaceKey: item.namespaceKey,
           slug: item.slug,
           displayName: item.displayName,
           description: item.description,
           sourceType: item.sourceType,
           sourceUrl: item.sourceUrl,
+          sourceKey: item.sourceKey,
+          storeItemKey: item.storeItemKey,
+          visibility: item.visibility,
+          ownerUserId: item.ownerUserId,
+          licenseName: item.licenseName,
+          licenseUrl: item.licenseUrl,
+          licenseStatus: item.licenseStatus,
           status: item.status,
           defaultVersion: item.defaultVersion
             ? {
@@ -205,6 +267,153 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
       return c.json<ApiResponse>({ success: true, data })
     } catch (error) {
       return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Load catalog failed' }, 500)
+    }
+  })
+
+  router.get('/store', actorMiddleware, zValidator('query', storeQuerySchema), async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      const query = c.req.valid('query')
+      const q = (query.q || '').trim().toLowerCase()
+      const sourceKey = (query.sourceKey || '').trim()
+      const catalog = await listSkillStoreCatalog({
+        prisma,
+        userId: actor.type === 'user' ? actor.id : null,
+        refresh: normalizeBooleanQuery(query.refresh),
+      })
+
+      let items = catalog.items
+      if (sourceKey) {
+        items = items.filter((item) => item.sourceKey === sourceKey)
+      }
+      if (q) {
+        items = items.filter((item) => {
+          const haystack = [
+            item.displayName,
+            item.slug,
+            item.sourceName,
+            item.repository,
+            item.description,
+            item.tags.join(' '),
+          ].join(' ').toLowerCase()
+          return haystack.includes(q)
+        })
+      }
+
+      return c.json<ApiResponse>({
+        success: true,
+        data: {
+          items,
+          sources: catalog.sources.map((source) => ({
+            key: source.key,
+            name: source.name,
+            repository: `${source.owner}/${source.repo}`,
+            ref: source.ref,
+            description: source.description,
+            homepageUrl: source.homepageUrl,
+            tags: source.tags,
+            status: catalog.sourceStatuses[source.key] || 'fallback',
+          })),
+          refreshedAt: catalog.refreshedAt,
+          anonymous: actor.type !== 'user',
+        },
+      })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Load skill store failed' }, 500)
+    }
+  })
+
+  router.get('/session-options', actorMiddleware, requireUserActor, async (c) => {
+    try {
+      const actor = c.get('actor') as Actor
+      if (!isUserActor(actor)) {
+        return c.json<ApiResponse>({ success: false, error: 'Authentication required' }, 401)
+      }
+      const sessionId = parseOptionalInt(c.req.query('sessionId'))
+      if (sessionId == null) {
+        return c.json<ApiResponse>({ success: false, error: 'sessionId is required' }, 400)
+      }
+      if (!(await assertSessionOwner(prisma, actor, sessionId))) {
+        return c.json<ApiResponse>({ success: false, error: 'Session not found' }, 404)
+      }
+
+      const [skills, bindings] = await Promise.all([
+        (prisma as any).skill.findMany({
+          where: {
+            ownerUserId: actor.id,
+            visibility: 'user_private',
+            status: 'active',
+          },
+          include: {
+            defaultVersion: {
+              select: {
+                id: true,
+                version: true,
+                status: true,
+                riskLevel: true,
+                activatedAt: true,
+                manifestJson: true,
+              },
+            },
+          },
+          orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        }),
+        (prisma as any).skillBinding.findMany({
+          where: {
+            scopeType: 'session',
+            scopeId: String(sessionId),
+            sessionId,
+            createdByUserId: actor.id,
+          },
+          select: {
+            id: true,
+            skillId: true,
+            versionId: true,
+            enabled: true,
+          },
+        }),
+      ])
+
+      const bindingBySkillId = new Map(bindings.map((binding: any) => [binding.skillId, binding]))
+      const items = skills.map((skill: any) => {
+        const binding = bindingBySkillId.get(skill.id)
+        const defaultVersion = skill.defaultVersion
+        return {
+          id: skill.id,
+          slug: skill.slug,
+          displayName: skill.displayName,
+          description: skill.description,
+          sourceType: skill.sourceType,
+          sourceUrl: skill.sourceUrl,
+          sourceKey: skill.sourceKey,
+          storeItemKey: skill.storeItemKey,
+          visibility: skill.visibility,
+          licenseName: skill.licenseName,
+          licenseUrl: skill.licenseUrl,
+          licenseStatus: skill.licenseStatus,
+          defaultVersion: defaultVersion
+            ? {
+                id: defaultVersion.id,
+                version: defaultVersion.version,
+                status: defaultVersion.status,
+                riskLevel: defaultVersion.riskLevel,
+                activatedAt: defaultVersion.activatedAt,
+                manifest: safeJsonObject(defaultVersion.manifestJson),
+              }
+            : null,
+          sessionBinding: binding
+            ? {
+                id: binding.id,
+                enabled: Boolean(binding.enabled),
+                versionId: binding.versionId,
+              }
+            : null,
+        }
+      })
+
+      return c.json<ApiResponse>({ success: true, data: { items } })
+    } catch (error) {
+      return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Load session skills failed' }, 500)
     }
   })
 
@@ -325,16 +534,45 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
     }
   })
 
-  router.post('/install', actorMiddleware, requireUserActor, adminOnlyMiddleware, zValidator('json', installSchema), async (c) => {
+  router.post('/install', actorMiddleware, requireUserActor, zValidator('json', installSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor
       const payload = c.req.valid('json')
-      const actorUserId = actor.type === 'user' ? actor.id : null
+      if (!isUserActor(actor)) {
+        return c.json<ApiResponse>({ success: false, error: 'Authentication required' }, 401)
+      }
+      const actorUserId = actor.id
       const token = payload.token || process.env.GITHUB_SKILL_TOKEN || undefined
+      let source = payload.source?.trim() || ''
+      let storeItemKey: string | null = null
+      let sourceKey: string | null = null
+      let trustedSource = false
+      let licensePolicy: SkillLicensePolicy | undefined
+
+      if (payload.itemKey) {
+        const storeItem = await resolveSkillStoreItem(payload.itemKey)
+        if (!storeItem) {
+          return c.json<ApiResponse>({ success: false, error: 'Skill store item not found' }, 404)
+        }
+        const curatedSource = getCuratedSkillSource(storeItem.sourceKey)
+        if (!curatedSource) {
+          return c.json<ApiResponse>({ success: false, error: 'Skill source is not curated' }, 400)
+        }
+        source = `${storeItem.repository}@${storeItem.ref}:${storeItem.subdir}`
+        storeItemKey = storeItem.key
+        sourceKey = storeItem.sourceKey
+        trustedSource = true
+        licensePolicy = curatedSource.licensePolicy as any
+      }
+
       const result = await skillInstaller.installFromGithub({
-        source: payload.source,
+        source,
         actorUserId,
         token,
+        storeItemKey,
+        sourceKey,
+        trustedSource,
+        licensePolicy: licensePolicy as any,
       })
       return c.json<ApiResponse>({ success: true, data: result })
     } catch (error) {
@@ -342,7 +580,98 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
     }
   })
 
-  router.get('/:skillId/uninstall-plan', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+  router.put(
+    '/sessions/:sessionId',
+    actorMiddleware,
+    requireUserActor,
+    zValidator('json', sessionSkillBindingSchema),
+    async (c) => {
+      try {
+        const actor = c.get('actor') as Actor
+        if (!isUserActor(actor)) {
+          return c.json<ApiResponse>({ success: false, error: 'Authentication required' }, 401)
+        }
+        const sessionId = Number.parseInt(c.req.param('sessionId'), 10)
+        if (!Number.isFinite(sessionId)) {
+          return c.json<ApiResponse>({ success: false, error: 'Invalid session id' }, 400)
+        }
+        if (!(await assertSessionOwner(prisma, actor, sessionId))) {
+          return c.json<ApiResponse>({ success: false, error: 'Session not found' }, 404)
+        }
+
+        const payload = c.req.valid('json')
+        const version = await (prisma as any).skillVersion.findFirst({
+          where: {
+            id: payload.versionId,
+            skillId: payload.skillId,
+            status: 'active',
+            skill: {
+              ownerUserId: actor.id,
+              visibility: 'user_private',
+              status: 'active',
+            },
+          },
+          include: {
+            skill: {
+              select: {
+                id: true,
+                slug: true,
+                displayName: true,
+                ownerUserId: true,
+              },
+            },
+          },
+        })
+        if (!version) {
+          return c.json<ApiResponse>({ success: false, error: 'Skill version not found' }, 404)
+        }
+
+        const binding = await (prisma as any).skillBinding.upsert({
+          where: {
+            skillId_scopeType_scopeId: {
+              skillId: payload.skillId,
+              scopeType: 'session',
+              scopeId: String(sessionId),
+            },
+          },
+          update: {
+            versionId: payload.versionId,
+            sessionId,
+            enabled: payload.enabled,
+            createdByUserId: actor.id,
+          },
+          create: {
+            skillId: payload.skillId,
+            versionId: payload.versionId,
+            scopeType: 'session',
+            scopeId: String(sessionId),
+            sessionId,
+            enabled: payload.enabled,
+            createdByUserId: actor.id,
+            policyJson: '{}',
+            overridesJson: '{}',
+          },
+        })
+
+        return c.json<ApiResponse>({
+          success: true,
+          data: {
+            ...binding,
+            skill: version.skill,
+            version: {
+              id: version.id,
+              version: version.version,
+              status: version.status,
+            },
+          },
+        })
+      } catch (error) {
+        return c.json<ApiResponse>({ success: false, error: error instanceof Error ? error.message : 'Update session skill failed' }, 400)
+      }
+    },
+  )
+
+  router.get('/:skillId/uninstall-plan', actorMiddleware, requireUserActor, async (c) => {
     try {
       const skillId = Number.parseInt(c.req.param('skillId'), 10)
       if (!Number.isFinite(skillId)) {
@@ -356,6 +685,8 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
           slug: true,
           displayName: true,
           sourceType: true,
+          visibility: true,
+          ownerUserId: true,
           versions: {
             select: {
               id: true,
@@ -372,6 +703,10 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
       }
       if (skill.sourceType === 'builtin') {
         return c.json<ApiResponse>({ success: false, error: 'Builtin skill cannot be uninstalled' }, 400)
+      }
+      const actor = c.get('actor') as Actor
+      if (!canManageSkill(actor, skill)) {
+        return c.json<ApiResponse>({ success: false, error: 'Skill not found' }, 404)
       }
 
       const removedRequirements: string[] = Array.from(
@@ -420,7 +755,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
     }
   })
 
-  router.delete('/:skillId', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
+  router.delete('/:skillId', actorMiddleware, requireUserActor, async (c) => {
     try {
       const skillId = Number.parseInt(c.req.param('skillId'), 10)
       if (!Number.isFinite(skillId)) {
@@ -433,6 +768,8 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
           id: true,
           slug: true,
           sourceType: true,
+          visibility: true,
+          ownerUserId: true,
           versions: {
             select: {
               id: true,
@@ -450,6 +787,10 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
       if (skill.sourceType === 'builtin') {
         return c.json<ApiResponse>({ success: false, error: 'Builtin skill cannot be uninstalled' }, 400)
       }
+      const actor = c.get('actor') as Actor
+      if (!canManageSkill(actor, skill)) {
+        return c.json<ApiResponse>({ success: false, error: 'Skill not found' }, 404)
+      }
 
       const removedRequirements: string[] = Array.from(
         new Set<string>(
@@ -463,6 +804,20 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
           (skill.versions || [])
             .map((version: any) => (typeof version.packagePath === 'string' ? version.packagePath.trim() : ''))
             .filter(Boolean),
+        ),
+      )
+      const packageSelfReferenceCounts = new Map<string, number>()
+      for (const version of skill.versions || []) {
+        const packagePath = typeof version.packagePath === 'string' ? version.packagePath.trim() : ''
+        if (!packagePath) continue
+        packageSelfReferenceCounts.set(packagePath, (packageSelfReferenceCounts.get(packagePath) || 0) + 1)
+      }
+      const packageReferenceCounts = new Map<string, number>(
+        await Promise.all(
+          packagePaths.map(async (packagePath) => [
+            packagePath,
+            await (prisma as any).skillVersion.count({ where: { packagePath } }),
+          ] as const),
         ),
       )
 
@@ -482,6 +837,12 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
             packagePath,
             storageRoot,
           })
+          continue
+        }
+        const referenceCountBeforeDelete = packageReferenceCounts.get(packagePath) || 0
+        const selfReferenceCountBeforeDelete = packageSelfReferenceCounts.get(packagePath) || 0
+        if (referenceCountBeforeDelete > selfReferenceCountBeforeDelete) {
+          skippedPackageDirs.push(packagePath)
           continue
         }
         try {
@@ -669,6 +1030,10 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
       const payload = c.req.valid('json')
       const actor = c.get('actor') as Actor
       const actorUserId = actor.type === 'user' ? actor.id : null
+      const sessionId =
+        payload.scopeType === 'session'
+          ? Number.parseInt(payload.scopeId, 10)
+          : null
       const upserted = await (prisma as any).skillBinding.upsert({
         where: {
           skillId_scopeType_scopeId: {
@@ -679,6 +1044,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
         },
         update: {
           versionId: payload.versionId ?? null,
+          sessionId: Number.isFinite(sessionId) && sessionId && sessionId > 0 ? sessionId : null,
           enabled: payload.enabled ?? true,
           policyJson: payload.policy ? JSON.stringify(payload.policy) : '{}',
           overridesJson: payload.overrides ? JSON.stringify(payload.overrides) : '{}',
@@ -687,6 +1053,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
         create: {
           skillId: payload.skillId,
           versionId: payload.versionId ?? null,
+          sessionId: Number.isFinite(sessionId) && sessionId && sessionId > 0 ? sessionId : null,
           scopeType: payload.scopeType,
           scopeId: payload.scopeId,
           enabled: payload.enabled ?? true,

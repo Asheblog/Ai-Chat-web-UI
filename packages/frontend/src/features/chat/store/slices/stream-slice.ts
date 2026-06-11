@@ -450,7 +450,7 @@ export const createStreamSlice: ChatSliceCreator<
       reasoningActivated: false,
       clientMessageId: userClientMessageId ?? null,
       assistantClientMessageId: null,
-      webSearchRequested: Boolean(options?.skills?.enabled?.includes('web-search')),
+      webSearchRequested: Boolean(options?.skills?.builtin?.includes('web-search')),
       lastUsage: null,
       startedAt: Date.now(),
       firstChunkAt: null,

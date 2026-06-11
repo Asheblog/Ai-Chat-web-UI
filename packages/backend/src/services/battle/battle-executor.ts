@@ -151,7 +151,7 @@ export class BattleExecutor {
 
     const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
     const requestedSkills = normalizeRequestedSkills(modelConfig.skills)
-    const requestedSkillSet = new Set(requestedSkills.enabled)
+    const requestedSkillSet = new Set(requestedSkills.builtin)
     const webSearchConfig = buildAgentWebSearchConfig(systemSettings)
     const pythonConfig = buildAgentPythonToolConfig(systemSettings)
     const urlReaderConfig = buildAgentUrlReaderConfig(systemSettings)
@@ -202,17 +202,13 @@ export class BattleExecutor {
       })
     }
     const urlReaderActive = urlReaderRequested
-    const builtinSkillSet = new Set<string>([
-      BUILTIN_SKILL_SLUGS.WEB_SEARCH,
-      BUILTIN_SKILL_SLUGS.PYTHON_RUNNER,
-      BUILTIN_SKILL_SLUGS.URL_READER,
-    ])
-    const effectiveEnabled = requestedSkills.enabled.filter((slug) => !builtinSkillSet.has(slug))
-    if (webSearchActive) effectiveEnabled.push(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
-    if (pythonActive) effectiveEnabled.push(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
-    if (urlReaderActive) effectiveEnabled.push(BUILTIN_SKILL_SLUGS.URL_READER)
+    const effectiveBuiltin: string[] = []
+    if (webSearchActive) effectiveBuiltin.push(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
+    if (pythonActive) effectiveBuiltin.push(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
+    if (urlReaderActive) effectiveBuiltin.push(BUILTIN_SKILL_SLUGS.URL_READER)
     const effectiveSkills: BattleModelSkills = {
-      enabled: Array.from(new Set(effectiveEnabled)),
+      builtin: Array.from(new Set(effectiveBuiltin)),
+      enabled: requestedSkills.enabled,
       ...(requestedSkills.overrides ? { overrides: requestedSkills.overrides } : {}),
     }
 

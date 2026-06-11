@@ -5,6 +5,8 @@ import type {
   SkillExecutionAuditItem,
   SkillBindingItem,
   SkillCatalogItem,
+  SkillStoreResponseData,
+  SessionSkillOptionsData,
   SkillUninstallPreviewData,
 } from '@/types'
 
@@ -25,6 +27,41 @@ export const listSkillCatalog = async (params?: {
 
 export const installSkillFromGithub = async (payload: { source: string; token?: string }) => {
   const response = await client.post<ApiResponse>('/skills/install', payload)
+  return response.data
+}
+
+export const listSkillStore = async (params?: {
+  q?: string
+  sourceKey?: string
+  refresh?: boolean
+}) => {
+  const query: Record<string, string> = {}
+  if (params?.q) query.q = params.q
+  if (params?.sourceKey) query.sourceKey = params.sourceKey
+  if (params?.refresh) query.refresh = '1'
+  const response = await client.get<ApiResponse<SkillStoreResponseData>>('/skills/store', {
+    params: query,
+  })
+  return response.data
+}
+
+export const installSkillFromStore = async (payload: { itemKey: string }) => {
+  const response = await client.post<ApiResponse>('/skills/install', payload)
+  return response.data
+}
+
+export const listSessionSkillOptions = async (sessionId: number) => {
+  const response = await client.get<ApiResponse<SessionSkillOptionsData>>('/skills/session-options', {
+    params: { sessionId },
+  })
+  return response.data
+}
+
+export const updateSessionSkillBinding = async (
+  sessionId: number,
+  payload: { skillId: number; versionId: number; enabled: boolean },
+) => {
+  const response = await client.put<ApiResponse<SkillBindingItem>>(`/skills/sessions/${sessionId}`, payload)
   return response.data
 }
 
