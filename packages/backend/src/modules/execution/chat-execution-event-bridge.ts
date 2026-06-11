@@ -17,6 +17,9 @@ const asRecord = (value: unknown): UnknownRecord | null =>
 const asString = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value : null
 
+const asTextDelta = (value: unknown): string | null =>
+  typeof value === 'string' && value.length > 0 ? value : null
+
 const asNumber = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null
 
@@ -139,7 +142,7 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
 
     if (type === 'content') {
       events.push(...ensureBootEvents())
-      const delta = asString(legacyEvent.content)
+      const delta = asTextDelta(legacyEvent.content)
       if (!delta) return events
       events.push(
         nextEvent(
@@ -157,7 +160,7 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
 
     if (type === 'reasoning') {
       events.push(...ensureBootEvents())
-      const delta = asString(legacyEvent.content)
+      const delta = asTextDelta(legacyEvent.content)
       if (delta) {
         events.push(
           nextEvent(

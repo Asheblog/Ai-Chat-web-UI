@@ -103,4 +103,26 @@ describe('chat execution event bridge', () => {
       },
     })
   })
+
+  it('preserves whitespace-only content deltas', () => {
+    const bridge = createChatExecutionEventBridge({
+      runKey: 'chat-run-whitespace',
+      sessionId: 123,
+      clock: () => 1700000000000,
+    })
+
+    const events = bridge.consume({
+      type: 'content',
+      content: '\n  ',
+    })
+
+    const delta = events.find((item) => item.type === 'step_delta')
+    expect(delta).toMatchObject({
+      type: 'step_delta',
+      payload: {
+        channel: 'content',
+        delta: '\n  ',
+      },
+    })
+  })
 })

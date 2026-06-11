@@ -84,6 +84,9 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const asString = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value : null
 
+const asTextDelta = (value: unknown): string | null =>
+  typeof value === 'string' && value.length > 0 ? value : null
+
 const asNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
@@ -107,7 +110,7 @@ const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
 
   if (eventType === 'step_delta') {
     const channel = asString(eventPayload.channel)
-    const delta = asString(eventPayload.delta)
+    const delta = asTextDelta(eventPayload.delta)
     if (!delta) return null
     if (channel === 'reasoning') {
       return {

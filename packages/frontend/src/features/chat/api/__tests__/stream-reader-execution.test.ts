@@ -62,6 +62,23 @@ describe('stream-reader unified execution events', () => {
     expect(chunk).toMatchObject({ type: 'reasoning', content: 'thinking' })
   })
 
+  it('preserves whitespace-only step_delta content', () => {
+    const chunk = normalizeChunk({
+      type: 'step_delta',
+      runId: 'chat-run-1',
+      eventId: 'evt-whitespace',
+      ts: Date.now(),
+      status: 'running',
+      stepId: 'assistant-main',
+      payload: {
+        channel: 'content',
+        delta: '\n  ',
+      },
+    })
+
+    expect(chunk).toEqual({ type: 'content', content: '\n  ' })
+  })
+
   it('maps run_metrics into usage chunk', () => {
     const chunk = normalizeChunk({
       type: 'run_metrics',
