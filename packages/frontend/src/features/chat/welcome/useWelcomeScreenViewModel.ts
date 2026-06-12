@@ -17,6 +17,8 @@ import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
+import { useSkillsSelection } from '@/hooks/use-skills-selection'
+import { updateSessionSkillBinding } from '@/features/skills/api'
 
 export const useWelcomeScreenViewModel = () => {
   const router = useRouter()
@@ -244,15 +246,11 @@ export const useWelcomeScreenViewModel = () => {
   )
   const showWebSearchScope = canUseWebSearch && isMetasoEngine
 
-  const skillOptions = useMemo<Array<{
-    skillId: number
-    versionId: number | null
-    slug: string
-    label: string
-    description?: string
-    enabled: boolean
-  }>>(() => [], [])
-  const toggleSkillOption = useCallback((_skillId: number, _enabled: boolean) => {}, [])
+  const {
+    skillOptions,
+    toggleSkillOption,
+    enabledExtraSkills,
+  } = useSkillsSelection(null)
 
   useEffect(() => {
     const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
@@ -531,6 +529,36 @@ export const useWelcomeScreenViewModel = () => {
         }
         const session = useChatStore.getState().currentSession
         if (session) {
+          // Bind enabled extra skills to the new session before sending first message
+          let skillBindingFailed = false
+          if (enabledExtraSkills.length > 0) {
+            for (const ref of enabledExtraSkills) {
+              try {
+                const bindResp = await updateSessionSkillBinding(session.id, {
+                  skillId: ref.skillId,
+                  versionId: ref.versionId,
+                  enabled: true,
+                })
+                if (!bindResp?.success) {
+                  throw new Error(bindResp?.error || '绑定 Skill 失败')
+                }
+              } catch (e) {
+                skillBindingFailed = true
+                toast({
+                  title: 'Skill 启用失败',
+                  description: `未能为当前会话启用第三方 Skill，请稍后重试`,
+                  variant: 'destructive',
+                })
+                break
+              }
+            }
+          }
+          if (skillBindingFailed) {
+            clearWorkspaceFiles()
+            router.push(`/main/${session.id}`)
+            return
+          }
+
           const message = text || '请分析工作区中的文件'
           const imagesPayload =
             selectedImages.length > 0
@@ -554,9 +582,10 @@ export const useWelcomeScreenViewModel = () => {
           const options: Record<string, any> = {}
           if (thinkingTouched) options.reasoningEnabled = thinkingEnabled
           if (effortTouched && effort !== 'unset') options.reasoningEffort = effort
-          if (builtinSkills.length > 0) {
+          if (builtinSkills.length > 0 || enabledExtraSkills.length > 0) {
             options.skills = {
-              builtin: Array.from(new Set(builtinSkills)),
+              ...(builtinSkills.length > 0 ? { builtin: Array.from(new Set(builtinSkills)) } : {}),
+              ...(enabledExtraSkills.length > 0 ? { enabled: enabledExtraSkills } : {}),
               ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
             }
           }
@@ -617,6 +646,7 @@ export const useWelcomeScreenViewModel = () => {
     fileInputRef,
     draftFiles,
     clearWorkspaceFiles,
+    enabledExtraSkills,
   ])
 
   const handleKeyDown = useCallback(
