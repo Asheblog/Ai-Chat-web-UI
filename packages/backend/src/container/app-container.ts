@@ -8,6 +8,7 @@ import {
   PrismaModelResolverRepository,
   type ModelResolverRepository,
 } from '../repositories/model-resolver-repository'
+import { SecretVaultService } from '../services/secret-vault'
 import { ConnectionService } from '../services/connections'
 import { ModelResolverService } from '../services/catalog/model-resolver-service'
 import { ModelCatalogService } from '../services/catalog/model-catalog-service'
@@ -173,11 +174,19 @@ export class AppContainer {
       })
     registry.register(SERVICE_KEYS.modelResolverService, this.modelResolverService)
 
+    let secretVault: SecretVaultService
+    try {
+      secretVault = new SecretVaultService()
+    } catch (error) {
+      log.error('Secret Vault 初始化失败，请设置 SECRET_VAULT_MASTER_KEY。', error)
+      throw error
+    }
+
     this.connectionService =
       deps.connectionService ??
       new ConnectionService({
         repository: this.connectionRepository,
-        encryptApiKey: AuthUtils.encryptApiKey,
+        secretVault,
         refreshModelCatalog: refreshModelCatalogForConnection,
         verifyConnection,
         logger: log,

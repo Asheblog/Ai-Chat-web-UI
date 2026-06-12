@@ -21,7 +21,7 @@ export interface ImageGenerationResponseParams {
   connection: {
     id: number
     baseUrl: string
-    apiKey?: string | null
+    secretVaultId?: number | null
     provider: string
   }
   modelRawId: string
@@ -95,7 +95,7 @@ export async function createImageGenerationResponse(
           {
             id: connection.id,
             baseUrl: connection.baseUrl,
-            apiKey: connection.apiKey || undefined,
+            secretVaultId: connection.secretVaultId ?? null,
             provider: connection.provider,
           },
           modelRawId,

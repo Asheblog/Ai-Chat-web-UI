@@ -374,7 +374,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
         }),
       ])
 
-      const bindingBySkillId = new Map(bindings.map((binding: any) => [binding.skillId, binding]))
+      const bindingBySkillId = new Map<any, any>(bindings.map((binding: any) => [binding.skillId, binding]))
       const items = skills.map((skill: any) => {
         const binding = bindingBySkillId.get(skill.id)
         const defaultVersion = skill.defaultVersion

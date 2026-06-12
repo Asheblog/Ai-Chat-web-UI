@@ -7,6 +7,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { AuthUtils } from '../src/utils/auth';
+import { SecretVaultService } from '../src/services/secret-vault';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { syncBuiltinSkills } from '../src/modules/skills/builtin-skills';
@@ -223,29 +224,66 @@ async function initSetupState(params: { initialUserCount: number }) {
 
 async function createExampleSystemConnection() {
   const connCount = await prisma.connection.count({ where: { ownerUserId: null } })
-  if (connCount === 0) {
-    const exampleApiKey = process.env.EXAMPLE_SYSTEM_API_KEY;
-    const exampleBaseUrl = process.env.EXAMPLE_SYSTEM_API_URL;
-    if (exampleBaseUrl) {
-      await prisma.connection.create({
-        data: {
-          ownerUserId: null,
-          provider: 'openai',
-          baseUrl: exampleBaseUrl.replace(/\/$/, ''),
-          enable: true,
-          authType: exampleApiKey ? 'bearer' : 'none',
-          apiKey: exampleApiKey ? AuthUtils.encryptApiKey(exampleApiKey) : '',
-          prefixId: 'example',
-          connectionType: 'external',
-        },
-      })
-      console.log('✅ 示例系统连接创建完成')
-    } else {
-      console.log('ℹ️ 未提供示例连接配置，跳过示例系统连接创建')
-    }
-  } else {
+  if (connCount > 0) {
     console.log('✅ 已存在系统连接，跳过示例创建')
+    return
   }
+
+  const exampleApiKey = process.env.EXAMPLE_SYSTEM_API_KEY
+  const exampleBaseUrl = process.env.EXAMPLE_SYSTEM_API_URL
+  if (!exampleBaseUrl) {
+    console.log('ℹ️ 未提供示例连接配置，跳过示例系统连接创建')
+    return
+  }
+
+  // Create connection first without secretVaultId (start with authType='none' to avoid
+  // broken bearer connection if Secret Vault later fails)
+  const connection = await prisma.connection.create({
+    data: {
+      ownerUserId: null,
+      provider: 'openai',
+      baseUrl: exampleBaseUrl.replace(/\/$/, ''),
+      enable: true,
+      authType: 'none',
+      secretVaultId: null,
+      prefixId: 'example',
+      connectionType: 'external',
+    },
+  })
+
+  let secretVaultId: number | null = null
+
+  if (exampleApiKey) {
+    // Must have SECRET_VAULT_MASTER_KEY for bearer connections
+    try {
+      const vault = new SecretVaultService()
+      const createdSecret = await vault.createSecret({
+        scope: 'system',
+        scopeId: 'system',
+        kind: 'api_key',
+        label: 'Example Key',
+        value: exampleApiKey,
+        refId: String(connection.id),
+        refType: 'connection',
+      })
+      secretVaultId = createdSecret.id
+    } catch (error) {
+      // Clean up the connection we just created
+      await prisma.connection.delete({ where: { id: connection.id } }).catch(() => {})
+      console.error('❌ 示例 API Key 已配置但 Secret Vault 不可用。请设置 SECRET_VAULT_MASTER_KEY。')
+      throw error // fail closed — don't leave broken bearer connection
+    }
+  }
+
+  // Persist secretVaultId and switch authType to bearer if we have a secret
+  if (secretVaultId) {
+    await prisma.connection.update({
+      where: { id: connection.id },
+      data: { secretVaultId, authType: 'bearer' },
+    })
+  }
+
+  console.log('✅ 示例系统连接创建完成')
 }
 
 async function initBuiltinSkills() {

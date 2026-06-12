@@ -16,9 +16,10 @@ import type { BattleUploadImage } from '@aichat/shared/battle-contract'
 import type { BattleModelInput, BattleModelSkills } from './battle-types'
 import { safeParseJson } from './battle-serialization'
 import { createSkillRegistry } from '../../modules/skills/skill-registry'
-import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills } from '../../modules/skills/types'
+import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../modules/skills/types'
 import { createLogger } from '../../utils/logger'
 import { computeCapabilities } from '../../utils/providers'
+import type { McpService } from '../../services/mcp/mcp-service'
 
 export interface BattleExecutionContext {
   checkRunCancelled: () => void
@@ -41,6 +42,7 @@ export interface BattleExecutionContext {
 export interface BattleExecutorDeps {
   requestBuilder?: ChatRequestBuilder
   requester?: ProviderRequesterType
+  mcpService?: McpService
 }
 
 const extractJsonObject = (raw: string) => {
@@ -129,11 +131,13 @@ const normalizeMessagesForProviderCompatibility = (messages: unknown): unknown =
 export class BattleExecutor {
   private requestBuilder: ChatRequestBuilder
   private requester: ProviderRequesterType
+  private mcpService?: McpService
   private logger = createLogger('BattleExecutor')
 
   constructor(deps: BattleExecutorDeps = {}) {
     this.requestBuilder = deps.requestBuilder ?? new ChatRequestBuilder()
     this.requester = deps.requester ?? new ProviderRequester()
+    this.mcpService = deps.mcpService
   }
 
   async executeModel(params: {
@@ -237,7 +241,7 @@ export class BattleExecutor {
     })
     this.normalizePreparedRequest(prepared)
 
-    if (effectiveSkills.enabled.length > 0) {
+    if ((effectiveSkills.enabled ?? []).length > 0) {
       return this.executeWithTools(
         prepared,
         {
@@ -601,10 +605,11 @@ export class BattleExecutor {
 
     const sysMap = prepared.systemSettings
     const toolRegistry = await createSkillRegistry({
-      requestedSkills: toolFlags.skills,
+      requestedSkills: toolFlags.skills as RequestedSkillsPayload,
       sessionId: 0,
       actorUserId: context.actorUserId ?? null,
       battleRunId: context.battleRunId ?? null,
+      mcpService: this.mcpService,
       builtins: {
         webSearch: toolFlags.webSearchActive ? toolFlags.webSearchConfig : null,
         python: toolFlags.pythonActive ? toolFlags.pythonConfig : null,

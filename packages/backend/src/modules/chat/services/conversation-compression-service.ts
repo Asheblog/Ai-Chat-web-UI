@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
 import { Tokenizer } from '../../../utils/tokenizer'
 import { resolveContextLimit as defaultResolveContextLimit } from '../../../utils/context-window'
-import { AuthUtils as defaultAuthUtils } from '../../../utils/auth'
+import type { SecretVaultService } from '../../../services/secret-vault'
 import {
   buildHeaders,
   type AuthType,
@@ -46,7 +46,7 @@ export interface CompressionCandidateSummary {
 export interface ConversationCompressionServiceDeps {
   prisma?: PrismaClient
   resolveContextLimit?: typeof defaultResolveContextLimit
-  authUtils?: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
+  secretVault?: SecretVaultService
   fetchFn?: typeof fetch
 }
 
@@ -58,13 +58,13 @@ const MIN_CONTEXT_WINDOW = 1024
 export class ConversationCompressionService {
   private prisma: PrismaClient
   private resolveContextLimit: typeof defaultResolveContextLimit
-  private authUtils: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
+  private secretVault?: SecretVaultService
   private fetchFn: typeof fetch
 
   constructor(deps: ConversationCompressionServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.resolveContextLimit = deps.resolveContextLimit ?? defaultResolveContextLimit
-    this.authUtils = deps.authUtils ?? defaultAuthUtils
+    this.secretVault = deps.secretVault
     this.fetchFn = deps.fetchFn ?? fetch
   }
 
@@ -450,10 +450,15 @@ export class ConversationCompressionService {
       stream: false,
     })
 
+    let decryptedKey = ''
+    if (authType === 'bearer' && (params.session.connection as any)?.secretVaultId && this.secretVault) {
+      decryptedKey = await this.secretVault.decryptById((params.session.connection as any).secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+    }
+
     const headers = await buildHeaders(
       provider,
       authType,
-      this.authUtils.decryptApiKey(params.session.connection?.apiKey || ''),
+      decryptedKey,
       this.parseHeadersJson(params.session.connection?.headersJson),
     )
 

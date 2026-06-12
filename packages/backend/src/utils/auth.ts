@@ -1,10 +1,8 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import CryptoJS from 'crypto-js';
 import type { JWTPayload, AuthPayload } from '../types';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'aichat-encryption-key-2025';
 
 export class AuthUtils {
   // 密码哈希
@@ -52,17 +50,6 @@ export class AuthUtils {
     }
 
     return parts[1];
-  }
-
-  // 加密API Key
-  static encryptApiKey(apiKey: string): string {
-    return CryptoJS.AES.encrypt(apiKey, ENCRYPTION_KEY).toString();
-  }
-
-  // 解密API Key
-  static decryptApiKey(encryptedApiKey: string): string {
-    const bytes = CryptoJS.AES.decrypt(encryptedApiKey, ENCRYPTION_KEY);
-    return bytes.toString(CryptoJS.enc.Utf8);
   }
 
   // 验证用户名格式

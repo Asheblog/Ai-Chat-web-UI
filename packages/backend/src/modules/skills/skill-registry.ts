@@ -6,6 +6,8 @@ import { resolveSkillPolicy } from './skill-policy-engine'
 import { skillApprovalService } from './skill-approval-service'
 import { executeSkillRuntime } from './runtime-adapters'
 import { normalizeRequestedSkills, type RequestedSkillsPayload, type SkillManifest, type SkillRiskLevel } from './types'
+import { McpToolAdapter } from '../../services/mcp/mcp-tool-adapter'
+import type { McpService } from '../../services/mcp/mcp-service'
 
 interface InstalledSkillHandlerOptions {
   prisma: typeof defaultPrisma
@@ -464,6 +466,7 @@ export interface CreateSkillRegistryParams {
   actorUserId?: number | null
   battleRunId?: number | null
   allowDynamicRuntime?: boolean
+  mcpService?: McpService
 }
 
 export async function createSkillRegistry(params: CreateSkillRegistryParams): Promise<ToolHandlerRegistry> {
@@ -471,6 +474,14 @@ export async function createSkillRegistry(params: CreateSkillRegistryParams): Pr
   const requested = normalizeRequestedSkills(params.requestedSkills)
   const registry = createToolHandlerRegistry(params.builtins)
   const allowDynamicRuntime = params.allowDynamicRuntime !== false
+
+  // Register MCP adapter if available
+  if (params.mcpService && params.sessionId != null) {
+    const mcpAdapter = new McpToolAdapter(params.mcpService)
+    registry.register(mcpAdapter)
+    // Pre-load tool definitions for this session
+    await mcpAdapter.getToolDefinitions(params.sessionId)
+  }
 
   if (!allowDynamicRuntime) {
     return registry

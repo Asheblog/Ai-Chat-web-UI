@@ -18,6 +18,7 @@ import {
 } from '@/features/chat/composer'
 import type { ComposerImage, WorkspaceFile } from '@/features/chat/composer'
 import { useSkillsSelection } from './use-skills-selection'
+import { useMcpSessionBindings } from './use-mcp-session-bindings'
 import { useSendCommand } from './use-send-command'
 import { useScrollPersistence } from './use-scroll-persistence'
 
@@ -120,6 +121,14 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   }, [modelsCount, fetchModels])
 
   const { enabledExtraSkills, skillOptions, toggleSkillOption } = useSkillsSelection(currentSession?.id ?? null)
+  const {
+    mcpGlobalEnabled,
+    connectionOptions: mcpConnectionOptions,
+    sessionTools: mcpSessionTools,
+    loading: mcpLoading,
+    error: mcpError,
+    toggleBinding: onToggleMcpBinding,
+  } = useMcpSessionBindings(currentSession?.id ?? null, systemSettings)
 
   const activeModel = useMemo(() => {
     if (!currentSession) return null
@@ -456,6 +465,12 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     pythonToolDisabledNote,
     skillOptions,
     toggleSkillOption,
+    mcpGlobalEnabled,
+    mcpConnectionOptions,
+    mcpSessionTools,
+    mcpLoading,
+    mcpError,
+    onToggleMcpBinding,
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,

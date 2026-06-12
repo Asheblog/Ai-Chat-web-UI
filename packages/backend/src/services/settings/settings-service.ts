@@ -376,6 +376,7 @@ export class SettingsService {
         20,
         4,
       ),
+      mcp_global_enabled: this.parseBoolean(settingsObj.mcp_global_enabled, process.env.MCP_GLOBAL_ENABLED || 'true'),
       python_tool_enable: this.parseBoolean(settingsObj.python_tool_enable, process.env.PYTHON_TOOL_ENABLE || 'false'),
       chat_dynamic_skill_runtime_enabled: this.parseBoolean(
         settingsObj.chat_dynamic_skill_runtime_enabled,
@@ -492,6 +493,7 @@ export class SettingsService {
         web_search_auto_bilingual: formatted.web_search_auto_bilingual,
         web_search_auto_bilingual_mode: formatted.web_search_auto_bilingual_mode,
         web_search_auto_read_parallelism: formatted.web_search_auto_read_parallelism,
+        mcp_global_enabled: formatted.mcp_global_enabled,
         python_tool_enable: formatted.python_tool_enable,
         chat_dynamic_skill_runtime_enabled: formatted.chat_dynamic_skill_runtime_enabled,
         assistant_avatar_url: formatted.assistant_avatar_url,
@@ -598,6 +600,7 @@ export class SettingsService {
       SYSTEM_SETTINGS_FIELD_MAP.webSearchAutoBilingual,
       SYSTEM_SETTINGS_FIELD_MAP.pythonToolEnable,
       SYSTEM_SETTINGS_FIELD_MAP.chatDynamicSkillRuntimeEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.mcpGlobalEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceDefaultOn,
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceAdminOnly,

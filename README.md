@@ -173,7 +173,8 @@ Copy-Item .env.example .env
 | 变量 | 说明 |
 | --- | --- |
 | `JWT_SECRET` | 必改，登录态签名密钥 |
-| `ENCRYPTION_KEY` | 建议设置，连接密钥加密 |
+| `SECRET_VAULT_MASTER_KEY` | 必填！Secret Vault 主密钥，使用 `openssl rand -hex 32` 生成 |
+| `ENCRYPTION_KEY` | 已废弃，请使用 SECRET_VAULT_MASTER_KEY |
 | `WORKSPACE_ARTIFACT_SIGNING_SECRET` | 建议设置，artifact 下载签名 |
 | `CORS_ORIGIN` | 改成你的实际访问地址 |
 

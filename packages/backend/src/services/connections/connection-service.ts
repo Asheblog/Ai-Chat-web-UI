@@ -18,6 +18,7 @@ import {
   type AuthType,
   type ProviderType,
 } from '../../utils/providers'
+import type { SecretVaultService as ISecretVaultService } from '../secret-vault'
 
 export class ConnectionServiceError extends Error {
   statusCode: number
@@ -33,6 +34,7 @@ type VendorType = 'deepseek' | 'openai_interleave'
 
 type TagItem = { name: string }
 
+/** 内部规范化后的 API Key 条目 —— apiKey 仅作为写入输入，不保存到数据库 */
 type NormalizedApiKeyPayload = {
   id?: number
   apiKeyLabel: string | null
@@ -50,8 +52,7 @@ type GroupedConnectionRows = {
 export interface ConnectionServiceDeps {
   prisma?: PrismaClient
   repository?: ConnectionRepository
-  encryptApiKey?: (value: string) => string
-  decryptApiKey?: (value: string) => string
+  secretVault?: ISecretVaultService
   refreshModelCatalog?: (connection: Connection) => Promise<unknown>
   fetchModelsForConnection?: (config: ConnectionConfig) => Promise<CatalogItem[]>
   verifyConnection?: (config: {
@@ -72,6 +73,7 @@ export interface ConnectionServiceDeps {
   logger?: Pick<typeof console, 'warn' | 'error'>
 }
 
+/** 前端 API 输入：apiKey 作为写入/验证输入 */
 export interface ConnectionApiKeyPayload {
   id?: number
   apiKeyLabel?: string
@@ -290,8 +292,7 @@ const compareDatesDesc = (a: string, b: string) => {
 
 export class ConnectionService {
   private repository: ConnectionRepository
-  private encryptApiKey: (value: string) => string
-  private decryptApiKey: (value: string) => string
+  private secretVault?: ISecretVaultService
   private refreshModelCatalog: (connection: Connection) => Promise<unknown>
   private fetchModelsForConnection: (config: ConnectionConfig) => Promise<CatalogItem[]>
   private verifyConnection?: ConnectionServiceDeps['verifyConnection']
@@ -300,8 +301,7 @@ export class ConnectionService {
   constructor(deps: ConnectionServiceDeps = {}) {
     const prisma = deps.prisma ?? defaultPrisma
     this.repository = deps.repository ?? new PrismaConnectionRepository(prisma)
-    this.encryptApiKey = deps.encryptApiKey ?? ((value) => value)
-    this.decryptApiKey = deps.decryptApiKey ?? ((value) => value)
+    this.secretVault = deps.secretVault
     this.refreshModelCatalog = deps.refreshModelCatalog ?? (async () => {})
     this.fetchModelsForConnection = deps.fetchModelsForConnection ?? defaultFetchModelsForConnection
     this.verifyConnection = deps.verifyConnection
@@ -314,15 +314,26 @@ export class ConnectionService {
   }
 
   async createSystemConnection(payload: ConnectionPayload): Promise<ConnectionGroupView> {
-    const normalizedKeys = this.normalizeApiKeys(payload.apiKeys)
+    const authType = payload.authType ?? 'bearer'
+    const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
     const shared = this.buildSharedCreateData(payload)
     const created: Connection[] = []
 
     for (const key of normalizedKeys) {
+      // Step 1: create connection record (secretVaultId = null initially)
       const connection = await this.repository.createSystemConnection({
         ...shared,
-        ...this.buildApiKeyCreateData(key, payload.authType ?? 'bearer'),
+        enable: key.enable,
+        apiKeyLabel: key.apiKeyLabel,
+        modelIdsJson: serializeStringArray(key.modelIds),
       })
+
+      // Step 2: if bearer, create Secret Vault entry and persist secretVaultId
+      const svId = await this.createAndPersistVaultSecret(connection.id, key, authType)
+      if (svId != null) {
+        ;(connection as any).secretVaultId = svId
+      }
+
       created.push(connection)
       await this.refreshCatalogSafe(connection, 'create')
     }
@@ -331,9 +342,10 @@ export class ConnectionService {
   }
 
   async updateSystemConnection(id: number, payload: ConnectionPayload): Promise<ConnectionGroupView> {
+    const authType = payload.authType ?? 'bearer'
     const group = await this.requireGroupById(id)
     const existingById = new Map(group.rows.map((row) => [row.id, row]))
-    const normalizedKeys = this.normalizeApiKeys(payload.apiKeys)
+    const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
     const shared = this.buildSharedUpdateData(payload, group.rows[0])
     const sharedCreate = this.buildSharedCreateData(payload, parseRecord(group.rows[0]?.headersJson))
     const touched: Connection[] = []
@@ -346,19 +358,40 @@ export class ConnectionService {
           throw new ConnectionServiceError(`API Key #${key.id} 不属于当前端点`, 400)
         }
         seenIds.add(existing.id)
+
         const connection = await this.repository.updateSystemConnection(existing.id, {
           ...shared,
-          ...this.buildApiKeyUpdateData(key, payload.authType ?? 'bearer', existing),
+          enable: key.enable,
+          apiKeyLabel: key.apiKeyLabel,
+          modelIdsJson: serializeStringArray(key.modelIds),
         })
+
+        // Replace or preserve Vault secret
+        if (authType === 'bearer') {
+          const resolvedVaultId = await this.replaceOrPreserveVaultSecret(connection.id, key, existing)
+          if (resolvedVaultId != null) {
+            ;(connection as any).secretVaultId = resolvedVaultId
+          }
+        }
+
         touched.push(connection)
         await this.refreshCatalogSafe(connection, 'update')
         continue
       }
 
+      // New key within an update
       const connection = await this.repository.createSystemConnection({
         ...sharedCreate,
-        ...this.buildApiKeyCreateData(key, payload.authType ?? 'bearer'),
+        enable: key.enable,
+        apiKeyLabel: key.apiKeyLabel,
+        modelIdsJson: serializeStringArray(key.modelIds),
       })
+
+      const svId2 = await this.createAndPersistVaultSecret(connection.id, key, authType)
+      if (svId2 != null) {
+        ;(connection as any).secretVaultId = svId2
+      }
+
       touched.push(connection)
       await this.refreshCatalogSafe(connection, 'create')
     }
@@ -386,20 +419,39 @@ export class ConnectionService {
       throw new ConnectionServiceError('verifyConnection dependency not provided', 500)
     }
 
-    const normalizedKeys = this.normalizeApiKeys(payload.apiKeys)
+    const authType = payload.authType ?? 'bearer'
+    const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
     const existingById = await this.loadExistingRows(normalizedKeys)
 
     const results = await Promise.all(
       normalizedKeys.map(async (key) => {
         const existing = key.id != null ? existingById.get(key.id) ?? null : null
-        const plainApiKey = this.resolvePlainApiKey({
-          authType: payload.authType ?? 'bearer',
-          apiKeyInput: key.apiKey,
-          existing,
-          requireOnMissingExisting: true,
-        })
+        const hasStoredApiKey = Boolean(
+          existing?.secretVaultId,
+        )
+
+        // Resolve plainApiKey
+        let plainApiKey: string
+        try {
+          plainApiKey = await this.resolvePlainApiKeyForVerify({
+            authType,
+            apiKeyInput: key.apiKey,
+            existing,
+          })
+        } catch (error) {
+          return {
+            id: key.id,
+            apiKeyLabel: key.apiKeyLabel,
+            apiKeyMasked: key.apiKey ? maskApiKey(key.apiKey) : null,
+            hasStoredApiKey,
+            enable: key.enable,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            models: [],
+          } satisfies VerifyConnectionKeyResult
+        }
+
         const apiKeyMasked = maskApiKey(plainApiKey)
-        const hasStoredApiKey = Boolean((key.apiKey && key.apiKey.trim()) || existing?.apiKey)
 
         try {
           await verifyConnection({
@@ -407,7 +459,7 @@ export class ConnectionService {
             vendor: payload.vendor,
             baseUrl: payload.baseUrl,
             enable: true,
-            authType: payload.authType ?? 'bearer',
+            authType,
             apiKey: plainApiKey || undefined,
             headers: payload.headers ?? (existing ? parseRecord(existing.headersJson) : undefined),
             azureApiVersion: payload.azureApiVersion,
@@ -426,7 +478,7 @@ export class ConnectionService {
               provider: payload.provider,
               baseUrl: payload.baseUrl,
               enable: true,
-              authType: payload.authType ?? 'bearer',
+              authType,
               apiKey: plainApiKey || undefined,
               headers: payload.headers ?? (existing ? parseRecord(existing.headersJson) : undefined),
               azureApiVersion: payload.azureApiVersion,
@@ -483,18 +535,29 @@ export class ConnectionService {
     }
   }
 
-  private normalizeApiKeys(input: ConnectionApiKeyPayload[]): NormalizedApiKeyPayload[] {
+  // --- private helpers ---
+
+  private normalizeApiKeys(
+    input: ConnectionApiKeyPayload[],
+    authType: AuthType,
+  ): NormalizedApiKeyPayload[] {
     if (!Array.isArray(input) || input.length === 0) {
       throw new ConnectionServiceError('至少需要一个 API Key 条目', 400)
     }
 
-    return input.map((item, index) => ({
-      id: Number.isFinite(item?.id) ? Number(item.id) : undefined,
-      apiKeyLabel: normalizeOptionalString(item?.apiKeyLabel) || `Key ${index + 1}`,
-      apiKey: typeof item?.apiKey === 'string' ? item.apiKey.trim() : undefined,
-      modelIds: normalizeStringArray(item?.modelIds),
-      enable: item?.enable ?? true,
-    }))
+    return input.map((item, index) => {
+      const apiKey = typeof item?.apiKey === 'string' ? item.apiKey.trim() : undefined
+      if (authType === 'bearer' && !apiKey && item?.id == null) {
+        throw new ConnectionServiceError(`${item?.apiKeyLabel || `Key ${index + 1}`} 的 apiKey 不能为空`, 400)
+      }
+      return {
+        id: Number.isFinite(item?.id) ? Number(item.id) : undefined,
+        apiKeyLabel: normalizeOptionalString(item?.apiKeyLabel) || `Key ${index + 1}`,
+        apiKey,
+        modelIds: normalizeStringArray(item?.modelIds),
+        enable: item?.enable ?? true,
+      }
+    })
   }
 
   private buildSharedCreateData(
@@ -532,83 +595,102 @@ export class ConnectionService {
     }
   }
 
-  private buildApiKeyCreateData(
-    payload: NormalizedApiKeyPayload,
+  /** Create Vault secret and persist secretVaultId on connection. Returns the secretVaultId. */
+  private async createAndPersistVaultSecret(
+    connectionId: number,
+    key: NormalizedApiKeyPayload,
     authType: AuthType,
-  ): Pick<ConnectionCreateData, 'enable' | 'apiKey' | 'apiKeyLabel' | 'modelIdsJson'> {
-    return {
-      enable: payload.enable,
-      apiKey: this.resolveStoredApiKeyForCreate(payload, authType),
-      apiKeyLabel: payload.apiKeyLabel,
-      modelIdsJson: serializeStringArray(payload.modelIds),
+  ): Promise<number | null> {
+    if (authType !== 'bearer') return null
+
+    if (!this.secretVault) {
+      throw new ConnectionServiceError(
+        'Secret Vault 未配置。bearer 认证类型的连接需要 Secret Vault 来安全存储 API Key。' +
+          '请设置 SECRET_VAULT_MASTER_KEY 环境变量。',
+        500,
+      )
     }
+    if (!key.apiKey) {
+      throw new ConnectionServiceError(`${key.apiKeyLabel || 'API Key'} 不能为空`, 400)
+    }
+
+    const created = await this.secretVault.createSecret({
+      scope: 'system',
+      scopeId: 'system',
+      kind: 'api_key',
+      label: key.apiKeyLabel || `Connection #${connectionId}`,
+      value: key.apiKey,
+      refId: String(connectionId),
+      refType: 'connection',
+    })
+
+    await this.repository.updateSystemConnection(connectionId, { secretVaultId: created.id })
+    return created.id
   }
 
-  private buildApiKeyUpdateData(
-    payload: NormalizedApiKeyPayload,
-    authType: AuthType,
+  /** Replace Vault secret if new apiKey provided; preserve existing; throw if neither. Returns the resolved secretVaultId. */
+  private async replaceOrPreserveVaultSecret(
+    connectionId: number,
+    key: NormalizedApiKeyPayload,
     existing: Connection,
-  ): Pick<ConnectionUpdateData, 'enable' | 'apiKey' | 'apiKeyLabel' | 'modelIdsJson'> {
-    return {
-      enable: payload.enable,
-      apiKey: this.resolveStoredApiKeyForUpdate(payload, authType, existing),
-      apiKeyLabel: payload.apiKeyLabel,
-      modelIdsJson: serializeStringArray(payload.modelIds),
+  ): Promise<number | null> {
+    if (!this.secretVault) {
+      if (existing.secretVaultId) return existing.secretVaultId // no vault but existing ref → preserve
+      throw new ConnectionServiceError(
+        'Secret Vault 未配置且连接无已有密钥引用。bearer 认证需要 Secret Vault。',
+        500,
+      )
     }
+
+    if (key.apiKey) {
+      // Replace: delete old, create new, update ref
+      if (existing.secretVaultId) {
+        await this.secretVault.deleteSecret(existing.secretVaultId).catch(() => {})
+      }
+      const created = await this.secretVault.createSecret({
+        scope: 'system',
+        scopeId: 'system',
+        kind: 'api_key',
+        label: key.apiKeyLabel || `Connection #${connectionId}`,
+        value: key.apiKey,
+        refId: String(connectionId),
+        refType: 'connection',
+      })
+      await this.repository.updateSystemConnection(connectionId, { secretVaultId: created.id })
+      return created.id
+    }
+
+    // No new apiKey — preserve existing secretVaultId
+    if (existing.secretVaultId) return existing.secretVaultId
+
+    throw new ConnectionServiceError(
+      `${key.apiKeyLabel || 'API Key'} 不能为空：未提供 apiKey 且连接无已存储的密钥`,
+      400,
+    )
   }
 
-  private resolveStoredApiKeyForCreate(payload: NormalizedApiKeyPayload, authType: AuthType) {
-    if (authType !== 'bearer') {
-      return ''
-    }
-    if (!payload.apiKey) {
-      throw new ConnectionServiceError(`${payload.apiKeyLabel || 'API Key'} 不能为空`, 400)
-    }
-    return this.encryptApiKey(payload.apiKey)
-  }
-
-  private resolveStoredApiKeyForUpdate(
-    payload: NormalizedApiKeyPayload,
-    authType: AuthType,
-    existing: Connection,
-  ) {
-    if (authType !== 'bearer') {
-      return ''
-    }
-    if (payload.apiKey) {
-      return this.encryptApiKey(payload.apiKey)
-    }
-    if (existing.apiKey) {
-      return existing.apiKey
-    }
-    throw new ConnectionServiceError(`${payload.apiKeyLabel || 'API Key'} 不能为空`, 400)
-  }
-
-  private resolvePlainApiKey(params: {
+  /** Resolve apiKey for verify: use payload plaintext for new keys, decrypt from Vault for existing. */
+  private async resolvePlainApiKeyForVerify(params: {
     authType: AuthType
     apiKeyInput?: string
     existing?: Connection | null
-    requireOnMissingExisting: boolean
-  }) {
+  }): Promise<string> {
     if (params.authType !== 'bearer') return ''
+
+    // New key: use the plaintext apiKey from the verify payload
     if (params.apiKeyInput && params.apiKeyInput.trim()) {
       return params.apiKeyInput.trim()
     }
-    if (params.existing?.apiKey) {
-      return this.decryptSafely(params.existing.apiKey)
-    }
-    if (params.requireOnMissingExisting) {
-      throw new ConnectionServiceError('存在未填写的新 API Key，无法验证', 400)
-    }
-    return ''
-  }
 
-  private decryptSafely(value: string) {
-    try {
-      return this.decryptApiKey(value)
-    } catch {
-      return value
+    // Existing key: decrypt from Secret Vault
+    if (params.existing?.secretVaultId) {
+      if (!this.secretVault) {
+        throw new ConnectionServiceError('Secret Vault 未配置，无法解密已有密钥进行验证', 500)
+      }
+      return this.secretVault.decryptById(params.existing.secretVaultId)
     }
+
+    throw new ConnectionServiceError('存在未填写的新 API Key，无法验证', 400)
   }
 
   private async loadExistingRows(keys: NormalizedApiKeyPayload[]) {
@@ -703,12 +785,12 @@ export class ConnectionService {
       connectionType: (base.connectionType || 'external') as 'external' | 'local',
       defaultCapabilities: parseDefaultCapabilities(base.defaultCapabilitiesJson),
       apiKeys: sortedRows.map((row) => {
-        const plain = row.apiKey ? this.decryptSafely(row.apiKey) : ''
+        const hasKey = Boolean(row.secretVaultId)
         return {
           id: row.id,
           apiKeyLabel: normalizeOptionalString(row.apiKeyLabel) || `Key ${row.id}`,
-          apiKeyMasked: maskApiKey(plain),
-          hasStoredApiKey: Boolean(row.apiKey),
+          apiKeyMasked: hasKey ? '****' : null,
+          hasStoredApiKey: hasKey,
           modelIds: parseStringArray(row.modelIdsJson),
           enable: Boolean(row.enable),
           createdAt: row.createdAt.toISOString(),

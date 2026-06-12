@@ -7,7 +7,8 @@ import {
   resolveContextLimit as defaultResolveContextLimit,
 } from '../../../utils/context-window'
 import { cleanupExpiredChatImages as defaultCleanupExpiredChatImages } from '../../../utils/chat-images'
-import { AuthUtils as defaultAuthUtils } from '../../../utils/auth'
+import { SecretVaultService } from '../../../services/secret-vault'
+import { ConnectionServiceError } from '../../../services/connections/connection-service'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage'
 import {
   buildHeaders,
@@ -77,7 +78,7 @@ export interface ChatRequestBuilderDeps {
   resolveContextLimit?: typeof defaultResolveContextLimit
   resolveCompletionLimit?: typeof defaultResolveCompletionLimit
   cleanupExpiredChatImages?: typeof defaultCleanupExpiredChatImages
-  authUtils?: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
+  secretVault?: SecretVaultService
 }
 
 export class ChatRequestBuilder {
@@ -98,7 +99,7 @@ export class ChatRequestBuilder {
   private resolveContextLimit: typeof defaultResolveContextLimit
   private resolveCompletionLimit: typeof defaultResolveCompletionLimit
   private cleanupExpiredChatImages: typeof defaultCleanupExpiredChatImages
-  private authUtils: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
+  private secretVault?: SecretVaultService
   private readonly defaultSessionPromptTemplate = '你是一位乐于助人的AI助手。'
 
   constructor(deps: ChatRequestBuilderDeps = {}) {
@@ -107,7 +108,7 @@ export class ChatRequestBuilder {
     this.resolveContextLimit = deps.resolveContextLimit ?? defaultResolveContextLimit
     this.resolveCompletionLimit = deps.resolveCompletionLimit ?? defaultResolveCompletionLimit
     this.cleanupExpiredChatImages = deps.cleanupExpiredChatImages ?? defaultCleanupExpiredChatImages
-    this.authUtils = deps.authUtils ?? defaultAuthUtils
+    this.secretVault = deps.secretVault
   }
 
   async prepare(params: PrepareChatRequestParams): Promise<PreparedChatRequest> {
@@ -621,10 +622,16 @@ export class ChatRequestBuilder {
     const provider = params.session.connection.provider as ProviderType
     const baseUrl = params.session.connection.baseUrl.replace(/\/+$/, '')
     const extraHeaders = this.parseHeadersJson(params.session.connection.headersJson)
-    const decryptedKey =
-      params.session.connection.authType === 'bearer' && params.session.connection.apiKey
-        ? this.authUtils.decryptApiKey(params.session.connection.apiKey)
-        : undefined
+    let decryptedKey: string | undefined
+    if (params.session.connection.authType === 'bearer') {
+      if ((params.session.connection as any).secretVaultId && this.secretVault) {
+        decryptedKey = await this.secretVault.decryptById((params.session.connection as any).secretVaultId).catch(() => {
+          throw new ConnectionServiceError('无法解密连接密钥，Secret Vault 解密失败', 500)
+        })
+      } else {
+        throw new ConnectionServiceError('连接缺少 secretVaultId，无法获取 API Key', 400)
+      }
+    }
 
     const providerHeaders = await buildHeaders(
       provider,

@@ -25,6 +25,7 @@ import {
   KnowledgeBaseToolHandlerAdapter,
   kbToolNames,
 } from './knowledge-base-handler-adapter'
+import { McpToolAdapter } from '../../../services/mcp/mcp-tool-adapter'
 
 /**
  * 工具处理器注册表
@@ -49,6 +50,10 @@ export class ToolHandlerRegistry {
       for (const name of kbToolNames) {
         this.toolNameToHandler.set(name, handler)
       }
+    } else if (handler instanceof McpToolAdapter) {
+      // McpToolAdapter handles dynamic MCP tool names via canHandle
+      // Register the adapter keyed by handler.toolName for fallback
+      this.toolNameToHandler.set(handler.toolName, handler)
     } else {
       this.toolNameToHandler.set(handler.toolName, handler)
     }
@@ -58,14 +63,28 @@ export class ToolHandlerRegistry {
    * 获取处理器
    */
   getHandler(toolName: string): IToolHandler | undefined {
-    return this.toolNameToHandler.get(toolName)
+    const direct = this.toolNameToHandler.get(toolName)
+    if (direct) return direct
+    // Fallback: check MCP adapter's dynamic tools
+    for (const handler of this.handlers) {
+      if (handler instanceof McpToolAdapter && handler.canHandle(toolName)) {
+        return handler
+      }
+    }
+    return undefined
   }
 
   /**
    * 检查是否有对应处理器
    */
   hasHandler(toolName: string): boolean {
-    return this.toolNameToHandler.has(toolName)
+    if (this.toolNameToHandler.has(toolName)) return true
+    for (const handler of this.handlers) {
+      if (handler instanceof McpToolAdapter && handler.canHandle(toolName)) {
+        return true
+      }
+    }
+    return false
   }
 
   /**
@@ -96,6 +115,16 @@ export class ToolHandlerRegistry {
         }
         continue
       }
+      if (handler instanceof McpToolAdapter) {
+        // MCP tools are dynamic - adapter maintains a cache
+        for (const def of handler.getAllCachedDefinitions()) {
+          if (!addedNames.has(def.function.name)) {
+            definitions.push(def)
+            addedNames.add(def.function.name)
+          }
+        }
+        continue
+      }
       if (!addedNames.has(handler.toolName)) {
         definitions.push(handler.toolDefinition)
         addedNames.add(handler.toolName)
@@ -109,7 +138,15 @@ export class ToolHandlerRegistry {
    * 获取所有允许的工具名称
    */
   getAllowedToolNames(): Set<string> {
-    return new Set(this.toolNameToHandler.keys())
+    const names = new Set(this.toolNameToHandler.keys())
+    for (const handler of this.handlers) {
+      if (handler instanceof McpToolAdapter) {
+        for (const name of handler.getCachedToolNames()) {
+          names.add(name)
+        }
+      }
+    }
+    return names
   }
 
   /**
@@ -122,7 +159,16 @@ export class ToolHandlerRegistry {
     context: ToolCallContext
   ): Promise<ToolHandlerResult | null> {
     const handler = this.getHandler(toolName)
+
     if (!handler) {
+      return null
+    }
+
+    // For MCP tools, route to the adapter
+    if (handler instanceof McpToolAdapter) {
+      if (handler.canHandle(toolName)) {
+        return handler.handle(toolCall, args, context)
+      }
       return null
     }
 

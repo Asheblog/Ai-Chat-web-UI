@@ -8,6 +8,7 @@
  */
 
 import { BackendLogger as log } from '../../utils/logger'
+import { SecretVaultService } from '../secret-vault'
 import {
   generateImageOpenAI,
   ImageGenerationError,
@@ -19,20 +20,23 @@ export type ImageGenerationApiType = 'openai-compat' | 'gemini-generate'
 
 export interface ImageGenerationServiceDeps {
   logger?: Pick<typeof console, 'debug' | 'info' | 'warn' | 'error'>
+  secretVault?: SecretVaultService
 }
 
 export interface ConnectionInfo {
   id: number
   baseUrl: string
-  apiKey?: string
+  secretVaultId?: number | null
   provider: string
 }
 
 export class ImageGenerationService {
   private logger: Pick<typeof console, 'debug' | 'info' | 'warn' | 'error'>
+  private secretVault?: SecretVaultService
 
   constructor(deps: ImageGenerationServiceDeps = {}) {
     this.logger = deps.logger ?? log
+    this.secretVault = deps.secretVault
   }
 
   /**
@@ -40,12 +44,12 @@ export class ImageGenerationService {
    */
   getApiType(modelId: string, provider?: string): ImageGenerationApiType {
     const lowerId = modelId.toLowerCase()
-    
+
     // 如果是原生 Google GenAI 连接且模型名包含 gemini，使用 gemini-generate API
     if (provider === 'google_genai' && lowerId.includes('gemini')) {
       return 'gemini-generate'
     }
-    
+
     // 其他所有情况使用 OpenAI 兼容 API
     // 包括：OpenAI、Azure OpenAI、第三方代理（如 CLIProxyAPI）、Nano-GPT 等
     return 'openai-compat'
@@ -61,29 +65,35 @@ export class ImageGenerationService {
     options?: ImageGenerationOptions
   ): Promise<ImageGenerationResult> {
     const apiType = this.getApiType(modelId, connection.provider)
-    
+
     this.logger.info('[ImageGenerationService] Generating image', {
       connectionId: connection.id,
       model: modelId,
       apiType,
       promptLength: prompt.length,
     })
-    
+
+    // Resolve API key from Secret Vault
+    let apiKey = ''
+    if (connection.secretVaultId && this.secretVault) {
+      apiKey = await this.secretVault.decryptById(connection.secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+    }
+
     try {
       if (apiType === 'gemini-generate') {
         return await generateImageGemini({
           baseUrl: connection.baseUrl,
-          apiKey: connection.apiKey || '',
+          apiKey,
           model: modelId,
           prompt,
           inputImage: options?.inputImage,
         })
       }
-      
+
       // OpenAI 兼容 API
       return await generateImageOpenAI({
         baseUrl: connection.baseUrl,
-        apiKey: connection.apiKey || '',
+        apiKey,
         model: modelId,
         prompt,
         options,

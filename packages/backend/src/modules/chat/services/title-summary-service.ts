@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
-import { AuthUtils as defaultAuthUtils } from '../../../utils/auth'
+import type { SecretVaultService } from '../../../services/secret-vault'
 import { buildHeaders, type ProviderType, type AuthType } from '../../../utils/providers'
 import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { BackendLogger as log } from '../../../utils/logger'
@@ -35,18 +35,18 @@ export class TitleSummaryServiceError extends Error {
 
 export interface TitleSummaryServiceDeps {
   prisma?: PrismaClient
-  authUtils?: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
+  secretVault?: SecretVaultService
   fetchFn?: typeof fetch
 }
 
 export class TitleSummaryService {
   private prisma: PrismaClient
-  private authUtils: Pick<typeof defaultAuthUtils, 'decryptApiKey'>
+  private secretVault?: SecretVaultService
   private fetchFn: typeof fetch
 
   constructor(deps: TitleSummaryServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
-    this.authUtils = deps.authUtils ?? defaultAuthUtils
+    this.secretVault = deps.secretVault
     this.fetchFn = deps.fetchFn ?? fetch
   }
 
@@ -123,7 +123,10 @@ export class TitleSummaryService {
     const provider = connection.provider as ProviderType
     const endpoint = (connection.baseUrl || '').trim().replace(/\/+$/, '')
     const authType = connection.authType as AuthType
-    const apiKey = this.authUtils.decryptApiKey(connection.apiKey)
+    let apiKey = ''
+    if (authType === 'bearer' && (connection as any).secretVaultId && this.secretVault) {
+      apiKey = await this.secretVault.decryptById((connection as any).secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+    }
 
     if (!endpoint) {
       throw new TitleSummaryServiceError('Connection baseUrl is not configured', 400)

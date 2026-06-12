@@ -24,7 +24,7 @@ const baseSession = {
     baseUrl: 'https://api.example.com/v1',
     headersJson: null,
     authType: 'bearer',
-    apiKey: 'secret',
+    secretVaultId: 1,
     azureApiVersion: null,
   },
 }
@@ -48,7 +48,7 @@ const buildBuilder = () => {
   const resolveContextLimit = jest.fn()
   const resolveCompletionLimit = jest.fn()
   const cleanupExpiredChatImages = jest.fn(() => Promise.resolve())
-  const authUtils = { decryptApiKey: jest.fn(() => 'decoded') }
+  const secretVault = { decryptById: jest.fn(() => Promise.resolve('decoded')) }
 
   const builder = new ChatRequestBuilder({
     prisma: prisma as any,
@@ -56,7 +56,7 @@ const buildBuilder = () => {
     resolveContextLimit,
     resolveCompletionLimit,
     cleanupExpiredChatImages,
-    authUtils,
+    secretVault: secretVault as any,
   })
 
   return {
@@ -65,7 +65,7 @@ const buildBuilder = () => {
     resolveContextLimit,
     resolveCompletionLimit,
     cleanupExpiredChatImages,
-    authUtils,
+    secretVault,
     builder,
   }
 }

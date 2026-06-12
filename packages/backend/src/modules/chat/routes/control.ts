@@ -5,9 +5,10 @@ import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse } from '../../../types';
-import { AuthUtils } from '../../../utils/auth';
 import type { ProviderType } from '../../../utils/providers';
 import { convertChatCompletionsRequestToResponses } from '../../../utils/openai-responses';
+import type { SecretVaultService } from '../../../services/secret-vault';
+import { ConnectionServiceError } from '../../../services/connections/connection-service';
 
 const toContentfulStatus = (status: number): ContentfulStatusCode => {
   if (status === 101 || status === 204 || status === 205 || status === 304) {
@@ -21,10 +22,11 @@ const toContentfulStatus = (status: number): ContentfulStatusCode => {
 
 export interface ChatControlRoutesDeps {
   prisma: PrismaClient
+  secretVault?: SecretVaultService
 }
 
 export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesDeps) => {
-  const { prisma } = deps
+  const { prisma, secretVault } = deps
   router.post('/stop', actorMiddleware, zValidator('json', z.object({
     sessionId: z.number().int().positive(),
   })), async (c) => {
@@ -130,7 +132,10 @@ export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesD
 
       const baseUrl = conn.baseUrl.replace(/\/+$/, '');
       const provider = conn.provider as ProviderType;
-      const decryptedApiKey = conn.authType === 'bearer' && conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : '';
+      let decryptedApiKey = '';
+      if (conn.authType === 'bearer' && conn.secretVaultId && secretVault) {
+        decryptedApiKey = await secretVault.decryptById(conn.secretVaultId).catch(() => { throw new ConnectionServiceError('无法解密 API Key：Secret Vault 解密失败', 500) })
+      }
       const extraHeaders = conn.headersJson ? JSON.parse(conn.headersJson) : {};
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',

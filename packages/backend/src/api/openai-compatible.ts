@@ -6,9 +6,9 @@ import { randomUUID } from 'node:crypto';
 
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import { getModelResolverService } from '../utils/model-resolver';
-import { AuthUtils } from '../utils/auth';
 import { buildHeaders, type ProviderType } from '../utils/providers';
 import { buildChatProviderRequest, flattenMessageContent } from '../utils/chat-provider';
+import type { SecretVaultService } from '../services/secret-vault';
 import { TaskTraceRecorder, shouldEnableTaskTrace, type TaskTraceStatus } from '../utils/task-trace';
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../utils/trace-helpers';
 import { truncateString } from '../utils/task-trace';
@@ -30,6 +30,7 @@ export interface OpenAICompatDeps {
   modelResolverService: ReturnType<typeof getModelResolverService>
   messageService: OpenAICompatMessageService
   fetchImpl?: typeof fetch
+  secretVault?: SecretVaultService
 }
 
 
@@ -146,15 +147,18 @@ interface ProviderRequestOptions {
   rawModelId: string;
   provider: ProviderType;
   body: any;
+  secretVault?: SecretVaultService;
 }
 
 async function buildProviderRequest(opts: ProviderRequestOptions) {
   const baseUrl = opts.connection.baseUrl.replace(/\/+$/, '');
   const extraHeaders = opts.connection.headersJson ? JSON.parse(opts.connection.headersJson) : undefined;
-  const decryptedKey =
-    opts.connection.authType === 'bearer' && opts.connection.apiKey
-      ? AuthUtils.decryptApiKey(opts.connection.apiKey)
-      : undefined;
+  let decryptedKey: string | undefined;
+  if (opts.connection.authType === 'bearer') {
+    if (opts.connection.secretVaultId && opts.secretVault) {
+      decryptedKey = await opts.secretVault.decryptById(opts.connection.secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+    }
+  }
 
   const headers = await buildHeaders(
     opts.provider as any,
@@ -180,15 +184,18 @@ interface EmbeddingsRequestOptions {
   rawModelId: string;
   provider: ProviderType;
   body: z.infer<typeof embeddingsSchema>;
+  secretVault?: SecretVaultService;
 }
 
 async function buildEmbeddingsRequest(opts: EmbeddingsRequestOptions) {
   const baseUrl = opts.connection.baseUrl.replace(/\/+$/, '');
   const extraHeaders = opts.connection.headersJson ? JSON.parse(opts.connection.headersJson) : undefined;
-  const decryptedKey =
-    opts.connection.authType === 'bearer' && opts.connection.apiKey
-      ? AuthUtils.decryptApiKey(opts.connection.apiKey)
-      : undefined;
+  let decryptedKey: string | undefined;
+  if (opts.connection.authType === 'bearer') {
+    if (opts.connection.secretVaultId && opts.secretVault) {
+      decryptedKey = await opts.secretVault.decryptById(opts.connection.secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+    }
+  }
 
   const headers = await buildHeaders(
     opts.provider as any,
@@ -359,6 +366,7 @@ function formatMessage(message: MessageEntity) {
 export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const messageService = deps.messageService;
+  const secretVault = deps.secretVault;
 
   const openaiCompat = new Hono();
 
@@ -442,6 +450,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
             ...body,
             messages: cloneMessages(body.messages),
           },
+          secretVault,
         });
 
         traceRecorder.log('model:resolved', {
@@ -743,6 +752,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
             ...chatBody,
             messages: cloneMessages(messages),
           },
+          secretVault,
         });
 
         const executor = (signal: AbortSignal) =>
@@ -986,6 +996,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
           rawModelId: resolved.rawModelId,
           provider,
           body,
+          secretVault,
         });
 
         const executor = (signal: AbortSignal) =>

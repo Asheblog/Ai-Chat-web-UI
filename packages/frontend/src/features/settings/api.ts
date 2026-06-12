@@ -311,6 +311,7 @@ export const getSystemSettings = async () => {
     }
     return 4
   })()
+  const mcpGlobalEnabled = (raw.mcp_global_enabled ?? true) as boolean
   const assistantAvatarUrl = (() => {
     const value = raw.assistant_avatar_url
     if (typeof value === 'string' && value.trim().length > 0) return value
@@ -448,6 +449,7 @@ export const getSystemSettings = async () => {
       pythonToolMaxOutputChars,
       pythonToolMaxSourceChars,
       agentMaxToolIterations,
+      mcpGlobalEnabled,
       assistantAvatarUrl,
       chatSystemPrompt,
       taskTraceEnabled,
@@ -631,6 +633,7 @@ export const updateSystemSettings = async (
     const clamped = Math.max(0, Math.min(20, Math.round(rest.agentMaxToolIterations)))
     patch.agentMaxToolIterations = clamped
   }
+  if (typeof rest.mcpGlobalEnabled === 'boolean') patch.mcpGlobalEnabled = rest.mcpGlobalEnabled
   if (typeof rest.webSearchApiKeyTavily === 'string') patch.webSearchApiKeyTavily = rest.webSearchApiKeyTavily
   if (typeof rest.webSearchApiKeyBrave === 'string') patch.webSearchApiKeyBrave = rest.webSearchApiKeyBrave
   if (typeof rest.webSearchApiKeyMetaso === 'string') patch.webSearchApiKeyMetaso = rest.webSearchApiKeyMetaso

@@ -503,7 +503,7 @@ model Connection {
   baseUrl                 String
   enable                  Boolean  @default(true)
   authType                String   @default("bearer") // 'bearer' | 'none' | 预留：'session' | 'system_oauth' | 'microsoft_entra_id'
-  apiKey                  String   @default("") // 加密存储；none 时为空
+  secretVaultId           Int?     @map("secret_vault_id") // 密钥引用，实际值在 Secret Vault
   apiKeyLabel             String?
   headersJson             String   @default("") // 额外HTTP头（JSON字符串）
   azureApiVersion         String? // 仅 provider=azure_openai 时必填
@@ -973,4 +973,121 @@ model ExecutionEvent {
   @@index([runId, ts])
   @@index([type, status])
   @@map("execution_events")
+}
+
+// ============================================
+// Secret Vault — 通用密钥库
+// ============================================
+
+model SecretVault {
+  id             Int      @id @default(autoincrement())
+  scope          String   // 'system' | 'user'
+  scopeId        String   // userId as string, or 'system'
+  kind           String   // 'api_key' | 'mcp_credential' | 'skill_secret' etc.
+  label          String   // display name for management UI
+  encryptedValue String   @map("encrypted_value") // AES-256-GCM encrypted, base64
+  refId          String?  @map("ref_id") // optional reference to related entity
+  refType        String?  @map("ref_type") // 'connection' | 'mcp_connection' | 'skill'
+  createdBy      Int?     @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([scope, scopeId])
+  @@index([kind])
+  @@index([refType, refId])
+  @@map("secret_vault")
+}
+
+// ============================================
+// MCP (Model Context Protocol) 相关模型
+// ============================================
+
+model McpInstallation {
+  id          Int      @id @default(autoincrement())
+  namespaceKey String  @unique @map("namespace_key")
+  name        String
+  description String?
+  sourceType  String   @default("remote") @map("source_type") // 'remote' | 'local_package'
+  sourceUrl   String?  @map("source_url")
+  sourceKey   String?  @map("source_key")
+  registrySource String? @map("registry_source")
+  transport   String   @default("streamable_http") // 'streamable_http' | 'sse' | 'stdio'
+  endpoint    String?  // URL for remote, command for local_package
+  command     String?  // only for local_package
+  argsJson    String   @default("[]") @map("args_json")
+  envJson     String   @default("{}") @map("env_json")
+  status      String   @default("active") // 'active' | 'disabled'
+  createdBy   Int?     @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  connections McpConnection[]
+
+  @@index([sourceType])
+  @@index([status])
+  @@index([registrySource])
+  @@map("mcp_installations")
+}
+
+model McpConnection {
+  id             Int      @id @default(autoincrement())
+  installationId Int      @map("installation_id")
+  ownerUserId    Int?     @map("owner_user_id") // null = system-shared
+  name           String
+  enabled        Boolean  @default(true)
+  configJson     String   @default("{}") @map("config_json")
+  secretVaultId  Int?     @map("secret_vault_id") // reference to SecretVault for credential
+  toolSetRevision Int     @default(1) @map("tool_set_revision")
+  status         String   @default("active") // 'active' | 'error' | 'disabled'
+  lastHealthCheckAt DateTime? @map("last_health_check_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  installation McpInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  bindings     McpBinding[]
+  toolCache    McpToolCache[]
+
+  @@index([installationId])
+  @@index([ownerUserId])
+  @@index([status])
+  @@map("mcp_connections")
+}
+
+model McpBinding {
+  id           Int      @id @default(autoincrement())
+  connectionId Int      @map("connection_id")
+  scopeType    String   @map("scope_type") // 'system' | 'user' | 'session' | 'battle_model'
+  scopeId      String   @map("scope_id")
+  enabled      Boolean  @default(true)
+  toolSetRevision Int   @default(1) @map("tool_set_revision") // pinned at bind time
+  createdBy    Int?     @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  connection McpConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, scopeType, scopeId])
+  @@index([scopeType, scopeId])
+  @@map("mcp_bindings")
+}
+
+model McpToolCache {
+  id              Int      @id @default(autoincrement())
+  connectionId    Int      @map("connection_id")
+  originalName    String   @map("original_name")
+  description     String?
+  inputSchemaJson String   @default("{}") @map("input_schema_json")
+  pinned          Boolean  @default(false)
+  pinnedBy        Int?     @map("pinned_by")
+  pinnedAt        DateTime? @map("pinned_at")
+  toolSetRevision Int      @default(1) @map("tool_set_revision")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  connection McpConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, originalName])
+  @@index([connectionId, toolSetRevision])
+  @@index([pinned])
+  @@map("mcp_tool_cache")
 }

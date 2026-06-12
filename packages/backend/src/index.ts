@@ -4,6 +4,8 @@ import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { CHAT_IMAGE_PUBLIC_PATH, CHAT_IMAGE_STORAGE_ROOT } from './config/storage';
+import { SecretVaultService } from './services/secret-vault';
+import { ImageGenerationService, setImageGenerationService } from './services/image-generation';
 import { createAppContainer } from './container/app-container';
 
 // 导入路由
@@ -26,6 +28,9 @@ import { getDocumentServices } from './services/document-services-factory';
 import { setRAGInitializerDeps, reloadRAGServices } from './services/rag-initializer';
 import { createSystemLogsApi } from './api/system-logs';
 import { createSkillsApi } from './api/skills';
+import { createMcpApi } from './api/mcp';
+import { createSecretVaultApi } from './api/secret-vault';
+import { McpService } from './services/mcp';
 import { createArtifactsApi } from './api/artifacts';
 import { createPromptTemplatesApi } from './api/prompt-templates';
 import { SkillInstaller } from './modules/skills/skill-installer';
@@ -50,27 +55,37 @@ const container = createAppContainer();
 const appContext = container.context;
 setChatConfig(appContext.config);
 
+let secretVault: SecretVaultService
+try {
+  secretVault = new SecretVaultService()
+} catch (error) {
+  console.error('Secret Vault 初始化失败，请设置 SECRET_VAULT_MASTER_KEY。', error)
+  throw error
+}
+
 // 设置 RAG 初始化器依赖并启动
-setRAGInitializerDeps({ prisma: appContext.prisma });
+setRAGInitializerDeps({ prisma: appContext.prisma, secretVault });
 reloadRAGServices();
+
 const skillInstaller = new SkillInstaller({ prisma: appContext.prisma });
 const skillApprovalService = new SkillApprovalService({ prisma: appContext.prisma });
 const providerRequester = new ProviderRequester();
-const chatRequestBuilder = new ChatRequestBuilder({ prisma: appContext.prisma });
+const chatRequestBuilder = new ChatRequestBuilder({ prisma: appContext.prisma, secretVault });
+setImageGenerationService(new ImageGenerationService({ secretVault }));
 const nonStreamFallbackService = new NonStreamFallbackService();
 const assistantProgressService = new AssistantProgressService({ prisma: appContext.prisma });
 const streamUsageService = new StreamUsageService();
 const streamTraceService = new StreamTraceService();
 const streamSseService = new StreamSseService();
 const reasoningCompatibilityService = new ReasoningCompatibilityService({ prisma: appContext.prisma });
-const conversationCompressionService = new ConversationCompressionService({ prisma: appContext.prisma });
+const conversationCompressionService = new ConversationCompressionService({ prisma: appContext.prisma, secretVault });
 const chatMessageQueryService = new ChatMessageQueryService({ prisma: appContext.prisma });
 const nonStreamChatService = new NonStreamChatService({
   prisma: appContext.prisma,
   requestBuilder: chatRequestBuilder,
   requester: providerRequester,
 });
-const titleSummaryService = new TitleSummaryService({ prisma: appContext.prisma });
+const titleSummaryService = new TitleSummaryService({ prisma: appContext.prisma, secretVault });
 
 const app = new Hono();
 
@@ -156,6 +171,7 @@ app.route('/api/chat', createChatApi({
   },
   controlRoutes: {
     prisma: appContext.prisma,
+    secretVault,
   },
   usageRoutes: {
     prisma: appContext.prisma,
@@ -207,6 +223,21 @@ app.route('/api/skills', createSkillsApi({
   skillApprovalService,
   pythonRuntimeService: container.pythonRuntimeService,
 }));
+
+const mcpService = new McpService({
+  prisma: appContext.prisma,
+  getSystemSetting: async (key: string) => {
+    try {
+      const setting = await appContext.prisma.systemSetting.findUnique({ where: { key } })
+      return setting?.value ?? null
+    } catch {
+      return null
+    }
+  },
+});
+app.route('/api/mcp', createMcpApi({ mcpService }));
+app.route('/api/secrets', createSecretVaultApi(secretVault));
+
 app.route('/api/artifacts', createArtifactsApi({ artifactService: container.artifactService }));
 app.route('/api/prompt-templates', createPromptTemplatesApi({ promptTemplateService: container.promptTemplateService }));
 
@@ -215,6 +246,7 @@ app.route(
   createOpenAICompatApi({
     modelResolverService: container.modelResolverService,
     messageService: container.openaiCompatMessageService,
+    secretVault,
   }),
 );
 
@@ -350,6 +382,7 @@ app.onError(errorHandler);
 setModelCatalogTtlSeconds(appContext.config.modelCatalog.ttlSeconds);
 const stopCatalogRefresh = scheduleModelCatalogAutoRefresh({
   refreshIntervalMs: appContext.config.modelCatalog.refreshIntervalMs,
+  secretVault,
 });
 container.workspaceCleanupService.start();
 

@@ -85,6 +85,14 @@ check_env_file() {
     if [ "$ENV" = "prod" ] && [ ! -f "$env_file" ]; then
         log_warning "生产环境需要.env文件，正在创建默认配置..."
         cp .env.example "$env_file"
+        # 生成 SECRET_VAULT_MASTER_KEY
+        if command -v openssl >/dev/null 2>&1; then
+          local generated_key=$(openssl rand -hex 32)
+          if [ -n "$generated_key" ]; then
+            sed -i "s/^SECRET_VAULT_MASTER_KEY=.*/SECRET_VAULT_MASTER_KEY=$generated_key/" "$env_file"
+            log_success "已生成 SECRET_VAULT_MASTER_KEY，请妥善备份"
+          fi
+        fi
         log_warning "请编辑.env文件配置生产环境参数，特别是JWT_SECRET和管理员密码"
     fi
 

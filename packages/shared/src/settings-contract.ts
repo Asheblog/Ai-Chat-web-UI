@@ -22,6 +22,7 @@ export const SYSTEM_SETTINGS_FIELD_MAP = {
   knowledgeBaseAllowAnonymous: 'knowledge_base_allow_anonymous',
   knowledgeBaseAllowUsers: 'knowledge_base_allow_users',
   knowledgeBaseEnabled: 'knowledge_base_enabled',
+  mcpGlobalEnabled: 'mcp_global_enabled',
   modelAccessDefaultAnonymous: 'model_access_default_anonymous',
   modelAccessDefaultUser: 'model_access_default_user',
   ollamaThink: 'ollama_think',

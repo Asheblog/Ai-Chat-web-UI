@@ -174,6 +174,7 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     web_search_auto_bilingual_mode: z.enum(['off', 'conditional', 'always']).optional(),
     web_search_auto_read_parallelism: z.number().int().min(1).max(4).optional(),
     agent_max_tool_iterations: z.number().int().min(0).max(20).optional(),
+    mcp_global_enabled: z.boolean().optional(),
     python_tool_enable: z.boolean().optional(),
     chat_dynamic_skill_runtime_enabled: z.boolean().optional(),
     python_tool_timeout_ms: z.number().int().min(1000).max(60000).optional(),

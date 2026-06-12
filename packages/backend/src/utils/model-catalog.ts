@@ -1,7 +1,6 @@
 import type { Connection } from '@prisma/client'
 import { prisma } from '../db'
 import fetch from 'node-fetch'
-import { AuthUtils } from './auth'
 import {
   fetchModelsForConnection,
   type CatalogItem,
@@ -10,6 +9,7 @@ import {
   computeCapabilities,
   detectModelType,
 } from './providers'
+import type { SecretVaultService } from '../services/secret-vault'
 import { BackendLogger as log } from './logger'
 import { guessKnownContextWindow, guessKnownCompletionLimit, invalidateCompletionLimitCache, invalidateContextWindowCache } from './context-window'
 import {
@@ -57,20 +57,26 @@ const parseCapabilitiesFromJson = (raw: string | null | undefined): CapabilityFl
   }
 }
 
-const buildConfigFromConnection = (conn: Connection): ConnectionConfig => ({
-  provider: conn.provider as ConnectionConfig['provider'],
-  baseUrl: conn.baseUrl,
-  enable: conn.enable,
-  authType: conn.authType as ConnectionConfig['authType'],
-  apiKey: conn.apiKey ? AuthUtils.decryptApiKey(conn.apiKey) : undefined,
-  headers: parseJsonRecord(conn.headersJson),
-  azureApiVersion: conn.azureApiVersion || undefined,
-  prefixId: conn.prefixId || undefined,
-  tags: parseJsonArray(conn.tagsJson, []),
-  modelIds: parseJsonArray(conn.modelIdsJson, []),
-  connectionType: (conn.connectionType as any) || 'external',
-  defaultCapabilities: parseCapabilitiesFromJson(conn.defaultCapabilitiesJson),
-})
+const buildConfigFromConnection = async (conn: Connection, secretVault?: SecretVaultService): Promise<ConnectionConfig> => {
+  let apiKey: string | undefined
+  if (conn.authType === 'bearer' && conn.secretVaultId && secretVault) {
+    apiKey = await secretVault.decryptById(conn.secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+  }
+  return {
+    provider: conn.provider as ConnectionConfig['provider'],
+    baseUrl: conn.baseUrl,
+    enable: conn.enable,
+    authType: conn.authType as ConnectionConfig['authType'],
+    apiKey,
+    headers: parseJsonRecord(conn.headersJson),
+    azureApiVersion: conn.azureApiVersion || undefined,
+    prefixId: conn.prefixId || undefined,
+    tags: parseJsonArray(conn.tagsJson, []),
+    modelIds: parseJsonArray(conn.modelIdsJson, []),
+    connectionType: (conn.connectionType as any) || 'external',
+    defaultCapabilities: parseCapabilitiesFromJson(conn.defaultCapabilitiesJson),
+  }
+}
 
 const DEFAULT_TTL_S = 600
 let ttlOverrideSeconds: number | null = null
@@ -114,12 +120,12 @@ const expireManual = async (connectionId: number) => {
   })
 }
 
-export async function refreshModelCatalogForConnection(conn: Connection): Promise<{ connectionId: number; total: number }> {
+export async function refreshModelCatalogForConnection(conn: Connection, secretVault?: SecretVaultService): Promise<{ connectionId: number; total: number }> {
   if (conn.ownerUserId != null) {
     log.debug('跳过个人连接的模型刷新', { connectionId: conn.id, ownerUserId: conn.ownerUserId })
     return { connectionId: conn.id, total: 0 }
   }
-  const cfg = buildConfigFromConnection(conn)
+  const cfg = await buildConfigFromConnection(conn, secretVault)
   const connectionCapabilityLayer = createCapabilityEnvelope(cfg.defaultCapabilities, 'connection_default')
   if (!cfg.enable) {
     await expireManual(conn.id)
@@ -368,30 +374,30 @@ export async function refreshModelCatalogForConnection(conn: Connection): Promis
   return { connectionId: conn.id, total: items.length }
 }
 
-export async function refreshModelCatalogForConnectionId(connectionId: number) {
+export async function refreshModelCatalogForConnectionId(connectionId: number, secretVault?: SecretVaultService) {
   const conn = await prisma.connection.findUnique({ where: { id: connectionId } })
   if (!conn) return
-  await refreshModelCatalogForConnection(conn)
+  await refreshModelCatalogForConnection(conn, secretVault)
 }
 
-export async function refreshModelCatalogForConnections(connections: Connection[]) {
+export async function refreshModelCatalogForConnections(connections: Connection[], secretVault?: SecretVaultService) {
   for (const conn of connections) {
     try {
-      await refreshModelCatalogForConnection(conn)
+      await refreshModelCatalogForConnection(conn, secretVault)
     } catch (error) {
       log.warn('刷新模型目录出错，继续下一个', { connectionId: conn.id, error })
     }
   }
 }
 
-export async function refreshAllModelCatalog() {
+export async function refreshAllModelCatalog(secretVault?: SecretVaultService) {
   const connections = await prisma.connection.findMany({ where: { enable: true, ownerUserId: null } })
-  await refreshModelCatalogForConnections(connections)
+  await refreshModelCatalogForConnections(connections, secretVault)
 }
 
 let catalogTimer: NodeJS.Timeout | null = null
 
-export function scheduleModelCatalogAutoRefresh(options: { refreshIntervalMs?: number } = {}) {
+export function scheduleModelCatalogAutoRefresh(options: { refreshIntervalMs?: number; secretVault?: SecretVaultService } = {}) {
   const intervalMs = Number.isFinite(options.refreshIntervalMs) && (options.refreshIntervalMs as number) > 0
     ? Math.floor(options.refreshIntervalMs as number)
     : resolveTtlSeconds() * 1000
@@ -402,7 +408,7 @@ export function scheduleModelCatalogAutoRefresh(options: { refreshIntervalMs?: n
 
   const run = async () => {
     try {
-      await refreshAllModelCatalog()
+      await refreshAllModelCatalog(options.secretVault)
     } catch (error) {
       log.error('定时刷新模型目录失败', error)
     }

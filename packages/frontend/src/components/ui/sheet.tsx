@@ -26,13 +26,14 @@ type SheetContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.C
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
   dialogTitle: React.ReactNode
+  dialogDescription?: React.ReactNode
 }
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   SheetContentProps
 >(
-  ({ side = "right", className, children, showCloseButton = true, dialogTitle, ...props }, ref) => (
+  ({ side = "right", className, children, showCloseButton = true, dialogTitle, dialogDescription, ...props }, ref) => (
     <SheetPortal>
       <SheetOverlay />
       <DialogPrimitive.Content
@@ -51,6 +52,9 @@ const SheetContent = React.forwardRef<
         {...props}
       >
         <DialogPrimitive.Title className="sr-only">{dialogTitle}</DialogPrimitive.Title>
+        {dialogDescription && (
+          <DialogPrimitive.Description className="sr-only">{dialogDescription}</DialogPrimitive.Description>
+        )}
         {showCloseButton && (
           <SheetClose className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full border border-transparent text-muted-foreground opacity-90 ring-offset-background transition-colors hover:bg-[hsl(var(--surface-hover))] hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none sm:right-4 sm:top-4 sm:h-8 sm:w-8 sm:rounded-md">
             <X className="h-5 w-5 sm:h-4 sm:w-4" />

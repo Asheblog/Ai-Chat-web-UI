@@ -13,6 +13,7 @@ import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import type { ComposerSkillOption } from './chat-composer-panel'
+import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
 import { cn } from '@/lib/utils'
 import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
@@ -54,6 +55,13 @@ interface DesktopComposerProps {
   pythonToolDisabledNote?: string
   skillOptions: ComposerSkillOption[]
   onToggleSkillOption: (skillId: number, enabled: boolean) => void
+  // MCP 绑定
+  mcpGlobalEnabled?: boolean
+  mcpConnectionOptions?: McpConnectionOption[]
+  mcpSessionTools?: McpToolView[]
+  mcpLoading?: boolean
+  mcpError?: string | null
+  onToggleMcpBinding?: (connectionId: number, enabled: boolean) => void
   traceEnabled: boolean
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
@@ -109,6 +117,12 @@ export function DesktopComposer({
   pythonToolDisabledNote,
   skillOptions,
   onToggleSkillOption,
+  mcpGlobalEnabled,
+  mcpConnectionOptions,
+  mcpSessionTools,
+  mcpLoading,
+  mcpError,
+  onToggleMcpBinding,
   traceEnabled,
   canUseTrace,
   onToggleTrace,
@@ -286,6 +300,12 @@ export function DesktopComposer({
           pythonToolDisabledNote={pythonToolDisabledNote}
           skillOptions={skillOptions}
           onToggleSkillOption={onToggleSkillOption}
+          mcpGlobalEnabled={mcpGlobalEnabled}
+          mcpConnectionOptions={mcpConnectionOptions}
+          mcpSessionTools={mcpSessionTools}
+          mcpLoading={mcpLoading}
+          mcpError={mcpError}
+          onToggleMcpBinding={onToggleMcpBinding}
         />
       </div>
     </div>

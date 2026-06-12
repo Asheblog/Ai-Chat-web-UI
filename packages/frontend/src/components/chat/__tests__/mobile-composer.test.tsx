@@ -61,8 +61,9 @@ describe('MobileComposer', () => {
     const mobileContainer = document.querySelector('.md\\:hidden')
     expect(mobileContainer).toBeInTheDocument()
 
-    // COMPOSER_SHELL_BASE_CLASS uses backdrop-blur-md — verify no child has it
-    const shellInside = mobileContainer?.querySelector('.backdrop-blur-md')
+    // COMPOSER_SHELL_BASE_CLASS uses rounded-[12px] — verify no child has it.
+    // composerInnerEditorClass uses rounded-[10px] so [12px] uniquely identifies the shell.
+    const shellInside = mobileContainer?.querySelector('.rounded-\\[12px\\]')
     expect(shellInside).toBeNull()
   })
 

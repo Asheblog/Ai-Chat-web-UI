@@ -53,6 +53,7 @@ import { computeCapabilities, type ProviderType } from '../../utils/providers';
 import { parseCapabilityEnvelope } from '../../utils/capabilities';
 import { createSkillRegistry } from '../skills/skill-registry';
 import type { RequestedSkillsPayload } from '../skills/types';
+import type { McpService } from '../../services/mcp/mcp-service';
 
 // Re-export for backwards compatibility
 export {
@@ -150,6 +151,7 @@ export type AgentResponseParams = {
   maxConcurrentStreams: number;
   concurrencyErrorMessage: string;
   ragService?: RAGService | null;
+  mcpService?: McpService;
 };
 
 export const createAgentWebSearchResponse = async (params: AgentResponseParams): Promise<Response> => {
@@ -613,6 +615,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             : null,
         },
         allowDynamicRuntime: allowDynamicRuntime === true,
+        mcpService: params.mcpService,
       });
       const toolDefinitions = toolRegistry.getToolDefinitions();
       const allowedToolNames = toolRegistry.getAllowedToolNames();

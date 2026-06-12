@@ -31,6 +31,10 @@
 - **搜索批次**：同一 reasoning offset 下发起的搜索调用集合，用于合并展示
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
 
+## 密钥
+
+- **Secret Vault（密钥库）**：由显式主密钥保护、加密保存用户或管理员私有凭据的系统边界；密钥值只允许写入和运行时使用，不允许回显、导出或跨能力继承
+
 ## Skill
 
 - **System Skill（系统级 Skill）**：对所有拥有权限的用户可见且可用的 Skill
@@ -64,3 +68,26 @@
 - **Skill Compliance Baseline（Skill 合规基线）**：系统内置并持续维护的可信来源、受管依赖源和强制阻断规则集合；满足基线只代表允许安装，不代表获得可执行权限
 - **Skill Resource Quota（Skill 资源配额）**：限制单个用户可安装数量、逻辑存储占用、并发运行和依赖构建数量的资源边界；超额不删除已有数据
 - **Skill Uninstallation（Skill 卸载）**：移除 Skill 所有者的安装、配置、密钥和会话启用关系，同时保留既有消息与执行审计
+
+## MCP
+
+- **MCP Server（MCP 服务）**：通过 Model Context Protocol 暴露外部工具、资源或提示的服务；不同于 Skill，MCP 服务不是模型指令或工作流程本身
+- **Remote MCP Server（远程 MCP 服务）**：已由第三方或管理员运行、通过网络端点接入的 MCP 服务；普通用户只能直接连接这类 MCP 服务
+- **Local Package MCP Server（本地包型 MCP 服务）**：需要系统安装并启动的软件包形式 MCP 服务；只能由管理员安装为系统级能力
+- **MCP Gateway（MCP 网关）**：系统用于托管本地包型 MCP 服务进程、隔离运行边界并代理 MCP 调用的服务边界
+- **MCP Installation（MCP 安装）**：MCP 服务加入系统级或用户私有集合的元数据记录；它提供可配置模板，已安装不代表任何用户或会话可调用
+- **MCP Connection（MCP 连接）**：用户或系统基于 MCP 安装创建的连接实例，保存普通配置、密钥绑定、连接状态和启用状态；连接是 MCP 服务可调用的最小配置单位
+- **System-shared MCP Connection（系统共享 MCP 连接）**：管理员显式允许多用户共同调用的系统级 MCP 连接，使用系统级配置和密钥并受配额与审计约束
+- **MCP Binding（MCP 绑定）**：将 MCP 连接在系统、用户、会话或 Battle 模型范围内启用或禁用的关系
+- **MCP Tool Runtime（MCP 工具运行时）**：首版 MCP 运行链路，仅包含工具发现、工具调用和工具清单变更处理
+- **MCP Tool Cache（MCP 工具缓存）**：系统从 MCP 连接读取并保存的工具清单快照，用于展示、搜索和调用校验
+- **MCP Tool Set Revision（MCP 工具集版本）**：MCP 连接工具清单快照的稳定版本，用于判断会话启用时看到的工具集合是否已经过期
+- **MCP Tool Identity（MCP 工具身份）**：由 MCP 连接和原始工具名共同构成的稳定工具身份；原始工具名不能单独作为系统内唯一标识
+- **Pinned MCP Tool（固定 MCP 工具）**：被用户或管理员选中并允许直接暴露给模型的 MCP 工具
+- **MCP Progressive Discovery（MCP 渐进发现）**：模型先通过轻量搜索和详情查询发现 MCP 工具，再按名称调用目标工具的方式
+- **MCP Policy Boundary（MCP 策略边界）**：管理员定义的 MCP 最高允许范围，决定来源、连接、工具类别或调用是否允许进入运行时
+- **MCP Runtime Confirmation（MCP 运行时确认）**：当前会话用户在敏感 MCP 工具调用前进行的允许或拒绝决策
+- **MCP Global Gate（MCP 全局总闸）**：管理员控制 MCP 能力、来源或安装是否可被使用的最高优先级开关；用户和会话不能绕过全局总闸
+- **MCP Secret Binding（MCP 密钥绑定）**：用户或管理员将私有凭据关联到已安装 MCP 服务的关系；凭据只用于对应 MCP 服务连接或调用
+- **MCP Registry Source（MCP 注册表来源）**：提供 MCP 服务发现、版本和安装元数据的外部来源，包括官方注册表、市场和组织自建目录
+- **Built-in MCP Market（内置 MCP 市场）**：系统内置的 MCP 服务发现目录，聚合远程 MCP 服务、仓库链接、主页和安装元数据；出现在市场中不代表已获准运行

@@ -1,3 +1,5 @@
+process.env.SECRET_VAULT_MASTER_KEY = 'test-master-key-32-bytes-long!!'
+
 jest.mock('../../utils/model-catalog', () => ({
   refreshModelCatalogForConnection: jest.fn(),
   refreshAllModelCatalog: jest.fn(),

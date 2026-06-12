@@ -2,7 +2,6 @@ import type { Context } from 'hono';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../types';
-import { AuthUtils } from '../../../utils/auth';
 import type { ProviderType } from '../../../utils/providers';
 import { buildChatProviderRequest } from '../../../utils/chat-provider';
 import { Tokenizer } from '../../../utils/tokenizer';
@@ -685,7 +684,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           connection: {
             id: session.connection.id,
             baseUrl: session.connection.baseUrl,
-            apiKey: session.connection.apiKey,
+            secretVaultId: (session.connection as any).secretVaultId ?? null,
             provider: session.connection.provider,
           },
           modelRawId: session.modelRawId || '',

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { RichMessageRenderer } from './rich-message-renderer'
 
 describe('RichMessageRenderer', () => {
@@ -68,7 +69,8 @@ describe('RichMessageRenderer', () => {
     expect(root).toHaveAttribute('data-render-mode', 'default')
   })
 
-  it('renders stack layout for image-only payload', () => {
+  it('renders stack layout for image-only payload', async () => {
+    const user = userEvent.setup()
     render(
       <RichMessageRenderer
         payload={{
@@ -85,7 +87,15 @@ describe('RichMessageRenderer', () => {
       />,
     )
 
-    expect(screen.getByTestId('rich-message-renderer')).toHaveAttribute('data-layout', 'stack')
+    const root = screen.getByTestId('rich-message-renderer')
+    expect(root).toHaveAttribute('data-layout', 'stack')
+
+    // Images are initially collapsed — only the toggle button is visible
+    const expandButton = screen.getByRole('button', { name: '查看图片（1 张）' })
+    expect(expandButton).toBeInTheDocument()
+
+    // Click to expand images, then the EvidenceImageCard with meaningful alt appears
+    await user.click(expandButton)
     expect(screen.getByAltText('证据图片 1')).toBeInTheDocument()
   })
 })

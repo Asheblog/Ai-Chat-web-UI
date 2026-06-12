@@ -9,7 +9,7 @@
  */
 
 import type { PrismaClient } from '@prisma/client'
-import { AuthUtils } from '../utils/auth'
+import { SecretVaultService } from './secret-vault'
 import { createLogger } from '../utils/logger'
 
 const log = createLogger('RAGInit')
@@ -22,6 +22,7 @@ import {
 
 export interface RAGInitializerDeps {
   prisma: PrismaClient
+  secretVault?: SecretVaultService
 }
 
 let deps: RAGInitializerDeps | null = null
@@ -140,16 +141,23 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
         return { success: false, message: `Connection not found: ${connectionId}` }
       }
 
-      // 获取连接的 API URL 和密钥（密钥是加密存储的，需要解密）
+      // 获取连接的 API URL 和密钥（密钥存储在 Secret Vault 中）
       const apiUrl = connection.baseUrl || 'https://api.openai.com/v1'
-      const encryptedApiKey = connection.apiKey
 
-      if (!encryptedApiKey) {
-        return { success: false, message: `Connection has no API key: ${connectionId}` }
+      if (!connection.secretVaultId) {
+        return { success: false, message: `Connection has no secretVaultId: ${connectionId}` }
       }
 
-      // 解密 API Key
-      const apiKey = AuthUtils.decryptApiKey(encryptedApiKey)
+      // 从 Secret Vault 解密 API Key
+      let apiKey: string
+      try {
+        if (!deps.secretVault) {
+          return { success: false, message: 'Secret Vault not available' }
+        }
+        apiKey = await deps.secretVault.decryptById(connection.secretVaultId!)
+      } catch (error) {
+        return { success: false, message: `Failed to decrypt API key from Secret Vault: ${error instanceof Error ? error.message : String(error)}` }
+      }
 
       // 创建新的文档服务
       const embeddingBatchSize = Math.max(

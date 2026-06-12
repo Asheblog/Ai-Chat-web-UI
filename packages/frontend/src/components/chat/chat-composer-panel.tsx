@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatComposerImage, WorkspaceFile } from '@/hooks/use-chat-composer'
+import type { McpToolView, McpConnectionOption } from '@/hooks/use-mcp-session-bindings'
 import { MobileComposer } from './mobile-composer'
 import { DesktopComposer } from './desktop-composer'
 import { ExpandEditorDialog } from './expand-editor-dialog'
@@ -67,6 +68,13 @@ export interface ChatComposerPanelProps {
   pythonToolDisabledNote?: string
   skillOptions: ComposerSkillOption[]
   onToggleSkillOption: (skillId: number, enabled: boolean) => void
+  // MCP 绑定
+  mcpGlobalEnabled?: boolean
+  mcpConnectionOptions?: McpConnectionOption[]
+  mcpSessionTools?: McpToolView[]
+  mcpLoading?: boolean
+  mcpError?: string | null
+  onToggleMcpBinding?: (connectionId: number, enabled: boolean) => void
   isVisionEnabled: boolean
   traceEnabled: boolean
   canUseTrace: boolean
@@ -179,6 +187,12 @@ export function ChatComposerPanel({
   pythonToolDisabledNote,
   skillOptions,
   onToggleSkillOption,
+  mcpGlobalEnabled,
+  mcpConnectionOptions,
+  mcpSessionTools,
+  mcpLoading,
+  mcpError,
+  onToggleMcpBinding,
   isVisionEnabled,
   traceEnabled,
   canUseTrace,
@@ -682,6 +696,12 @@ export function ChatComposerPanel({
         pythonToolDisabledNote={pythonToolDisabledNote}
         skillOptions={skillOptions}
         onToggleSkillOption={onToggleSkillOption}
+        mcpGlobalEnabled={mcpGlobalEnabled}
+        mcpConnectionOptions={mcpConnectionOptions}
+        mcpSessionTools={mcpSessionTools}
+        mcpLoading={mcpLoading}
+        mcpError={mcpError}
+        onToggleMcpBinding={onToggleMcpBinding}
         isVisionEnabled={isVisionEnabled}
         placeholder={mobilePlaceholder}
         traceEnabled={traceEnabled}
@@ -728,6 +748,12 @@ export function ChatComposerPanel({
         pythonToolDisabledNote={pythonToolDisabledNote}
         skillOptions={skillOptions}
         onToggleSkillOption={onToggleSkillOption}
+        mcpGlobalEnabled={mcpGlobalEnabled}
+        mcpConnectionOptions={mcpConnectionOptions}
+        mcpSessionTools={mcpSessionTools}
+        mcpLoading={mcpLoading}
+        mcpError={mcpError}
+        onToggleMcpBinding={onToggleMcpBinding}
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}
         onToggleTrace={onToggleTrace}

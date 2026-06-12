@@ -37,7 +37,6 @@ const baseSession = {
     provider: "openai",
     baseUrl: "https://api.example.com/v1",
     authType: "bearer",
-    apiKey: "encrypted",
     headersJson: "",
     azureApiVersion: null,
   },
@@ -74,22 +73,17 @@ const createHarness = () => {
   )
 
   const resolveContextLimit = jest.fn().mockResolvedValue(1000)
-  const authUtils = {
-    decryptApiKey: jest.fn(() => "sk-test"),
-  }
   const fetchFn = jest.fn()
 
   const service = new ConversationCompressionService({
     prisma: prisma as any,
     resolveContextLimit,
-    authUtils,
     fetchFn,
   })
 
   return {
     prisma,
     resolveContextLimit,
-    authUtils,
     fetchFn,
     service,
   }

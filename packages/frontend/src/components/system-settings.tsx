@@ -11,6 +11,7 @@ import {
   Globe,
   KeyRound,
   LayoutDashboard,
+  Link2,
   PlugZap,
   Puzzle,
   Router,
@@ -88,6 +89,10 @@ const SystemPythonRuntimePage = dynamic(
   () => import("@/components/settings/pages/SystemPythonRuntime").then((m) => m.SystemPythonRuntimePage),
   { loading: pageLoading },
 )
+const SystemMcpPage = dynamic(
+  () => import("@/components/settings/pages/SystemMcpPage").then((m) => m.SystemMcpPage),
+  { loading: pageLoading },
+)
 
 function ModuleSubTabs({
   tabs,
@@ -145,12 +150,15 @@ function ToolsRuntimeModule() {
   const subTabs = [
     { key: "web-search", label: "联网搜索", icon: <Globe className="h-3.5 w-3.5" /> },
     { key: "python-runtime", label: "Python 运行时", icon: <Terminal className="h-3.5 w-3.5" /> },
+    { key: "mcp", label: "MCP 管理", icon: <Link2 className="h-3.5 w-3.5" /> },
   ]
 
   return (
     <div className="min-w-0">
       <ModuleSubTabs tabs={subTabs} activeKey={sub} onSelect={setSub} />
-      {sub === "web-search" ? <SystemWebSearchPage /> : <SystemPythonRuntimePage />}
+      {sub === "web-search" && <SystemWebSearchPage />}
+      {sub === "python-runtime" && <SystemPythonRuntimePage />}
+      {sub === "mcp" && <SystemMcpPage />}
     </div>
   )
 }
