@@ -10,6 +10,7 @@ import {
   KeyRound,
   PackageCheck,
   PlugZap,
+  Puzzle,
   Router,
   ScrollText,
   Settings2,
@@ -110,6 +111,16 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
           icon: <Wrench className="h-full w-full" />,
         },
         {
+          key: "skills",
+          label: "Skill 管理",
+          icon: <Puzzle className="h-full w-full" />,
+        },
+        {
+          key: "personal-skills",
+          label: "个人 Skills",
+          icon: <PackageCheck className="h-full w-full" />,
+        },
+        {
           key: "logs",
           label: "日志查看器",
           icon: <ScrollText className="h-full w-full" />,
@@ -163,6 +174,33 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     }
   }, [activeSection])
 
+  useEffect(() => {
+    if (activeSection !== "personal") return
+    if (typeof window === "undefined") return
+
+    const applyHashSelection = () => {
+      const hash = window.location.hash.replace(/^#/, "")
+      const nextKeyByHash: Record<string, string> = {
+        "settings-personal-preferences": "profile",
+        "settings-personal-skills": "skills",
+        "settings-share-management": "shares",
+        "settings-personal-security": "security",
+      }
+      const nextKey = nextKeyByHash[hash]
+      if (!nextKey) return
+      setPersonalSub(nextKey)
+      window.requestAnimationFrame(() => {
+        document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" })
+      })
+    }
+
+    applyHashSelection()
+    window.addEventListener("hashchange", applyHashSelection)
+    return () => {
+      window.removeEventListener("hashchange", applyHashSelection)
+    }
+  }, [activeSection])
+
   const handleChange = (key: string) => {
     if (activeSection === "personal") {
       setPersonalSub(key)
@@ -179,6 +217,11 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     }
 
     if (activeSection === "system") {
+      if (key === "personal-skills") {
+        setPersonalSub("skills")
+        router.push(`${SECTION_PATH.personal}#settings-personal-skills`)
+        return
+      }
       setSystemSub(key)
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail: { key } }))

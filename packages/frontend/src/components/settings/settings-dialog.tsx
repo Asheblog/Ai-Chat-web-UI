@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/use-toast"
 // import { PersonalModelsPage } from "./pages/PersonalModels"
 import { PersonalPreferencesPage } from "./pages/PersonalPreferences"
 import { PersonalSecurityPage } from "./pages/PersonalSecurity"
+import { PersonalSkillsPage } from "./pages/PersonalSkills"
 import { ShareManagementPanel } from "./pages/ShareManagement"
 import { AboutPage } from "./pages/About"
 import { SystemSettings } from "@/components/system-settings"
@@ -230,6 +231,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
               switch (activeSub) {
                 // case 'personal.models': return <PersonalModelsPage />
                 case 'personal.preferences': return <PersonalPreferencesPage />
+                case 'personal.skills': return <PersonalSkillsPage />
                 case 'personal.shares': return <ShareManagementPanel />
                 case 'personal.security': return <PersonalSecurityPage />
                 case 'personal.about': return <AboutPage />

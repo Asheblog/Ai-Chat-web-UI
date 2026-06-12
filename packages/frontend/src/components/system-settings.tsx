@@ -272,6 +272,7 @@ const SYSTEM_MODULES: SystemModule[] = [
     description: "安装、审批、激活 Skill 并维护绑定策略。",
     icon: Puzzle,
     content: <SystemSkillsPage />,
+    topLevel: true,
   },
 ]
 
