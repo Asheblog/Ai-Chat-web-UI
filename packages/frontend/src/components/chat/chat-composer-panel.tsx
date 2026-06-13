@@ -19,7 +19,6 @@ import { ExpandEditorDialog } from './expand-editor-dialog'
 import { CustomRequestEditor } from './custom-request-editor'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { WorkspaceFileTray } from '@/features/chat/composer'
 import {
   createPromptTemplate,
   deletePromptTemplate,
@@ -28,13 +27,6 @@ import {
 } from '@/features/prompt-templates/api'
 import { KnowledgeBaseSelector, type KnowledgeBaseItem } from './knowledge-base-selector'
 import type { PromptTemplate } from '@/types'
-
-interface ImageLimitConfig {
-  maxCount: number
-  maxMb: number
-  maxEdge: number
-  maxTotalMb: number
-}
 
 export interface ComposerSkillOption {
   skillId: number
@@ -83,7 +75,6 @@ export interface ChatComposerPanelProps {
   mobilePlaceholder: string
   textareaDisabled: boolean
   desktopSendDisabled: boolean
-  pickImages: () => void
   onRemoveImage: (index: number) => void
   onInputChange: (value: string) => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
@@ -97,9 +88,15 @@ export interface ChatComposerPanelProps {
   onWebSearchScopeChange: (value: string) => void
   onToggleTrace: (value: boolean) => void
   onEffortChange: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
-  fileInputRef: MutableRefObject<HTMLInputElement | null>
-  onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
-  imageLimits: ImageLimitConfig
+  // 统一附件上传
+  attachmentInputRef: MutableRefObject<HTMLInputElement | null>
+  pickAttachments: () => void
+  onAttachmentsSelected: (event: ChangeEvent<HTMLInputElement>) => void
+  workspaceFiles: WorkspaceFile[]
+  isUploadingWorkspaceFiles: boolean
+  hasWorkspaceFiles: boolean
+  onRemoveWorkspaceFile: (fileId: string) => void
+  // 自定义请求
   customHeaders: Array<{ name: string; value: string }>
   onAddCustomHeader: () => void
   onCustomHeaderChange: (index: number, field: 'name' | 'value', value: string) => void
@@ -108,6 +105,7 @@ export interface ChatComposerPanelProps {
   customBody: string
   onCustomBodyChange: (value: string) => void
   customBodyError?: string | null
+  // 会话提示词
   sessionPromptDraft: string
   sessionPromptSourceLabel: string
   sessionPromptPlaceholder: string
@@ -122,15 +120,6 @@ export interface ChatComposerPanelProps {
     onDragLeave: (e: React.DragEvent) => void
     onDrop: (e: React.DragEvent) => void
   }
-  // 工作区文件上传
-  workspaceFileInputRef: MutableRefObject<HTMLInputElement | null>
-  workspaceFiles: WorkspaceFile[]
-  isUploadingWorkspaceFiles: boolean
-  hasWorkspaceFiles: boolean
-  pickWorkspaceFiles: () => void
-  onWorkspaceFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
-  onRemoveWorkspaceFile: (fileId: string) => void
-  onRetryWorkspaceFile?: (localId: string) => void
   // 知识库
   knowledgeBaseEnabled?: boolean
   knowledgeBases?: KnowledgeBaseItem[]
@@ -210,7 +199,6 @@ export function ChatComposerPanel({
   mobilePlaceholder,
   textareaDisabled,
   desktopSendDisabled,
-  pickImages,
   onRemoveImage,
   onInputChange,
   onKeyDown,
@@ -224,9 +212,15 @@ export function ChatComposerPanel({
   onWebSearchScopeChange,
   onToggleTrace,
   onEffortChange,
-  fileInputRef,
-  onFilesSelected,
-  imageLimits,
+  // 统一附件上传
+  attachmentInputRef,
+  pickAttachments,
+  onAttachmentsSelected,
+  workspaceFiles,
+  isUploadingWorkspaceFiles,
+  hasWorkspaceFiles,
+  onRemoveWorkspaceFile,
+  // 自定义请求
   customHeaders,
   onAddCustomHeader,
   onCustomHeaderChange,
@@ -235,24 +229,16 @@ export function ChatComposerPanel({
   customBody,
   onCustomBodyChange,
   customBodyError,
+  // 会话提示词
   sessionPromptDraft,
-  sessionPromptSaving,
   sessionPromptSourceLabel,
   sessionPromptPlaceholder,
   onSessionPromptChange,
   onSessionPromptSave,
+  sessionPromptSaving,
   // 拖拽上传
   isDragOver,
   dragHandlers,
-  // 工作区文件上传
-  workspaceFileInputRef,
-  workspaceFiles,
-  isUploadingWorkspaceFiles,
-  hasWorkspaceFiles,
-  pickWorkspaceFiles,
-  onWorkspaceFilesSelected,
-  onRemoveWorkspaceFile,
-  onRetryWorkspaceFile,
   // 知识库
   knowledgeBaseEnabled,
   knowledgeBases,
@@ -277,7 +263,6 @@ export function ChatComposerPanel({
   const [promptTemplateSaving, setPromptTemplateSaving] = useState(false)
   const [promptTemplateBusyId, setPromptTemplateBusyId] = useState<number | null>(null)
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
-  const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false)
   const [kbSelectorOpen, setKbSelectorOpen] = useState(false)
   const attachmentsCount = selectedImages.length + workspaceFiles.length
   const hasReadyFiles = workspaceFiles.some((f) => f.status === 'ready')
@@ -653,7 +638,7 @@ export function ChatComposerPanel({
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用“今天日期是{day time}”。'}
+                      {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用"今天日期是{day time}"。'}
                     </p>
                   </div>
                 </div>
@@ -702,6 +687,11 @@ export function ChatComposerPanel({
         onStop={onStop}
         selectedImages={selectedImages}
         onRemoveImage={onRemoveImage}
+        workspaceFiles={workspaceFiles}
+        onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+        onPickAttachments={pickAttachments}
+        hasAttachments={attachmentsCount > 0}
+        attachmentsCount={attachmentsCount}
         thinkingEnabled={thinkingEnabled}
         onToggleThinking={onToggleThinking}
         effort={effort}
@@ -711,9 +701,6 @@ export function ChatComposerPanel({
         webSearchScope={webSearchScope}
         onWebSearchScopeChange={onWebSearchScopeChange}
         showWebSearchScope={showWebSearchScope}
-        pickImages={pickImages}
-        pickDocuments={pickWorkspaceFiles}
-        hasDocuments={hasReadyFiles}
         canUseWebSearch={canUseWebSearch}
         webSearchDisabledNote={webSearchDisabledNote}
         pythonToolEnabled={pythonToolEnabled}
@@ -735,8 +722,6 @@ export function ChatComposerPanel({
         onToggleTrace={onToggleTrace}
         onOpenAdvanced={() => setAdvancedOpen(true)}
         onOpenSessionPrompt={() => setSessionPromptOpen(true)}
-        onOpenAttachmentManager={() => setAttachmentViewerOpen(true)}
-        attachmentsCount={attachmentsCount}
         // 知识库
         onOpenKnowledgeBase={() => setKbSelectorOpen(true)}
         knowledgeBaseEnabled={knowledgeBaseEnabled}
@@ -756,9 +741,11 @@ export function ChatComposerPanel({
         isStreaming={isStreaming}
         selectedImages={selectedImages}
         onRemoveImage={onRemoveImage}
-        pickImages={pickImages}
-        isVisionEnabled={isVisionEnabled}
-        imageLimits={imageLimits}
+        workspaceFiles={workspaceFiles}
+        onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+        onPickAttachments={pickAttachments}
+        hasAttachments={attachmentsCount > 0}
+        attachmentsCount={attachmentsCount}
         thinkingEnabled={thinkingEnabled}
         onToggleThinking={onToggleThinking}
         webSearchEnabled={webSearchEnabled}
@@ -793,10 +780,6 @@ export function ChatComposerPanel({
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}
         sendLockedReason={sendLockedReason}
-        hasDocuments={hasReadyFiles}
-        pickDocuments={pickWorkspaceFiles}
-        onOpenAttachmentManager={() => setAttachmentViewerOpen(true)}
-        attachedDocumentsLength={workspaceFiles.length}
         // 知识库
         onOpenKnowledgeBase={() => setKbSelectorOpen(true)}
         knowledgeBaseEnabled={knowledgeBaseEnabled}
@@ -817,33 +800,13 @@ export function ChatComposerPanel({
         onRefresh={async () => { onRefreshKnowledgeBases?.() }}
       />
 
-      {attachmentViewerOpen && (
-        <WorkspaceFileTray
-          files={workspaceFiles}
-          onRemove={onRemoveWorkspaceFile}
-          onRetry={onRetryWorkspaceFile}
-          open={attachmentViewerOpen}
-          onOpenChange={setAttachmentViewerOpen}
-        />
-      )}
-
+      {/* 统一附件上传输入框 */}
       <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={onFilesSelected}
-        disabled={!isVisionEnabled}
-      />
-
-      {/* 文件上传输入框（无格式限制，直接写入 workspace） */}
-      <input
-        ref={workspaceFileInputRef}
+        ref={attachmentInputRef}
         type="file"
         multiple
         className="hidden"
-        onChange={onWorkspaceFilesSelected}
+        onChange={onAttachmentsSelected}
       />
 
       <ExpandEditorDialog

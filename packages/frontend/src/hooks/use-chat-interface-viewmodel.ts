@@ -27,7 +27,6 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     setIsComposing,
     textareaRef,
     scrollAreaRef,
-    fileInputRef,
     selectedImages,
     thinkingEnabled,
     setThinkingEnabled,
@@ -44,16 +43,10 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     currentSession,
     error,
     isVisionEnabled,
-    MAX_IMAGE_COUNT,
-    MAX_IMAGE_MB,
-    MAX_IMAGE_EDGE,
-    MAX_TOTAL_IMAGE_MB,
     handleSend,
     handleStop,
     handleKeyDown,
     handleTextareaChange,
-    pickImages,
-    onFilesSelected,
     removeImage,
     handlePaste,
     webSearchEnabled,
@@ -96,13 +89,13 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     traceEnabled,
     canUseTrace,
     onToggleTrace,
-    // 工作区文件上传
-    workspaceFileInputRef,
+    // 统一附件上传
+    attachmentInputRef,
+    pickAttachments,
+    onAttachmentsSelected,
     workspaceFiles,
     isUploadingWorkspaceFiles,
     hasWorkspaceFiles,
-    pickWorkspaceFiles,
-    onWorkspaceFilesSelected,
     removeWorkspaceFile,
     retryWorkspaceFile,
     clearWorkspaceFiles,
@@ -178,12 +171,6 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
   const readyFiles = workspaceFiles.filter((f) => f.status === 'ready')
   const desktopSendDisabled = sendLocked || isUploadingWorkspaceFiles || ((!input.trim() && selectedImages.length === 0 && readyFiles.length === 0) && !isStreaming)
   const textareaDisabled = isStreaming || sessionControls.quotaExhausted
-  const imageLimits = {
-    maxCount: MAX_IMAGE_COUNT,
-    maxMb: MAX_IMAGE_MB,
-    maxEdge: MAX_IMAGE_EDGE,
-    maxTotalMb: MAX_TOTAL_IMAGE_MB,
-  }
 
   const toolbar: ChatToolbarProps = {
     selectedModelId: sessionControls.toolbarModelId,
@@ -238,7 +225,6 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     desktopSendDisabled,
     sendLocked,
     sendLockedReason,
-    pickImages,
     onRemoveImage: removeImage,
     onInputChange: handleTextareaChange,
     onKeyDown: handleKeyDown,
@@ -254,9 +240,14 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     onToggleWebSearch: sessionControls.toggleWebSearch,
     onWebSearchScopeChange: setWebSearchScope,
     onEffortChange: sessionControls.updateEffort,
-    fileInputRef,
-    onFilesSelected,
-    imageLimits,
+    // 统一附件上传
+    attachmentInputRef,
+    pickAttachments,
+    onAttachmentsSelected,
+    workspaceFiles,
+    isUploadingWorkspaceFiles,
+    hasWorkspaceFiles,
+    onRemoveWorkspaceFile: removeWorkspaceFile,
     customHeaders,
     onAddCustomHeader: addCustomHeader,
     onCustomHeaderChange: updateCustomHeader,
@@ -277,15 +268,6 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     // 拖拽上传
     isDragOver,
     dragHandlers,
-    // 工作区文件上传
-    workspaceFileInputRef,
-    workspaceFiles,
-    isUploadingWorkspaceFiles,
-    hasWorkspaceFiles,
-    pickWorkspaceFiles,
-    onWorkspaceFilesSelected,
-    onRemoveWorkspaceFile: removeWorkspaceFile,
-    onRetryWorkspaceFile: retryWorkspaceFile,
     // 知识库
     knowledgeBaseEnabled: knowledgeBase.isEnabled,
     knowledgeBases: knowledgeBase.availableKbs,

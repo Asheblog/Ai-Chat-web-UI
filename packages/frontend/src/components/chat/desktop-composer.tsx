@@ -5,13 +5,14 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Maximize2, Plus, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
+import type { WorkspaceFile } from '@/features/chat/composer'
 import { Textarea } from '@/components/ui/textarea'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ChatImagePreview } from './chat-image-preview'
+import { ComposerAttachmentList } from './composer-attachment-list'
+import { AttachmentUploadButton } from './attachment-upload-button'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
-import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import type { ComposerSkillOption } from './chat-composer-panel'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
@@ -35,11 +36,15 @@ interface DesktopComposerProps {
   placeholder: string
   textareaDisabled: boolean
   isStreaming: boolean
+  // 附件
   selectedImages: ChatComposerImage[]
   onRemoveImage: (index: number) => void
-  pickImages: () => void
-  isVisionEnabled: boolean
-  imageLimits: { maxCount: number; maxMb: number; maxEdge: number; maxTotalMb: number }
+  workspaceFiles: WorkspaceFile[]
+  onRemoveWorkspaceFile: (localId: string) => void
+  onPickAttachments: () => void
+  hasAttachments: boolean
+  attachmentsCount: number
+  // 功能开关
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
   webSearchEnabled: boolean
@@ -75,12 +80,7 @@ interface DesktopComposerProps {
   onStop: () => void
   desktopSendDisabled: boolean
   sendLockedReason: string | null
-  // 文件附件
-  hasDocuments?: boolean
-  pickDocuments?: () => void
-  onOpenAttachmentManager?: () => void
-  attachedDocumentsLength?: number
-  // 知识库
+  // 知识库（只在 ComposerFeatureControls 展示）
   onOpenKnowledgeBase?: () => void
   knowledgeBaseEnabled?: boolean
   knowledgeBaseCount?: number
@@ -99,9 +99,11 @@ export function DesktopComposer({
   isStreaming,
   selectedImages,
   onRemoveImage,
-  pickImages,
-  isVisionEnabled,
-  imageLimits,
+  workspaceFiles,
+  onRemoveWorkspaceFile,
+  onPickAttachments,
+  hasAttachments,
+  attachmentsCount,
   thinkingEnabled,
   onToggleThinking,
   webSearchEnabled,
@@ -136,11 +138,6 @@ export function DesktopComposer({
   onStop,
   desktopSendDisabled,
   sendLockedReason,
-  hasDocuments,
-  pickDocuments,
-  onOpenAttachmentManager,
-  attachedDocumentsLength = 0,
-  // 知识库
   onOpenKnowledgeBase,
   knowledgeBaseEnabled,
   knowledgeBaseCount,
@@ -158,7 +155,13 @@ export function DesktopComposer({
   return (
     <div className="hidden md:block">
       <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-5 pt-3 md:px-6">
-        <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-3" />
+        <ComposerAttachmentList
+          images={selectedImages}
+          onRemoveImage={onRemoveImage}
+          workspaceFiles={workspaceFiles}
+          onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+          className="mb-3"
+        />
         <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'relative p-4')}>
           <Textarea
             ref={textareaRef}
@@ -225,21 +228,13 @@ export function DesktopComposer({
                 />
               </DropdownMenu>
 
-              <AttachmentMenu
-                onPickImages={pickImages}
-                onPickDocuments={pickDocuments}
-                disableImages={isStreaming || !isVisionEnabled}
-                disableDocuments={isStreaming}
-                hasImages={selectedImages.length > 0}
-                hasDocuments={hasDocuments}
-                onOpenManager={onOpenAttachmentManager}
-                manageDisabled={!hasDocuments && selectedImages.length === 0}
-                manageCount={(selectedImages?.length ?? 0) + (hasDocuments ? attachedDocumentsLength : 0)}
+              <AttachmentUploadButton
+                onPick={onPickAttachments}
+                disabled={isStreaming}
+                hasAttachments={hasAttachments}
+                count={attachmentsCount}
                 ariaLabel="上传附件"
                 className={composerToolbarButtonClass}
-                onOpenKnowledgeBase={onOpenKnowledgeBase}
-                knowledgeBaseEnabled={knowledgeBaseEnabled}
-                knowledgeBaseCount={knowledgeBaseCount}
               />
 
               <ComposerFeatureControls

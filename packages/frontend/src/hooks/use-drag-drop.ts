@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { classifyFiles } from '@/features/chat/composer/classify-files'
 import type { ToastHandler } from '@/features/chat/composer'
 
 /**
@@ -34,22 +35,9 @@ export function useDragDrop(options: {
     }
   }, [])
 
-  const classifyFiles = useCallback(
+  const handleClassifiedFiles = useCallback(
     (fileList: FileList) => {
-      const files = Array.from(fileList)
-      const directories: File[] = []
-      const images: File[] = []
-      const others: File[] = []
-
-      for (const file of files) {
-        if (file.size === 0 && file.type === '') {
-          directories.push(file)
-        } else if (file.type.startsWith('image/')) {
-          images.push(file)
-        } else {
-          others.push(file)
-        }
-      }
+      const { directories, images, others } = classifyFiles(fileList, { isVisionEnabled })
 
       if (directories.length > 0) {
         toast({
@@ -59,20 +47,19 @@ export function useDragDrop(options: {
         })
       }
 
-      if (images.length > 0) {
-        if (isVisionEnabled && onAddImageFiles) {
-          onAddImageFiles(images)
-        } else {
-          others.push(...images)
+      if (images.length > 0 && onAddImageFiles) {
+        onAddImageFiles(images)
+      }
+
+      if (others.length > 0) {
+        // vision 关闭时，classifyFiles 已将图片归入 others，需要告知用户
+        if (!isVisionEnabled && Array.from(fileList).some((f) => f.type.startsWith('image/'))) {
           toast({
             title: '图片作为工作区文件',
             description: '当前模型不支持图片输入，已作为工作区文件上传',
           })
         }
-      }
-
-      if (others.length > 0 && onUploadWorkspaceFiles) {
-        onUploadWorkspaceFiles(others)
+        onUploadWorkspaceFiles?.(others)
       }
     },
     [isVisionEnabled, onAddImageFiles, onUploadWorkspaceFiles, toast],
@@ -111,9 +98,9 @@ export function useDragDrop(options: {
 
       if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) return
 
-      classifyFiles(e.dataTransfer.files)
+      handleClassifiedFiles(e.dataTransfer.files)
     },
-    [classifyFiles],
+    [handleClassifiedFiles],
   )
 
   return {

@@ -203,13 +203,13 @@ export const useWorkspaceFiles = ({
       if (successCount === 0 && failureCount > 0) {
         toast({
           title: '所有文件上传失败',
-          description: '可在附件管理中重试或移除',
+          description: '失败文件已保留在输入框，可删除后重新上传',
           variant: 'destructive',
         })
       } else if (successCount > 0 && failureCount > 0) {
         toast({
           title: `${successCount} 个文件上传成功`,
-          description: `${failureCount} 个文件上传失败，可在附件管理中重试`,
+          description: `${failureCount} 个文件上传失败，失败文件已保留在输入框，可删除后重新上传`,
         })
       }
     },

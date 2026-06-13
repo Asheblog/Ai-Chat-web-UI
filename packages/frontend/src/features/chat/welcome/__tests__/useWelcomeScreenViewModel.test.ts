@@ -143,26 +143,13 @@ vi.mock('@/features/chat/composer', () => ({
     buildRequestPayload: () => ({ ok: true }),
   }),
   useImageAttachments: () => ({
-    fileInputRef: { current: null },
     selectedImages: [],
     setSelectedImages: vi.fn(),
-    pickImages: vi.fn(),
-    onFilesSelected: vi.fn(),
     removeImage: vi.fn(),
     validateImage: vi.fn().mockResolvedValue({ ok: false }),
     handlePaste: vi.fn(),
   }),
   useComposerFeatureFlags: () => ({}),
-  useWorkspaceFiles: () => ({
-    workspaceFiles: [],
-    pickWorkspaceFiles: vi.fn(),
-    onWorkspaceFilesSelected: vi.fn(),
-    removeWorkspaceFile: vi.fn(),
-    workspaceFileInputRef: { current: null },
-  }),
-  useDocumentAttachments: () => ({}),
-  DocumentAttachment: () => null,
-  WorkspaceFileTray: () => null,
 }))
 
 // --- Mock knowledge base ---

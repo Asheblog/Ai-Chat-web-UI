@@ -96,11 +96,8 @@ export const useWelcomeScreenViewModel = () => {
   } = useAdvancedRequest({ sessionId: null })
 
   const {
-    fileInputRef,
     selectedImages,
     setSelectedImages,
-    pickImages,
-    onFilesSelected,
     removeImage,
     validateImage,
     handlePaste,
@@ -110,33 +107,27 @@ export const useWelcomeScreenViewModel = () => {
     toast,
   })
 
-  // 工作区文件草稿（欢迎页无 session，先暂存 File 对象，创建会话后上传）
-  const workspaceFileInputRef = useRef<HTMLInputElement>(null)
+  // 统一附件输入（不含 onAttachmentsSelected — 其定义在 isVisionEnabled 之后）
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
+  const pickAttachments = useCallback(() => {
+    if (quotaExhausted) {
+      toast({
+        title: '额度已用尽',
+        description: '请登录或等待次日重置额度',
+        variant: 'destructive',
+      })
+      return
+    }
+    attachmentInputRef.current?.click()
+  }, [quotaExhausted, toast])
   const [draftFiles, setDraftFiles] = useState<Array<{ id: string; file: File }>>([])
-  const pickWorkspaceFiles = useCallback(() => {
-    workspaceFileInputRef.current?.click()
-  }, [])
-  const onWorkspaceFilesSelected = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const selectedFiles = Array.from(event.target.files || [])
-      if (selectedFiles.length === 0) return
-      setDraftFiles((prev) => [
-        ...prev,
-        ...selectedFiles.map((f) => ({ id: crypto.randomUUID(), file: f })),
-      ])
-      if (workspaceFileInputRef.current) {
-        workspaceFileInputRef.current.value = ''
-      }
-    },
-    [],
-  )
   const removeWorkspaceFile = useCallback((workspacePath: string) => {
     setDraftFiles((prev) => prev.filter((d) => d.id !== workspacePath))
   }, [])
   const clearWorkspaceFiles = useCallback(() => {
     setDraftFiles([])
-    if (workspaceFileInputRef.current) {
-      workspaceFileInputRef.current.value = ''
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = ''
     }
   }, [])
   const draftWorkspaceFiles = useMemo(
@@ -326,6 +317,59 @@ export const useWelcomeScreenViewModel = () => {
     }
   }, [draftFiles.length, canUsePythonTool, pythonToolEnabled])
 
+  // onAttachmentsSelected（需在 isVisionEnabled 之后定义）
+  const onAttachmentsSelected = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || [])
+      if (files.length === 0) return
+
+      const { classifyFiles } = await import('@/features/chat/composer/classify-files')
+      const { directories, images, others } = classifyFiles(files, { isVisionEnabled })
+
+      if (directories.length > 0) {
+        toast({
+          title: '不支持文件夹',
+          description: '请单独选择文件上传',
+          variant: 'destructive',
+        })
+      }
+
+      // 处理图片（vision 路径）
+      for (const file of images) {
+        const result = await validateImage(file)
+        if (!result.ok) {
+          toast({
+            title: '图片不符合要求',
+            description: result.reason || '图片校验失败',
+            variant: 'destructive',
+          })
+        } else if (result.dataUrl && result.mime && typeof result.size === 'number') {
+          setSelectedImages((prev) => [...prev, { dataUrl: result.dataUrl!, mime: result.mime!, size: result.size! }])
+        }
+      }
+
+      // 处理其他文件（欢迎页暂存，创建会话后上传）
+      if (others.length > 0) {
+        // vision 关闭时图片会被归入 others，告知用户
+        if (!isVisionEnabled && files.some((f) => f.type.startsWith('image/'))) {
+          toast({
+            title: '图片作为工作区文件',
+            description: '当前模型不支持图片输入，已作为工作区文件上传',
+          })
+        }
+        setDraftFiles((prev) => [
+          ...prev,
+          ...others.map((f) => ({ id: crypto.randomUUID(), file: f })),
+        ])
+      }
+
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = ''
+      }
+    },
+    [isVisionEnabled, validateImage, setSelectedImages, toast],
+  )
+
   // 拖拽图片处理（欢迎页）
   const handleAddImageFiles = useCallback(
     async (imageFiles: File[]) => {
@@ -429,26 +473,6 @@ export const useWelcomeScreenViewModel = () => {
     },
     [actorType],
   )
-
-  const handlePickImages = useCallback(() => {
-    if (quotaExhausted) {
-      toast({
-        title: '额度已用尽',
-        description: '请登录或等待次日重置额度',
-        variant: 'destructive',
-      })
-      return
-    }
-    if (!isVisionEnabled) {
-      toast({
-        title: '当前模型不支持图片',
-        description: '请切换到支持图片的模型',
-        variant: 'destructive',
-      })
-      return
-    }
-    pickImages()
-  }, [isVisionEnabled, pickImages, quotaExhausted, toast])
 
   const canCreate = Boolean(selectedModel)
   const creationDisabled = !canCreate || isCreating || quotaExhausted
@@ -646,9 +670,6 @@ export const useWelcomeScreenViewModel = () => {
             Object.keys(options).length ? options : undefined,
           )
           setSelectedImages([])
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ''
-          }
         }
       }
 
@@ -689,7 +710,6 @@ export const useWelcomeScreenViewModel = () => {
     systemSettings?.webSearchIncludeRaw,
     canUsePythonTool,
     pythonToolEnabled,
-    fileInputRef,
     draftFiles,
     clearWorkspaceFiles,
     enabledExtraSkills,
@@ -755,16 +775,13 @@ export const useWelcomeScreenViewModel = () => {
       dragHandlers,
       attachments: {
         selectedImages,
-        fileInputRef,
         onRemoveImage: removeImage,
-        onFilesSelected,
-        onPickImages: handlePickImages,
         onPaste: handlePaste,
         workspaceFiles: draftWorkspaceFiles,
         onRemoveWorkspaceFile: removeWorkspaceFile,
-        pickWorkspaceFiles,
-        onWorkspaceFilesSelected,
-        workspaceFileInputRef,
+        attachmentInputRef,
+        pickAttachments,
+        onAttachmentsSelected,
       },
       knowledgeBase: {
         enabled: knowledgeBaseEnabled && knowledgeBaseHasPermission,

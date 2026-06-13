@@ -5,14 +5,15 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
+import type { WorkspaceFile } from '@/features/chat/composer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ChatImagePreview } from './chat-image-preview'
+import { ComposerAttachmentList } from './composer-attachment-list'
+import { AttachmentUploadButton } from './attachment-upload-button'
 import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
-import { AttachmentMenu } from '@/components/chat/attachment-menu'
 import type { ComposerSkillOption } from './chat-composer-panel'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
@@ -39,8 +40,15 @@ interface MobileComposerProps {
   sendLockedReason: string | null
   onSend: () => void
   onStop: () => void
+  // 附件
   selectedImages: ChatComposerImage[]
   onRemoveImage: (index: number) => void
+  workspaceFiles: WorkspaceFile[]
+  onRemoveWorkspaceFile: (localId: string) => void
+  onPickAttachments: () => void
+  hasAttachments: boolean
+  attachmentsCount: number
+  // 功能开关
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
   effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
@@ -50,11 +58,6 @@ interface MobileComposerProps {
   webSearchScope: string
   onWebSearchScopeChange: (value: string) => void
   showWebSearchScope: boolean
-  pickImages: () => void
-  pickDocuments?: () => void
-  hasDocuments?: boolean
-  onOpenAttachmentManager?: () => void
-  attachmentsCount?: number
   canUseWebSearch: boolean
   webSearchDisabledNote?: string
   pythonToolEnabled: boolean
@@ -98,6 +101,11 @@ export function MobileComposer({
   onStop,
   selectedImages,
   onRemoveImage,
+  workspaceFiles,
+  onRemoveWorkspaceFile,
+  onPickAttachments,
+  hasAttachments,
+  attachmentsCount,
   thinkingEnabled,
   onToggleThinking,
   effort,
@@ -107,11 +115,6 @@ export function MobileComposer({
   webSearchScope,
   onWebSearchScopeChange,
   showWebSearchScope,
-  pickImages,
-  pickDocuments,
-  hasDocuments,
-  onOpenAttachmentManager,
-  attachmentsCount = 0,
   canUseWebSearch,
   webSearchDisabledNote,
   pythonToolEnabled,
@@ -133,12 +136,12 @@ export function MobileComposer({
   onToggleTrace,
   onOpenAdvanced,
   onOpenSessionPrompt,
-  // 知识库
   onOpenKnowledgeBase,
   knowledgeBaseEnabled,
   knowledgeBaseCount,
 }: MobileComposerProps) {
-  const disabled = sendLocked || (!input.trim() && selectedImages.length === 0 && !hasDocuments)
+  const hasReadyFiles = workspaceFiles.some((f) => f.status === 'ready')
+  const disabled = sendLocked || (!input.trim() && selectedImages.length === 0 && !hasReadyFiles)
   const [plusOpen, setPlusOpen] = useState(false)
   const [plusAdvancedOpen, setPlusAdvancedOpen] = useState(false)
   const [skillPanelOpen, setSkillPanelOpen] = useState(false)
@@ -157,7 +160,13 @@ export function MobileComposer({
 
   return (
     <div className="px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 md:hidden">
-      <ChatImagePreview images={selectedImages} onRemove={onRemoveImage} className="mb-2" />
+      <ComposerAttachmentList
+        images={selectedImages}
+        onRemoveImage={onRemoveImage}
+        workspaceFiles={workspaceFiles}
+        onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+        className="mb-2"
+      />
       <div className={composerInnerEditorClass}>
         <Textarea
           ref={textareaRef}
@@ -209,22 +218,13 @@ export function MobileComposer({
             </PopoverContent>
           </Popover>
 
-          <AttachmentMenu
-            onPickImages={pickImages}
-            onPickDocuments={pickDocuments}
-            disableImages={isStreaming || !isVisionEnabled}
-            disableDocuments={isStreaming || !pickDocuments}
-            hasImages={selectedImages.length > 0}
-            hasDocuments={hasDocuments}
-            onOpenManager={onOpenAttachmentManager}
-            manageDisabled={!hasDocuments && selectedImages.length === 0}
-            manageCount={attachmentsCount}
+          <AttachmentUploadButton
+            onPick={onPickAttachments}
+            disabled={isStreaming}
+            hasAttachments={hasAttachments}
+            count={attachmentsCount}
             ariaLabel="上传附件"
             className={composerToolbarButtonClass}
-            menuMode="sheet"
-            onOpenKnowledgeBase={onOpenKnowledgeBase}
-            knowledgeBaseEnabled={knowledgeBaseEnabled}
-            knowledgeBaseCount={knowledgeBaseCount}
           />
 
           <ComposerFeatureControls

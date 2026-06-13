@@ -237,11 +237,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   }, [isAutoScrollEnabled, isStreaming])
 
   const {
-    fileInputRef,
     selectedImages,
     setSelectedImages,
-    pickImages,
-    onFilesSelected,
     removeImage,
     validateImage,
     handlePaste,
@@ -259,12 +256,9 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
   // 工作区文件上传（直接写入 workspace，不走分块嵌入管线）
   const {
-    fileInputRef: workspaceFileInputRef,
     files: workspaceFiles,
     isUploading: isUploadingWorkspaceFiles,
     hasFiles,
-    pickFiles: pickWorkspaceFiles,
-    onFilesSelected: onWorkspaceFilesSelected,
     removeFile: removeWorkspaceFile,
     retryUpload,
     uploadFiles,
@@ -314,6 +308,68 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     onUploadWorkspaceFiles: uploadFiles,
     toast,
   })
+
+  // 统一附件选择器
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
+  const pickAttachments = useCallback(() => {
+    attachmentInputRef.current?.click()
+  }, [])
+  const onAttachmentsSelected = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || [])
+      if (files.length === 0) return
+
+      const { classifyFiles } = await import('@/features/chat/composer/classify-files')
+
+      // 先按 vision 状态分类
+      const classified = classifyFiles(files, { isVisionEnabled })
+
+      if (classified.directories.length > 0) {
+        toast({
+          title: '不支持文件夹',
+          description: '请单独选择文件上传',
+          variant: 'destructive',
+        })
+      }
+
+      const workspaceUploads: File[] = []
+
+      // 处理图片
+      for (const file of classified.images) {
+        const result = await validateImage(file)
+        if (!result.ok) {
+          toast({
+            title: '图片不符合要求',
+            description: result.reason || '图片校验失败',
+            variant: 'destructive',
+          })
+        } else if (result.dataUrl && result.mime && typeof result.size === 'number') {
+          setSelectedImages((prev) => [...prev, { dataUrl: result.dataUrl!, mime: result.mime!, size: result.size! }])
+        }
+      }
+
+      // 分类中的 others 也可能是图片（vision off 时）
+      workspaceUploads.push(...classified.others)
+
+      // 有图片但 vision 关闭时给出提示
+      const othersFromImages = files.some((f) => f.type.startsWith('image/')) && !isVisionEnabled
+
+      if (workspaceUploads.length > 0) {
+        if (othersFromImages) {
+          toast({
+            title: '图片作为工作区文件',
+            description: '当前模型不支持图片输入，已作为工作区文件上传',
+          })
+        }
+        await uploadFiles(workspaceUploads)
+      }
+
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = ''
+      }
+    },
+    [isVisionEnabled, validateImage, setSelectedImages, uploadFiles, toast],
+  )
 
   const handleAddCustomHeader = useCallback(() => {
     const result = appendCustomHeader()
@@ -437,7 +493,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     isComposing,
     textareaRef,
     scrollAreaRef,
-    fileInputRef,
     selectedImages,
     thinkingEnabled,
     effort,
@@ -486,8 +541,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     handleStop,
     handleKeyDown,
     handleTextareaChange,
-    pickImages,
-    onFilesSelected,
     removeImage,
     validateImage,
     handlePaste,
@@ -519,13 +572,14 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     // 拖拽上传
     isDragOver,
     dragHandlers,
-    // 工作区文件上传
-    workspaceFileInputRef,
+    // 统一附件上传
+    attachmentInputRef,
+    pickAttachments,
+    onAttachmentsSelected,
+    // 工作区文件
     workspaceFiles,
     isUploadingWorkspaceFiles,
     hasWorkspaceFiles: hasFiles,
-    pickWorkspaceFiles,
-    onWorkspaceFilesSelected,
     removeWorkspaceFile,
     retryWorkspaceFile: retryUpload,
     clearWorkspaceFiles,

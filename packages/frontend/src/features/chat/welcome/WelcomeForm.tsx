@@ -5,9 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Loader2, Maximize2, Send } from 'lucide-react'
 import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { AdvancedOptions } from './AdvancedOptions'
-import { ImagePreviewList } from './ImagePreviewList'
-import { AttachmentMenu } from '@/components/chat/attachment-menu'
-import { WorkspaceFileTray } from '@/features/chat/composer'
+import { ComposerAttachmentList } from '@/components/chat/composer-attachment-list'
+import { AttachmentUploadButton } from '@/components/chat/attachment-upload-button'
 import type { WorkspaceFile } from '@/features/chat/composer'
 import { KnowledgeBaseSelector, type KnowledgeBaseItem } from '@/components/chat/knowledge-base-selector'
 import { cn } from '@/lib/utils'
@@ -54,16 +53,14 @@ interface WelcomeFormProps {
     }
     attachments: {
       selectedImages: Array<{ dataUrl: string; mime: string; size: number }>
-      fileInputRef: RefObject<HTMLInputElement>
       onRemoveImage: (index: number) => void
-      onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
-      onPickImages: () => void
       onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void
       workspaceFiles: WorkspaceFile[]
       onRemoveWorkspaceFile: (workspacePath: string) => void
-      pickWorkspaceFiles: () => void
-      onWorkspaceFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
-      workspaceFileInputRef: RefObject<HTMLInputElement>
+      // 统一附件上传
+      attachmentInputRef: RefObject<HTMLInputElement>
+      pickAttachments: () => void
+      onAttachmentsSelected: (event: ChangeEvent<HTMLInputElement>) => void
     }
     knowledgeBase: {
       enabled: boolean
@@ -133,7 +130,6 @@ interface WelcomeFormProps {
 }
 
 export function WelcomeForm({ form }: WelcomeFormProps) {
-  const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false)
   const {
     query,
     isComposing,
@@ -176,6 +172,8 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
   }, [])
 
   const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
+  const hasAttachments = attachments.selectedImages.length > 0 || attachments.workspaceFiles.length > 0
+  const attachmentsCount = attachments.selectedImages.length + attachments.workspaceFiles.length
 
   return (
     <div
@@ -191,7 +189,12 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           </div>
         </div>
       )}
-      <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
+      <ComposerAttachmentList
+        images={attachments.selectedImages}
+        onRemoveImage={attachments.onRemoveImage}
+        workspaceFiles={attachments.workspaceFiles}
+        onRemoveWorkspaceFile={attachments.onRemoveWorkspaceFile}
+      />
 
       <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-3 md:px-4')}>
         <div className={composerInnerEditorClass}>
@@ -230,21 +233,13 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className={cn(composerToolbarScrollClass, 'flex-1')}>
             <AdvancedOptions {...advancedOptions} triggerClassName={composerToolbarButtonClass} />
-            <AttachmentMenu
-              onPickImages={attachments.onPickImages}
-              onPickDocuments={attachments.pickWorkspaceFiles}
-              disableImages={creationDisabled}
-              disableDocuments={creationDisabled}
-              hasImages={attachments.selectedImages.length > 0}
-              hasDocuments={attachments.workspaceFiles.length > 0}
+            <AttachmentUploadButton
+              onPick={attachments.pickAttachments}
+              disabled={creationDisabled}
+              hasAttachments={hasAttachments}
+              count={attachmentsCount}
+              ariaLabel="上传附件"
               className={composerToolbarButtonClass}
-              ariaLabel="添加附件"
-              onOpenManager={() => setAttachmentViewerOpen(true)}
-              manageDisabled={attachments.selectedImages.length + attachments.workspaceFiles.length === 0}
-              manageCount={attachments.selectedImages.length + attachments.workspaceFiles.length}
-              onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
-              knowledgeBaseEnabled={knowledgeBase.enabled}
-              knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
             />
 
             <ComposerFeatureControls
@@ -282,29 +277,14 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           {mobileQuotaNotice}
         </p>
       ) : null}
+
+      {/* 统一附件上传输入框 */}
       <input
-        ref={attachments.fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={attachments.onFilesSelected}
-        disabled={creationDisabled}
-      />
-      {attachmentViewerOpen && (
-        <WorkspaceFileTray
-          files={attachments.workspaceFiles}
-          onRemove={attachments.onRemoveWorkspaceFile}
-          open={attachmentViewerOpen}
-          onOpenChange={setAttachmentViewerOpen}
-        />
-      )}
-      <input
-        ref={attachments.workspaceFileInputRef}
+        ref={attachments.attachmentInputRef}
         type="file"
         multiple
         className="hidden"
-        onChange={attachments.onWorkspaceFilesSelected}
+        onChange={attachments.onAttachmentsSelected}
         disabled={creationDisabled}
       />
 
@@ -392,7 +372,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
             <p className="text-xs text-muted-foreground">
-              {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用“今天日期是{day time}”。'}
+              {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用"今天日期是{day time}"。'}
             </p>
           </div>
           <div className="flex items-center justify-between border-t px-5 py-3">
