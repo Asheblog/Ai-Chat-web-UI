@@ -10,10 +10,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { SectionCard } from './tab-bar'
+import { McpListHeader, McpEmptyState, McpFormPanel, McpField, McpSelectField } from './mcp-ui'
 import * as secretVaultApi from '@/features/secret-vault/api'
 import type { SecretView } from '@/types'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { KeyRound, Pencil, Trash2 } from 'lucide-react'
 
 export function SecretsTab() {
   const { toast } = useToast()
@@ -25,7 +25,6 @@ export function SecretsTab() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Form state
   const [formScope, setFormScope] = useState<'system' | 'user'>('system')
   const [formKind, setFormKind] = useState<'api_key' | 'mcp_credential' | 'skill_secret'>('mcp_credential')
   const [formLabel, setFormLabel] = useState('')
@@ -44,13 +43,8 @@ export function SecretsTab() {
 
   useEffect(() => { load() }, [load])
 
-  const openCreate = () => {
-    setEditId(null); setFormScope('system'); setFormKind('mcp_credential'); setFormLabel(''); setFormValue(''); setShowForm(true)
-  }
-
-  const openEdit = (s: SecretView) => {
-    setEditId(s.id); setFormScope(s.scope as any); setFormKind(s.kind as any); setFormLabel(s.label); setFormValue(''); setShowForm(true)
-  }
+  const openCreate = () => { setEditId(null); setFormScope('system'); setFormKind('mcp_credential'); setFormLabel(''); setFormValue(''); setShowForm(true) }
+  const openEdit = (s: SecretView) => { setEditId(s.id); setFormScope(s.scope as any); setFormKind(s.kind as any); setFormLabel(s.label); setFormValue(''); setShowForm(true) }
 
   const handleSave = async () => {
     if (!formLabel) { toast({ title: 'label 必填', variant: 'destructive' }); return }
@@ -88,78 +82,64 @@ export function SecretsTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">共 {items.length} 个凭据</p>
-        <Button size="sm" variant="outline" onClick={openCreate}><Plus className="mr-1 h-3.5 w-3.5" />新建</Button>
-      </div>
+      <McpListHeader count={items.length} actionLabel="新建" onAction={openCreate} />
 
       {showForm && (
-        <SectionCard>
-          <p className="text-xs font-semibold">{editId ? '编辑凭据' : '新建凭据'}</p>
+        <McpFormPanel
+          title={editId ? '编辑凭据' : '新建凭据'}
+          actions={
+            <>
+              <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>取消</Button>
+            </>
+          }
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">scope</label>
-              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs" value={formScope} onChange={(e) => setFormScope(e.target.value as any)}>
-                <option value="system">system</option>
-                <option value="user">user</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">kind</label>
-              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs" value={formKind} onChange={(e) => setFormKind(e.target.value as any)}>
-                <option value="mcp_credential">mcp_credential</option>
-                <option value="api_key">api_key</option>
-                <option value="skill_secret">skill_secret</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">标签 *</label>
-              <Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">{editId ? '新值（留空不改）' : '值 *'}</label>
+            <McpSelectField label="scope" value={formScope} onChange={(v) => setFormScope(v as any)} options={['system', 'user']} />
+            <McpSelectField label="kind" value={formKind} onChange={(v) => setFormKind(v as any)} options={['mcp_credential', 'api_key', 'skill_secret']} />
+            <McpField label="标签" required><Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} /></McpField>
+            <McpField label={editId ? '新值（留空不改）' : '值'} required={!editId}>
               <Input type="password" value={formValue} onChange={(e) => setFormValue(e.target.value)} />
-            </div>
+            </McpField>
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>取消</Button>
-          </div>
-        </SectionCard>
+        </McpFormPanel>
       )}
 
-      <div className="v2-table-wrap">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-left text-muted-foreground border-b">
-              <th className="py-2 pr-3">ID</th>
-              <th className="py-2 pr-3">标签</th>
-              <th className="py-2 pr-3">scope</th>
-              <th className="py-2 pr-3">kind</th>
-              <th className="py-2 pr-3">有值</th>
-              <th className="py-2 pr-3">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 && <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">暂无凭据</td></tr>}
-            {items.map((s) => (
-              <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
-                <td className="py-2 pr-3 font-mono">{s.id}</td>
-                <td className="py-2 pr-3">{s.label}</td>
-                <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{s.scope}</Badge></td>
-                <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{s.kind}</Badge></td>
-                <td className="py-2 pr-3">{s.hasValue ? '是' : '否'}</td>
-                <td className="py-2 pr-3">
-                  <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => openEdit(s)} title="编辑"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button type="button" onClick={() => setDeleteId(s.id)} title="删除"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
-                  </div>
-                </td>
+      {items.length === 0 ? (
+        <McpEmptyState icon={KeyRound} title="暂无凭据" description="创建凭据来安全存储 API Key 和 MCP 凭据" action={{ label: '新建凭据', onClick: openCreate }} />
+      ) : (
+        <div className="v2-table-wrap">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-muted-foreground border-b">
+                <th className="py-2 pr-3">ID</th>
+                <th className="py-2 pr-3">标签</th>
+                <th className="py-2 pr-3">scope</th>
+                <th className="py-2 pr-3">kind</th>
+                <th className="py-2 pr-3">有值</th>
+                <th className="py-2 pr-3">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {items.map((s) => (
+                <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
+                  <td className="py-2 pr-3 font-mono">{s.id}</td>
+                  <td className="py-2 pr-3">{s.label}</td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{s.scope}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{s.kind}</Badge></td>
+                  <td className="py-2 pr-3">{s.hasValue ? '是' : '否'}</td>
+                  <td className="py-2 pr-3">
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => openEdit(s)} title="编辑" className="inline-flex p-1 rounded hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => setDeleteId(s.id)} title="删除" className="inline-flex p-1 rounded hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>

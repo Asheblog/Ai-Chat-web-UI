@@ -11,11 +11,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { SectionCard } from './tab-bar'
+import { McpListHeader, McpEmptyState, McpFormPanel, McpField } from './mcp-ui'
 import * as mcpApi from '@/features/mcp/api'
 import * as secretVaultApi from '@/features/secret-vault/api'
 import type { McpInstallation, McpConnection, SecretView } from '@/types'
-import { Plus, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { Cable, Plus, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function ConnectionsTab() {
@@ -35,7 +35,6 @@ export function ConnectionsTab() {
   const [secretValue, setSecretValue] = useState('')
   const [secretCreating, setSecretCreating] = useState(false)
 
-  // Form state
   const [formInstId, setFormInstId] = useState('')
   const [formName, setFormName] = useState('')
   const [formConfig, setFormConfig] = useState('')
@@ -143,7 +142,6 @@ export function ConnectionsTab() {
       toast({ title: '凭据已创建' })
       setFormSecretVaultId(String(res.data?.id))
       setShowSecretCreate(false); setSecretLabel(''); setSecretValue('')
-      // Reload secrets list
       const secretRes = await secretVaultApi.listSecrets({ scope: 'system', kind: 'mcp_credential' })
       setSecrets(secretRes.data ?? [])
     } catch (err: any) {
@@ -158,34 +156,30 @@ export function ConnectionsTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">共 {items.length} 个连接</p>
-        <Button size="sm" variant="outline" onClick={openCreate}><Plus className="mr-1 h-3.5 w-3.5" />新建</Button>
-      </div>
+      <McpListHeader count={items.length} actionLabel="新建" onAction={openCreate} />
 
       {showForm && (
-        <SectionCard>
-          <p className="text-xs font-semibold">{editId ? '编辑连接' : '新建连接'}</p>
+        <McpFormPanel
+          title={editId ? '编辑连接' : '新建连接'}
+          actions={
+            <>
+              <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>取消</Button>
+            </>
+          }
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">安装 *</label>
-              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs" value={formInstId} onChange={(e) => setFormInstId(e.target.value)}>
+            <McpField label="安装" required>
+              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formInstId} onChange={(e) => setFormInstId(e.target.value)}>
                 <option value="">选择...</option>
                 {installations.map((i) => <option key={i.id} value={i.id}>{i.namespaceKey}</option>)}
               </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">名称 *</label>
-              <Input value={formName} onChange={(e) => setFormName(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">configJson</label>
-              <Input value={formConfig} onChange={(e) => setFormConfig(e.target.value)} placeholder='{"key": "val"}' />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Secret Vault 凭据</label>
+            </McpField>
+            <McpField label="名称" required><Input value={formName} onChange={(e) => setFormName(e.target.value)} /></McpField>
+            <McpField label="configJson"><Input value={formConfig} onChange={(e) => setFormConfig(e.target.value)} placeholder='{"key": "val"}' /></McpField>
+            <McpField label="Secret Vault 凭据">
               <div className="flex gap-1">
-                <select className="h-9 flex-1 rounded-md border bg-background px-3 text-xs" value={formSecretVaultId} onChange={(e) => setFormSecretVaultId(e.target.value)}>
+                <select className="h-9 flex-1 rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formSecretVaultId} onChange={(e) => setFormSecretVaultId(e.target.value)}>
                   <option value="">无（不关联凭据）</option>
                   {secrets.map((s) => <option key={s.id} value={s.id}>{s.label} (ID:{s.id})</option>)}
                 </select>
@@ -193,7 +187,7 @@ export function ConnectionsTab() {
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            </div>
+            </McpField>
             <div className="flex items-center gap-2 pt-5">
               <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
               <span className="text-xs text-muted-foreground">启用</span>
@@ -201,7 +195,7 @@ export function ConnectionsTab() {
           </div>
 
           {showSecretCreate && (
-            <div className="border rounded-md p-3 space-y-2 mt-2">
+            <div className="rounded-md border p-3 space-y-3">
               <p className="text-xs font-medium text-muted-foreground">快速创建 MCP 凭据</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <Input placeholder="标签（如 My API Key）" value={secretLabel} onChange={(e) => setSecretLabel(e.target.value)} />
@@ -212,47 +206,45 @@ export function ConnectionsTab() {
               </Button>
             </div>
           )}
-
-          <div className="flex gap-2 pt-2">
-            <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>取消</Button>
-          </div>
-        </SectionCard>
+        </McpFormPanel>
       )}
 
-      <div className="v2-table-wrap">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-left text-muted-foreground border-b">
-              <th className="py-2 pr-3">名称</th>
-              <th className="py-2 pr-3">安装</th>
-              <th className="py-2 pr-3">启用</th>
-              <th className="py-2 pr-3">状态</th>
-              <th className="py-2 pr-3">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 && <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">暂无连接</td></tr>}
-            {items.map((conn) => (
-              <tr key={conn.id} className="border-b border-border/50 hover:bg-muted/30">
-                <td className="py-2 pr-3">{conn.name}</td>
-                <td className="py-2 pr-3 font-mono text-[10px]">{instMap.get(conn.installationId)?.namespaceKey ?? conn.installationId}</td>
-                <td className="py-2 pr-3"><Switch checked={conn.enabled} onCheckedChange={(v) => handleToggle(conn.id, v)} /></td>
-                <td className="py-2 pr-3"><Badge variant={conn.status === 'active' ? 'default' : conn.status === 'error' ? 'destructive' : 'secondary'} className="text-[10px]">{conn.status || 'unknown'}</Badge></td>
-                <td className="py-2 pr-3">
-                  <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => openEdit(conn)} title="编辑"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button type="button" onClick={() => handleRefresh(conn.id)} disabled={refreshing === conn.id} title="刷新工具缓存">
-                      <RefreshCw className={cn('h-3.5 w-3.5', refreshing === conn.id && 'animate-spin')} />
-                    </button>
-                    <button type="button" onClick={() => setDeleteId(conn.id)} title="删除"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
-                  </div>
-                </td>
+      {items.length === 0 ? (
+        <McpEmptyState icon={Cable} title="暂无连接" description="基于安装模板创建一个连接来接入 MCP 工具" action={{ label: '新建连接', onClick: openCreate }} />
+      ) : (
+        <div className="v2-table-wrap">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-muted-foreground border-b">
+                <th className="py-2 pr-3">名称</th>
+                <th className="py-2 pr-3">安装</th>
+                <th className="py-2 pr-3">启用</th>
+                <th className="py-2 pr-3">状态</th>
+                <th className="py-2 pr-3">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {items.map((conn) => (
+                <tr key={conn.id} className="border-b border-border/50 hover:bg-muted/30">
+                  <td className="py-2 pr-3">{conn.name}</td>
+                  <td className="py-2 pr-3 font-mono text-[10px]">{instMap.get(conn.installationId)?.namespaceKey ?? conn.installationId}</td>
+                  <td className="py-2 pr-3"><Switch checked={conn.enabled} onCheckedChange={(v) => handleToggle(conn.id, v)} /></td>
+                  <td className="py-2 pr-3"><Badge variant={conn.status === 'active' ? 'default' : conn.status === 'error' ? 'destructive' : 'secondary'} className="text-[10px]">{conn.status || 'unknown'}</Badge></td>
+                  <td className="py-2 pr-3">
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => openEdit(conn)} title="编辑" className="inline-flex p-1 rounded hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => handleRefresh(conn.id)} disabled={refreshing === conn.id} title="刷新工具缓存" className="inline-flex p-1 rounded hover:bg-accent">
+                        <RefreshCw className={cn('h-3.5 w-3.5', refreshing === conn.id && 'animate-spin')} />
+                      </button>
+                      <button type="button" onClick={() => setDeleteId(conn.id)} title="删除" className="inline-flex p-1 rounded hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
