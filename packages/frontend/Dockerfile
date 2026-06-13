@@ -52,8 +52,9 @@ WORKDIR /app/packages/frontend
 ARG NEXT_PUBLIC_API_URL=/api
 ARG BACKEND_HOST=localhost
 ARG BACKEND_INTERNAL_PORT=8001
-# 稳定的 Server Actions 加密密钥，避免重新构建后旧客户端调用失败
-ARG NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=aichat-stable-server-actions-key-2025
+# Server Actions 加密密钥（base64 编码的 32 字节 AES-GCM key），
+# 避免重新构建后旧客户端调用失败。生产环境建议通过运行期环境变量覆盖。
+ARG NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=9SRCAaf3q6ix4CQjsxf2uMPQLQnp7eomMStASLjwCmM=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV BACKEND_HOST=$BACKEND_HOST
 ENV BACKEND_INTERNAL_PORT=$BACKEND_INTERNAL_PORT
