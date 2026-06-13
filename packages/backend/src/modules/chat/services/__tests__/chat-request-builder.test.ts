@@ -11,6 +11,7 @@ jest.mock('../../../../db', () => ({
 }))
 
 import { ChatRequestBuilder } from '../chat-request-builder'
+import { ConnectionServiceError } from '../../../../services/connections/connection-service'
 
 const baseSession = {
   id: 1,
@@ -333,5 +334,33 @@ describe('ChatRequestBuilder', () => {
     })
 
     expect(prepared.baseRequestBody.thinking).toBeUndefined()
+  })
+
+  it('throws ConnectionServiceError(400) when secretVaultId is null on bearer connection', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'provider_timeout_ms', value: '60000' },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hello' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(4000)
+    resolveCompletionLimit.mockResolvedValue(2048)
+
+    const brokenSession = {
+      ...baseSession,
+      connection: {
+        ...baseSession.connection,
+        secretVaultId: null,
+      },
+    }
+
+    await expect(builder.prepare({
+      session: brokenSession as any,
+      payload: { sessionId: 1, content: 'hello' } as any,
+      content: 'hello',
+      mode: 'stream',
+    })).rejects.toMatchObject({ statusCode: 400, message: '连接缺少 secretVaultId，无法获取 API Key' })
   })
 })

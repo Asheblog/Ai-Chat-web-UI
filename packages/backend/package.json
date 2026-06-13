@@ -20,6 +20,7 @@
     "db:migrate:execution-domain": "tsx scripts/migrate-execution-domain.ts",
     "db:studio": "prisma studio",
     "python-runtime:reconcile": "tsx scripts/reconcile-python-runtime.ts",
+    "check:broken-connections": "tsx scripts/check-broken-connections.ts",
     "test": "jest"
   },
   "prisma": {

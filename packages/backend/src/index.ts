@@ -386,6 +386,35 @@ const stopCatalogRefresh = scheduleModelCatalogAutoRefresh({
 });
 container.workspaceCleanupService.start();
 
+// 非阻塞启动检查：诊断 bearer 连接缺少 secretVaultId
+;(async () => {
+  try {
+    const broken = await appContext.prisma.$queryRaw<
+      Array<{ id: bigint; provider: string; apiKeyLabel: string | null }>
+    >`
+      SELECT id, provider, "apiKeyLabel" FROM connections
+      WHERE "authType" = 'bearer' AND secret_vault_id IS NULL
+      LIMIT 20
+    `
+    if (broken.length > 0) {
+      console.warn(`\n⚠️  发现 ${broken.length} 个 bearer 连接缺少 secretVaultId，API Key 不可用。`)
+      console.warn('   这些连接在发送消息时会返回 400 错误。')
+      console.warn('   请在管理后台重新保存这些连接的 API Key，或运行:')
+      console.warn('   npx tsx scripts/check-broken-connections.ts\n')
+      for (const conn of broken.slice(0, 5)) {
+        const label = conn.apiKeyLabel?.trim() ? ` (${conn.apiKeyLabel})` : ''
+        console.warn(`     [#${conn.id}] ${conn.provider}${label}`)
+      }
+      if (broken.length > 5) {
+        console.warn(`     ... 还有 ${broken.length - 5} 个`)
+      }
+    }
+  } catch (err) {
+    // 启动健康检查不应阻断启动；若查询失败（如表不存在）仅 debug 日志
+    console.debug('[startup] broken-connection check skipped:', err instanceof Error ? (err).message : err)
+  }
+})()
+
 // 启动服务器
 // 端口解析：优先 PORT，其次兼容 BACKEND_PORT，最后回退 8001（统一本地/容器内行为）
 const port = appContext.config.server.port;

@@ -2235,6 +2235,32 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
     } catch (error) {
       console.error('Chat stream error:', error);
       log.error('Chat stream error detail', (error as Error)?.message, (error as Error)?.stack)
+
+      // Business errors carrying a numeric statusCode (e.g. ConnectionServiceError with 400 for missing API Key)
+      // — return it directly instead of hardcoded 500
+      const errWithStatus = error as { statusCode?: unknown; message: string }
+      if (typeof errWithStatus.statusCode === 'number' && errWithStatus.statusCode >= 400 && errWithStatus.statusCode <= 599) {
+        traceRecorder?.log('http:client_response', {
+          route: '/api/chat/stream',
+          direction: 'inbound',
+          actor: (() => {
+            try { return (c.get('actor') as Actor | undefined)?.identifier }
+            catch { return undefined }
+          })(),
+          status: errWithStatus.statusCode,
+          error: summarizeErrorForTrace(error),
+        })
+        if (traceRecorder?.isEnabled()) {
+          await traceRecorder.finalize('error', {
+            metadata: { error: errWithStatus.message || String(error) },
+          })
+        }
+        return c.json<ApiResponse>({
+          success: false,
+          error: errWithStatus.message,
+        }, errWithStatus.statusCode as any)
+      }
+
       traceRecorder?.log('http:client_response', {
         route: '/api/chat/stream',
         direction: 'inbound',
