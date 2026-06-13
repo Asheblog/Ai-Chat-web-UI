@@ -39,6 +39,7 @@ docker run -d \
   -e DEFAULT_ADMIN_USERNAME=admin \
   -e DEFAULT_ADMIN_PASSWORD=admin123456 \
   -e DB_INIT_ON_START=true \
+  -e SECRET_VAULT_MASTER_KEY="${SECRET_VAULT_MASTER_KEY:-ci-smoke-secret-vault-master-key-32-bytes}" \
   "$IMAGE_TAG" >/dev/null
 
 echo "[smoke] waiting for health endpoint..."
