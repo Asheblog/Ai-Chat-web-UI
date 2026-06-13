@@ -128,6 +128,7 @@ export interface SessionSlice {
   ) => Promise<boolean>
   toggleSessionPin: (sessionId: number, pinned: boolean) => Promise<boolean>
   clearSessions: (excludePinned: boolean) => Promise<{ deletedCount: number; failedCount: number } | null>
+  clearCurrentSession: () => void
 }
 
 export interface UsageSlice {

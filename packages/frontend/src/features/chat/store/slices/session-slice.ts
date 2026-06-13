@@ -344,5 +344,19 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       return null
     }
   },
+
+  clearCurrentSession: () => {
+    runtime.stopAllMessagePollers()
+    set({
+      currentSession: null,
+      usageCurrent: null,
+      usageLastRound: null,
+      usageTotals: null,
+      isStreaming: false,
+      activeStreamSessionId: null,
+      shareSelection: createInitialShareSelection(),
+      isMessagesLoading: false,
+    })
+  },
   }
 }

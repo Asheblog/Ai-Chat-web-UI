@@ -75,7 +75,12 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
     }
 
     const ensureSelection = () => {
-      if (cancelled || normalizedSessionId === null) {
+      if (cancelled) return
+      if (normalizedSessionId === null) {
+        const state = useChatStore.getState()
+        if (state.currentSession !== null) {
+          state.clearCurrentSession()
+        }
         return
       }
 

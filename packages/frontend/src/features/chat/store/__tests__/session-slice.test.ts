@@ -42,6 +42,31 @@ describe('session slice', () => {
     expect(store.getState().error).toBeNull()
   })
 
+  it('clearCurrentSession should reset currentSession to null and related UI state while preserving sessions list', () => {
+    const store = createChatStoreInstance()
+    const sessions = mockSessions(2)
+    store.setState({
+      sessions,
+      currentSession: sessions[0],
+      isStreaming: true,
+      activeStreamSessionId: sessions[0].id,
+      isMessagesLoading: true,
+    })
+
+    store.getState().clearCurrentSession()
+
+    const state = store.getState()
+    expect(state.currentSession).toBeNull()
+    expect(state.isStreaming).toBe(false)
+    expect(state.activeStreamSessionId).toBeNull()
+    expect(state.isMessagesLoading).toBe(false)
+    expect(state.shareSelection.enabled).toBe(false)
+    expect(state.shareSelection.sessionId).toBeNull()
+    expect(state.shareSelection.selectedMessageIds).toEqual([])
+    // sessions list must be preserved
+    expect(state.sessions).toEqual(sessions)
+  })
+
   it('updateSessionPrefs should persist and sync state', async () => {
     const store = createChatStoreInstance()
     const sessions = mockSessions()

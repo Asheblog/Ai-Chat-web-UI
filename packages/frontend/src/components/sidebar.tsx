@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronRight, Folder, Github, Info, MessageCircle, Pin, PinOff, Plus, Search, Settings, Trash2, Trophy } from 'lucide-react'
@@ -234,6 +234,13 @@ export function Sidebar() {
     }
   }
 
+  const handleLogoClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    // 只处理纯左键点击；中键/右键/带修饰键的新标签/下载操作交给浏览器默认行为
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    useChatStore.getState().clearCurrentSession()
+    setIsMobileMenuOpen(false)
+  }
+
   const handleSessionClick = (sessionId: number) => {
     if (currentSession?.id === sessionId) {
       setIsMobileMenuOpen(false)
@@ -303,7 +310,11 @@ export function Sidebar() {
     <div className="flex h-full w-full flex-col border-r border-border bg-surface text-foreground shadow-[10px_0_28px_rgba(15,23,42,0.035)] lg:w-[248px]">
       {/* 顶部文字LOGO + 折叠按钮 */}
       <div className="flex h-[78px] items-center justify-between px-4">
-        <Link href="/main" className="flex min-w-0 flex-1 select-none items-center gap-2.5">
+        <Link
+          href="/main"
+          onClick={handleLogoClick}
+          className="flex min-w-0 flex-1 select-none items-center gap-2.5"
+        >
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.22)]">
             <MessageCircle className="h-[18px] w-[18px]" />
           </span>
