@@ -1,12 +1,14 @@
 'use client'
 
 import { useCallback } from 'react'
-import type { ComposerImage } from '@/features/chat/composer'
+import type { ComposerImage, WorkspaceFile } from '@/features/chat/composer'
 import type { SkillRuntimeReference } from '@/types'
+import { buildWorkspaceFileManifest } from '@/features/chat/composer/workspace-file-manifest'
 
 interface UseSendCommandParams {
   input: string
   hasWorkspaceFiles?: boolean
+  workspaceFiles?: WorkspaceFile[]
   currentSession: { id: number } | null
   concurrencyLocked: boolean
   totalActiveStreams: number
@@ -46,7 +48,7 @@ interface UseSendCommandParams {
 export const useSendCommand = (params: UseSendCommandParams) => {
   const {
     input,
-    hasWorkspaceFiles = false,
+    workspaceFiles = [],
     currentSession,
     concurrencyLocked,
     totalActiveStreams,
@@ -79,9 +81,13 @@ export const useSendCommand = (params: UseSendCommandParams) => {
   } = params
 
   return useCallback(async () => {
-    if (!input.trim() && !hasWorkspaceFiles) return
+    // 只统计 status=ready 的文件用于发送
+    const readyFiles = workspaceFiles.filter((f) => f.status === 'ready')
+    const hasReadyFiles = readyFiles.length > 0
+
+    if (!input.trim() && !hasReadyFiles) return
     if (!currentSession) return
-    if (hasWorkspaceFiles && !canUsePythonTool) {
+    if (hasReadyFiles && !canUsePythonTool) {
       toast({
         title: '无法分析文件',
         description: '管理员未启用 Python 工具，无法读取工作区文件',
@@ -97,7 +103,11 @@ export const useSendCommand = (params: UseSendCommandParams) => {
       })
       return
     }
-    const message = input.trim() || (hasWorkspaceFiles ? '请分析工作区中的文件' : '')
+    const userMessage = input.trim() || (hasReadyFiles ? '请分析工作区中的文件' : '')
+    const fileManifest = buildWorkspaceFileManifest(
+      readyFiles.map((f) => ({ originalName: f.originalName, workspacePath: f.workspacePath })),
+    )
+    const message = userMessage + fileManifest
     const prevSelectedImages = selectedImages
     clearError()
     try {
@@ -126,7 +136,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
           skillOverrides['web-search'] = webSearchOverride
         }
       }
-      if ((pythonToolEnabled || hasWorkspaceFiles) && canUsePythonTool) {
+      if ((pythonToolEnabled || hasReadyFiles) && canUsePythonTool) {
         builtinSkills.push('python-runner')
       }
       const skillsPayload =
@@ -163,7 +173,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     }
   }, [
     input,
-    hasWorkspaceFiles,
+    workspaceFiles,
     currentSession,
     concurrencyLocked,
     totalActiveStreams,

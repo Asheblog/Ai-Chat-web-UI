@@ -16,8 +16,10 @@ import {
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
+import { buildWorkspaceFileManifest } from '@/features/chat/composer/workspace-file-manifest'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 import { useSkillsSelection } from '@/hooks/use-skills-selection'
+import { useDragDrop } from '@/hooks/use-drag-drop'
 import { updateSessionSkillBinding } from '@/features/skills/api'
 
 export const useWelcomeScreenViewModel = () => {
@@ -100,6 +102,7 @@ export const useWelcomeScreenViewModel = () => {
     pickImages,
     onFilesSelected,
     removeImage,
+    validateImage,
     handlePaste,
   } = useImageAttachments({
     isVisionEnabled: true,
@@ -139,12 +142,13 @@ export const useWelcomeScreenViewModel = () => {
   const draftWorkspaceFiles = useMemo(
     () =>
       draftFiles.map(({ id, file }) => ({
+        localId: id,
         filename: file.name,
         originalName: file.name,
         mimeType: file.type || 'application/octet-stream',
         fileSize: file.size,
         workspacePath: id,
-        draftId: id,
+        status: 'ready' as const,
       })),
     [draftFiles],
   )
@@ -322,6 +326,44 @@ export const useWelcomeScreenViewModel = () => {
     }
   }, [draftFiles.length, canUsePythonTool, pythonToolEnabled])
 
+  // 拖拽图片处理（欢迎页）
+  const handleAddImageFiles = useCallback(
+    async (imageFiles: File[]) => {
+      for (const file of imageFiles) {
+        const result = await validateImage(file)
+        if (!result.ok) {
+          toast({
+            title: '图片不符合要求',
+            description: result.reason || '图片校验失败',
+            variant: 'destructive',
+          })
+        } else if (result.dataUrl && result.mime && typeof result.size === 'number') {
+          setSelectedImages((prev) => [...prev, { dataUrl: result.dataUrl!, mime: result.mime!, size: result.size! }])
+        }
+      }
+    },
+    [validateImage, setSelectedImages, toast],
+  )
+
+  // 拖拽文件处理：添加到草稿
+  const handleUploadWorkspaceFiles = useCallback(
+    (files: File[]) => {
+      setDraftFiles((prev) => [
+        ...prev,
+        ...files.map((f) => ({ id: crypto.randomUUID(), file: f })),
+      ])
+    },
+    [],
+  )
+
+  // 拖拽上传
+  const { isDragOver, dragHandlers } = useDragDrop({
+    isVisionEnabled,
+    onAddImageFiles: handleAddImageFiles,
+    onUploadWorkspaceFiles: handleUploadWorkspaceFiles,
+    toast,
+  })
+
   useEffect(() => {
     if (!showWebSearchScope) {
       if (webSearchScope !== 'webpage') {
@@ -441,8 +483,8 @@ export const useWelcomeScreenViewModel = () => {
         selectedModel.rawId,
         normalizedPrompt || undefined,
       )
-      let allUploadsFailed = false
-      let uploadSuccesses = 0
+      // 上传成功的文件元数据，用于构造 manifest
+      const uploadedFilesMeta: Array<{ originalName: string; workspacePath: string }> = []
       if (created?.id) {
         let uploadFailures = 0
         if (draftFiles.length) {
@@ -474,7 +516,10 @@ export const useWelcomeScreenViewModel = () => {
                   variant: 'destructive',
                 })
               } else {
-                uploadSuccesses++
+                uploadedFilesMeta.push({
+                  originalName: result.data.originalName,
+                  workspacePath: result.data.workspacePath,
+                })
               }
             } catch (error) {
               uploadFailures++
@@ -495,9 +540,8 @@ export const useWelcomeScreenViewModel = () => {
             })
           }
         }
-        const hadFiles = draftFiles.length > 0
-        allUploadsFailed = hadFiles && uploadFailures === draftFiles.length
       }
+      const uploadSuccesses = uploadedFilesMeta.length
 
       try {
         const session = useChatStore.getState().currentSession
@@ -559,7 +603,9 @@ export const useWelcomeScreenViewModel = () => {
             return
           }
 
-          const message = text || '请分析工作区中的文件'
+          // 构造文件 manifest
+          const fileManifest = buildWorkspaceFileManifest(uploadedFilesMeta)
+          const message = (text || (uploadedFilesMeta.length > 0 ? '请分析工作区中的文件' : '')) + fileManifest
           const imagesPayload =
             selectedImages.length > 0
               ? selectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
@@ -576,7 +622,7 @@ export const useWelcomeScreenViewModel = () => {
               skillOverrides['web-search'] = webSearchOverride
             }
           }
-          if ((pythonToolEnabled || uploadSuccesses > 0) && canUsePythonTool) {
+          if ((pythonToolEnabled || uploadedFilesMeta.length > 0) && canUsePythonTool) {
             builtinSkills.push('python-runner')
           }
           const options: Record<string, any> = {}
@@ -705,6 +751,8 @@ export const useWelcomeScreenViewModel = () => {
         onClose: () => setExpandOpen(false),
         onApply: handleExpandApply,
       },
+      isDragOver,
+      dragHandlers,
       attachments: {
         selectedImages,
         fileInputRef,

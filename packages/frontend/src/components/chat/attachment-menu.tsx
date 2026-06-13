@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BookOpen, FilePlus2, FolderOpen, ImagePlus, Paperclip } from 'lucide-react'
+import { FILE_SIZE_LIMIT_LABEL, RECOMMENDED_FILE_TYPES } from '@aichat/shared/workspace-files'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -120,7 +121,7 @@ export function AttachmentMenu({
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-foreground">文件上传</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">上传文件到工作区，AI 可通过 Python 读取任意格式。</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">推荐 {RECOMMENDED_FILE_TYPES.slice(0, 4).join('、')} 等 · {FILE_SIZE_LIMIT_LABEL}</span>
                 </span>
               </button>
 
@@ -183,7 +184,12 @@ export function AttachmentMenu({
           disabled={disableDocuments || !onPickDocuments}
         >
           <FilePlus2 className="mr-2 h-4 w-4" />
-          <span>文件上传</span>
+          <div className="min-w-0">
+            <span className="block">文件上传</span>
+            <span className="mt-0.5 block text-[10px] text-muted-foreground">
+              {RECOMMENDED_FILE_TYPES.slice(0, 4).join(' · ')} · {FILE_SIZE_LIMIT_LABEL}
+            </span>
+          </div>
         </DropdownMenuItem>
         {onOpenManager ? (
           <DropdownMenuItem className="cursor-pointer" onSelect={onOpenManager} disabled={manageDisabled}>

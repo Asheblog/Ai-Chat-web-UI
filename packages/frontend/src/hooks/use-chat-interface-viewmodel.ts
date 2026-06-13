@@ -104,7 +104,10 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     pickWorkspaceFiles,
     onWorkspaceFilesSelected,
     removeWorkspaceFile,
+    retryWorkspaceFile,
     clearWorkspaceFiles,
+    isDragOver,
+    dragHandlers,
   } = useChatComposer({ knowledgeBaseIds: knowledgeBase.selectedKbIds })
 
   const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
@@ -172,7 +175,8 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     return null
   }
 
-  const desktopSendDisabled = sendLocked || ((!input.trim() && selectedImages.length === 0 && workspaceFiles.length === 0) && !isStreaming)
+  const readyFiles = workspaceFiles.filter((f) => f.status === 'ready')
+  const desktopSendDisabled = sendLocked || isUploadingWorkspaceFiles || ((!input.trim() && selectedImages.length === 0 && readyFiles.length === 0) && !isStreaming)
   const textareaDisabled = isStreaming || sessionControls.quotaExhausted
   const imageLimits = {
     maxCount: MAX_IMAGE_COUNT,
@@ -270,6 +274,9 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     sessionPromptPlaceholder,
     onSessionPromptChange: setSessionPromptDraft,
     onSessionPromptSave: onSaveSessionPrompt,
+    // 拖拽上传
+    isDragOver,
+    dragHandlers,
     // 工作区文件上传
     workspaceFileInputRef,
     workspaceFiles,
@@ -278,6 +285,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     pickWorkspaceFiles,
     onWorkspaceFilesSelected,
     onRemoveWorkspaceFile: removeWorkspaceFile,
+    onRetryWorkspaceFile: retryWorkspaceFile,
     // 知识库
     knowledgeBaseEnabled: knowledgeBase.isEnabled,
     knowledgeBases: knowledgeBase.availableKbs,

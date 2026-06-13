@@ -1,10 +1,10 @@
 /**
  * 工作区文件托盘组件
- * 展示已上传到 workspace 的文件列表（简化版，无处理状态/轮询）
+ * 展示已上传/上传中/失败的文件列表，支持重试和移除
  */
 
 import React, { useMemo, useState } from 'react'
-import { File, FileText, Search, Table, Trash2, X } from 'lucide-react'
+import { AlertCircle, File, FileText, Loader2, RefreshCw, Search, Table, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetClose, SheetContent } from '@/components/ui/sheet'
@@ -25,9 +25,21 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+function getStatusLabel(status: WorkspaceFile['status']): string {
+  switch (status) {
+    case 'uploading':
+      return '上传中'
+    case 'ready':
+      return '就绪'
+    case 'error':
+      return '上传失败'
+  }
+}
+
 interface WorkspaceFileTrayProps {
   files: WorkspaceFile[]
-  onRemove: (workspacePath: string) => void
+  onRemove: (localId: string) => void
+  onRetry?: (localId: string) => void
   open: boolean
   onOpenChange: (open: boolean) => void
   title?: string
@@ -36,6 +48,7 @@ interface WorkspaceFileTrayProps {
 export const WorkspaceFileTray: React.FC<WorkspaceFileTrayProps> = ({
   files,
   onRemove,
+  onRetry,
   open,
   onOpenChange,
   title = '文件管理',
@@ -85,11 +98,19 @@ export const WorkspaceFileTray: React.FC<WorkspaceFileTrayProps> = ({
             <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4">
               <p className="text-sm font-semibold text-foreground md:text-base">{title}</p>
               <p className="mt-1 text-xs text-muted-foreground md:text-sm">
-                文件已上传至工作区，AI 可通过 Python 工具直接读取。
+                文件会作为当前会话工作材料供 AI 读取；上传失败的文件不会随消息发送。
+              </p>
+              <p className="mt-1.5 text-[11px] text-muted-foreground/70 md:text-xs">
+                支持 PDF / Word / Excel / CSV / 纯文本 / Markdown / JSON / 代码文件 · 单文件最大 100MB
               </p>
               <div className="mt-3 rounded-xl border border-border/60 bg-background/55 px-3 py-2">
                 <p className="text-[11px] text-muted-foreground">总文件</p>
-                <p className="mt-1 text-base font-semibold text-foreground">{files.length}</p>
+                <p className="mt-1 text-base font-semibold text-foreground">
+                  {files.length}
+                  {files.some((f) => f.status === 'uploading')
+                    ? `（${files.filter((f) => f.status === 'uploading').length} 上传中）`
+                    : ''}
+                </p>
               </div>
             </div>
           </div>
@@ -117,34 +138,75 @@ export const WorkspaceFileTray: React.FC<WorkspaceFileTrayProps> = ({
               <div className="space-y-2.5">
                 {filteredFiles.map((file) => (
                   <article
-                    key={file.workspacePath}
+                    key={file.localId}
                     className={cn(
-                      'rounded-2xl border border-border/70 px-3 py-3 md:px-4',
+                      'rounded-2xl border px-3 py-3 md:px-4',
                       'bg-[hsl(var(--surface))/0.72] transition-colors hover:bg-[hsl(var(--surface-hover))]',
+                      file.status === 'error' && 'border-destructive/40 bg-destructive/5',
+                      file.status === 'uploading' && 'border-primary/30 bg-primary/[0.03]',
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        {getFileIcon(file.mimeType)}
+                      <span
+                        className={cn(
+                          'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                          file.status === 'error'
+                            ? 'bg-destructive/10 text-destructive'
+                            : 'bg-primary/10 text-primary',
+                        )}
+                      >
+                        {file.status === 'uploading' ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : file.status === 'error' ? (
+                          <AlertCircle className="h-4 w-4" />
+                        ) : (
+                          getFileIcon(file.mimeType)
+                        )}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-foreground" title={file.originalName}>
                           {file.originalName}
                         </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {formatFileSize(file.fileSize)}
+                          {' · '}
+                          <span
+                            className={cn(
+                              file.status === 'error' && 'text-destructive',
+                              file.status === 'uploading' && 'text-primary',
+                            )}
+                          >
+                            {getStatusLabel(file.status)}
+                          </span>
                         </p>
+                        {file.status === 'error' && file.errorMessage ? (
+                          <p className="mt-0.5 text-[11px] text-destructive/80">{file.errorMessage}</p>
+                        ) : null}
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 rounded-full hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => onRemove(file.workspacePath)}
-                        title="移除"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {file.status === 'error' && onRetry && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full hover:bg-primary/10 hover:text-primary"
+                            onClick={() => onRetry(file.localId)}
+                            aria-label="重试上传"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 rounded-full hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => onRemove(file.localId)}
+                          aria-label={`移除 ${file.originalName}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </article>
                 ))}

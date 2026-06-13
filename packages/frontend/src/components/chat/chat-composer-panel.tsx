@@ -114,6 +114,14 @@ export interface ChatComposerPanelProps {
   onSessionPromptChange: (value: string) => void
   onSessionPromptSave: () => void
   sessionPromptSaving: boolean
+  // 拖拽上传
+  isDragOver?: boolean
+  dragHandlers?: {
+    onDragEnter: (e: React.DragEvent) => void
+    onDragOver: (e: React.DragEvent) => void
+    onDragLeave: (e: React.DragEvent) => void
+    onDrop: (e: React.DragEvent) => void
+  }
   // 工作区文件上传
   workspaceFileInputRef: MutableRefObject<HTMLInputElement | null>
   workspaceFiles: WorkspaceFile[]
@@ -121,7 +129,8 @@ export interface ChatComposerPanelProps {
   hasWorkspaceFiles: boolean
   pickWorkspaceFiles: () => void
   onWorkspaceFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void
-  onRemoveWorkspaceFile: (workspacePath: string) => void
+  onRemoveWorkspaceFile: (fileId: string) => void
+  onRetryWorkspaceFile?: (localId: string) => void
   // 知识库
   knowledgeBaseEnabled?: boolean
   knowledgeBases?: KnowledgeBaseItem[]
@@ -232,6 +241,9 @@ export function ChatComposerPanel({
   sessionPromptPlaceholder,
   onSessionPromptChange,
   onSessionPromptSave,
+  // 拖拽上传
+  isDragOver,
+  dragHandlers,
   // 工作区文件上传
   workspaceFileInputRef,
   workspaceFiles,
@@ -240,6 +252,7 @@ export function ChatComposerPanel({
   pickWorkspaceFiles,
   onWorkspaceFilesSelected,
   onRemoveWorkspaceFile,
+  onRetryWorkspaceFile,
   // 知识库
   knowledgeBaseEnabled,
   knowledgeBases,
@@ -267,6 +280,7 @@ export function ChatComposerPanel({
   const [attachmentViewerOpen, setAttachmentViewerOpen] = useState(false)
   const [kbSelectorOpen, setKbSelectorOpen] = useState(false)
   const attachmentsCount = selectedImages.length + workspaceFiles.length
+  const hasReadyFiles = workspaceFiles.some((f) => f.status === 'ready')
 
   const filteredPromptTemplates = useMemo(() => {
     const keyword = promptTemplateSearch.trim().toLowerCase()
@@ -446,7 +460,19 @@ export function ChatComposerPanel({
   }
 
   return (
-    <div className="sticky bottom-0 w-full">
+    <div
+      className="sticky bottom-0 w-full relative"
+      {...(dragHandlers ?? {})}
+    >
+      {/* 拖拽上传遮罩 */}
+      {isDragOver && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/[0.04] backdrop-blur-[1px]">
+          <div className="rounded-xl bg-background/80 px-5 py-3 text-center shadow-sm backdrop-blur-sm">
+            <p className="text-sm font-medium text-foreground">松开以上传文件</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
+          </div>
+        </div>
+      )}
       {advancedOpen && portalRoot
         ? createPortal(
           <div
@@ -687,7 +713,7 @@ export function ChatComposerPanel({
         showWebSearchScope={showWebSearchScope}
         pickImages={pickImages}
         pickDocuments={pickWorkspaceFiles}
-        hasDocuments={hasWorkspaceFiles}
+        hasDocuments={hasReadyFiles}
         canUseWebSearch={canUseWebSearch}
         webSearchDisabledNote={webSearchDisabledNote}
         pythonToolEnabled={pythonToolEnabled}
@@ -767,7 +793,7 @@ export function ChatComposerPanel({
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}
         sendLockedReason={sendLockedReason}
-        hasDocuments={hasWorkspaceFiles}
+        hasDocuments={hasReadyFiles}
         pickDocuments={pickWorkspaceFiles}
         onOpenAttachmentManager={() => setAttachmentViewerOpen(true)}
         attachedDocumentsLength={workspaceFiles.length}
@@ -795,6 +821,7 @@ export function ChatComposerPanel({
         <WorkspaceFileTray
           files={workspaceFiles}
           onRemove={onRemoveWorkspaceFile}
+          onRetry={onRetryWorkspaceFile}
           open={attachmentViewerOpen}
           onOpenChange={setAttachmentViewerOpen}
         />

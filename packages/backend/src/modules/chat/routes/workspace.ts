@@ -15,7 +15,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 
-const MAX_WORKSPACE_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+import { MAX_WORKSPACE_FILE_SIZE } from '@aichat/shared/workspace-files'
 const ALLOWED_WORKSPACE_FILENAME = /^[^<>:"/\\|?*\x00-\x1f]+$/u
 
 export interface ChatWorkspaceRoutesDeps {

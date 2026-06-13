@@ -11,7 +11,8 @@
     "./latex-normalizer": "./dist/latex-normalizer.js",
     "./image-limits": "./dist/image-limits.js",
     "./battle-contract": "./dist/battle-contract.js",
-    "./execution-contract": "./dist/execution-contract.js"
+    "./execution-contract": "./dist/execution-contract.js",
+    "./workspace-files": "./dist/workspace-files.js"
   },
   "files": [
     "dist"

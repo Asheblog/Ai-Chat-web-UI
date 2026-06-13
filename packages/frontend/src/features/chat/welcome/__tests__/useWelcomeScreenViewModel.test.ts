@@ -67,7 +67,7 @@ vi.mock('@/store/settings-store', () => ({
       chatSystemPrompt: '',
       webSearchAgentEnable: false,
       webSearchHasApiKey: false,
-      pythonToolEnable: false,
+      pythonToolEnable: true,
       brandText: 'AIChat',
     },
     publicBrandText: 'AIChat',
@@ -149,6 +149,7 @@ vi.mock('@/features/chat/composer', () => ({
     pickImages: vi.fn(),
     onFilesSelected: vi.fn(),
     removeImage: vi.fn(),
+    validateImage: vi.fn().mockResolvedValue({ ok: false }),
     handlePaste: vi.fn(),
   }),
   useComposerFeatureFlags: () => ({}),
@@ -187,6 +188,7 @@ import { useWelcomeScreenViewModel } from '@/features/chat/welcome/useWelcomeScr
 describe('useWelcomeScreenViewModel — skill binding in handleCreate', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.restoreAllMocks() // also clear global fetch
     mockCreateSession.mockReset()
     mockStreamMessage.mockReset()
     mockUpdateSessionSkillBinding.mockReset()

@@ -21,6 +21,7 @@ import { useSkillsSelection } from './use-skills-selection'
 import { useMcpSessionBindings } from './use-mcp-session-bindings'
 import { useSendCommand } from './use-send-command'
 import { useScrollPersistence } from './use-scroll-persistence'
+import { useDragDrop } from './use-drag-drop'
 
 export type { WorkspaceFile }
 
@@ -265,18 +266,54 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     pickFiles: pickWorkspaceFiles,
     onFilesSelected: onWorkspaceFilesSelected,
     removeFile: removeWorkspaceFile,
+    retryUpload,
+    uploadFiles,
     clearFiles: clearWorkspaceFiles,
   } = useWorkspaceFiles({
     sessionId: currentSession?.id ?? null,
     toast,
   })
 
-  // 当有工作区文件时自动启用 Python 工具
+  // 当有就绪的工作区文件时自动启用 Python 工具
+  const hasReadyFiles = useMemo(
+    () => workspaceFiles.some((f) => f.status === 'ready'),
+    [workspaceFiles],
+  )
   useEffect(() => {
-    if (hasFiles && canUsePythonTool && !pythonToolEnabled) {
+    if (hasReadyFiles && canUsePythonTool && !pythonToolEnabled) {
       setPythonToolEnabled(true)
     }
-  }, [hasFiles, canUsePythonTool, pythonToolEnabled, setPythonToolEnabled])
+  }, [hasReadyFiles, canUsePythonTool, pythonToolEnabled, setPythonToolEnabled])
+
+  // 拖拽图片处理：验证后直接添加到 selectedImages
+  const handleAddImageFiles = useCallback(
+    async (imageFiles: File[]) => {
+      for (const file of imageFiles) {
+        const result = await validateImage(file)
+        if (!result.ok) {
+          toast({
+            title: '图片不符合要求',
+            description: result.reason || '图片校验失败',
+            variant: 'destructive',
+          })
+        } else if (result.dataUrl && result.mime && typeof result.size === 'number') {
+          setSelectedImages((prev) => [...prev, { dataUrl: result.dataUrl!, mime: result.mime!, size: result.size! }])
+        }
+      }
+    },
+    [validateImage, setSelectedImages, toast],
+  )
+
+  // 拖拽上传
+  const {
+    isDragOver,
+    dragHandlers,
+  } = useDragDrop({
+    isVisionEnabled,
+    onAddImageFiles: handleAddImageFiles,
+    onUploadWorkspaceFiles: uploadFiles,
+    toast,
+  })
 
   const handleAddCustomHeader = useCallback(() => {
     const result = appendCustomHeader()
@@ -318,7 +355,9 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const concurrencyLocked = totalActiveStreams >= maxConcurrentStreams
   const sendLockedReason = concurrencyLocked
     ? `当前已有 ${totalActiveStreams}/${maxConcurrentStreams} 个请求生成中，请稍后再试或先停止部分任务。`
-    : null
+    : isUploadingWorkspaceFiles
+      ? '文件正在上传中，请稍候'
+      : null
 
   const systemPromptFallback = (systemSettings?.chatSystemPrompt ?? '').trim()
   const personalPromptFallback = (user?.personalPrompt ?? '').trim()
@@ -338,6 +377,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const handleSend = useSendCommand({
     input,
     hasWorkspaceFiles: hasFiles,
+    workspaceFiles,
     currentSession,
     concurrencyLocked,
     totalActiveStreams,
@@ -426,7 +466,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     MAX_IMAGE_MB,
     MAX_IMAGE_EDGE,
     MAX_TOTAL_IMAGE_MB,
-    sendLocked: concurrencyLocked,
+    sendLocked: concurrencyLocked || isUploadingWorkspaceFiles,
     sendLockedReason,
     // 控制方法
     setInput,
@@ -476,6 +516,9 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     canUseTrace,
     onSaveSessionPrompt: handleSessionPromptSave,
     canAddCustomHeader: canAddHeader,
+    // 拖拽上传
+    isDragOver,
+    dragHandlers,
     // 工作区文件上传
     workspaceFileInputRef,
     workspaceFiles,
@@ -484,6 +527,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     pickWorkspaceFiles,
     onWorkspaceFilesSelected,
     removeWorkspaceFile,
+    retryWorkspaceFile: retryUpload,
     clearWorkspaceFiles,
   }
 }

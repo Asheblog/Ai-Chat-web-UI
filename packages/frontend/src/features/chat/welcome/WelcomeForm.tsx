@@ -1,4 +1,4 @@
-import { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject, useEffect, useState } from 'react'
+import React, { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject, useEffect, useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -34,6 +34,13 @@ interface WelcomeFormProps {
     creationDisabled: boolean
     isCreating: boolean
     showExpand: boolean
+    isDragOver?: boolean
+    dragHandlers?: {
+      onDragEnter: (e: React.DragEvent) => void
+      onDragOver: (e: React.DragEvent) => void
+      onDragLeave: (e: React.DragEvent) => void
+      onDrop: (e: React.DragEvent) => void
+    }
     onTextareaChange: (value: string) => void
     onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
     onSubmit: () => void
@@ -138,6 +145,8 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
     creationDisabled,
     isCreating,
     showExpand,
+    isDragOver,
+    dragHandlers,
     onTextareaChange,
     onKeyDown,
     onSubmit,
@@ -169,7 +178,19 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
   const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
 
   return (
-    <div className="w-full max-w-[940px]">
+    <div
+      className="relative w-full max-w-[940px]"
+      {...(dragHandlers ?? {})}
+    >
+      {/* 拖拽上传遮罩 */}
+      {isDragOver && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/[0.04] backdrop-blur-[1px]">
+          <div className="rounded-xl bg-background/80 px-5 py-3 text-center shadow-sm backdrop-blur-sm">
+            <p className="text-sm font-medium text-foreground">松开以上传文件</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
+          </div>
+        </div>
+      )}
       <ImagePreviewList images={attachments.selectedImages} onRemove={attachments.onRemoveImage} />
 
       <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-3 md:px-4')}>

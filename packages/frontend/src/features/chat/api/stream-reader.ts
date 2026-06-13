@@ -303,13 +303,19 @@ export async function* parseEventStream(
             if (
               parsed?.type === 'complete' ||
               parsed?.type === 'run_complete' ||
-              parsed?.type === 'run_error'
+              parsed?.type === 'run_error' ||
+              parsed?.type === 'error'
             ) {
               completed = true
             }
             const chunk = normalizeChunk(parsed)
             if (chunk) {
               yield chunk
+              // error/run_error 事件后立即终止循环，不等待底层流 close
+              if (parsed?.type === 'error' || parsed?.type === 'run_error') {
+                terminated = true
+                break
+              }
             }
           } catch (error) {
             if (STREAM_DEBUG_ENABLED) {
