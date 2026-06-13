@@ -2,25 +2,14 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  BarChart3,
-  BookOpen,
-  Boxes,
-  Cloud,
-  ClipboardList,
-  KeyRound,
   PackageCheck,
-  PlugZap,
-  Puzzle,
-  Router,
-  ScrollText,
-  Settings2,
   Share2,
   ShieldCheck,
   User,
-  Users,
-  Wrench,
 } from "lucide-react"
+import { settingsNav, type SettingsNavItem } from "@/components/settings/nav"
 import { SettingsShell, type SettingsSection } from "@/components/settings/shell"
+import { DEFAULT_SYSTEM_LEAF } from "@/components/settings/system-settings-registry"
 import { useAuthStore } from "@/store/auth-store"
 
 const SECTION_PATH: Record<string, string> = {
@@ -50,106 +39,21 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
   const isAdmin = actorState === "authenticated" && user?.role === "ADMIN"
   const activeSection = deriveSection(pathname)
   const [personalSub, setPersonalSub] = useState("profile")
-  const [systemSub, setSystemSub] = useState("connections")
+  const [systemSub, setSystemSub] = useState(DEFAULT_SYSTEM_LEAF)
 
-  const sections = useMemo<SettingsSection[]>(() => {
-    if (activeSection === "system") {
-      return [
-        {
-          key: "overview",
-          label: "概览",
-          icon: <BarChart3 className="h-full w-full" />,
-        },
-        {
-          key: "models",
-          label: "模型管理",
-          icon: <Boxes className="h-full w-full" />,
-        },
-        {
-          key: "connections",
-          label: "连接管理",
-          icon: <PlugZap className="h-full w-full" />,
-        },
-        {
-          key: "api-routing",
-          label: "模型权限",
-          icon: <Router className="h-full w-full" />,
-        },
-        {
-          key: "token-management",
-          label: "推理配置",
-          icon: <KeyRound className="h-full w-full" />,
-        },
-        {
-          key: "members",
-          label: "成员与权限",
-          icon: <Users className="h-full w-full" />,
-        },
-        {
-          key: "audit",
-          label: "审计日志",
-          icon: <ClipboardList className="h-full w-full" />,
-        },
-        {
-          key: "system-config",
-          label: "系统配置",
-          icon: <Settings2 className="h-full w-full" />,
-        },
-        {
-          key: "backup",
-          label: "备份与恢复",
-          icon: <Cloud className="h-full w-full" />,
-        },
-        {
-          key: "knowledge-docs",
-          label: "知识库与文档",
-          icon: <BookOpen className="h-full w-full" />,
-        },
-        {
-          key: "tools-runtime",
-          label: "工具与运行时",
-          icon: <Wrench className="h-full w-full" />,
-        },
-        {
-          key: "skills",
-          label: "Skill 管理",
-          icon: <Puzzle className="h-full w-full" />,
-        },
-        {
-          key: "personal-skills",
-          label: "个人 Skills",
-          icon: <PackageCheck className="h-full w-full" />,
-        },
-        {
-          key: "logs",
-          label: "日志查看器",
-          icon: <ScrollText className="h-full w-full" />,
-        },
-      ]
-    }
-    return [
-      {
-        key: "profile",
-        label: "个人资料与偏好",
-        icon: <User className="h-full w-full" />,
-      },
-      {
-        key: "skills",
-        label: "个人 Skills",
-        icon: <PackageCheck className="h-full w-full" />,
-      },
-      {
-        key: "shares",
-        label: "分享管理",
-        icon: <Share2 className="h-full w-full" />,
-      },
-      {
-        key: "security",
-        label: "账号安全",
-        icon: <ShieldCheck className="h-full w-full" />,
-      },
-    ]
-  }, [activeSection])
+  // Personal sections (flat, unchanged)
+  const personalSections = useMemo<SettingsSection[]>(() => [
+    { key: "profile", label: "个人资料与偏好", icon: <User className="h-full w-full" />, },
+    { key: "skills", label: "个人 Skills", icon: <PackageCheck className="h-full w-full" />, },
+    { key: "shares", label: "分享管理", icon: <Share2 className="h-full w-full" />, },
+    { key: "security", label: "账号安全", icon: <ShieldCheck className="h-full w-full" />, },
+  ], [])
+
+  // System 3-level tree from shared nav
+  const systemTree = useMemo<SettingsNavItem[]>(() => {
+    const sys = settingsNav.find((item) => item.key === "system")
+    return sys ? [sys] : []
+  }, [])
 
   useEffect(() => {
     if (!isAdmin && activeSection === "system") {
@@ -162,6 +66,7 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (activeSection !== "system") return
+    // Sync nav from SystemSettings changes
     const onActiveChange = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string }>).detail
       if (detail?.key) {
@@ -216,6 +121,7 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
       return
     }
 
+    // System: leaf selection from nested nav
     if (activeSection === "system") {
       if (key === "personal-skills") {
         setPersonalSub("skills")
@@ -235,6 +141,14 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     router.push(target)
   }
 
+  // System leaf selected via nested nav
+  const handleSystemSubChange = (key: string) => {
+    setSystemSub(key)
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail: { key } }))
+    }
+  }
+
   if (!isAdmin && activeSection === "system") {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -243,15 +157,32 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     )
   }
 
-  const resolvedActive = activeSection === "personal" ? personalSub : systemSub
+  if (activeSection === "system") {
+    return (
+      <SettingsShell
+        mode="nested"
+        title="系统设置"
+        tree={systemTree}
+        activeMain="system"
+        activeSub={systemSub}
+        onChangeMain={() => {}}
+        onChangeSub={handleSystemSubChange}
+        showNavTitle
+      >
+        {children}
+      </SettingsShell>
+    )
+  }
+
+  const resolvedActive = personalSub
 
   return (
     <SettingsShell
-      title={activeSection === "system" ? "系统设置" : "个人设置"}
-      sections={sections}
+      title="个人设置"
+      sections={personalSections}
       active={resolvedActive}
       onChange={handleChange}
-      showNavTitle={activeSection === "system"}
+      showNavTitle={false}
     >
       {children}
     </SettingsShell>

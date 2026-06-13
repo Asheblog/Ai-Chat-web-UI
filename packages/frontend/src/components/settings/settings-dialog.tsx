@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { settingsNav, type SettingsNavItem } from "./nav"
@@ -12,12 +12,35 @@ import { PersonalSecurityPage } from "./pages/PersonalSecurity"
 import { PersonalSkillsPage } from "./pages/PersonalSkills"
 import { ShareManagementPanel } from "./pages/ShareManagement"
 import { AboutPage } from "./pages/About"
-import { SystemSettings } from "@/components/system-settings"
+import { DEFAULT_SYSTEM_LEAF, renderSystemLeaf } from "./system-settings-registry"
 
 interface SettingsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   defaultTab?: "personal" | "system"
+}
+
+/** Recursively collect all leaf keys from a nav tree node list. */
+function getAllLeafKeys(items: SettingsNavItem[]): string[] {
+  const keys: string[] = []
+  for (const item of items) {
+    if (!item.children || item.children.length === 0) {
+      keys.push(item.key)
+    } else {
+      keys.push(...getAllLeafKeys(item.children))
+    }
+  }
+  return keys
+}
+
+/** Find the first leaf key (recursive) from a nav tree node list. */
+function findFirstLeaf(items: SettingsNavItem[]): string | undefined {
+  for (const item of items) {
+    if (!item.children || item.children.length === 0) return item.key
+    const found = findFirstLeaf(item.children)
+    if (found) return found
+  }
+  return undefined
 }
 
 export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: SettingsDialogProps) {
@@ -39,22 +62,26 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   const openedFromQueryRef = useRef(false)
   const closeCleanupTimerRef = useRef<number | null>(null)
 
+  /** Recursively filter a nav node by adminOnly/requiresAuth. Returns null if node should be removed. */
+  const filterNode = useCallback(
+    (node: SettingsNavItem): SettingsNavItem | null => {
+      if (node.adminOnly && !isAdmin) return null
+      if (node.requiresAuth && !isAuthenticated) return null
+      if (!node.children || node.children.length === 0) return node
+      const filteredChildren = node.children
+        .map((child) => filterNode(child))
+        .filter((child): child is SettingsNavItem => child !== null)
+      if (filteredChildren.length === 0) return null
+      return { ...node, children: filteredChildren }
+    },
+    [isAdmin, isAuthenticated],
+  )
+
   const filteredTree = useMemo<SettingsNavItem[]>(() => {
-    return settingsNav.reduce<SettingsNavItem[]>((acc, item) => {
-      if (item.adminOnly && !isAdmin) return acc
-      if (item.requiresAuth && !isAuthenticated) return acc
-      const children = (item.children || []).filter((child) => {
-        if (child.adminOnly && !isAdmin) return false
-        if (child.requiresAuth && !isAuthenticated) return false
-        return true
-      })
-      if (children.length === 0 && (item.children?.length ?? 0) > 0) {
-        return acc
-      }
-      acc.push({ ...item, children })
-      return acc
-    }, [])
-  }, [isAdmin, isAuthenticated])
+    return settingsNav
+      .map((item) => filterNode(item))
+      .filter((item): item is SettingsNavItem => item !== null)
+  }, [filterNode])
 
   useEffect(() => {
     if (!open) {
@@ -114,12 +141,13 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     setActiveMain(nextMain)
 
     const subs = filteredTree.find((item) => item.key === nextMain)?.children ?? []
+    const subLeaves = getAllLeafKeys(subs)
     const roleDefaultSub =
       nextMain === 'system'
-        ? 'system.workspace'
+        ? DEFAULT_SYSTEM_LEAF
         : (isAuthenticated ? 'personal.preferences' : 'personal.about')
-    let nextSub = (urlSub || memSub || roleDefaultSub || subs[0]?.key || '') as string
-    if (nextSub && !subs.some((item) => item.key === nextSub)) {
+    let nextSub = (urlSub || memSub || roleDefaultSub || subLeaves[0] || '') as string
+    if (nextSub && !subLeaves.includes(nextSub)) {
       if (!denialNotifiedRef.current && (urlSub || urlMain)) {
         toast({
           title: '当前账户无法访问该设置',
@@ -127,7 +155,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
         })
         denialNotifiedRef.current = true
       }
-      nextSub = subs[0]?.key || ''
+      nextSub = nextMain === 'system' ? DEFAULT_SYSTEM_LEAF : (subLeaves[0] || '')
     }
     setActiveSub(nextSub)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,8 +169,9 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
       return
     }
     const subs = filteredTree.find((item) => item.key === activeMain)?.children ?? []
-    if (activeSub && !subs.some((item) => item.key === activeSub)) {
-      setActiveSub(subs[0]?.key || '')
+    const subLeaves = getAllLeafKeys(subs)
+    if (activeSub && !subLeaves.includes(activeSub)) {
+      setActiveSub(activeMain === 'system' ? DEFAULT_SYSTEM_LEAF : (subLeaves[0] || ''))
     }
   }, [filteredTree, activeMain, activeSub])
 
@@ -220,29 +249,36 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
             activeSub={activeSub}
             onChangeMain={(key) => {
               setActiveMain(key)
-              const first = filteredTree.find((item) => item.key === key)?.children?.[0]?.key || ''
-              setActiveSub(first)
+              if (key === 'system') {
+                setActiveSub(DEFAULT_SYSTEM_LEAF)
+              } else {
+                const mainItem = filteredTree.find((item) => item.key === key)
+                const first = findFirstLeaf(mainItem?.children || []) || ''
+                setActiveSub(first)
+              }
             }}
             onChangeSub={setActiveSub}
             readOnly={isAnonymous}
             readOnlyMessage="当前为匿名访客，仅可浏览公开信息。请登录后再编辑设置。"
           >
             {(() => {
+              // Personal pages via switch
               switch (activeSub) {
-                // case 'personal.models': return <PersonalModelsPage />
                 case 'personal.preferences': return <PersonalPreferencesPage />
                 case 'personal.skills': return <PersonalSkillsPage />
                 case 'personal.shares': return <ShareManagementPanel />
                 case 'personal.security': return <PersonalSecurityPage />
                 case 'personal.about': return <AboutPage />
-                case 'system.workspace': return <SystemSettings />
-                default:
-                  return activeSub ? (
-                    <div className="p-6 text-sm text-muted-foreground">
-                      当前账户无法访问该设置
-                    </div>
-                  ) : <AboutPage />
               }
+              // System pages via shared registry
+              const systemContent = renderSystemLeaf(activeSub)
+              if (systemContent) return systemContent
+              // Fallback
+              return activeSub ? (
+                <div className="p-6 text-sm text-muted-foreground">
+                  当前账户无法访问该设置
+                </div>
+              ) : <AboutPage />
             })()}
           </SettingsShell>
         )}
