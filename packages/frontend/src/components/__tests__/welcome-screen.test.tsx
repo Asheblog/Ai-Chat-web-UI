@@ -174,6 +174,17 @@ describe('WelcomeScreen', () => {
     expect(mockTextareaChange).toHaveBeenCalledWith('hello')
   })
 
+  it('textarea is direct child of composer shell (no composerInnerEditorClass wrapper)', () => {
+    render(<WelcomeScreen />)
+    const textarea = screen.getByRole('textbox', { name: '输入消息' })
+    const parent = textarea.parentElement!
+    expect(parent.className).toContain('rounded-[12px]')
+    expect(parent.className).toContain('relative')
+    expect(parent.className).toContain('p-4')
+    expect(parent.className).toContain('focus-within:ring-2')
+    expect(parent.className).not.toContain('rounded-[10px]')
+  })
+
   it('shows quota below input on mobile instead of placeholder text', async () => {
     setViewport(true)
     mockViewModel.form.basePlaceholder = '本日消息发送额度剩余 195'

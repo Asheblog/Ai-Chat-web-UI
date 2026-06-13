@@ -10,11 +10,11 @@ import { AttachmentUploadButton } from '@/components/chat/attachment-upload-butt
 import type { WorkspaceFile } from '@/features/chat/composer'
 import { KnowledgeBaseSelector, type KnowledgeBaseItem } from '@/components/chat/knowledge-base-selector'
 import { cn } from '@/lib/utils'
-import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
+import { COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
+import { ComposerShell } from '@/components/chat/composer-shell'
 import {
   ComposerFeatureControls,
   ComposerIconButton,
-  composerInnerEditorClass,
   composerToolbarButtonClass,
   composerToolbarScrollClass,
 } from '@/components/chat/composer-toolbar-primitives'
@@ -196,39 +196,37 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         onRemoveWorkspaceFile={attachments.onRemoveWorkspaceFile}
       />
 
-      <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'px-3 py-3 md:px-4')}>
-        <div className={composerInnerEditorClass}>
-          <Textarea
-            ref={textareaRef}
-            value={query}
-            placeholder={activePlaceholder}
-            aria-label="输入消息"
-            disabled={creationDisabled}
-            onChange={(event) => onTextareaChange(event.target.value)}
-            onKeyDown={onKeyDown}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onPaste={attachments.onPaste}
-            className={cn(
-              COMPOSER_TEXTAREA_BASE_CLASS,
-              'min-h-[64px] max-h-[220px] w-full px-3 py-3 text-sm md:min-h-[68px] md:text-base',
-              showExpand && 'pr-12',
-            )}
-            rows={1}
-          />
-
-          {showExpand && (
-            <ComposerIconButton
-              className="absolute right-2 top-2 h-8 w-8 rounded-[7px]"
-              onClick={onOpenExpand}
-              disabled={creationDisabled}
-              aria-label="全屏编辑"
-              title="全屏编辑"
-            >
-              <Maximize2 className="h-4 w-4" />
-            </ComposerIconButton>
+      <ComposerShell>
+        <Textarea
+          ref={textareaRef}
+          value={query}
+          placeholder={activePlaceholder}
+          aria-label="输入消息"
+          disabled={creationDisabled}
+          onChange={(event) => onTextareaChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
+          onPaste={attachments.onPaste}
+          className={cn(
+            COMPOSER_TEXTAREA_BASE_CLASS,
+            'min-h-[64px] max-h-[200px] w-full text-sm lg:min-h-[68px]',
+            showExpand && 'pr-12',
           )}
-        </div>
+          rows={1}
+        />
+
+        {showExpand && (
+          <ComposerIconButton
+            className="absolute right-4 top-4 h-8 w-8 rounded-[7px]"
+            onClick={onOpenExpand}
+            disabled={creationDisabled}
+            aria-label="全屏编辑"
+            title="全屏编辑"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </ComposerIconButton>
+        )}
 
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className={cn(composerToolbarScrollClass, 'flex-1')}>
@@ -270,7 +268,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             {isCreating ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
           </Button>
         </div>
-      </div>
+      </ComposerShell>
 
       {mobileQuotaNotice ? (
         <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm md:hidden">

@@ -55,6 +55,17 @@ const createProps = (overrides: Partial<React.ComponentProps<typeof DesktopCompo
 })
 
 describe('DesktopComposer', () => {
+  it('textarea is direct child of composer shell', () => {
+    const { container } = render(<DesktopComposer {...createProps()} />)
+    const textarea = container.querySelector('textarea')
+    expect(textarea).toBeInTheDocument()
+    const parent = textarea!.parentElement!
+    expect(parent.className).toContain('rounded-[12px]')
+    expect(parent.className).toContain('relative')
+    expect(parent.className).toContain('p-4')
+    expect(parent.className).toContain('focus-within:ring-2')
+  })
+
   it('allows stopping while streaming even when send would otherwise be disabled', () => {
     const onStop = vi.fn()
     render(

@@ -17,7 +17,8 @@ import type { ComposerSkillOption } from './chat-composer-panel'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
 import { cn } from '@/lib/utils'
-import { COMPOSER_SHELL_BASE_CLASS, COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
+import { COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
+import { ComposerShell } from './composer-shell'
 import {
   ComposerFeatureControls,
   ComposerIconButton,
@@ -162,7 +163,7 @@ export function DesktopComposer({
           onRemoveWorkspaceFile={onRemoveWorkspaceFile}
           className="mb-3"
         />
-        <div className={cn(COMPOSER_SHELL_BASE_CLASS, 'relative p-4')}>
+        <ComposerShell>
           <Textarea
             ref={textareaRef}
             value={input}
@@ -279,7 +280,7 @@ export function DesktopComposer({
               </Tooltip>
             </TooltipProvider>
           </div>
-        </div>
+        </ComposerShell>
 
         <SkillPanelSheet
           open={skillPanelOpen}
