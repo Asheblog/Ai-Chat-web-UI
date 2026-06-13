@@ -39,6 +39,7 @@ export interface FinalizeParams {
   timing?: {
     requestStartedAt: number
     firstChunkAt?: number | null
+    speedStartedAt?: number | null
     completedAt: number
   }
   /** 预计算的 metrics，如果提供则直接使用，否则从 timing 计算 */
@@ -91,6 +92,10 @@ export interface ComputeMetricsParams {
   timing: {
     requestStartedAt: number
     firstChunkAt?: number | null
+    /** 用于计算 tokensPerSecond 的起始锚点。如果提供，tokensPerSecond 使用
+     * speedStartedAt → completedAt 窗口而非 firstChunkAt → completedAt。
+     * 适用于 reasoning 阶段先于可见正文到达的场景，避免 reasoning 时长稀释 TPS。 */
+    speedStartedAt?: number | null
     completedAt: number
   }
   completionTokens: number
@@ -111,7 +116,14 @@ export const computeStreamMetrics = (params: ComputeMetricsParams): StreamMetric
   const firstTokenLatencyMs =
     firstChunkAt != null ? Math.max(0, Math.round(firstChunkAt - startedAt)) : null
   const responseTimeMs = Math.max(0, Math.round(completedAt - startedAt))
-  const speedAnchorAt = firstChunkAt ?? startedAt
+
+  // speedAnchorAt: 用于 TPS 计算的时间窗口起点
+  const speedCandidate = Number(timing.speedStartedAt)
+  const speedStartedAt =
+    Number.isFinite(speedCandidate) && speedCandidate >= startedAt
+      ? Math.min(speedCandidate, completedAt)
+      : null
+  const speedAnchorAt = speedStartedAt ?? firstChunkAt ?? startedAt
   const speedWindowMs = Math.max(1, completedAt - speedAnchorAt || completedAt - startedAt || 1)
   const tokensPerSecond = completionTokens > 0 ? completionTokens / (speedWindowMs / 1000) : 0
 
@@ -157,6 +169,7 @@ export class StreamUsageService {
           timing: {
             requestStartedAt: params.timing.requestStartedAt,
             firstChunkAt: params.timing.firstChunkAt,
+            speedStartedAt: params.timing.speedStartedAt,
             completedAt: params.timing.completedAt,
           },
           completionTokens: finalUsage.completion,

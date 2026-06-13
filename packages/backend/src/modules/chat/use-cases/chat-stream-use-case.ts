@@ -1562,6 +1562,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             let providerUsageEvents = 0;
             let providerStopEvents = 0;
             let providerFirstDeltaAt: number | null = null;
+            let visibleFirstDeltaAt: number | null = null;
             let providerFirstUsageAt: number | null = null;
             const traceIdleTimeoutMs = traceDecision.config.idleTimeoutMs > 0 ? traceDecision.config.idleTimeoutMs : null;
             let traceIdleWarned = false;
@@ -1760,6 +1761,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
 	                      }
 
 	                      if (visible) {
+	                        if (!visibleFirstDeltaAt) visibleFirstDeltaAt = now
 	                        pendingVisibleDelta += visible
 	                        visibleDeltaCount += 1
 	                        providerContentChunks += 1
@@ -1853,6 +1855,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
                   }
 
                   if (visible) {
+                    if (!visibleFirstDeltaAt) visibleFirstDeltaAt = now
                     pendingVisibleDelta += visible;
                     visibleDeltaCount += 1;
                     providerContentChunks += 1;
@@ -2029,6 +2032,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
               timing: {
                 requestStartedAt,
                 firstChunkAt: firstTokenAt,
+                speedStartedAt: visibleFirstDeltaAt,
                 completedAt,
               },
               completionTokens: completionTokensForMetrics,
@@ -2077,6 +2081,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
                 timing: {
                   requestStartedAt,
                   firstChunkAt: firstTokenAt,
+                  speedStartedAt: visibleFirstDeltaAt,
                   completedAt,
                 },
                 precomputedMetrics: streamMetrics,

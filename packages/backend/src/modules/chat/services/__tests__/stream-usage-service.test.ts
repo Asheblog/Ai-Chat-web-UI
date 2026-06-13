@@ -65,6 +65,37 @@ describe('StreamUsageService', () => {
     expect(metrics.tokensPerSecond).toBeCloseTo(10, 5)
   })
 
+  it('uses speedStartedAt for tokensPerSecond when provided (reasoning started early, visible content started later)', () => {
+    const metrics = computeStreamMetrics({
+      timing: {
+        requestStartedAt: 1000,
+        firstChunkAt: 1200,       // first delta (reasoning) arrived at 1200
+        speedStartedAt: 5000,     // visible content delta arrived at 5000
+        completedAt: 9000,        // stream finished at 9000
+      },
+      completionTokens: 80,
+    })
+    // firstTokenLatencyMs still uses firstChunkAt (1200 - 1000 = 200)
+    expect(metrics.firstTokenLatencyMs).toBe(200)
+    // responseTimeMs still uses requestStartedAt to completedAt
+    expect(metrics.responseTimeMs).toBe(8000)
+    // tokensPerSecond uses speedStartedAt(5000) to completedAt(9000) = 4000ms, 80/4 = 20
+    expect(metrics.tokensPerSecond).toBeCloseTo(20, 5)
+  })
+
+  it('falls back to firstChunkAt when speedStartedAt is not provided', () => {
+    const metrics = computeStreamMetrics({
+      timing: {
+        requestStartedAt: 1000,
+        firstChunkAt: 2000,
+        completedAt: 5000,
+      },
+      completionTokens: 40,
+    })
+    // tokensPerSecond uses firstChunkAt(2000) to completedAt(5000) = 3000ms, 40/3 = 13.33
+    expect(metrics.tokensPerSecond).toBeCloseTo(40 / 3, 5)
+  })
+
   it('uses provider completion tokens for metrics when fallback tokens are zero', () => {
     const completion = resolveCompletionTokensForMetrics({
       providerUsageSeen: true,
