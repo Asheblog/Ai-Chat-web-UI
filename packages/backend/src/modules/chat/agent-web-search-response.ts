@@ -9,7 +9,7 @@ import { getFriendlyErrorMessage, parseApiError } from '../../utils/api-error-pa
 import type { UsageQuotaSnapshot } from '../../types';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
-import type { ToolLogEntry } from './tool-logs';
+import { serializeToolLogsForPersistence, type ToolLogEntry } from './tool-logs';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from './assistant-message-service';
 import {
   buildAgentStreamKey,
@@ -308,7 +308,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const shouldPersistToolLogs = toolLogsDirty || force;
         const toolLogsJson = shouldPersistToolLogs
           ? toolLogs.length > 0
-            ? JSON.stringify(toolLogs)
+            ? serializeToolLogsForPersistence(toolLogs)
             : null
           : undefined;
         try {
@@ -981,7 +981,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 return null;
               }
             })();
-            const finalToolLogsJson = toolLogs.length > 0 ? JSON.stringify(toolLogs) : null;
+            const finalToolLogsJson = serializeToolLogsForPersistence(toolLogs);
             const persistedId = await persistAssistantFinalResponse({
               sessionId,
               existingMessageId: activeAssistantMessageId,

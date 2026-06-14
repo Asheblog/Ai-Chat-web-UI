@@ -4,7 +4,7 @@
  */
 
 import type { WebSearchHit } from '../../utils/web-search';
-import type { ToolLogEntry, ToolLogDetails, ToolLogStage } from './tool-logs';
+import { serializeToolLogsForPersistence, type ToolLogEntry, type ToolLogDetails, type ToolLogStage } from './tool-logs';
 
 export interface ToolLogManagerOptions {
   sessionId: number;
@@ -51,7 +51,7 @@ export class ToolLogManager {
    * 序列化日志为 JSON
    */
   toJson(): string | null {
-    return this.logs.length > 0 ? JSON.stringify(this.logs) : null;
+    return serializeToolLogsForPersistence(this.logs);
   }
 
   /**

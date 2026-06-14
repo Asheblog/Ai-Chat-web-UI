@@ -85,7 +85,7 @@ RUN pnpm run build
 FROM node:20-slim AS production
 
 # 优化Node.js运行时内存设置（移除 --optimize-for-size，避免 NODE_OPTIONS 限制报错）
-ENV NODE_OPTIONS="--max-old-space-size=256"
+ENV NODE_OPTIONS="--max-old-space-size=1024"
 ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 ENV DATABASE_URL="file:/app/data/app.db"
