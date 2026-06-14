@@ -41,10 +41,10 @@ describe("system-settings-registry", () => {
       expect(ws.children.map((c) => c.label)).toEqual(["联网搜索", "Python 运行时", "MCP 管理"])
     })
 
-    test("「治理与审计」应包含成员与权限、Skill 管理、审计日志、日志查看器", () => {
+    test("「治理与审计」应包含成员与权限、Skill 管理、审计日志、任务追踪、系统运行日志", () => {
       const ws = workspaces[3]
       expect(ws.label).toBe("治理与审计")
-      expect(ws.children.map((c) => c.label)).toEqual(["成员与权限", "Skill 管理", "审计日志", "日志查看器"])
+      expect(ws.children.map((c) => c.label)).toEqual(["成员与权限", "Skill 管理", "审计日志", "任务追踪", "系统运行日志"])
     })
 
     test("「运行维护」应包含运行监控与保留策略", () => {
@@ -66,6 +66,18 @@ describe("system-settings-registry", () => {
 
     test("renderSystemLeaf('network') 应返回有效 React 元素", () => {
       expect(renderSystemLeaf("network")).not.toBeNull()
+    })
+
+    test("renderSystemLeaf('task-trace') 应返回有效 React 元素", () => {
+      expect(renderSystemLeaf("task-trace")).not.toBeNull()
+    })
+
+    test("renderSystemLeaf('system-logs') 应返回有效 React 元素", () => {
+      expect(renderSystemLeaf("system-logs")).not.toBeNull()
+    })
+
+    test("renderSystemLeaf('logs') 应返回 null（已被拆分为独立菜单）", () => {
+      expect(renderSystemLeaf("logs")).toBeNull()
     })
 
     test("renderSystemLeaf('unknown-key') 应返回 null", () => {
@@ -90,6 +102,18 @@ describe("system-settings-registry", () => {
 
     test("backup 属于 operations", () => {
       expect(getWorkspaceForLeaf("backup")).toBe("operations")
+    })
+
+    test("task-trace 属于 audit-governance", () => {
+      expect(getWorkspaceForLeaf("task-trace")).toBe("audit-governance")
+    })
+
+    test("system-logs 属于 audit-governance", () => {
+      expect(getWorkspaceForLeaf("system-logs")).toBe("audit-governance")
+    })
+
+    test("logs 应返回 undefined（已被移除）", () => {
+      expect(getWorkspaceForLeaf("logs")).toBeUndefined()
     })
 
     test("unknown key 应返回 undefined", () => {

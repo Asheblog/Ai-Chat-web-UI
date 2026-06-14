@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { BookOpen, Boxes, ClipboardList, Cloud, Database, Globe, KeyRound, LayoutDashboard, Link2, PlugZap, Puzzle, Router, ScrollText, Settings2, Terminal, Users, Wrench, type LucideIcon } from "lucide-react"
+import { BookOpen, Boxes, ClipboardList, Cloud, Database, FileText, Globe, KeyRound, LayoutDashboard, Link2, PlugZap, Puzzle, Router, Settings2, Terminal, TerminalSquare, Users, Wrench, type LucideIcon } from "lucide-react"
 import type { ComponentType, ReactNode } from "react"
 
 // Leaf metadata
@@ -85,16 +85,20 @@ const SystemKnowledgeBasePage = dynamic(
   () => import("@/components/settings/pages/SystemKnowledgeBase").then((m) => m.SystemKnowledgeBasePage),
   { loading: pageLoading },
 )
-const LogViewerPage = dynamic(
-  () => import("@/components/settings/pages/LogViewerPage").then((m) => m.LogViewerPage),
-  { loading: pageLoading },
-)
 const SystemPythonRuntimePage = dynamic(
   () => import("@/components/settings/pages/SystemPythonRuntime").then((m) => m.SystemPythonRuntimePage),
   { loading: pageLoading },
 )
 const SystemMcpPage = dynamic(
   () => import("@/components/settings/pages/SystemMcpPage").then((m) => m.SystemMcpPage),
+  { loading: pageLoading },
+)
+const SystemLogsPage = dynamic(
+  () => import("@/components/settings/pages/SystemLogsPage").then((m) => m.SystemLogsPage),
+  { loading: pageLoading },
+)
+const TaskTraceConsole = dynamic(
+  () => import("@/components/task-trace/TaskTraceConsole").then((m) => m.TaskTraceConsole),
   { loading: pageLoading },
 )
 
@@ -142,7 +146,8 @@ export const systemSettingsTree: SystemWorkspaceNode[] = [
       { key: "members", label: "成员与权限", icon: Users },
       { key: "skills", label: "Skill 管理", icon: Puzzle },
       { key: "audit", label: "审计日志", icon: ClipboardList },
-      { key: "logs", label: "日志查看器", icon: ScrollText },
+      { key: "task-trace", label: "任务追踪", icon: FileText },
+      { key: "system-logs", label: "系统运行日志", icon: TerminalSquare },
     ],
   },
   {
@@ -173,7 +178,8 @@ const leafComponentMap: Record<string, ComponentType> = {
   members: SystemUsersPage,
   skills: SystemSkillsPage,
   audit: SystemSkillAuditsPage,
-  logs: LogViewerPage,
+  "task-trace": TaskTraceConsole,
+  "system-logs": SystemLogsPage,
   backup: SystemMonitoringPage,
 }
 
