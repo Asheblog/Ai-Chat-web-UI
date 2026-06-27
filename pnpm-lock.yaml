@@ -328,6 +328,9 @@ importers:
       expo:
         specifier: ~56.0.12
         version: 56.0.12(@babel/core@7.28.5)(@expo/dom-webview@56.0.5)(react-native@0.85.3)(react@19.2.3)(typescript@6.0.3)
+      expo-secure-store:
+        specifier: ^56.0.4
+        version: 56.0.4(expo@56.0.12)
       expo-status-bar:
         specifier: ~56.0.4
         version: 56.0.4(expo@56.0.12)(react-native@0.85.3)(react@19.2.3)
@@ -7320,6 +7323,14 @@ packages:
       react-native: '*'
     dependencies:
       react-native: 0.85.3(@babel/core@7.28.5)(@types/react@19.2.17)(react@19.2.3)
+    dev: false
+
+  /expo-secure-store@56.0.4(expo@56.0.12):
+    resolution: {integrity: sha512-hjEi/gmpdFFJ9lYbdp3k3p/WchV7Gi0Qt8jt/m/0WJadqQrskafHAlDxbZkII1cN3Yd7zp9Lvkeq3UfGhSwirQ==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 56.0.12(@babel/core@7.28.5)(@expo/dom-webview@56.0.5)(react-native@0.85.3)(react@19.2.3)(typescript@6.0.3)
     dev: false
 
   /expo-server@56.0.5:
