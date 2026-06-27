@@ -51,6 +51,13 @@
 - **Settings Work Domain（设置工作域）**：系统设置左侧导航中的二级分组，用于把相关配置页面组织在同一操作语境下
 - **Settings Page（设置页面）**：设置工作域下的具体配置页面，是右侧内容区渲染的最小页面单位
 
+## 移动客户端
+
+- **Android Client（Android 客户端）**：AIChat 的可安装 Android 应用，以移动端原生交互访问既有 AIChat 服务端；它不是 Web 客户端的简单网页壳
+- **Server Endpoint（服务端地址）**：用户在 Android 客户端内配置的 AIChat 服务端根地址，客户端所有 API 请求都以它为基址
+- **Mobile Chat MVP（移动端聊天 MVP）**：Android 客户端首版范围，仅覆盖服务器配置、认证、会话列表和聊天主流程；不包含系统设置、MCP、Skill、知识库管理、Battle、任务追踪或管理员后台
+- **Mobile Auth Token（移动端认证令牌）**：Android 客户端保存并用于 API 请求的 Bearer token；不同于 Web 客户端依赖的浏览器 cookie
+
 ## Skill
 
 - **System Skill（系统级 Skill）**：对所有拥有权限的用户可见且可用的 Skill

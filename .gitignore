@@ -30,6 +30,12 @@ build/
 coverage/
 *.tsbuildinfo
 
+# --- Expo / React Native ---
+.expo/
+packages/mobile/.expo/
+packages/mobile/android/
+packages/mobile/ios/
+
 # --- Logs ---
 logs/
 **/logs/

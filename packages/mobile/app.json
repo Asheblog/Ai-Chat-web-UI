@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "AIChat Mobile",
+    "slug": "aichat-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "aichat",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.aichat.mobile",
+      "edgeToEdgeEnabled": true
+    }
+  }
+}
