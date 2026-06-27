@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MobileComposer } from '@/components/chat/mobile-composer'
 
 const createProps = (
@@ -76,5 +76,38 @@ describe('MobileComposer', () => {
 
     const innerEditor = mobileContainer?.querySelector('.focus-within\\:ring-primary\\/10')
     expect(innerEditor).toBeInTheDocument()
+  })
+
+  it('passes a real button ref to the mobile plus popover trigger', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      render(<MobileComposer {...createProps()} />)
+
+      const refWarning = consoleError.mock.calls.some((call) =>
+        call.some((message) =>
+          String(message).includes('Function components cannot be given refs'),
+        ),
+      )
+      expect(refWarning).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('keeps the mobile plus button touch target large enough for tapping', () => {
+    render(<MobileComposer {...createProps()} />)
+
+    const plusButton = screen.getByRole('button', { name: '更多操作' })
+
+    expect(plusButton).toHaveClass('h-11', 'w-11', 'touch-manipulation')
+  })
+
+  it('opens the mobile plus menu when tapping the plus button', async () => {
+    render(<MobileComposer {...createProps()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '更多操作' }))
+
+    expect(await screen.findByText('第三方技能')).toBeInTheDocument()
   })
 })

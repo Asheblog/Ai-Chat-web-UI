@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { BookOpen, Brain, Code2, Globe2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -9,33 +9,31 @@ export const composerToolbarScrollClass =
   'flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-visible pr-0 sm:gap-1.5'
 
 export const composerToolbarButtonClass =
-  'relative inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-card text-muted-foreground shadow-[0_1px_2px_hsl(var(--background)/0.25)] transition-colors hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-45 sm:h-9 sm:w-9'
+  'relative inline-flex h-11 w-11 shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-[8px] border border-border bg-card text-muted-foreground shadow-[0_1px_2px_hsl(var(--background)/0.25)] transition-colors hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-45 md:h-9 md:w-9'
 
 interface ComposerIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
 }
 
-export function ComposerIconButton({
-  active,
-  className,
-  type = 'button',
-  children,
-  ...props
-}: ComposerIconButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cn(
-        composerToolbarButtonClass,
-        active && 'border-primary/35 bg-primary/5 text-primary',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  )
-}
+export const ComposerIconButton = forwardRef<HTMLButtonElement, ComposerIconButtonProps>(
+  ({ active, className, type = 'button', children, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={cn(
+          composerToolbarButtonClass,
+          active && 'border-primary/35 bg-primary/5 text-primary',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </button>
+    )
+  },
+)
+ComposerIconButton.displayName = 'ComposerIconButton'
 
 interface ComposerFeatureChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
