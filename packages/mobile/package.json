@@ -5,7 +5,8 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
+    "android": "expo run:android",
+    "android:build-apk": "bash scripts/build-android-apk.sh",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
+    "@expo/config-plugins": "^56.0.9",
     "@types/react": "^19.2.17",
     "typescript": "~6.0.3"
   }

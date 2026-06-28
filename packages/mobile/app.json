@@ -4,12 +4,14 @@
     "slug": "aichat-mobile",
     "version": "0.1.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
     "scheme": "aichat",
     "newArchEnabled": true,
+    "plugins": [
+      "./plugins/with-android-cleartext-traffic"
+    ],
     "android": {
       "package": "com.aichat.mobile",
-      "edgeToEdgeEnabled": true
+      "usesCleartextTraffic": true
     }
   }
 }
