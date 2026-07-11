@@ -41,14 +41,18 @@ type StreamState = {
 export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProps) {
   const title = getSessionTitle(session);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const inputRef = useRef<TextInput>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamRef = useRef<StreamState | null>(null);
   const stopRequestedRef = useRef(false);
+  const streamStartedRef = useRef(false);
+  const shouldFollowStreamRef = useRef(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadMessages = useCallback(async (mode: "initial" | "refresh" = "refresh") => {
@@ -78,13 +82,11 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
     };
   }, [loadMessages]);
 
-  useEffect(() => {
-    if (messages.length === 0) {
-      return;
-    }
-    const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
-    return () => clearTimeout(timer);
-  }, [messages.length, isStreaming]);
+  const scrollToBottom = useCallback((animated = true) => {
+    shouldFollowStreamRef.current = true;
+    setShowScrollToBottom(false);
+    listRef.current?.scrollToEnd({ animated });
+  }, []);
 
   const trimmedInput = input.trim();
   const canSend = trimmedInput.length > 0 && !isStreaming;
@@ -138,6 +140,8 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
     abortRef.current = controller;
     streamRef.current = { assistantId, clientMessageId, messageId: null };
     stopRequestedRef.current = false;
+    streamStartedRef.current = false;
+    shouldFollowStreamRef.current = true;
     setInput("");
     setErrorMessage(null);
     setIsStreaming(true);
@@ -155,6 +159,7 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
         signal: controller.signal,
       })) {
         if (chunk.type === "start") {
+          streamStartedRef.current = true;
           const previousAssistantId: number | string = streamRef.current?.assistantId ?? assistantId;
           const nextAssistantId: number | string = chunk.assistantMessageId ?? previousAssistantId;
           streamRef.current = {
@@ -237,11 +242,19 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
 
       const message = error instanceof Error ? error.message : "发送失败，请重试。";
       setErrorMessage(message);
-      markActiveAssistant("error", message);
+      if (!streamStartedRef.current) {
+        setInput(content);
+        setMessages((current) =>
+          current.filter((item) => item.id !== userMessage.id && item.id !== assistantId),
+        );
+      } else {
+        markActiveAssistant("error", `${message} 下拉刷新可同步服务端状态。`);
+      }
     } finally {
       abortRef.current = null;
       streamRef.current = null;
       stopRequestedRef.current = false;
+      streamStartedRef.current = false;
       setIsStreaming(false);
     }
   }, [apiClient, input, isStreaming, loadMessages, markActiveAssistant, session.id]);
@@ -268,7 +281,7 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       style={styles.container}
     >
@@ -303,15 +316,28 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
         ref={listRef}
         contentContainerStyle={[styles.messageList, empty && styles.messageListEmpty]}
         data={messages}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         keyExtractor={(item) => String(item.id)}
         ListEmptyComponent={
           isLoading ? (
             <LoadingState theme={theme} />
           ) : (
-            <EmptyState onFocusComposer={() => listRef.current?.scrollToEnd({ animated: true })} theme={theme} />
+            <EmptyState onFocusComposer={() => inputRef.current?.focus()} theme={theme} />
           )
         }
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        onContentSizeChange={() => {
+          if (shouldFollowStreamRef.current) {
+            scrollToBottom(false);
+          }
+        }}
+        onScroll={({ nativeEvent }) => {
+          const distanceFromBottom =
+            nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
+          const isNearBottom = distanceFromBottom < 96;
+          shouldFollowStreamRef.current = isNearBottom;
+          setShowScrollToBottom(!isNearBottom);
+        }}
         refreshControl={
           <RefreshControl
             colors={[theme.primary]}
@@ -321,10 +347,32 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
           />
         }
         renderItem={({ item }) => <MessageBubble message={item} theme={theme} />}
+        scrollEventThrottle={80}
       />
 
-      <View style={[styles.composer, { borderTopColor: theme.border, backgroundColor: theme.background }]}>
+      {showScrollToBottom ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="回到最新消息"
+          onPress={() => scrollToBottom()}
+          style={({ pressed }) => [
+            styles.scrollToBottomButton,
+            {
+              backgroundColor: pressed ? theme.primaryPressed : theme.primary,
+              borderColor: theme.background,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons name="arrow-down" size={20} color="#FFFFFF" />
+          <Text style={styles.scrollToBottomText}>最新消息</Text>
+        </Pressable>
+      ) : null}
+
+      <View
+        style={[styles.composer, { borderTopColor: theme.border, backgroundColor: theme.background }]}
+      >
         <TextInput
+          ref={inputRef}
           accessibilityLabel="输入消息"
           editable={!isStreaming}
           multiline
@@ -529,6 +577,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     textAlign: "center",
+  },
+  scrollToBottomButton: {
+    alignItems: "center",
+    alignSelf: "center",
+    borderRadius: 22,
+    borderWidth: 2,
+    bottom: 84,
+    columnGap: spacing.sm,
+    flexDirection: "row",
+    minHeight: 44,
+    paddingHorizontal: spacing.lg,
+    position: "absolute",
+  },
+  scrollToBottomText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
   },
   emptyButton: {
     alignItems: "center",
