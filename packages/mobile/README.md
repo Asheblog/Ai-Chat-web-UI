@@ -374,10 +374,20 @@ pnpm mobile:type-check
 9. 通过：轮换隔离后端 JWT 后，下一次认证请求清理 token 并返回登录页，页面未卡死。
 10. 通过：使用同一正式签名 APK 执行 `pm install -r` 覆盖安装成功，后续升级签名链路成立。
 11. 通过：移动端 5 项测试、TypeScript 类型检查、Expo prebuild 和正式 release 构建通过。
+12. 通过：普通 push 的 Mobile CI 成功，且未触发正式 APK 发布。
+13. 通过：`mobile-v0.1.0` Tag 自动完成正式签名构建、证书指纹校验、Actions Artifact、来源证明和 GitHub Release。
+
+首次 GitHub Release：
+
+```text
+地址：https://github.com/Asheblog/Ai-Chat-web-UI/releases/tag/mobile-v0.1.0
+文件：aichat-mobile-0.1.0.apk
+大小：70,832,071 bytes
+SHA-256：4ef6580abd01a25ed59bcf844464b7067081d43329f09eb1fe95575c1c5e2a8f
+```
 
 当前限制：
 
-- 尚未创建第一个 `mobile-v0.1.0` Tag，因此 GitHub Release workflow 已配置但未实际触发；避免在阶段验收期间意外发布正式 Release。
 - GitHub `android-release` Environment 已保存四项签名 Secrets，但 keystore 仍必须由项目负责人另行做加密离线备份。
 - Windows 原生构建脚本已按同一 Node 入口实现，本阶段环境为 WSL，无法把 Windows 原生执行结果冒充为已验证。
 - 当前仅分发 APK，不包含 Play Console、AAB 或应用商店上架。
