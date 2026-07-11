@@ -14,9 +14,14 @@ const signature = run(apksigner, ["verify", "--verbose", "--print-certs", apk], 
 if (/Android Debug/i.test(signature)) {
   throw new Error("release APK 仍使用 Android debug 证书签名");
 }
-const certificateMatch = signature.match(/Signer #1 certificate SHA-256 digest:\s*([0-9a-f:]+)/i);
-if (!certificateMatch) throw new Error("无法从 APK 读取签名证书 SHA-256");
-const certificateSha256 = certificateMatch[1].replace(/:/g, "").toLowerCase();
+const certificateOutput = run(apksigner, ["verify", "--print-certs-pem", apk], { capture: true });
+const certificatePem = certificateOutput.match(
+  /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/,
+)?.[0];
+if (!certificatePem) throw new Error("无法从 APK 提取签名证书");
+const certificateSha256 = new crypto.X509Certificate(certificatePem).fingerprint256
+  .replace(/:/g, "")
+  .toLowerCase();
 const expectedCertificateSha256 = String(
   appConfig.expo.extra?.androidReleaseCertificateSha256 ?? "",
 ).replace(/:/g, "").toLowerCase();
