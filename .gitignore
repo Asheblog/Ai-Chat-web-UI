@@ -35,6 +35,11 @@ coverage/
 packages/mobile/.expo/
 packages/mobile/android/
 packages/mobile/ios/
+packages/mobile/signing/
+*.jks
+*.keystore
+signing.env
+signing.cmd
 
 # --- Logs ---
 logs/

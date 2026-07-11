@@ -57,6 +57,8 @@
 - **Server Endpoint（服务端地址）**：用户在 Android 客户端内配置的 AIChat 服务端根地址，客户端所有 API 请求都以它为基址
 - **Mobile Chat MVP（移动端聊天 MVP）**：Android 客户端首版范围，仅覆盖服务器配置、认证、会话列表和聊天主流程；不包含系统设置、MCP、Skill、知识库管理、Battle、任务追踪或管理员后台
 - **Mobile Auth Token（移动端认证令牌）**：Android 客户端保存并用于 API 请求的 Bearer token；不同于 Web 客户端依赖的浏览器 cookie
+- **Mobile Release Identity（移动端发布身份）**：由 Android applicationId 与长期 release signing certificate 共同确定的可升级应用身份；同一发布链路必须持续使用相同身份
+- **Mobile Release（移动端正式发布）**：与 `app.json` 版本一致、由 `mobile-v<versionName>` Tag 触发并使用移动端发布身份签名的可分发 APK
 
 ## Skill
 

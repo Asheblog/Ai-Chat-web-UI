@@ -6,11 +6,16 @@
     "orientation": "portrait",
     "scheme": "aichat",
     "newArchEnabled": true,
+    "extra": {
+      "androidReleaseCertificateSha256": "2de04200f1e2cbc8263f33ecdd0a55cf78a0545d8e129a40edac076eb5c0ac10"
+    },
     "plugins": [
-      "./plugins/with-android-cleartext-traffic"
+      "./plugins/with-android-cleartext-traffic",
+      "./plugins/with-android-release-signing"
     ],
     "android": {
       "package": "com.aichat.mobile",
+      "versionCode": 1,
       "usesCleartextTraffic": true
     }
   }

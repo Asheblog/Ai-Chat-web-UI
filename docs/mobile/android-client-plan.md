@@ -235,6 +235,29 @@
 - 常见错误有明确反馈。
 - 仍不扩大到 Web 管理后台。
 
+## 阶段 8：正式分发准备
+
+目标：把仅用于本地验收的 APK 构建升级为安全、可重复、可交接的正式分发流程。
+
+产出：
+
+- `app.json` 统一管理 Android applicationId、versionName 和 versionCode。
+- 仓库外独立 release keystore，本地通过环境变量注入。
+- GitHub `android-release` Environment Secrets 保存同一发布身份。
+- 普通 PR/push 只做移动端质量检查，`mobile-v<versionName>` Tag 构建并发布正式 APK。
+- 自动验证 APK 签名、包名、版本和 SHA-256。
+- README 记录密钥准备、构建、安装、升级、GitHub Release 和排障流程。
+
+验收标准：
+
+- release APK 不再使用 debug keystore。
+- 仓库不包含 keystore 或明文密码。
+- Linux/WSL 与 Windows 共用同一 Node 构建入口。
+- 正式签名 APK 可安装并完成聊天核心流程。
+- 首次 debug 签名迁移与后续 release 签名覆盖升级规则明确。
+
+本阶段不包含应用商店、Play Console、AAB 上架和业务 UI 重设计。
+
 ## 每个新窗口的推荐开场
 
 ```text

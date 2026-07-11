@@ -6,7 +6,10 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "android:build-apk": "bash scripts/build-android-apk.sh",
+    "android:build-apk": "node scripts/build-android-apk.js release",
+    "android:build-debug-apk": "node scripts/build-android-apk.js debug",
+    "android:generate-keystore": "node scripts/generate-android-keystore.js",
+    "android:verify-apk": "node scripts/verify-android-apk.js",
     "test": "vitest run",
     "type-check": "tsc --noEmit"
   },

@@ -1,6 +1,6 @@
 # AIChat Mobile
 
-AIChat Mobile 是 AIChat 的 Android 客户端包。当前已完成阶段 7：第一轮打磨。
+AIChat Mobile 是 AIChat 的 Android 客户端包。当前已完成阶段 8：正式分发准备。
 
 ## 当前范围
 
@@ -55,6 +55,45 @@ pnpm mobile:start
 pnpm mobile:android
 ```
 
+## 正式签名准备
+
+release APK 必须使用长期保存的独立 keystore。仓库禁止提交 `*.keystore`、`*.jks`、密码、token 或签名环境文件。
+
+首次准备密钥时执行：
+
+```bash
+pnpm --filter @aichat/mobile android:generate-keystore
+```
+
+默认生成到仓库外的 `~/.config/aichat-mobile/signing/`：
+
+- `release.keystore`：长期发布密钥。
+- `signing.env`：Linux/WSL 环境变量。
+- `signing.cmd`：Windows cmd 环境变量。
+
+生成脚本拒绝覆盖已有密钥。请立即对整个目录做加密离线备份；密钥丢失后无法继续覆盖升级已经分发的 App。
+
+Linux/WSL 构建前加载：
+
+```bash
+set -a
+source ~/.config/aichat-mobile/signing/signing.env
+set +a
+```
+
+Windows cmd 构建前加载仓库外的配置：
+
+```cmd
+call %USERPROFILE%\.config\aichat-mobile\signing\signing.cmd
+```
+
+构建统一读取以下变量，缺少任何一项都会失败，绝不回退 debug keystore：
+
+- `AICHAT_ANDROID_KEYSTORE_PATH`
+- `AICHAT_ANDROID_KEYSTORE_PASSWORD`
+- `AICHAT_ANDROID_KEY_ALIAS`
+- `AICHAT_ANDROID_KEY_PASSWORD`
+
 ## 构建 APK
 
 在仓库根目录执行：
@@ -67,9 +106,10 @@ pnpm --filter @aichat/mobile android:build-apk
 
 1. `expo prebuild --platform android`
 2. 将 Gradle wrapper 锁到 `8.14.3`
-3. 自动优先使用 `~/.local/share/android-sdk`
-4. 自动优先使用 `~/.local/share/jdks/temurin-17`
-5. `android/gradlew --no-daemon --no-watch-fs :app:assembleRelease`
+3. 自动发现 `ANDROID_HOME`/`ANDROID_SDK_ROOT` 或常见 Android SDK 路径
+4. 自动发现 `JAVA_HOME` 或常见 JDK 17 路径
+5. 使用外部 release keystore 执行 `:app:assembleRelease`
+6. 自动验证签名、包名、版本和 SHA-256
 
 APK 产物路径：
 
@@ -89,21 +129,38 @@ scripts\build-android-apk.cmd
 
 ```text
 路径：packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-大小：68M
-SHA-256：a3b621be7f3fa9fb28ffad6af8842368db4c6bb5173e083f1754353bcb318458
+大小：70,832,503 bytes
+SHA-256：a4084c6aae23505f0950f87090bb16f59b130dfd81236c3cd71cbf89562a5efb
+包名：com.aichat.mobile
+版本：0.1.0 (versionCode 1)
+签名证书 SHA-256：2de04200f1e2cbc8263f33ecdd0a55cf78a0545d8e129a40edac076eb5c0ac10
 ```
 
-### 签名说明
+开发调试 APK 使用显式命令，不会被当作正式产物：
 
-当前阶段 6 产物是可安装、可验收的本地 release APK。Expo prebuild 生成的 Android 工程默认用 debug keystore 签名 release build：
-
-```gradle
-release {
-  signingConfig signingConfigs.debug
-}
+```bash
+pnpm --filter @aichat/mobile android:build-debug-apk
 ```
 
-这适合本地真机安装验证，不适合作为正式分发或上架签名。正式分发建议后续使用 EAS Build 或配置独立 release keystore。
+### 手工验证正式 APK
+
+```bash
+pnpm --filter @aichat/mobile android:verify-apk
+```
+
+底层等价验证命令：
+
+```bash
+"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs packages/mobile/android/app/build/outputs/apk/release/app-release.apk
+"$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging packages/mobile/android/app/build/outputs/apk/release/app-release.apk
+sha256sum packages/mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+Windows SHA-256 命令：
+
+```cmd
+certutil -hashfile packages\mobile\android\app\build\outputs\apk\release\app-release.apk SHA256
+```
 
 ### WSL 本地 SDK 准备
 
@@ -133,21 +190,34 @@ tar -xzf /tmp/temurin17.tar.gz -C /tmp/temurin17 --strip-components=1
 mv /tmp/temurin17 ~/.local/share/jdks/temurin-17
 ```
 
-## 正式 Release 推荐方式
+## GitHub Actions 正式发布
 
-当前仓库不提交 Android release keystore，也不把签名密钥写入源码仓库。因此正式分发不应直接使用 debug keystore 签名的本地 APK。
+普通 PR 和 push 只触发 `.github/workflows/mobile-ci.yml` 中的测试、类型检查和 Expo 配置检查，不构建正式 APK，也不读取签名密钥。
 
-如需要可分发 release APK，推荐使用 EAS Build 的 APK profile：
+正式发布由 `.github/workflows/mobile-release.yml` 处理。GitHub `android-release` Environment 必须配置：
+
+- `AICHAT_ANDROID_KEYSTORE_BASE64`
+- `AICHAT_ANDROID_KEYSTORE_PASSWORD`
+- `AICHAT_ANDROID_KEY_ALIAS`
+- `AICHAT_ANDROID_KEY_PASSWORD`
+
+流水线只接受与 `app.json` 的 `expo.version` 一致的 `mobile-v<versionName>` Tag。例如当前版本：
 
 ```bash
-pnpm --filter @aichat/mobile exec eas build --platform android --profile preview-apk
+git tag mobile-v0.1.0
+git push origin mobile-v0.1.0
 ```
 
-`packages/mobile/eas.json` 已提供：
+流水线会构建并验证正式签名 APK、生成 SHA-256、上传 Actions Artifact、生成构建来源证明，并创建或更新 GitHub Release。手工补发只能选择已经存在且版本匹配的 Tag。
 
-- `preview-apk`：生成可直接安装的 APK。
-- `debug-apk`：通过 EAS 执行 `:app:assembleDebug`。
-- `production`：生成 Android App Bundle，适合后续上架或正式签名流程。
+版本唯一来源是 `packages/mobile/app.json`：
+
+- `expo.android.package`：Android applicationId，当前为 `com.aichat.mobile`。
+- `expo.version`：`versionName`，当前为 `0.1.0`。
+- `expo.android.versionCode`：当前为 `1`。
+- `expo.extra.androidReleaseCertificateSha256`：长期发布证书的公开 SHA-256 指纹；本地和 GitHub 构建必须精确匹配。
+
+每次准备新的可安装升级版本都必须递增 `versionCode`；发布语义版本时同时更新 `versionName`，再创建对应 Tag。
 
 ## 真机安装
 
@@ -176,7 +246,7 @@ adb install -r packages/mobile/android/app/build/outputs/apk/release/app-release
 '/mnt/e/Program Files/Android/Sdk/platform-tools/adb.exe' shell pm install -r /data/local/tmp/aichat-app-release.apk
 ```
 
-如果设备已经安装过签名不同的同包名应用，先在手机上卸载旧的 `AIChat Mobile`，再重新安装。
+阶段 6/7 的 APK 使用 debug 签名，与阶段 8 正式签名不兼容。首次迁移必须卸载旧 App 后安装，会清除本地服务端地址和登录 token，但不会删除服务端会话；此后沿用同一 release keystore，即可使用 `adb install -r` 覆盖升级。
 
 ## 配置服务端地址
 
@@ -281,10 +351,33 @@ pnpm mobile:type-check
 
 - “停止生成”的效果取决于服务端和模型供应商对取消请求的响应速度；客户端会立即恢复可操作状态。
 - 当前只渲染基础 Markdown；复杂表格、语法高亮和横向代码块工具栏未纳入本阶段。
-- 本地 release APK 仍使用 debug keystore 签名，仅用于安装验收，不作为正式分发签名。
+- 该条是阶段 7 的历史限制；阶段 8 已改为独立 release keystore。
 
 ## 类型检查
 
 ```bash
 pnpm mobile:type-check
 ```
+
+## 阶段 8 正式分发验收结果
+
+本次使用设备 `3c730137 device`、隔离数据库、专用账号和本地 OpenAI 兼容流式模型桩，不调用真实模型或共享服务端。
+
+1. 通过：正式 APK 使用独立 `AIChat Mobile Release` 证书签名，不再使用 Android debug 证书。
+2. 通过：APK 包名为 `com.aichat.mobile`，版本为 `0.1.0 (versionCode 1)`，签名、包名、版本和 SHA-256 自动验证通过。
+3. 通过：历史 debug 签名 APK 直接覆盖时返回 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，与一次性迁移设计一致。
+4. 通过：卸载旧包后可安装正式签名 APK，冷启动正常。
+5. 通过：可配置服务端、登录、进入会话列表，并加载 `APK 真机验收` 的历史消息。
+6. 通过：发送 `stage8-final-stream` 后，助手内容逐步到达并完整显示，输入区恢复可用。
+7. 通过：流式生成期间点击停止后显示 `已停止生成。`，页面和输入区不锁死。
+8. 通过：移除 `adb reverse tcp:8001` 后显示明确网络错误，原输入草稿恢复，发送按钮重新可用；恢复 reverse 后可继续使用。
+9. 通过：轮换隔离后端 JWT 后，下一次认证请求清理 token 并返回登录页，页面未卡死。
+10. 通过：使用同一正式签名 APK 执行 `pm install -r` 覆盖安装成功，后续升级签名链路成立。
+11. 通过：移动端 5 项测试、TypeScript 类型检查、Expo prebuild 和正式 release 构建通过。
+
+当前限制：
+
+- 尚未创建第一个 `mobile-v0.1.0` Tag，因此 GitHub Release workflow 已配置但未实际触发；避免在阶段验收期间意外发布正式 Release。
+- GitHub `android-release` Environment 已保存四项签名 Secrets，但 keystore 仍必须由项目负责人另行做加密离线备份。
+- Windows 原生构建脚本已按同一 Node 入口实现，本阶段环境为 WSL，无法把 Windows 原生执行结果冒充为已验证。
+- 当前仅分发 APK，不包含 Play Console、AAB 或应用商店上架。

@@ -1,0 +1,55 @@
+name: Mobile CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/mobile/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/mobile-ci.yml"
+      - ".github/workflows/mobile-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/mobile/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/mobile-ci.yml"
+      - ".github/workflows/mobile-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Test and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run mobile tests
+        run: pnpm --filter @aichat/mobile test
+
+      - name: Run mobile type-check
+        run: pnpm mobile:type-check
+
+      - name: Validate Expo config
+        run: pnpm --filter @aichat/mobile exec expo config --type public
