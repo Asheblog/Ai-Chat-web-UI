@@ -326,5 +326,85 @@ describe('ChatMessageQueryService', () => {
       content: '摘要',
     })
     expect(result.messages.map((m) => m.id)).toEqual(['group:7', 3, 4])
+    expect(prisma.messageGroup.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          sessionId: 5,
+          cancelledAt: null,
+        },
+      }),
+    )
+    const groupWhere = prisma.messageGroup.findMany.mock.calls[0]?.[0]?.where
+    expect(groupWhere).not.toHaveProperty('NOT')
+  })
+
+  it('excludes empty-summary groups from total without invalid Prisma NOT filter', async () => {
+    const { prisma, service, actor, request } = buildService()
+    prisma.message.count.mockResolvedValue(1)
+    prisma.systemSetting.findUnique.mockResolvedValue({ value: null })
+    prisma.messageGroup.findMany.mockResolvedValue([
+      {
+        id: 1,
+        sessionId: 5,
+        summary: '',
+        compressedMessagesJson: '[]',
+        lastMessageId: null,
+        expanded: false,
+        metadataJson: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      },
+      {
+        id: 2,
+        sessionId: 5,
+        summary: '  ',
+        compressedMessagesJson: '[]',
+        lastMessageId: null,
+        expanded: false,
+        metadataJson: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      },
+    ])
+    prisma.message.findMany.mockResolvedValue([
+      {
+        id: 10,
+        sessionId: 5,
+        messageGroupId: null,
+        role: 'user',
+        content: 'hi',
+        parentMessageId: null,
+        variantIndex: null,
+        attachments: [],
+        clientMessageId: null,
+        reasoning: null,
+        reasoningDurationSeconds: null,
+        toolLogsJson: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        updatedAt: new Date('2024-01-02T00:00:00Z'),
+        streamStatus: 'done',
+        streamCursor: 0,
+        streamReasoning: null,
+        streamError: null,
+        usageMetrics: [],
+        generatedImages: [],
+      },
+    ])
+
+    const result = await service.listMessages({
+      actor,
+      sessionId: 5,
+      page: 'latest',
+      limit: 20,
+      request,
+    })
+
+    expect(prisma.messageGroup.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      sessionId: 5,
+      cancelledAt: null,
+    })
+    expect(result.pagination.total).toBe(1)
+    expect(result.messages).toHaveLength(1)
+    expect(result.messages[0]?.id).toBe(10)
   })
 })

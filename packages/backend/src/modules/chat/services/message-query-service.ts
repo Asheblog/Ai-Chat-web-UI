@@ -183,13 +183,7 @@ export class ChatMessageQueryService {
     const safeLimit = Math.max(1, Math.min(params.limit, 200))
     const baseUrl = await this.resolveImageBaseUrl(params.request)
 
-    const groupWhere = {
-      sessionId: params.sessionId,
-      cancelledAt: null,
-      // 与 normalizeCompressedGroup 一致：无 summary 的组不进入时间线
-      NOT: [{ summary: null }, { summary: '' }],
-    }
-
+    // summary 过滤放在内存：Prisma SQLite 对 NOT [{ summary: null }, { summary: "" }] 会校验失败
     const [ungroupedCount, groups] = await Promise.all([
       (this.prisma as any).message.count({
         where: {
@@ -198,7 +192,10 @@ export class ChatMessageQueryService {
         },
       }) as Promise<number>,
       (this.prisma as any).messageGroup.findMany({
-        where: groupWhere,
+        where: {
+          sessionId: params.sessionId,
+          cancelledAt: null,
+        },
         select: {
           id: true,
           sessionId: true,
