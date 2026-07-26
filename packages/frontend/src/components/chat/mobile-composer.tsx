@@ -2,7 +2,6 @@
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
-import { motion } from 'framer-motion'
 import { Plus, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
@@ -12,7 +11,6 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ComposerAttachmentList } from './composer-attachment-list'
 import { AttachmentUploadButton } from './attachment-upload-button'
-import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import type { ComposerSkillOption } from './chat-composer-panel'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
@@ -73,6 +71,7 @@ interface MobileComposerProps {
   mcpLoading?: boolean
   mcpError?: string | null
   onToggleMcpBinding?: (connectionId: number, enabled: boolean) => void
+  onActivateSkillPanel?: () => void
   isVisionEnabled: boolean
   placeholder: string
   traceEnabled: boolean
@@ -129,6 +128,7 @@ export function MobileComposer({
   mcpLoading,
   mcpError,
   onToggleMcpBinding,
+  onActivateSkillPanel,
   isVisionEnabled,
   placeholder,
   traceEnabled,
@@ -245,13 +245,7 @@ export function MobileComposer({
           />
         </div>
 
-        <motion.div
-          variants={sendButtonVariants}
-          animate="idle"
-          whileHover={!isStreaming ? 'hover' : undefined}
-          whileTap={!isStreaming ? 'tap' : undefined}
-          className="shrink-0"
-        >
+        <div className="shrink-0">
           <Button
             type="button"
             className={`h-9 w-9 rounded-[10px] p-0 shadow-[0_10px_22px_rgba(37,99,235,0.18)] ${
@@ -270,7 +264,7 @@ export function MobileComposer({
           >
             {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
           </Button>
-        </motion.div>
+        </div>
       </div>
 
       <SkillPanelSheet
@@ -293,6 +287,7 @@ export function MobileComposer({
         mcpLoading={mcpLoading}
         mcpError={mcpError}
         onToggleMcpBinding={onToggleMcpBinding}
+        onActivate={onActivateSkillPanel}
       />
 
       <Sheet open={plusAdvancedOpen} onOpenChange={setPlusAdvancedOpen}>

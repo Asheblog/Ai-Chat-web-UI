@@ -40,7 +40,6 @@ type SystemConnectionEditorProps = {
   submitting: boolean
   verifying: boolean
   verifyResult: VerifyConnectionResult | null
-  reducedMotion: boolean
   onProviderChange: (value: string) => void
   onToggleCapability: (key: ConnectionCapKey, value: boolean) => void
   onAddKey: () => void
@@ -66,7 +65,6 @@ export function SystemConnectionEditor({
   submitting,
   verifying,
   verifyResult,
-  reducedMotion,
   onProviderChange,
   onToggleCapability,
   onAddKey,
@@ -248,7 +246,6 @@ export function SystemConnectionEditor({
       >
         <SystemConnectionKeyPool
           keys={form.keys}
-          reducedMotion={reducedMotion}
           onAddKey={onAddKey}
           onRemoveKey={onRemoveKey}
           onUpdateKey={onUpdateKey}
@@ -262,7 +259,7 @@ export function SystemConnectionEditor({
         open={openSections.verify}
         onToggle={() => toggleSection("verify")}
       >
-        <SystemConnectionVerifyPanel verifyResult={verifyResult} reducedMotion={reducedMotion} />
+        <SystemConnectionVerifyPanel verifyResult={verifyResult} />
       </CollapsibleEditorSection>
     </div>
   )

@@ -17,26 +17,6 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/main',
 }))
 
-vi.mock('framer-motion', () => ({
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  motion: {
-    div: ({ children, ...rest }: { children: React.ReactNode; [key: string]: unknown }) => (
-      <div {...rest}>{children}</div>
-    ),
-  },
-}))
-
-vi.mock('@/store/settings-store', () => ({
-  useSettingsStore: (selector: (state: Record<string, unknown>) => unknown) => {
-    const state = {
-      fetchSystemSettings: vi.fn(),
-      hasSystemSettings: false,
-      systemSettings: null,
-    }
-    return selector(state)
-  },
-}))
-
 vi.mock('@/features/chat/api', () => ({
   getSessions: vi.fn().mockResolvedValue({ data: [] }),
   getSessionsUsage: vi.fn().mockResolvedValue({ success: true, data: [] }),

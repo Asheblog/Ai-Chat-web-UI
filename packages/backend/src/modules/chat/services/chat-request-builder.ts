@@ -19,6 +19,11 @@ import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { sendMessageSchema } from '../chat-common'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../skills/types'
 import { buildTaskPlanningPrompt } from '../task-planning'
+import {
+  loadSystemSettingsMap,
+  type PreStreamHistorySnapshot,
+  type SystemSettingsMap,
+} from './pre-stream-context'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
@@ -70,6 +75,10 @@ export interface PrepareChatRequestParams {
   requestedSkills?: RequestedSkillsPayload
   /** RAG 增强上下文（从文档检索获取） */
   ragContext?: string | null
+  /** 同 turn 由编排层注入，避免重复 systemSetting.findMany */
+  systemSettings?: SystemSettingsMap | null
+  /** 同 turn 历史快照，避免重复扫消息 */
+  historySnapshot?: PreStreamHistorySnapshot | null
 }
 
 export interface ChatRequestBuilderDeps {
@@ -116,7 +125,7 @@ export class ChatRequestBuilder {
       throw new Error('Chat session connection is not ready')
     }
     const contextEnabled = params.payload?.contextEnabled !== false
-    const systemSettings = await this.loadSystemSettings()
+    const systemSettings = params.systemSettings ?? (await loadSystemSettingsMap(this.prisma))
     this.scheduleImageCleanup(systemSettings)
 
     const systemPrompts: Array<{ role: 'system'; content: string }> = []
@@ -198,6 +207,7 @@ export class ChatRequestBuilder {
       connectionId: params.session.connectionId,
       modelRawId: params.session.modelRawId,
       provider: params.session.connection.provider as ProviderType,
+      historySnapshot: params.historySnapshot ?? null,
       actorContent: params.content,
       contextEnabled,
       historyUpperBound: params.historyUpperBound ?? null,
@@ -277,6 +287,7 @@ export class ChatRequestBuilder {
     actorContent: string
     contextEnabled: boolean
     historyUpperBound: Date | null
+    historySnapshot?: PreStreamHistorySnapshot | null
     pinnedSystemMessages: Array<{ role: 'system'; content: string }>
   }) {
     const contextLimit = await this.resolveContextLimit({
@@ -294,38 +305,85 @@ export class ChatRequestBuilder {
     let truncatedConversation: Array<{ role: string; content: string }>
     let compressionSummaries: Array<{ role: string; content: string }> = []
     if (params.contextEnabled) {
-      const messageWhere: Record<string, unknown> = {
-        sessionId: params.sessionId,
-        ...(params.historyUpperBound ? { createdAt: { lte: params.historyUpperBound } } : {}),
-      }
+      let ungroupedMessages: Array<{ id: number; role: string; content: string; createdAt: Date }>
+      let groupedMessageRefs: Array<{ id: number; messageGroupId: number | null; createdAt: Date }>
+      let groups: Array<{ id: number; summary: string; metadataJson?: string | null }>
 
-      const [ungroupedMessages, groupedMessageRefs] = await Promise.all([
-        (this.prisma as any).message.findMany({
-          where: {
-            ...messageWhere,
-            messageGroupId: null,
-          },
-          select: {
-            id: true,
-            role: true,
-            content: true,
-            createdAt: true,
-          },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        }) as Promise<Array<{ id: number; role: string; content: string; createdAt: Date }>>,
-        (this.prisma as any).message.findMany({
-          where: {
-            ...messageWhere,
-            messageGroupId: { not: null },
-          },
-          select: {
-            id: true,
-            messageGroupId: true,
-            createdAt: true,
-          },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        }) as Promise<Array<{ id: number; messageGroupId: number | null; createdAt: Date }>>,
-      ])
+      if (params.historySnapshot) {
+        ungroupedMessages = params.historySnapshot.messages
+          .filter((msg) => msg.messageGroupId == null)
+          .map((msg) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            createdAt: msg.createdAt,
+          }))
+        groupedMessageRefs = params.historySnapshot.messages
+          .filter((msg) => typeof msg.messageGroupId === 'number')
+          .map((msg) => ({
+            id: msg.id,
+            messageGroupId: msg.messageGroupId,
+            createdAt: msg.createdAt,
+          }))
+        groups = params.historySnapshot.groups
+      } else {
+        const messageWhere: Record<string, unknown> = {
+          sessionId: params.sessionId,
+          ...(params.historyUpperBound ? { createdAt: { lte: params.historyUpperBound } } : {}),
+        }
+
+        const [loadedUngrouped, loadedGroupedRefs] = await Promise.all([
+          (this.prisma as any).message.findMany({
+            where: {
+              ...messageWhere,
+              messageGroupId: null,
+            },
+            select: {
+              id: true,
+              role: true,
+              content: true,
+              createdAt: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          }) as Promise<Array<{ id: number; role: string; content: string; createdAt: Date }>>,
+          (this.prisma as any).message.findMany({
+            where: {
+              ...messageWhere,
+              messageGroupId: { not: null },
+            },
+            select: {
+              id: true,
+              messageGroupId: true,
+              createdAt: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          }) as Promise<Array<{ id: number; messageGroupId: number | null; createdAt: Date }>>,
+        ])
+        ungroupedMessages = loadedUngrouped
+        groupedMessageRefs = loadedGroupedRefs
+
+        const groupedIds = Array.from(
+          new Set(
+            groupedMessageRefs
+              .map((item) => (typeof item.messageGroupId === 'number' ? item.messageGroupId : null))
+              .filter((id): id is number => id != null),
+          ),
+        )
+        groups =
+          groupedIds.length > 0
+            ? ((await (this.prisma as any).messageGroup.findMany({
+                where: {
+                  id: { in: groupedIds },
+                  cancelledAt: null,
+                },
+                select: {
+                  id: true,
+                  summary: true,
+                  metadataJson: true,
+                },
+              })) as Array<{ id: number; summary: string; metadataJson?: string | null }>)
+            : []
+      }
 
       const conversationItems: Array<{
         role: string
@@ -343,66 +401,45 @@ export class ChatRequestBuilder {
       // 而非按时间顺序插入对话中。此举可稳定 DeepSeek 缓存前缀。
       compressionSummaries = []
 
-      if (groupedMessageRefs.length > 0) {
-        const groupedIds = Array.from(
-          new Set(
-            groupedMessageRefs
-              .map((item) => (typeof item.messageGroupId === 'number' ? item.messageGroupId : null))
-              .filter((id): id is number => id != null),
-          ),
-        )
-        if (groupedIds.length > 0) {
-          const groups = (await (this.prisma as any).messageGroup.findMany({
-            where: {
-              id: { in: groupedIds },
-              cancelledAt: null,
-            },
-            select: {
-              id: true,
-              summary: true,
-              metadataJson: true,
-            },
-          })) as Array<{ id: number; summary: string; metadataJson?: string | null }>
+      if (groupedMessageRefs.length > 0 && groups.length > 0) {
+        const groupById = new Map(groups.map((group) => [group.id, group]))
+        const groupedStats = new Map<number, { count: number; lastCreatedAt: Date; lastMessageId: number }>()
 
-          const groupById = new Map(groups.map((group) => [group.id, group]))
-          const groupedStats = new Map<number, { count: number; lastCreatedAt: Date; lastMessageId: number }>()
-
-          for (const item of groupedMessageRefs) {
-            if (typeof item.messageGroupId !== 'number') continue
-            if (!groupById.has(item.messageGroupId)) continue
-            const previous = groupedStats.get(item.messageGroupId)
-            if (!previous) {
-              groupedStats.set(item.messageGroupId, {
-                count: 1,
-                lastCreatedAt: item.createdAt,
-                lastMessageId: item.id,
-              })
-              continue
-            }
+        for (const item of groupedMessageRefs) {
+          if (typeof item.messageGroupId !== 'number') continue
+          if (!groupById.has(item.messageGroupId)) continue
+          const previous = groupedStats.get(item.messageGroupId)
+          if (!previous) {
             groupedStats.set(item.messageGroupId, {
-              count: previous.count + 1,
-              lastCreatedAt:
-                item.createdAt.getTime() >= previous.lastCreatedAt.getTime()
-                  ? item.createdAt
-                  : previous.lastCreatedAt,
-              lastMessageId: Math.max(previous.lastMessageId, item.id),
+              count: 1,
+              lastCreatedAt: item.createdAt,
+              lastMessageId: item.id,
             })
+            continue
           }
+          groupedStats.set(item.messageGroupId, {
+            count: previous.count + 1,
+            lastCreatedAt:
+              item.createdAt.getTime() >= previous.lastCreatedAt.getTime()
+                ? item.createdAt
+                : previous.lastCreatedAt,
+            lastMessageId: Math.max(previous.lastMessageId, item.id),
+          })
+        }
 
-          for (const [groupId, stats] of groupedStats.entries()) {
-            const group = groupById.get(groupId)
-            if (!group?.summary?.trim()) continue
-            const countFromMetadata = this.parseCompressedCountFromMetadata(group.metadataJson)
-            const compressedCount =
-              typeof countFromMetadata === 'number' && countFromMetadata > 0
-                ? countFromMetadata
-                : stats.count
-            // 压缩摘要置于固定位置（system prompt 之后），不插入对话时间线中
-            compressionSummaries.push({
-              role: 'system',
-              content: this.buildCompressionSummaryMessage(group.summary, compressedCount),
-            })
-          }
+        for (const [groupId, stats] of groupedStats.entries()) {
+          const group = groupById.get(groupId)
+          if (!group?.summary?.trim()) continue
+          const countFromMetadata = this.parseCompressedCountFromMetadata(group.metadataJson)
+          const compressedCount =
+            typeof countFromMetadata === 'number' && countFromMetadata > 0
+              ? countFromMetadata
+              : stats.count
+          // 压缩摘要置于固定位置（system prompt 之后），不插入对话时间线中
+          compressionSummaries.push({
+            role: 'system',
+            content: this.buildCompressionSummaryMessage(group.summary, compressedCount),
+          })
         }
       }
 
@@ -750,16 +787,6 @@ export class ChatRequestBuilder {
       merged[name] = value
     }
     return merged
-  }
-
-  private async loadSystemSettings(): Promise<Record<string, string>> {
-    const rows = await this.prisma.systemSetting.findMany({
-      select: { key: true, value: true },
-    })
-    return rows.reduce<Record<string, string>>((acc, row) => {
-      acc[row.key] = row.value ?? ''
-      return acc
-    }, {})
   }
 
   private async resolveTemperature(params: {

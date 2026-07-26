@@ -65,6 +65,11 @@ import {
 import type { StreamTraceService } from '../services/stream-trace-service';
 import type { StreamSseService } from '../services/stream-sse-service';
 import type { ConversationCompressionService } from '../services/conversation-compression-service';
+import {
+  loadPreStreamTurnContext,
+  loadPreStreamHistorySnapshot,
+  ungroupedMessagesFromSnapshot,
+} from '../services/pre-stream-context';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';
@@ -375,6 +380,12 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         });
       }
 
+      const historyUpperBound = userMessageRecord?.createdAt ?? null;
+      let turnContext = await loadPreStreamTurnContext(prisma, {
+        sessionId,
+        historyUpperBound,
+      });
+
       let compressionAppliedPayload: import('../services/conversation-compression-service').CompressionAppliedPayload | null = null;
       try {
         if (payload?.contextEnabled !== false) {
@@ -382,10 +393,20 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             session,
             actorContent: content,
             protectedMessageId: userMessageRecord?.id ?? null,
-            historyUpperBound: userMessageRecord?.createdAt ?? null,
+            historyUpperBound,
+            systemSettings: turnContext.systemSettings,
+            historyMessages: ungroupedMessagesFromSnapshot(turnContext.history),
           });
           if (compressionResult.applied && compressionResult.payload) {
             compressionAppliedPayload = compressionResult.payload;
+            // 压缩写库后历史快照失效，仅重载 history；settings 继续复用
+            turnContext = {
+              systemSettings: turnContext.systemSettings,
+              history: await loadPreStreamHistorySnapshot(prisma, {
+                sessionId,
+                historyUpperBound,
+              }),
+            };
           }
         }
       } catch (compressionError) {
@@ -401,10 +422,12 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         content,
         images,
         mode: 'stream',
-        historyUpperBound: userMessageRecord?.createdAt ?? null,
+        historyUpperBound,
         personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
         requestedSkills,
         ragContext,
+        systemSettings: turnContext.systemSettings,
+        historySnapshot: turnContext.history,
       });
 
       const promptTokens = preparedRequest.promptTokens;
@@ -1011,6 +1034,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       let assistantProgressLastPersistAt = 0;
       let assistantProgressLastPersistedLength = 0;
       let assistantReasoningPersistLength = 0;
+      // 串行化进度写：调用方不阻塞，但避免旧快照覆盖 force 终态
+      let assistantProgressPersistChain: Promise<void> = Promise.resolve();
       const persistAssistantProgress = async (options?: { force?: boolean; includeReasoning?: boolean; status?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled'; errorMessage?: string | null }) => {
         if (!assistantMessageId) return;
         const force = options?.force === true;
@@ -1031,24 +1056,36 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             return;
           }
         }
+        // 先推进游标，避免并发流式路径重复排队同一进度写
         assistantProgressLastPersistAt = now;
         assistantProgressLastPersistedLength = aiResponseContent.length;
         if (includeReasoning) {
           assistantReasoningPersistLength = reasoningBuffer.length;
         }
         const nextStatus = options?.status ?? (cancelled ? 'cancelled' : 'streaming');
-        const result = await persistenceSink.persistProgress({
-          assistantMessageId,
-          sessionId,
-          clientMessageId: assistantClientMessageId,
-          content: aiResponseContent,
-          reasoning: currentReasoning,
-          status: nextStatus,
-          errorMessage: options?.errorMessage ?? null,
-          traceRecorder,
-        });
-        if (result.recovered && result.messageId) {
-          assistantMessageId = result.messageId;
+        const snapshotContent = aiResponseContent;
+        const snapshotReasoning = currentReasoning;
+        const snapshotMessageId = assistantMessageId;
+        const runPersist = async () => {
+          const result = await persistenceSink.persistProgress({
+            assistantMessageId: snapshotMessageId,
+            sessionId,
+            clientMessageId: assistantClientMessageId,
+            content: snapshotContent,
+            reasoning: snapshotReasoning,
+            status: nextStatus,
+            errorMessage: options?.errorMessage ?? null,
+            traceRecorder,
+          });
+          if (result.recovered && result.messageId) {
+            assistantMessageId = result.messageId;
+          }
+        };
+        const queued = assistantProgressPersistChain.then(runPersist, runPersist);
+        assistantProgressPersistChain = queued.catch(() => { });
+        // 流式增量：不阻塞 SSE；finalize/cancel/error 强制路径仍 await 队列，保证终态落库
+        if (force) {
+          await queued;
         }
       };
 
@@ -2038,7 +2075,16 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
               completionTokens: completionTokensForMetrics,
             });
 
-            // 发送完成事件（包含后端计算的 metrics）
+            // 发送完成事件（包含后端计算的 metrics；若已有 usage 一并带上，减少前端叠拉）
+            const completeUsage = providerUsageSeen && providerUsageSnapshot
+              ? providerUsageSnapshot
+              : {
+                prompt_tokens: promptTokens,
+                completion_tokens: completionTokensFallback,
+                total_tokens: promptTokens + completionTokensFallback,
+                context_limit: contextLimit,
+                context_remaining: Math.max(0, contextLimit - promptTokens),
+              };
             const completeEvent = `data: ${JSON.stringify({
               type: 'complete',
               metrics: {
@@ -2046,6 +2092,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
                 responseTimeMs: streamMetrics.responseTimeMs,
                 tokensPerSecond: streamMetrics.tokensPerSecond,
               },
+              usage: completeUsage,
             })}\n\n`;
             safeEnqueue(completeEvent);
             traceStatus = 'completed';
@@ -2053,6 +2100,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
 
             // 完成后持久化 usage（优先厂商 usage，否则兜底估算）
             try {
+              // 排空未完成的进度写，避免旧快照覆盖 finalize
+              await assistantProgressPersistChain;
               const usageResult = await persistenceSink.finalizeUsage({
                 sessionId,
                 modelRawId: session.modelRawId!,

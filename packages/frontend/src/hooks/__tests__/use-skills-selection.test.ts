@@ -86,6 +86,11 @@ describe('useSkillsSelection', () => {
     })
 
     const { result } = renderHook(() => useSkillsSelection(null))
+    expect(mockListSkillCatalog).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
 
     await waitFor(() => {
       expect(result.current.skillOptions.length).toBeGreaterThan(0)
@@ -117,6 +122,10 @@ describe('useSkillsSelection', () => {
 
     const { result } = renderHook(() => useSkillsSelection(null))
 
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
+
     await waitFor(() => {
       expect(result.current.skillOptions.length).toBe(1)
     })
@@ -146,6 +155,10 @@ describe('useSkillsSelection', () => {
 
     const { result } = renderHook(() => useSkillsSelection(null))
 
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
+
     await waitFor(() => {
       expect(result.current.skillOptions.length).toBe(1)
     })
@@ -167,6 +180,10 @@ describe('useSkillsSelection', () => {
     mockListSkillCatalog.mockRejectedValue(new Error('Network error'))
 
     const { result } = renderHook(() => useSkillsSelection(null))
+
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
 
     await waitFor(() => {
       expect(result.current.skillOptions).toHaveLength(0)
@@ -210,6 +227,11 @@ describe('useSkillsSelection', () => {
     })
 
     const { result } = renderHook(() => useSkillsSelection(123))
+    expect(mockListSessionSkillOptions).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
 
     await waitFor(() => {
       expect(result.current.skillOptions.length).toBe(1)
@@ -238,6 +260,10 @@ describe('useSkillsSelection', () => {
     mockUpdateSessionSkillBinding.mockResolvedValue({ success: true })
 
     const { result } = renderHook(() => useSkillsSelection(123))
+
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
 
     await waitFor(() => {
       expect(result.current.skillOptions.length).toBe(1)
@@ -274,6 +300,10 @@ describe('useSkillsSelection', () => {
     mockUpdateSessionSkillBinding.mockRejectedValue(new Error('fail'))
 
     const { result } = renderHook(() => useSkillsSelection(123))
+
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
 
     await waitFor(() => {
       expect(result.current.skillOptions.length).toBe(1)

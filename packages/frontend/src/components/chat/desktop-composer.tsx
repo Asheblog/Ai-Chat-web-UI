@@ -2,7 +2,6 @@
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
-import { motion } from 'framer-motion'
 import { Maximize2, Plus, Send, Square } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
@@ -11,7 +10,6 @@ import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ComposerAttachmentList } from './composer-attachment-list'
 import { AttachmentUploadButton } from './attachment-upload-button'
-import { sendButtonVariants } from '@/lib/animations/chat'
 import { PlusMenuContent } from '@/components/plus-menu-content'
 import type { ComposerSkillOption } from './chat-composer-panel'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
@@ -68,6 +66,7 @@ interface DesktopComposerProps {
   mcpLoading?: boolean
   mcpError?: string | null
   onToggleMcpBinding?: (connectionId: number, enabled: boolean) => void
+  onActivateSkillPanel?: () => void
   traceEnabled: boolean
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
@@ -126,6 +125,7 @@ export function DesktopComposer({
   mcpLoading,
   mcpError,
   onToggleMcpBinding,
+  onActivateSkillPanel,
   traceEnabled,
   canUseTrace,
   onToggleTrace,
@@ -259,7 +259,8 @@ export function DesktopComposer({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <motion.button
+                  <button
+                    type="button"
                     onClick={isStreaming ? onStop : onSend}
                     disabled={isStreaming ? false : desktopSendDisabled}
                     aria-label={isStreaming ? '停止生成' : '发送'}
@@ -268,13 +269,9 @@ export function DesktopComposer({
                         ? 'bg-destructive text-destructive-foreground hover:opacity-90'
                         : 'bg-primary text-primary-foreground hover:bg-primary/90'
                     }`}
-                    variants={sendButtonVariants}
-                    animate="idle"
-                    whileHover={!isStreaming ? 'hover' : undefined}
-                    whileTap={!isStreaming ? 'tap' : undefined}
                   >
                     {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
-                  </motion.button>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent>{sendTooltip}</TooltipContent>
               </Tooltip>
@@ -302,6 +299,7 @@ export function DesktopComposer({
           mcpLoading={mcpLoading}
           mcpError={mcpError}
           onToggleMcpBinding={onToggleMcpBinding}
+          onActivate={onActivateSkillPanel}
         />
       </div>
     </div>

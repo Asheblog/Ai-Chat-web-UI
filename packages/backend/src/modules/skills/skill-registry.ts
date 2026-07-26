@@ -396,54 +396,119 @@ function parseManifestFromVersion(manifestJson: string): SkillManifest | null {
   }
 }
 
-async function resolveActiveVersion(params: {
+type SkillVersionRow = {
+  id: number
+  skillId: number
+  status: string
+  packagePath?: string | null
+  manifestJson?: string | null
+  entry?: string | null
+  riskLevel?: string | null
+  activatedAt?: Date | null
+  createdAt?: Date
+}
+
+/**
+ * 批量解析多个 skill 的 active version，避免 per-skill N+1。
+ * 优先级：requestedVersionId → binding.versionId → defaultVersionId → 最新 active。
+ */
+async function resolveActiveVersionsBatch(params: {
   prisma: typeof defaultPrisma
-  skill: any
-  binding?: any
-  requestedVersionId?: number | null
-}): Promise<any | null> {
-  const { prisma, skill, binding, requestedVersionId } = params
-  if (requestedVersionId) {
-    const requestedVersion = await (prisma as any).skillVersion.findFirst({
-      where: {
-        id: requestedVersionId,
-        skillId: skill.id,
-        status: 'active',
-      },
-    })
-    if (requestedVersion) return requestedVersion
+  skills: Array<{ id: number; defaultVersionId?: number | null }>
+  bindingBySkillId: Map<number, { versionId?: number | null } | null>
+  requestedVersionBySkillId: Map<number, number>
+}): Promise<Map<number, SkillVersionRow>> {
+  const { prisma, skills, bindingBySkillId, requestedVersionBySkillId } = params
+  const result = new Map<number, SkillVersionRow>()
+  if (skills.length === 0) return result
+
+  const skillIds = skills.map((skill) => skill.id)
+  const candidateIds = new Set<number>()
+  for (const skill of skills) {
+    const requested = requestedVersionBySkillId.get(skill.id)
+    if (typeof requested === 'number' && Number.isFinite(requested)) {
+      candidateIds.add(requested)
+    }
+    const binding = bindingBySkillId.get(skill.id)
+    if (binding?.versionId != null && Number.isFinite(binding.versionId)) {
+      candidateIds.add(binding.versionId)
+    }
+    if (skill.defaultVersionId != null && Number.isFinite(skill.defaultVersionId)) {
+      candidateIds.add(skill.defaultVersionId)
+    }
   }
 
-  if (binding?.versionId) {
-    const boundVersion = await (prisma as any).skillVersion.findFirst({
-      where: {
-        id: binding.versionId,
-        skillId: skill.id,
-        status: 'active',
-      },
-    })
-    if (boundVersion) return boundVersion
+  const byIdRows =
+    candidateIds.size > 0
+      ? ((await (prisma as any).skillVersion.findMany({
+          where: {
+            id: { in: Array.from(candidateIds) },
+            skillId: { in: skillIds },
+            status: 'active',
+          },
+        })) as SkillVersionRow[])
+      : []
+
+  const versionById = new Map<number, SkillVersionRow>()
+  for (const row of byIdRows) {
+    versionById.set(row.id, row)
   }
 
-  if (skill.defaultVersionId) {
-    const defaultVersion = await (prisma as any).skillVersion.findFirst({
-      where: {
-        id: skill.defaultVersionId,
-        skillId: skill.id,
-        status: 'active',
-      },
-    })
-    if (defaultVersion) return defaultVersion
+  const unresolvedSkillIds: number[] = []
+  for (const skill of skills) {
+    const requestedId = requestedVersionBySkillId.get(skill.id)
+    if (typeof requestedId === 'number') {
+      const requested = versionById.get(requestedId)
+      if (requested && requested.skillId === skill.id) {
+        result.set(skill.id, requested)
+        continue
+      }
+    }
+
+    const binding = bindingBySkillId.get(skill.id)
+    if (binding?.versionId != null) {
+      const bound = versionById.get(binding.versionId)
+      if (bound && bound.skillId === skill.id) {
+        result.set(skill.id, bound)
+        continue
+      }
+    }
+
+    if (skill.defaultVersionId != null) {
+      const defaults = versionById.get(skill.defaultVersionId)
+      if (defaults && defaults.skillId === skill.id) {
+        result.set(skill.id, defaults)
+        continue
+      }
+    }
+
+    unresolvedSkillIds.push(skill.id)
   }
 
-  const latest = await (prisma as any).skillVersion.findFirst({
-    where: {
-      skillId: skill.id,
-      status: 'active',
-    },
-    orderBy: [{ activatedAt: 'desc' }, { createdAt: 'desc' }],
-  })
-  return latest || null
+  if (unresolvedSkillIds.length > 0) {
+    const latestRows = (await (prisma as any).skillVersion.findMany({
+      where: {
+        skillId: { in: unresolvedSkillIds },
+        status: 'active',
+      },
+      orderBy: [{ skillId: 'asc' }, { activatedAt: 'desc' }, { createdAt: 'desc' }],
+    })) as SkillVersionRow[]
+
+    const latestBySkillId = new Map<number, SkillVersionRow>()
+    for (const row of latestRows) {
+      if (!latestBySkillId.has(row.skillId)) {
+        latestBySkillId.set(row.skillId, row)
+      }
+    }
+    for (const skillId of unresolvedSkillIds) {
+      const latest = latestBySkillId.get(skillId)
+      if (latest) {
+        result.set(skillId, latest)
+      }
+    }
+  }
+
+  return result
 }
 
 function chooseBinding(bindings: any[]): any | null {
@@ -549,18 +614,25 @@ export async function createSkillRegistry(params: CreateSkillRegistryParams): Pr
     bindingsBySkill.set(item.skillId, list)
   }
 
+  const bindingBySkillId = new Map<number, any | null>()
   for (const skill of skills) {
     const scopedBindings = bindingsBySkill.get(skill.id) ?? []
-    const selectedBinding = chooseBinding(scopedBindings)
-    const activeVersion = await resolveActiveVersion({
-      prisma,
-      skill,
-      binding: selectedBinding,
-      requestedVersionId: requestedVersionBySkillId.get(skill.id) ?? null,
-    })
+    bindingBySkillId.set(skill.id, chooseBinding(scopedBindings))
+  }
+
+  const activeVersionBySkillId = await resolveActiveVersionsBatch({
+    prisma,
+    skills,
+    bindingBySkillId,
+    requestedVersionBySkillId,
+  })
+
+  for (const skill of skills) {
+    const selectedBinding = bindingBySkillId.get(skill.id) ?? null
+    const activeVersion = activeVersionBySkillId.get(skill.id)
     if (!activeVersion || !activeVersion.packagePath) continue
 
-    const manifest = parseManifestFromVersion(activeVersion.manifestJson)
+    const manifest = parseManifestFromVersion(activeVersion.manifestJson || '')
     if (!manifest) continue
 
     const policyJson = selectedBinding?.policyJson

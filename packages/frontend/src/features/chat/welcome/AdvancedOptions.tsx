@@ -34,6 +34,7 @@ interface AdvancedOptionsProps {
     enabled: boolean
   }>
   onToggleSkillOption: (skillId: number, enabled: boolean) => void
+  onActivateSkillPanel?: () => void
   onOpenAdvanced: () => void
   onOpenSessionPrompt: () => void
   triggerClassName?: string
@@ -54,6 +55,7 @@ export function AdvancedOptions({
   pythonToolDisabledNote,
   skillOptions,
   onToggleSkillOption,
+  onActivateSkillPanel,
   onOpenAdvanced,
   onOpenSessionPrompt,
   triggerClassName,
@@ -190,6 +192,7 @@ export function AdvancedOptions({
         pythonToolDisabledNote={pythonToolDisabledNote}
         skillOptions={skillOptions}
         onToggleSkillOption={onToggleSkillOption}
+        onActivate={onActivateSkillPanel}
       />
 
       <Sheet open={plusAdvancedOpen} onOpenChange={setPlusAdvancedOpen}>

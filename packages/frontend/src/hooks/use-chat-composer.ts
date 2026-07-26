@@ -8,6 +8,7 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
+import { messageKey as toMessageKey } from '@/features/chat/store/utils'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import {
@@ -41,7 +42,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const {
     currentSession,
     messageMetas,
-    messageBodies,
     messageRenderCache,
     messagePaginationBySession,
     isMessagesLoading,
@@ -58,7 +58,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     (state) => ({
       currentSession: state.currentSession,
       messageMetas: state.messageMetas,
-      messageBodies: state.messageBodies,
       messageRenderCache: state.messageRenderCache,
       messagePaginationBySession: state.messagePaginationBySession,
       isMessagesLoading: state.isMessagesLoading,
@@ -79,6 +78,19 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     if (!currentSession) return []
     return messageMetas.filter((meta) => meta.sessionId === currentSession.id)
   }, [messageMetas, currentSession])
+
+  const streamScrollAnchor = useChatStore((state) => {
+    if (!state.isStreaming || !currentSession) return 'idle'
+    const sessionMetas = state.messageMetas.filter((meta) => meta.sessionId === currentSession.id)
+    if (sessionMetas.length === 0) return 'idle'
+    const lastMeta = sessionMetas[sessionMetas.length - 1]
+    if (!lastMeta || lastMeta.role !== 'assistant') {
+      return `stream:${sessionMetas.length}`
+    }
+    const key = toMessageKey(lastMeta.id)
+    const body = state.messageBodies[key]
+    return `stream:${key}:${body?.version ?? 0}:${body?.reasoningVersion ?? 0}`
+  })
 
   const currentSessionPagination = useMemo(() => {
     if (!currentSession) return null
@@ -103,9 +115,9 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const [sessionPromptDraft, setSessionPromptDraft] = useState<string>('')
   const [sessionPromptSaving, setSessionPromptSaving] = useState<boolean>(false)
 
-  const { systemSettings } = useSettingsStore()
+  const systemSettings = useSettingsStore((state) => state.systemSettings)
   const { toast } = useToast()
-  const { models: allModels, fetchAll: fetchModels } = useModelsStore()
+  const allModels = useModelsStore((state) => state.models)
   const { actorState, user } = useAuthStore((state) => ({ actorState: state.actorState, user: state.user }))
   const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
 
@@ -114,20 +126,20 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const storedPythonPreference = usePythonToolPreferenceStore((state) => state.lastSelection)
   const persistPythonPreference = usePythonToolPreferenceStore((state) => state.setLastSelection)
 
-  const modelsCount = allModels.length
-  useEffect(() => {
-    if (modelsCount === 0) {
-      fetchModels().catch(() => { })
-    }
-  }, [modelsCount, fetchModels])
-
-  const { enabledExtraSkills, skillOptions, toggleSkillOption } = useSkillsSelection(currentSession?.id ?? null)
+  const {
+    enabledExtraSkills,
+    skillOptions,
+    toggleSkillOption,
+    ensureLoaded: ensureSkillsLoaded,
+    ensureExtraSkills,
+  } = useSkillsSelection(currentSession?.id ?? null)
   const {
     mcpGlobalEnabled,
     connectionOptions: mcpConnectionOptions,
     sessionTools: mcpSessionTools,
     loading: mcpLoading,
     error: mcpError,
+    ensureLoaded: ensureMcpLoaded,
     toggleBinding: onToggleMcpBinding,
   } = useMcpSessionBindings(currentSession?.id ?? null, systemSettings)
 
@@ -222,7 +234,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     currentSessionPagination,
     isMessagesLoading,
     isStreaming,
-    messageBodies: messageBodies as any,
+    streamScrollAnchor,
     loadOlderMessages,
   })
 
@@ -444,6 +456,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setSelectedImages,
     buildRequestPayload,
     enabledExtraSkills,
+    ensureExtraSkills,
     webSearchEnabled,
     canUseWebSearch,
     webSearchScope,
@@ -502,7 +515,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     customBodyError,
     customHeaders,
     messageMetas: sessionMessageMetas,
-    messageBodies,
     messageRenderCache,
     sessionPromptDraft,
     sessionPromptSaving,
@@ -558,11 +570,13 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     pythonToolDisabledNote,
     skillOptions,
     toggleSkillOption,
+    ensureSkillsLoaded,
     mcpGlobalEnabled,
     mcpConnectionOptions,
     mcpSessionTools,
     mcpLoading,
     mcpError,
+    ensureMcpLoaded,
     onToggleMcpBinding,
     traceEnabled,
     onToggleTrace: handleTraceToggle,

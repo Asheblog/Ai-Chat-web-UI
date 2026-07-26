@@ -32,6 +32,15 @@ const mockPrisma = (session: any) => {
     chatSession: {
       findFirst: jest.fn().mockResolvedValue(session),
     },
+    systemSetting: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    message: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    messageGroup: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   } as unknown as PrismaClient
 }
 
@@ -61,7 +70,7 @@ describe('completion route factory', () => {
       }),
       nonStreamService,
       conversationCompressionService: {
-        compressIfNeeded: jest.fn(),
+        compressIfNeeded: jest.fn().mockResolvedValue({ applied: false }),
       } as any,
     })
 

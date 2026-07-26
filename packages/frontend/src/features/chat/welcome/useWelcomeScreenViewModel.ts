@@ -32,8 +32,9 @@ export const useWelcomeScreenViewModel = () => {
     }),
     shallow,
   )
-  const { systemSettings, publicBrandText } = useSettingsStore()
-  const { models, fetchAll } = useModelsStore()
+  const systemSettings = useSettingsStore((state) => state.systemSettings)
+  const publicBrandText = useSettingsStore((state) => state.publicBrandText)
+  const models = useModelsStore((state) => state.models)
   const { actorState, quota, actor } = useAuthStore((state) => ({
     actorState: state.actorState,
     quota: state.quota,
@@ -181,12 +182,6 @@ export const useWelcomeScreenViewModel = () => {
   }, [preferred?.modelId])
 
   useEffect(() => {
-    if (modelsCount === 0) {
-      fetchAll().catch(() => { })
-    }
-  }, [modelsCount, fetchAll])
-
-  useEffect(() => {
     if (modelsCount === 0) return
     if (selectedModelKey && models?.some((m) => modelKeyFor(m) === selectedModelKey)) {
       return
@@ -244,7 +239,8 @@ export const useWelcomeScreenViewModel = () => {
   const {
     skillOptions,
     toggleSkillOption,
-    enabledExtraSkills,
+    ensureLoaded: ensureSkillsLoaded,
+    ensureExtraSkills,
   } = useSkillsSelection(null)
 
   useEffect(() => {
@@ -598,9 +594,10 @@ export const useWelcomeScreenViewModel = () => {
         const session = useChatStore.getState().currentSession
         if (session) {
           // Bind enabled extra skills to the new session before sending first message
+          const resolvedExtraSkills = await ensureExtraSkills()
           let skillBindingFailed = false
-          if (enabledExtraSkills.length > 0) {
-            for (const ref of enabledExtraSkills) {
+          if (resolvedExtraSkills.length > 0) {
+            for (const ref of resolvedExtraSkills) {
               try {
                 const bindResp = await updateSessionSkillBinding(session.id, {
                   skillId: ref.skillId,
@@ -652,10 +649,10 @@ export const useWelcomeScreenViewModel = () => {
           const options: Record<string, any> = {}
           if (thinkingTouched) options.reasoningEnabled = thinkingEnabled
           if (effortTouched && effort !== 'unset') options.reasoningEffort = effort
-          if (builtinSkills.length > 0 || enabledExtraSkills.length > 0) {
+          if (builtinSkills.length > 0 || resolvedExtraSkills.length > 0) {
             options.skills = {
               ...(builtinSkills.length > 0 ? { builtin: Array.from(new Set(builtinSkills)) } : {}),
-              ...(enabledExtraSkills.length > 0 ? { enabled: enabledExtraSkills } : {}),
+              ...(resolvedExtraSkills.length > 0 ? { enabled: resolvedExtraSkills } : {}),
               ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
             }
           }
@@ -712,7 +709,7 @@ export const useWelcomeScreenViewModel = () => {
     pythonToolEnabled,
     draftFiles,
     clearWorkspaceFiles,
-    enabledExtraSkills,
+    ensureExtraSkills,
   ])
 
   const handleKeyDown = useCallback(
@@ -794,8 +791,16 @@ export const useWelcomeScreenViewModel = () => {
         onClearAll: clearAllKbs,
         onRefresh: refreshKnowledgeBases,
         selectorOpen: kbSelectorOpen,
-        onOpenSelector: () => setKbSelectorOpen(true),
-        onSelectorOpenChange: setKbSelectorOpen,
+        onOpenSelector: () => {
+          setKbSelectorOpen(true)
+          void refreshKnowledgeBases()
+        },
+        onSelectorOpenChange: (open: boolean) => {
+          setKbSelectorOpen(open)
+          if (open) {
+            void refreshKnowledgeBases()
+          }
+        },
       },
       advancedOptions: {
         disabled: creationDisabled,
@@ -839,6 +844,9 @@ export const useWelcomeScreenViewModel = () => {
         pythonToolDisabledNote,
         skillOptions,
         onToggleSkillOption: toggleSkillOption,
+        onActivateSkillPanel: () => {
+          void ensureSkillsLoaded()
+        },
         onOpenAdvanced: () => setAdvancedOpen(true),
         onOpenSessionPrompt: () => setSessionPromptOpen(true),
       },

@@ -50,6 +50,8 @@ interface SkillPanelSheetProps {
   mcpLoading?: boolean
   mcpError?: string | null
   onToggleMcpBinding?: (connectionId: number, enabled: boolean) => void
+  /** 面板打开时触发，用于按需加载 skills / MCP */
+  onActivate?: () => void
 }
 
 export function SkillPanelSheet({
@@ -72,12 +74,19 @@ export function SkillPanelSheet({
   mcpLoading = false,
   mcpError = null,
   onToggleMcpBinding,
+  onActivate,
 }: SkillPanelSheetProps) {
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     if (typeof window.matchMedia !== 'function') return false
     return window.matchMedia('(min-width: 768px)').matches
   })
+
+  useEffect(() => {
+    if (open) {
+      onActivate?.()
+    }
+  }, [open, onActivate])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

@@ -110,14 +110,19 @@ describe('useMcpSessionBindings', () => {
     expect(result.current.mcpGlobalEnabled).toBe(false)
   })
 
-  it('登录有 session 时加载 connections/bindings/tools', async () => {
+  it('挂载时不主动加载，ensureLoaded 后加载 connections/bindings/tools', async () => {
     mockListConnections.mockResolvedValue({ data: [mockConnection] })
     mockListBindings.mockResolvedValue({ data: [mockBinding] })
     mockListSessionTools.mockResolvedValue({ data: [mockToolView] })
 
     const { result } = renderHook(() => useMcpSessionBindings(42, defaultSettings))
 
-    // Wait for the async effect to complete
+    expect(mockListConnections).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
+
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
@@ -140,11 +145,11 @@ describe('useMcpSessionBindings', () => {
     mockUpdateBinding.mockResolvedValue({ data: { id: 100, enabled: false } })
     mockListSessionTools.mockResolvedValue({ data: [] })
 
-    const { result } = await waitFor(() => {
-      const hook = renderHook(() => useMcpSessionBindings(42, defaultSettings))
-      return hook
-    })
+    const { result } = renderHook(() => useMcpSessionBindings(42, defaultSettings))
 
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
@@ -162,11 +167,11 @@ describe('useMcpSessionBindings', () => {
     mockCreateBinding.mockResolvedValue({ data: { id: 200, enabled: true } })
     mockListSessionTools.mockResolvedValue({ data: [] })
 
-    const { result } = await waitFor(() => {
-      const hook = renderHook(() => useMcpSessionBindings(42, defaultSettings))
-      return hook
-    })
+    const { result } = renderHook(() => useMcpSessionBindings(42, defaultSettings))
 
+    await act(async () => {
+      await result.current.ensureLoaded()
+    })
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
@@ -188,25 +193,22 @@ describe('useMcpSessionBindings', () => {
     mockListSessionTools.mockResolvedValue({ data: [] })
     mockUpdateBinding.mockRejectedValue(new Error('Network error'))
 
-    let hookResult: any
-
-    await waitFor(() => {
-      const hook = renderHook(() => useMcpSessionBindings(42, defaultSettings))
-      hookResult = hook
-      return undefined
-    })
-
-    await waitFor(() => expect(hookResult.result.current.loading).toBe(false))
-
-    // Initial state: enabled=true
-    expect(hookResult.result.current.connectionOptions[0].enabled).toBe(true)
+    const { result } = renderHook(() => useMcpSessionBindings(42, defaultSettings))
 
     await act(async () => {
-      await hookResult.result.current.toggleBinding(1, false)
+      await result.current.ensureLoaded()
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // Initial state: enabled=true
+    expect(result.current.connectionOptions[0].enabled).toBe(true)
+
+    await act(async () => {
+      await result.current.toggleBinding(1, false)
     })
 
     // After failure: should revert to original enabled=true
-    expect(hookResult.result.current.connectionOptions[0].enabled).toBe(true)
+    expect(result.current.connectionOptions[0].enabled).toBe(true)
     expect(mockUpdateBinding).toHaveBeenCalledWith(100, { enabled: false })
   })
 })

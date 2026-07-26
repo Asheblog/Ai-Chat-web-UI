@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
 import { ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -10,12 +9,10 @@ import { cn } from "@/lib/utils"
 
 type SystemConnectionVerifyPanelProps = {
   verifyResult: VerifyConnectionResult | null
-  reducedMotion: boolean
 }
 
 export function SystemConnectionVerifyPanel({
   verifyResult,
-  reducedMotion,
 }: SystemConnectionVerifyPanelProps) {
   const [expandedVerifyKey, setExpandedVerifyKey] = useState<string | null>(null)
   const resultKeys = useMemo(
@@ -95,71 +92,63 @@ export function SystemConnectionVerifyPanel({
                       </div>
                     </button>
 
-                    <AnimatePresence initial={false}>
-                      {expanded ? (
-                        <motion.div
-                          initial={reducedMotion ? false : { opacity: 0, height: 0 }}
-                          animate={reducedMotion ? undefined : { opacity: 1, height: "auto" }}
-                          exit={reducedMotion ? undefined : { opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2, ease: "easeOut" }}
-                          className="overflow-hidden border-t border-border/70"
-                        >
-                          {!item.success ? (
-                            <div className="space-y-3 px-4 py-4">
-                              <div className="rounded-[10px] border border-destructive/20 bg-destructive/5 p-4">
-                                <div className="text-xs font-medium text-destructive">错误详情</div>
-                                <div className="mt-2 break-words text-sm text-foreground">{item.error || "验证失败"}</div>
+                    {expanded ? (
+                      <div className="overflow-hidden border-t border-border/70">
+                        {!item.success ? (
+                          <div className="space-y-3 px-4 py-4">
+                            <div className="rounded-[10px] border border-destructive/20 bg-destructive/5 p-4">
+                              <div className="text-xs font-medium text-destructive">错误详情</div>
+                              <div className="mt-2 break-words text-sm text-foreground">{item.error || "验证失败"}</div>
+                            </div>
+                            {item.warning ? (
+                              <div className="rounded-[10px] border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
+                                {item.warning}
                               </div>
-                              {item.warning ? (
-                                <div className="rounded-[10px] border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
-                                  {item.warning}
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : item.models.length === 0 ? (
-                            <div className="px-4 py-4 text-sm text-muted-foreground">
-                              {item.warning ? <div className="mb-3 text-amber-600">{item.warning}</div> : null}
-                              没有返回模型列表。若上游不支持 <span className="font-mono">/models</span>，请直接在该 Key 下填写 Model IDs。
-                            </div>
-                          ) : (
-                            <div className="overflow-auto px-4 py-4">
-                              {item.warning ? <div className="mb-3 text-sm text-amber-600">{item.warning}</div> : null}
-                              <Table className="min-w-[720px]">
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Model ID</TableHead>
-                                    <TableHead>Provider</TableHead>
-                                    <TableHead>Channel</TableHead>
-                                    <TableHead>Tags</TableHead>
-                                    <TableHead>Capabilities</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {item.models.map((model) => {
-                                    const tags = (model.tags ?? []).map((tag) => tag?.name).filter(Boolean).join(", ")
-                                    const caps = model.capabilities
-                                      ? Object.entries(model.capabilities)
-                                          .filter(([, value]) => value === true)
-                                          .map(([name]) => name)
-                                          .join(", ")
-                                      : ""
-                                    return (
-                                      <TableRow key={model.id}>
-                                        <TableCell className="font-mono text-xs whitespace-normal break-all">{model.id}</TableCell>
-                                        <TableCell className="text-xs">{model.provider}</TableCell>
-                                        <TableCell className="text-xs whitespace-normal break-words">{model.channelName || "-"}</TableCell>
-                                        <TableCell className="text-xs whitespace-normal break-words">{tags || "-"}</TableCell>
-                                        <TableCell className="text-xs whitespace-normal break-words">{caps || "-"}</TableCell>
-                                      </TableRow>
-                                    )
-                                  })}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          )}
-                        </motion.div>
-                      ) : null}
-                    </AnimatePresence>
+                            ) : null}
+                          </div>
+                        ) : item.models.length === 0 ? (
+                          <div className="px-4 py-4 text-sm text-muted-foreground">
+                            {item.warning ? <div className="mb-3 text-amber-600">{item.warning}</div> : null}
+                            没有返回模型列表。若上游不支持 <span className="font-mono">/models</span>，请直接在该 Key 下填写 Model IDs。
+                          </div>
+                        ) : (
+                          <div className="overflow-auto px-4 py-4">
+                            {item.warning ? <div className="mb-3 text-sm text-amber-600">{item.warning}</div> : null}
+                            <Table className="min-w-[720px]">
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Model ID</TableHead>
+                                  <TableHead>Provider</TableHead>
+                                  <TableHead>Channel</TableHead>
+                                  <TableHead>Tags</TableHead>
+                                  <TableHead>Capabilities</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {item.models.map((model) => {
+                                  const tags = (model.tags ?? []).map((tag) => tag?.name).filter(Boolean).join(", ")
+                                  const caps = model.capabilities
+                                    ? Object.entries(model.capabilities)
+                                        .filter(([, value]) => value === true)
+                                        .map(([name]) => name)
+                                        .join(", ")
+                                    : ""
+                                  return (
+                                    <TableRow key={model.id}>
+                                      <TableCell className="font-mono text-xs whitespace-normal break-all">{model.id}</TableCell>
+                                      <TableCell className="text-xs">{model.provider}</TableCell>
+                                      <TableCell className="text-xs whitespace-normal break-words">{model.channelName || "-"}</TableCell>
+                                      <TableCell className="text-xs whitespace-normal break-words">{tags || "-"}</TableCell>
+                                      <TableCell className="text-xs whitespace-normal break-words">{caps || "-"}</TableCell>
+                                    </TableRow>
+                                  )
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 )
               })}

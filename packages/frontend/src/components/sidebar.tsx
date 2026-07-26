@@ -70,7 +70,6 @@ export function Sidebar() {
   const {
     sessions,
     currentSession,
-    fetchSessions,
     selectSession,
     deleteSession,
     createSession,
@@ -82,7 +81,6 @@ export function Sidebar() {
     (state) => ({
       sessions: state.sessions,
       currentSession: state.currentSession,
-      fetchSessions: state.fetchSessions,
       selectSession: state.selectSession,
       deleteSession: state.deleteSession,
       createSession: state.createSession,
@@ -93,20 +91,16 @@ export function Sidebar() {
     }),
     shallow,
   )
-  const {
-    systemSettings,
-    sidebarCollapsed,
-    setSidebarCollapsed,
-    publicBrandText,
-    fetchSystemSettings,
-    fetchPublicBranding,
-  } = useSettingsStore()
+  const systemSettings = useSettingsStore((state) => state.systemSettings)
+  const sidebarCollapsed = useSettingsStore((state) => state.sidebarCollapsed)
+  const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
+  const publicBrandText = useSettingsStore((state) => state.publicBrandText)
   const { actorState, quota } = useAuthStore((state) => ({ actorState: state.actorState, quota: state.quota }))
-  const { models, fetchAll } = useModelsStore()
+  const models = useModelsStore((state) => state.models)
+  const fetchAll = useModelsStore((state) => state.fetchAll)
   const preferredModel = useModelPreferenceStore((state) => state.preferred)
 
   const isAnonymous = actorState !== 'authenticated'
-  const hasRequestedBranding = useRef(false)
   const quotaRemaining = quota?.unlimited
     ? Infinity
     : quota?.remaining ?? (quota ? Math.max(0, quota.dailyLimit - quota.usedCount) : null)
@@ -116,26 +110,6 @@ export function Sidebar() {
   const settingsDeepLink = searchParams?.get('settings') === '1'
   const settingsDeepLinkHandledRef = useRef(false)
   const router = useRouter()
-
-  useEffect(() => {
-    fetchSessions()
-  }, [fetchSessions])
-
-  useEffect(() => {
-    const brandText = (systemSettings?.brandText ?? publicBrandText ?? '').trim()
-    if (brandText || hasRequestedBranding.current) return
-    if (actorState === 'loading') return
-    hasRequestedBranding.current = true
-    if (actorState === 'authenticated') {
-      fetchSystemSettings().catch(() => {
-        hasRequestedBranding.current = false
-      })
-      return
-    }
-    fetchPublicBranding().catch(() => {
-      hasRequestedBranding.current = false
-    })
-  }, [systemSettings, publicBrandText, actorState, fetchSystemSettings, fetchPublicBranding])
 
   // 监听全局事件以从外部打开/关闭移动端侧栏
   useEffect(() => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useSettingsStore } from '@/store/settings-store'
@@ -15,13 +15,15 @@ import { useAuthStore } from '@/store/auth-store'
 import { persistPreferredModel } from '@/store/model-preference-store'
 import { SetupWizard } from '@/components/setup-wizard/setup-wizard'
 import { SkillApprovalInbox } from '@/components/skills/skill-approval-inbox'
+import { useMainBootstrap } from '@/hooks/use-main-bootstrap'
 
 export default function MainLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { sidebarCollapsed, setSidebarCollapsed, fetchSystemSettings } = useSettingsStore()
+  const sidebarCollapsed = useSettingsStore((state) => state.sidebarCollapsed)
+  const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const currentSession = useChatStore((state) => state.currentSession)
   const actorState = useAuthStore((state) => state.actorState)
   const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
@@ -32,6 +34,8 @@ export default function MainLayout({
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useMainBootstrap(mounted)
 
   // 迁移旧 Zustand 主题设置到 next-themes（仅执行一次）
   useEffect(() => {
@@ -48,20 +52,6 @@ export default function MainLayout({
     } catch {}
     localStorage.setItem('theme-migrated', '1')
   }, [mounted, setTheme])
-
-  const hasRequestedSettings = useRef(false)
-  useEffect(() => {
-    if (!mounted) return
-    if (actorState !== 'authenticated') {
-      hasRequestedSettings.current = false
-      return
-    }
-    if (hasRequestedSettings.current) return
-    hasRequestedSettings.current = true
-    fetchSystemSettings().catch(() => {
-      hasRequestedSettings.current = false
-    })
-  }, [actorState, fetchSystemSettings, mounted])
 
   // 防止服务端渲染hydration问题
   if (!mounted) {

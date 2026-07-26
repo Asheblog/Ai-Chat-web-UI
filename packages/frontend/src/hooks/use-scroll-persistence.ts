@@ -1,7 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { messageKey as toMessageKey } from '@/features/chat/store/utils'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 96
 const AUTO_LOAD_OLDER_TOP_THRESHOLD = 80
@@ -42,7 +41,8 @@ interface UseScrollPersistenceParams {
   currentSessionPagination: { hasOlder?: boolean; isLoadingOlder?: boolean } | null
   isMessagesLoading: boolean
   isStreaming: boolean
-  messageBodies: Record<string, { version?: number; reasoningVersion?: number } | undefined>
+  /** 流式内容版本锚点，由调用方用细粒度 selector 计算，避免订阅完整 messageBodies */
+  streamScrollAnchor: string
   loadOlderMessages: (sessionId: number) => Promise<unknown>
 }
 
@@ -53,7 +53,7 @@ export const useScrollPersistence = (params: UseScrollPersistenceParams) => {
     currentSessionPagination,
     isMessagesLoading,
     isStreaming,
-    messageBodies,
+    streamScrollAnchor,
     loadOlderMessages,
   } = params
 
@@ -271,17 +271,6 @@ export const useScrollPersistence = (params: UseScrollPersistenceParams) => {
   useEffect(() => {
     scrollToBottom()
   }, [sessionMessageMetas.length, scrollToBottom])
-
-  const streamScrollAnchor = useMemo(() => {
-    if (!isStreaming || sessionMessageMetas.length === 0) return 'idle'
-    const lastMeta = sessionMessageMetas[sessionMessageMetas.length - 1]
-    if (!lastMeta || lastMeta.role !== 'assistant') {
-      return `stream:${sessionMessageMetas.length}`
-    }
-    const key = toMessageKey(lastMeta.id)
-    const body = messageBodies[key]
-    return `stream:${key}:${body?.version ?? 0}:${body?.reasoningVersion ?? 0}`
-  }, [isStreaming, messageBodies, sessionMessageMetas])
 
   useEffect(() => {
     if (!isStreaming) return

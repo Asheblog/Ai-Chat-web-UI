@@ -102,6 +102,7 @@ interface WelcomeFormProps {
         enabled: boolean
       }>
       onToggleSkillOption: (skillId: number, enabled: boolean) => void
+      onActivateSkillPanel?: () => void
       onOpenAdvanced: () => void
       onOpenSessionPrompt: () => void
     }

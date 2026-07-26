@@ -44,7 +44,7 @@ export interface UseKnowledgeBaseReturn {
   selectAll: () => void
   /** 取消全选 */
   clearAll: () => void
-  /** 刷新列表 */
+  /** 刷新列表（打开选择器时再拉） */
   refresh: () => Promise<void>
 }
 
@@ -58,27 +58,22 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
   const [selectedKbIds, setSelectedKbIds] = useState<number[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasFetchedList, setHasFetchedList] = useState(false)
 
-  // 获取用户状态
   const { actorState, user } = useAuthStore((state) => ({
     actorState: state.actorState,
     user: state.user,
   }))
 
-  // 获取系统设置
-  const { systemSettings } = useSettingsStore((state) => ({
-    systemSettings: state.systemSettings,
-  }))
+  const systemSettings = useSettingsStore((state) => state.systemSettings)
 
   const isAnonymous = actorState !== 'authenticated'
   const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
 
-  // 判断功能是否启用
   const knowledgeBaseEnabled = Boolean((systemSettings as any)?.knowledgeBaseEnabled ?? false)
   const knowledgeBaseAllowAnonymous = Boolean((systemSettings as any)?.knowledgeBaseAllowAnonymous ?? false)
   const knowledgeBaseAllowUsers = Boolean((systemSettings as any)?.knowledgeBaseAllowUsers ?? true)
 
-  // 判断用户权限
   const hasPermission = (() => {
     if (!knowledgeBaseEnabled) return false
     if (isAdmin) return true
@@ -88,11 +83,8 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
   })()
 
   const isEnabled = knowledgeBaseEnabled && hasPermission
-
-  // 判断系统设置是否已加载（用于区分"加载中"和"已确认禁用"）
   const settingsLoaded = systemSettings !== null
 
-  // 从 sessionStorage 恢复选择
   const storageKey = sessionId ? `kb-selected-${sessionId}` : 'kb-selected-draft'
 
   const readStoredSelection = useCallback((): number[] => {
@@ -126,10 +118,10 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
     [storageKey]
   )
 
-  // 加载知识库列表
   const fetchKnowledgeBases = useCallback(async () => {
     if (!isEnabled) {
       setAvailableKbs([])
+      setHasFetchedList(true)
       return
     }
 
@@ -139,7 +131,6 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
     try {
       const res = await apiHttpClient.get<ApiResponse<KnowledgeBaseItem[]>>('/knowledge-bases')
       if (res.data.success && Array.isArray(res.data.data)) {
-        // 只显示 active 状态的知识库
         const activeKbs = res.data.data.filter((kb) => kb.status === 'active')
         setAvailableKbs(activeKbs)
       } else {
@@ -150,48 +141,41 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
       setError(err?.message || '加载知识库列表失败')
       setAvailableKbs([])
     } finally {
+      setHasFetchedList(true)
       setIsLoading(false)
     }
   }, [isEnabled])
 
-  // 初始化加载
+  // 仅恢复选择，不在进会话时强制拉列表
   useEffect(() => {
-    // 如果系统设置还未加载完成，不做任何操作，避免误清空选择
     if (!settingsLoaded) return
 
     if (isEnabled) {
-      fetchKnowledgeBases()
-      // 恢复之前的选择
       const stored = readStoredSelection()
       if (stored.length > 0) {
         setSelectedKbIds(stored)
       }
     } else {
-      // 只有在确认功能禁用时才清空
       setAvailableKbs([])
       setSelectedKbIds([])
+      setHasFetchedList(false)
     }
-  }, [settingsLoaded, isEnabled, fetchKnowledgeBases, readStoredSelection])
+  }, [settingsLoaded, isEnabled, readStoredSelection, storageKey])
 
-  // 同步选择到 storage - 只有在 settings 加载完成后才写入
   useEffect(() => {
-    // 如果系统设置还未加载完成，不写入 storage，避免覆盖已保存的选择
     if (!settingsLoaded) return
     writeStoredSelection(selectedKbIds)
   }, [settingsLoaded, selectedKbIds, writeStoredSelection])
 
-  // 验证选中的 ID 在可用列表中
-  // 当知识库被删除后，自动清理无效的选择
   useEffect(() => {
+    if (!hasFetchedList) return
     if (selectedKbIds.length === 0) return
 
-    // 如果可用列表为空，清空所有选择
     if (availableKbs.length === 0 && !isLoading) {
       setSelectedKbIds([])
       return
     }
 
-    // 过滤掉不存在的知识库 ID
     if (availableKbs.length > 0) {
       const validIds = selectedKbIds.filter((id) =>
         availableKbs.some((kb) => kb.id === id)
@@ -200,7 +184,7 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
         setSelectedKbIds(validIds)
       }
     }
-  }, [availableKbs, selectedKbIds, isLoading])
+  }, [availableKbs, hasFetchedList, selectedKbIds, isLoading])
 
   const toggleKb = useCallback((id: number) => {
     setSelectedKbIds((prev) => {

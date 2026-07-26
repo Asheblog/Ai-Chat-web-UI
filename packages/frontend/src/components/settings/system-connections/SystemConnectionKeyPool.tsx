@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
 import { ChevronDown, KeyRound, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -13,7 +12,6 @@ import type { ConnectionKeyFormState } from "./use-system-connections"
 
 type SystemConnectionKeyPoolProps = {
   keys: ConnectionKeyFormState[]
-  reducedMotion: boolean
   onAddKey: () => void
   onRemoveKey: (clientId: string) => void
   onUpdateKey: (
@@ -24,7 +22,6 @@ type SystemConnectionKeyPoolProps = {
 
 export function SystemConnectionKeyPool({
   keys,
-  reducedMotion,
   onAddKey,
   onRemoveKey,
   onUpdateKey,
@@ -65,7 +62,7 @@ export function SystemConnectionKeyPool({
           </Button>
         </div>
 
-        <AnimatePresence initial={false}>
+        <div className="space-y-3">
           {keys.map((key, index) => {
             const expanded = expandedKeyId === key.clientId
             const modelCount = key.modelIds
@@ -74,13 +71,8 @@ export function SystemConnectionKeyPool({
               .filter(Boolean).length
 
             return (
-              <motion.div
+              <div
                 key={key.clientId}
-                layout={!reducedMotion}
-                initial={reducedMotion ? false : { opacity: 0, y: 10 }}
-                animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-                exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
                 className="rounded-[10px] border border-border/75 bg-muted/40 p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -143,76 +135,68 @@ export function SystemConnectionKeyPool({
                   </div>
                 </div>
 
-                <AnimatePresence initial={false}>
-                  {expanded ? (
-                    <motion.div
-                      initial={reducedMotion ? false : { opacity: 0, height: 0 }}
-                      animate={reducedMotion ? undefined : { opacity: 1, height: "auto" }}
-                      exit={reducedMotion ? undefined : { opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2, ease: "easeOut" }}
-                      className="overflow-hidden"
-                    >
-                      <div className="mt-5 space-y-4 border-t border-border/60 pt-5">
-                        <div className="space-y-2">
-                          <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
-                          <Input
-                            id={`key-label-${key.clientId}`}
-                            value={key.apiKeyLabel}
-                            onChange={(event) =>
-                              onUpdateKey(key.clientId, (current) => ({
-                                ...current,
-                                apiKeyLabel: event.target.value,
-                              }))
-                            }
-                            placeholder={`Key ${index + 1}`}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`key-secret-${key.clientId}`}>API Key</Label>
-                          <Input
-                            id={`key-secret-${key.clientId}`}
-                            type="password"
-                            value={key.apiKey}
-                            onChange={(event) =>
-                              onUpdateKey(key.clientId, (current) => ({
-                                ...current,
-                                apiKey: event.target.value,
-                              }))
-                            }
-                            placeholder={key.hasStoredApiKey ? "留空则继续使用已保存的 Key" : "sk-..."}
-                          />
-                          <p className="text-xs leading-5 text-muted-foreground">
-                            {key.hasStoredApiKey
-                              ? `当前已保存摘要：${key.apiKeyMasked || "已保存"}`
-                              : "新建时建议立即写明用途，例如 team-a、group-1、images。"}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`key-models-${key.clientId}`}>Model IDs</Label>
-                          <Textarea
-                            id={`key-models-${key.clientId}`}
-                            value={key.modelIds}
-                            onChange={(event) =>
-                              onUpdateKey(key.clientId, (current) => ({
-                                ...current,
-                                modelIds: event.target.value,
-                              }))
-                            }
-                            placeholder={"gpt-4o-mini\ngpt-4.1-mini\ntext-embedding-3-small"}
-                            className="min-h-[116px]"
-                          />
-                          <p className="text-xs leading-5 text-muted-foreground">
-                            支持逗号或换行分隔。留空时会尝试从这个 Key 对应的上游接口自动枚举模型。
-                          </p>
-                        </div>
+                {expanded ? (
+                  <div className="overflow-hidden">
+                    <div className="mt-5 space-y-4 border-t border-border/60 pt-5">
+                      <div className="space-y-2">
+                        <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
+                        <Input
+                          id={`key-label-${key.clientId}`}
+                          value={key.apiKeyLabel}
+                          onChange={(event) =>
+                            onUpdateKey(key.clientId, (current) => ({
+                              ...current,
+                              apiKeyLabel: event.target.value,
+                            }))
+                          }
+                          placeholder={`Key ${index + 1}`}
+                        />
                       </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </motion.div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`key-secret-${key.clientId}`}>API Key</Label>
+                        <Input
+                          id={`key-secret-${key.clientId}`}
+                          type="password"
+                          value={key.apiKey}
+                          onChange={(event) =>
+                            onUpdateKey(key.clientId, (current) => ({
+                              ...current,
+                              apiKey: event.target.value,
+                            }))
+                          }
+                          placeholder={key.hasStoredApiKey ? "留空则继续使用已保存的 Key" : "sk-..."}
+                        />
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {key.hasStoredApiKey
+                            ? `当前已保存摘要：${key.apiKeyMasked || "已保存"}`
+                            : "新建时建议立即写明用途，例如 team-a、group-1、images。"}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`key-models-${key.clientId}`}>Model IDs</Label>
+                        <Textarea
+                          id={`key-models-${key.clientId}`}
+                          value={key.modelIds}
+                          onChange={(event) =>
+                            onUpdateKey(key.clientId, (current) => ({
+                              ...current,
+                              modelIds: event.target.value,
+                            }))
+                          }
+                          placeholder={"gpt-4o-mini\ngpt-4.1-mini\ntext-embedding-3-small"}
+                          className="min-h-[116px]"
+                        />
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          支持逗号或换行分隔。留空时会尝试从这个 Key 对应的上游接口自动枚举模型。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             )
           })}
-        </AnimatePresence>
+        </div>
       </div>
     </section>
   )

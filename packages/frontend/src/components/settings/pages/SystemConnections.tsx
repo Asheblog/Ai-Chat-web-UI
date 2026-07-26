@@ -1,7 +1,6 @@
 "use client"
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react"
-import { useReducedMotion } from "framer-motion"
 import { AlertDialog } from "@/components/ui/alert-dialog"
 import { DestructiveConfirmDialogContent } from "@/components/ui/destructive-confirm-dialog"
 import type { SystemConnectionGroup } from "@/services/system-connections"
@@ -49,7 +48,6 @@ export function SystemConnectionsPage() {
     toggleCapability,
   } = useSystemConnections()
 
-  const reducedMotion = useReducedMotion()
   const [query, setQuery] = useState("")
   const deferredQuery = useDeferredValue(query)
   const [providerFilter, setProviderFilter] = useState("all")
@@ -220,7 +218,6 @@ export function SystemConnectionsPage() {
             submitting={submitting}
             verifying={verifying}
             verifyResult={verifyResult}
-            reducedMotion={Boolean(reducedMotion)}
             onProviderChange={handleProviderChange}
             onToggleCapability={toggleCapability}
             onAddKey={addKey}
@@ -253,7 +250,6 @@ export function SystemConnectionsPage() {
             submitting={submitting}
             verifying={verifying}
             verifyResult={verifyResult}
-            reducedMotion={Boolean(reducedMotion)}
             onProviderChange={handleProviderChange}
             onToggleCapability={toggleCapability}
             onAddKey={addKey}

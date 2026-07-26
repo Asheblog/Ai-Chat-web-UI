@@ -1019,6 +1019,22 @@ export const createStreamSlice: ChatSliceCreator<
                 totalTokens: null,
               }
             }
+            if (evt.usage && typeof evt.usage === 'object') {
+              const usage = evt.usage as import('../types').StreamUsageSnapshot
+              activeBuffer.lastUsage = usage
+              set((state) => ({
+                usageCurrent: {
+                  prompt_tokens: usage.prompt_tokens,
+                  context_limit: usage.context_limit ?? state.usageCurrent?.context_limit ?? undefined,
+                  context_remaining:
+                    usage.context_remaining ?? state.usageCurrent?.context_remaining ?? undefined,
+                },
+                usageLastRound:
+                  usage.completion_tokens != null || usage.total_tokens != null
+                    ? usage
+                    : state.usageLastRound,
+              }))
+            }
           }
           runtime.scheduleFlush(active)
           continue
@@ -1117,12 +1133,21 @@ export const createStreamSlice: ChatSliceCreator<
       runtime.clearActiveStream(finalStream)
       runtime.recomputeStreamingState()
       set((state) => runtime.streamingFlagUpdate(state, sessionId, false))
-      get().fetchUsage(sessionId).catch(() => {})
+      // 侧栏总量刷新一次即可；当前会话 usage 已尽量由 stream complete 写入
       get().fetchSessionsUsage().catch(() => {})
+      if (!completedSnapshot?.usage) {
+        get().fetchUsage(sessionId).catch(() => {})
+      }
 
-      // 流式结束后从服务端拉取完整消息覆盖本地内容，
-      // 避免本地累积的内容与数据库存储不一致导致渲染差异
-      if (finalStream && (finalStream.clientMessageId || finalStream.assistantClientMessageId)) {
+      // 仅在有工具事件或本地内容为空时回补，避免每次流结束再打 getMessage
+      const needsServerSync =
+        Boolean(completedSnapshot?.toolEvents?.length) ||
+        !(typeof completedSnapshot?.content === 'string' && completedSnapshot.content.length > 0)
+      if (
+        needsServerSync &&
+        finalStream &&
+        (finalStream.clientMessageId || finalStream.assistantClientMessageId)
+      ) {
         const syncClientId = finalStream.assistantClientMessageId || finalStream.clientMessageId
         if (syncClientId) {
           setTimeout(() => {

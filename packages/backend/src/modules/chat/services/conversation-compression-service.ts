@@ -11,6 +11,10 @@ import {
 import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { BackendLogger as log } from '../../../utils/logger'
+import {
+  loadSystemSettingsMap,
+  type SystemSettingsMap,
+} from './pre-stream-context'
 
 type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
 
@@ -73,12 +77,16 @@ export class ConversationCompressionService {
     actorContent: string
     protectedMessageId?: number | null
     historyUpperBound?: Date | null
+    /** 同 turn 由编排层注入，避免重复 systemSetting.findMany */
+    systemSettings?: SystemSettingsMap | null
+    /** 同 turn 未分组历史快照；注入后不再 findMany */
+    historyMessages?: PlainMessage[] | null
   }): Promise<CompressionAttemptResult> {
     if (!params.session.connectionId || !params.session.connection || !params.session.modelRawId) {
       return { applied: false, reason: 'session_model_missing' }
     }
 
-    const settings = await this.loadSystemSettings()
+    const settings = params.systemSettings ?? (await loadSystemSettingsMap(this.prisma))
     const enabled = this.parseBoolean(settings.context_compression_enabled, true)
     if (!enabled) {
       return { applied: false, reason: 'disabled' }
@@ -107,22 +115,31 @@ export class ConversationCompressionService {
       : MIN_CONTEXT_WINDOW
     const thresholdTokens = Math.max(1, Math.floor(contextLimit * thresholdRatio))
 
-    const whereClause: Record<string, unknown> = {
-      sessionId: params.session.id,
-      messageGroupId: null,
-      ...(params.historyUpperBound ? { createdAt: { lte: params.historyUpperBound } } : {}),
-    }
+    let ungroupedMessages: PlainMessage[]
+    if (Array.isArray(params.historyMessages)) {
+      ungroupedMessages = params.historyMessages.slice().sort((a, b) => {
+        const timeDiff = a.createdAt.getTime() - b.createdAt.getTime()
+        if (timeDiff !== 0) return timeDiff
+        return a.id - b.id
+      })
+    } else {
+      const whereClause: Record<string, unknown> = {
+        sessionId: params.session.id,
+        messageGroupId: null,
+        ...(params.historyUpperBound ? { createdAt: { lte: params.historyUpperBound } } : {}),
+      }
 
-    const ungroupedMessages = (await (this.prisma as any).message.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        role: true,
-        content: true,
-        createdAt: true,
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    })) as PlainMessage[]
+      ungroupedMessages = (await (this.prisma as any).message.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          createdAt: true,
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      })) as PlainMessage[]
+    }
 
     if (ungroupedMessages.length < tailMessages + MIN_MESSAGES_TO_COMPRESS) {
       return { applied: false, reason: 'not_enough_messages' }
@@ -302,16 +319,6 @@ export class ConversationCompressionService {
       cancelled: true,
       releasedCount: result,
     }
-  }
-
-  private async loadSystemSettings(): Promise<Record<string, string>> {
-    const rows = await this.prisma.systemSetting.findMany({
-      select: { key: true, value: true },
-    })
-    return rows.reduce<Record<string, string>>((acc, row) => {
-      acc[row.key] = row.value ?? ''
-      return acc
-    }, {})
   }
 
   private parseBoolean(raw: unknown, fallback: boolean) {

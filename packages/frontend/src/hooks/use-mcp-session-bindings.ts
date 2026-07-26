@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as mcpApi from '@/features/mcp/api'
 import { useAuthStore } from '@/store/auth-store'
-import type { McpConnection, McpBinding, McpToolView } from '@/types'
+import type { McpToolView } from '@/types'
 
 export type { McpToolView }
 
@@ -22,6 +22,7 @@ export interface UseMcpSessionBindingsResult {
   sessionTools: McpToolView[]
   loading: boolean
   error: string | null
+  ensureLoaded: () => Promise<void>
   toggleBinding: (connectionId: number, enabled: boolean) => Promise<void>
 }
 
@@ -33,6 +34,7 @@ export const useMcpSessionBindings = (
   const [sessionTools, setSessionTools] = useState<McpToolView[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadRequested, setLoadRequested] = useState(false)
 
   const actorState = useAuthStore((state) => state.actorState)
   const isAuthenticated = actorState === 'authenticated'
@@ -41,27 +43,40 @@ export const useMcpSessionBindings = (
 
   const optionsRef = useRef(connectionOptions)
   optionsRef.current = connectionOptions
+  const inFlightRef = useRef<Promise<void> | null>(null)
+  const loadedSessionRef = useRef<number | null>(null)
 
-  // Load connections and bindings when session is available
   useEffect(() => {
-    let cancelled = false
+    setLoadRequested(false)
+    loadedSessionRef.current = null
+    setConnectionOptions([])
+    setSessionTools([])
+    setError(null)
+  }, [sessionId])
+
+  const load = useCallback(async () => {
     if (!isAuthenticated || !hasSession || !mcpGlobalEnabled || !sessionId) {
       setConnectionOptions([])
       setSessionTools([])
-      return () => { cancelled = true }
+      return
+    }
+    if (loadedSessionRef.current === sessionId && !inFlightRef.current) {
+      return
+    }
+    if (inFlightRef.current) {
+      await inFlightRef.current
+      return
     }
 
-    const load = async () => {
-      setLoading(true)
-      setError(null)
+    setLoading(true)
+    setError(null)
+    const task = (async () => {
       try {
         const [connRes, bindRes, toolsRes] = await Promise.all([
           mcpApi.listConnections({ mine: true }),
           mcpApi.listBindings({ scopeType: 'session', scopeId: String(sessionId) }),
           mcpApi.listSessionTools(sessionId),
         ])
-
-        if (cancelled) return
 
         const connections = connRes.data ?? []
         const bindings = bindRes.data ?? []
@@ -77,18 +92,27 @@ export const useMcpSessionBindings = (
           })),
         )
         setSessionTools(toolsRes.data ?? [])
+        loadedSessionRef.current = sessionId
       } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.response?.data?.error || err?.message || '加载 MCP 数据失败')
-        }
+        setError(err?.response?.data?.error || err?.message || '加载 MCP 数据失败')
       } finally {
-        if (!cancelled) setLoading(false)
+        setLoading(false)
+        inFlightRef.current = null
       }
-    }
+    })()
+    inFlightRef.current = task
+    await task
+  }, [hasSession, isAuthenticated, mcpGlobalEnabled, sessionId])
 
-    load()
-    return () => { cancelled = true }
-  }, [isAuthenticated, hasSession, mcpGlobalEnabled, sessionId])
+  useEffect(() => {
+    if (!loadRequested) return
+    void load()
+  }, [load, loadRequested])
+
+  const ensureLoaded = useCallback(async () => {
+    setLoadRequested(true)
+    await load()
+  }, [load])
 
   const toggleBinding = useCallback(async (connectionId: number, enabled: boolean) => {
     if (!sessionId || !isAuthenticated) return
@@ -96,41 +120,35 @@ export const useMcpSessionBindings = (
     const option = optionsRef.current.find((o) => o.connectionId === connectionId)
     if (!option) return
 
-    // Optimistic update
     const prev = optionsRef.current
-    setConnectionOptions((prev) =>
-      prev.map((o) => (o.connectionId === connectionId ? { ...o, enabled, updating: true } : o)),
+    setConnectionOptions((current) =>
+      current.map((o) => (o.connectionId === connectionId ? { ...o, enabled, updating: true } : o)),
     )
 
     try {
       if (option.bindingId) {
-        // Update existing binding
         const res = await mcpApi.updateBinding(option.bindingId, { enabled })
-        // Update session tools after toggling
         const toolsRes = await mcpApi.listSessionTools(sessionId)
         setSessionTools(toolsRes.data ?? [])
-        // Update bindingId from response if available
         const updatedBinding = res.data
-        setConnectionOptions((prev) =>
-          prev.map((o) =>
+        setConnectionOptions((current) =>
+          current.map((o) =>
             o.connectionId === connectionId
               ? { ...o, enabled, updating: false, bindingId: updatedBinding?.id ?? o.bindingId }
               : o,
           ),
         )
       } else {
-        // Create new binding
         const res = await mcpApi.createBinding({
           connectionId,
           scopeType: 'session',
           scopeId: String(sessionId),
           enabled,
         })
-        // Reload session tools
         const toolsRes = await mcpApi.listSessionTools(sessionId)
         setSessionTools(toolsRes.data ?? [])
-        setConnectionOptions((prev) =>
-          prev.map((o) =>
+        setConnectionOptions((current) =>
+          current.map((o) =>
             o.connectionId === connectionId
               ? { ...o, enabled, updating: false, bindingId: res.data?.id }
               : o,
@@ -138,10 +156,11 @@ export const useMcpSessionBindings = (
         )
       }
     } catch {
-      // Revert on failure
-      setConnectionOptions(prev => prev.map((o) =>
-        o.connectionId === connectionId ? { ...o, updating: false, enabled: !enabled } : o,
-      ))
+      setConnectionOptions(
+        prev.map((o) =>
+          o.connectionId === connectionId ? { ...o, updating: false, enabled: !enabled } : o,
+        ),
+      )
     }
   }, [sessionId, isAuthenticated])
 
@@ -151,6 +170,7 @@ export const useMcpSessionBindings = (
     sessionTools,
     loading,
     error,
+    ensureLoaded,
     toggleBinding,
   }
 }

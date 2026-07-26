@@ -67,6 +67,7 @@ export interface ChatComposerPanelProps {
   mcpLoading?: boolean
   mcpError?: string | null
   onToggleMcpBinding?: (connectionId: number, enabled: boolean) => void
+  onActivateSkillPanel?: () => void
   isVisionEnabled: boolean
   traceEnabled: boolean
   canUseTrace: boolean
@@ -191,6 +192,7 @@ export function ChatComposerPanel({
   mcpLoading,
   mcpError,
   onToggleMcpBinding,
+  onActivateSkillPanel,
   isVisionEnabled,
   traceEnabled,
   canUseTrace,
@@ -266,6 +268,21 @@ export function ChatComposerPanel({
   const [kbSelectorOpen, setKbSelectorOpen] = useState(false)
   const attachmentsCount = selectedImages.length + workspaceFiles.length
   const hasReadyFiles = workspaceFiles.some((f) => f.status === 'ready')
+
+  const openKnowledgeBaseSelector = useCallback(() => {
+    setKbSelectorOpen(true)
+    void onRefreshKnowledgeBases?.()
+  }, [onRefreshKnowledgeBases])
+
+  const handleKbSelectorOpenChange = useCallback(
+    (open: boolean) => {
+      setKbSelectorOpen(open)
+      if (open) {
+        void onRefreshKnowledgeBases?.()
+      }
+    },
+    [onRefreshKnowledgeBases],
+  )
 
   const filteredPromptTemplates = useMemo(() => {
     const keyword = promptTemplateSearch.trim().toLowerCase()
@@ -715,6 +732,7 @@ export function ChatComposerPanel({
         mcpLoading={mcpLoading}
         mcpError={mcpError}
         onToggleMcpBinding={onToggleMcpBinding}
+        onActivateSkillPanel={onActivateSkillPanel}
         isVisionEnabled={isVisionEnabled}
         placeholder={mobilePlaceholder}
         traceEnabled={traceEnabled}
@@ -723,7 +741,7 @@ export function ChatComposerPanel({
         onOpenAdvanced={() => setAdvancedOpen(true)}
         onOpenSessionPrompt={() => setSessionPromptOpen(true)}
         // 知识库
-        onOpenKnowledgeBase={() => setKbSelectorOpen(true)}
+        onOpenKnowledgeBase={openKnowledgeBaseSelector}
         knowledgeBaseEnabled={knowledgeBaseEnabled}
         knowledgeBaseCount={selectedKnowledgeBaseIds?.length ?? 0}
       />
@@ -767,6 +785,7 @@ export function ChatComposerPanel({
         mcpLoading={mcpLoading}
         mcpError={mcpError}
         onToggleMcpBinding={onToggleMcpBinding}
+        onActivateSkillPanel={onActivateSkillPanel}
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}
         onToggleTrace={onToggleTrace}
@@ -781,7 +800,7 @@ export function ChatComposerPanel({
         desktopSendDisabled={desktopSendDisabled}
         sendLockedReason={sendLockedReason}
         // 知识库
-        onOpenKnowledgeBase={() => setKbSelectorOpen(true)}
+        onOpenKnowledgeBase={openKnowledgeBaseSelector}
         knowledgeBaseEnabled={knowledgeBaseEnabled}
         knowledgeBaseCount={selectedKnowledgeBaseIds?.length ?? 0}
       />
@@ -789,7 +808,7 @@ export function ChatComposerPanel({
       {/* 知识库选择对话框 */}
       <KnowledgeBaseSelector
         open={kbSelectorOpen}
-        onOpenChange={setKbSelectorOpen}
+        onOpenChange={handleKbSelectorOpenChange}
         availableKbs={knowledgeBases ?? []}
         selectedKbIds={selectedKnowledgeBaseIds ?? []}
         isLoading={isLoadingKnowledgeBases ?? false}

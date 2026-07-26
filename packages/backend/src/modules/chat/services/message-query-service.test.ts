@@ -6,9 +6,11 @@ const buildService = () => {
     message: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      count: jest.fn(),
     },
     messageGroup: {
       findMany: jest.fn(),
+      count: jest.fn(),
     },
     systemSetting: {
       findUnique: jest.fn(),
@@ -64,6 +66,8 @@ describe('ChatMessageQueryService', () => {
       },
     ])
 
+    prisma.message.count.mockResolvedValue(1)
+    prisma.messageGroup.count.mockResolvedValue(0)
     prisma.message.findMany.mockResolvedValue([
       {
         id: 10,
@@ -124,9 +128,15 @@ describe('ChatMessageQueryService', () => {
       request,
     })
 
+    expect(prisma.message.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { sessionId: 5, messageGroupId: null },
+      }),
+    )
     expect(prisma.message.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { sessionId: 5 },
+        where: { sessionId: 5, messageGroupId: null },
+        take: 1,
       }),
     )
     expect(determineChatImageBaseUrl).toHaveBeenCalledWith({
@@ -223,5 +233,98 @@ describe('ChatMessageQueryService', () => {
 
     expect(result).toBeNull()
     expect(determineChatImageBaseUrl).not.toHaveBeenCalled()
+  })
+
+  it('lists latest page with SQL take and preserves compressed groups', async () => {
+    const { prisma, service, actor, request } = buildService()
+    prisma.message.count.mockResolvedValue(2)
+    prisma.messageGroup.count.mockResolvedValue(1)
+    prisma.systemSetting.findUnique.mockResolvedValue({ value: null })
+    prisma.messageGroup.findMany.mockResolvedValue([
+      {
+        id: 7,
+        sessionId: 5,
+        summary: '摘要',
+        compressedMessagesJson: JSON.stringify([
+          { id: 1, role: 'user', content: 'old', createdAt: '2024-01-01T00:00:00.000Z' },
+          { id: 2, role: 'assistant', content: 'old-a', createdAt: '2024-01-01T00:01:00.000Z' },
+        ]),
+        lastMessageId: 2,
+        expanded: false,
+        metadataJson: null,
+        createdAt: new Date('2024-01-01T00:01:00Z'),
+        updatedAt: new Date('2024-01-01T00:01:00Z'),
+      },
+    ])
+    prisma.message.findMany.mockResolvedValue([
+      {
+        id: 3,
+        sessionId: 5,
+        messageGroupId: null,
+        role: 'user',
+        content: 'newer',
+        parentMessageId: null,
+        variantIndex: null,
+        attachments: [],
+        clientMessageId: null,
+        reasoning: null,
+        reasoningDurationSeconds: null,
+        toolLogsJson: null,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+        updatedAt: new Date('2024-01-02T00:00:00Z'),
+        streamStatus: 'done',
+        streamCursor: 0,
+        streamReasoning: null,
+        streamError: null,
+        usageMetrics: [],
+        generatedImages: [],
+      },
+      {
+        id: 4,
+        sessionId: 5,
+        messageGroupId: null,
+        role: 'assistant',
+        content: 'latest',
+        parentMessageId: null,
+        variantIndex: null,
+        attachments: [],
+        clientMessageId: null,
+        reasoning: null,
+        reasoningDurationSeconds: null,
+        toolLogsJson: null,
+        createdAt: new Date('2024-01-02T00:01:00Z'),
+        updatedAt: new Date('2024-01-02T00:01:00Z'),
+        streamStatus: 'done',
+        streamCursor: 0,
+        streamReasoning: null,
+        streamError: null,
+        usageMetrics: [],
+        generatedImages: [],
+      },
+    ])
+
+    const result = await service.listMessages({
+      actor,
+      sessionId: 5,
+      page: 'latest',
+      limit: 3,
+      request,
+    })
+
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { sessionId: 5, messageGroupId: null },
+        take: 3,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+    )
+    expect(result.pagination).toEqual({ page: 1, limit: 3, total: 3, totalPages: 1 })
+    expect(result.messages).toHaveLength(3)
+    expect(result.messages[0]).toMatchObject({
+      id: 'group:7',
+      role: 'compressedGroup',
+      content: '摘要',
+    })
+    expect(result.messages.map((m) => m.id)).toEqual(['group:7', 3, 4])
   })
 })

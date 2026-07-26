@@ -130,7 +130,8 @@ describe('stream slice', () => {
     await flushMicrotasks()
 
     expect(chatApi.streamChat).toHaveBeenCalledTimes(1)
-    expect(chatApi.getUsage).toHaveBeenCalledWith(session.id)
+    // stream 已带 usage 时不再二次 getUsage，只刷新侧栏 sessions usage
+    expect(chatApi.getUsage).not.toHaveBeenCalled()
     expect(chatApi.getSessionsUsage).toHaveBeenCalledTimes(1)
 
     const state = store.getState()

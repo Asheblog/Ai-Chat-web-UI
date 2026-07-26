@@ -46,7 +46,6 @@ export function ModelSelector({
   const triggerRef = useRef<HTMLButtonElement>(null)
 
   const { models: allModels, isLoading: loading, fetchAll } = useModelsStore()
-  const modelsCount = allModels.length
   const forceBottomDropdown = dropdownDirection === "bottom"
 
   useEffect(() => {
@@ -60,13 +59,9 @@ export function ModelSelector({
   }, [])
 
   useEffect(() => {
-    if (modelsCount === 0) {
-      fetchAll().catch(() => {})
-    }
-
     setRecentModels(parseStoredModelIds(localStorage.getItem(RECENT_MODELS_KEY)))
     setFavoriteModels(parseStoredModelIds(localStorage.getItem(FAVORITE_MODELS_KEY)))
-  }, [modelsCount, fetchAll])
+  }, [])
 
   useEffect(() => {
     if (!open) {

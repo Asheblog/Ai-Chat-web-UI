@@ -61,6 +61,7 @@ function mapSessionOptionItems(items: SkillCatalogItem[]): ExtraSkillCatalogEntr
 export const useSkillsSelection = (sessionId?: number | null) => {
   const [extraSkillsCatalog, setExtraSkillsCatalog] = useState<ExtraSkillCatalogEntry[]>([])
   const [updatingSkillIds, setUpdatingSkillIds] = useState<number[]>([])
+  const [loadRequested, setLoadRequested] = useState(false)
   const actorState = useAuthStore((state) => state.actorState)
   const isAuthenticated = actorState === 'authenticated'
   const hasSession = Boolean(sessionId)
@@ -68,67 +69,91 @@ export const useSkillsSelection = (sessionId?: number | null) => {
 
   const catalogRef = useRef(extraSkillsCatalog)
   catalogRef.current = extraSkillsCatalog
+  const inFlightRef = useRef<Promise<void> | null>(null)
+  const loadedKeyRef = useRef<string | null>(null)
 
-  // Session mode: load from session-options
+  const loadKey = !isAuthenticated
+    ? 'anon'
+    : hasSession
+      ? `session:${sessionId}`
+      : 'draft'
+
   useEffect(() => {
-    let cancelled = false
-    if (!canUsePrivateSkills || !sessionId) {
-      return () => {
-        cancelled = true
-      }
-    }
-    listSessionSkillOptions(sessionId)
-      .then((response) => {
-        if (cancelled) return
-        const list = Array.isArray(response?.data?.items) ? response.data.items : []
-        setExtraSkillsCatalog(mapSessionOptionItems(list))
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setExtraSkillsCatalog([])
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [canUsePrivateSkills, sessionId])
+    setLoadRequested(false)
+    loadedKeyRef.current = null
+    setExtraSkillsCatalog([])
+  }, [loadKey])
 
-  // Draft mode: authenticated but no session → load from catalog
-  useEffect(() => {
-    let cancelled = false
-    if (!isAuthenticated || hasSession) {
-      return () => {
-        cancelled = true
-      }
-    }
-    listSkillCatalog()
-      .then((response) => {
-        if (cancelled) return
-        const list: SkillCatalogItem[] = Array.isArray(response?.data) ? response.data : []
-        const userPrivateActive = list.filter(
-          (item) =>
-            item.visibility === 'user_private' &&
-            item.status === 'active' &&
-            item.defaultVersion != null,
-        )
-        setExtraSkillsCatalog(mapCatalogItems(userPrivateActive))
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setExtraSkillsCatalog([])
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isAuthenticated, hasSession])
-
-  // Anonymous user: clear the list
   useEffect(() => {
     if (actorState !== 'authenticated') {
       setExtraSkillsCatalog([])
     }
   }, [actorState])
+
+  const toEnabledRefs = useCallback((items: ExtraSkillCatalogEntry[]): SkillRuntimeReference[] => {
+    return items
+      .filter((item): item is ExtraSkillCatalogEntry & { versionId: number } =>
+        item.enabled && item.versionId != null,
+      )
+      .map((item) => ({ skillId: item.id, versionId: item.versionId }))
+  }, [])
+
+  const load = useCallback(async (): Promise<ExtraSkillCatalogEntry[]> => {
+    if (!isAuthenticated) {
+      setExtraSkillsCatalog([])
+      return []
+    }
+    if (loadedKeyRef.current === loadKey && !inFlightRef.current) {
+      return catalogRef.current
+    }
+    if (inFlightRef.current) {
+      await inFlightRef.current
+      return catalogRef.current
+    }
+
+    let nextCatalog: ExtraSkillCatalogEntry[] = []
+    const task = (async () => {
+      try {
+        if (hasSession && sessionId) {
+          const response = await listSessionSkillOptions(sessionId)
+          const list = Array.isArray(response?.data?.items) ? response.data.items : []
+          nextCatalog = mapSessionOptionItems(list)
+        } else {
+          const response = await listSkillCatalog()
+          const list: SkillCatalogItem[] = Array.isArray(response?.data) ? response.data : []
+          const userPrivateActive = list.filter(
+            (item) =>
+              item.visibility === 'user_private' &&
+              item.status === 'active' &&
+              item.defaultVersion != null,
+          )
+          nextCatalog = mapCatalogItems(userPrivateActive)
+        }
+        catalogRef.current = nextCatalog
+        setExtraSkillsCatalog(nextCatalog)
+        loadedKeyRef.current = loadKey
+      } catch {
+        nextCatalog = []
+        catalogRef.current = nextCatalog
+        setExtraSkillsCatalog(nextCatalog)
+      } finally {
+        inFlightRef.current = null
+      }
+    })()
+    inFlightRef.current = task
+    await task
+    return nextCatalog
+  }, [hasSession, isAuthenticated, loadKey, sessionId])
+
+  useEffect(() => {
+    if (!loadRequested) return
+    void load()
+  }, [load, loadRequested])
+
+  const ensureLoaded = useCallback(async () => {
+    setLoadRequested(true)
+    await load()
+  }, [load])
 
   const skillOptions = useMemo<SkillOption[]>(() => {
     return extraSkillsCatalog.map((item) => ({
@@ -144,16 +169,18 @@ export const useSkillsSelection = (sessionId?: number | null) => {
     }))
   }, [extraSkillsCatalog, updatingSkillIds])
 
-  const enabledExtraSkills = useMemo<SkillRuntimeReference[]>(() => {
-    return extraSkillsCatalog
-      .filter((item): item is ExtraSkillCatalogEntry & { versionId: number } =>
-        item.enabled && item.versionId != null,
-      )
-      .map((item) => ({ skillId: item.id, versionId: item.versionId }))
-  }, [extraSkillsCatalog])
+  const enabledExtraSkills = useMemo<SkillRuntimeReference[]>(
+    () => toEnabledRefs(extraSkillsCatalog),
+    [extraSkillsCatalog, toEnabledRefs],
+  )
+
+  const ensureExtraSkills = useCallback(async () => {
+    setLoadRequested(true)
+    const catalog = await load()
+    return toEnabledRefs(catalog)
+  }, [load, toEnabledRefs])
 
   const toggleSkillOption = useCallback(async (skillId: number, enabled: boolean) => {
-    // Draft mode: local toggle only, no API call
     if (!hasSession) {
       setExtraSkillsCatalog((prev) =>
         prev.map((item) => (item.id === skillId ? { ...item, enabled } : item)),
@@ -161,7 +188,6 @@ export const useSkillsSelection = (sessionId?: number | null) => {
       return
     }
 
-    // Session mode: persist via API
     if (!sessionId || actorState !== 'authenticated') return
     const skill = catalogRef.current.find((item) => item.id === skillId)
     if (!skill?.versionId) return
@@ -191,5 +217,7 @@ export const useSkillsSelection = (sessionId?: number | null) => {
     canUsePrivateSkills,
     skillOptions,
     toggleSkillOption,
+    ensureLoaded,
+    ensureExtraSkills,
   }
 }

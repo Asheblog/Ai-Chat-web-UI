@@ -15,6 +15,10 @@ import {
   type PreparedChatRequest,
 } from './chat-request-builder'
 import type { ProviderRequester } from './provider-requester'
+import type {
+  PreStreamHistorySnapshot,
+  SystemSettingsMap,
+} from './pre-stream-context'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 
@@ -33,6 +37,9 @@ interface NonStreamChatRequest {
   quotaSnapshot: UsageQuotaSnapshot | null
   traceRecorder?: TaskTraceRecorder | null
   personalPrompt?: string | null
+  historyUpperBound?: Date | null
+  systemSettings?: SystemSettingsMap | null
+  historySnapshot?: PreStreamHistorySnapshot | null
 }
 
 export interface NonStreamChatResult {
@@ -78,7 +85,18 @@ export class NonStreamChatService {
   }
 
   async execute(request: NonStreamChatRequest): Promise<NonStreamChatResult> {
-    const { session, payload, content, images = [], quotaSnapshot, traceRecorder, personalPrompt } = request
+    const {
+      session,
+      payload,
+      content,
+      images = [],
+      quotaSnapshot,
+      traceRecorder,
+      personalPrompt,
+      historyUpperBound,
+      systemSettings,
+      historySnapshot,
+    } = request
     const prepared = await this.requestBuilder.prepare({
       session,
       payload,
@@ -86,6 +104,9 @@ export class NonStreamChatService {
       images,
       mode: 'completion',
       personalPrompt,
+      historyUpperBound: historyUpperBound ?? null,
+      systemSettings,
+      historySnapshot,
     })
 
     const response = await this.performProviderRequest({

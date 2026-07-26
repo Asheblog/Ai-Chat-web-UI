@@ -15,12 +15,10 @@ export function TitleSync({ initialBrandText, initialBrandFallback = false }: Ti
   const brandText = useSettingsStore(
     (state) => state.systemSettings?.brandText ?? state.publicBrandText ?? null,
   )
-  const fetchSystemSettings = useSettingsStore((state) => state.fetchSystemSettings)
   const fetchPublicBranding = useSettingsStore((state) => state.fetchPublicBranding)
   const bootstrapBrandText = useSettingsStore((state) => state.bootstrapBrandText)
   const actorState = useAuthStore((state) => state.actorState)
   const fetchActor = useAuthStore((state) => state.fetchActor)
-  const hasRequestedSystem = useRef(false)
   const hasRequestedBrand = useRef(false)
   const lastBrandRef = useRef<string>((initialBrandText ?? '').trim())
   const fallbackRetryRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; attempts: number }>({
@@ -114,17 +112,6 @@ export function TitleSync({ initialBrandText, initialBrandFallback = false }: Ti
       }
     }
   }, [initialBrandFallback, fetchPublicBranding])
-
-  useEffect(() => {
-    if (actorState !== 'authenticated') {
-      hasRequestedSystem.current = false
-      return
-    }
-    if (!hasRequestedSystem.current) {
-      hasRequestedSystem.current = true
-      fetchSystemSettings().catch(() => {})
-    }
-  }, [actorState, fetchSystemSettings])
 
   useEffect(() => {
     const trimmed = (brandText ?? '').trim()

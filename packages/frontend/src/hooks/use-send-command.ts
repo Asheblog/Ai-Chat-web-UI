@@ -19,6 +19,8 @@ interface UseSendCommandParams {
   setSelectedImages: (images: ComposerImage[]) => void
   buildRequestPayload: () => { ok: true; customBody?: Record<string, unknown>; customHeaders?: Array<{ name: string; value: string }> } | { ok: false; reason: string }
   enabledExtraSkills: SkillRuntimeReference[]
+  /** 发送前按需加载 skills，返回最新 enabled 列表 */
+  ensureExtraSkills?: () => Promise<SkillRuntimeReference[]>
   webSearchEnabled: boolean
   canUseWebSearch: boolean
   webSearchScope: string
@@ -59,6 +61,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     setSelectedImages,
     buildRequestPayload,
     enabledExtraSkills,
+    ensureExtraSkills,
     webSearchEnabled,
     canUseWebSearch,
     webSearchScope,
@@ -124,6 +127,9 @@ export const useSendCommand = (params: UseSendCommandParams) => {
         return
       }
       setInput('')
+      const resolvedExtraSkills = ensureExtraSkills
+        ? await ensureExtraSkills()
+        : enabledExtraSkills
       const builtinSkills: string[] = []
       const skillOverrides: Record<string, Record<string, unknown>> = {}
       if (webSearchEnabled && canUseWebSearch) {
@@ -140,10 +146,10 @@ export const useSendCommand = (params: UseSendCommandParams) => {
         builtinSkills.push('python-runner')
       }
       const skillsPayload =
-        builtinSkills.length > 0 || enabledExtraSkills.length > 0
+        builtinSkills.length > 0 || resolvedExtraSkills.length > 0
           ? {
               builtin: Array.from(new Set(builtinSkills)),
-              enabled: enabledExtraSkills,
+              enabled: resolvedExtraSkills,
               ...(Object.keys(skillOverrides).length > 0 ? { overrides: skillOverrides } : {}),
             }
           : undefined
@@ -184,6 +190,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     setSelectedImages,
     buildRequestPayload,
     enabledExtraSkills,
+    ensureExtraSkills,
     webSearchEnabled,
     canUseWebSearch,
     webSearchScope,

@@ -23,6 +23,11 @@ import {
 import {
   type ConversationCompressionService,
 } from '../services/conversation-compression-service';
+import {
+  loadPreStreamTurnContext,
+  loadPreStreamHistorySnapshot,
+  ungroupedMessagesFromSnapshot,
+} from '../services/pre-stream-context';
 
 export interface ChatCompletionRoutesDeps {
   prisma: PrismaClient
@@ -151,14 +156,31 @@ export const registerChatCompletionRoutes = (
         });
       }
 
+      const historyUpperBound = userMessageRecord?.createdAt ?? null;
+      let turnContext = await loadPreStreamTurnContext(prisma, {
+        sessionId,
+        historyUpperBound,
+      });
+
       try {
         if (payload?.contextEnabled !== false) {
-          await conversationCompressionService.compressIfNeeded({
+          const compressionResult = await conversationCompressionService.compressIfNeeded({
             session: session as any,
             actorContent: content,
             protectedMessageId: userMessageRecord?.id ?? null,
-            historyUpperBound: userMessageRecord?.createdAt ?? null,
+            historyUpperBound,
+            systemSettings: turnContext.systemSettings,
+            historyMessages: ungroupedMessagesFromSnapshot(turnContext.history),
           });
+          if (compressionResult.applied) {
+            turnContext = {
+              systemSettings: turnContext.systemSettings,
+              history: await loadPreStreamHistorySnapshot(prisma, {
+                sessionId,
+                historyUpperBound,
+              }),
+            };
+          }
         }
       } catch (compressionError) {
         log.warn('[chat completion] context compression failed, fallback to normal flow', {
@@ -177,6 +199,9 @@ export const registerChatCompletionRoutes = (
           quotaSnapshot,
           traceRecorder,
           personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
+          historyUpperBound,
+          systemSettings: turnContext.systemSettings,
+          historySnapshot: turnContext.history,
         });
       } catch (error) {
         if (error instanceof ChatCompletionServiceError) {

@@ -58,10 +58,7 @@ export const createProgressWatcherRuntime = (deps: {
           if (payload.streamStatus && payload.streamStatus !== 'streaming') {
             stopMessagePoller(messageId)
             activeWatchers.delete(messageId)
-            setTimeout(() => {
-              deps.get().fetchMessages(sessionId, { page: 'latest', mode: 'replace' }).catch(() => {})
-            }, 350)
-            deps.get().fetchUsage(sessionId).catch(() => {})
+            // 终态已由 progress 快照写入 store，避免再全量 replace messages
             deps.get().fetchSessionsUsage().catch(() => {})
             return
           }

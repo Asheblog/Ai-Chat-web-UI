@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useChatComposer } from '@/hooks/use-chat-composer'
 import { useTextareaAutoResize } from '@/hooks/use-textarea-auto-resize'
 import { useChatSessionControls } from '@/hooks/use-chat-session-controls'
@@ -19,6 +19,7 @@ export interface ChatInterfaceViewModel {
 
 export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewModel | null {
   const activeSessionId = useChatStore((state) => state.currentSession?.id ?? null)
+  const messageBodies = useChatStore((state) => state.messageBodies)
   // 知识库 - 需要先于 useChatComposer 调用，以便传递 selectedKbIds
   const knowledgeBase = useKnowledgeBase({ sessionId: activeSessionId })
 
@@ -33,7 +34,6 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     effort,
     setEffort,
     messageMetas,
-    messageBodies,
     messageRenderCache,
     isMessagesLoading,
     isStreaming,
@@ -62,11 +62,13 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     pythonToolDisabledNote,
     skillOptions,
     toggleSkillOption,
+    ensureSkillsLoaded,
     mcpGlobalEnabled,
     mcpConnectionOptions,
     mcpSessionTools,
     mcpLoading,
     mcpError,
+    ensureMcpLoaded,
     onToggleMcpBinding,
     assistantVariantSelections,
     sendLocked,
@@ -164,6 +166,11 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
       })
   }, [currentSession, normalizedSelectedKbIds, selectedKbKey, sessionKbKey])
 
+  const onActivateSkillPanel = useCallback(() => {
+    void ensureSkillsLoaded()
+    void ensureMcpLoaded()
+  }, [ensureMcpLoaded, ensureSkillsLoaded])
+
   if (!currentSession) {
     return null
   }
@@ -211,6 +218,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     pythonToolDisabledNote,
     skillOptions,
     onToggleSkillOption: toggleSkillOption,
+    onActivateSkillPanel,
     mcpGlobalEnabled,
     mcpConnectionOptions,
     mcpSessionTools,

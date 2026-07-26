@@ -182,17 +182,68 @@ export class ChatMessageQueryService {
   }): Promise<ListMessagesResult> {
     const safeLimit = Math.max(1, Math.min(params.limit, 200))
     const baseUrl = await this.resolveImageBaseUrl(params.request)
-    const timeline = await this.buildSessionTimeline(params.sessionId, baseUrl)
 
-    const total = timeline.length
+    const groupWhere = {
+      sessionId: params.sessionId,
+      cancelledAt: null,
+      // 与 normalizeCompressedGroup 一致：无 summary 的组不进入时间线
+      NOT: [{ summary: null }, { summary: '' }],
+    }
+
+    const [ungroupedCount, groups] = await Promise.all([
+      (this.prisma as any).message.count({
+        where: {
+          sessionId: params.sessionId,
+          messageGroupId: null,
+        },
+      }) as Promise<number>,
+      (this.prisma as any).messageGroup.findMany({
+        where: groupWhere,
+        select: {
+          id: true,
+          sessionId: true,
+          summary: true,
+          compressedMessagesJson: true,
+          lastMessageId: true,
+          expanded: true,
+          metadataJson: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }) as Promise<MessageGroupRecord[]>,
+    ])
+
+    const validGroups = groups.filter((group) => Boolean(group.summary?.trim()))
+    const total = Number(ungroupedCount || 0) + validGroups.length
     const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 1
     const requestedPage = params.page === 'latest' ? totalPages : params.page
     const page = Math.max(1, Math.min(requestedPage, totalPages))
     const start = (page - 1) * safeLimit
-    const end = start + safeLimit
+    const end = Math.min(start + safeLimit, total)
+
+    if (total === 0 || start >= total) {
+      return {
+        messages: [],
+        pagination: {
+          page,
+          limit: safeLimit,
+          total,
+          totalPages,
+        },
+      }
+    }
+
+    const timeline = await this.buildPagedSessionTimeline({
+      sessionId: params.sessionId,
+      baseUrl,
+      start,
+      end,
+      total,
+      groups: validGroups,
+    })
 
     return {
-      messages: timeline.slice(start, end),
+      messages: timeline,
       pagination: {
         page,
         limit: safeLimit,
@@ -242,77 +293,82 @@ export class ChatMessageQueryService {
     return this.normalizeMessage(message, baseUrl)
   }
 
-  private async buildSessionTimeline(sessionId: number, baseUrl: string): Promise<NormalizedMessage[]> {
-    const [messages, groups] = await Promise.all([
-      ((this.prisma as any).message.findMany({
-        where: { sessionId },
-        select: messageSelectFields,
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      }) as Promise<RawMessage[]>),
-      (this.prisma as any).messageGroup.findMany({
-        where: {
-          sessionId,
-          cancelledAt: null,
-        },
-        select: {
-          id: true,
-          sessionId: true,
-          summary: true,
-          compressedMessagesJson: true,
-          lastMessageId: true,
-          expanded: true,
-          metadataJson: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }) as Promise<MessageGroupRecord[]>,
-    ])
+  /**
+   * 分页构建时间线：不解压组内消息全量；只按未分组消息做 orderBy+take，
+   * 再与全部压缩组合并切片。保证长会话不再全表 load 消息进内存。
+   *
+   * 不变量：完整时间线 = 未分组消息 + 有效压缩组（各组 1 项）。
+   * 取最新/最旧窗口时，取对应方向的 N 条未分组消息 ∪ 全部组，足以覆盖该页。
+   */
+  private async buildPagedSessionTimeline(params: {
+    sessionId: number
+    baseUrl: string
+    start: number
+    end: number
+    total: number
+    groups: MessageGroupRecord[]
+  }): Promise<NormalizedMessage[]> {
+    const pageSize = Math.max(0, params.end - params.start)
+    if (pageSize === 0) return []
 
-    const groupById = new Map(groups.map((group) => [group.id, group]))
-    const groupedMessages = new Map<number, RawMessage[]>()
-    const timeline: NormalizedMessage[] = []
+    const fromStartDistance = params.end
+    const fromEndDistance = params.total - params.start
+    const useFromEnd = fromEndDistance <= fromStartDistance
+    const windowSize = useFromEnd ? fromEndDistance : fromStartDistance
 
-    for (const message of messages) {
-      const groupIdRaw = (message as any).messageGroupId
-      const groupId = typeof groupIdRaw === 'number' ? groupIdRaw : null
-      if (groupId != null && groupById.has(groupId)) {
-        const list = groupedMessages.get(groupId) ?? []
-        list.push(message)
-        groupedMessages.set(groupId, list)
-        continue
-      }
-      timeline.push(this.normalizeMessage(message, baseUrl))
+    const ungroupedMessages = (await (this.prisma as any).message.findMany({
+      where: {
+        sessionId: params.sessionId,
+        messageGroupId: null,
+      },
+      select: messageSelectFields,
+      orderBy: useFromEnd
+        ? [{ createdAt: 'desc' }, { id: 'desc' }]
+        : [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: windowSize,
+    })) as RawMessage[]
+
+    if (useFromEnd) {
+      ungroupedMessages.reverse()
     }
 
-    for (const [groupId, rows] of groupedMessages.entries()) {
-      const group = groupById.get(groupId)
-      if (!group) continue
-      const normalized = this.normalizeCompressedGroup(group, rows)
-      if (normalized) {
-        timeline.push(normalized)
-      }
-    }
+    const groupItems = params.groups
+      .map((group) => this.normalizeCompressedGroup(group))
+      .filter((item): item is NormalizedMessage => item != null)
 
-    return timeline.sort((a, b) => {
+    const messageItems = ungroupedMessages.map((message) =>
+      this.normalizeMessage(message, params.baseUrl),
+    )
+
+    const merged = [...messageItems, ...groupItems].sort((a, b) => {
       const timeDiff = a.createdAt.getTime() - b.createdAt.getTime()
       if (timeDiff !== 0) return timeDiff
       return String(a.id).localeCompare(String(b.id))
     })
+
+    if (useFromEnd) {
+      // merged 含「最近 windowSize 条未分组 + 全部组」，取末尾 windowSize 即为该尾部窗口
+      const window = merged.slice(-windowSize)
+      // 窗口对应 full timeline [total-windowSize, total)；页在其中的偏移为 start - (total-windowSize)
+      const offsetInWindow = params.start - (params.total - windowSize)
+      return window.slice(offsetInWindow, offsetInWindow + pageSize)
+    }
+
+    // 从头窗口：取前 windowSize(=end) 项后切 [start, end)
+    return merged.slice(0, windowSize).slice(params.start, params.end)
   }
 
   private normalizeCompressedGroup(
     group: MessageGroupRecord,
-    rows: RawMessage[],
   ): NormalizedMessage | null {
     if (!group.summary || !group.summary.trim()) return null
-    const sorted = rows.slice().sort((a, b) => {
-      const timeDiff = a.createdAt.getTime() - b.createdAt.getTime()
-      if (timeDiff !== 0) return timeDiff
-      return a.id - b.id
-    })
-    const fallbackLast = sorted[sorted.length - 1]
-    const createdAt = fallbackLast?.createdAt ?? group.createdAt
     const snapshot = this.parseCompressedMessages(group.compressedMessagesJson)
+    const lastSnapshot = snapshot.length > 0 ? snapshot[snapshot.length - 1] : null
+    const createdAtFromSnapshot =
+      lastSnapshot?.createdAt && !Number.isNaN(Date.parse(lastSnapshot.createdAt))
+        ? new Date(lastSnapshot.createdAt)
+        : null
+    const createdAt = createdAtFromSnapshot ?? group.createdAt
     const metadata = this.parseJsonObject(group.metadataJson)
     return {
       id: `group:${group.id}`,
@@ -335,7 +391,7 @@ export class ChatMessageQueryService {
       metrics: null,
       messageGroupId: group.id,
       compressedMessages: snapshot,
-      lastMessageId: group.lastMessageId ?? fallbackLast?.id ?? null,
+      lastMessageId: group.lastMessageId ?? lastSnapshot?.id ?? null,
       expanded: Boolean(group.expanded),
       metadata,
     }

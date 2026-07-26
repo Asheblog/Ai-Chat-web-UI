@@ -262,6 +262,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let assistantProgressLastPersistAt = 0;
       let assistantProgressLastPersistedLength = 0;
       let assistantReasoningPersistLength = 0;
+      let assistantProgressPersistChain: Promise<void> = Promise.resolve();
       const idleTimeout = idleTimeoutMs > 0 ? idleTimeoutMs : null;
       let idleWatchTimer: ReturnType<typeof setInterval> | null = null;
       let lastChunkAt = Date.now();
@@ -311,30 +312,46 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             ? serializeToolLogsForPersistence(toolLogs)
             : null
           : undefined;
-        try {
-          const updateData: Prisma.MessageUpdateInput = {
-            content: aiResponseContent,
-            streamCursor: aiResponseContent.length,
-            streamStatus,
-            streamReasoning: reasoningPayload,
-          };
-          if (toolLogsJson !== undefined) {
-            updateData.toolLogsJson = toolLogsJson;
-          }
+        const updateData: Prisma.MessageUpdateInput = {
+          content: aiResponseContent,
+          streamCursor: aiResponseContent.length,
+          streamStatus,
+          streamReasoning: reasoningPayload,
+        };
+        if (toolLogsJson !== undefined) {
+          updateData.toolLogsJson = toolLogsJson;
+          // 同步清脏，避免 fire-and-forget 期间新工具事件被旧写回覆盖清脏
+          toolLogsDirty = false;
+        }
+        const messageIdForPersist = activeAssistantMessageId;
+        const contentLength = aiResponseContent.length;
+        const reasoningLength = reasoningPayload?.length ?? 0;
+        const toolLogsCount = toolLogsJson ? toolLogs.length : 0;
+        const runPersist = async () => {
           await prisma.message.update({
-            where: { id: activeAssistantMessageId },
+            where: { id: messageIdForPersist },
             data: updateData,
           });
           traceRecorder.log('db:persist_progress', {
-            messageId: activeAssistantMessageId,
-            length: aiResponseContent.length,
-            reasoningLength: reasoningPayload?.length ?? 0,
+            messageId: messageIdForPersist,
+            length: contentLength,
+            reasoningLength,
             force,
-            toolLogsPersisted: toolLogsJson ? toolLogs.length : 0,
-            toolLogsPending: toolLogsDirty ? toolLogs.length : 0,
+            toolLogsPersisted: toolLogsCount,
+            toolLogsPending: 0,
           });
-          if (toolLogsJson !== undefined) {
-            toolLogsDirty = false;
+        };
+        try {
+          const queued = assistantProgressPersistChain.then(runPersist, runPersist);
+          assistantProgressPersistChain = queued.catch((error) => {
+            traceRecorder.log('db:persist_progress_error', {
+              messageId: messageIdForPersist,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+          // 流式增量不阻塞调用方；force 等待串行队列，避免旧快照覆盖终态
+          if (force) {
+            await queued;
           }
         } catch (error) {
           const isRecordMissing =
@@ -947,7 +964,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (!providerUsageSeen || !providerUsageValid) {
           safeEnqueue({ type: 'usage', usage: finalUsagePayload });
         }
-        safeEnqueue({ type: 'complete', content: finalContent });
+        safeEnqueue({ type: 'complete', content: finalContent, usage: finalUsagePayload });
         traceMetadataExtras.finalUsage = finalUsagePayload;
         traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
 
@@ -969,6 +986,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           };
 
           if (finalContent && (await sessionStillExists())) {
+            // 排空未完成的进度写，避免旧快照覆盖 finalize
+            await assistantProgressPersistChain;
             // 不再对 reasoningText 做 trim，保持与 tool event offsets 的一致性
             const streamReasoningPayload = reasoningText.length > 0 ? reasoningText : null;
             const shouldPersistReasoning =

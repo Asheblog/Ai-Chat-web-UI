@@ -2,17 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
 import { shallow } from 'zustand/shallow'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { ChatInterface } from '@/components/chat-interface'
 import { useChatStore } from '@/store/chat-store'
-import { useSettingsStore } from '@/store/settings-store'
-import {
-  welcomeScreenVariants,
-  chatInterfaceVariants,
-  pageTransition,
-} from '@/lib/animations/page'
 
 interface ChatPageClientProps {
   initialSessionId?: number | null
@@ -22,17 +15,12 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
   const router = useRouter()
   const pathname = usePathname()
   const redirectedRef = useRef<string | null>(null)
-  const { currentSession, fetchSessions } = useChatStore(
+  const { currentSession, sessions, isSessionsLoading, fetchSessions } = useChatStore(
     (state) => ({
       currentSession: state.currentSession,
+      sessions: state.sessions,
+      isSessionsLoading: state.isSessionsLoading,
       fetchSessions: state.fetchSessions,
-    }),
-    shallow,
-  )
-  const { fetchSystemSettings, hasSystemSettings } = useSettingsStore(
-    (state) => ({
-      fetchSystemSettings: state.fetchSystemSettings,
-      hasSystemSettings: Boolean(state.systemSettings),
     }),
     shallow,
   )
@@ -68,12 +56,6 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       router.replace(target)
     }
 
-    const ensureSessionsLoaded = async () => {
-      const state = useChatStore.getState()
-      if (state.sessions.length > 0) return
-      await fetchSessions()
-    }
-
     const ensureSelection = () => {
       if (cancelled) return
       if (normalizedSessionId === null) {
@@ -92,10 +74,8 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
         } else {
           const hasMatchedMessages = state.messageMetas.some((meta) => meta.sessionId === matched.id)
           if (state.messagesHydrated[matched.id] !== true) {
-            // 防止极端情况下刷新后会话已恢复但消息仍为空
             state.fetchMessages(matched.id)
           } else if (!hasMatchedMessages) {
-            // 已标记 hydrated 但内存中没有该会话消息（例如浏览器刚恢复）
             state.fetchMessages(matched.id)
           }
           state.fetchUsage(matched.id)
@@ -107,7 +87,7 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
         const fallback = state.sessions[0]
         state.selectSession(fallback.id)
         safeReplace(`/main/${fallback.id}`)
-      } else {
+      } else if (!state.isSessionsLoading) {
         safeReplace('/main')
       }
     }
@@ -118,7 +98,10 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
           const hasSessions = useChatStore.getState().sessions.length > 0
           setIsHydrating(!hasSessions)
         }
-        await ensureSessionsLoaded()
+        // bootstrap 负责预热；此处仅在仍为空时走 store 内 in-flight 去重 ensure
+        if (useChatStore.getState().sessions.length === 0) {
+          await fetchSessions()
+        }
       } finally {
         ensureSelection()
         if (!cancelled) {
@@ -127,57 +110,30 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       }
     })()
 
-    if (!hasSystemSettings) {
-      fetchSystemSettings()
-    }
-
     return () => {
       cancelled = true
     }
-  }, [fetchSessions, fetchSystemSettings, hasSystemSettings, normalizedSessionId, pathname, router])
+  }, [fetchSessions, normalizedSessionId, pathname, router, sessions.length, isSessionsLoading])
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
-      <AnimatePresence mode="wait" initial={false}>
-        {currentSession ? (
-          <motion.div
-            key="chat-interface"
-            variants={chatInterfaceVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={pageTransition}
-            className="flex-1 flex flex-col h-full min-h-0"
-          >
-            <ChatInterface />
-          </motion.div>
-        ) : isHydrating ? (
-          <motion.div
-            key="chat-hydrating"
-            variants={chatInterfaceVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={pageTransition}
-            className="flex-1 flex flex-col h-full min-h-0 items-center justify-center gap-3 text-sm text-muted-foreground"
-          >
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 border-border border-t-primary animate-spin" />
-            <span>正在恢复会话…</span>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="welcome-screen"
-            variants={welcomeScreenVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={pageTransition}
-            className="flex-1 flex flex-col h-full min-h-0"
-          >
-            <WelcomeScreen />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {currentSession ? (
+        <div key="chat-interface" className="flex-1 flex flex-col h-full min-h-0">
+          <ChatInterface />
+        </div>
+      ) : isHydrating ? (
+        <div
+          key="chat-hydrating"
+          className="flex-1 flex flex-col h-full min-h-0 items-center justify-center gap-3 text-sm text-muted-foreground"
+        >
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 border-border border-t-primary animate-spin" />
+          <span>正在恢复会话…</span>
+        </div>
+      ) : (
+        <div key="welcome-screen" className="flex-1 flex flex-col h-full min-h-0">
+          <WelcomeScreen />
+        </div>
+      )}
     </div>
   )
 }

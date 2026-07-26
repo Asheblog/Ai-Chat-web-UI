@@ -60,18 +60,21 @@ vi.mock('@/store/chat-store', () => ({
 
 // --- Mock settings store ---
 vi.mock('@/store/settings-store', () => ({
-  useSettingsStore: () => ({
-    systemSettings: {
-      reasoningEnabled: true,
-      openaiReasoningEffort: 'unset',
-      chatSystemPrompt: '',
-      webSearchAgentEnable: false,
-      webSearchHasApiKey: false,
-      pythonToolEnable: true,
-      brandText: 'AIChat',
-    },
-    publicBrandText: 'AIChat',
-  }),
+  useSettingsStore: (selector?: any) => {
+    const state = {
+      systemSettings: {
+        reasoningEnabled: true,
+        openaiReasoningEffort: 'unset',
+        chatSystemPrompt: '',
+        webSearchAgentEnable: false,
+        webSearchHasApiKey: false,
+        pythonToolEnable: true,
+        brandText: 'AIChat',
+      },
+      publicBrandText: 'AIChat',
+    }
+    return typeof selector === 'function' ? selector(state) : state
+  },
 }))
 
 // --- Mock models store ---
@@ -86,10 +89,13 @@ const testModel = {
 }
 
 vi.mock('@/store/models-store', () => ({
-  useModelsStore: () => ({
-    models: [testModel],
-    fetchAll: vi.fn().mockResolvedValue(undefined),
-  }),
+  useModelsStore: (selector?: any) => {
+    const state = {
+      models: [testModel],
+      fetchAll: vi.fn().mockResolvedValue(undefined),
+    }
+    return typeof selector === 'function' ? selector(state) : state
+  },
 }))
 
 // --- Mock auth store ---
@@ -216,7 +222,10 @@ describe('useWelcomeScreenViewModel — skill binding in handleCreate', () => {
   it('handleCreate binds enabled skills to session and includes them in streamMessage options.skills.enabled', async () => {
     const { result } = renderHook(() => useWelcomeScreenViewModel())
 
-    // Wait for useSkillsSelection draft mode to load catalog
+    await act(async () => {
+      result.current.form.advancedOptions.onActivateSkillPanel?.()
+    })
+
     await waitFor(() => {
       expect(result.current.form.advancedOptions.skillOptions.length).toBeGreaterThan(0)
     })
