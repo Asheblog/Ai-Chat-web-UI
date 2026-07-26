@@ -15,11 +15,9 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
   const router = useRouter()
   const pathname = usePathname()
   const redirectedRef = useRef<string | null>(null)
-  const { currentSession, sessions, isSessionsLoading, fetchSessions } = useChatStore(
+  const { currentSession, fetchSessions } = useChatStore(
     (state) => ({
       currentSession: state.currentSession,
-      sessions: state.sessions,
-      isSessionsLoading: state.isSessionsLoading,
       fetchSessions: state.fetchSessions,
     }),
     shallow,
@@ -98,7 +96,9 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
           const hasSessions = useChatStore.getState().sessions.length > 0
           setIsHydrating(!hasSessions)
         }
-        // bootstrap 负责预热；此处仅在仍为空时走 store 内 in-flight 去重 ensure
+        // bootstrap 负责预热；此处仅在仍为空时走 store 内 in-flight 去重 ensure。
+        // 禁止把 isSessionsLoading / sessions.length 放进 deps：空列表时 fetchSessions
+        // 会翻转 loading，从而反复触发本 effect → /sessions + /sessions/usage 死循环。
         if (useChatStore.getState().sessions.length === 0) {
           await fetchSessions()
         }
@@ -113,7 +113,7 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
     return () => {
       cancelled = true
     }
-  }, [fetchSessions, normalizedSessionId, pathname, router, sessions.length, isSessionsLoading])
+  }, [fetchSessions, normalizedSessionId, pathname, router])
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">

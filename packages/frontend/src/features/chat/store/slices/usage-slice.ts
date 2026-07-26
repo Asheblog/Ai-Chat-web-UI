@@ -9,43 +9,53 @@ export const createUsageSlice: ChatSliceCreator<
     usageTotals: import('@/types').UsageTotals | null
     sessionUsageTotalsMap: Record<number, import('@/types').UsageTotals>
   }
-> = (set) => ({
-  usageCurrent: null,
-  usageLastRound: null,
-  usageTotals: null,
-  sessionUsageTotalsMap: {},
+> = (set) => {
+  let fetchSessionsUsageInFlight: Promise<void> | null = null
 
-  fetchSessionsUsage: async () => {
-    try {
-      const res = await getSessionsUsage()
-      const arr = res.data as Array<{ sessionId: number; totals: import('@/types').UsageTotals }>
-      const map: Record<number, import('@/types').UsageTotals> = {}
-      ;(arr || []).forEach((item) => {
-        map[item.sessionId] = item.totals
-      })
-      set({ sessionUsageTotalsMap: map })
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        // eslint-disable-next-line no-console
-        console.debug('[fetchSessionsUsage] error', (error as any)?.message || error)
-      }
-    }
-  },
+  return {
+    usageCurrent: null,
+    usageLastRound: null,
+    usageTotals: null,
+    sessionUsageTotalsMap: {},
 
-  fetchUsage: async (sessionId: number) => {
-    try {
-      const res = await getUsage(sessionId)
-      const data = res.data || {}
-      set({
-        usageTotals: data.totals || null,
-        usageLastRound: data.last_round || null,
-        usageCurrent: data.current || null,
-      })
-    } catch (error: any) {
-      if (process.env.NODE_ENV !== 'production') {
-        // eslint-disable-next-line no-console
-        console.debug('[fetchUsage] error', error?.message || error)
+    fetchSessionsUsage: async () => {
+      if (fetchSessionsUsageInFlight) return fetchSessionsUsageInFlight
+      fetchSessionsUsageInFlight = (async () => {
+        try {
+          const res = await getSessionsUsage()
+          const arr = res.data as Array<{ sessionId: number; totals: import('@/types').UsageTotals }>
+          const map: Record<number, import('@/types').UsageTotals> = {}
+          ;(arr || []).forEach((item) => {
+            map[item.sessionId] = item.totals
+          })
+          set({ sessionUsageTotalsMap: map })
+        } catch (error) {
+          if (process.env.NODE_ENV !== 'production') {
+            // eslint-disable-next-line no-console
+            console.debug('[fetchSessionsUsage] error', (error as any)?.message || error)
+          }
+        } finally {
+          fetchSessionsUsageInFlight = null
+        }
+      })()
+      return fetchSessionsUsageInFlight
+    },
+
+    fetchUsage: async (sessionId: number) => {
+      try {
+        const res = await getUsage(sessionId)
+        const data = res.data || {}
+        set({
+          usageTotals: data.totals || null,
+          usageLastRound: data.last_round || null,
+          usageCurrent: data.current || null,
+        })
+      } catch (error: any) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.debug('[fetchUsage] error', error?.message || error)
+        }
       }
-    }
-  },
-})
+    },
+  }
+}

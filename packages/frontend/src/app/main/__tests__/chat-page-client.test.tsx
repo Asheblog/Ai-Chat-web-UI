@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import { ChatPageClient } from '../chat-page-client'
 import { useChatStore } from '@/store/chat-store'
 import type { ChatSession } from '@/types'
+import * as chatApi from '@/features/chat/api'
 
 vi.mock('@/components/welcome-screen', () => ({
   WelcomeScreen: () => <div data-testid="welcome-screen">欢迎页</div>,
@@ -71,6 +72,28 @@ const emptyStoreState = () => ({
 describe('ChatPageClient - /main route regression', () => {
   beforeEach(() => {
     useChatStore.setState(emptyStoreState())
+    vi.mocked(chatApi.getSessions).mockClear()
+    vi.mocked(chatApi.getSessionsUsage).mockClear()
+    vi.mocked(chatApi.getSessions).mockResolvedValue({ data: [] })
+    vi.mocked(chatApi.getSessionsUsage).mockResolvedValue({ success: true, data: [] })
+  })
+
+  it('should not loop sessions/usage fetches on empty homepage', async () => {
+    render(<ChatPageClient initialSessionId={null} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('welcome-screen')).toBeInTheDocument()
+    })
+
+    // 等若干宏任务：若 effect 依赖 isSessionsLoading，空列表会反复 fetchSessions→usage
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    expect(chatApi.getSessions).toHaveBeenCalledTimes(1)
+    expect(chatApi.getSessionsUsage).toHaveBeenCalledTimes(1)
   })
 
   it('should clear currentSession and render WelcomeScreen when entering /main with active session', async () => {
