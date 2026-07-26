@@ -661,13 +661,16 @@ export class ChatRequestBuilder {
     const extraHeaders = this.parseHeadersJson(params.session.connection.headersJson)
     let decryptedKey: string | undefined
     if (params.session.connection.authType === 'bearer') {
-      if ((params.session.connection as any).secretVaultId && this.secretVault) {
-        decryptedKey = await this.secretVault.decryptById((params.session.connection as any).secretVaultId).catch(() => {
-          throw new ConnectionServiceError('无法解密连接密钥，Secret Vault 解密失败', 500)
-        })
-      } else {
+      const secretVaultId = (params.session.connection as any).secretVaultId
+      if (!secretVaultId) {
         throw new ConnectionServiceError('连接缺少 secretVaultId，无法获取 API Key', 400)
       }
+      if (!this.secretVault) {
+        throw new ConnectionServiceError('Secret Vault 未注入，无法解密 API Key', 500)
+      }
+      decryptedKey = await this.secretVault.decryptById(secretVaultId).catch(() => {
+        throw new ConnectionServiceError('无法解密连接密钥，Secret Vault 解密失败', 500)
+      })
     }
 
     const providerHeaders = await buildHeaders(

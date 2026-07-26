@@ -159,4 +159,44 @@ describe('QuotaService', () => {
     expect(record?.usedCount).toBe(0)
     expect(record?.lastResetAt?.toISOString()).toBe('2024-01-03T00:00:00.000Z')
   })
+
+  test('loads quota policy before entering the write transaction', async () => {
+    const { prisma } = createMockPrisma()
+    const order: string[] = []
+    const getQuotaPolicy = jest.fn(async () => {
+      order.push('policy')
+      return defaultPolicy
+    })
+    prisma.$transaction = jest.fn(async (fn: any) => {
+      order.push('tx')
+      return fn(prisma)
+    })
+    const service = new QuotaService({
+      prisma: prisma as any,
+      getQuotaPolicy,
+      now: () => new Date('2024-01-01T00:00:00Z'),
+    })
+
+    await service.consumeActorQuota(userActor)
+
+    expect(getQuotaPolicy).toHaveBeenCalledTimes(1)
+    expect(order).toEqual(['policy', 'tx'])
+  })
+
+  test('reuses the provided transaction client when loading quota policy', async () => {
+    const { prisma } = createMockPrisma()
+    const tx = { ...prisma, __tag: 'tx' }
+    const getQuotaPolicy = jest.fn(async () => defaultPolicy)
+    const service = new QuotaService({
+      prisma: prisma as any,
+      getQuotaPolicy,
+      now: () => new Date('2024-01-01T00:00:00Z'),
+    })
+
+    const txSpy = jest.spyOn(prisma, '$transaction')
+    await service.consumeActorQuota(userActor, { tx: tx as any })
+
+    expect(getQuotaPolicy).toHaveBeenCalledWith(tx)
+    expect(txSpy).not.toHaveBeenCalled()
+  })
 })

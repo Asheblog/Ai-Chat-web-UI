@@ -1,3 +1,11 @@
+jest.mock('../../../../utils/system-settings', () => ({
+  getQuotaPolicy: jest.fn(async () => ({
+    anonymousDailyQuota: 10,
+    defaultUserDailyQuota: 100,
+    anonymousRetentionDays: 1,
+  })),
+}))
+
 import {
   setMessageServiceDeps,
   resetMessageServiceDeps,

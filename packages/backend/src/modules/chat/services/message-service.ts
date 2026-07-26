@@ -6,6 +6,7 @@ import {
   consumeActorQuota as defaultConsumeActorQuota,
   inspectActorQuota as defaultInspectActorQuota,
 } from '../../../utils/quota'
+import { getQuotaPolicy } from '../../../utils/system-settings'
 import { MESSAGE_DEDUPE_WINDOW_MS, QuotaExceededError } from '../chat-common'
 
 type IncomingImage = { data: string; mime: string }
@@ -78,6 +79,8 @@ export const createUserMessageWithQuota = async (
   let userMessageRecord: PrismaMessage | null = null
   let messageWasReused = false
   let quotaSnapshot: UsageQuotaSnapshot | null = null
+  // 事务外预取，避免 SQLite connection_limit=1 时事务内再读 settings 自我死锁
+  const quotaPolicy = await getQuotaPolicy()
 
   try {
     await deps.prisma.$transaction(async (tx) => {
@@ -93,7 +96,7 @@ export const createUserMessageWithQuota = async (
         if (existing) {
           userMessageRecord = existing
           messageWasReused = true
-          quotaSnapshot = await deps.inspectActorQuota(actor, { tx, now })
+          quotaSnapshot = await deps.inspectActorQuota(actor, { tx, now, policy: quotaPolicy })
           return
         }
       } else {
@@ -104,12 +107,12 @@ export const createUserMessageWithQuota = async (
         if (hasRecentDuplicate(existing, now)) {
           userMessageRecord = existing
           messageWasReused = true
-          quotaSnapshot = await deps.inspectActorQuota(actor, { tx, now })
+          quotaSnapshot = await deps.inspectActorQuota(actor, { tx, now, policy: quotaPolicy })
           return
         }
       }
 
-      const consumeResult = await deps.consumeActorQuota(actor, { tx, now })
+      const consumeResult = await deps.consumeActorQuota(actor, { tx, now, policy: quotaPolicy })
       if (!consumeResult.success) {
         throw new QuotaExceededError(consumeResult.snapshot)
       }

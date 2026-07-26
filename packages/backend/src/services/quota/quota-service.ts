@@ -25,6 +25,7 @@ interface ProcessOptions {
   cost: number
   mutate: boolean
   now: Date
+  policy: QuotaPolicy
 }
 
 export interface ProcessResult {
@@ -33,15 +34,20 @@ export interface ProcessResult {
   reason?: 'OVER_LIMIT'
 }
 
+type QuotaPolicy = Awaited<ReturnType<typeof defaultGetQuotaPolicy>>
+
 export interface ConsumeQuotaOptions {
   cost?: number
   tx?: Prisma.TransactionClient
   now?: Date
+  /** 事务外预取时可传入，避免事务内再读 settings */
+  policy?: QuotaPolicy
 }
 
 export interface InspectQuotaOptions {
   tx?: Prisma.TransactionClient
   now?: Date
+  policy?: QuotaPolicy
 }
 
 const startOfUtcDay = (date: Date): Date => {
@@ -106,20 +112,25 @@ export class QuotaService {
     const cost = Math.max(0, options.cost ?? 1)
     const now = options.now ?? this.now()
     if (options.tx) {
-      return this.processQuota(actor, options.tx, { cost, mutate: true, now })
+      // 已在交互事务内时必须走同一 client 或预传 policy；SQLite connection_limit=1 下再用默认 client 会自我死锁
+      const policy = options.policy ?? (await this.getQuotaPolicy(options.tx))
+      return this.processQuota(actor, options.tx, { cost, mutate: true, now, policy })
     }
+    const policy = options.policy ?? (await this.getQuotaPolicy())
     return this.prisma.$transaction((tx) =>
-      this.processQuota(actor, tx, { cost, mutate: true, now }),
+      this.processQuota(actor, tx, { cost, mutate: true, now, policy }),
     )
   }
 
   async inspectActorQuota(actor: Actor, options: InspectQuotaOptions = {}): Promise<UsageQuotaSnapshot> {
     const now = options.now ?? this.now()
     if (options.tx) {
-      const result = await this.processQuota(actor, options.tx, { cost: 0, mutate: false, now })
+      const policy = options.policy ?? (await this.getQuotaPolicy(options.tx))
+      const result = await this.processQuota(actor, options.tx, { cost: 0, mutate: false, now, policy })
       return result.snapshot
     }
-    const result = await this.processQuota(actor, this.prisma, { cost: 0, mutate: false, now })
+    const policy = options.policy ?? (await this.getQuotaPolicy())
+    const result = await this.processQuota(actor, this.prisma, { cost: 0, mutate: false, now, policy })
     return result.snapshot
   }
 
@@ -192,7 +203,7 @@ export class QuotaService {
     options: ProcessOptions,
   ): Promise<ProcessResult> {
     const { scope, identifier, userId } = this.resolveScope(actor)
-    const { anonymousDailyQuota, defaultUserDailyQuota } = await this.getQuotaPolicy()
+    const { anonymousDailyQuota, defaultUserDailyQuota } = options.policy
     const defaultLimit = scope === 'USER' ? defaultUserDailyQuota : anonymousDailyQuota
 
     let record = await client.usageQuota.findUnique({

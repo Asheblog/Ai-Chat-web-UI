@@ -58,4 +58,26 @@ describe('AppContainer', () => {
 
     expect(repo.findCachedModel).toHaveBeenCalledWith('gpt-4o')
   })
+
+  it('binds secretVault into model catalog refresh callbacks', async () => {
+    const modelCatalog = jest.requireMock('../../utils/model-catalog') as {
+      refreshAllModelCatalog: jest.Mock
+    }
+    modelCatalog.refreshAllModelCatalog.mockClear()
+
+    const container = createAppContainer()
+    await container.modelCatalogService.refreshAllModels()
+    expect(modelCatalog.refreshAllModelCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({ decryptById: expect.any(Function) }),
+    )
+  })
+
+  it('wires battle executor ChatRequestBuilder with secretVault', () => {
+    const container = createAppContainer()
+    const requestBuilder = (container.battleService as any).executor?.requestBuilder
+    expect(requestBuilder).toBeDefined()
+    expect((requestBuilder as any).secretVault).toEqual(
+      expect.objectContaining({ decryptById: expect.any(Function) }),
+    )
+  })
 })

@@ -30,7 +30,9 @@ import { TaskTraceFileService } from '../services/task-trace/task-trace-file-ser
 import { ChatService } from '../services/chat/chat-service'
 import { ShareService } from '../services/shares'
 import { BattleService } from '../services/battle/battle-service'
+import { BattleExecutor } from '../services/battle/battle-executor'
 import { BattleImageService } from '../services/battle/battle-image-service'
+import { ChatRequestBuilder } from '../modules/chat/services/chat-request-builder'
 import { PromptTemplateService } from '../services/prompt-templates/prompt-template-service'
 import { ArtifactService } from '../services/workspace/artifact-service'
 import { WorkspaceService } from '../services/workspace/workspace-service'
@@ -187,7 +189,8 @@ export class AppContainer {
       new ConnectionService({
         repository: this.connectionRepository,
         secretVault,
-        refreshModelCatalog: refreshModelCatalogForConnection,
+        // 刷新模型目录必须带上 vault，否则 bearer 连接会以空 Key 请求上游并 401
+        refreshModelCatalog: (conn) => refreshModelCatalogForConnection(conn, secretVault),
         verifyConnection,
         logger: log,
       })
@@ -232,6 +235,13 @@ export class AppContainer {
         prisma: this.context.prisma,
         modelResolver: this.modelResolverService,
         imageService: new BattleImageService(),
+        // 对战执行必须复用带 vault 的 ChatRequestBuilder，否则 bearer 连接无法解密 API Key
+        executor: new BattleExecutor({
+          requestBuilder: new ChatRequestBuilder({
+            prisma: this.context.prisma,
+            secretVault,
+          }),
+        }),
       })
     registry.register(SERVICE_KEYS.battleService, this.battleService)
 
@@ -322,9 +332,11 @@ export class AppContainer {
       deps.modelCatalogService ??
       new ModelCatalogService({
         prisma: this.context.prisma,
-        refreshAllModelCatalog,
-        refreshModelCatalogForConnections,
-        refreshModelCatalogForConnectionId,
+        refreshAllModelCatalog: () => refreshAllModelCatalog(secretVault),
+        refreshModelCatalogForConnections: (connections) =>
+          refreshModelCatalogForConnections(connections, secretVault),
+        refreshModelCatalogForConnectionId: (connectionId) =>
+          refreshModelCatalogForConnectionId(connectionId, secretVault),
         computeCapabilities,
         deriveChannelName,
         parseCapabilityEnvelope,
