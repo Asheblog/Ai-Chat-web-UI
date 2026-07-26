@@ -314,7 +314,7 @@ export function SystemConnectionsPage() {
       >
         <DestructiveConfirmDialogContent
           title="导入连接与密钥"
-          description={`将从 JSON 文件合并导入 ${importPayload?.connections.length ?? 0} 个端点组及其 API Key，已存在的端点组会更新，新 Key 会追加。`}
+          description={`将从 JSON 文件按端点签名合并导入 ${importPayload?.connections.length ?? 0} 个端点组；已存在端点仅追加新 Key，不删除已有连接。`}
           warning="请确认文件来源可信；导入会写入明文密钥到系统。"
           actionLabel={importing ? "导入中..." : "确认导入"}
           actionDisabled={importing}

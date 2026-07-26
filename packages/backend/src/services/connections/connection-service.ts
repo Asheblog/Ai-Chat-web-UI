@@ -555,7 +555,8 @@ export class ConnectionService {
         continue
       }
 
-      const authType = connection.authType ?? 'bearer'
+      const base = existing.rows[0]
+      const authType = (base.authType as AuthType) || 'bearer'
       const existingPlaintextSet = new Set<string>()
 
       for (const row of existing.rows) {
@@ -570,6 +571,7 @@ export class ConnectionService {
           const plain = await this.secretVault.decryptById(row.secretVaultId)
           existingPlaintextSet.add(plain)
         } catch {
+          skippedKeys += 1
           skippedReasons.push(
             `已有 Key #${row.id} (${normalizeOptionalString(row.apiKeyLabel) || 'Key'}): 解密失败，无法去重比对`,
           )
@@ -599,17 +601,30 @@ export class ConnectionService {
 
       if (keysToAdd.length === 0) continue
 
-      const apiKeys: ConnectionApiKeyPayload[] = [
-        ...existing.rows.map((row) => ({
-          id: row.id,
-          apiKeyLabel: normalizeOptionalString(row.apiKeyLabel) || undefined,
-          modelIds: parseStringArray(row.modelIdsJson),
-          enable: Boolean(row.enable),
-        })),
-        ...keysToAdd,
-      ]
+      // 同签名合并时保留目标端点既有共享配置，仅追加 Key
+      const mergePayload: ConnectionPayload = {
+        provider: base.provider as ProviderType,
+        vendor: (base.vendor as VendorType | null) ?? undefined,
+        baseUrl: sanitizeBaseUrl(base.baseUrl),
+        authType,
+        headers: parseRecord(base.headersJson),
+        azureApiVersion: base.azureApiVersion ?? undefined,
+        prefixId: base.prefixId ?? undefined,
+        tags: parseTags(base.tagsJson),
+        connectionType: (base.connectionType || 'external') as 'external' | 'local',
+        defaultCapabilities: parseDefaultCapabilities(base.defaultCapabilitiesJson),
+        apiKeys: [
+          ...existing.rows.map((row) => ({
+            id: row.id,
+            apiKeyLabel: normalizeOptionalString(row.apiKeyLabel) || undefined,
+            modelIds: parseStringArray(row.modelIdsJson),
+            enable: Boolean(row.enable),
+          })),
+          ...keysToAdd,
+        ],
+      }
 
-      await this.updateSystemConnection(existing.id, { ...connection, apiKeys })
+      await this.updateSystemConnection(existing.id, mergePayload)
       updatedGroups += 1
       addedKeys += keysToAdd.length
       signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemConnections())

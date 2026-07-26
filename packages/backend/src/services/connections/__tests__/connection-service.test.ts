@@ -439,6 +439,35 @@ describe('ConnectionService', () => {
       expect(createPayload).toEqual(expect.objectContaining({ apiKeyLabel: '追加 Key' }))
     })
 
+    it('counts existing-key decrypt failures in skippedKeys during merge dedupe', async () => {
+      const { service, repository, secretVault } = buildService()
+      repository.listSystemConnections.mockResolvedValue([
+        { ...baseConnection, id: 7, apiKeyLabel: '坏 Key', secretVaultId: 100 } as any,
+      ])
+      secretVault!.decryptById.mockRejectedValue(new Error('Vault corrupted'))
+      repository.updateSystemConnection.mockResolvedValue({
+        ...baseConnection, id: 7, apiKeyLabel: '坏 Key', secretVaultId: 100,
+      } as any)
+      repository.createSystemConnection.mockResolvedValue({
+        ...baseConnection, id: 8, apiKeyLabel: '新 Key', secretVaultId: 200,
+      } as any)
+
+      const result = await service.importSystemConnections({
+        schemaVersion: 1,
+        connections: [{
+          provider: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          authType: 'bearer',
+          apiKeys: [{ apiKeyLabel: '新 Key', apiKey: 'fresh-import-key', modelIds: ['gpt-4o'] }],
+        }],
+      })
+
+      expect(result.skippedKeys).toBe(1)
+      expect(result.addedKeys).toBe(1)
+      expect(result.updatedGroups).toBe(1)
+      expect(result.skippedReasons.some((reason) => reason.includes('解密失败'))).toBe(true)
+    })
+
     it('calls logger.info without any plaintext apiKey substring in meta', async () => {
       const { service, repository, secretVault, logger } = buildService()
       const sensitiveKey = 'super-secret-import-key-999'
