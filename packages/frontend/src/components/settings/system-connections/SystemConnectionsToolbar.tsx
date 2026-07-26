@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { AlertTriangle, CheckCircle2, Filter, Loader2, PlugZap, Plus, RefreshCw, Search, Server, X } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Download, Filter, Loader2, PlugZap, Plus, RefreshCw, Search, Server, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -43,7 +43,11 @@ type SystemConnectionsToolbarProps = {
   onStatusFilterChange: (value: string) => void
   onHealthFilterChange: (value: string) => void
   onRefresh: () => void
+  onImport: () => void
+  onExport: () => void
   onCreate: () => void
+  exporting?: boolean
+  importing?: boolean
 }
 
 export function SystemConnectionsToolbar({
@@ -59,7 +63,11 @@ export function SystemConnectionsToolbar({
   onStatusFilterChange,
   onHealthFilterChange,
   onRefresh,
+  onImport,
+  onExport,
   onCreate,
+  exporting = false,
+  importing = false,
 }: SystemConnectionsToolbarProps) {
   return (
     <section className="v2-panel overflow-hidden bg-background/92 shadow-none">
@@ -74,7 +82,25 @@ export function SystemConnectionsToolbar({
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button variant="outline" onClick={onRefresh} disabled={loading} className="h-10 bg-background">
+          <Button
+            variant="outline"
+            onClick={onImport}
+            disabled={loading || exporting || importing}
+            className="h-10 bg-background"
+          >
+            {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            导入
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onExport}
+            disabled={loading || exporting || importing}
+            className="h-10 bg-background"
+          >
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            导出
+          </Button>
+          <Button variant="outline" onClick={onRefresh} disabled={loading || exporting || importing} className="h-10 bg-background">
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             刷新
           </Button>

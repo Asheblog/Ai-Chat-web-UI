@@ -282,6 +282,8 @@ app.get('/api', (c) => {
       connections: {
         'GET /api/connections': '系统端点组列表（管理员，多 Key 视图）',
         'POST /api/connections': '新增系统端点组（管理员，多 Key）',
+        'GET /api/connections/export': '导出系统端点组及明文 API Key（管理员）',
+        'POST /api/connections/import': '导入系统端点组，按端点签名合并 Key（管理员）',
         'PUT /api/connections/:id': '更新系统端点组（管理员，多 Key）',
         'DELETE /api/connections/:id': '删除系统端点组（管理员，多 Key）',
         'POST /api/connections/verify': '并发验证端点组下的 Key',

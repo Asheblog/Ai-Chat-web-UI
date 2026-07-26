@@ -1,9 +1,17 @@
 "use client"
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { AlertDialog } from "@/components/ui/alert-dialog"
 import { DestructiveConfirmDialogContent } from "@/components/ui/destructive-confirm-dialog"
-import type { SystemConnectionGroup } from "@/services/system-connections"
+import type {
+  SystemConnectionGroup,
+  SystemConnectionsImportPayload,
+} from "@/services/system-connections"
+import {
+  downloadConnectionsExport,
+  exportSystemConnections,
+  importSystemConnections,
+} from "@/services/system-connections"
 import {
   SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
   useSystemConnections,
@@ -57,6 +65,14 @@ export function SystemConnectionsPage() {
   const [detailIntent, setDetailIntent] = useState<DetailIntent>("view")
   const [editorFocus, setEditorFocus] = useState<EditorFocus>("basic")
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [confirmExportOpen, setConfirmExportOpen] = useState(false)
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importPayload, setImportPayload] = useState<SystemConnectionsImportPayload | null>(null)
+  const [pageError, setPageError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const expandedGroup = useMemo(
     () => connections.find((group) => group.id === expandedGroupId) || null,
@@ -110,6 +126,100 @@ export function SystemConnectionsPage() {
     if (detailIntent !== "view" || !expandedGroup || editing?.id === expandedGroup.id) return
     startEdit(expandedGroup)
   }, [detailIntent, editing?.id, expandedGroup, startEdit])
+
+  useEffect(() => {
+    if (!successMessage) return
+    const timer = window.setTimeout(() => setSuccessMessage(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [successMessage])
+
+  const displayError = pageError || error
+
+  const parseImportFile = (raw: unknown): SystemConnectionsImportPayload => {
+    if (!raw || typeof raw !== "object") {
+      throw new Error("JSON 格式无效")
+    }
+    const json = raw as Record<string, unknown>
+    if (json.schemaVersion !== 1) {
+      throw new Error("不支持的 schemaVersion，当前仅支持版本 1")
+    }
+    if (!Array.isArray(json.connections)) {
+      throw new Error("缺少 connections 数组")
+    }
+    return {
+      schemaVersion: json.schemaVersion,
+      exportedAt: typeof json.exportedAt === "string" ? json.exportedAt : undefined,
+      connections: json.connections,
+      skippedKeys: typeof json.skippedKeys === "number" ? json.skippedKeys : undefined,
+      skippedReasons: Array.isArray(json.skippedReasons)
+        ? json.skippedReasons.filter((item): item is string => typeof item === "string")
+        : undefined,
+    }
+  }
+
+  const handleExportRequest = () => {
+    setConfirmExportOpen(true)
+  }
+
+  const handleExportConfirm = async () => {
+    setConfirmExportOpen(false)
+    setPageError(null)
+    setExporting(true)
+    try {
+      const data = await exportSystemConnections()
+      downloadConnectionsExport(data)
+      const skippedHint =
+        data.skippedKeys && data.skippedKeys > 0
+          ? `，跳过 ${data.skippedKeys} 个无法解密的 Key`
+          : ""
+      setSuccessMessage(`已导出 ${data.connections.length} 个端点组${skippedHint}`)
+    } catch (err: any) {
+      setPageError(err?.response?.data?.error || err?.message || "导出失败")
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+
+    setPageError(null)
+    try {
+      const text = await file.text()
+      const parsed = parseImportFile(JSON.parse(text))
+      setImportPayload(parsed)
+      setConfirmImportOpen(true)
+    } catch (err: any) {
+      setPageError(err?.message || "无法解析导入文件")
+    }
+  }
+
+  const handleImportConfirm = async () => {
+    if (!importPayload) return
+    setConfirmImportOpen(false)
+    setPageError(null)
+    setImporting(true)
+    try {
+      const result = await importSystemConnections(importPayload)
+      const skippedHint =
+        result.skippedKeys > 0 ? `，跳过 ${result.skippedKeys} 个 Key` : ""
+      setSuccessMessage(
+        `导入完成：新增 ${result.createdGroups} 组、更新 ${result.updatedGroups} 组、追加 ${result.addedKeys} 个 Key${skippedHint}`,
+      )
+      setImportPayload(null)
+      await refresh()
+    } catch (err: any) {
+      setPageError(err?.response?.data?.error || err?.message || "导入失败")
+    } finally {
+      setImporting(false)
+    }
+  }
 
   const handleProviderChange = (value: string) => {
     setForm((prev) => {
@@ -182,9 +292,55 @@ export function SystemConnectionsPage() {
         />
       </AlertDialog>
 
-      {error ? (
+      <AlertDialog open={confirmExportOpen} onOpenChange={setConfirmExportOpen}>
+        <DestructiveConfirmDialogContent
+          title="导出连接与密钥"
+          description="将下载包含明文 API Key 的 JSON，仅用于环境迁移。"
+          warning="文件含敏感凭据，勿提交到仓库或外传。"
+          actionLabel={exporting ? "导出中..." : "确认导出"}
+          actionDisabled={exporting}
+          onAction={() => {
+            void handleExportConfirm()
+          }}
+        />
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmImportOpen}
+        onOpenChange={(open) => {
+          setConfirmImportOpen(open)
+          if (!open) setImportPayload(null)
+        }}
+      >
+        <DestructiveConfirmDialogContent
+          title="导入连接与密钥"
+          description={`将从 JSON 文件合并导入 ${importPayload?.connections.length ?? 0} 个端点组及其 API Key，已存在的端点组会更新，新 Key 会追加。`}
+          warning="请确认文件来源可信；导入会写入明文密钥到系统。"
+          actionLabel={importing ? "导入中..." : "确认导入"}
+          actionDisabled={importing}
+          onAction={() => {
+            void handleImportConfirm()
+          }}
+        />
+      </AlertDialog>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={handleImportFileChange}
+      />
+
+      {displayError ? (
         <div role="alert" className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-          {error}
+          {displayError}
+        </div>
+      ) : null}
+
+      {successMessage ? (
+        <div role="status" className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {successMessage}
         </div>
       ) : null}
 
@@ -201,7 +357,11 @@ export function SystemConnectionsPage() {
         onStatusFilterChange={setStatusFilter}
         onHealthFilterChange={setHealthFilter}
         onRefresh={refresh}
+        onImport={handleImportClick}
+        onExport={handleExportRequest}
         onCreate={startCreate}
+        exporting={exporting}
+        importing={importing}
       />
 
       {detailIntent === "create" ? (

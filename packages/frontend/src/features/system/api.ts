@@ -111,6 +111,16 @@ export const verifySystemConnection = async (data: any) => {
   return response.data
 }
 
+export const exportSystemConnections = async () => {
+  const response = await client.get<ApiResponse<any>>('/connections/export')
+  return response.data
+}
+
+export const importSystemConnections = async (data: any) => {
+  const response = await client.post<ApiResponse<any>>('/connections/import', data)
+  return response.data
+}
+
 export const getUsers = async (params?: {
   page?: number
   limit?: number
