@@ -36,11 +36,32 @@ start.bat prod
 
 ### 服务端口
 
+生产默认（`docker-compose.yml`）为 all-in-one：`app` + `docker-socket-proxy`。
+
 | 服务 | 端口 | 说明 |
 |-----|------|------|
-| 前端 (Next.js) | 3000 | Web应用界面 |
-| 后端 (Hono API) | 8001 | API服务 |
+| app（前端入口） | 3000（可用 `FRONTEND_PORT` 映射） | Web 界面；`/api` 由容器内 Next 反代到 backend |
+| app（后端，容器内） | 8001 | 默认不映射到宿主机 |
+| docker-socket-proxy | 2375（仅容器网络） | Workspace 沙箱用，不对外暴露 |
 | Prisma Studio (开发环境) | 5555 | 数据库管理界面 |
+
+旧四容器拓扑见 `docker-compose.split.yml`。
+
+### 1Panel / Nginx 部署
+
+1. 使用 [`docs/deploy/1panel-compose.example.yml`](deploy/1panel-compose.example.yml) 或仓库根目录 `docker-compose.yml`
+2. 同目录配置 `.env`（至少 `JWT_SECRET`、`SECRET_VAULT_MASTER_KEY`、`WORKSPACE_ARTIFACT_SIGNING_SECRET`）
+3. 面板/Nginx 反代到宿主机前端端口（示例 `127.0.0.1:3555`），无需再单独反代后端 `8001`
+4. 从旧四容器迁移时保留同名数据卷，执行 `docker compose down`（不加 `-v`）后 `pull && up -d`
+5. 日常升级：`docker compose pull && docker compose up -d`
+
+镜像：
+
+| 用途 | 镜像 |
+| --- | --- |
+| 生产默认（推荐） | `ghcr.io/asheblog/aichat:latest` |
+| 拆分拓扑 backend | `ghcr.io/asheblog/aichat-backend:latest` |
+| 拆分拓扑 frontend | `ghcr.io/asheblog/aichat-frontend:latest` |
 
 ### 默认账户
 
@@ -212,16 +233,11 @@ server {
 
     # 前端
     location / {
+        # all-in-one：整站反代到前端端口即可（/api 由容器内 Next 转发）
         proxy_pass http://localhost:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    # API代理
-    location /api/ {
-        proxy_pass http://localhost:8001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
@@ -234,19 +250,18 @@ server {
 # 查看所有服务日志
 ./start.sh --logs
 
-# 查看特定服务日志
-docker logs aichat-backend
-docker logs aichat-frontend
+# 查看 all-in-one 应用日志
+docker logs ai-chat-web-ui-app
 
 # 实时跟踪日志
-docker logs -f aichat-backend
+docker logs -f ai-chat-web-ui-app
 ```
 
 ### 健康检查
 
 服务提供健康检查端点：
-- 前端: `http://localhost:3000/api/health`
-- 后端: `http://localhost:8001/api/health`
+- 应用入口: `http://localhost:3000/api/health`
+- 后端（容器内）: `http://localhost:8001/api/settings/health`（默认不映射到宿主机）
 
 ## 🚨 故障排除
 

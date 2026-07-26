@@ -1,7 +1,7 @@
 version: '3.8'
 
-# 生产默认：all-in-one（frontend + backend + rag-worker）+ docker-socket-proxy
-# 旧四容器拓扑见 docker-compose.split.yml
+# 可选：旧四容器拓扑（frontend / backend / rag-worker / docker-proxy）
+# 默认请使用 docker-compose.yml（all-in-one）
 
 services:
   docker-socket-proxy:
@@ -17,11 +17,9 @@ services:
     networks:
       - ai-chat-web-ui-network
 
-  app:
-    image: ghcr.io/asheblog/aichat:latest
-    container_name: ai-chat-web-ui-app
-    depends_on:
-      - docker-socket-proxy
+  backend:
+    image: ghcr.io/asheblog/aichat-backend:latest
+    container_name: ai-chat-web-ui-backend
     environment:
       - NODE_ENV=production
       - PORT=8001
@@ -61,34 +59,69 @@ services:
       - URL_READER_BROWSER_ENABLE=${URL_READER_BROWSER_ENABLE:-true}
       - URL_READER_BROWSER_EXECUTABLE_PATH=${URL_READER_BROWSER_EXECUTABLE_PATH:-/usr/bin/chromium}
       - URL_READER_RENDER_WAIT_MS=${URL_READER_RENDER_WAIT_MS:-1200}
-      - NEXT_PUBLIC_API_URL=/api
-      - BACKEND_HOST=127.0.0.1
-      - BACKEND_INTERNAL_PORT=8001
     volumes:
       - backend_data:/app/data
       - backend_logs:/app/logs
       - backend_images:/app/storage/chat-images
     ports:
-      # 对外只暴露前端；浏览器经 Next rewrites 访问 /api
-      - "${FRONTEND_PORT:-3000}:3000"
-      # 可选：直接暴露后端（调试用）。1Panel/Nginx 通常只反代 FRONTEND_PORT
-      # - "${BACKEND_PORT:-8001}:8001"
+      - "${BACKEND_PORT:-8001}:8001"
     restart: unless-stopped
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -fsS http://localhost:3000/api/health >/dev/null && curl -fsS http://localhost:8001/api/settings/health >/dev/null || exit 1",
-        ]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 40s
     networks:
       ai-chat-web-ui-network:
         aliases:
           - backend
-          - frontend
+
+  rag-worker:
+    image: ghcr.io/asheblog/aichat-backend:latest
+    container_name: ai-chat-web-ui-rag-worker
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/app.db
+      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
+      - SECRET_VAULT_MASTER_KEY=${SECRET_VAULT_MASTER_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NODE_OPTIONS=--max-old-space-size=1024
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/app/logs
+      - backend_images:/app/storage/chat-images
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai-chat-web-ui-network
+    working_dir: /app/packages/backend
+    command: ["node", "dist/workers/document-worker.js"]
+
+  frontend:
+    image: ghcr.io/asheblog/aichat-frontend:latest
+    container_name: ai-chat-web-ui-frontend
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=/api
+      - BACKEND_HOST=backend
+      - BACKEND_INTERNAL_PORT=8001
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ai-chat-web-ui-network
 
 volumes:
   backend_data:

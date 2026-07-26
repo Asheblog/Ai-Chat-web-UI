@@ -324,6 +324,12 @@ else
   echo "[entrypoint] Skip Python runtime reconcile on start (PYTHON_RUNTIME_RECONCILE_ON_START=$RECONCILE_ON_START_FLAG)"
 fi
 
+# all-in-one 镜像会先跑完初始化，再交给 supervisord 拉起多进程
+if [ "${1:-}" = "--init-only" ] || [ "${APP_INIT_ONLY:-0}" = "1" ]; then
+  echo "[entrypoint] Init complete (init-only); skipping backend process start"
+  exit 0
+fi
+
 echo "[entrypoint] Starting backend service..."
 if command -v su-exec >/dev/null 2>&1; then
   exec su-exec backend node dist/index.js

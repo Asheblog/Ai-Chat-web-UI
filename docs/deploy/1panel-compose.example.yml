@@ -1,7 +1,13 @@
-version: '3.8'
+# 1Panel / 单机生产示例（all-in-one）
+# 用法：
+# 1) 将本文件内容粘贴为编排，或另存为 docker-compose.yml
+# 2) 同目录创建 .env，填入 JWT_SECRET / SECRET_VAULT_MASTER_KEY / WORKSPACE_ARTIFACT_SIGNING_SECRET
+# 3) 确认卷名与旧环境一致（下方 name: 已对齐旧部署）
+# 4) Nginx/1Panel 反代到 127.0.0.1:3555 即可，无需再反代 3556
+#
+# 升级：docker compose pull && docker compose up -d
 
-# 生产默认：all-in-one（frontend + backend + rag-worker）+ docker-socket-proxy
-# 旧四容器拓扑见 docker-compose.split.yml
+version: '3.8'
 
 services:
   docker-socket-proxy:
@@ -22,20 +28,21 @@ services:
     container_name: ai-chat-web-ui-app
     depends_on:
       - docker-socket-proxy
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=8001
       - DATABASE_URL=file:/app/data/app.db
-      - NODE_OPTIONS=${BACKEND_NODE_OPTIONS:---max-old-space-size=1024}
-      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
-      - SECRET_VAULT_MASTER_KEY=${SECRET_VAULT_MASTER_KEY}
+      - NODE_OPTIONS=--max-old-space-size=1024
       - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-120000}
       - ENABLE_CORS=${ENABLE_CORS:-false}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      - CORS_ORIGIN=${CORS_ORIGIN:-https://aichat.asheblog.org}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DB_INIT_ON_START=${DB_INIT_ON_START:-false}
       - PYTHON_RUNTIME_RECONCILE_ON_START=${PYTHON_RUNTIME_RECONCILE_ON_START:-true}
       - SKILL_STORAGE_ROOT=/app/data/skills
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
       - WORKSPACE_TOOL_ENABLE=${WORKSPACE_TOOL_ENABLE:-true}
       - WORKSPACE_ROOT_DIR=${WORKSPACE_ROOT_DIR:-/app/data/workspaces/chat}
       - WORKSPACE_ARTIFACT_TTL_MINUTES=${WORKSPACE_ARTIFACT_TTL_MINUTES:-60}
@@ -45,12 +52,10 @@ services:
       - WORKSPACE_ARTIFACT_MAX_BYTES=${WORKSPACE_ARTIFACT_MAX_BYTES:-104857600}
       - WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE=${WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE:-20}
       - WORKSPACE_RUN_TIMEOUT_MS=${WORKSPACE_RUN_TIMEOUT_MS:-120000}
-      - DOCKER_HOST=tcp://docker-socket-proxy:2375
       - WORKSPACE_DOCKER_IMAGE=${WORKSPACE_DOCKER_IMAGE:-python:3.11-slim}
       - WORKSPACE_DOCKER_CPUS=${WORKSPACE_DOCKER_CPUS:-1.0}
       - WORKSPACE_DOCKER_MEMORY=${WORKSPACE_DOCKER_MEMORY:-1g}
       - WORKSPACE_DOCKER_PIDS_LIMIT=${WORKSPACE_DOCKER_PIDS_LIMIT:-256}
-      - WORKSPACE_ARTIFACT_SIGNING_SECRET=${WORKSPACE_ARTIFACT_SIGNING_SECRET:-replace-with-strong-secret}
       - WORKSPACE_LIST_MAX_ENTRIES=${WORKSPACE_LIST_MAX_ENTRIES:-500}
       - WORKSPACE_READ_MAX_CHARS=${WORKSPACE_READ_MAX_CHARS:-120000}
       - WORKSPACE_GIT_CLONE_TIMEOUT_MS=${WORKSPACE_GIT_CLONE_TIMEOUT_MS:-120000}
@@ -69,10 +74,7 @@ services:
       - backend_logs:/app/logs
       - backend_images:/app/storage/chat-images
     ports:
-      # 对外只暴露前端；浏览器经 Next rewrites 访问 /api
-      - "${FRONTEND_PORT:-3000}:3000"
-      # 可选：直接暴露后端（调试用）。1Panel/Nginx 通常只反代 FRONTEND_PORT
-      # - "${BACKEND_PORT:-8001}:8001"
+      - "3555:3000"
     restart: unless-stopped
     healthcheck:
       test:

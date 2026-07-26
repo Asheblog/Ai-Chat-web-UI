@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- 生产默认 Docker 拓扑改为 all-in-one：`ghcr.io/asheblog/aichat` 同容器运行 frontend + backend + rag-worker，并保留独立 `docker-socket-proxy`；旧四容器见 `docker-compose.split.yml`。升级：`docker compose pull && docker compose up -d`。1Panel 示例见 `docs/deploy/1panel-compose.example.yml`。
 - BREAKING: 模型大乱斗改为统一入口下的双模式选择（`多模型大乱斗` / `单模型多问题大乱斗`）；`/battle/stream` 入参改为强制判别联合，必须显式传递 `mode`；迁移策略为无迁移、直接替换。
 - 新增单模型多问题评测能力：支持单模型批量题目、每题独立 `runsPerQuestion/passK`（最多 3）、按题稳定性统计（`stabilityScore`/`questionStats`）、按题维度的 SSE 与结果持久化字段。
 - 升级指引：执行 `pnpm --filter backend prisma migrate deploy` 应用 `20260304120000_add_battle_mode_and_questions`（新增 `battle_runs.mode` 与 `battle_results.questionIndex/questionId/questionTitle`），随后执行 `pnpm --filter backend prisma generate`。

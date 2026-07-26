@@ -21,139 +21,23 @@
 
 ## 方式 A：按默认 `docker-compose.yml` 首次部署（推荐）
 
-### 1) 创建 `docker-compose.yml`（已去个人配置，改为默认值）
+生产默认拓扑为 **2 个容器**：
 
-```yaml
-version: '3.8'
+- `app`：`ghcr.io/asheblog/aichat`（同容器运行 frontend + backend + rag-worker）
+- `docker-socket-proxy`：限制访问 Docker socket（工作区沙箱）
 
-services:
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
-    container_name: ai-chat-web-ui-docker-proxy
-    environment:
-      - CONTAINERS=1
-      - IMAGES=1
-      - POST=1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: unless-stopped
-    networks:
-      - ai-chat-web-ui-network
+旧四容器拓扑见仓库内 `docker-compose.split.yml`。
 
-  backend:
-    image: ghcr.io/asheblog/aichat-backend:latest
-    container_name: ai-chat-web-ui-backend
-    environment:
-      - NODE_ENV=production
-      - PORT=8001
-      - DATABASE_URL=file:/app/data/app.db
-      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
-      - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-120000}
-      - ENABLE_CORS=${ENABLE_CORS:-false}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DB_INIT_ON_START=${DB_INIT_ON_START:-false}
-      - PYTHON_RUNTIME_RECONCILE_ON_START=${PYTHON_RUNTIME_RECONCILE_ON_START:-true}
-      - SKILL_STORAGE_ROOT=/app/data/skills
-      - DOCKER_HOST=tcp://docker-socket-proxy:2375
-      - WORKSPACE_TOOL_ENABLE=${WORKSPACE_TOOL_ENABLE:-true}
-      - WORKSPACE_ROOT_DIR=${WORKSPACE_ROOT_DIR:-/app/data/workspaces/chat}
-      - WORKSPACE_ARTIFACT_TTL_MINUTES=${WORKSPACE_ARTIFACT_TTL_MINUTES:-60}
-      - WORKSPACE_IDLE_TTL_MINUTES=${WORKSPACE_IDLE_TTL_MINUTES:-1440}
-      - WORKSPACE_CLEANUP_INTERVAL_MINUTES=${WORKSPACE_CLEANUP_INTERVAL_MINUTES:-5}
-      - WORKSPACE_MAX_BYTES=${WORKSPACE_MAX_BYTES:-1073741824}
-      - WORKSPACE_ARTIFACT_MAX_BYTES=${WORKSPACE_ARTIFACT_MAX_BYTES:-104857600}
-      - WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE=${WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE:-20}
-      - WORKSPACE_RUN_TIMEOUT_MS=${WORKSPACE_RUN_TIMEOUT_MS:-120000}
-      - WORKSPACE_DOCKER_IMAGE=${WORKSPACE_DOCKER_IMAGE:-python:3.11-slim}
-      - WORKSPACE_DOCKER_CPUS=${WORKSPACE_DOCKER_CPUS:-1.0}
-      - WORKSPACE_DOCKER_MEMORY=${WORKSPACE_DOCKER_MEMORY:-1g}
-      - WORKSPACE_DOCKER_PIDS_LIMIT=${WORKSPACE_DOCKER_PIDS_LIMIT:-256}
-      - WORKSPACE_ARTIFACT_SIGNING_SECRET=${WORKSPACE_ARTIFACT_SIGNING_SECRET:-replace-with-strong-secret}
-      - WORKSPACE_LIST_MAX_ENTRIES=${WORKSPACE_LIST_MAX_ENTRIES:-500}
-      - WORKSPACE_READ_MAX_CHARS=${WORKSPACE_READ_MAX_CHARS:-120000}
-      - WORKSPACE_GIT_CLONE_TIMEOUT_MS=${WORKSPACE_GIT_CLONE_TIMEOUT_MS:-120000}
-      - WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS=${WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS:-300000}
-    volumes:
-      - backend_data:/app/data
-      - backend_logs:/app/logs
-      - backend_images:/app/storage/chat-images
-    ports:
-      - "${BACKEND_PORT:-8001}:8001"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/settings/health > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    networks:
-      ai-chat-web-ui-network:
-        aliases:
-          - backend
+### 1) 使用仓库根目录的 `docker-compose.yml`
 
-  rag-worker:
-    image: ghcr.io/asheblog/aichat-backend:latest
-    container_name: ai-chat-web-ui-rag-worker
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/app.db
-      - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - NODE_OPTIONS=--max-old-space-size=1024
-    volumes:
-      - backend_data:/app/data
-      - backend_logs:/app/logs
-      - backend_images:/app/storage/chat-images
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - ai-chat-web-ui-network
-    working_dir: /app/packages/backend
-    command: ["node", "dist/workers/document-worker.js"]
+直接使用仓库里的编排文件即可（密钥放 `.env`，不要写进 compose）。核心服务：
 
-  frontend:
-    image: ghcr.io/asheblog/aichat-frontend:latest
-    container_name: ai-chat-web-ui-frontend
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=/api
-      - BACKEND_HOST=backend
-      - BACKEND_INTERNAL_PORT=8001
-    depends_on:
-      backend:
-        condition: service_healthy
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - ai-chat-web-ui-network
+| 服务 | 镜像 | 宿主机端口（默认） |
+| --- | --- | --- |
+| `app` | `ghcr.io/asheblog/aichat:latest` | `FRONTEND_PORT` → 3000（页面与 `/api` 反代） |
+| `docker-socket-proxy` | `tecnativa/docker-socket-proxy` | 不对外暴露 |
 
-volumes:
-  backend_data:
-    driver: local
-    name: ai_chat_web_ui_db_data
-  backend_logs:
-    driver: local
-    name: ai_chat_web_ui_logs
-  backend_images:
-    driver: local
-    name: ai_chat_web_ui_images
-
-networks:
-  ai-chat-web-ui-network:
-    driver: bridge
-    name: ai_chat_web_ui_network
-```
-
+数据卷名保持不变：`ai_chat_web_ui_db_data` / `ai_chat_web_ui_logs` / `ai_chat_web_ui_images`。
 ### 2) 创建 `.env`（首次部署至少配置密钥）
 
 Linux / WSL：
@@ -187,15 +71,14 @@ docker compose up -d
 首次部署建议查看日志（会自动初始化 DB / 同步 builtin skills / reconcile Python runtime）：
 
 ```bash
-docker compose logs -f backend
+docker compose logs -f app
 ```
 
 ### 4) 验证服务
 
-- 前端健康检查：`http://<你的地址>:3000/api/health`
-- 后端健康检查：`http://<你的地址>:8001/api/settings/health`
+- 应用健康检查：`http://<你的地址>:3000/api/health`
 - 页面入口：`http://<你的地址>:3000`
-
+- 后端仅在容器内监听 `8001`；浏览器经前端同源 `/api` 访问即可（Nginx/1Panel 只需反代前端端口）
 ### 5) 首次登录
 
 - 默认允许注册时：第一个注册用户会成为管理员
@@ -215,8 +98,7 @@ docker compose up -d
 docker compose ps
 
 # 查看日志
-docker compose logs -f backend
-docker compose logs -f frontend
+docker compose logs -f app
 
 # 停止
 docker compose down
@@ -228,6 +110,22 @@ docker compose down
 docker compose pull
 docker compose up -d
 ```
+
+### 从旧四容器迁移到 all-in-one
+
+1. **不要**执行 `docker compose down -v`（保留数据卷）
+2. 停旧栈：`docker compose down`
+3. 换成新版 `docker-compose.yml`（服务名为 `app` + `docker-socket-proxy`）
+4. 密钥放到同目录 `.env`（或 1Panel 环境变量）
+5. `docker compose pull && docker compose up -d`
+6. Nginx/1Panel 反代目标保持指向前端宿主机端口（例如 `127.0.0.1:3555`）；可不再单独反代后端端口
+
+### 1Panel 部署要点
+
+- 编排示例：[`docs/deploy/1panel-compose.example.yml`](docs/deploy/1panel-compose.example.yml)（示例端口 `3555:3000`）
+- 密钥只放 `.env` / 面板环境变量，不要写进 compose
+- 站点反代整站到前端端口即可；容器内 Next 会把 `/api` 转到本机 backend
+- 升级：`docker compose pull && docker compose up -d`（主要只更新 `ghcr.io/asheblog/aichat`）
 
 ### 使用源码构建（仅当 compose 配置了 `build` 字段）
 
@@ -313,9 +211,12 @@ aichat/
 │   ├── backend/
 │   ├── frontend/
 │   └── shared/
+├── docker/
+│   └── Dockerfile          # all-in-one 合成镜像
 ├── docs/
 ├── scripts/
-├── docker-compose.yml
+├── docker-compose.yml      # 生产默认：app + docker-proxy
+├── docker-compose.split.yml
 ├── docker-compose.dev.yml
 ├── start.sh
 └── start.bat

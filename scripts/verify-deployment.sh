@@ -26,7 +26,7 @@ log_info() {
 
 log_success() {
     echo -e "${GREEN}[✓ PASS]${NC} $1"
-    ((PASSED_CHECKS++))
+    PASSED_CHECKS=$((PASSED_CHECKS + 1))
 }
 
 log_warning() {
@@ -35,12 +35,12 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[✗ FAIL]${NC} $1"
-    ((FAILED_CHECKS++))
+    FAILED_CHECKS=$((FAILED_CHECKS + 1))
 }
 
 log_check() {
     echo -e "${BLUE}[CHECK]${NC} $1"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
 }
 
 # 获取项目根目录
@@ -68,8 +68,10 @@ check_file_exists() {
 check_directory_structure() {
     log_info "检查项目目录结构..."
 
-    check_file_exists "docker-compose.yml" "Docker Compose配置"
+    check_file_exists "docker-compose.yml" "Docker Compose配置（all-in-one）"
+    check_file_exists "docker-compose.split.yml" "Docker Compose拆分拓扑"
     check_file_exists "docker-compose.dev.yml" "开发环境配置"
+    check_file_exists "docker/Dockerfile" "All-in-one Dockerfile"
     check_file_exists "packages/backend/Dockerfile" "后端Dockerfile"
     check_file_exists "packages/frontend/Dockerfile" "前端Dockerfile"
     check_file_exists "packages/backend/package.json" "后端package.json"
