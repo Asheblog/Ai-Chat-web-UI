@@ -37,6 +37,25 @@ const connectionSchema = z.object({
   apiKeys: z.array(apiKeySchema).min(1),
 })
 
+const importApiKeySchema = z.object({
+  apiKeyLabel: z.string().nullish(),
+  apiKey: z.string().optional(),
+  modelIds: z.array(z.string()).optional(),
+  enable: z.boolean().optional().default(true),
+})
+
+const importConnectionSchema = connectionSchema.extend({
+  apiKeys: z.array(importApiKeySchema).min(1),
+})
+
+const importPayloadSchema = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.string().optional(),
+  connections: z.array(importConnectionSchema),
+  skippedKeys: z.number().optional(),
+  skippedReasons: z.array(z.string()).optional(),
+})
+
 const handleServiceError = (
   c: any,
   error: unknown,
@@ -81,6 +100,35 @@ export const createConnectionsApi = (deps: ConnectionsApiDeps) => {
         return c.json<ApiResponse>({ success: true, data: row, message: 'Connection created' })
       } catch (error) {
         return handleServiceError(c, error, 'Failed to create connection', 'Create connection error:')
+      }
+    },
+  )
+
+  router.get('/export', requireUserActor, adminOnlyMiddleware, async (c) => {
+    try {
+      const actor = c.get('actor')
+      const userId = actor?.type === 'user' ? actor.id : null
+      const data = await service.exportSystemConnections({ userId })
+      return c.json<ApiResponse>({ success: true, data })
+    } catch (error) {
+      return handleServiceError(c, error, 'Failed to export connections', 'Export connections error:')
+    }
+  })
+
+  router.post(
+    '/import',
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', importPayloadSchema),
+    async (c) => {
+      try {
+        const payload = c.req.valid('json')
+        const actor = c.get('actor')
+        const userId = actor?.type === 'user' ? actor.id : null
+        const data = await service.importSystemConnections(payload, { userId })
+        return c.json<ApiResponse>({ success: true, data, message: 'Connections imported' })
+      } catch (error) {
+        return handleServiceError(c, error, 'Failed to import connections', 'Import connections error:')
       }
     },
   )

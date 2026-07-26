@@ -39,7 +39,7 @@ const buildService = (opts?: { withSecretVault?: boolean }) => {
     { id: 'gpt-4o', rawId: 'gpt-4o', name: 'gpt-4o', provider: 'openai', channelName: 'openai', connectionBaseUrl: 'https://api.openai.com/v1', connectionType: 'external', tags: [] },
   ])
   const verifyConnection = jest.fn().mockResolvedValue(undefined)
-  const logger = { warn: jest.fn(), error: jest.fn() }
+  const logger = { warn: jest.fn(), error: jest.fn(), info: jest.fn() }
 
   let secretVault: jest.Mocked<Pick<SecretVaultService, 'createSecret' | 'decryptById' | 'deleteSecret'>> | undefined
   if (opts?.withSecretVault !== false) {
@@ -327,6 +327,171 @@ describe('ConnectionService', () => {
           apiKeys: [{ apiKeyLabel: 'K', modelIds: ['gpt-4o'] }],
         }),
       ).rejects.toThrow(ConnectionServiceError)
+    })
+  })
+
+  describe('exportSystemConnections', () => {
+    it('exports decrypted plaintext apiKey for bearer connections while list view stays masked', async () => {
+      const { service, repository, secretVault } = buildService()
+      const plainKey = 'sk-export-plaintext-key-xyz'
+      repository.listSystemConnections.mockResolvedValue([
+        { ...baseConnection, id: 1, secretVaultId: 100, apiKeyLabel: '主 Key' } as any,
+      ])
+      secretVault!.decryptById.mockResolvedValue(plainKey)
+
+      const exported = await service.exportSystemConnections({ userId: 42 })
+      const listed = await service.listSystemConnections()
+
+      expect(exported.schemaVersion).toBe(1)
+      expect(exported.connections).toHaveLength(1)
+      expect(exported.connections[0]?.apiKeys[0]?.apiKey).toBe(plainKey)
+      expect(exported.skippedKeys).toBe(0)
+      expect(listed[0]?.apiKeys[0]?.apiKeyMasked).toBe('****')
+      expect(listed[0]?.apiKeys[0]?.hasStoredApiKey).toBe(true)
+    })
+
+    it('counts decrypt failures in skippedKeys and still exports other connections', async () => {
+      const { service, repository, secretVault } = buildService()
+      repository.listSystemConnections.mockResolvedValue([
+        { ...baseConnection, id: 1, secretVaultId: 100, apiKeyLabel: '坏 Key', baseUrl: 'https://bad.example/v1' } as any,
+        { ...baseConnection, id: 2, secretVaultId: 101, apiKeyLabel: '好 Key', baseUrl: 'https://good.example/v1' } as any,
+      ])
+      secretVault!.decryptById.mockImplementation(async (id: number) => {
+        if (id === 100) throw new Error('Vault corrupted')
+        return 'good-plain-key'
+      })
+
+      const exported = await service.exportSystemConnections()
+
+      expect(exported.connections).toHaveLength(1)
+      expect(exported.connections[0]?.baseUrl).toBe('https://good.example/v1')
+      expect(exported.connections[0]?.apiKeys[0]?.apiKey).toBe('good-plain-key')
+      expect(exported.skippedKeys).toBe(1)
+      expect(exported.skippedReasons.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('importSystemConnections', () => {
+    const importPayload = {
+      schemaVersion: 1 as const,
+      connections: [
+        {
+          provider: 'openai' as const,
+          baseUrl: 'https://api.new.example/v1',
+          authType: 'bearer' as const,
+          apiKeys: [{ apiKeyLabel: '新 Key', apiKey: 'brand-new-import-key', modelIds: ['gpt-4o'] }],
+        },
+      ],
+    }
+
+    it('creates a new endpoint group when signature does not exist', async () => {
+      const { service, repository } = buildService()
+      repository.listSystemConnections.mockResolvedValue([])
+      repository.createSystemConnection.mockResolvedValue({ ...baseConnection, id: 50, secretVaultId: null } as any)
+
+      const result = await service.importSystemConnections(importPayload, { userId: 7 })
+
+      expect(repository.createSystemConnection).toHaveBeenCalledTimes(1)
+      expect(result.createdGroups).toBe(1)
+      expect(result.updatedGroups).toBe(0)
+      expect(result.addedKeys).toBe(1)
+    })
+
+    it('merges into existing signature group: skips duplicate plaintext and appends new keys', async () => {
+      const { service, repository, secretVault } = buildService()
+      const existingKey = 'existing-merge-key-abc'
+      const newKey = 'new-merge-key-def'
+      repository.listSystemConnections.mockResolvedValue([
+        { ...baseConnection, id: 7, apiKeyLabel: '已有 Key', secretVaultId: 100 } as any,
+      ])
+      secretVault!.decryptById.mockResolvedValue(existingKey)
+      repository.updateSystemConnection.mockResolvedValue({
+        ...baseConnection, id: 7, apiKeyLabel: '已有 Key', secretVaultId: 100,
+      } as any)
+      repository.createSystemConnection.mockResolvedValue({
+        ...baseConnection, id: 8, apiKeyLabel: '追加 Key', secretVaultId: 200,
+      } as any)
+
+      const result = await service.importSystemConnections({
+        schemaVersion: 1,
+        connections: [{
+          provider: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          authType: 'bearer',
+          apiKeys: [
+            { apiKeyLabel: '重复', apiKey: existingKey, modelIds: ['gpt-4o'] },
+            { apiKeyLabel: '追加 Key', apiKey: newKey, modelIds: ['gpt-4.1-mini'] },
+          ],
+        }],
+      })
+
+      expect(repository.createSystemConnection).toHaveBeenCalledTimes(1)
+      expect(repository.updateSystemConnection).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ apiKeyLabel: '已有 Key' }),
+      )
+      expect(result.createdGroups).toBe(0)
+      expect(result.updatedGroups).toBe(1)
+      expect(result.addedKeys).toBe(1)
+      expect(result.skippedKeys).toBe(1)
+
+      const createPayload = repository.createSystemConnection.mock.calls[0]?.[0]
+      expect(createPayload).toEqual(expect.objectContaining({ apiKeyLabel: '追加 Key' }))
+    })
+
+    it('counts existing-key decrypt failures in skippedKeys during merge dedupe', async () => {
+      const { service, repository, secretVault } = buildService()
+      repository.listSystemConnections.mockResolvedValue([
+        { ...baseConnection, id: 7, apiKeyLabel: '坏 Key', secretVaultId: 100 } as any,
+      ])
+      secretVault!.decryptById.mockRejectedValue(new Error('Vault corrupted'))
+      repository.updateSystemConnection.mockResolvedValue({
+        ...baseConnection, id: 7, apiKeyLabel: '坏 Key', secretVaultId: 100,
+      } as any)
+      repository.createSystemConnection.mockResolvedValue({
+        ...baseConnection, id: 8, apiKeyLabel: '新 Key', secretVaultId: 200,
+      } as any)
+
+      const result = await service.importSystemConnections({
+        schemaVersion: 1,
+        connections: [{
+          provider: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          authType: 'bearer',
+          apiKeys: [{ apiKeyLabel: '新 Key', apiKey: 'fresh-import-key', modelIds: ['gpt-4o'] }],
+        }],
+      })
+
+      expect(result.skippedKeys).toBe(1)
+      expect(result.addedKeys).toBe(1)
+      expect(result.updatedGroups).toBe(1)
+      expect(result.skippedReasons.some((reason) => reason.includes('解密失败'))).toBe(true)
+    })
+
+    it('calls logger.info without any plaintext apiKey substring in meta', async () => {
+      const { service, repository, secretVault, logger } = buildService()
+      const sensitiveKey = 'super-secret-import-key-999'
+      repository.listSystemConnections.mockResolvedValue([])
+      repository.createSystemConnection.mockResolvedValue({ ...baseConnection, id: 1, secretVaultId: null } as any)
+      secretVault!.decryptById.mockResolvedValue(sensitiveKey)
+
+      await service.exportSystemConnections({ userId: 1 })
+      await service.importSystemConnections({
+        schemaVersion: 1,
+        connections: [{
+          provider: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          authType: 'bearer',
+          apiKeys: [{ apiKeyLabel: 'K', apiKey: sensitiveKey, modelIds: ['gpt-4o'] }],
+        }],
+      }, { userId: 1 })
+
+      expect(logger.info).toHaveBeenCalled()
+      for (const call of logger.info.mock.calls) {
+        const serialized = JSON.stringify(call)
+        expect(serialized).not.toContain(sensitiveKey)
+        expect(serialized).not.toContain('super-secret-import-key')
+      }
     })
   })
 })

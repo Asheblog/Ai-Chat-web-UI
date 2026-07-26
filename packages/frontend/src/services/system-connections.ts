@@ -1,7 +1,9 @@
 import {
   createSystemConnection as createSystemConnectionApi,
   deleteSystemConnection as deleteSystemConnectionApi,
+  exportSystemConnections as exportSystemConnectionsApi,
   getSystemConnections,
+  importSystemConnections as importSystemConnectionsApi,
   updateSystemConnection as updateSystemConnectionApi,
   verifySystemConnection as verifySystemConnectionApi,
 } from '@/features/system/api'
@@ -105,4 +107,63 @@ export async function deleteSystemConnection(id: number) {
 
 export async function verifySystemConnection(payload: SystemConnectionPayload) {
   return verifySystemConnectionApi(payload)
+}
+
+export interface SystemConnectionsExportData {
+  schemaVersion: number
+  exportedAt: string
+  connections: unknown[]
+  skippedKeys?: number
+  skippedReasons?: string[]
+}
+
+export interface SystemConnectionsImportPayload {
+  schemaVersion: number
+  exportedAt?: string
+  connections: unknown[]
+  skippedKeys?: number
+  skippedReasons?: string[]
+}
+
+export interface SystemConnectionsImportResult {
+  createdGroups: number
+  updatedGroups: number
+  addedKeys: number
+  skippedKeys: number
+  skippedReasons: string[]
+}
+
+function formatConnectionsExportFilename(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `aichat-connections-export-${year}${month}${day}.json`
+}
+
+export async function exportSystemConnections(): Promise<SystemConnectionsExportData> {
+  const response = await exportSystemConnectionsApi()
+  return response?.data as SystemConnectionsExportData
+}
+
+export function downloadConnectionsExport(data: SystemConnectionsExportData): void {
+  if (typeof window === 'undefined') return
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = formatConnectionsExportFilename()
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+export async function importSystemConnections(
+  payload: SystemConnectionsImportPayload,
+): Promise<SystemConnectionsImportResult> {
+  const response = await importSystemConnectionsApi(payload)
+  return response?.data as SystemConnectionsImportResult
 }

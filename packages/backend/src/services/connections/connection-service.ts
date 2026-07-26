@@ -70,7 +70,7 @@ export interface ConnectionServiceDeps {
     connectionType?: 'external' | 'local'
     defaultCapabilities?: Record<string, unknown> | undefined
   }) => Promise<void>
-  logger?: Pick<typeof console, 'warn' | 'error'>
+  logger?: Pick<typeof console, 'warn' | 'error' | 'info'>
 }
 
 /** 前端 API 输入：apiKey 作为写入/验证输入 */
@@ -141,6 +141,52 @@ export interface VerifyConnectionResult {
   successCount: number
   failureCount: number
   totalModels: number
+}
+
+export interface ExportConnectionApiKey {
+  apiKeyLabel?: string
+  apiKey: string
+  modelIds: string[]
+  enable: boolean
+}
+
+export interface ExportConnection {
+  provider: ProviderType
+  vendor?: VendorType
+  baseUrl: string
+  authType: AuthType
+  headers?: Record<string, string>
+  azureApiVersion?: string
+  prefixId?: string
+  tags: TagItem[]
+  connectionType: 'external' | 'local'
+  defaultCapabilities: CapabilityFlags
+  apiKeys: ExportConnectionApiKey[]
+}
+
+export interface ExportSystemConnectionsResult {
+  schemaVersion: 1
+  exportedAt: string
+  connections: ExportConnection[]
+  skippedKeys: number
+  skippedReasons: string[]
+}
+
+export interface ImportSystemConnectionsPayload {
+  schemaVersion: 1
+  connections: ConnectionPayload[]
+}
+
+export interface ImportSystemConnectionsResult {
+  createdGroups: number
+  updatedGroups: number
+  addedKeys: number
+  skippedKeys: number
+  skippedReasons: string[]
+}
+
+export interface ConnectionActorContext {
+  userId?: number | null
 }
 
 const sanitizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, '')
@@ -296,7 +342,7 @@ export class ConnectionService {
   private refreshModelCatalog: (connection: Connection) => Promise<unknown>
   private fetchModelsForConnection: (config: ConnectionConfig) => Promise<CatalogItem[]>
   private verifyConnection?: ConnectionServiceDeps['verifyConnection']
-  private logger: Pick<typeof console, 'warn' | 'error'>
+  private logger: Pick<typeof console, 'warn' | 'error' | 'info'>
 
   constructor(deps: ConnectionServiceDeps = {}) {
     const prisma = deps.prisma ?? defaultPrisma
@@ -410,6 +456,194 @@ export class ConnectionService {
     for (const row of group.rows) {
       await this.repository.deleteSystemConnection(row.id)
       await this.repository.deleteModelCatalogByConnectionId(row.id)
+    }
+  }
+
+  async exportSystemConnections(
+    actor?: ConnectionActorContext,
+  ): Promise<ExportSystemConnectionsResult> {
+    const rows = await this.repository.listSystemConnections()
+    const groups = this.groupRows(rows)
+    const connections: ExportConnection[] = []
+    let skippedKeys = 0
+    const skippedReasons: string[] = []
+
+    for (const group of groups) {
+      const base = group.rows[0]
+      const authType = (base.authType as AuthType) || 'bearer'
+      const headers = parseRecord(base.headersJson)
+      const exportKeys: ExportConnectionApiKey[] = []
+
+      for (const row of group.rows) {
+        let apiKey = ''
+        if (authType === 'bearer' && row.secretVaultId) {
+          try {
+            if (!this.secretVault) {
+              throw new ConnectionServiceError('Secret Vault 未配置，无法解密 API Key', 500)
+            }
+            apiKey = await this.secretVault.decryptById(row.secretVaultId)
+          } catch (error) {
+            skippedKeys += 1
+            skippedReasons.push(
+              `连接 #${row.id} (${normalizeOptionalString(row.apiKeyLabel) || 'Key'}): 解密失败`,
+            )
+            continue
+          }
+        }
+
+        exportKeys.push({
+          apiKeyLabel: normalizeOptionalString(row.apiKeyLabel) || `Key ${row.id}`,
+          apiKey,
+          modelIds: parseStringArray(row.modelIdsJson),
+          enable: Boolean(row.enable),
+        })
+      }
+
+      if (exportKeys.length === 0) continue
+
+      connections.push({
+        provider: base.provider as ProviderType,
+        vendor: (base.vendor as VendorType | null) ?? undefined,
+        baseUrl: sanitizeBaseUrl(base.baseUrl),
+        authType,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        azureApiVersion: base.azureApiVersion ?? undefined,
+        prefixId: base.prefixId ?? undefined,
+        tags: parseTags(base.tagsJson),
+        connectionType: (base.connectionType || 'external') as 'external' | 'local',
+        defaultCapabilities: parseDefaultCapabilities(base.defaultCapabilitiesJson),
+        apiKeys: exportKeys,
+      })
+    }
+
+    this.logger.info?.('系统连接已导出', {
+      actorUserId: actor?.userId ?? null,
+      connectionCount: connections.length,
+      skippedKeys,
+    })
+
+    return {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      connections,
+      skippedKeys,
+      skippedReasons,
+    }
+  }
+
+  async importSystemConnections(
+    payload: ImportSystemConnectionsPayload,
+    actor?: ConnectionActorContext,
+  ): Promise<ImportSystemConnectionsResult> {
+    let signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemConnections())
+
+    let createdGroups = 0
+    let updatedGroups = 0
+    let addedKeys = 0
+    let skippedKeys = 0
+    const skippedReasons: string[] = []
+
+    for (const connection of payload.connections) {
+      const signature = this.signatureFromPayload(connection)
+      const existing = signatureToGroup.get(signature)
+
+      if (!existing) {
+        await this.createSystemConnection(connection)
+        createdGroups += 1
+        addedKeys += connection.apiKeys.length
+        signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemConnections())
+        continue
+      }
+
+      const base = existing.rows[0]
+      const authType = (base.authType as AuthType) || 'bearer'
+      const existingPlaintextSet = new Set<string>()
+
+      for (const row of existing.rows) {
+        if (authType !== 'bearer' || !row.secretVaultId) {
+          existingPlaintextSet.add('')
+          continue
+        }
+        try {
+          if (!this.secretVault) {
+            throw new ConnectionServiceError('Secret Vault 未配置，无法解密已有 API Key', 500)
+          }
+          const plain = await this.secretVault.decryptById(row.secretVaultId)
+          existingPlaintextSet.add(plain)
+        } catch {
+          skippedKeys += 1
+          skippedReasons.push(
+            `已有 Key #${row.id} (${normalizeOptionalString(row.apiKeyLabel) || 'Key'}): 解密失败，无法去重比对`,
+          )
+        }
+      }
+
+      const keysToAdd: ConnectionApiKeyPayload[] = []
+      for (const importKey of connection.apiKeys) {
+        const plain = authType === 'bearer' ? (importKey.apiKey?.trim() || '') : ''
+        const label = importKey.apiKeyLabel || 'Key'
+
+        if (authType === 'bearer' && !plain) {
+          skippedKeys += 1
+          skippedReasons.push(`导入 Key (${label}): apiKey 为空`)
+          continue
+        }
+
+        if (existingPlaintextSet.has(plain)) {
+          skippedKeys += 1
+          skippedReasons.push(`导入 Key (${label}): 明文已存在`)
+          continue
+        }
+
+        keysToAdd.push(importKey)
+        existingPlaintextSet.add(plain)
+      }
+
+      if (keysToAdd.length === 0) continue
+
+      // 同签名合并时保留目标端点既有共享配置，仅追加 Key
+      const mergePayload: ConnectionPayload = {
+        provider: base.provider as ProviderType,
+        vendor: (base.vendor as VendorType | null) ?? undefined,
+        baseUrl: sanitizeBaseUrl(base.baseUrl),
+        authType,
+        headers: parseRecord(base.headersJson),
+        azureApiVersion: base.azureApiVersion ?? undefined,
+        prefixId: base.prefixId ?? undefined,
+        tags: parseTags(base.tagsJson),
+        connectionType: (base.connectionType || 'external') as 'external' | 'local',
+        defaultCapabilities: parseDefaultCapabilities(base.defaultCapabilitiesJson),
+        apiKeys: [
+          ...existing.rows.map((row) => ({
+            id: row.id,
+            apiKeyLabel: normalizeOptionalString(row.apiKeyLabel) || undefined,
+            modelIds: parseStringArray(row.modelIdsJson),
+            enable: Boolean(row.enable),
+          })),
+          ...keysToAdd,
+        ],
+      }
+
+      await this.updateSystemConnection(existing.id, mergePayload)
+      updatedGroups += 1
+      addedKeys += keysToAdd.length
+      signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemConnections())
+    }
+
+    this.logger.info?.('系统连接已导入', {
+      actorUserId: actor?.userId ?? null,
+      createdGroups,
+      updatedGroups,
+      addedKeys,
+      skippedKeys,
+    })
+
+    return {
+      createdGroups,
+      updatedGroups,
+      addedKeys,
+      skippedKeys,
+      skippedReasons,
     }
   }
 
@@ -811,5 +1045,24 @@ export class ConnectionService {
         error: error instanceof Error ? error.message : error,
       })
     }
+  }
+
+  private buildSignatureGroupMap(rows: Connection[]) {
+    return new Map(this.groupRows(rows).map((group) => [group.signature, group]))
+  }
+
+  private signatureFromPayload(payload: ConnectionPayload) {
+    return stringifySignature({
+      provider: payload.provider,
+      vendor: payload.vendor ?? null,
+      baseUrl: payload.baseUrl,
+      authType: payload.authType ?? 'bearer',
+      headers: payload.headers ?? {},
+      azureApiVersion: payload.azureApiVersion ?? null,
+      prefixId: payload.prefixId ?? null,
+      tags: normalizeTags(payload.tags),
+      connectionType: payload.connectionType ?? 'external',
+      defaultCapabilities: sortCapabilityFlags(normalizeCapabilityFlags(payload.defaultCapabilities)),
+    })
   }
 }
