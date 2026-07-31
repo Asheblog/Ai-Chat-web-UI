@@ -62,6 +62,18 @@ Copy-Item .env.example .env
 | `WORKSPACE_ARTIFACT_SIGNING_SECRET` | 建议设置，artifact 下载签名 |
 | `CORS_ORIGIN` | 改成你的实际访问地址 |
 
+可选：Workspace 沙箱并发与资源（未设置时使用 compose / 代码默认值，详见 [`.env.example`](.env.example)）：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `WORKSPACE_MAX_CONCURRENT_RUNS` | `2` | 全局同时运行的 Python 沙箱数（聊天/Battle/Skill 共用） |
+| `WORKSPACE_RUN_QUEUE_TIMEOUT_MS` | `15000` | 排队等槽位最长 15 秒 |
+| `WORKSPACE_DOCKER_CPUS` | `0.5` | 单个沙箱 CPU 上限 |
+| `WORKSPACE_DOCKER_MEMORY` | `512m` | 单个沙箱内存上限 |
+| `WORKSPACE_DOCKER_PIDS_LIMIT` | `128` | 单个沙箱进程数上限 |
+| `WORKSPACE_RUN_TIMEOUT_MS` | `120000` | 单次 Python 执行超时（毫秒） |
+| `WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS` | `600000` | pip 自动安装超时（毫秒） |
+
 ### 3) 启动部署
 
 ```bash
@@ -86,9 +98,31 @@ docker compose logs -f app
 
 ---
 
+## 方式 A2：四容器 split 拓扑（可选）
+
+若需要 frontend / backend / rag-worker 分开扩缩，使用仓库内 [`docker-compose.split.yml`](docker-compose.split.yml)（已含 workspace 沙箱防护默认值，**密钥仍只放 `.env`**）：
+
+| 服务 | 镜像 | 说明 |
+| --- | --- | --- |
+| `backend` | `ghcr.io/asheblog/aichat-backend:latest` | 工作区沙箱、API |
+| `frontend` | `ghcr.io/asheblog/aichat-frontend:latest` | 页面与 `/api` 反代 |
+| `rag-worker` | `ghcr.io/asheblog/aichat-backend:latest` | 文档解析 worker |
+| `docker-socket-proxy` | `tecnativa/docker-socket-proxy` | 需 `DELETE=1` 以支持超时杀容器 |
+
+端口可通过环境变量覆盖：`FRONTEND_PORT`（默认 `3000`）、`BACKEND_PORT`（默认 `8001`）。
+
+```bash
+docker compose -f docker-compose.split.yml up -d
+docker compose -f docker-compose.split.yml logs -f backend
+```
+
+---
+
 ## 构建命令速查（你要的）
 
 ### 启动 / 停止 / 日志
+
+**all-in-one（默认 `docker-compose.yml`）：**
 
 ```bash
 # 启动
@@ -104,11 +138,29 @@ docker compose logs -f app
 docker compose down
 ```
 
+**四容器 split（`docker-compose.split.yml`）：**
+
+```bash
+docker compose -f docker-compose.split.yml up -d
+docker compose -f docker-compose.split.yml ps
+docker compose -f docker-compose.split.yml logs -f backend
+docker compose -f docker-compose.split.yml down
+```
+
 ### 更新到最新镜像
+
+**all-in-one：**
 
 ```bash
 docker compose pull
 docker compose up -d
+```
+
+**split：**
+
+```bash
+docker compose -f docker-compose.split.yml pull
+docker compose -f docker-compose.split.yml up -d
 ```
 
 ### 从旧四容器迁移到 all-in-one
@@ -122,10 +174,12 @@ docker compose up -d
 
 ### 1Panel 部署要点
 
-- 编排示例：[`docs/deploy/1panel-compose.example.yml`](docs/deploy/1panel-compose.example.yml)（示例端口 `3555:3000`）
-- 密钥只放 `.env` / 面板环境变量，不要写进 compose
+- 编排示例：[`docs/deploy/1panel-compose.example.yml`](docs/deploy/1panel-compose.example.yml)（all-in-one；示例端口 `3555:3000`）
+- 四容器参考：[`docker-compose.split.yml`](docker-compose.split.yml)
+- 密钥只放 `.env` / 面板环境变量，**不要写进 compose 或提交到 Git**
 - 站点反代整站到前端端口即可；容器内 Next 会把 `/api` 转到本机 backend
-- 升级：`docker compose pull && docker compose up -d`（主要只更新 `ghcr.io/asheblog/aichat`）
+- 升级 all-in-one：`docker compose pull && docker compose up -d`（主要更新 `ghcr.io/asheblog/aichat`）
+- 升级 split：`docker compose -f docker-compose.split.yml pull && docker compose -f docker-compose.split.yml up -d`
 
 ### 使用源码构建（仅当 compose 配置了 `build` 字段）
 
@@ -168,13 +222,23 @@ npm run start:dev
 
 ## Workspace 部署前置条件（必须满足）
 
-要启用 `python_runner` 与 workspace 工具链，backend 容器必须满足：
+要启用 `python_runner` 与 workspace 工具链，运行 backend 的容器（all-in-one 的 `app` 或 split 的 `backend`）必须满足：
 
 - 容器内有 `docker` CLI（官方镜像已内置）
 - 容器内有 `git` CLI（`workspace_git_clone` 依赖，官方镜像已内置）
-- 通过 Docker socket proxy 安全访问 Docker API（编排模板已包含 `docker-socket-proxy` 服务，无需额外配置）
+- 通过 Docker socket proxy 访问 Docker API（编排模板已包含 `docker-socket-proxy`）
+- **`docker-socket-proxy` 必须开启 `DELETE=1`**，否则超时/取消时无法 `docker kill` / `docker rm`，会留下孤儿沙箱容器
+
+仓库默认编排已配置：
+
+- 全局并发槽位（默认 2 个同时运行，超额 FIFO 排队，排队超时 15 秒）
+- 单沙箱 cgroup：`0.5` CPU / `512m` 内存 / `128` pids；禁 swap（`memory-swap` 与 memory 同值）
+- 业务容器资源上限（示例：`cpus: 2.0`、`mem_limit: 2g`、`pids_limit: 1024`）
+- 启动时按 `aichat-ws-` 前缀清理残留沙箱容器
 
 Python 代码执行默认为网络隔离（`network: none`）。pip 安装依赖阶段自动开启网络，安装完成后恢复隔离。
+
+调参：在 `.env` 中覆盖上表 workspace 变量即可；决策说明见 [`docs/adr/0030-workspace-docker-concurrency-and-orphan-cleanup.md`](docs/adr/0030-workspace-docker-concurrency-and-orphan-cleanup.md)。
 
 ---
 
