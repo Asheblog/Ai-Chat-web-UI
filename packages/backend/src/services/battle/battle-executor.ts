@@ -30,6 +30,7 @@ export interface BattleExecutionContext {
   battleRunId?: number | null
   actorUserId?: number | null
   actorIdentifier?: string
+  requestSignal?: AbortSignal
   sendStreamEvent?: (payload: Record<string, unknown>) => void
   sendToolEvent?: (payload: Record<string, unknown>) => void
   modelId?: string
@@ -713,6 +714,7 @@ export class BattleExecutor {
           connectionId: prepared.baseRequestBody?.connectionId ?? context.connectionId ?? null,
           modelRawId: prepared.providerRequest.rawModelId,
           modelCapabilities,
+          requestSignal: context.requestSignal,
           emitReasoning: () => {},
           sendToolEvent: (payload) => {
             context.sendToolEvent?.(payload)

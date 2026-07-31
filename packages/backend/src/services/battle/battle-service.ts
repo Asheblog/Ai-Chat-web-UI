@@ -3234,6 +3234,7 @@ export class BattleService {
       battleRunId,
       actorUserId: runControl?.actorUserId ?? null,
       actorIdentifier: runControl?.actorIdentifier || 'battle',
+      requestSignal: runControl?.abortController.signal,
       modelId,
       connectionId,
       rawId,

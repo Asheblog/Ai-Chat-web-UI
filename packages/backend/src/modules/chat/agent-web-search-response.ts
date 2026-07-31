@@ -856,6 +856,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 connectionId: session.connection?.id ?? null,
                 modelRawId: session.modelRawId ?? null,
                 modelCapabilities,
+                requestSignal,
                 emitReasoning,
                 sendToolEvent,
                 sendStreamEvent,

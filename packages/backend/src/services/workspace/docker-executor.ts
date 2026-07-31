@@ -63,6 +63,7 @@ export interface DockerRunOptions {
   env?: Record<string, string>
   workdir?: string
   readOnlyMounts?: Array<{ source: string; target: string }>
+  signal?: AbortSignal
 }
 
 export interface DockerRunResult {
@@ -72,6 +73,7 @@ export interface DockerRunResult {
   durationMs: number
   truncated: boolean
   timeout: boolean
+  cancelled: boolean
 }
 
 export interface DockerExecutorDeps {
@@ -83,6 +85,7 @@ type QueueWaiter = {
   resolve: (release: () => void) => void
   reject: (error: Error) => void
   timer: NodeJS.Timeout | null
+  cleanup: () => void
 }
 
 export class DockerExecutor {
@@ -164,7 +167,10 @@ export class DockerExecutor {
 
   async run(options: DockerRunOptions): Promise<DockerRunResult> {
     await this.assertDockerAvailable()
-    const release = await this.acquireRunSlot()
+    if (options.signal?.aborted) {
+      throw new WorkspaceServiceError('workspace 执行已取消', 499, 'WORKSPACE_EXEC_CANCELLED')
+    }
+    const release = await this.acquireRunSlot(options.signal)
 
     try {
       const workspaceRoot = path.resolve(options.workspaceRoot)
@@ -232,6 +238,7 @@ export class DockerExecutor {
         timeoutMs: options.timeoutMs,
         maxOutputChars,
         containerName,
+        signal: options.signal,
       })
 
       if (result.timeout) {
@@ -241,6 +248,9 @@ export class DockerExecutor {
           'WORKSPACE_EXEC_TIMEOUT',
         )
       }
+      if (result.cancelled) {
+        throw new WorkspaceServiceError('workspace 执行已取消', 499, 'WORKSPACE_EXEC_CANCELLED')
+      }
 
       return result
     } finally {
@@ -248,7 +258,7 @@ export class DockerExecutor {
     }
   }
 
-  private acquireRunSlot(): Promise<() => void> {
+  private acquireRunSlot(signal?: AbortSignal): Promise<() => void> {
     const maxConcurrent = Math.max(1, this.config.maxConcurrentRuns)
     if (this.activeRuns < maxConcurrent) {
       this.activeRuns += 1
@@ -260,12 +270,30 @@ export class DockerExecutor {
         resolve: (release) => resolve(release),
         reject,
         timer: null,
+        cleanup: () => undefined,
       }
-      waiter.timer = setTimeout(() => {
+
+      const removeWaiter = () => {
         const index = this.runQueue.indexOf(waiter)
         if (index >= 0) {
           this.runQueue.splice(index, 1)
         }
+      }
+
+      const onAbort = () => {
+        removeWaiter()
+        if (waiter.timer) clearTimeout(waiter.timer)
+        reject(new WorkspaceServiceError('workspace 执行已取消', 499, 'WORKSPACE_EXEC_CANCELLED'))
+      }
+
+      waiter.cleanup = () => {
+        if (waiter.timer) clearTimeout(waiter.timer)
+        signal?.removeEventListener('abort', onAbort)
+      }
+
+      waiter.timer = setTimeout(() => {
+        removeWaiter()
+        waiter.cleanup()
         reject(
           new WorkspaceServiceError(
             '工作区繁忙，请稍后重试',
@@ -278,6 +306,10 @@ export class DockerExecutor {
           ),
         )
       }, Math.max(1, this.config.runQueueTimeoutMs))
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true })
+      }
       this.runQueue.push(waiter)
     })
   }
@@ -285,7 +317,7 @@ export class DockerExecutor {
   private releaseRunSlot(): void {
     const next = this.runQueue.shift()
     if (next) {
-      if (next.timer) clearTimeout(next.timer)
+      next.cleanup()
       next.resolve(() => this.releaseRunSlot())
       return
     }
@@ -403,6 +435,7 @@ export class DockerExecutor {
       timeoutMs: number
       maxOutputChars: number
       containerName?: string
+      signal?: AbortSignal
     },
   ): Promise<DockerRunResult> {
     const startedAt = Date.now()
@@ -412,51 +445,78 @@ export class DockerExecutor {
     return new Promise<DockerRunResult>((resolve, reject) => {
       let finished = false
       let timedOut = false
-      let killingContainer = false
+      let cancelled = false
+      let cleanupPromise: Promise<void> | null = null
 
       const child = this.spawnFn('docker', args, {
         stdio: 'pipe',
         windowsHide: true,
       })
 
+      const buildResult = (exitCode: number | null): DockerRunResult => ({
+        stdout: stdoutCollector.toString(),
+        stderr: stderrCollector.toString(),
+        exitCode,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        truncated: stdoutCollector.isTruncated() || stderrCollector.isTruncated(),
+        timeout: timedOut,
+        cancelled,
+      })
+
       const finish = (result: DockerRunResult) => {
         if (finished) return
         finished = true
+        options.signal?.removeEventListener('abort', onAbort)
         resolve(result)
       }
 
       const fail = (error: Error) => {
         if (finished) return
         finished = true
+        options.signal?.removeEventListener('abort', onAbort)
         reject(error)
       }
 
-      const killNamedContainer = async () => {
-        if (!options.containerName || killingContainer) return
-        killingContainer = true
-        try {
-          await this.forceRemoveContainer(options.containerName)
-        } catch (error) {
-          log.warn('Failed to kill timed-out workspace container', {
-            containerName: options.containerName,
-            error: error instanceof Error ? error.message : String(error),
-          })
+      const ensureContainerCleanup = () => {
+        if (!options.containerName) return Promise.resolve()
+        if (!cleanupPromise) {
+          cleanupPromise = this.forceRemoveContainer(options.containerName).then(() => undefined)
         }
+        return cleanupPromise
+      }
+
+      const stopChild = () => {
+        try {
+          child.kill('SIGKILL')
+        } catch {
+          // ignore
+        }
+      }
+
+      const onAbort = () => {
+        cancelled = true
+        void ensureContainerCleanup().finally(() => {
+          stopChild()
+        })
       }
 
       const timer =
         options.timeoutMs > 0
           ? setTimeout(() => {
               timedOut = true
-              void killNamedContainer().finally(() => {
-                try {
-                  child.kill('SIGKILL')
-                } catch {
-                  // ignore
-                }
+              void ensureContainerCleanup().finally(() => {
+                stopChild()
               })
             }, options.timeoutMs)
           : null
+
+      if (options.signal) {
+        if (options.signal.aborted) {
+          onAbort()
+        } else {
+          options.signal.addEventListener('abort', onAbort, { once: true })
+        }
+      }
 
       child.on('error', (error: any) => {
         if (timer) clearTimeout(timer)
@@ -482,27 +542,14 @@ export class DockerExecutor {
 
       child.on('close', (code) => {
         if (timer) clearTimeout(timer)
-        if (timedOut && options.containerName) {
-          void killNamedContainer().finally(() => {
-            finish({
-              stdout: stdoutCollector.toString(),
-              stderr: stderrCollector.toString(),
-              exitCode: typeof code === 'number' ? code : null,
-              durationMs: Math.max(0, Date.now() - startedAt),
-              truncated: stdoutCollector.isTruncated() || stderrCollector.isTruncated(),
-              timeout: timedOut,
-            })
+        const exitCode = typeof code === 'number' ? code : null
+        if ((timedOut || cancelled) && options.containerName) {
+          void ensureContainerCleanup().finally(() => {
+            finish(buildResult(exitCode))
           })
           return
         }
-        finish({
-          stdout: stdoutCollector.toString(),
-          stderr: stderrCollector.toString(),
-          exitCode: typeof code === 'number' ? code : null,
-          durationMs: Math.max(0, Date.now() - startedAt),
-          truncated: stdoutCollector.isTruncated() || stderrCollector.isTruncated(),
-          timeout: timedOut,
-        })
+        finish(buildResult(exitCode))
       })
 
       if (typeof options.stdin === 'string' && options.stdin.length > 0) {

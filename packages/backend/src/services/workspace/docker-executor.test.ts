@@ -187,4 +187,52 @@ describe('DockerExecutor', () => {
     )
     expect(listed).toBe(true)
   })
+
+  it('kills named container when abort signal fires', async () => {
+    delete process.env.HOSTNAME
+    const spawnCalls: string[][] = []
+    const controller = new AbortController()
+    const spawnFn = jest.fn((_cmd: string, args: string[]) => {
+      spawnCalls.push(args)
+      const child = createMockChild()
+      if (args[0] === 'version') {
+        queueMicrotask(() => {
+          child.stdout.emit('data', Buffer.from('24.0.0'))
+          child.emit('close', 0)
+        })
+      } else if (args[0] === 'kill' || args[0] === 'rm') {
+        queueMicrotask(() => child.emit('close', 0))
+      } else if (args[0] === 'run') {
+        queueMicrotask(() => controller.abort())
+      }
+      return child as unknown as ChildProcessWithoutNullStreams
+    })
+
+    const executor = new DockerExecutor({
+      workspaceConfig: {
+        ...baseConfig(),
+        maxConcurrentRuns: 2,
+        runQueueTimeoutMs: 5_000,
+      },
+      spawnFn: spawnFn as any,
+    })
+
+    await expect(
+      executor.run({
+        workspaceRoot: '/tmp/ws-cancel',
+        command: ['python', '-c', 'while True: pass'],
+        timeoutMs: 5_000,
+        maxOutputChars: 1024,
+        networkMode: 'none',
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({
+      code: 'WORKSPACE_EXEC_CANCELLED',
+      statusCode: 499,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(spawnCalls.some((args) => args[0] === 'kill')).toBe(true)
+    expect(spawnCalls.some((args) => args[0] === 'rm')).toBe(true)
+  })
 })

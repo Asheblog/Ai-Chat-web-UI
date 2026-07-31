@@ -186,6 +186,7 @@ export interface WorkspacePythonRunParams {
   timeoutMs: number
   maxOutputChars: number
   maxSourceChars: number
+  signal?: AbortSignal
 }
 
 export interface WorkspacePythonRunResult {
@@ -253,7 +254,7 @@ export class WorkspacePythonRuntime {
 
     const runStartedAt = Date.now()
     try {
-      await this.ensureVirtualEnvironment(workspace.rootPath)
+      await this.ensureVirtualEnvironment(workspace.rootPath, params.signal)
       const scriptRelativePath = path.join('.meta', 'runs', `${params.toolCallId || randomUUID()}.py`)
       const scriptAbsolutePath = path.resolve(workspace.rootPath, scriptRelativePath)
       await fs.mkdir(path.dirname(scriptAbsolutePath), { recursive: true })
@@ -265,6 +266,7 @@ export class WorkspacePythonRuntime {
         input: params.input,
         timeoutMs: Math.max(1000, Math.min(params.timeoutMs, this.config.runTimeoutMs)),
         maxOutputChars: params.maxOutputChars,
+        signal: params.signal,
       })
 
       const afterArtifacts = await ArtifactService.snapshotArtifactTree(workspace.artifactsPath)
@@ -337,7 +339,7 @@ export class WorkspacePythonRuntime {
     }
   }
 
-  private async ensureVirtualEnvironment(workspaceRoot: string): Promise<void> {
+  private async ensureVirtualEnvironment(workspaceRoot: string, signal?: AbortSignal): Promise<void> {
     const venvPythonPath = path.resolve(workspaceRoot, '.venv', 'bin', 'python')
     const exists = await fs
       .access(venvPythonPath)
@@ -351,6 +353,7 @@ export class WorkspacePythonRuntime {
       timeoutMs: Math.max(10_000, this.config.runTimeoutMs),
       maxOutputChars: 10_000,
       networkMode: 'none',
+      signal,
     })
 
     if ((createResult.exitCode ?? 1) !== 0) {
@@ -368,6 +371,7 @@ export class WorkspacePythonRuntime {
     input?: string
     timeoutMs: number
     maxOutputChars: number
+    signal?: AbortSignal
   }): Promise<{
     stdout: string
     stderr: string
@@ -401,6 +405,7 @@ export class WorkspacePythonRuntime {
         env: {
           PYTHONUNBUFFERED: '1',
         },
+        signal: params.signal,
       })
 
       const detectedMissing = extractMissingModuleRequirements(`${runResult.stderr}\n${runResult.stdout}`)
@@ -428,7 +433,7 @@ export class WorkspacePythonRuntime {
         break
       }
 
-      await this.installRequirements(params.workspaceRoot, detectedMissing)
+      await this.installRequirements(params.workspaceRoot, detectedMissing, params.signal)
       for (const requirement of detectedMissing) {
         installedSet.add(requirement)
         autoInstalledRequirements.push(requirement)
@@ -447,7 +452,7 @@ export class WorkspacePythonRuntime {
     }
   }
 
-  private async installRequirements(workspaceRoot: string, requirements: string[]) {
+  private async installRequirements(workspaceRoot: string, requirements: string[], signal?: AbortSignal) {
     const safeRequirements = requirements
       .map((item) => (item || '').trim())
       .filter((item) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(item))
@@ -470,6 +475,7 @@ export class WorkspacePythonRuntime {
       timeoutMs: this.config.pythonInstallTimeoutMs,
       maxOutputChars: 20_000,
       networkMode: 'default',
+      signal,
     })
 
     if ((installResult.exitCode ?? 1) !== 0) {

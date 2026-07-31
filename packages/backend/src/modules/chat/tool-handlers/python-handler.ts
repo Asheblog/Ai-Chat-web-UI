@@ -128,6 +128,7 @@ export class PythonToolHandler implements IToolHandler {
         timeoutMs: this.config.timeoutMs,
         maxOutputChars: this.config.maxOutputChars,
         maxSourceChars: this.config.maxSourceChars,
+        signal: context.requestSignal,
       })
 
       const resultPreview = truncateText(

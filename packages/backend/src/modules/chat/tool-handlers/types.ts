@@ -42,6 +42,7 @@ export interface ToolCallContext {
   modelCapabilities?: {
     vision?: boolean
   }
+  requestSignal?: AbortSignal
   emitReasoning: (content: string, meta?: Record<string, unknown>) => void
   sendToolEvent: (payload: Record<string, unknown>) => void
   sendStreamEvent?: (payload: Record<string, unknown>) => void
