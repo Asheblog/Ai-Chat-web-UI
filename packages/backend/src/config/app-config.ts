@@ -46,6 +46,8 @@ export interface WorkspaceConfig {
   maxArtifactBytes: number
   maxArtifactsPerMessage: number
   runTimeoutMs: number
+  maxConcurrentRuns: number
+  runQueueTimeoutMs: number
   dockerImage: string
   dockerCpu: string
   dockerMemory: string
@@ -124,11 +126,19 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig =
     const parsed = parseNumber(env.WORKSPACE_RUN_TIMEOUT_MS, 120_000)
     return Math.max(1000, Math.min(parsed, 10 * 60_000))
   })()
+  const maxConcurrentRuns = (() => {
+    const parsed = parseNumber(env.WORKSPACE_MAX_CONCURRENT_RUNS, 2)
+    return Math.max(1, Math.min(parsed, 32))
+  })()
+  const runQueueTimeoutMs = (() => {
+    const parsed = parseNumber(env.WORKSPACE_RUN_QUEUE_TIMEOUT_MS, 15_000)
+    return Math.max(1000, Math.min(parsed, 5 * 60_000))
+  })()
   const dockerImage = (env.WORKSPACE_DOCKER_IMAGE || 'python:3.11-slim').trim()
-  const dockerCpu = (env.WORKSPACE_DOCKER_CPUS || '1.0').trim() || '1.0'
-  const dockerMemory = (env.WORKSPACE_DOCKER_MEMORY || '1g').trim() || '1g'
+  const dockerCpu = (env.WORKSPACE_DOCKER_CPUS || '0.5').trim() || '0.5'
+  const dockerMemory = (env.WORKSPACE_DOCKER_MEMORY || '512m').trim() || '512m'
   const dockerPidsLimit = (() => {
-    const parsed = parseNumber(env.WORKSPACE_DOCKER_PIDS_LIMIT, 256)
+    const parsed = parseNumber(env.WORKSPACE_DOCKER_PIDS_LIMIT, 128)
     return Math.max(32, Math.min(parsed, 8192))
   })()
   const artifactSigningSecret =
@@ -147,7 +157,7 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig =
     return Math.max(5000, Math.min(parsed, 10 * 60_000))
   })()
   const pythonInstallTimeoutMs = (() => {
-    const parsed = parseNumber(env.WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS, 300_000)
+    const parsed = parseNumber(env.WORKSPACE_PYTHON_INSTALL_TIMEOUT_MS, 600_000)
     return Math.max(10_000, Math.min(parsed, 30 * 60_000))
   })()
 
@@ -178,6 +188,8 @@ export const loadAppConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig =
       maxArtifactBytes,
       maxArtifactsPerMessage,
       runTimeoutMs,
+      maxConcurrentRuns,
+      runQueueTimeoutMs,
       dockerImage,
       dockerCpu,
       dockerMemory,

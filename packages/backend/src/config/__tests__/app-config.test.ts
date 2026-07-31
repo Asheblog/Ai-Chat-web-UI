@@ -32,7 +32,13 @@ describe('app-config', () => {
     expect(cfg.workspace.maxArtifactBytes).toBe(100 * 1024 * 1024)
     expect(cfg.workspace.maxArtifactsPerMessage).toBe(20)
     expect(cfg.workspace.runTimeoutMs).toBe(120_000)
+    expect(cfg.workspace.maxConcurrentRuns).toBe(2)
+    expect(cfg.workspace.runQueueTimeoutMs).toBe(15_000)
     expect(cfg.workspace.dockerImage).toBe('python:3.11-slim')
+    expect(cfg.workspace.dockerCpu).toBe('0.5')
+    expect(cfg.workspace.dockerMemory).toBe('512m')
+    expect(cfg.workspace.dockerPidsLimit).toBe(128)
+    expect(cfg.workspace.pythonInstallTimeoutMs).toBe(600_000)
   })
 
   it('parses overrides from env', () => {
@@ -58,6 +64,8 @@ describe('app-config', () => {
       WORKSPACE_ARTIFACT_MAX_BYTES: '1048576',
       WORKSPACE_MAX_ARTIFACTS_PER_MESSAGE: '8',
       WORKSPACE_RUN_TIMEOUT_MS: '90000',
+      WORKSPACE_MAX_CONCURRENT_RUNS: '4',
+      WORKSPACE_RUN_QUEUE_TIMEOUT_MS: '20000',
       WORKSPACE_DOCKER_IMAGE: 'python:3.12-slim',
       WORKSPACE_DOCKER_CPUS: '2.0',
       WORKSPACE_DOCKER_MEMORY: '2g',
@@ -87,7 +95,7 @@ describe('app-config', () => {
     expect(cfg.storage.defaultRetentionDays).toBe(10)
     expect(cfg.storage.baseUrl).toBe('https://cdn.test')
 
-    expect(cfg.workspace.rootDir).toBe(path.join('/tmp/aichat-data', 'workspaces', 'chat'))
+    expect(cfg.workspace.rootDir).toBe(path.resolve('/tmp/aichat-data', 'workspaces', 'chat'))
     expect(cfg.workspace.artifactTtlMinutes).toBe(30)
     expect(cfg.workspace.idleTtlMinutes).toBe(300)
     expect(cfg.workspace.cleanupIntervalMs).toBe(2 * 60_000)
@@ -95,6 +103,8 @@ describe('app-config', () => {
     expect(cfg.workspace.maxArtifactBytes).toBe(1_048_576)
     expect(cfg.workspace.maxArtifactsPerMessage).toBe(8)
     expect(cfg.workspace.runTimeoutMs).toBe(90_000)
+    expect(cfg.workspace.maxConcurrentRuns).toBe(4)
+    expect(cfg.workspace.runQueueTimeoutMs).toBe(20_000)
     expect(cfg.workspace.dockerImage).toBe('python:3.12-slim')
     expect(cfg.workspace.dockerCpu).toBe('2.0')
     expect(cfg.workspace.dockerMemory).toBe('2g')

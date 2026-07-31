@@ -14,6 +14,8 @@
 - **Workspace File（工作区文件）**：会话中的用户上传文件，作为工具可读取的工作材料；不同于图片附件和 RAG/知识库文档
 - **Workspace File State（工作区文件状态）**：工作区文件在上传流程中的用户可见状态，用于区分上传中、可使用和失败
 - **Recommended Analysis Type（推荐直接分析类型）**：产品明确提示可优先用于对话分析的常见文件类型（图片、PDF、Word、Excel、CSV、TXT/Markdown、JSON、代码文件等）；它不是上传白名单，不排除其他 Workspace File 的上传
+- **Workspace Docker Run Slot（工作区 Docker 运行槽）**：进程内限制同时运行的 workspace Docker 容器数量的配额单位；聊天、Battle 与 Skill 沙箱共用同一池，超额请求排队等待
+- **Orphan Workspace Container（孤儿工作区容器）**：执行超时或进程中断后仍留在宿主上、继续占用资源的 workspace 沙箱容器；系统须按命名前缀主动回收
 
 ## 思考与推理
 

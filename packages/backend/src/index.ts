@@ -388,6 +388,19 @@ const stopCatalogRefresh = scheduleModelCatalogAutoRefresh({
 });
 container.workspaceCleanupService.start();
 
+// 非阻塞：清理超时残留的 workspace Docker 容器，避免孤儿容器吃满宿主
+;(async () => {
+  try {
+    const { dockerExecutor } = await import('./services/workspace/docker-executor')
+    await dockerExecutor.cleanupOrphanContainers()
+  } catch (err) {
+    console.debug(
+      '[startup] orphan workspace container cleanup skipped:',
+      err instanceof Error ? err.message : err,
+    )
+  }
+})()
+
 // 非阻塞启动检查：诊断 bearer 连接缺少 secretVaultId
 ;(async () => {
   try {

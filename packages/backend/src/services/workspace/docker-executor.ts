@@ -1,12 +1,15 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { getAppConfig, type WorkspaceConfig } from '../../config/app-config'
 import { WorkspaceServiceError } from './workspace-errors'
 import { createLogger } from '../../utils/logger'
 
 const DOCKER_CHECK_CACHE_MS = 30_000
 const DOCKER_MOUNT_CACHE_MS = 30_000
+export const WORKSPACE_CONTAINER_NAME_PREFIX = 'aichat-ws-'
+
 const resolveSeccompProfilePath = () => {
   const candidates = [
     path.resolve(process.cwd(), 'dist', 'py-sandbox-seccomp.json'),
@@ -73,15 +76,26 @@ export interface DockerRunResult {
 
 export interface DockerExecutorDeps {
   workspaceConfig?: WorkspaceConfig
+  spawnFn?: typeof spawn
+}
+
+type QueueWaiter = {
+  resolve: (release: () => void) => void
+  reject: (error: Error) => void
+  timer: NodeJS.Timeout | null
 }
 
 export class DockerExecutor {
   private readonly config: WorkspaceConfig
+  private readonly spawnFn: typeof spawn
   private dockerAvailableCache: { at: number; ok: boolean } | null = null
   private mountCache: { at: number; mounts: DockerMountPoint[] } | null = null
+  private activeRuns = 0
+  private readonly runQueue: QueueWaiter[] = []
 
   constructor(deps: DockerExecutorDeps = {}) {
     this.config = deps.workspaceConfig ?? getAppConfig().workspace
+    this.spawnFn = deps.spawnFn ?? spawn
   }
 
   async assertDockerAvailable(): Promise<void> {
@@ -115,77 +129,167 @@ export class DockerExecutor {
     this.dockerAvailableCache = { at: now, ok: true }
   }
 
+  async cleanupOrphanContainers(): Promise<number> {
+    const listResult = await this.execDocker(
+      ['ps', '-aq', '--filter', `name=^/${WORKSPACE_CONTAINER_NAME_PREFIX}`],
+      {
+        timeoutMs: 10_000,
+        maxOutputChars: 64_000,
+      },
+    )
+    if (listResult.exitCode !== 0) {
+      log.warn('Failed to list orphan workspace containers', {
+        stderr: listResult.stderr.trim(),
+        exitCode: listResult.exitCode,
+      })
+      return 0
+    }
+
+    const ids = listResult.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (ids.length === 0) return 0
+
+    let cleaned = 0
+    for (const id of ids) {
+      const removed = await this.forceRemoveContainer(id)
+      if (removed) cleaned += 1
+    }
+    if (cleaned > 0) {
+      log.info('Cleaned orphan workspace containers on startup', { cleaned, total: ids.length })
+    }
+    return cleaned
+  }
+
   async run(options: DockerRunOptions): Promise<DockerRunResult> {
     await this.assertDockerAvailable()
+    const release = await this.acquireRunSlot()
 
-    const workspaceRoot = path.resolve(options.workspaceRoot)
-    const dockerWorkspaceRoot = await this.resolveDockerWorkspaceRoot(workspaceRoot)
-    const maxOutputChars = Math.max(256, options.maxOutputChars)
-    const workdir = options.workdir || '/workspace'
-    const args: string[] = [
-      'run',
-      '--rm',
-      '--workdir',
-      workdir,
-      '--cpus',
-      this.config.dockerCpu,
-      '--memory',
-      this.config.dockerMemory,
-      '--pids-limit',
-      String(this.config.dockerPidsLimit),
-      '--cap-drop=ALL',
-      '--security-opt',
-      'no-new-privileges',
-      '--read-only',
-      '--tmpfs',
-      '/tmp:rw,noexec,nosuid,size=268435456',
-    ]
+    try {
+      const workspaceRoot = path.resolve(options.workspaceRoot)
+      const dockerWorkspaceRoot = await this.resolveDockerWorkspaceRoot(workspaceRoot)
+      const maxOutputChars = Math.max(256, options.maxOutputChars)
+      const workdir = options.workdir || '/workspace'
+      const containerName = `${WORKSPACE_CONTAINER_NAME_PREFIX}${randomUUID()}`
+      const args: string[] = [
+        'run',
+        '--rm',
+        '--name',
+        containerName,
+        '--workdir',
+        workdir,
+        '--cpus',
+        this.config.dockerCpu,
+        '--memory',
+        this.config.dockerMemory,
+        '--memory-swap',
+        this.config.dockerMemory,
+        '--pids-limit',
+        String(this.config.dockerPidsLimit),
+        '--ulimit',
+        'nofile=1024:1024',
+        '--cap-drop=ALL',
+        '--security-opt',
+        'no-new-privileges',
+        '--read-only',
+        '--tmpfs',
+        '/tmp:rw,noexec,nosuid,size=268435456',
+      ]
 
-    if (SECCOMP_AVAILABLE) {
-      args.push('--security-opt', `seccomp=${SECCOMP_PROFILE_PATH}`)
+      if (SECCOMP_AVAILABLE) {
+        args.push('--security-opt', `seccomp=${SECCOMP_PROFILE_PATH}`)
+      }
+
+      // Keep file ownership/permissions consistent with the backend process user.
+      // This avoids venv init/write failures under userns-remap and rootless daemon setups.
+      if (runtimeContainerUser) {
+        args.push('--user', runtimeContainerUser)
+      }
+
+      for (const mount of options.readOnlyMounts || []) {
+        const source = await this.resolveDockerWorkspaceRoot(mount.source)
+        args.push('--volume', `${source}:${mount.target}:ro`)
+      }
+
+      args.push('--volume', `${dockerWorkspaceRoot}:/workspace`)
+
+      if (options.networkMode === 'none') {
+        args.push('--network', 'none')
+      }
+
+      const envEntries = Object.entries(options.env || {})
+        .filter(([key, value]) => key.trim().length > 0 && value.trim().length > 0)
+        .slice(0, 32)
+      for (const [key, value] of envEntries) {
+        args.push('-e', `${key}=${value}`)
+      }
+
+      args.push(this.config.dockerImage, ...options.command)
+
+      const result = await this.execDocker(args, {
+        stdin: options.stdin,
+        timeoutMs: options.timeoutMs,
+        maxOutputChars,
+        containerName,
+      })
+
+      if (result.timeout) {
+        throw new WorkspaceServiceError(
+          `workspace 执行超时（${options.timeoutMs}ms）`,
+          408,
+          'WORKSPACE_EXEC_TIMEOUT',
+        )
+      }
+
+      return result
+    } finally {
+      release()
+    }
+  }
+
+  private acquireRunSlot(): Promise<() => void> {
+    const maxConcurrent = Math.max(1, this.config.maxConcurrentRuns)
+    if (this.activeRuns < maxConcurrent) {
+      this.activeRuns += 1
+      return Promise.resolve(() => this.releaseRunSlot())
     }
 
-    // Keep file ownership/permissions consistent with the backend process user.
-    // This avoids venv init/write failures under userns-remap and rootless daemon setups.
-    if (runtimeContainerUser) {
-      args.push('--user', runtimeContainerUser)
-    }
-
-    for (const mount of options.readOnlyMounts || []) {
-      const source = await this.resolveDockerWorkspaceRoot(mount.source)
-      args.push('--volume', `${source}:${mount.target}:ro`)
-    }
-
-    args.push('--volume', `${dockerWorkspaceRoot}:/workspace`)
-
-    if (options.networkMode === 'none') {
-      args.push('--network', 'none')
-    }
-
-    const envEntries = Object.entries(options.env || {})
-      .filter(([key, value]) => key.trim().length > 0 && value.trim().length > 0)
-      .slice(0, 32)
-    for (const [key, value] of envEntries) {
-      args.push('-e', `${key}=${value}`)
-    }
-
-    args.push(this.config.dockerImage, ...options.command)
-
-    const result = await this.execDocker(args, {
-      stdin: options.stdin,
-      timeoutMs: options.timeoutMs,
-      maxOutputChars,
+    return new Promise<() => void>((resolve, reject) => {
+      const waiter: QueueWaiter = {
+        resolve: (release) => resolve(release),
+        reject,
+        timer: null,
+      }
+      waiter.timer = setTimeout(() => {
+        const index = this.runQueue.indexOf(waiter)
+        if (index >= 0) {
+          this.runQueue.splice(index, 1)
+        }
+        reject(
+          new WorkspaceServiceError(
+            '工作区繁忙，请稍后重试',
+            503,
+            'WORKSPACE_RUN_QUEUE_TIMEOUT',
+            {
+              maxConcurrentRuns: this.config.maxConcurrentRuns,
+              queueTimeoutMs: this.config.runQueueTimeoutMs,
+            },
+          ),
+        )
+      }, Math.max(1, this.config.runQueueTimeoutMs))
+      this.runQueue.push(waiter)
     })
+  }
 
-    if (result.timeout) {
-      throw new WorkspaceServiceError(
-        `workspace 执行超时（${options.timeoutMs}ms）`,
-        408,
-        'WORKSPACE_EXEC_TIMEOUT',
-      )
+  private releaseRunSlot(): void {
+    const next = this.runQueue.shift()
+    if (next) {
+      if (next.timer) clearTimeout(next.timer)
+      next.resolve(() => this.releaseRunSlot())
+      return
     }
-
-    return result
+    this.activeRuns = Math.max(0, this.activeRuns - 1)
   }
 
   private async resolveDockerWorkspaceRoot(workspaceRoot: string): Promise<string> {
@@ -272,12 +376,33 @@ export class DockerExecutor {
     }
   }
 
+  private async forceRemoveContainer(containerRef: string): Promise<boolean> {
+    const killResult = await this.execDocker(['kill', containerRef], {
+      timeoutMs: 5_000,
+      maxOutputChars: 2048,
+    })
+    const rmResult = await this.execDocker(['rm', '-f', containerRef], {
+      timeoutMs: 5_000,
+      maxOutputChars: 2048,
+    })
+    const removed = killResult.exitCode === 0 || rmResult.exitCode === 0
+    if (!removed) {
+      log.warn('Failed to remove workspace container', {
+        containerRef,
+        killStderr: killResult.stderr.trim(),
+        rmStderr: rmResult.stderr.trim(),
+      })
+    }
+    return removed
+  }
+
   private async execDocker(
     args: string[],
     options: {
       stdin?: string
       timeoutMs: number
       maxOutputChars: number
+      containerName?: string
     },
   ): Promise<DockerRunResult> {
     const startedAt = Date.now()
@@ -287,8 +412,9 @@ export class DockerExecutor {
     return new Promise<DockerRunResult>((resolve, reject) => {
       let finished = false
       let timedOut = false
+      let killingContainer = false
 
-      const child = spawn('docker', args, {
+      const child = this.spawnFn('docker', args, {
         stdio: 'pipe',
         windowsHide: true,
       })
@@ -305,15 +431,30 @@ export class DockerExecutor {
         reject(error)
       }
 
+      const killNamedContainer = async () => {
+        if (!options.containerName || killingContainer) return
+        killingContainer = true
+        try {
+          await this.forceRemoveContainer(options.containerName)
+        } catch (error) {
+          log.warn('Failed to kill timed-out workspace container', {
+            containerName: options.containerName,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
       const timer =
         options.timeoutMs > 0
           ? setTimeout(() => {
               timedOut = true
-              try {
-                child.kill('SIGKILL')
-              } catch {
-                // ignore
-              }
+              void killNamedContainer().finally(() => {
+                try {
+                  child.kill('SIGKILL')
+                } catch {
+                  // ignore
+                }
+              })
             }, options.timeoutMs)
           : null
 
@@ -332,15 +473,28 @@ export class DockerExecutor {
         fail(error instanceof Error ? error : new Error(String(error)))
       })
 
-      child.stdout.on('data', (chunk: Buffer) => {
+      child.stdout?.on('data', (chunk: Buffer) => {
         stdoutCollector.push(chunk)
       })
-      child.stderr.on('data', (chunk: Buffer) => {
+      child.stderr?.on('data', (chunk: Buffer) => {
         stderrCollector.push(chunk)
       })
 
       child.on('close', (code) => {
         if (timer) clearTimeout(timer)
+        if (timedOut && options.containerName) {
+          void killNamedContainer().finally(() => {
+            finish({
+              stdout: stdoutCollector.toString(),
+              stderr: stderrCollector.toString(),
+              exitCode: typeof code === 'number' ? code : null,
+              durationMs: Math.max(0, Date.now() - startedAt),
+              truncated: stdoutCollector.isTruncated() || stderrCollector.isTruncated(),
+              timeout: timedOut,
+            })
+          })
+          return
+        }
         finish({
           stdout: stdoutCollector.toString(),
           stderr: stderrCollector.toString(),
@@ -352,9 +506,9 @@ export class DockerExecutor {
       })
 
       if (typeof options.stdin === 'string' && options.stdin.length > 0) {
-        child.stdin.write(options.stdin)
+        child.stdin?.write(options.stdin)
       }
-      child.stdin.end()
+      child.stdin?.end()
     })
   }
 }
