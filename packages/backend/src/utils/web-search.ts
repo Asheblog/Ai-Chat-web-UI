@@ -79,7 +79,7 @@ const DEFAULT_LIMIT = 4
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12_000
 const SUPPORTED_ENGINES = ['tavily', 'brave', 'metaso', 'exa'] as const
 type SupportedSearchEngine = (typeof SUPPORTED_ENGINES)[number]
-const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'scholar', 'image', 'video', 'podcast'])
+export const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'scholar', 'image', 'video', 'podcast'])
 
 const clampLimit = (value?: number) => {
   if (!value || Number.isNaN(value)) return DEFAULT_LIMIT

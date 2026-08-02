@@ -186,9 +186,10 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
           continue;
         }
 
-        if (chunk.type === "content") {
+        if (chunk.type === "content" && chunk.content) {
+          const contentText: string = chunk.content;
           const targetId = streamRef.current?.assistantId ?? assistantId;
-          setMessages((current) => appendAssistantContent(current, targetId, chunk.content));
+          setMessages((current) => appendAssistantContent(current, targetId, contentText));
           continue;
         }
 

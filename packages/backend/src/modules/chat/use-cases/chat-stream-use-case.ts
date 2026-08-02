@@ -34,6 +34,11 @@ import {
 } from '../../chat/stream-state';
 import type { ChatRequestBuilder } from '../services/chat-request-builder';
 import {
+  resolveMaxToolIterations,
+  sanitizeScope,
+  extractUsageNumbers,
+} from '../services/stream-utils';
+import {
   type ReasoningCompatibilityService,
   type AttemptTracker,
   type ReasoningProtocol,
@@ -462,24 +467,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       const pythonToolConfig = buildAgentPythonToolConfig(sysMap);
       const urlReaderConfig = buildAgentUrlReaderConfig(sysMap);
       const workspaceToolConfig = buildAgentWorkspaceToolConfig(sysMap);
-      const agentMaxToolIterations = (() => {
-        const raw =
-          sysMap.agent_max_tool_iterations ??
-          process.env.AGENT_MAX_TOOL_ITERATIONS ??
-          '4';
-        const parsed = Number.parseInt(String(raw), 10);
-        if (Number.isFinite(parsed) && parsed >= 0) {
-          return Math.min(20, parsed);
-        }
-        return 4;
-      })();
-      const sanitizeScope = (scope?: string) => {
-        if (!scope) return undefined;
-        const normalized = scope.trim().toLowerCase();
-        return ['webpage', 'document', 'paper', 'image', 'video', 'podcast'].includes(normalized)
-          ? normalized
-          : undefined;
-      };
+      const agentMaxToolIterations = resolveMaxToolIterations(sysMap);
+      // 统一 scope 白名单（含 scholar），与 utils/web-search.ts METASO_SCOPE_WHITELIST 同源
       const webSearchSkillOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}
       Object.assign(
         agentWebSearchConfig,
@@ -1019,18 +1008,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           return { hit: 0, miss: 0 }
         }
       };
-      const extractUsageNumbers = (u: any): { prompt: number; completion: number; total: number } => {
-        try {
-          const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0;
-          const completion = Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0;
-          const total =
-            Number(u?.total_tokens ?? (prompt + completion)) || (prompt + completion);
-          return { prompt, completion, total };
-        } catch {
-          return { prompt: 0, completion: 0, total: 0 };
-        }
-      };
-
       let assistantProgressLastPersistAt = 0;
       let assistantProgressLastPersistedLength = 0;
       let assistantReasoningPersistLength = 0;

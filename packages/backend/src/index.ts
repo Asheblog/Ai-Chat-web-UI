@@ -4,7 +4,6 @@ import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { CHAT_IMAGE_PUBLIC_PATH, CHAT_IMAGE_STORAGE_ROOT } from './config/storage';
-import { SecretVaultService } from './services/secret-vault';
 import { ImageGenerationService, setImageGenerationService } from './services/image-generation';
 import { createAppContainer } from './container/app-container';
 
@@ -39,7 +38,6 @@ import { ChatMessageQueryService } from './modules/chat/services/message-query-s
 import { ConversationCompressionService } from './modules/chat/services/conversation-compression-service';
 import { NonStreamChatService } from './modules/chat/services/non-stream-chat-service';
 import { TitleSummaryService } from './modules/chat/services/title-summary-service';
-import { ChatRequestBuilder } from './modules/chat/services/chat-request-builder';
 import { ReasoningCompatibilityService } from './modules/chat/services/reasoning-compatibility-service';
 import { ProviderRequester } from './modules/chat/services/provider-requester';
 import { NonStreamFallbackService } from './modules/chat/services/non-stream-fallback-service';
@@ -55,13 +53,9 @@ const container = createAppContainer();
 const appContext = container.context;
 setChatConfig(appContext.config);
 
-let secretVault: SecretVaultService
-try {
-  secretVault = new SecretVaultService()
-} catch (error) {
-  console.error('Secret Vault 初始化失败，请设置 SECRET_VAULT_MASTER_KEY。', error)
-  throw error
-}
+// SecretVault 与 ChatRequestBuilder 均由容器统一装配（全进程唯一实例）
+const secretVault = container.secretVault;
+const chatRequestBuilder = container.chatRequestBuilder;
 
 // 设置 RAG 初始化器依赖并启动
 setRAGInitializerDeps({ prisma: appContext.prisma, secretVault });
@@ -70,7 +64,6 @@ reloadRAGServices();
 const skillInstaller = new SkillInstaller({ prisma: appContext.prisma });
 const skillApprovalService = new SkillApprovalService({ prisma: appContext.prisma });
 const providerRequester = new ProviderRequester();
-const chatRequestBuilder = new ChatRequestBuilder({ prisma: appContext.prisma, secretVault });
 setImageGenerationService(new ImageGenerationService({ secretVault }));
 const nonStreamFallbackService = new NonStreamFallbackService();
 const assistantProgressService = new AssistantProgressService({ prisma: appContext.prisma });

@@ -119,6 +119,8 @@ export interface AppContainerDeps {
 
 export class AppContainer {
   readonly context: AppContext
+  readonly secretVault: SecretVaultService
+  readonly chatRequestBuilder: ChatRequestBuilder
   readonly connectionRepository: ConnectionRepository
   readonly connectionService: ConnectionService
   readonly modelResolverRepository: ModelResolverRepository
@@ -176,21 +178,27 @@ export class AppContainer {
       })
     registry.register(SERVICE_KEYS.modelResolverService, this.modelResolverService)
 
-    let secretVault: SecretVaultService
+    // SecretVault 全进程唯一实例：chat/battle/image-generation/model-catalog 等共用，
+    // 避免各处重复构造导致 master-key 校验与加密上下文分叉。
     try {
-      secretVault = new SecretVaultService()
+      this.secretVault = new SecretVaultService()
     } catch (error) {
       log.error('Secret Vault 初始化失败，请设置 SECRET_VAULT_MASTER_KEY。', error)
       throw error
     }
+    // ChatRequestBuilder 全进程唯一实例（带 vault 解密能力），battle 与 chat 共用。
+    this.chatRequestBuilder = new ChatRequestBuilder({
+      prisma: this.context.prisma,
+      secretVault: this.secretVault,
+    })
 
     this.connectionService =
       deps.connectionService ??
       new ConnectionService({
         repository: this.connectionRepository,
-        secretVault,
+        secretVault: this.secretVault,
         // 刷新模型目录必须带上 vault，否则 bearer 连接会以空 Key 请求上游并 401
-        refreshModelCatalog: (conn) => refreshModelCatalogForConnection(conn, secretVault),
+        refreshModelCatalog: (conn) => refreshModelCatalogForConnection(conn, this.secretVault),
         verifyConnection,
         logger: log,
       })
@@ -235,12 +243,10 @@ export class AppContainer {
         prisma: this.context.prisma,
         modelResolver: this.modelResolverService,
         imageService: new BattleImageService(),
-        // 对战执行必须复用带 vault 的 ChatRequestBuilder，否则 bearer 连接无法解密 API Key
+        // 对战执行必须复用带 vault 的 ChatRequestBuilder（全进程唯一实例），
+        // 否则 bearer 连接无法解密 API Key
         executor: new BattleExecutor({
-          requestBuilder: new ChatRequestBuilder({
-            prisma: this.context.prisma,
-            secretVault,
-          }),
+          requestBuilder: this.chatRequestBuilder,
         }),
       })
     registry.register(SERVICE_KEYS.battleService, this.battleService)
@@ -332,11 +338,11 @@ export class AppContainer {
       deps.modelCatalogService ??
       new ModelCatalogService({
         prisma: this.context.prisma,
-        refreshAllModelCatalog: () => refreshAllModelCatalog(secretVault),
+        refreshAllModelCatalog: () => refreshAllModelCatalog(this.secretVault),
         refreshModelCatalogForConnections: (connections) =>
-          refreshModelCatalogForConnections(connections, secretVault),
+          refreshModelCatalogForConnections(connections, this.secretVault),
         refreshModelCatalogForConnectionId: (connectionId) =>
-          refreshModelCatalogForConnectionId(connectionId, secretVault),
+          refreshModelCatalogForConnectionId(connectionId, this.secretVault),
         computeCapabilities,
         deriveChannelName,
         parseCapabilityEnvelope,

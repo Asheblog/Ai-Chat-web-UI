@@ -15,6 +15,7 @@ import type { TaskTraceRecorder } from '../../utils/task-trace'
 import type { BattleUploadImage } from '@aichat/shared/battle-contract'
 import type { BattleModelInput, BattleModelSkills } from './battle-types'
 import { safeParseJson } from './battle-serialization'
+import { resolveMaxToolIterations, buildUsage } from '../../modules/chat/services/stream-utils'
 import { createSkillRegistry } from '../../modules/skills/skill-registry'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../modules/skills/types'
 import { createLogger } from '../../utils/logger'
@@ -65,35 +66,7 @@ const normalizeJudgeScore = (value: unknown) => {
   return Math.min(1, Math.max(0, score))
 }
 
-const resolveMaxToolIterations = (sysMap: Record<string, string>) => {
-  const raw = sysMap.agent_max_tool_iterations || process.env.AGENT_MAX_TOOL_ITERATIONS || '4'
-  const parsed = Number.parseInt(String(raw), 10)
-  if (Number.isFinite(parsed) && parsed >= 0) {
-    if (parsed === 0) {
-      return Number.POSITIVE_INFINITY
-    }
-    return Math.min(20, parsed)
-  }
-  return 4
-}
-
-const buildUsage = (json: any, context: { promptTokens: number; contextLimit: number; contextRemaining: number }) => {
-  const u = json?.usage || {}
-  const promptTokens =
-    Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? context.promptTokens) ||
-    context.promptTokens
-  const completionTokens =
-    Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0
-  const totalTokens =
-    Number(u?.total_tokens ?? 0) || promptTokens + (Number(u?.completion_tokens ?? 0) || 0)
-  return {
-    prompt_tokens: promptTokens,
-    completion_tokens: completionTokens,
-    total_tokens: totalTokens,
-    context_limit: context.contextLimit,
-    context_remaining: context.contextRemaining,
-  }
-}
+// resolveMaxToolIterations / buildUsage 已收敛至 modules/chat/services/stream-utils（battle 与 chat 共用）
 
 const normalizeTextOnlyContent = (content: unknown): unknown => {
   if (!Array.isArray(content) || content.length === 0) {

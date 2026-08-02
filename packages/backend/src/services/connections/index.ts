@@ -1,33 +1,9 @@
-import { ConnectionService } from './connection-service'
-import { prisma } from '../../db'
-import { SecretVaultService } from '../secret-vault'
-import { refreshModelCatalogForConnection } from '../../utils/model-catalog'
-import { verifyConnection } from '../../utils/providers'
-import { BackendLogger as log } from '../../utils/logger'
-import { PrismaConnectionRepository } from '../../repositories/connection-repository'
-
-const connectionRepository = new PrismaConnectionRepository(prisma)
-
-let secretVault: SecretVaultService
-try {
-  secretVault = new SecretVaultService()
-} catch (error) {
-  log.error('Secret Vault 初始化失败，服务器将无法启动。请设置 SECRET_VAULT_MASTER_KEY 环境变量。', error)
-  throw error
-}
-
-let connectionService: ConnectionService = new ConnectionService({
-  repository: connectionRepository,
-  secretVault,
-  refreshModelCatalog: refreshModelCatalogForConnection,
-  verifyConnection,
-  logger: log,
-})
-
-export const setConnectionService = (service: ConnectionService) => {
-  connectionService = service
-}
-
-export { connectionService }
+/**
+ * connections 模块 barrel —— 纯再导出。
+ *
+ * 历史版本在此文件顶层急切构造 SecretVaultService + ConnectionService 单例，
+ * 导致容器之外再生成一份 vault 实例（master-key 校验分叉、重复解密上下文）。
+ * 连接服务统一由 AppContainer 装配（container.connectionService），此处不再保留副作用。
+ */
 
 export * from './connection-service'

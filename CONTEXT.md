@@ -33,6 +33,13 @@
 - **Tool Node（工具节点）**：时间轴上的单个工具调用卡片
 - **Tool Group（工具合并组）**：同一推理位置、同一类型的多个工具调用合并为一个摘要节点。展开后显示各子调用的明细。仅对 web_search 和 read_url 启用合并
 
+## 流式协议
+
+- **Stream Chunk（流式块）**：服务端 execution SSE 与 legacy 事件经统一归一化后的客户端产物，web / mobile 共用 `@aichat/shared/chat-stream-contract` 类型定义
+- **Stream Normalizer（流式归一化器）**：`@aichat/shared/chat-stream-parser`，将 SSE 帧与事件归一化为 Stream Chunk 的单一实现，web 与 mobile 不得各自维护解析副本
+- **Tool Event Normalizer（工具事件归一化器）**：`@aichat/shared/tool-events`，ToolEvent 状态推断、合并、排序与中文摘要的单一实现，battle 与 chat 共用
+- **Battle Stream Event（乱斗流事件）**：Battle 专有的 `BattleStreamEvent` 协议，与 ChatStreamChunk 不同，battle 私有 SSE 循环不并入 chat 解析器
+
 ## 搜索
 
 - **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa）检索网页

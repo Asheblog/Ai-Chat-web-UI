@@ -1,4 +1,5 @@
 import type { SkillCatalogItem } from '@/types'
+import { formatDateTime } from '@/features/settings/shared'
 
 export type ScopeType = 'system' | 'user' | 'session' | 'battle_model'
 
@@ -10,12 +11,8 @@ export const SKILL_STATUS_BADGE_VARIANT: Record<string, 'default' | 'secondary' 
   deprecated: 'outline',
 }
 
-export const formatDateTime = (value: string | Date | null | undefined) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return '-'
-  return date.toLocaleString()
-}
+// formatDateTime 已收敛至 features/settings/shared（可空容忍版），此处为兼容再导出
+export { formatDateTime }
 
 export const parseDraftJson = (value: string, fieldName: string) => {
   const trimmed = value.trim()

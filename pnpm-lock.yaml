@@ -319,6 +319,9 @@ importers:
 
   packages/mobile:
     dependencies:
+      '@aichat/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@expo/vector-icons':
         specifier: ^15.1.1
         version: 15.1.1(expo-font@56.0.7)(react-native@0.85.3)(react@19.2.3)

@@ -12,7 +12,10 @@
     "./image-limits": "./dist/image-limits.js",
     "./battle-contract": "./dist/battle-contract.js",
     "./execution-contract": "./dist/execution-contract.js",
-    "./workspace-files": "./dist/workspace-files.js"
+    "./workspace-files": "./dist/workspace-files.js",
+    "./chat-stream-contract": "./dist/chat-stream-contract.js",
+    "./chat-stream-parser": "./dist/chat-stream-parser.js",
+    "./tool-events": "./dist/tool-events.js"
   },
   "files": [
     "dist"

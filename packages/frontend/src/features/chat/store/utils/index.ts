@@ -10,6 +10,11 @@ import type {
   ToolEvent,
 } from '@/types'
 import type { MessageId } from '../types'
+import {
+  normalizeToolCallPhase as sharedInferPhase,
+  normalizeToolCallSource as sharedInferSource,
+  normalizeToolCallStatus as sharedInferStatus,
+} from '@aichat/shared/chat-stream-parser'
 
 // 以固定帧率批量刷新流式内容，避免每个 chunk 都触发一次重渲染
 export const STREAM_FLUSH_INTERVAL = 48
@@ -236,60 +241,6 @@ export const inferToolStatus = (stage: ToolEvent['stage']): ToolEvent['status'] 
   return 'running'
 }
 
-const TOOL_CALL_PHASES = new Set([
-  'arguments_streaming',
-  'pending_approval',
-  'executing',
-  'result',
-  'error',
-  'rejected',
-  'aborted',
-])
-
-const TOOL_CALL_SOURCES = new Set(['builtin', 'plugin', 'mcp', 'workspace', 'system'])
-
-const inferToolPhase = (
-  phase: unknown,
-  status: unknown,
-  stage: ToolEvent['stage'],
-): ToolEvent['phase'] => {
-  if (typeof phase === 'string' && TOOL_CALL_PHASES.has(phase)) {
-    return phase as ToolEvent['phase']
-  }
-  if (status === 'pending') return 'pending_approval'
-  if (status === 'success') return 'result'
-  if (status === 'rejected') return 'rejected'
-  if (status === 'aborted') return 'aborted'
-  if (status === 'error') return 'error'
-  if (status === 'running') return 'executing'
-  if (stage === 'result') return 'result'
-  if (stage === 'error') return 'error'
-  return 'executing'
-}
-
-const inferToolStatusFromPayload = (
-  status: unknown,
-  phase: ToolEvent['phase'],
-  stage: ToolEvent['stage'],
-): ToolEvent['status'] => {
-  if (
-    status === 'running' ||
-    status === 'success' ||
-    status === 'error' ||
-    status === 'pending' ||
-    status === 'rejected' ||
-    status === 'aborted'
-  ) {
-    return status
-  }
-  if (phase === 'pending_approval') return 'pending'
-  if (phase === 'result') return 'success'
-  if (phase === 'rejected') return 'rejected'
-  if (phase === 'aborted') return 'aborted'
-  if (phase === 'error') return 'error'
-  return inferToolStatus(stage)
-}
-
 export const normalizeToolEvents = (message: Message): ToolEvent[] => {
   if (!Array.isArray(message.toolEvents) || message.toolEvents.length === 0) return []
   const baseTimestamp = (() => {
@@ -351,8 +302,8 @@ export const normalizeToolEvents = (message: Message): ToolEvent[] => {
       typeof (evt as any).createdAt === 'number' && Number.isFinite((evt as any).createdAt)
         ? ((evt as any).createdAt as number)
         : baseTimestamp + idx
-    const phase = inferToolPhase(rawPhase, (evt as any).status, stage)
-    const status = inferToolStatusFromPayload((evt as any).status, phase, stage)
+    const phase = sharedInferPhase(rawPhase, (evt as any).status, stage) ?? 'executing'
+    const status = sharedInferStatus((evt as any).status, phase, stage) ?? inferToolStatus(stage)
     const identifier =
       typeof (evt as any).identifier === 'string' ? ((evt as any).identifier as string) : undefined
     const apiName =
@@ -386,10 +337,7 @@ export const normalizeToolEvents = (message: Message): ToolEvent[] => {
       callId: callId || id,
       identifier: identifier ?? tool,
       apiName: apiName ?? identifier ?? tool,
-      source:
-        typeof (evt as any).source === 'string' && TOOL_CALL_SOURCES.has((evt as any).source)
-          ? ((evt as any).source as ToolEvent['source'])
-          : undefined,
+      source: sharedInferSource((evt as any).source),
       phase,
       argumentsText:
         typeof (evt as any).argumentsText === 'string'

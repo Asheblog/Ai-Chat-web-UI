@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 import type { WebSearchBilingualMode, WebSearchEngine } from "@/types"
+import { parseNumericInput } from "@/features/settings/shared"
 
 const ENGINE_OPTIONS: Array<{ value: WebSearchEngine; label: string }> = [
   { value: "tavily", label: "Tavily" },
@@ -67,13 +68,6 @@ const normalizeDomains = (text: string) =>
 
 const arraysEqual = (left: string[], right: string[]) =>
   left.length === right.length && left.every((item, idx) => item === right[idx])
-
-const parseNumericInput = (value: string, fallback: number) => {
-  const trimmed = value.trim()
-  if (trimmed === "") return 0
-  const parsed = Number(trimmed)
-  return Number.isFinite(parsed) ? parsed : fallback
-}
 
 export function SystemWebSearchPage() {
   const {

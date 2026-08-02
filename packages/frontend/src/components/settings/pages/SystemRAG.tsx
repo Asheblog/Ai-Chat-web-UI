@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { FileText, AlertCircle, Check, ChevronsUpDown, Trash2, RefreshCw, Loader2, Search, Filter, FolderOpen } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useModelsStore, type ModelItem } from "@/store/models-store"
+import { formatDateTime, formatFileSize, parseNumericInput } from "@/features/settings/shared"
 import {
   Command,
   CommandEmpty,
@@ -111,12 +112,6 @@ export function SystemRAGPage() {
     retentionDays: { min: 1, max: 365 },
     embeddingBatchSize: { min: 1, max: 128 },
     embeddingConcurrency: { min: 1, max: 16 },
-  }
-  const parseNumericInput = (value: string, fallback: number) => {
-    const trimmed = value.trim()
-    if (trimmed === '') return 0
-    const parsed = Number(trimmed)
-    return Number.isFinite(parsed) ? parsed : fallback
   }
 
   // 获取文档列表
@@ -222,24 +217,6 @@ export function SystemRAGPage() {
         variant: "destructive",
       })
     }
-  }
-
-  // 格式化文件大小
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  }
-
-  // 格式化日期
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
   }
 
   // 状态徽章
@@ -777,7 +754,7 @@ export function SystemRAGPage() {
                         {doc.chunkCount ?? '-'}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(doc.createdAt)}
+                        {formatDateTime(doc.createdAt)}
                       </TableCell>
                       <TableCell>
                         <Button

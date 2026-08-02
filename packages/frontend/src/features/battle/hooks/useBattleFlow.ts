@@ -20,6 +20,10 @@ import {
   type MultiModelBattleStreamPayload,
 } from '../api'
 import { buildModelKey, modelKeyFor, parseModelKey } from '../utils/model-key'
+import {
+  compareToolEvents as compareToolEvent,
+  mergeToolEvents as mergeToolEvent,
+} from '@aichat/shared/tool-events'
 
 // ==================== Types ====================
 
@@ -508,30 +512,6 @@ const buildToolEventKey = (event: ToolEvent) => {
   const id = pickString(event.id)
   if (id) return `id:${id}`
   return `fallback:${event.createdAt}`
-}
-
-const mergeToolEvent = (previous: ToolEvent, incoming: ToolEvent): ToolEvent => ({
-  ...previous,
-  ...incoming,
-  id: incoming.id || previous.id,
-  callId: incoming.callId || previous.callId,
-  tool: incoming.tool || incoming.identifier || previous.tool,
-  identifier: incoming.identifier || previous.identifier,
-  apiName: incoming.apiName || previous.apiName,
-  createdAt: Math.min(previous.createdAt, incoming.createdAt),
-  updatedAt: Math.max(previous.updatedAt ?? previous.createdAt, incoming.updatedAt ?? incoming.createdAt),
-  details:
-    previous.details || incoming.details
-      ? { ...(previous.details || {}), ...(incoming.details || {}) }
-      : undefined,
-})
-
-const compareToolEvent = (a: ToolEvent, b: ToolEvent) => {
-  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
-  const aUpdated = a.updatedAt ?? a.createdAt
-  const bUpdated = b.updatedAt ?? b.createdAt
-  if (aUpdated !== bUpdated) return aUpdated - bUpdated
-  return buildToolEventKey(a).localeCompare(buildToolEventKey(b))
 }
 
 export const normalizeBattleToolEventList = (events: unknown): ToolEvent[] => {

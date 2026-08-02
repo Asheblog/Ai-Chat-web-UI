@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { Zap } from "lucide-react"
 import { SettingRow } from "../components/setting-row"
+import { parseNumericInput } from "@/features/settings/shared"
 
 export function SystemNetworkPage() {
   const {
@@ -28,13 +29,6 @@ export function SystemNetworkPage() {
   const [initialGraceMs, setInitialGraceMs] = useState(120000)
   const [reasoningIdleMs, setReasoningIdleMs] = useState(300000)
   const [keepaliveMs, setKeepaliveMs] = useState(0)
-
-  const parseNumericInput = (value: string, fallback: number) => {
-    const trimmed = value.trim()
-    if (trimmed === '') return 0
-    const parsed = Number(trimmed)
-    return Number.isFinite(parsed) ? parsed : fallback
-  }
 
   useEffect(() => { fetchSystemSettings() }, [fetchSystemSettings])
   useEffect(() => {

@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { FileText, ShieldCheck, TerminalSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { listSkillAudits, listSkillCatalog } from '@/features/skills/api'
+import { formatDateTime } from '@/features/settings/shared'
 import type { SkillCatalogItem, SkillExecutionAuditItem } from '@/types'
 import { TaskTraceConsole } from '@/components/task-trace/TaskTraceConsole'
 import { SystemLogsPage } from '@/components/settings/pages/SystemLogsPage'
@@ -28,13 +29,6 @@ const STATUS_BADGE_VARIANT: Record<string, 'default' | 'secondary' | 'destructiv
   skipped: 'secondary',
   denied: 'destructive',
   expired: 'outline',
-}
-
-const formatDateTime = (value: string | Date | null | undefined) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return '-'
-  return date.toLocaleString()
 }
 
 const parseInputInt = (value: string) => {

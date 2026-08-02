@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { apiHttpClient } from "@/lib/api"
 import type { ApiResponse } from "@/types"
+import { formatDateTime, formatFileSize } from "@/features/settings/shared"
 import {
   Dialog,
   DialogContent,
@@ -481,22 +482,6 @@ export function SystemKnowledgeBasePage() {
     }
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
   const handleRefreshStats = async (kbId: number) => {
     try {
       const res = await apiHttpClient.post<ApiResponse<any>>(
@@ -661,7 +646,7 @@ export function SystemKnowledgeBasePage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {formatDate(kb.updatedAt)}
+                          {formatDateTime(kb.updatedAt)}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>

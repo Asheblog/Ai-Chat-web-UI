@@ -24,32 +24,9 @@ export type MessageListPayload = {
   pagination: MessagePagination;
 };
 
-export type ChatStreamChunk =
-  | {
-      type: "start";
-      messageId?: number | null;
-      assistantMessageId?: number | null;
-      assistantClientMessageId?: string | null;
-    }
-  | {
-      type: "content";
-      content: string;
-    }
-  | {
-      type: "reasoning";
-      content?: string;
-      done?: boolean;
-      keepalive?: boolean;
-    }
-  | {
-      type: "complete";
-      content?: string;
-    }
-  | {
-      type: "error";
-      error: string;
-      suggestion?: string;
-    };
+// 流式 chunk 类型已收敛至 @aichat/shared/chat-stream-contract（web / mobile 共用）。
+// 相比旧本地 union 子集，现支持 tool_call / image / artifact / usage / quota 等全量事件。
+export type { ChatStreamChunk } from "@aichat/shared/chat-stream-contract";
 
 export type StreamMessagePayload = {
   sessionId: number;
