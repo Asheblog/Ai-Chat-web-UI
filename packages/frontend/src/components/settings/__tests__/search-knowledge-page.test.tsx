@@ -2,7 +2,7 @@ import React from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { SearchKnowledgePage } from "@/components/settings/pages/SearchKnowledgePage"
+import { SearchKnowledgePage } from "@/components/settings/pages/search-knowledge/SearchKnowledgePage"
 import type { SystemSettings } from "@/types"
 import { baseSettings } from "./system-settings-pages.fixtures"
 
