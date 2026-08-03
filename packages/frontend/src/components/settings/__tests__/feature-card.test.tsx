@@ -55,11 +55,17 @@ describe("FeatureCard", () => {
 
     const button = screen.getByRole("button", { name: /更多参数/ })
     expect(button.getAttribute("aria-expanded")).toBe("false")
+    // 收起时无 aria-controls（折叠区尚未挂载）
+    expect(button.getAttribute("aria-controls")).toBeNull()
 
     // 点击展开
     fireEvent.click(button)
     expect(screen.getByText("高级参数")).toBeInTheDocument()
     expect(button.getAttribute("aria-expanded")).toBe("true")
+    // 展开时 aria-controls 指向折叠区 id
+    const regionId = button.getAttribute("aria-controls")
+    expect(regionId).not.toBeNull()
+    expect(document.getElementById(regionId!)).toContainHTML("高级参数")
 
     // 再点收起
     fireEvent.click(button)

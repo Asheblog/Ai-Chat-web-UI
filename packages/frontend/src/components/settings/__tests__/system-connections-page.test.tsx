@@ -136,6 +136,15 @@ describe("SystemConnectionsPage 模板卡 + Sheet 配置抽屉", () => {
     expect(within(getCard("google_genai")).getByText("未配置")).toBeInTheDocument()
   })
 
+  test("模板卡按钮可访问名 = 「配置{label}」（整卡可点、朗读简洁）", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
+    expect(screen.getByRole("button", { name: "配置Ollama" })).toBe(getCard("ollama"))
+    expect(screen.getByRole("button", { name: "配置OpenAI" })).toBe(getCard("openai"))
+    expect(screen.getByRole("button", { name: "配置Azure" })).toBe(getCard("azure_openai"))
+  })
+
   test("高级管理默认收起（工具栏「连接管理」不可见）→ 点击展开可见", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")

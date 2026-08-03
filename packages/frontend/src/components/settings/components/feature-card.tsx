@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useId, useState } from "react"
 import type { ReactNode } from "react"
 import { ChevronDown } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -44,6 +44,7 @@ export function FeatureCard({
   children,
 }: FeatureCardProps) {
   const [moreOpen, setMoreOpen] = useState(false)
+  const moreRegionId = useId()
   const hasSwitch = enabled !== undefined && onEnabledChange !== undefined
 
   return (
@@ -76,6 +77,7 @@ export function FeatureCard({
           type="button"
           onClick={() => setMoreOpen((open) => !open)}
           aria-expanded={moreOpen}
+          aria-controls={moreOpen ? moreRegionId : undefined}
           className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors duration-200 hover:bg-accent/55 hover:text-foreground"
         >
           <span>{moreLabel}</span>
@@ -86,7 +88,7 @@ export function FeatureCard({
       ) : null}
 
       {moreOpen && more !== undefined ? (
-        <div className="space-y-3 border-t border-border px-4 py-4">{more}</div>
+        <div id={moreRegionId} className="space-y-3 border-t border-border px-4 py-4">{more}</div>
       ) : null}
 
       {footer !== undefined ? <div className="border-t border-border px-4 py-3">{footer}</div> : null}

@@ -22,6 +22,7 @@ export function ProviderTemplateCard({
     <button
       type="button"
       data-testid={`provider-template-${template.provider}`}
+      aria-label={`配置${template.label}`}
       onClick={() => onConfigure(template)}
       className="v2-panel group flex w-full cursor-pointer flex-col items-start gap-3 p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/50"
     >
