@@ -56,64 +56,48 @@ const SystemOverviewContent = dynamic(
   () => import("./system-settings-registry-overview").then((m) => m.SystemOverviewContent),
   { loading: pageLoading },
 )
-const SystemGeneralPage = dynamic(
-  () => import("@/features/settings/pages/system-general").then((m) => m.SystemGeneralPage),
-  { loading: pageLoading },
-)
-const SystemModelsPage = dynamic(
-  () => import("@/features/settings/pages/system-models").then((m) => m.SystemModelsPage),
-  { loading: pageLoading },
-)
-const SystemNetworkPage = dynamic(
-  () => import("@/components/settings/pages/SystemNetwork").then((m) => m.SystemNetworkPage),
-  { loading: pageLoading },
-)
-const SystemReasoningPage = dynamic(
-  () => import("@/components/settings/pages/SystemReasoning").then((m) => m.SystemReasoningPage),
-  { loading: pageLoading },
-)
 const SystemConnectionsPage = dynamic(
   () => import("@/components/settings/pages/SystemConnections").then((m) => m.SystemConnectionsPage),
-  { loading: pageLoading },
-)
-const SystemSkillsPage = dynamic(
-  () => import("@/components/settings/pages/SystemSkills").then((m) => m.SystemSkillsPage),
   { loading: pageLoading },
 )
 const SystemSkillAuditsPage = dynamic(
   () => import("@/components/settings/pages/SystemSkillAudits").then((m) => m.SystemSkillAuditsPage),
   { loading: pageLoading },
 )
-const SystemUsersPage = dynamic(
-  () => import("@/components/settings/pages/SystemUsers").then((m) => m.SystemUsersPage),
-  { loading: pageLoading },
-)
-const SystemModelAccessPage = dynamic(
-  () => import("@/components/settings/pages/SystemModelAccess").then((m) => m.SystemModelAccessPage),
-  { loading: pageLoading },
-)
-const SystemMonitoringPage = dynamic(
-  () => import("@/components/settings/pages/SystemMonitoring").then((m) => m.SystemMonitoringPage),
-  { loading: pageLoading },
-)
-const SystemWebSearchPage = dynamic(
-  () => import("@/components/settings/pages/SystemWebSearch").then((m) => m.SystemWebSearchPage),
-  { loading: pageLoading },
-)
-const SystemRAGPage = dynamic(
-  () => import("@/components/settings/pages/SystemRAG").then((m) => m.SystemRAGPage),
-  { loading: pageLoading },
-)
-const SystemKnowledgeBasePage = dynamic(
-  () => import("@/components/settings/pages/SystemKnowledgeBase").then((m) => m.SystemKnowledgeBasePage),
-  { loading: pageLoading },
-)
-const SystemPythonRuntimePage = dynamic(
-  () => import("@/components/settings/pages/SystemPythonRuntime").then((m) => m.SystemPythonRuntimePage),
-  { loading: pageLoading },
-)
 const SystemMcpPage = dynamic(
   () => import("@/components/settings/pages/SystemMcpPage").then((m) => m.SystemMcpPage),
+  { loading: pageLoading },
+)
+const SearchKnowledgePage = dynamic(
+  () => import("@/components/settings/pages/search-knowledge/SearchKnowledgePage").then((m) => m.SearchKnowledgePage),
+  { loading: pageLoading },
+)
+const ToolsExtensionsPage = dynamic(
+  () => import("@/components/settings/pages/tools-extensions/ToolsExtensionsPage").then((m) => m.ToolsExtensionsPage),
+  { loading: pageLoading },
+)
+const ReasoningNetworkPage = dynamic(
+  () => import("@/components/settings/pages/reasoning-network/ReasoningNetworkPage").then((m) => m.ReasoningNetworkPage),
+  { loading: pageLoading },
+)
+const DataMaintenancePage = dynamic(
+  () => import("@/components/settings/pages/data-maintenance/DataMaintenancePage").then((m) => m.DataMaintenancePage),
+  { loading: pageLoading },
+)
+const ModelsPage = dynamic(
+  () => import("@/components/settings/pages/models/ModelsPage").then((m) => m.ModelsPage),
+  { loading: pageLoading },
+)
+const UsersRegistrationPage = dynamic(
+  () => import("@/components/settings/pages/users-registration/UsersRegistrationPage").then((m) => m.UsersRegistrationPage),
+  { loading: pageLoading },
+)
+const BrandingPage = dynamic(
+  () => import("@/components/settings/pages/branding/BrandingPage").then((m) => m.BrandingPage),
+  { loading: pageLoading },
+)
+const SkillsGovernancePage = dynamic(
+  () => import("@/components/settings/pages/skills-governance/SkillsGovernancePage").then((m) => m.SkillsGovernancePage),
   { loading: pageLoading },
 )
 
@@ -211,32 +195,19 @@ export const systemSettingsTree: SystemSettingsEntry[] = [
 
 // Leaf component map
 
-/** 叠挂多个页面组件为一个组件（阶段 1 临时手段，阶段 2 由 FeatureCard 整合取代）。 */
-function stacked(...pages: ComponentType[]): ComponentType {
-  return function Stacked() {
-    return (
-      <div className="space-y-6">
-        {pages.map((Page, index) => (
-          <Page key={index} />
-        ))}
-      </div>
-    )
-  }
-}
-
 const leafComponentMap: Record<string, ComponentType> = {
   overview: SystemOverviewContent,
   connections: SystemConnectionsPage,
-  models: stacked(SystemModelsPage, SystemModelAccessPage),
-  "search-knowledge": stacked(SystemWebSearchPage, SystemRAGPage, SystemKnowledgeBasePage),
-  "tools-extensions": SystemPythonRuntimePage,
+  models: ModelsPage,
+  "search-knowledge": SearchKnowledgePage,
+  "tools-extensions": ToolsExtensionsPage,
   mcp: SystemMcpPage,
-  "users-registration": SystemUsersPage,
-  "skills-governance": SystemSkillsPage,
-  branding: SystemGeneralPage,
+  "users-registration": UsersRegistrationPage,
+  "skills-governance": SkillsGovernancePage,
+  branding: BrandingPage,
   "logs-audit": SystemSkillAuditsPage,
-  "data-maintenance": SystemMonitoringPage,
-  "reasoning-network": stacked(SystemReasoningPage, SystemNetworkPage),
+  "data-maintenance": DataMaintenancePage,
+  "reasoning-network": ReasoningNetworkPage,
 }
 
 // Utilities
