@@ -92,6 +92,23 @@ describe("SettingsSearch", () => {
     expect(screen.getByText("供应商与连接")).toBeInTheDocument()
   })
 
+  test("Escape 收起下拉后再按 Enter 不 dispatch（防止误导航）且不清空输入", () => {
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent")
+    render(<SettingsSearch />)
+    const input = screen.getByRole("textbox", { name: "搜索设置" })
+
+    fireEvent.change(input, { target: { value: "模型" } })
+    expect(screen.getByText("模型管理")).toBeInTheDocument()
+
+    fireEvent.keyDown(input, { key: "Escape" })
+    expect(screen.queryByText("模型管理")).not.toBeInTheDocument()
+
+    fireEvent.keyDown(input, { key: "Enter" })
+    const selectEvents = getSelectEvents(dispatchSpy)
+    expect(selectEvents).toHaveLength(0)
+    expect(input).toHaveValue("模型")
+  })
+
   test("空输入不显示结果下拉", () => {
     render(<SettingsSearch />)
     expect(screen.getByRole("textbox", { name: "搜索设置" })).toBeInTheDocument()

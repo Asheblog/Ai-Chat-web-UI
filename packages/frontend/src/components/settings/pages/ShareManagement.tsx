@@ -160,6 +160,7 @@ export function ShareManagementPanel() {
     <section className="v2-panel p-4 shadow-none sm:p-5">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {/* 副标题需堆叠在标题下方，而不是与搜索框并排，故 h2+副标题包在 shrink-0 容器里（勿简化回直接 h2） */}
           <div className="shrink-0">
             <h2 className="v2-section-title">最近分享</h2>
             <p className="mt-1 text-sm text-muted-foreground">查看、复制或撤销你分享出去的对话</p>

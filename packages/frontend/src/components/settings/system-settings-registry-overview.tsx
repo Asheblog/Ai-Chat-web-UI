@@ -49,8 +49,10 @@ const overviewCards: OverviewCard[] = [
   },
 ]
 
+type ChecklistTarget = "connections" | "users-registration" | "search-knowledge" | "models"
+
 type ChecklistItem = {
-  key: string
+  key: ChecklistTarget
   label: string
   done: boolean
 }
@@ -69,7 +71,7 @@ export function SystemOverviewContent() {
     { key: "models", label: "默认模型", done: modelList.length > 0 },
   ]
 
-  const goTo = (key: string) => {
+  const goTo = (key: ChecklistTarget) => {
     window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail: { key } }))
   }
 

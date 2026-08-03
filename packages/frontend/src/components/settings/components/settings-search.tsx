@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import { Search, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -22,7 +22,6 @@ export function SettingsSearch() {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const results = useMemo<SearchResult[]>(() => {
     const q = query.trim().toLowerCase()
@@ -63,7 +62,8 @@ export function SettingsSearch() {
       event.preventDefault()
       setOpen(true)
       setHighlightIndex((prev) => (prev - 1 + results.length) % results.length)
-    } else if (event.key === "Enter") {
+    } else if (event.key === "Enter" && open) {
+      // 仅在下拉打开时接受 Enter：Escape 关闭或 blur 之后，Enter 不应触发过期的选中项
       const target = results[highlightIndex]
       if (target) selectKey(target.key)
     } else if (event.key === "Escape") {
@@ -74,7 +74,7 @@ export function SettingsSearch() {
   const showResults = open && query.trim() !== ""
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div className="relative w-full">
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
