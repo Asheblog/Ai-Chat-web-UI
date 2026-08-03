@@ -17,18 +17,27 @@ function iconNode(Icon: LucideIcon): ReactNode {
   return <IconComponent className="h-[1.125rem] w-[1.125rem]" />
 }
 
-/** Build system workspace children from the shared registry tree */
+/** Build system children from the shared registry tree (top-level leaves + workspace groups) */
 function buildSystemChildren(): SettingsNavItem[] {
-  return systemSettingsTree.map((ws) => ({
-    key: ws.key,
-    label: ws.label,
-    icon: iconNode(ws.icon),
-    children: ws.children.map((leaf) => ({
-      key: leaf.key,
-      label: leaf.label,
-      icon: iconNode(leaf.icon),
-    })),
-  }))
+  return systemSettingsTree.map((entry) => {
+    if ("children" in entry) {
+      return {
+        key: entry.key,
+        label: entry.label,
+        icon: iconNode(entry.icon),
+        children: entry.children.map((leaf) => ({
+          key: leaf.key,
+          label: leaf.label,
+          icon: iconNode(leaf.icon),
+        })),
+      }
+    }
+    return {
+      key: entry.key,
+      label: entry.label,
+      icon: iconNode(entry.icon),
+    }
+  })
 }
 
 export const settingsNav: SettingsNavItem[] = [

@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 import { settingsNav, type SettingsNavItem } from "@/components/settings/nav"
 import { SettingsShell, type SettingsSection } from "@/components/settings/shell"
-import { DEFAULT_SYSTEM_LEAF } from "@/components/settings/system-settings-registry"
+import { DEFAULT_SYSTEM_LEAF, getWorkspaceForLeaf } from "@/components/settings/system-settings-registry"
 import { useAuthStore } from "@/store/auth-store"
 
 const SECTION_PATH: Record<string, string> = {
@@ -40,6 +40,7 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
   const activeSection = deriveSection(pathname)
   const [personalSub, setPersonalSub] = useState("profile")
   const [systemSub, setSystemSub] = useState(DEFAULT_SYSTEM_LEAF)
+  const [systemMain, setSystemMain] = useState(DEFAULT_SYSTEM_LEAF)
 
   // Personal sections (flat, unchanged)
   const personalSections = useMemo<SettingsSection[]>(() => [
@@ -49,10 +50,10 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     { key: "security", label: "账号安全", icon: <ShieldCheck className="h-full w-full" />, },
   ], [])
 
-  // System 3-level tree from shared nav
+  // System 3-level tree from shared nav: the system item's children (6 top-level entries)
   const systemTree = useMemo<SettingsNavItem[]>(() => {
     const sys = settingsNav.find((item) => item.key === "system")
-    return sys ? [sys] : []
+    return sys?.children ?? []
   }, [])
 
   useEffect(() => {
@@ -70,7 +71,9 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     const onActiveChange = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string }>).detail
       if (detail?.key) {
-        setSystemSub(detail.key)
+        const key = detail.key
+        setSystemSub(key)
+        setSystemMain((current) => getWorkspaceForLeaf(key) ?? current)
       }
     }
     window.addEventListener("aichat:system-settings-active", onActiveChange as EventListener)
@@ -163,9 +166,9 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
         mode="nested"
         title="系统设置"
         tree={systemTree}
-        activeMain="system"
+        activeMain={systemMain}
         activeSub={systemSub}
-        onChangeMain={() => {}}
+        onChangeMain={setSystemMain}
         onChangeSub={handleSystemSubChange}
         showNavTitle
       >

@@ -3,35 +3,40 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { SettingsShell } from "../shell"
 import type { SettingsNavItem } from "../nav"
+import { Database, LayoutDashboard, PlugZap, Settings, User, Users } from "lucide-react"
 
 /** 3-level tree: main → workspace → leaf */
 const threeLevelTree: SettingsNavItem[] = [
   {
     key: "personal",
     label: "个人设置",
+    icon: <User className="h-[1.125rem] w-[1.125rem]" />,
     children: [
-      { key: "personal.preferences", label: "偏好设置" },
+      { key: "personal.preferences", label: "偏好设置", icon: <Settings className="h-[1.125rem] w-[1.125rem]" /> },
       { key: "personal.about", label: "关于" },
     ],
   },
   {
     key: "system",
     label: "系统设置",
+    icon: <Settings className="h-[1.125rem] w-[1.125rem]" />,
     children: [
       {
         key: "configuration-center",
         label: "配置中心",
+        icon: <LayoutDashboard className="h-[1.125rem] w-[1.125rem]" />,
         children: [
-          { key: "overview", label: "概览" },
-          { key: "connections", label: "连接管理" },
+          { key: "overview", label: "概览", icon: <LayoutDashboard className="h-[1.125rem] w-[1.125rem]" /> },
+          { key: "connections", label: "连接管理", icon: <PlugZap className="h-[1.125rem] w-[1.125rem]" /> },
         ],
       },
       {
         key: "knowledge-docs",
         label: "知识库与文档",
+        icon: <Database className="h-[1.125rem] w-[1.125rem]" />,
         children: [
-          { key: "rag", label: "RAG 文档解析" },
-          { key: "knowledge-base", label: "知识库管理" },
+          { key: "rag", label: "RAG 文档解析", icon: <Database className="h-[1.125rem] w-[1.125rem]" /> },
+          { key: "knowledge-base", label: "知识库管理", icon: <Database className="h-[1.125rem] w-[1.125rem]" /> },
         ],
       },
     ],
@@ -193,6 +198,52 @@ describe("SettingsShell 3 级嵌套导航", () => {
       expect(screen.getByText("知识库与文档")).toBeInTheDocument()
     })
     expect(screen.getByText("RAG 文档解析")).toBeInTheDocument()
+  })
+
+  test("顶级主类行（depth-0 折叠行）渲染分组图标", () => {
+    render(
+      <SettingsShell
+        mode="nested"
+        tree={threeLevelTree}
+        activeMain="personal"
+        activeSub="personal.preferences"
+        onChangeMain={vi.fn()}
+        onChangeSub={vi.fn()}
+      >
+        <div>content</div>
+      </SettingsShell>
+    )
+
+    const personalBtn = screen.getByText("个人设置").closest("button")
+    expect(personalBtn?.querySelector("svg")).not.toBeNull()
+
+    const systemBtn = screen.getByText("系统设置").closest("button")
+    expect(systemBtn?.querySelector("svg")).not.toBeNull()
+  })
+
+  test("二级分组行（depth>=1）渲染分组图标", async () => {
+    render(
+      <SettingsShell
+        mode="nested"
+        tree={threeLevelTree}
+        activeMain="system"
+        activeSub="overview"
+        onChangeMain={vi.fn()}
+        onChangeSub={vi.fn()}
+      >
+        <div>content</div>
+      </SettingsShell>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("配置中心")).toBeInTheDocument()
+    })
+
+    const groupBtn = screen.getByText("配置中心").closest("button")
+    expect(groupBtn?.querySelector("svg")).not.toBeNull()
+
+    const docsBtn = screen.getByText("知识库与文档").closest("button")
+    expect(docsBtn?.querySelector("svg")).not.toBeNull()
   })
 
   test("active leaf 高亮显示", async () => {

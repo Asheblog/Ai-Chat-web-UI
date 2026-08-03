@@ -237,6 +237,7 @@ function SettingsShellNestedImpl({
                 ) : (
                   <ChevronRight className="h-4 w-4 shrink-0" />
                 )}
+                {item.icon && <span className="h-[1.125rem] w-[1.125rem] shrink-0">{item.icon}</span>}
                 <span className="flex-1">{item.label}</span>
               </button>
               {isExpanded && (
@@ -261,6 +262,7 @@ function SettingsShellNestedImpl({
               ) : (
                 <ChevronRight className="h-4 w-4 shrink-0" />
               )}
+              {item.icon && <span className="h-[1.125rem] w-[1.125rem] shrink-0">{item.icon}</span>}
               <span className="flex-1">{item.label}</span>
             </button>
             {isExpanded && (
