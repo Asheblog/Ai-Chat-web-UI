@@ -13,15 +13,20 @@ export class PythonRuntimePlatformAdapter {
     private readonly platform: NodeJS.Platform,
   ) {}
 
+  // 路径解析跟随目标运行平台而非宿主（Linux 容器 POSIX / Windows 宿主 win32），
+  // 保证 Windows 宿主上运行测试/模拟时仍按目标平台生成路径
+  private readonly pathImpl = this.platform === 'win32' ? path.win32 : path.posix
+
   resolvePaths(): RuntimePaths {
-    const rawDataRoot = this.env.APP_DATA_DIR || this.env.DATA_DIR || path.resolve(process.cwd(), 'data')
-    const dataRoot = path.resolve(rawDataRoot)
-    const runtimeRoot = path.resolve(dataRoot, 'python-runtime')
-    const venvPath = path.resolve(runtimeRoot, 'venv')
+    const rawDataRoot =
+      this.env.APP_DATA_DIR || this.env.DATA_DIR || this.pathImpl.resolve(process.cwd(), 'data')
+    const dataRoot = this.pathImpl.resolve(rawDataRoot)
+    const runtimeRoot = this.pathImpl.resolve(dataRoot, 'python-runtime')
+    const venvPath = this.pathImpl.resolve(runtimeRoot, 'venv')
     const pythonPath =
       this.platform === 'win32'
-        ? path.resolve(venvPath, 'Scripts', 'python.exe')
-        : path.resolve(venvPath, 'bin', 'python')
+        ? this.pathImpl.resolve(venvPath, 'Scripts', 'python.exe')
+        : this.pathImpl.resolve(venvPath, 'bin', 'python')
 
     return {
       dataRoot,
