@@ -158,7 +158,7 @@ describe("ToolsExtensionsPage", () => {
     expect(screen.getByText("工具与扩展")).toBeInTheDocument()
     expect(screen.getByText("Python 工具")).toBeInTheDocument()
     expect(screen.getByText("Python 运行时管理")).toBeInTheDocument()
-    // FeatureCard 标题与 SkillInstallSection 内部标题同名，存在两处
+    // FeatureCard 标题唯一（SkillInstallSection 内部标题已随单消费者收口移除）
     expect(screen.getAllByText("Skill 安装").length).toBeGreaterThan(0)
     expect(screen.getByText("模型大乱斗")).toBeInTheDocument()
     expect(screen.getByText("标题智能总结")).toBeInTheDocument()

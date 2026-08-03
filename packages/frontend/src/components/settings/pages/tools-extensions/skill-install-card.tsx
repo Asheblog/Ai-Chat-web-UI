@@ -16,7 +16,6 @@ export function SkillInstallCard() {
   const [installSource, setInstallSource] = useState("")
   const [installToken, setInstallToken] = useState("")
   const [installing, setInstalling] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
 
   const handleInstall = async () => {
     const source = installSource.trim()
@@ -54,13 +53,6 @@ export function SkillInstallCard() {
     }
   }
 
-  // 本卡仅提供安装入口，无目录/审批数据可刷新；保留按钮交互以复用 SkillInstallSection
-  const handleRefresh = () => {
-    if (refreshing) return
-    setRefreshing(true)
-    setRefreshing(false)
-  }
-
   return (
     <FeatureCard
       icon={Download}
@@ -71,11 +63,9 @@ export function SkillInstallCard() {
         installSource={installSource}
         installToken={installToken}
         installing={installing}
-        refreshing={refreshing}
         onInstallSourceChange={setInstallSource}
         onInstallTokenChange={setInstallToken}
         onInstall={handleInstall}
-        onRefresh={handleRefresh}
       />
     </FeatureCard>
   )

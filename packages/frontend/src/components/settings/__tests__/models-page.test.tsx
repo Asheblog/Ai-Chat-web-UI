@@ -133,8 +133,8 @@ describe("ModelsPage", () => {
   test("渲染页头标题「模型管理」与两个分区标题「模型目录与能力」「访问控制」", () => {
     render(<ModelsPage />)
 
-    // 页头标题 1 处 + 内嵌 SystemModelsPage 自身页头标题 1 处
-    expect(screen.getAllByText("模型管理")).toHaveLength(2)
+    // 页头标题 1 处（内嵌 SystemModelsPage 传 hideHeader 不再重复渲染自身页头）
+    expect(screen.getAllByText("模型管理")).toHaveLength(1)
     expect(screen.getByText("管理模型目录、能力开关与访问控制")).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "模型目录与能力" })).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "访问控制" })).toBeInTheDocument()

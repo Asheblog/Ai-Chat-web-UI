@@ -38,7 +38,7 @@ export function ModelsPage() {
             </p>
           </div>
         </div>
-        <SystemModelsPage />
+        <SystemModelsPage hideHeader />
       </section>
 
       {/* 分隔 */}

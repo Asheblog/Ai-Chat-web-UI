@@ -36,7 +36,7 @@ import {
 
 const modelKey = (model: any) => `${model.connectionId}:${model.id}`
 
-export function SystemModelsPage() {
+export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const {
     list,
@@ -166,13 +166,15 @@ export function SystemModelsPage() {
 
       {/* 搜索筛选区块 */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b">
-          <Cpu className="w-5 h-5 text-primary" />
-          <div>
-            <CardTitle className="text-lg">模型管理</CardTitle>
-            <CardDescription>为模型开启/关闭能力标签:图片理解、图像生成</CardDescription>
+        {!hideHeader && (
+          <div className="flex items-center gap-3 pb-3 border-b">
+            <Cpu className="w-5 h-5 text-primary" />
+            <div>
+              <CardTitle className="text-lg">模型管理</CardTitle>
+              <CardDescription>为模型开启/关闭能力标签:图片理解、图像生成</CardDescription>
+            </div>
           </div>
-        </div>
+        )}
 
         <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
