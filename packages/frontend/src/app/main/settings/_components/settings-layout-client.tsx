@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { settingsNav, type SettingsNavItem } from "@/components/settings/nav"
 import { SettingsShell, type SettingsSection } from "@/components/settings/shell"
+import { SettingsSearch } from "@/components/settings/components/settings-search"
 import { DEFAULT_SYSTEM_LEAF, getWorkspaceForLeaf } from "@/components/settings/system-settings-registry"
 import { useAuthStore } from "@/store/auth-store"
 
@@ -171,6 +172,7 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
         onChangeMain={setSystemMain}
         onChangeSub={handleSystemSubChange}
         showNavTitle
+        navTop={<SettingsSearch />}
       >
         {children}
       </SettingsShell>

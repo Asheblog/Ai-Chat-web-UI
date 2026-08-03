@@ -34,6 +34,7 @@ type NestedModeProps = {
   onChangeSub: (key: string) => void
   readOnly?: boolean
   readOnlyMessage?: string
+  navTop?: ReactNode
 }
 
 export type SettingsShellProps = BaseProps & (FlatModeProps | NestedModeProps)
@@ -166,6 +167,7 @@ function SettingsShellNestedImpl({
   onChangeSub,
   readOnly = false,
   readOnlyMessage,
+  navTop,
   children,
   className,
   bare,
@@ -298,7 +300,12 @@ function SettingsShellNestedImpl({
       )
     })
 
-  const nav = <nav className="space-y-2">{renderItems(tree, 0)}</nav>
+  const nav = (
+    <div className="space-y-2">
+      {navTop}
+      <nav className="space-y-2">{renderItems(tree, 0)}</nav>
+    </div>
+  )
 
   const content = (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
