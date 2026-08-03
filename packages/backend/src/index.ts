@@ -102,8 +102,7 @@ if (enableCors) {
   console.log('⚠️  CORS is disabled by ENABLE_CORS=false')
 }
 
-// 静态文件服务（可选）
-app.use('/static/*', serveStatic({ root: './public' }));
+// 静态文件服务：仅提供聊天图片（/chat-images/*）；前端页面由 Next.js 独立服务
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 app.use(

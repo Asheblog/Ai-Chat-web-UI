@@ -7,8 +7,6 @@
 #
 # 升级：docker compose pull && docker compose up -d
 
-version: '3.8'
-
 services:
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:latest

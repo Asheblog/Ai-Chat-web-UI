@@ -1,5 +1,3 @@
-version: '3.8'
-
 # 生产默认：all-in-one（frontend + backend + rag-worker）+ docker-socket-proxy
 # 旧四容器拓扑见 docker-compose.split.yml
 

@@ -1,5 +1,3 @@
-version: '3.8'
-
 # 可选：旧四容器拓扑（frontend / backend / rag-worker / docker-proxy）
 # 默认请使用 docker-compose.yml（all-in-one）
 
