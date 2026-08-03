@@ -1,8 +1,11 @@
 "use client"
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react"
+import { LayoutGrid, PlugZap, Settings2 } from "lucide-react"
 import { AlertDialog } from "@/components/ui/alert-dialog"
+import { CardDescription, CardTitle } from "@/components/ui/card"
 import { DestructiveConfirmDialogContent } from "@/components/ui/destructive-confirm-dialog"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
 import type {
   SystemConnectionGroup,
   SystemConnectionsImportPayload,
@@ -17,11 +20,22 @@ import {
   useSystemConnections,
 } from "@/components/settings/system-connections/use-system-connections"
 import { SystemConnectionEditor } from "@/components/settings/system-connections/SystemConnectionEditor"
+import { CollapsibleEditorSection } from "@/components/settings/system-connections/SystemConnectionEditorParts"
 import { SystemConnectionList } from "@/components/settings/system-connections/SystemConnectionList"
 import {
   SystemConnectionsToolbar,
   type ConnectionStats,
 } from "@/components/settings/system-connections/SystemConnectionsToolbar"
+import { ProviderTemplateCard } from "@/components/settings/system-connections/provider-template-card"
+import {
+  PROVIDER_TEMPLATES,
+  type ProviderTemplate,
+} from "@/components/settings/system-connections/provider-templates"
+import {
+  createEmptyKey,
+  createFormFromTemplate,
+  DEFAULT_FORM,
+} from "@/components/settings/system-connections/form-state"
 import {
   filterConnections,
   getEnabledKeyCount,
@@ -64,6 +78,8 @@ export function SystemConnectionsPage() {
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
   const [detailIntent, setDetailIntent] = useState<DetailIntent>("view")
   const [editorFocus, setEditorFocus] = useState<EditorFocus>("basic")
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [sheetTemplate, setSheetTemplate] = useState<ProviderTemplate | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [confirmExportOpen, setConfirmExportOpen] = useState(false)
   const [confirmImportOpen, setConfirmImportOpen] = useState(false)
@@ -101,6 +117,22 @@ export function SystemConnectionsPage() {
       })
     })
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label))
+  }, [connections])
+
+  /** 模板卡数据：连接数按 `${provider}:${vendor||""}` 口径统计（与 providerOptions 同口径） */
+  const templateCards = useMemo(() => {
+    const countMap = new Map<string, number>()
+    connections.forEach((group) => {
+      const key = `${group.provider}:${group.vendor || ""}`
+      countMap.set(key, (countMap.get(key) ?? 0) + 1)
+    })
+    return PROVIDER_TEMPLATES.map((template) => {
+      const matchKey =
+        template.provider === SPECIAL_PROVIDER_OPENAI_INTERLEAVE
+          ? `openai:${SPECIAL_PROVIDER_OPENAI_INTERLEAVE}`
+          : `${template.provider}:`
+      return { template, count: countMap.get(matchKey) ?? 0 }
+    })
   }, [connections])
 
   const filteredConnections = useMemo(
@@ -260,9 +292,28 @@ export function SystemConnectionsPage() {
     cancelEdit()
   }
 
+  /** 打开模板配置 Sheet：预填模板表单，收起页内内联编辑面 */
+  const openTemplateSheet = (template: ProviderTemplate) => {
+    cancelEdit()
+    setExpandedGroupId(null)
+    setDetailIntent("view")
+    setForm(createFormFromTemplate(template))
+    setSheetTemplate(template)
+  }
+
+  /** 关闭配置 Sheet：重置 DEFAULT_FORM（沿用 closeCreate 的 cancelEdit 语义） */
+  const closeTemplateSheet = () => {
+    setSheetTemplate(null)
+    cancelEdit()
+  }
+
   const handleSubmit = async () => {
     const saved = await submitConnection()
     if (!saved) return false
+    if (sheetTemplate) {
+      closeTemplateSheet()
+      return true
+    }
     if (detailIntent === "create") {
       setDetailIntent("view")
     } else {
@@ -344,85 +395,201 @@ export function SystemConnectionsPage() {
         </div>
       ) : null}
 
-      <SystemConnectionsToolbar
-        stats={stats}
-        providers={providerOptions}
-        loading={loading}
-        query={query}
-        providerFilter={providerFilter}
-        statusFilter={statusFilter}
-        healthFilter={healthFilter}
-        onQueryChange={setQuery}
-        onProviderFilterChange={setProviderFilter}
-        onStatusFilterChange={setStatusFilter}
-        onHealthFilterChange={setHealthFilter}
-        onRefresh={refresh}
-        onImport={handleImportClick}
-        onExport={handleExportRequest}
-        onCreate={startCreate}
-        exporting={exporting}
-        importing={importing}
-      />
+      {/* 页头 */}
+      <div className="flex items-center gap-3 border-b border-border/60 pb-3">
+        <PlugZap className="h-5 w-5 flex-shrink-0 text-primary" />
+        <div className="space-y-1">
+          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">供应商与连接</CardTitle>
+          <CardDescription className="text-sm text-muted-foreground">
+            按供应商快速接入模型，高级管理在下方
+          </CardDescription>
+        </div>
+      </div>
 
-      {detailIntent === "create" ? (
-        <section className="v2-panel bg-background/92 p-4 shadow-none">
-          <SystemConnectionEditor
-            group={null}
-            detailIntent="create"
-            initialFocus={editorFocus}
-            form={form}
-            setForm={setForm}
-            firstKey={firstKey}
-            capabilities={capabilities}
-            editing={editing}
-            submitting={submitting}
-            verifying={verifying}
-            verifyResult={verifyResult}
-            onProviderChange={handleProviderChange}
-            onToggleCapability={toggleCapability}
-            onAddKey={addKey}
-            onRemoveKey={removeKey}
-            onUpdateKey={updateKey}
-            onSubmit={handleSubmit}
-            onVerify={verifyConnection}
-            onCancelCreate={closeCreate}
-          />
-        </section>
-      ) : null}
-
-      <SystemConnectionList
-        connections={filteredConnections}
-        loading={loading}
-        expandedGroupId={detailIntent === "view" ? expandedGroupId : null}
-        onToggleGroup={toggleGroup}
-        onOpenGroup={openGroup}
-        onDelete={setConfirmDeleteId}
-        renderEditor={(group) => (
-          <SystemConnectionEditor
-            group={group}
-            detailIntent="view"
-            initialFocus={editorFocus}
-            form={form}
-            setForm={setForm}
-            firstKey={firstKey}
-            capabilities={capabilities}
-            editing={editing}
-            submitting={submitting}
-            verifying={verifying}
-            verifyResult={verifyResult}
-            onProviderChange={handleProviderChange}
-            onToggleCapability={toggleCapability}
-            onAddKey={addKey}
-            onRemoveKey={removeKey}
-            onUpdateKey={updateKey}
-            onSubmit={handleSubmit}
-            onVerify={verifyConnection}
-            onCancelCreate={closeCreate}
-          />
+      {/* 模板卡网格 */}
+      <section aria-label="供应商模板">
+        <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+            <LayoutGrid className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 className="v2-section-title">快速接入</h2>
+            <p className="v2-muted-line mt-1">
+              选择供应商卡片，预填默认端点与认证方式后即可验证、保存。
+            </p>
+          </div>
+        </div>
+        {loading && connections.length === 0 ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="v2-panel h-40 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {templateCards.map(({ template, count }) => (
+              <ProviderTemplateCard
+                key={template.provider}
+                template={template}
+                count={count}
+                onConfigure={openTemplateSheet}
+              />
+            ))}
+          </div>
         )}
-      />
+      </section>
+
+      {/* 高级管理折叠：原页面全部管理面 */}
+      <CollapsibleEditorSection
+        icon={<Settings2 className="h-4 w-4" />}
+        title="高级管理"
+        summary="全部连接列表、导入导出与 API Key 池"
+        open={advancedOpen}
+        onToggle={() => setAdvancedOpen((prev) => !prev)}
+      >
+        <div className="space-y-4">
+          <SystemConnectionsToolbar
+            stats={stats}
+            providers={providerOptions}
+            loading={loading}
+            query={query}
+            providerFilter={providerFilter}
+            statusFilter={statusFilter}
+            healthFilter={healthFilter}
+            onQueryChange={setQuery}
+            onProviderFilterChange={setProviderFilter}
+            onStatusFilterChange={setStatusFilter}
+            onHealthFilterChange={setHealthFilter}
+            onRefresh={refresh}
+            onImport={handleImportClick}
+            onExport={handleExportRequest}
+            onCreate={startCreate}
+            exporting={exporting}
+            importing={importing}
+          />
+
+          {detailIntent === "create" ? (
+            <section className="v2-panel bg-background/92 p-4 shadow-none">
+              <SystemConnectionEditor
+                group={null}
+                detailIntent="create"
+                initialFocus={editorFocus}
+                form={form}
+                setForm={setForm}
+                firstKey={firstKey}
+                capabilities={capabilities}
+                editing={editing}
+                submitting={submitting}
+                verifying={verifying}
+                verifyResult={verifyResult}
+                onProviderChange={handleProviderChange}
+                onToggleCapability={toggleCapability}
+                onAddKey={addKey}
+                onRemoveKey={removeKey}
+                onUpdateKey={updateKey}
+                onSubmit={handleSubmit}
+                onVerify={verifyConnection}
+                onCancelCreate={closeCreate}
+              />
+            </section>
+          ) : null}
+
+          <SystemConnectionList
+            connections={filteredConnections}
+            loading={loading}
+            expandedGroupId={detailIntent === "view" ? expandedGroupId : null}
+            onToggleGroup={toggleGroup}
+            onOpenGroup={openGroup}
+            onDelete={setConfirmDeleteId}
+            renderEditor={(group) => (
+              <SystemConnectionEditor
+                group={group}
+                detailIntent="view"
+                initialFocus={editorFocus}
+                form={form}
+                setForm={setForm}
+                firstKey={firstKey}
+                capabilities={capabilities}
+                editing={editing}
+                submitting={submitting}
+                verifying={verifying}
+                verifyResult={verifyResult}
+                onProviderChange={handleProviderChange}
+                onToggleCapability={toggleCapability}
+                onAddKey={addKey}
+                onRemoveKey={removeKey}
+                onUpdateKey={updateKey}
+                onSubmit={handleSubmit}
+                onVerify={verifyConnection}
+                onCancelCreate={closeCreate}
+              />
+            )}
+          />
+        </div>
+      </CollapsibleEditorSection>
+
+      {/* 配置 Sheet（模板预填） */}
+      <Sheet
+        open={sheetTemplate !== null}
+        onOpenChange={(open) => {
+          if (!open) closeTemplateSheet()
+        }}
+      >
+        <SheetContent side="right" dialogTitle={`配置 ${sheetTemplate?.label ?? ""}`} className="w-full max-w-xl">
+          {sheetTemplate ? (
+            <SheetTemplateContent template={sheetTemplate}>
+              <SystemConnectionEditor
+                group={null}
+                detailIntent="create"
+                initialFocus="basic"
+                form={form}
+                setForm={setForm}
+                firstKey={firstKey}
+                capabilities={capabilities}
+                editing={editing}
+                submitting={submitting}
+                verifying={verifying}
+                verifyResult={verifyResult}
+                onProviderChange={handleProviderChange}
+                onToggleCapability={toggleCapability}
+                onAddKey={addKey}
+                onRemoveKey={removeKey}
+                onUpdateKey={updateKey}
+                onSubmit={handleSubmit}
+                onVerify={verifyConnection}
+                onCancelCreate={closeTemplateSheet}
+              />
+            </SheetTemplateContent>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
 
 export default SystemConnectionsPage
+
+/** Sheet 头部（模板 icon 瓦片 + 「配置 {label}」标题）与滚动内容容器 */
+function SheetTemplateContent({
+  template,
+  children,
+}: {
+  template: ProviderTemplate
+  children: ReactNode
+}) {
+  const Icon = template.icon
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border/70 px-5 py-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="v2-section-title">配置 {template.label}</h2>
+          <p className="v2-muted-line mt-0.5 text-xs">{template.description}</p>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+    </div>
+  )
+}
