@@ -43,6 +43,18 @@ const threeLevelTree: SettingsNavItem[] = [
   },
 ]
 
+/** Find the item-icon span (h-[1.125rem] w-[1.125rem]) inside a button, if rendered.
+ *  shell 只在 item.icon 存在时才渲染该 span，因此它存在即证明分组行图标已渲染
+ * （折叠行的 chevron 是无包裹 span 的裸 svg，不会造成误判）。 */
+function findIconSpan(btn: HTMLElement | null | undefined): HTMLSpanElement | null {
+  if (!btn) return null
+  return (
+    Array.from(btn.querySelectorAll("span")).find(
+      (span) => span.classList.contains("h-[1.125rem]") && span.classList.contains("w-[1.125rem]")
+    ) ?? null
+  )
+}
+
 afterEach(() => {
   cleanup()
 })
@@ -215,10 +227,14 @@ describe("SettingsShell 3 级嵌套导航", () => {
     )
 
     const personalBtn = screen.getByText("个人设置").closest("button")
-    expect(personalBtn?.querySelector("svg")).not.toBeNull()
+    const personalIcon = findIconSpan(personalBtn)
+    expect(personalIcon).not.toBeNull()
+    expect(personalIcon?.querySelector("svg")).not.toBeNull()
 
     const systemBtn = screen.getByText("系统设置").closest("button")
-    expect(systemBtn?.querySelector("svg")).not.toBeNull()
+    const systemIcon = findIconSpan(systemBtn)
+    expect(systemIcon).not.toBeNull()
+    expect(systemIcon?.querySelector("svg")).not.toBeNull()
   })
 
   test("二级分组行（depth>=1）渲染分组图标", async () => {
@@ -240,10 +256,14 @@ describe("SettingsShell 3 级嵌套导航", () => {
     })
 
     const groupBtn = screen.getByText("配置中心").closest("button")
-    expect(groupBtn?.querySelector("svg")).not.toBeNull()
+    const groupIcon = findIconSpan(groupBtn)
+    expect(groupIcon).not.toBeNull()
+    expect(groupIcon?.querySelector("svg")).not.toBeNull()
 
     const docsBtn = screen.getByText("知识库与文档").closest("button")
-    expect(docsBtn?.querySelector("svg")).not.toBeNull()
+    const docsIcon = findIconSpan(docsBtn)
+    expect(docsIcon).not.toBeNull()
+    expect(docsIcon?.querySelector("svg")).not.toBeNull()
   })
 
   test("active leaf 高亮显示", async () => {
