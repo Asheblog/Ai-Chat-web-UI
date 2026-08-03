@@ -8,6 +8,7 @@ import {
   SPECIAL_VENDOR_DEEPSEEK,
   type ConnectionCapKey,
 } from "./constants"
+import type { ProviderTemplate } from "./provider-templates"
 
 export interface ConnectionKeyFormState {
   clientId: string
@@ -144,6 +145,18 @@ export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFor
         : [createEmptyKey(0)],
   }
 }
+
+export const createFormFromTemplate = (template: ProviderTemplate): ConnectionFormState => ({
+  // openai_interleave 直接作 provider 值，沿用 mapProviderSelection 语义（其即 provider 选项值）
+  provider: template.provider,
+  baseUrl: template.baseUrl,
+  authType: template.authType,
+  azureApiVersion: template.azureApiVersion ?? "",
+  prefixId: "",
+  tags: "",
+  connectionType: "external",
+  keys: [createEmptyKey(0)],
+})
 
 export const validateForm = (form: ConnectionFormState, editing: SystemConnectionGroup | null) => {
   if (!form.baseUrl.trim()) return "请填写 Base URL"
