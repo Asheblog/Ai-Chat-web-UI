@@ -24,6 +24,13 @@ configure_docker_socket_access() {
     return 0
   fi
 
+  # 远程 Docker 主机（如 all-in-one 注入 DOCKER_HOST=tcp://docker-socket-proxy:2375）：
+  # 无需挂载本地 socket，权限由远端管理，跳过本机 socket 检查
+  if [ -n "${DOCKER_HOST:-}" ] && [[ "$DOCKER_HOST" != unix://* ]] && [[ "$DOCKER_HOST" != /* ]]; then
+    echo "[entrypoint] Using remote Docker host via DOCKER_HOST=$DOCKER_HOST"
+    return 0
+  fi
+
   if [ ! -S "$DOCKER_SOCKET_PATH" ]; then
     echo "[entrypoint] WARN: Docker socket 未挂载（$DOCKER_SOCKET_PATH），workspace 沙箱 Python 将不可用" >&2
     return 0

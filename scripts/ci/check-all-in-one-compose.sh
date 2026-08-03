@@ -21,6 +21,7 @@ grep -qE 'ai_chat_web_ui_db_data' "$COMPOSE" || fail "must keep volume name ai_c
 
 [[ -f "$ROOT/docker/Dockerfile" ]] || fail "missing docker/Dockerfile"
 [[ -f "$ROOT/docker/start-app.sh" ]] || fail "missing docker/start-app.sh"
+grep -qE '^export CHAT_IMAGE_DIR=' "$ROOT/docker/start-app.sh" || fail "start-app.sh must export CHAT_IMAGE_DIR so supervisord children inherit it"
 [[ -f "$ROOT/docker-compose.split.yml" ]] || fail "missing docker-compose.split.yml"
 
 echo "OK: all-in-one compose layout looks correct"
