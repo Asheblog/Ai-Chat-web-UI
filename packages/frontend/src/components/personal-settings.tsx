@@ -5,9 +5,9 @@
 
 import React from "react"
 import { PersonalPreferencesPage } from "@/components/settings/pages/PersonalPreferences"
-import { PersonalSecurityPage } from "@/components/settings/pages/PersonalSecurity"
-import { ShareManagementPanel } from "@/components/settings/pages/ShareManagement"
 import { PersonalSkillsPage } from "@/components/settings/pages/PersonalSkills"
+import { ShareManagementPanel } from "@/components/settings/pages/ShareManagement"
+import { PersonalSecurityPage } from "@/components/settings/pages/PersonalSecurity"
 
 export function PersonalSettings() {
   return (
@@ -18,11 +18,11 @@ export function PersonalSettings() {
       <div id="settings-personal-skills" className="scroll-mt-6">
         <PersonalSkillsPage />
       </div>
-      <div id="settings-personal-security" className="scroll-mt-6">
-        <PersonalSecurityPage />
-      </div>
       <div id="settings-share-management" className="scroll-mt-6">
         <ShareManagementPanel />
+      </div>
+      <div id="settings-personal-security" className="scroll-mt-6">
+        <PersonalSecurityPage />
       </div>
     </div>
   )

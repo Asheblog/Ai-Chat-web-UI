@@ -154,6 +154,7 @@ export function PersonalPreferencesPage(){
       <div className="grid gap-3 lg:grid-cols-2">
         <section className="v2-panel p-5 md:p-6">
           <h3 className="v2-section-title">个人资料</h3>
+          <p className="mt-1 text-sm text-muted-foreground">管理你的头像、用户名与界面主题</p>
           <div className="mt-5 grid gap-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
             <AvatarUploadField
               variant="profile"
@@ -220,6 +221,7 @@ export function PersonalPreferencesPage(){
 
         <section className="v2-panel p-5 md:p-6">
           <h3 className="v2-section-title">对话与上下文</h3>
+          <p className="mt-1 text-sm text-muted-foreground">设置 AI 是否记住对话上下文，以及你的个人系统提示词</p>
           <div className="mt-5 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
