@@ -1,83 +1,110 @@
 import React from "react"
 import { describe, expect, test } from "vitest"
-import { systemSettingsTree, renderSystemLeaf, DEFAULT_SYSTEM_LEAF, getWorkspaceForLeaf } from "../system-settings-registry"
+import {
+  systemSettingsTree,
+  renderSystemLeaf,
+  DEFAULT_SYSTEM_LEAF,
+  getWorkspaceForLeaf,
+  getAllSystemLeafKeys,
+  type SystemSettingsEntry,
+  type SystemLeafMeta,
+} from "../system-settings-registry"
+
+const childrenOf = (node: SystemSettingsEntry): SystemLeafMeta[] =>
+  "children" in node ? node.children : []
+
+const NEW_LEAF_KEYS = [
+  "overview",
+  "connections",
+  "models",
+  "search-knowledge",
+  "tools-extensions",
+  "mcp",
+  "users-registration",
+  "skills-governance",
+  "branding",
+  "logs-audit",
+  "data-maintenance",
+  "reasoning-network",
+]
+
+const RETIRED_KEYS = [
+  "api-routing",
+  "token-management",
+  "system-config",
+  "network",
+  "web-search",
+  "rag",
+  "knowledge-base",
+  "python-runtime",
+  "skills",
+  "members",
+  "audit",
+  "task-trace",
+  "system-logs",
+  "backup",
+]
 
 describe("system-settings-registry", () => {
   describe("导航树结构", () => {
-    const workspaces = systemSettingsTree
-
-    test("应有 5 个工作域", () => {
-      expect(workspaces).toHaveLength(5)
+    test("应有 6 个顶级条目", () => {
+      expect(systemSettingsTree).toHaveLength(6)
     })
 
-    test("第一个工作域应是「配置中心」", () => {
-      expect(workspaces[0].label).toBe("配置中心")
-      expect(workspaces[0].key).toBe("configuration-center")
+    test("第一个顶级条目是概览叶子（无 children）", () => {
+      const first = systemSettingsTree[0]
+      expect(first.key).toBe("overview")
+      expect(first.label).toBe("概览")
+      expect("children" in first).toBe(false)
     })
 
-    test("「配置中心」应包含概览、模型管理、连接管理、模型权限、推理配置、通用设置、网络与超时", () => {
-      const cfg = workspaces[0]
-      const labels = cfg.children.map((c) => c.label)
-      expect(labels).toEqual([
-        "概览",
-        "模型管理",
-        "连接管理",
-        "模型权限",
-        "推理配置",
-        "通用设置",
-        "网络与超时",
+    test("5 个分组 label 与 key 正确", () => {
+      const groups = systemSettingsTree.slice(1)
+      expect(groups.map((g) => g.key)).toEqual([
+        "model-connections",
+        "features-tools",
+        "members-security",
+        "system-data",
+        "advanced",
+      ])
+      expect(groups.map((g) => g.label)).toEqual([
+        "模型与连接",
+        "功能与工具",
+        "成员与安全",
+        "系统与数据",
+        "高级设置",
       ])
     })
 
-    test("「知识库与文档」应包含 RAG 文档解析、知识库管理", () => {
-      const ws = workspaces[1]
-      expect(ws.label).toBe("知识库与文档")
-      expect(ws.children.map((c) => c.label)).toEqual(["RAG 文档解析", "知识库管理"])
+    test("每个分组 children 数量正确（2/3/2/3/1）", () => {
+      expect(childrenOf(systemSettingsTree[1])).toHaveLength(2)
+      expect(childrenOf(systemSettingsTree[2])).toHaveLength(3)
+      expect(childrenOf(systemSettingsTree[3])).toHaveLength(2)
+      expect(childrenOf(systemSettingsTree[4])).toHaveLength(3)
+      expect(childrenOf(systemSettingsTree[5])).toHaveLength(1)
     })
 
-    test("「工具与运行时」应包含联网搜索、Python 运行时、MCP 管理", () => {
-      const ws = workspaces[2]
-      expect(ws.label).toBe("工具与运行时")
-      expect(ws.children.map((c) => c.label)).toEqual(["联网搜索", "Python 运行时", "MCP 管理"])
+    test("12 个叶子 key 全局唯一", () => {
+      const all = systemSettingsTree.flatMap((node) =>
+        "children" in node ? node.children.map((c) => c.key) : [node.key]
+      )
+      expect(all).toHaveLength(12)
+      expect(new Set(all).size).toBe(12)
     })
 
-    test("「治理与审计」应包含成员与权限、Skill 管理、审计日志、任务追踪、系统运行日志", () => {
-      const ws = workspaces[3]
-      expect(ws.label).toBe("治理与审计")
-      expect(ws.children.map((c) => c.label)).toEqual(["成员与权限", "Skill 管理", "审计日志", "任务追踪", "系统运行日志"])
-    })
-
-    test("「运行维护」应包含运行监控与保留策略", () => {
-      const ws = workspaces[4]
-      expect(ws.label).toBe("运行维护")
-      expect(ws.children.map((c) => c.label)).toEqual(["运行监控与保留策略"])
+    test("getAllSystemLeafKeys() 恰好 12 个", () => {
+      expect(getAllSystemLeafKeys()).toHaveLength(12)
+      expect(new Set(getAllSystemLeafKeys()).size).toBe(12)
     })
   })
 
   describe("leaf 渲染", () => {
-    test("renderSystemLeaf('connections') 应返回有效 React 元素", () => {
-      const el = renderSystemLeaf("connections")
-      expect(el).not.toBeNull()
+    test.each(NEW_LEAF_KEYS)("renderSystemLeaf(%s) 应返回有效 React 元素", (key) => {
+      expect(renderSystemLeaf(key)).not.toBeNull()
     })
 
-    test("renderSystemLeaf('models') 应返回有效 React 元素", () => {
-      expect(renderSystemLeaf("models")).not.toBeNull()
-    })
-
-    test("renderSystemLeaf('network') 应返回有效 React 元素", () => {
-      expect(renderSystemLeaf("network")).not.toBeNull()
-    })
-
-    test("renderSystemLeaf('task-trace') 应返回有效 React 元素", () => {
-      expect(renderSystemLeaf("task-trace")).not.toBeNull()
-    })
-
-    test("renderSystemLeaf('system-logs') 应返回有效 React 元素", () => {
-      expect(renderSystemLeaf("system-logs")).not.toBeNull()
-    })
-
-    test("renderSystemLeaf('logs') 应返回 null（已被拆分为独立菜单）", () => {
-      expect(renderSystemLeaf("logs")).toBeNull()
+    test.each(RETIRED_KEYS)("废弃 key %s 的 renderSystemLeaf 应返回 null", (key) => {
+      expect(renderSystemLeaf(key)).toBeNull()
     })
 
     test("renderSystemLeaf('unknown-key') 应返回 null", () => {
@@ -86,38 +113,74 @@ describe("system-settings-registry", () => {
   })
 
   describe("默认 leaf", () => {
-    test("DEFAULT_SYSTEM_LEAF 应为 connections", () => {
-      expect(DEFAULT_SYSTEM_LEAF).toBe("connections")
+    test("DEFAULT_SYSTEM_LEAF 应为 overview", () => {
+      expect(DEFAULT_SYSTEM_LEAF).toBe("overview")
     })
   })
 
   describe("getWorkspaceForLeaf", () => {
-    test("connections 属于 configuration-center", () => {
-      expect(getWorkspaceForLeaf("connections")).toBe("configuration-center")
+    test("overview 属于自身顶级条目 overview", () => {
+      expect(getWorkspaceForLeaf("overview")).toBe("overview")
     })
 
-    test("rag 属于 knowledge-docs", () => {
-      expect(getWorkspaceForLeaf("rag")).toBe("knowledge-docs")
+    test.each(["connections", "models"])("%s 属于 model-connections", (key) => {
+      expect(getWorkspaceForLeaf(key)).toBe("model-connections")
     })
 
-    test("backup 属于 operations", () => {
-      expect(getWorkspaceForLeaf("backup")).toBe("operations")
-    })
+    test.each(["search-knowledge", "tools-extensions", "mcp"])(
+      "%s 属于 features-tools",
+      (key) => {
+        expect(getWorkspaceForLeaf(key)).toBe("features-tools")
+      }
+    )
 
-    test("task-trace 属于 audit-governance", () => {
-      expect(getWorkspaceForLeaf("task-trace")).toBe("audit-governance")
-    })
+    test.each(["users-registration", "skills-governance"])(
+      "%s 属于 members-security",
+      (key) => {
+        expect(getWorkspaceForLeaf(key)).toBe("members-security")
+      }
+    )
 
-    test("system-logs 属于 audit-governance", () => {
-      expect(getWorkspaceForLeaf("system-logs")).toBe("audit-governance")
-    })
+    test.each(["branding", "logs-audit", "data-maintenance"])(
+      "%s 属于 system-data",
+      (key) => {
+        expect(getWorkspaceForLeaf(key)).toBe("system-data")
+      }
+    )
 
-    test("logs 应返回 undefined（已被移除）", () => {
-      expect(getWorkspaceForLeaf("logs")).toBeUndefined()
+    test("reasoning-network 属于 advanced", () => {
+      expect(getWorkspaceForLeaf("reasoning-network")).toBe("advanced")
     })
 
     test("unknown key 应返回 undefined", () => {
       expect(getWorkspaceForLeaf("nonexistent")).toBeUndefined()
+    })
+  })
+
+  describe("leaf 元数据", () => {
+    test("每个叶子有 label 与 icon", () => {
+      for (const node of systemSettingsTree) {
+        if ("children" in node) {
+          for (const leaf of node.children) {
+            expect(leaf.label).toBeTruthy()
+            expect(leaf.icon).toBeDefined()
+          }
+        } else {
+          expect(node.label).toBeTruthy()
+          expect(node.icon).toBeDefined()
+        }
+      }
+    })
+
+    test("每个叶子 keywords 存在（搜索阶段用）", () => {
+      for (const node of systemSettingsTree) {
+        const leaves: SystemLeafMeta[] = "children" in node ? node.children : [node]
+        for (const leaf of leaves) {
+          const keywords = leaf.keywords
+          expect(Array.isArray(keywords)).toBe(true)
+          expect((keywords ?? []).length).toBeGreaterThan(0)
+        }
+      }
     })
   })
 })

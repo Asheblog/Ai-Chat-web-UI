@@ -1,7 +1,26 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { BookOpen, Boxes, ClipboardList, Cloud, Database, FileText, Globe, KeyRound, LayoutDashboard, Link2, PlugZap, Puzzle, Router, Settings2, Terminal, TerminalSquare, Users, Wrench, type LucideIcon } from "lucide-react"
+import {
+  Boxes,
+  BrainCircuit,
+  Cable,
+  Database,
+  HardDrive,
+  LayoutDashboard,
+  Link2,
+  Palette,
+  PlugZap,
+  Puzzle,
+  ScrollText,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Terminal,
+  Users,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react"
 import type { ComponentType, ReactNode } from "react"
 
 // Leaf metadata
@@ -10,6 +29,7 @@ export type SystemLeafMeta = {
   key: string
   label: string
   icon: LucideIcon
+  keywords?: string[]
 }
 
 export type SystemWorkspaceNode = {
@@ -18,6 +38,9 @@ export type SystemWorkspaceNode = {
   icon: LucideIcon
   children: SystemLeafMeta[]
 }
+
+/** Top-level system settings entry: either a leaf or a workspace group. */
+export type SystemSettingsEntry = SystemLeafMeta | SystemWorkspaceNode
 
 // Dynamic page loading placeholder
 
@@ -93,99 +116,132 @@ const SystemMcpPage = dynamic(
   () => import("@/components/settings/pages/SystemMcpPage").then((m) => m.SystemMcpPage),
   { loading: pageLoading },
 )
-const SystemLogsPage = dynamic(
-  () => import("@/components/settings/pages/SystemLogsPage").then((m) => m.SystemLogsPage),
-  { loading: pageLoading },
-)
-const TaskTraceConsole = dynamic(
-  () => import("@/components/task-trace/TaskTraceConsole").then((m) => m.TaskTraceConsole),
-  { loading: pageLoading },
-)
 
-// Navigation tree
+// Navigation tree: overview leaf + 5 workspace groups, 12 leaves in total
 
-export const systemSettingsTree: SystemWorkspaceNode[] = [
+export const systemSettingsTree: SystemSettingsEntry[] = [
   {
-    key: "configuration-center",
-    label: "配置中心",
-    icon: Settings2,
+    key: "overview",
+    label: "概览",
+    icon: LayoutDashboard,
+    keywords: ["首页", "完成度", "待办"],
+  },
+  {
+    key: "model-connections",
+    label: "模型与连接",
+    icon: Cable,
     children: [
-      { key: "overview", label: "概览", icon: LayoutDashboard },
-      { key: "models", label: "模型管理", icon: Boxes },
-      { key: "connections", label: "连接管理", icon: PlugZap },
-      { key: "api-routing", label: "模型权限", icon: Router },
-      { key: "token-management", label: "推理配置", icon: KeyRound },
-      { key: "system-config", label: "通用设置", icon: Settings2 },
-      { key: "network", label: "网络与超时", icon: Router },
+      {
+        key: "connections",
+        label: "供应商与连接",
+        icon: PlugZap,
+        keywords: ["provider", "API Key", "openai", "ollama", "azure", "google", "密钥"],
+      },
+      { key: "models", label: "模型管理", icon: Boxes, keywords: ["模型权限", "能力", "访问控制"] },
     ],
   },
   {
-    key: "knowledge-docs",
-    label: "知识库与文档",
-    icon: BookOpen,
-    children: [
-      { key: "rag", label: "RAG 文档解析", icon: Database },
-      { key: "knowledge-base", label: "知识库管理", icon: BookOpen },
-    ],
-  },
-  {
-    key: "tools-runtime",
-    label: "工具与运行时",
+    key: "features-tools",
+    label: "功能与工具",
     icon: Wrench,
     children: [
-      { key: "web-search", label: "联网搜索", icon: Globe },
-      { key: "python-runtime", label: "Python 运行时", icon: Terminal },
-      { key: "mcp", label: "MCP 管理", icon: Link2 },
+      {
+        key: "search-knowledge",
+        label: "搜索与知识库",
+        icon: Search,
+        keywords: ["联网搜索", "web search", "RAG", "知识库", "嵌入"],
+      },
+      {
+        key: "tools-extensions",
+        label: "工具与扩展",
+        icon: Terminal,
+        keywords: ["Python", "运行时", "Skill 安装", "乱斗", "标题总结"],
+      },
+      { key: "mcp", label: "MCP 管理", icon: Link2, keywords: ["模型上下文协议", "连接", "工具"] },
     ],
   },
   {
-    key: "audit-governance",
-    label: "治理与审计",
-    icon: ClipboardList,
+    key: "members-security",
+    label: "成员与安全",
+    icon: ShieldCheck,
     children: [
-      { key: "members", label: "成员与权限", icon: Users },
-      { key: "skills", label: "Skill 管理", icon: Puzzle },
-      { key: "audit", label: "审计日志", icon: ClipboardList },
-      { key: "task-trace", label: "任务追踪", icon: FileText },
-      { key: "system-logs", label: "系统运行日志", icon: TerminalSquare },
+      { key: "users-registration", label: "用户与注册", icon: Users, keywords: ["成员", "注册", "配额", "额度"] },
+      { key: "skills-governance", label: "Skill 治理", icon: Puzzle, keywords: ["审批", "版本", "绑定", "安装"] },
     ],
   },
   {
-    key: "operations",
-    label: "运行维护",
-    icon: Cloud,
+    key: "system-data",
+    label: "系统与数据",
+    icon: Database,
     children: [
-      { key: "backup", label: "运行监控与保留策略", icon: Cloud },
+      {
+        key: "branding",
+        label: "品牌与界面",
+        icon: Palette,
+        keywords: ["品牌", "头像", "提示词", "站点", "siteBaseUrl"],
+      },
+      {
+        key: "logs-audit",
+        label: "日志与审计",
+        icon: ScrollText,
+        keywords: ["审计", "任务追踪", "运行日志", "日志"],
+      },
+      {
+        key: "data-maintenance",
+        label: "数据与维护",
+        icon: HardDrive,
+        keywords: ["备份", "保留", "压缩", "监控"],
+      },
+    ],
+  },
+  {
+    key: "advanced",
+    label: "高级设置",
+    icon: SlidersHorizontal,
+    children: [
+      {
+        key: "reasoning-network",
+        label: "推理与网络",
+        icon: BrainCircuit,
+        keywords: ["推理", "token", "流式", "网络", "超时", "ollama"],
+      },
     ],
   },
 ]
 
 // Leaf component map
 
+/** 叠挂多个页面组件为一个组件（阶段 1 临时手段，阶段 2 由 FeatureCard 整合取代）。 */
+function stacked(...pages: ComponentType[]): ComponentType {
+  return function Stacked() {
+    return (
+      <div className="space-y-6">
+        {pages.map((Page, index) => (
+          <Page key={index} />
+        ))}
+      </div>
+    )
+  }
+}
+
 const leafComponentMap: Record<string, ComponentType> = {
   overview: SystemOverviewContent,
-  models: SystemModelsPage,
   connections: SystemConnectionsPage,
-  "api-routing": SystemModelAccessPage,
-  "token-management": SystemReasoningPage,
-  "system-config": SystemGeneralPage,
-  network: SystemNetworkPage,
-  rag: SystemRAGPage,
-  "knowledge-base": SystemKnowledgeBasePage,
-  "web-search": SystemWebSearchPage,
-  "python-runtime": SystemPythonRuntimePage,
+  models: stacked(SystemModelsPage, SystemModelAccessPage),
+  "search-knowledge": stacked(SystemWebSearchPage, SystemRAGPage, SystemKnowledgeBasePage),
+  "tools-extensions": SystemPythonRuntimePage,
   mcp: SystemMcpPage,
-  members: SystemUsersPage,
-  skills: SystemSkillsPage,
-  audit: SystemSkillAuditsPage,
-  "task-trace": TaskTraceConsole,
-  "system-logs": SystemLogsPage,
-  backup: SystemMonitoringPage,
+  "users-registration": SystemUsersPage,
+  "skills-governance": SystemSkillsPage,
+  branding: SystemGeneralPage,
+  "logs-audit": SystemSkillAuditsPage,
+  "data-maintenance": SystemMonitoringPage,
+  "reasoning-network": stacked(SystemReasoningPage, SystemNetworkPage),
 }
 
 // Utilities
 
-export const DEFAULT_SYSTEM_LEAF = "connections"
+export const DEFAULT_SYSTEM_LEAF = "overview"
 
 /** Render a system leaf page by its key. Returns null if not found. */
 export function renderSystemLeaf(key: string): ReactNode | null {
@@ -194,15 +250,21 @@ export function renderSystemLeaf(key: string): ReactNode | null {
   return <Component />
 }
 
-/** Find which workspace key a leaf belongs to. Returns undefined if not found. */
+/** Find which top-level entry a leaf belongs to. Returns undefined if not found. */
 export function getWorkspaceForLeaf(leafKey: string): string | undefined {
-  for (const ws of systemSettingsTree) {
-    if (ws.children.some((c) => c.key === leafKey)) return ws.key
+  for (const entry of systemSettingsTree) {
+    if ("children" in entry) {
+      if (entry.children.some((c) => c.key === leafKey)) return entry.key
+    } else if (entry.key === leafKey) {
+      return entry.key
+    }
   }
   return undefined
 }
 
 /** Get all leaf keys. */
 export function getAllSystemLeafKeys(): string[] {
-  return systemSettingsTree.flatMap((ws) => ws.children.map((c) => c.key))
+  return systemSettingsTree.flatMap((entry) =>
+    "children" in entry ? entry.children.map((c) => c.key) : [entry.key]
+  )
 }
