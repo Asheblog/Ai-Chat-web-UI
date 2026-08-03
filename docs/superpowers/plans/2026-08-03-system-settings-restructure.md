@@ -854,3 +854,244 @@ export function SettingsTabs({
 ### 验收（阶段 2 整体）
 
 12 叶子全部指向新页/保留页；旧 9 页删除；全量测试绿；tsc/lint 绿；无回归（所有设置 key 可达——由各新页测试覆盖）
+
+---
+
+# 阶段 3 任务拆分（PR-3：体验增强）
+
+## Task 14 — 全站搜索框（settings-search + shell navTop）
+
+文件（仅这些）：
+- 新建 `packages/frontend/src/components/settings/components/settings-search.tsx`（≤300 行）
+- 修改 `packages/frontend/src/components/settings/shell.tsx`（仅加一个可选 `navTop?: ReactNode` prop：nested 模式 aside 内、导航列表上方渲染；flat 模式忽略）
+- 修改 `packages/frontend/src/app/main/settings/_components/settings-layout-client.tsx`（系统设置模式传 navTop=<SettingsSearch/>；个人设置模式不传）
+- 新建 `packages/frontend/src/components/settings/__tests__/settings-search.test.tsx`
+- 不触碰其他文件
+
+### 组件规格
+
+```tsx
+// components/settings/components/settings-search.tsx
+export function SettingsSearch()  // 无 props，数据来自注册表 systemSettingsTree
+```
+
+1. 数据源：`systemSettingsTree`（含分组与叶子）+ `getAllSystemLeafKeys`；匹配 = 叶子 label 或 keywords 子串（大小写不敏感，中英文都做 toLowerCase）
+2. UI：Input（placeholder「搜索设置…」+ Search 图标）+ 结果下拉（`absolute` 浮层 v2-panel 卡片，z-50，`mt-1` 宽度同输入框）；无匹配时显示「无匹配设置」
+3. 结果项：叶子 icon + label + 所属分组 label（小字）；点击 → `window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail: { key } }))` + 清空输入 + 收起
+4. 键盘：ArrowDown/ArrowUp 移动高亮、Enter 选择高亮项、Escape 收起、失焦收起（mousedown 处理避免点击冲突）；输入非空才显示结果
+5. 下拉用真实按钮元素（`role="option"` 或 button），高亮项 `aria-selected`；Input `aria-label="搜索设置"`
+6. 现有布局联动：select 事件 → SystemSettings 切页 + layout 同步 systemSub/systemMain（阶段 1 已就位，无需额外代码）
+
+### shell.tsx 改动
+
+- `NestedModeProps` 增加可选 `navTop?: ReactNode`；`SettingsShellNestedImpl` 的 nav 区域：`{navTop}{nav}`（nav 列表前渲染）；flat 模式不受影响；默认不渲染任何内容
+
+### settings-layout-client.tsx 改动
+
+- 系统设置分支（activeSection === "system"）传 `navTop={<SettingsSearch />}`；其他不动
+
+### 测试（TDD，先红后绿）
+
+`settings-search.test.tsx`（渲染 `<SettingsSearch />`，注册表数据真实可用）：
+1. 输入「模型」→ 结果含「模型管理」（label 匹配）；输入「密钥」→ 结果含「供应商与连接」（keywords 匹配）
+2. 无匹配输入 → 「无匹配设置」
+3. 点击结果项 → dispatch 事件 `aichat:system-settings-select` 且 detail.key 正确（vi.spyOn window dispatchEvent 或监听断言）
+4. ArrowDown 高亮移动 + Enter 选择（断言 dispatch）
+5. Escape 收起、清空输入后结果消失
+6. 空输入不显示结果
+7. shell：nested 模式传 navTop 渲染在导航上方（在 settings-shell 测试里补一个用例或在本测试文件内单独渲染 shell 断言；任选其一，倾向在本文件补 shell 用例）
+
+### 验证
+
+- `npx vitest run src/components/settings/__tests__/settings-search.test.tsx` 全绿
+- `npx vitest run src/components/settings` 全绿（shell 测试兼容）
+- `npx tsc --noEmit`；`npx next lint` 涉及文件无 error
+
+## Task 15 — 概览页升级（完成度清单 + 去配置跳转）
+
+文件（仅这些）：
+- 修改 `packages/frontend/src/components/settings/system-settings-registry-overview.tsx`
+- 新建 `packages/frontend/src/components/settings/__tests__/system-settings-registry-overview.test.tsx`
+- 不触碰其他文件（跳转联动已在阶段 1 就位：select 事件 → layout 同步 sub/main）
+
+### 新概览结构
+
+```
+SystemOverviewContent（升级）
+├─ 4 张状态卡（保留样式，label 更新为新结构）：
+│   模型与连接（供应商与连接 / 模型管理）/ 功能与工具（搜索与知识库 / 工具与扩展 / MCP）
+│   成员与安全（用户与注册 / Skill 治理）/ 系统与数据（品牌与界面 / 日志与审计 / 数据与维护）
+├─ 「待你完成」检查清单（v2-panel 卡片，标题 + 4 项）：
+│   ① 模型接入     → 完成条件：useSystemConnections().connections.length > 0    → 去配置 → connections
+│   ② 注册开放     → settings.allowRegistration === true                        → 去配置 → users-registration
+│   ③ 搜索配置     → settings.webSearchAgentEnable === true                      → 去配置 → search-knowledge
+│   ④ 默认模型     → useSystemModels().list.length > 0                           → 去配置 → models
+│   每项：白话名 + 状态徽标（已完成 emerald「已完成」/ 待完成 muted「待完成」）+ 右侧「去配置 →」按钮
+│   已完成项的去配置按钮保留（可复访）
+└─ 底部提示（v2-panel-soft）：「完成以上即可正常使用，其余参数保持默认。」
+```
+
+### 实现要点
+
+1. 数据 hook：`useSystemSettings`（@/hooks）、`useSystemConnections`（@/components/settings/system-connections/use-system-connections）、`useSystemModels`（@/components/settings/system-models/use-system-models）；loading 时清单区显示骨架（沿用 v2 风格），不阻塞状态卡
+2. 「去配置 →」按钮 onClick → `window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail: { key } }))`（key 见上表）
+3. 状态卡 icon 沿用现有配色体系（蓝/绿/紫/琥珀 tone）
+4. 无未使用 props；不引入新依赖
+
+### 测试（TDD，先红后绿）
+
+`system-settings-registry-overview.test.tsx`（mock：useSystemSettings/useSystemConnections/useSystemModels + useToast 不需要；渲染 `<SystemOverviewContent />`）：
+1. 4 张状态卡标题渲染（模型与连接/功能与工具/成员与安全/系统与数据）
+2. 检查清单 4 项渲染（模型接入/注册开放/搜索配置/默认模型）
+3. 全部条件满足 → 4 项均为「已完成」
+4. 条件未满足（connections 空/allowRegistration=false/webSearchAgentEnable=false/models 空）→ 对应项「待完成」
+5. 点「去配置 →」（模型接入项）→ dispatch 事件 `aichat:system-settings-select` detail.key === "connections"
+6. 底部提示文案渲染
+7. loading 态（settings null）渲染骨架不崩溃
+
+### 验证
+
+- `npx vitest run src/components/settings/__tests__/system-settings-registry-overview.test.tsx` 全绿
+- `npx vitest run src/components/settings` 全绿
+- `npx tsc --noEmit`；`npx next lint` 涉及文件无 error
+
+## Task 16 — 供应商与连接页重做（6 模板卡 + Sheet 配置抽屉 + 高级管理折叠）
+
+文件（仅这些）：
+- 新建 `packages/frontend/src/components/settings/system-connections/provider-templates.ts`（模板数据 + 类型）
+- 新建 `packages/frontend/src/components/settings/system-connections/provider-template-card.tsx`（模板卡组件，≤200 行）
+- 修改 `packages/frontend/src/components/settings/system-connections/form-state.ts`（追加 `createFormFromTemplate(template)` 纯函数）
+- 重写 `packages/frontend/src/components/settings/pages/SystemConnections.tsx`（页壳：页头 + 模板卡网格 + 高级管理折叠 + Sheet 抽屉；复用现有全部局部状态与 import/export/删除逻辑，≤700 行；若超限拆 `pages/connections/` 目录，导出名保持 SystemConnectionsPage）
+- 新建 `packages/frontend/src/components/settings/__tests__/system-connections-page.test.tsx`
+- 不触碰其他文件（既有 system-connections/* 组件、services、hook 原样复用）
+
+### 背景（勘察结论）
+
+- 当前无 per-provider 模板数据结构；编辑器为内联展开；页面局部状态含 query/filters/expandedGroupId/detailIntent/editorFocus/confirm*（SystemConnections.tsx 59-75）；import/export 流程 138-222；handleProviderChange 224-233（google_genai/openai_interleave 强制 bearer）
+- hook `useSystemConnections`（19 字段）复用；`validateForm`/`buildPayload`/`verifyConnection`/`submitConnection` 原样
+- `baseUrlPlaceholder`（view-model.ts:57-61）与 `HelperText`（PageParts）为端点提示来源；`providerLabel`（view-model.ts:28-37）为显示名来源
+- 抽屉基元：仓库已有 `src/components/ui/sheet.tsx`——用 Sheet（右侧抽屉）
+- 零既有测试
+
+### 1. provider-templates.ts
+
+```ts
+export type ProviderTemplateKey = "openai" | "openai_responses" | "azure_openai" | "ollama" | "google_genai" | "openai_interleave"
+export type ProviderTemplate = {
+  provider: ProviderTemplateKey
+  label: string                 // 显示名（openai_interleave → "OpenAI（交错思考）" 等，对齐 providerLabel）
+  description: string           // 白话描述（一句话说清用途）
+  icon: LucideIcon
+  baseUrl: string               // 默认端点
+  authType: "bearer" | "none"
+  azureApiVersion?: string      // 仅 azure_openai
+  helperText?: string           // 端点提示（可复用 HelperText 语义）
+}
+export const PROVIDER_TEMPLATES: ProviderTemplate[]  // 6 项，顺序：openai, openai_responses, azure_openai, ollama, google_genai, openai_interleave
+export function getProviderTemplate(provider: string): ProviderTemplate | undefined
+```
+
+模板默认值（沿用 baseUrlPlaceholder/HelperText/EditorParts 语义）：
+- openai：baseUrl `https://api.openai.com/v1`，bearer，helperText 可提兼容网关（NewAPI 等）
+- openai_responses：baseUrl `https://api.openai.com/v1`，bearer
+- azure_openai：baseUrl `https://<资源名>.openai.azure.com/`，bearer，azureApiVersion `2024-02-15-preview`
+- ollama：baseUrl `http://localhost:11434`，**authType `none`**（免 Key，解决现状"ollama 也要手动切 none"的痛点）
+- google_genai：baseUrl `https://generativelanguage.googleapis.com/v1beta`，bearer
+- openai_interleave：baseUrl `https://api.deepseek.com/v1`，bearer，helperText 提 DeepSeek/SiliconFlow（沿用 HelperText 文案）
+
+### 2. form-state.ts 追加
+
+```ts
+export function createFormFromTemplate(template: ProviderTemplate): ConnectionFormState
+// provider: template.provider（openai_interleave 直接作 provider 值，沿用现有 mapProviderSelection 语义：其即 provider 选项值）
+// baseUrl/azureApiVersion 预填；authType 预填；connectionType "external"；keys: [createEmptyKey(0)]；tags ""
+```
+
+### 3. provider-template-card.tsx
+
+Props：`{ template, count, onConfigure }`；v2-panel 卡：icon 瓦片 + label + description + 连接数徽标（`已有 ${count} 组连接`，count 0 时显示「未配置」）+「配置 →」按钮（onConfigure(template)）；hover 颜色过渡 + cursor-pointer
+
+### 4. SystemConnections.tsx 重写
+
+```
+SystemConnectionsPage
+├─ 页头：标题「供应商与连接」+ 白话副标题（如 "按供应商快速接入模型，高级管理在下方"）
+├─ 模板卡网格（grid md:grid-cols-2 xl:grid-cols-3 gap-3）：
+│    每卡 count = connections 中与该模板匹配的组数（匹配键 = `${provider}:${vendor||""}`，与 providerOptions 同口径；
+│    openai_interleave 卡匹配 key "openai:openai_interleave"）
+├─ 高级管理 CollapsibleEditorSection（icon Settings2，标题「高级管理」，summary「全部连接列表、导入导出与 API Key 池」，默认收起）：
+│    内容 = 既有全部管理面：SystemConnectionsToolbar（含统计/筛选/导入导出/新增连接）+ 内联 create 编辑器 + SystemConnectionList（含内联编辑/删除/Key 池/验证）——原样保留
+├─ 配置 Sheet（ui/sheet，side=right）：
+│    标题「配置 {label}」+ <SystemConnectionEditor group={null} detailIntent="create" initialFocus="basic" .../>（预填模板：打开时 setForm(createFormFromTemplate(tpl))；关闭时重置 DEFAULT_FORM——沿用现有 closeCreate 语义）
+│    底部保留 editor 自身的 验证连接/保存 按钮
+└─ 既有 confirm 对话框（删除/导出/导入）与 import 文件 input 原样保留在页壳
+```
+
+### 实现要点
+
+1. 复用 hook 全部字段；模板卡网格数据 = PROVIDER_TEMPLATES + 从 connections 算 count（useMemo）
+2. 既有局部状态与 handler（import/export/filter/openGroup/toggleGroup/startCreate/closeCreate/handleSubmit/handleProviderChange）原样保留——高级管理折叠内容即原页内容
+3. Sheet 打开模板时：`setForm(createFormFromTemplate(tpl))` + `setVerifyResult(null)`（hook 的 verifyResult 通过 startEdit/resetForm 管——以 hook 现有行为为准，必要时页内 setForm 后手动置空）；创建成功（submitConnection 返回 true）→ 关 Sheet
+4. 「配置 →」按钮与卡点击均可开 Sheet；Sheet 内保存用 editor 既有 onSubmit（= handleSubmit 包装 submitConnection）
+5. 不引入新依赖；行样式沿用 v2-panel 体系
+
+### 测试（TDD，先红后绿）
+
+`system-connections-page.test.tsx`（mock：`@/services/system-connections`（fetchSystemConnections 返回 2 组 openai + 1 组 ollama 的样例）、useToast；渲染 `<SystemConnectionsPage />`；hook 用真实 useSystemConnections——服务层 mock 即可）：
+1. 渲染 6 张模板卡（OpenAI/Azure/Ollama/Google/Responses/交错思考 标签可见）
+2. 连接数徽标：openai 卡显示「已有 2 组连接」、ollama 卡「已有 1 组连接」、google_genai 卡「未配置」
+3. 高级管理默认收起（工具栏「连接管理」不可见）→ 点击展开可见
+4. 点「配置 →」（Ollama 卡）→ Sheet 打开，标题「配置 Ollama」，表单预填 baseUrl `http://localhost:11434` 且 authType none（断言表单输入值）
+5. 抽屉内点「保存」→ createSystemConnection 被调（mock 断言 payload.provider === "ollama" 且 baseUrl 预填值）
+6. 抽屉内点「验证连接」→ verifySystemConnection 被调
+7. 关闭 Sheet 后表单重置（再开 OpenAI 卡 → provider 为 openai）
+8. 加载骨架渲染（fetch 未返回时）
+
+`provider-templates.test.ts`（可并入上面文件或独立）：
+- 6 项、provider 唯一、每项有 label/description/icon/baseUrl/authType；ollama.authType === "none"；azure_openai 有 azureApiVersion；getProviderTemplate 未知返回 undefined
+
+### 验证
+
+- `npx vitest run src/components/settings/__tests__/system-connections-page.test.tsx` 全绿
+- `npx vitest run src/components/settings` 全绿；`npx tsc --noEmit`；`npx next lint` 涉及文件无 error
+
+## Task 17 — 白话副标题补全 + 个人设置整理
+
+文件（仅这些）：
+- 修改 `packages/frontend/src/components/personal-settings.tsx`（渲染顺序：shares 移到 security 前）
+- 修改 `packages/frontend/src/components/settings/pages/SystemMcpPage.tsx`（仅加副标题，若已有则跳过）
+- 修改 `packages/frontend/src/components/settings/pages/PersonalPreferences.tsx` / `PersonalSkills.tsx` / `ShareManagement.tsx` / `PersonalSecurity.tsx` / `About.tsx`（仅补白话副标题，不改布局结构）
+- 新建 `packages/frontend/src/components/settings/__tests__/personal-settings.test.tsx`
+- 不触碰其他文件
+
+### 1. personal-settings.tsx 顺序修正
+
+现状渲染顺序：preferences → skills → **security → shares**；导航顺序为 preferences/skills/**shares**/security（settings-layout-client personalSections 与 settingsNav 一致）。改为：preferences → skills → **shares** → security（与导航一致）。hash 锚点 id 不变（settings-personal-preferences / skills / share-management / personal-security）。
+
+### 2. 白话副标题补全（已勘察现状）
+
+| 位置 | 现状 | 动作 |
+|---|---|---|
+| SystemMcpPage（system-mcp/SystemMcpPage.tsx:42-60 页头区，h2「MCP 管理」） | 无副标题 | 标题下加一行 `text-sm text-muted-foreground`：如「配置与管理模型上下文协议（MCP）服务器与工具」 |
+| PersonalPreferences.tsx 两个 v2-panel 区（:155/:221） | 无区副标题 | 每区标题下补一行白话说明（如「设置对话偏好与界面语言」等——以区实际内容为准，写准确的白话文案） |
+| PersonalSkills.tsx（:168 h2「个人 Skills」） | 无副标题 | 补「管理你专属的 Skill 技能包」类一行 |
+| ShareManagement.tsx（:163「最近分享」） | 无副标题 | 补「查看和管理你分享的对话」类一行 |
+| PersonalSecurity.tsx（:74「修改密码」） | 无副标题 | 补「定期修改密码保护账号安全」类一行 |
+| About.tsx（:22「系统信息」/:56「更新日志」） | 无副标题 | 各补一行（如「当前版本与运行环境」「查看产品更新记录」） |
+| 其余 9 个系统设置页 | 阶段 2 已有页头副标题 | 不动 |
+
+要求：只加 `<p className="mt-1 text-sm text-muted-foreground">` 之类的副标题行（样式对齐所在区既有 muted 文字风格）；**不改变布局结构、不加新依赖、不改其他文案**。文案要"白话"（管理员看得懂，不用术语堆砌）。
+
+### 3. 测试（TDD，先红后绿）
+
+`personal-settings.test.tsx`（渲染 `<PersonalSettings />`，子页面组件为真实组件——若它们依赖 hooks（如 auth），按需 mock；PersonalPreferences/Skills/Shares/Security 若有数据 hook 则 mock 最小返回）：
+1. 渲染顺序：shares（「最近分享」）在 security（「修改密码」）**之前**（compareDocumentPosition 或 DOM 顺序断言）
+2. 四个锚点 id 仍存在（settings-personal-preferences/skills/share-management/personal-security）
+3. 各个人页面副标题文本可见（「个人 Skills」区副标题等——断言新增文案）
+4. MCP 页副标题：渲染 SystemMcpPage（mock 其数据 hook，如有）断言副标题可见（可并入本文件或另起小文件）
+
+### 验证
+
+- `npx vitest run src/components/settings/__tests__/personal-settings.test.tsx` 全绿
+- `npx vitest run src/components/settings` 全绿
+- `npx tsc --noEmit`；`npx next lint` 涉及文件无 error
