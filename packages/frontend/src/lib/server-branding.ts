@@ -9,7 +9,9 @@ const BRANDING_REVALIDATE_SECONDS = (() => {
   if (parsed !== null && Number.isFinite(parsed) && parsed >= 0) {
     return parsed
   }
-  return 300
+  // 默认 60s：站点名/品牌信息在管理面板修改后 1 分钟内刷新，
+  // 同时保留 SSR 缓存避免每次请求都打到后端
+  return 60
 })()
 const IS_PRODUCTION_BUILD_PHASE = process.env.NEXT_PHASE === 'phase-production-build'
 const BRANDING_FETCH_DISABLED = IS_PRODUCTION_BUILD_PHASE || process.env.BRANDING_FETCH_DISABLED === '1'
