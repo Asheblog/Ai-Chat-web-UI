@@ -2,7 +2,7 @@ import React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, test, vi } from "vitest"
-import { SystemPythonRuntimePage } from "@/components/settings/pages/SystemPythonRuntime"
+import { PythonRuntimeCard } from "@/components/settings/pages/tools-extensions/python-runtime-card"
 import type { PythonRuntimeStatus } from "@/types"
 
 const apiMocks = vi.hoisted(() => ({
@@ -78,20 +78,25 @@ beforeEach(() => {
   apiMocks.reconcilePythonRuntime.mockResolvedValue({ data: {} })
 })
 
-describe("SystemPythonRuntimePage", () => {
-  test("加载状态后显示运行环境信息", async () => {
-    render(<SystemPythonRuntimePage />)
+describe("PythonRuntimeCard", () => {
+  /** 卡内全部区块收在 FeatureCard「更多参数」折叠区内，交互前先展开。 */
+  const renderAndExpand = async () => {
+    render(<PythonRuntimeCard />)
+    await userEvent.click(screen.getByRole("button", { name: "更多参数" }))
+  }
 
-    await screen.findByText("Python 运行环境")
+  test("加载状态后显示运行环境信息", async () => {
+    await renderAndExpand()
+
+    await screen.findByText("/app/data/python-runtime/venv/bin/python")
     expect(apiMocks.getPythonRuntimeStatus).toHaveBeenCalledTimes(1)
-    expect(screen.getByText("/app/data/python-runtime/venv/bin/python")).toBeInTheDocument()
     expect(screen.getByText("已安装 2 个包")).toBeInTheDocument()
     expect(screen.getByText("冲突 1")).toBeInTheDocument()
   })
 
   test("显示包来源并支持来源筛选", async () => {
-    render(<SystemPythonRuntimePage />)
-    await screen.findByText("Python 运行环境")
+    await renderAndExpand()
+    await screen.findByText("/app/data/python-runtime/venv/bin/python")
 
     expect(screen.getByText("Skill(自动)")).toBeInTheDocument()
     expect(screen.getByText("Skill(清单)")).toBeInTheDocument()
@@ -104,8 +109,8 @@ describe("SystemPythonRuntimePage", () => {
   })
 
   test("保存索引配置会发送规范化载荷", async () => {
-    render(<SystemPythonRuntimePage />)
-    await screen.findByText("Python 运行环境")
+    await renderAndExpand()
+    await screen.findByPlaceholderText("https://pypi.org/simple")
 
     fireEvent.change(screen.getByPlaceholderText("https://pypi.org/simple"), {
       target: { value: "https://pypi.tuna.tsinghua.edu.cn/simple" },
@@ -133,8 +138,8 @@ describe("SystemPythonRuntimePage", () => {
   })
 
   test("安装、卸载与 reconcile 会调用对应接口", async () => {
-    render(<SystemPythonRuntimePage />)
-    await screen.findByText("Python 运行环境")
+    await renderAndExpand()
+    await screen.findByText("/app/data/python-runtime/venv/bin/python")
 
     const installCard = screen.getByText("安装依赖（手动）").closest("div")
     const installTextarea = installCard?.querySelector("textarea")
@@ -184,7 +189,7 @@ describe("SystemPythonRuntimePage", () => {
       },
     })
 
-    render(<SystemPythonRuntimePage />)
+    await renderAndExpand()
 
     await screen.findByText("运行环境未就绪")
     expect(screen.getByText("受管环境 pip 不可用，自动修复失败。")).toBeInTheDocument()

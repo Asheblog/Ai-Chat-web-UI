@@ -1,13 +1,8 @@
 import React from "react"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
+import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { SettingsLayoutClient } from "@/app/main/settings/_components/settings-layout-client"
-import { SystemGeneralPage } from '@/features/settings/pages/system-general'
 import { SystemModelsPage } from '@/features/settings/pages/system-models'
-import { SystemNetworkPage } from '@/components/settings/pages/SystemNetwork'
-import { SystemReasoningPage } from '@/components/settings/pages/SystemReasoning'
-import { SystemWebSearchPage } from '@/components/settings/pages/SystemWebSearch'
 import type { SystemSettings } from '@/types'
 import {
   adminAuthState,
@@ -158,162 +153,11 @@ describe("权限与导航", () => {
   })
 })
 
-describe("系统设置页面", () => {
-  test("通用设置保存时会提交规范化后的有效载荷", async () => {
-    const { container } = render(<SystemGeneralPage />)
-    const quotaInput = container.querySelector<HTMLInputElement>("input#anonymousDailyQuota")
-    const brandInput = container.querySelector<HTMLInputElement>("input#brandText")
-    const saveButton = screen.getByRole("button", { name: "保存通用设置" })
-    expect(quotaInput).toBeTruthy()
-    expect(brandInput).toBeTruthy()
-
-    fireEvent.change(quotaInput!, { target: { value: "15" } })
-    fireEvent.change(brandInput!, { target: { value: "NewBrand" } })
-
-    await userEvent.click(saveButton)
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledWith({
-        allowRegistration: true,
-        anonymousDailyQuota: 15,
-        defaultUserDailyQuota: 50,
-        battleAllowAnonymous: true,
-        battleAllowUsers: true,
-        battleAnonymousDailyQuota: 8,
-        battleUserDailyQuota: 40,
-        battleRetentionDays: 15,
-        brandText: "NewBrand",
-        chatSystemPrompt: "",
-        siteBaseUrl: "https://chat.example.com",
-        chatImageRetentionDays: 30,
-        assistantReplyHistoryLimit: 5,
-        contextCompressionEnabled: true,
-        contextCompressionThresholdRatio: 0.5,
-        contextCompressionTailMessages: 12,
-        anonymousRetentionDays: 10,
-        titleSummaryEnabled: false,
-        titleSummaryMaxLength: 20,
-        titleSummaryModelSource: "current",
-      })
-    })
-  })
-
-  test("通用设置输入非法值时会阻止更新并提示错误", async () => {
-    const { container } = render(<SystemGeneralPage />)
-    const quotaInput = container.querySelector<HTMLInputElement>("input#anonymousDailyQuota")
-    const saveButton = screen.getByRole("button", { name: "保存通用设置" })
-    fireEvent.change(quotaInput!, { target: { value: "-1" } })
-
-    await userEvent.click(saveButton)
-
-    expect(updateSpy).not.toHaveBeenCalled()
-    expect(toastSpy).toHaveBeenCalled()
-    const toastArg = toastSpy.mock.calls[0]?.[0]
-    expect(toastArg?.title).toContain("输入无效")
-  })
-
-  test("乱斗保留天数非法时会阻止保存", async () => {
-    const { container } = render(<SystemGeneralPage />)
-    const retentionInput = container.querySelector<HTMLInputElement>("input#battleRetentionDays")
-    const saveButton = screen.getByRole("button", { name: "保存通用设置" })
-    fireEvent.change(retentionInput!, { target: { value: "-2" } })
-
-    await userEvent.click(saveButton)
-
-    expect(updateSpy).not.toHaveBeenCalled()
-    expect(toastSpy).toHaveBeenCalled()
-    const toastArg = toastSpy.mock.calls[0]?.[0]
-    expect(toastArg?.description).toContain("乱斗历史保留天数")
-  })
-
-  test("推理链设置的自定义标签校验失败会阻断保存", async () => {
-    mockSystemSettings({
-      ...baseSettings,
-      reasoningTagsMode: "custom",
-      reasoningCustomTags: "",
-    })
-    render(<SystemReasoningPage />)
-    const customInput = await screen.findByPlaceholderText('["<think>","</think>"]')
-    fireEvent.change(customInput, { target: { value: "not-json" } })
-
-    await userEvent.click(screen.getByRole("button", { name: "保存设置" }))
-
-    expect(updateSpy).not.toHaveBeenCalled()
-    expect(toastSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "自定义标签无效" })
-    )
-  })
-
-  test("网络与流式配置在值有效时才允许保存并调用更新", async () => {
-    const { container } = render(<SystemNetworkPage />)
-    const hbInput = container.querySelector<HTMLInputElement>("input#sseHeartbeat")
-    const saveButton = screen.getByRole("button", { name: "保存设置" })
-    expect(hbInput).toBeTruthy()
-
-    fireEvent.change(hbInput!, { target: { value: "500" } })
-    expect(saveButton).toBeDisabled()
-
-    fireEvent.change(hbInput!, { target: { value: "20000" } })
-    expect(saveButton).not.toBeDisabled()
-
-    await userEvent.click(saveButton)
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledWith({
-        sseHeartbeatIntervalMs: 20000,
-        providerMaxIdleMs: 60000,
-        providerTimeoutMs: 300000,
-        providerInitialGraceMs: 120000,
-        providerReasoningIdleMs: 300000,
-        reasoningKeepaliveIntervalMs: 0,
-        usageEmit: true,
-        usageProviderOnly: false,
-      })
-    })
-  })
-
-  test("联网搜索清除已保存 Key 后会发送清空指令", async () => {
-    render(<SystemWebSearchPage />)
-    const clearButtons = screen.getAllByRole("button", { name: "清除" })
-    expect(clearButtons.length).toBeGreaterThan(0)
-    await userEvent.click(clearButtons[0])
-
-    const saveButton = screen.getByRole("button", { name: "保存联网搜索设置" })
-    expect(saveButton).not.toBeDisabled()
-
-    await userEvent.click(saveButton)
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          webSearchAgentEnable: true,
-          webSearchEnabledEngines: ["tavily"],
-          webSearchEngineOrder: ["tavily"],
-          webSearchResultLimit: 4,
-          webSearchDomainFilter: ["example.com"],
-          webSearchScope: "webpage",
-          webSearchIncludeSummary: false,
-          webSearchIncludeRaw: false,
-          webSearchParallelMaxEngines: 1,
-          webSearchParallelMaxQueriesPerCall: 2,
-          webSearchParallelTimeoutMs: 12000,
-          webSearchAutoBilingual: true,
-          webSearchAutoBilingualMode: "conditional",
-          webSearchAutoReadParallelism: 2,
-          chatDynamicSkillRuntimeEnabled: false,
-          webSearchApiKeyTavily: "",
-        }),
-      )
-    })
-  })
-})
+// 被新页吸收的旧页面（SystemGeneralPage/SystemNetworkPage/SystemReasoningPage/
+// SystemWebSearchPage 等）的测试已由新页测试承接（branding/users-registration/
+// tools-extensions/data-maintenance/reasoning-network/search-knowledge 等）。
 
 describe("视图快照", () => {
-  test("SystemGeneralPage 渲染保持稳定", () => {
-    const { container } = render(<SystemGeneralPage />)
-    expect(container).toMatchSnapshot()
-  })
-
   test("SystemModelsPage 渲染保持稳定", () => {
     mockSystemModels()
     const { container } = render(<SystemModelsPage />)
