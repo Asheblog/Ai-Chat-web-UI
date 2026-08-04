@@ -120,6 +120,8 @@ model Message {
   reasoning                String?
   reasoningDurationSeconds Int?
   toolLogsJson             String?
+  // 图片转写描述（JSON 数组 [{ description, modelRawId }]，按图片顺序）
+  imageDescriptionsJson    String?   @map("image_descriptions_json")
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   streamStatus             String   @default("done")
