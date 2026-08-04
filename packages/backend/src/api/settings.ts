@@ -195,6 +195,10 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     title_summary_model_source: z.enum(['current', 'specified']).optional(),
     title_summary_connection_id: z.number().int().positive().nullable().optional(),
     title_summary_model_id: z.string().min(1).nullable().optional(),
+    // 图片转写代理设置
+    image_transcription_enabled: z.boolean().optional(),
+    image_transcription_connection_id: z.number().int().positive().nullable().optional(),
+    image_transcription_model_id: z.string().min(1).nullable().optional(),
     // RAG 文档解析设置
     rag_enabled: z.boolean().optional(),
     rag_embedding_connection_id: z.number().int().positive().nullable().optional(),
