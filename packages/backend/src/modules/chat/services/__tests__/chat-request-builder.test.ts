@@ -364,3 +364,90 @@ describe('ChatRequestBuilder', () => {
     })).rejects.toMatchObject({ statusCode: 400, message: '连接缺少 secretVaultId，无法获取 API Key' })
   })
 })
+
+describe('ChatRequestBuilder.prepare vision proxy', () => {
+  // tokenizer.truncateMessages 透传输入，确保注入到历史消息的描述能流入最终 payload
+  const passthroughTokenizer = (tokenizer: any) => {
+    tokenizer.truncateMessages.mockImplementation(async (messages: any[]) => messages)
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+  }
+
+  it('injects visionTranscriptionPrefix into current user message and strips images', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    passthroughTokenizer(tokenizer)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: '看看这张图' } as any,
+      content: '看看这张图',
+      images: [{ data: 'aGk=', mime: 'image/png' }],
+      mode: 'stream',
+      mainModelVision: false,
+      visionTranscriptionPrefix: '图片里有一只猫',
+      historyImageDescriptions: null,
+    })
+    const messages: any[] = prepared.baseRequestBody.messages
+    const last = messages[messages.length - 1]
+    expect(JSON.stringify(last.content)).toContain('图片里有一只猫')
+    expect(JSON.stringify(last.content)).not.toContain('image_url')
+    expect(JSON.stringify(last.content)).toContain('看看这张图')
+  })
+
+  it('keeps images for vision main model', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    passthroughTokenizer(tokenizer)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: '看看这张图' } as any,
+      content: '看看这张图',
+      images: [{ data: 'aGk=', mime: 'image/png' }],
+      mode: 'stream',
+      mainModelVision: true,
+    })
+    const messages: any[] = prepared.baseRequestBody.messages
+    const last = messages[messages.length - 1]
+    expect(JSON.stringify(last.content)).toContain('image_url')
+    expect(JSON.stringify(last.content)).not.toContain('图片里有一只猫')
+  })
+
+  it('injects history descriptions into historical user messages', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    passthroughTokenizer(tokenizer)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const historyImageDescriptions = new Map<number, any[]>(
+      [[100, [{ description: '历史上的图：一只狗', modelRawId: 'm' }]]],
+    )
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: '继续' } as any,
+      content: '继续',
+      mode: 'stream',
+      mainModelVision: false,
+      historyImageDescriptions,
+      historySnapshot: {
+        messages: [
+          { id: 100, role: 'user', content: '看这张', createdAt: new Date(), messageGroupId: null },
+        ],
+        groups: [],
+      },
+    })
+    const messages: any[] = prepared.baseRequestBody.messages
+    expect(JSON.stringify(messages)).toContain('历史上的图：一只狗')
+  })
+})

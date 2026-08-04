@@ -18,6 +18,7 @@ import {
 import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { sendMessageSchema } from '../chat-common'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../skills/types'
+import type { ImageDescription } from './vision-proxy-service'
 import { buildTaskPlanningPrompt } from '../task-planning'
 import {
   loadSystemSettingsMap,
@@ -79,6 +80,12 @@ export interface PrepareChatRequestParams {
   systemSettings?: SystemSettingsMap | null
   /** 同 turn 历史快照，避免重复扫消息 */
   historySnapshot?: PreStreamHistorySnapshot | null
+  /** 主模型是否支持识图（未知视为 true，保持既有行为） */
+  mainModelVision?: boolean
+  /** 当前轮次图片转写描述前缀（自动转写注入） */
+  visionTranscriptionPrefix?: string
+  /** 历史用户消息 id → 图片描述（仅主模型无 vision 时注入） */
+  historyImageDescriptions?: Map<number, ImageDescription[]> | null
 }
 
 export interface ChatRequestBuilderDeps {
@@ -125,6 +132,8 @@ export class ChatRequestBuilder {
       throw new Error('Chat session connection is not ready')
     }
     const contextEnabled = params.payload?.contextEnabled !== false
+    const mainModelVision = params.mainModelVision !== false
+    const visionTranscriptionPrefix = params.visionTranscriptionPrefix || ''
     const systemSettings = params.systemSettings ?? (await loadSystemSettingsMap(this.prisma))
     this.scheduleImageCleanup(systemSettings)
 
@@ -212,6 +221,8 @@ export class ChatRequestBuilder {
       contextEnabled,
       historyUpperBound: params.historyUpperBound ?? null,
       pinnedSystemMessages: cleanedSystemPrompts,
+      mainModelVision,
+      historyImageDescriptions: params.historyImageDescriptions ?? null,
     })
 
     const contextMessages = contextInfo.truncatedContext
@@ -219,13 +230,18 @@ export class ChatRequestBuilder {
     const messagesPayload = this.buildMessagesPayload(
       contextMessages,
       params.content,
-      params.images ?? [],
+      mainModelVision ? (params.images ?? []) : [],
     )
 
     // 注入当前日期时间和 RAG 上下文到用户消息前缀
     // 放在 system prompt 之后、用户内容之前，不影响 DeepSeek 前缀缓存命中
     const dateString = templateVariables['day time']
-    const cacheSafePrefix = ragUserPrefix + `[当前时间: ${dateString}]`
+    const cacheSafePrefix =
+      ragUserPrefix +
+      (visionTranscriptionPrefix
+        ? `[图片转写描述]\n${visionTranscriptionPrefix}\n\n`
+        : '') +
+      `[当前时间: ${dateString}]`
     if (messagesPayload.length > 0) {
       this.prependUserContent(messagesPayload, cacheSafePrefix)
     }
@@ -289,6 +305,8 @@ export class ChatRequestBuilder {
     historyUpperBound: Date | null
     historySnapshot?: PreStreamHistorySnapshot | null
     pinnedSystemMessages: Array<{ role: 'system'; content: string }>
+    mainModelVision: boolean
+    historyImageDescriptions: Map<number, ImageDescription[]> | null
   }) {
     const contextLimit = await this.resolveContextLimit({
       connectionId: params.connectionId,
@@ -301,6 +319,20 @@ export class ChatRequestBuilder {
       ? await this.tokenizer.countConversationTokens(pinned)
       : 0
     const remainingBudget = Math.max(0, contextLimit - pinnedTokens)
+
+    // 历史消息图片描述注入：仅在编排层提供了 historyImageDescriptions 时生效
+    const injectHistoryDescriptions = (
+      messages: Array<{ id: number; content: string }>,
+    ) => {
+      if (!params.historyImageDescriptions) return
+      for (const msg of messages) {
+        const descs = params.historyImageDescriptions.get(msg.id)
+        if (descs && descs.length > 0) {
+          const text = descs.map((d) => d.description).join('\n')
+          msg.content = `${msg.content}\n\n[图片转写描述]\n${text}`
+        }
+      }
+    }
 
     let truncatedConversation: Array<{ role: string; content: string }>
     let compressionSummaries: Array<{ role: string; content: string }> = []
@@ -318,6 +350,7 @@ export class ChatRequestBuilder {
             content: msg.content,
             createdAt: msg.createdAt,
           }))
+        injectHistoryDescriptions(ungroupedMessages)
         groupedMessageRefs = params.historySnapshot.messages
           .filter((msg) => typeof msg.messageGroupId === 'number')
           .map((msg) => ({
@@ -360,6 +393,7 @@ export class ChatRequestBuilder {
           }) as Promise<Array<{ id: number; messageGroupId: number | null; createdAt: Date }>>,
         ])
         ungroupedMessages = loadedUngrouped
+        injectHistoryDescriptions(ungroupedMessages)
         groupedMessageRefs = loadedGroupedRefs
 
         const groupedIds = Array.from(
