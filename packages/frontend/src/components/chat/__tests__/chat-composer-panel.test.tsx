@@ -127,4 +127,20 @@ describe('ChatComposerPanel — send button disabled with only error workspace f
       expect(btn).not.toBeDisabled()
     }
   })
+
+  it('renders vision proxy hint when proxy props are wired through panel', () => {
+    render(
+      <ChatComposerPanel
+        {...createProps({
+          selectedImages: [{ dataUrl: 'data:image/png;base64,abc', mime: 'image/png', size: 1024 }],
+          isVisionEnabled: false,
+          visionProxyEnabled: true,
+          visionProxyModelId: 'qwen-vl-max',
+        })}
+      />,
+    )
+
+    // mobile 与 desktop 两处 composer 均渲染附件列表，提示条应出现
+    expect(screen.getAllByText(/图片将由 qwen-vl-max 转写/).length).toBeGreaterThan(0)
+  })
 })

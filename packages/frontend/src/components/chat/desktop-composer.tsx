@@ -44,7 +44,7 @@ interface DesktopComposerProps {
   hasAttachments: boolean
   attachmentsCount: number
   // 图片转写代理
-  isVisionEnabled?: boolean
+  isVisionEnabled: boolean
   visionProxyEnabled?: boolean
   visionProxyModelId?: string | null
   // 功能开关

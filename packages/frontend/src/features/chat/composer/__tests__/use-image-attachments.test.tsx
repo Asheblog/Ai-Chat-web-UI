@@ -102,6 +102,14 @@ describe('useImageAttachments', () => {
       })
 
       expect(result.current.selectedImages).toHaveLength(1)
+
+      // 转写代理模式下 pickImages 弹出提示性 toast 且不阻止
+      act(() => {
+        result.current.pickImages()
+      })
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '图片将自动转写' }),
+      )
       expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }))
     } finally {
       vi.unstubAllGlobals()
