@@ -449,9 +449,13 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       // 主模型无 vision 且有图时：工具流 → 注入视觉分析工具由主模型自主调用；
       // 标准流（无工具）→ 后端自动转写，描述注入用户消息前缀并持久化（转写一次）
       const visionProxyConfig = buildAgentVisionProxyConfig(turnContext.systemSettings)
-      const mainModelCapabilities = await resolveModelCapabilitiesForSession(prisma, session)
-      const mainModelVision = mainModelCapabilities.vision !== false
       const hasImages = Array.isArray(images) && images.length > 0
+      // F4: 仅在发图时才查询模型能力，避免每请求一次 catalog 查询；mainModelVision 语义不变
+      // （无图时视为 vision 支持，无关紧要；有图时行为与先前一致）
+      const mainModelCapabilities = hasImages
+        ? await resolveModelCapabilitiesForSession(prisma, session)
+        : null
+      const mainModelVision = mainModelCapabilities?.vision !== false
       const visionProxyRequested = isVisionProxyReady(visionProxyConfig) && hasImages && !mainModelVision
       const preAgentToolFlags = visionProxyRequested
         ? computeAgentToolFlags({
@@ -472,6 +476,11 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       let historyImageDescriptions: Map<number, { description: string; modelRawId: string }[]> | null = null
       if (visionProxyRequested) {
         historyImageDescriptions = await loadHistoryImageDescriptions(prisma, sessionId, historyUpperBound)
+        // F5: 消息复用/重发时当前消息已有 imageDescriptionsJson，其描述会经
+        // visionTranscriptionPrefix 注入当前轮次；从历史 map 中剔除，避免双重注入
+        if (userMessageRecord && historyImageDescriptions) {
+          historyImageDescriptions.delete(userMessageRecord.id)
+        }
       }
       if (visionProxyAutoTranscribe) {
         const stored = userMessageRecord ? parseStoredImageDescriptions((userMessageRecord as any).imageDescriptionsJson) : null

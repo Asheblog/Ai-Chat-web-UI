@@ -98,6 +98,44 @@ describe('VisionProxyService.transcribeImages', () => {
     expect(result.description).toBe('ab')
   })
 
+  it('builds google_genai generateContent body with inline_data parts', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'google_genai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ candidates: [{ content: { parts: [{ text: 'a' }] } }] }))
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '这是什么？', config)
+    const [url, init] = fetchFn.mock.calls[0]
+    expect(String(url)).toContain(':generateContent')
+    const body = JSON.parse(init.body)
+    expect(body.contents).toHaveLength(1)
+    const parts = body.contents[0].parts
+    expect(parts[0].text).toContain('这是什么')
+    expect(parts[1].inline_data).toEqual({ mime_type: 'image/png', data: 'aGVsbG8=' })
+    // 不应包含 OpenAI 风格的 messages
+    expect(body.messages).toBeUndefined()
+  })
+
+  it('builds ollama /api/chat body with images array', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ message: { content: '一只猫' } }))
+    const result = await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config)
+    expect(result.description).toBe('一只猫')
+    const [url, init] = fetchFn.mock.calls[0]
+    expect(String(url)).toContain('/api/chat')
+    const body = JSON.parse(init.body)
+    expect(body.model).toBe('qwen-vl-max')
+    expect(body.stream).toBe(false)
+    const userMsg = body.messages.find((m: any) => m.role === 'user')
+    expect(userMsg.content).toContain('请描述以上图片')
+    expect(userMsg.images).toEqual(['aGVsbG8='])
+    // 不应包含 OpenAI 风格的 content 数组
+    expect(Array.isArray(userMsg.content)).toBe(false)
+  })
+
   it('maps http error to 502 VisionProxyServiceError', async () => {
     prisma.connection.findUnique.mockResolvedValue({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,

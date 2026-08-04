@@ -157,7 +157,49 @@ export class VisionProxyService {
       max_tokens: 2000,
       stream: false,
     }
-    const body = provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
+    // F6: 各 provider 请求体格式差异在此收敛，openai/azure_openai/openai_responses 保持原样
+    let body: Record<string, unknown>
+    if (provider === 'google_genai') {
+      // Gemini generateContent 多模态格式：contents[].parts 内混排 text 与 inline_data
+      const geminiParts: Array<Record<string, unknown>> = [{ text: userText }]
+      for (const image of images) {
+        geminiParts.push({
+          inline_data: { mime_type: image.mime, data: image.data },
+        })
+      }
+      body = {
+        contents: [
+          {
+            role: 'user',
+            parts: geminiParts,
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 2000,
+        },
+      }
+    } else if (provider === 'ollama') {
+      // Ollama /api/chat 多模态格式：messages[].images 为 base64 数组
+      body = {
+        model: modelId,
+        messages: [
+          { role: 'system', content: TRANSCRIPTION_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: userText,
+            images: images.map((image) => image.data),
+          },
+        ],
+        stream: false,
+        options: {
+          temperature: 0.2,
+          num_predict: 2000,
+        },
+      }
+    } else {
+      body = provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
+    }
     const headers = await buildHeaders(provider, authType, apiKey, extraHeaders)
 
     let url: string
