@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react"
 import { DEFAULT_SYSTEM_LEAF, renderSystemLeaf } from "./settings/system-settings-registry"
 
+// 路由页宿主的叶子渲染 hostId（与 Dialog 的 "dialog" 区分，用于卡定位请求匹配）
+const LAYOUT_HOST_ID = "layout"
+
 const MODULE_STORAGE_KEY = "settings:system:v2-module"
 
 type SystemSettingsProps = {
@@ -12,7 +15,7 @@ type SystemSettingsProps = {
 export function SystemSettings({ activeKey }: SystemSettingsProps) {
   // Controlled mode: render specified leaf, no side effects
   if (activeKey !== undefined) {
-    const content = renderSystemLeaf(activeKey)
+    const content = renderSystemLeaf(activeKey, LAYOUT_HOST_ID)
     if (!content) {
       return (
         <div className="v2-panel-soft p-6 text-sm text-muted-foreground">
@@ -34,14 +37,14 @@ function SystemSettingsUncontrolled() {
   useEffect(() => {
     if (typeof window === "undefined") return
     const saved = window.localStorage.getItem(MODULE_STORAGE_KEY)
-    if (saved && !initialKeyRef.current && renderSystemLeaf(saved) !== null) {
+    if (saved && !initialKeyRef.current && renderSystemLeaf(saved, LAYOUT_HOST_ID) !== null) {
       initialKeyRef.current = saved
       setActiveKey(saved)
     }
 
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string }>).detail
-      if (detail?.key && renderSystemLeaf(detail.key) !== null) {
+      if (detail?.key && renderSystemLeaf(detail.key, LAYOUT_HOST_ID) !== null) {
         setActiveKey(detail.key)
         window.localStorage.setItem(MODULE_STORAGE_KEY, detail.key)
       }
@@ -60,7 +63,7 @@ function SystemSettingsUncontrolled() {
     }
   }, [activeKey])
 
-  const content = renderSystemLeaf(activeKey)
+  const content = renderSystemLeaf(activeKey, LAYOUT_HOST_ID)
 
   if (!content) {
     return (

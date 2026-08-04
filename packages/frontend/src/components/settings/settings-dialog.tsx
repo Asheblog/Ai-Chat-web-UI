@@ -2,8 +2,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { settingsNav, type SettingsNavItem } from "./nav"
+import { settingsNav, type SettingsNavItem, resolveSelectTarget } from "./nav"
 import { SettingsShell } from "./shell"
+import { SettingsSearch } from "./components/settings-search"
+import { SettingsLocationBanner } from "./components/settings-location-banner"
+import { requestFlash, setDialogOpen } from "./settings-flash-bus"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 // import { PersonalModelsPage } from "./pages/PersonalModels"
@@ -13,6 +16,8 @@ import { PersonalSkillsPage } from "./pages/PersonalSkills"
 import { ShareManagementPanel } from "./pages/ShareManagement"
 import { AboutPage } from "./pages/About"
 import { DEFAULT_SYSTEM_LEAF, renderSystemLeaf } from "./system-settings-registry"
+
+type FlashTarget = { leafKey: string; cardKey?: string }
 
 interface SettingsDialogProps {
   open: boolean
@@ -57,10 +62,25 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   const searchParams = useSearchParams()
   const [activeMain, setActiveMain] = useState<string>(defaultTab)
   const [activeSub, setActiveSub] = useState<string>("personal.about")
+  const [flashTarget, setFlashTarget] = useState<FlashTarget | null>(null)
+  // flashKey 与 flashTarget 分离：导航闪烁 1.5s 结束即清 flashKey，
+  // banner 自管 3s 显示时长，不受动画结束影响
+  const [flashKey, setFlashKey] = useState<string | null>(null)
+  const [flashSeq, setFlashSeq] = useState(0)
+  const openRef = useRef(open)
   const denialNotifiedRef = useRef(false)
   const lastClearedHrefRef = useRef<string | null>(null)
   const openedFromQueryRef = useRef(false)
   const closeCleanupTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    openRef.current = open
+    setDialogOpen(open)
+    return () => {
+      // 组件卸载（sidebar 移除）时清标记，避免全局残留
+      setDialogOpen(false)
+    }
+  }, [open])
 
   /** Recursively filter a nav node by adminOnly/requiresAuth. Returns null if node should be removed. */
   const filterNode = useCallback(
@@ -175,6 +195,39 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     }
   }, [filteredTree, activeMain, activeSub])
 
+  // 搜索框 / 概览「去配置」dispatch 的 select 事件：切页 + 触发位置提醒。
+  // 仅 Dialog 打开时处理：组件常驻挂载于 sidebar，关闭期间不得响应
+  // 路由页宿主的搜索事件（否则造成重复闪烁与背景页状态残留）。
+  useEffect(() => {
+    const onSelect = (event: Event) => {
+      if (!openRef.current) return
+      const detail = (event as CustomEvent<{ key?: string; cardKey?: string; origin?: string }>).detail
+      if (!detail?.key) return
+      const target = resolveSelectTarget(filteredTree, detail.key)
+      if (!target) return
+      setActiveMain(target.main)
+      setActiveSub(target.sub)
+      if (detail.origin === 'search') {
+        const flash: FlashTarget = { leafKey: target.sub, cardKey: detail.cardKey }
+        setFlashTarget(flash)
+        setFlashKey(target.sub)
+        setFlashSeq((seq) => seq + 1)
+        requestFlash({ ...flash, hostId: 'dialog' })
+        window.dispatchEvent(
+          new CustomEvent('aichat:settings-flash-card', { detail: { ...flash, hostId: 'dialog' } })
+        )
+      }
+    }
+    window.addEventListener('aichat:system-settings-select', onSelect as EventListener)
+    return () => {
+      window.removeEventListener('aichat:system-settings-select', onSelect as EventListener)
+    }
+  }, [filteredTree])
+
+  const handleFlashDone = useCallback(() => {
+    setFlashKey(null)
+  }, [])
+
   // 仅同步记忆；不在弹窗打开期间写 URL，避免动画期路由重渲染造成闪烁。
   useEffect(() => {
     if (!open || !activeMain) return
@@ -184,10 +237,12 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     }
   }, [open, activeMain, activeSub, isAuthenticated])
 
-  // 关闭时清理 URL 的 settings 参数（保留其他参数）
+  // 关闭时清理 URL 的 settings 参数（保留其他参数），并清除位置提醒残留
   const handleOpenChange = (v: boolean) => {
     onOpenChange(v)
     if (!v) {
+      setFlashTarget(null)
+      setFlashKey(null)
       if (closeCleanupTimerRef.current) {
         window.clearTimeout(closeCleanupTimerRef.current)
         closeCleanupTimerRef.current = null
@@ -260,7 +315,17 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
             onChangeSub={setActiveSub}
             readOnly={isAnonymous}
             readOnlyMessage="当前为匿名访客，仅可浏览公开信息。请登录后再编辑设置。"
+            navTop={<SettingsSearch />}
+            flashKey={flashKey}
+            onFlashDone={handleFlashDone}
           >
+            {flashTarget && (
+              <SettingsLocationBanner
+                key={flashSeq}
+                leafKey={flashTarget.leafKey}
+                cardKey={flashTarget.cardKey}
+              />
+            )}
             {(() => {
               // Personal pages via switch
               switch (activeSub) {
@@ -271,7 +336,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
                 case 'personal.about': return <AboutPage />
               }
               // System pages via shared registry
-              const systemContent = renderSystemLeaf(activeSub)
+              const systemContent = renderSystemLeaf(activeSub, 'dialog')
               if (systemContent) return systemContent
               // Fallback
               return activeSub ? (

@@ -60,3 +60,34 @@ export const settingsNav: SettingsNavItem[] = [
     children: buildSystemChildren(),
   },
 ]
+
+/** 收集顶级项下的全部叶子 key。 */
+function collectLeafKeys(items: SettingsNavItem[]): string[] {
+  const keys: string[] = []
+  for (const item of items) {
+    if (!item.children || item.children.length === 0) {
+      keys.push(item.key)
+    } else {
+      keys.push(...collectLeafKeys(item.children))
+    }
+  }
+  return keys
+}
+
+/**
+ * 解析 select 事件的 key 应切换到的顶级分组与子项。
+ * 返回 { main, sub }；key 不在树中时返回 null（宿主忽略该事件）。
+ */
+export function resolveSelectTarget(
+  tree: SettingsNavItem[],
+  key: string
+): { main: string; sub: string } | null {
+  for (const item of tree) {
+    if (item.key === key) return { main: item.key, sub: item.key }
+    if (!item.children || item.children.length === 0) continue
+    if (collectLeafKeys(item.children).includes(key)) {
+      return { main: item.key, sub: key }
+    }
+  }
+  return null
+}

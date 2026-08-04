@@ -19,15 +19,19 @@ function getSelectEvents(dispatchSpy: MockInstance) {
 }
 
 describe("SettingsSearch", () => {
+  /** 是否存在文本包含子串的结果 option */
+  const hasOptionText = (text: string) =>
+    screen.getAllByRole("option").some((o) => o.textContent?.includes(text))
+
   test("输入「模型」按 label 匹配出「模型管理」；输入「密钥」按 keywords 匹配出「供应商与连接」", () => {
     render(<SettingsSearch />)
     const input = screen.getByRole("textbox", { name: "搜索设置" })
 
     fireEvent.change(input, { target: { value: "模型" } })
-    expect(screen.getByText("模型管理")).toBeInTheDocument()
+    expect(hasOptionText("模型管理")).toBe(true)
 
     fireEvent.change(input, { target: { value: "密钥" } })
-    expect(screen.getByText("供应商与连接")).toBeInTheDocument()
+    expect(hasOptionText("供应商与连接")).toBe(true)
   })
 
   test("无匹配输入时显示「无匹配设置」", () => {
@@ -44,13 +48,14 @@ describe("SettingsSearch", () => {
     const input = screen.getByRole("textbox", { name: "搜索设置" })
 
     fireEvent.change(input, { target: { value: "模型" } })
-    fireEvent.click(screen.getByText("模型管理"))
+    const leafOption = screen.getAllByRole("option").find((o) => o.textContent?.startsWith("模型管理"))
+    fireEvent.click(leafOption!)
 
     const selectEvents = getSelectEvents(dispatchSpy)
     expect(selectEvents).toHaveLength(1)
     expect(selectEvents[0][0].detail.key).toBe("models")
     expect(input).toHaveValue("")
-    expect(screen.queryByText("模型管理")).not.toBeInTheDocument()
+    expect(screen.queryAllByRole("option")).toHaveLength(0)
   })
 
   test("ArrowDown 移动高亮（aria-selected），Enter 选择高亮项并 dispatch", () => {
@@ -78,18 +83,18 @@ describe("SettingsSearch", () => {
     const input = screen.getByRole("textbox", { name: "搜索设置" })
 
     fireEvent.change(input, { target: { value: "模型" } })
-    expect(screen.getByText("模型管理")).toBeInTheDocument()
+    expect(screen.getAllByRole("option").length).toBeGreaterThan(0)
 
     fireEvent.keyDown(input, { key: "Escape" })
-    expect(screen.queryByText("模型管理")).not.toBeInTheDocument()
+    expect(screen.queryAllByRole("option")).toHaveLength(0)
 
     fireEvent.change(input, { target: { value: "" } })
-    expect(screen.queryByText("模型管理")).not.toBeInTheDocument()
+    expect(screen.queryAllByRole("option")).toHaveLength(0)
     expect(screen.queryByText("无匹配设置")).not.toBeInTheDocument()
 
     // 清空后重新输入可再次打开下拉
     fireEvent.change(input, { target: { value: "密钥" } })
-    expect(screen.getByText("供应商与连接")).toBeInTheDocument()
+    expect(screen.getAllByRole("option").length).toBeGreaterThan(0)
   })
 
   test("Escape 收起下拉后再按 Enter 不 dispatch（防止误导航）且不清空输入", () => {
@@ -98,10 +103,10 @@ describe("SettingsSearch", () => {
     const input = screen.getByRole("textbox", { name: "搜索设置" })
 
     fireEvent.change(input, { target: { value: "模型" } })
-    expect(screen.getByText("模型管理")).toBeInTheDocument()
+    expect(screen.getAllByRole("option").length).toBeGreaterThan(0)
 
     fireEvent.keyDown(input, { key: "Escape" })
-    expect(screen.queryByText("模型管理")).not.toBeInTheDocument()
+    expect(screen.queryAllByRole("option")).toHaveLength(0)
 
     fireEvent.keyDown(input, { key: "Enter" })
     const selectEvents = getSelectEvents(dispatchSpy)
@@ -155,5 +160,53 @@ describe("SettingsSearch", () => {
     expect(
       navTopEl.compareDocumentPosition(navItemEl) & Node.DOCUMENT_POSITION_FOLLOWING
     ).not.toBe(0)
+  })
+
+  test("卡级匹配：输入「压缩」命中功能卡「上下文压缩」并展示所属叶子页", () => {
+    render(<SettingsSearch />)
+    const input = screen.getByRole("textbox", { name: "搜索设置" })
+
+    fireEvent.change(input, { target: { value: "压缩" } })
+    // 叶子「数据与维护」（keywords 含压缩）+ 卡「上下文压缩」同时命中
+    expect(hasOptionText("上下文压缩")).toBe(true)
+    expect(hasOptionText("数据与维护")).toBe(true)
+  })
+
+  test("卡级匹配：输入「导出」命中「高级管理」卡（keywords 命中）", () => {
+    render(<SettingsSearch />)
+    const input = screen.getByRole("textbox", { name: "搜索设置" })
+
+    fireEvent.change(input, { target: { value: "导出" } })
+    expect(hasOptionText("高级管理")).toBe(true)
+  })
+
+  test("选择卡级结果 dispatch detail 含 origin=search、cardKey 与所属叶子 key", () => {
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent")
+    render(<SettingsSearch />)
+    const input = screen.getByRole("textbox", { name: "搜索设置" })
+
+    fireEvent.change(input, { target: { value: "压缩" } })
+    fireEvent.click(screen.getByText("上下文压缩"))
+
+    const selectEvents = getSelectEvents(dispatchSpy)
+    expect(selectEvents).toHaveLength(1)
+    const detail = selectEvents[0][0].detail
+    expect(detail.key).toBe("data-maintenance")
+    expect(detail.cardKey).toBe("data-maintenance:compression")
+    expect(detail.origin).toBe("search")
+  })
+
+  test("选择叶子级结果 dispatch origin=search 但无 cardKey", () => {
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent")
+    render(<SettingsSearch />)
+    const input = screen.getByRole("textbox", { name: "搜索设置" })
+
+    fireEvent.change(input, { target: { value: "模型管理" } })
+    fireEvent.click(screen.getByText("模型管理"))
+
+    const selectEvents = getSelectEvents(dispatchSpy)
+    expect(selectEvents).toHaveLength(1)
+    expect(selectEvents[0][0].detail.origin).toBe("search")
+    expect(selectEvents[0][0].detail.cardKey).toBeUndefined()
   })
 })

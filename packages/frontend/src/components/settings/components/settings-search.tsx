@@ -4,19 +4,24 @@ import { useMemo, useState } from "react"
 import { Search, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
-import { systemSettingsTree } from "../system-settings-registry"
+import { systemSettingsCards, systemSettingsTree } from "../system-settings-registry"
 
 type SearchResult = {
+  /** 目标叶子页 key（卡结果取其所属叶子） */
   key: string
   label: string
-  icon: LucideIcon
+  icon: LucideIcon | null
+  /** 叶子结果：顶级分组名；卡结果：所属叶子页名 */
   groupLabel?: string
+  /** 卡结果：卡 key（形如 leafKey:cardKey）；叶子结果无 */
+  cardKey?: string
 }
 
 /**
- * 全站设置搜索框：数据来自 systemSettingsTree 注册表。
- * 匹配叶子 label / keywords 子串（大小写不敏感），点击或 Enter 选择后
- * dispatch `aichat:system-settings-select`，由 SystemSettings 切页。
+ * 全站设置搜索框：数据来自 systemSettingsTree + systemSettingsCards 注册表。
+ * 匹配叶子/卡的 label + keywords 子串（大小写不敏感），点击或 Enter 选择后
+ * dispatch `aichat:system-settings-select`（detail 含 origin: "search"，卡结果附 cardKey），
+ * 由宿主（SettingsDialog / 路由页布局）切页并触发位置提醒。
  */
 export function SettingsSearch() {
   const [query, setQuery] = useState("")
@@ -42,11 +47,28 @@ export function SettingsSearch() {
         }
       }
     }
+    // 卡级结果（排在叶子结果之后），groupLabel 为所属叶子页名
+    for (const card of systemSettingsCards) {
+      const haystack = [card.label, ...(card.keywords ?? [])].join(" ").toLowerCase()
+      if (!haystack.includes(q)) continue
+      const leafLabel = getLeafLabelForCard(card.leafKey)
+      matches.push({
+        key: card.leafKey,
+        label: card.label,
+        icon: getLeafIcon(card.leafKey),
+        groupLabel: leafLabel,
+        cardKey: card.key,
+      })
+    }
     return matches
   }, [query])
 
-  const selectKey = (key: string) => {
-    window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail: { key } }))
+  const selectResult = (result: SearchResult) => {
+    window.dispatchEvent(
+      new CustomEvent("aichat:system-settings-select", {
+        detail: { key: result.key, cardKey: result.cardKey, origin: "search" },
+      })
+    )
     setQuery("")
     setOpen(false)
     setHighlightIndex(0)
@@ -65,7 +87,7 @@ export function SettingsSearch() {
     } else if (event.key === "Enter" && open) {
       // 仅在下拉打开时接受 Enter：Escape 关闭或 blur 之后，Enter 不应触发过期的选中项
       const target = results[highlightIndex]
-      if (target) selectKey(target.key)
+      if (target) selectResult(target)
     } else if (event.key === "Escape") {
       setOpen(false)
     }
@@ -105,13 +127,13 @@ export function SettingsSearch() {
                 const Icon = result.icon
                 const isHighlighted = index === highlightIndex
                 return (
-                  <li key={result.key}>
+                  <li key={result.cardKey ?? result.key}>
                     <button
                       type="button"
                       role="option"
                       aria-selected={isHighlighted}
                       onMouseEnter={() => setHighlightIndex(index)}
-                      onClick={() => selectKey(result.key)}
+                      onClick={() => selectResult(result)}
                       className={cn(
                         "flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-sm transition-colors",
                         isHighlighted
@@ -134,4 +156,30 @@ export function SettingsSearch() {
       )}
     </div>
   )
+}
+
+/** 查找卡所属叶子页的 label。 */
+function getLeafLabelForCard(leafKey: string): string | undefined {
+  for (const entry of systemSettingsTree) {
+    if ("children" in entry) {
+      const leaf = entry.children.find((c) => c.key === leafKey)
+      if (leaf) return leaf.label
+    } else if (entry.key === leafKey) {
+      return entry.label
+    }
+  }
+  return undefined
+}
+
+/** 查找叶子页图标（卡结果复用所属叶子图标）。 */
+function getLeafIcon(leafKey: string): LucideIcon | null {
+  for (const entry of systemSettingsTree) {
+    if ("children" in entry) {
+      const leaf = entry.children.find((c) => c.key === leafKey)
+      if (leaf) return leaf.icon
+    } else if (entry.key === leafKey) {
+      return entry.icon
+    }
+  }
+  return null
 }

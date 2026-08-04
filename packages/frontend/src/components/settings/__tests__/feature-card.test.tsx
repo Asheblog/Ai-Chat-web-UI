@@ -99,4 +99,15 @@ describe("FeatureCard", () => {
     expect(screen.queryByRole("switch")).not.toBeInTheDocument()
     expect(container.querySelector(".border-t")).toBeNull()
   })
+
+  test("cardKey 渲染 data-card-key 定位属性；未提供时不渲染该属性", () => {
+    const { container } = render(
+      <FeatureCard icon={Globe} title="联网搜索" cardKey="search-knowledge:web-search" />,
+    )
+    const section = container.querySelector("section")
+    expect(section?.getAttribute("data-card-key")).toBe("search-knowledge:web-search")
+
+    const { container: plainContainer } = render(<FeatureCard icon={Globe} title="联网搜索" />)
+    expect(plainContainer.querySelector("section")?.hasAttribute("data-card-key")).toBe(false)
+  })
 })

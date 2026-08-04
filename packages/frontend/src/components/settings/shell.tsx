@@ -1,8 +1,9 @@
 "use client"
-import { ReactNode, useEffect, useState } from "react"
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { SettingsNavItem } from "./nav"
 import { ChevronDown, ChevronRight } from "lucide-react"
+import { useNavFlash } from "./use-nav-flash"
 
 export interface SettingsSection {
   key: string
@@ -35,6 +36,10 @@ type NestedModeProps = {
   readOnly?: boolean
   readOnlyMessage?: string
   navTop?: ReactNode
+  /** 需要闪烁提示的叶子 key（搜索跳转后的位置提醒）；闪烁结束后由宿主通过 onFlashDone 清空 */
+  flashKey?: string | null
+  /** 目标叶子闪烁动画结束后的回调（用于清除 flashKey） */
+  onFlashDone?: () => void
 }
 
 export type SettingsShellProps = BaseProps & (FlatModeProps | NestedModeProps)
@@ -168,23 +173,40 @@ function SettingsShellNestedImpl({
   readOnly = false,
   readOnlyMessage,
   navTop,
+  flashKey,
+  onFlashDone,
   children,
   className,
   bare,
   showNavTitle,
 }: BaseProps & NestedModeProps) {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+  const navRef = useRef<HTMLDivElement>(null)
+  const onFlashDoneRef = useRef(onFlashDone)
+  useEffect(() => { onFlashDoneRef.current = onFlashDone }, [onFlashDone])
+
+  // 展开指定 key 的祖先分组（auto-expand 与导航闪烁共用）
+  const expandAncestors = useCallback((key: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      findAncestors(tree, key).forEach((a) => next.add(a))
+      return next
+    })
+  }, [tree])
 
   // Auto-expand ancestors when activeMain or activeSub changes so active leaf is visible
   useEffect(() => {
     setExpandedKeys((prev) => {
       const next = new Set(prev)
       if (activeMain) next.add(activeMain)
-      const ancestors = findAncestors(tree, activeSub)
-      ancestors.forEach((a) => next.add(a))
       return next
     })
-  }, [tree, activeMain, activeSub])
+    expandAncestors(activeSub)
+  }, [tree, activeMain, activeSub, expandAncestors])
+
+  // Flash highlight: expand target leaf's ancestors, scroll it into view,
+  // run the one-shot .settings-flash animation, then notify onFlashDone.
+  useNavFlash({ navRef, flashKey, onFlashDone, expandAncestors })
 
   const toggleExpand = (key: string) => {
     setExpandedKeys((prev) => {
@@ -280,6 +302,7 @@ function SettingsShellNestedImpl({
         <button
           key={item.key}
           type="button"
+          data-leaf-key={item.key}
           onClick={() => {
             // Sync activeMain if leaf belongs to a different root
             if (itemRootKey && itemRootKey !== activeMain) {
@@ -301,7 +324,7 @@ function SettingsShellNestedImpl({
     })
 
   const nav = (
-    <div className="space-y-2">
+    <div ref={navRef} className="space-y-2">
       {navTop}
       <nav className="space-y-2">{renderItems(tree, 0)}</nav>
     </div>

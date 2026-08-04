@@ -967,11 +967,28 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   backdrop-filter: saturate(150%) blur(8px);
 }
 
+/* 设置搜索跳转后的位置提醒：导航项/功能卡外发光脉冲（3 次，约 1.5s 一次性） */
+@keyframes settings-flash-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--ring) / 0.65);
+  }
+  50% {
+    box-shadow: 0 0 0 4px hsl(var(--ring) / 0.65);
+  }
+}
+
+.settings-flash {
+  animation: settings-flash-pulse 0.5s ease-in-out 3;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .typewriter-cursor {
     animation: none !important;
   }
   .animate-spin {
+    animation: none !important;
+  }
+  .settings-flash {
     animation: none !important;
   }
 }

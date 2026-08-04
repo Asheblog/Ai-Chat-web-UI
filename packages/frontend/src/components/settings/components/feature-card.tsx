@@ -26,6 +26,8 @@ export interface FeatureCardProps {
   footer?: ReactNode
   /** 常用内容区（SettingRow 等） */
   children?: ReactNode
+  /** 卡级定位标记（systemSettingsCards 的 key），渲染为 data-card-key 供搜索跳转定位 */
+  cardKey?: string
 }
 
 /**
@@ -42,13 +44,14 @@ export function FeatureCard({
   more,
   footer,
   children,
+  cardKey,
 }: FeatureCardProps) {
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRegionId = useId()
   const hasSwitch = enabled !== undefined && onEnabledChange !== undefined
 
   return (
-    <section className="v2-panel flex flex-col overflow-hidden">
+    <section className="v2-panel flex flex-col overflow-hidden" data-card-key={cardKey}>
       <div className="flex items-center justify-between gap-4 px-4 pt-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">

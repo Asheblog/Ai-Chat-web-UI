@@ -1,5 +1,5 @@
 "use client"
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   PackageCheck,
@@ -10,8 +10,12 @@ import {
 import { settingsNav, type SettingsNavItem } from "@/components/settings/nav"
 import { SettingsShell, type SettingsSection } from "@/components/settings/shell"
 import { SettingsSearch } from "@/components/settings/components/settings-search"
-import { DEFAULT_SYSTEM_LEAF, getWorkspaceForLeaf } from "@/components/settings/system-settings-registry"
+import { SettingsLocationBanner } from "@/components/settings/components/settings-location-banner"
+import { isDialogOpen, requestFlash } from "@/components/settings/settings-flash-bus"
+import { DEFAULT_SYSTEM_LEAF, getAllSystemLeafKeys, getWorkspaceForLeaf } from "@/components/settings/system-settings-registry"
 import { useAuthStore } from "@/store/auth-store"
+
+type FlashTarget = { leafKey: string; cardKey?: string }
 
 const SECTION_PATH: Record<string, string> = {
   personal: "/main/settings/personal",
@@ -42,6 +46,9 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
   const [personalSub, setPersonalSub] = useState("profile")
   const [systemSub, setSystemSub] = useState(DEFAULT_SYSTEM_LEAF)
   const [systemMain, setSystemMain] = useState(DEFAULT_SYSTEM_LEAF)
+  const [flashTarget, setFlashTarget] = useState<FlashTarget | null>(null)
+  const [flashKey, setFlashKey] = useState<string | null>(null)
+  const [flashSeq, setFlashSeq] = useState(0)
 
   // Personal sections (flat, unchanged)
   const personalSections = useMemo<SettingsSection[]>(() => [
@@ -58,13 +65,15 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    // 等待 auth 状态就绪再判定，否则 loading 期间会被误判为无权限而重定向
+    if (actorState === "loading") return
     if (!isAdmin && activeSection === "system") {
       if (pathname === SECTION_PATH.personal) return
       if (redirectedRef.current === SECTION_PATH.personal) return
       redirectedRef.current = SECTION_PATH.personal
       router.replace(SECTION_PATH.personal)
     }
-  }, [isAdmin, activeSection, pathname, router])
+  }, [actorState, isAdmin, activeSection, pathname, router])
 
   useEffect(() => {
     if (activeSection !== "system") return
@@ -82,6 +91,38 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
       window.removeEventListener("aichat:system-settings-active", onActiveChange as EventListener)
     }
   }, [activeSection])
+
+  // 搜索框 select（origin=search）：SystemSettings 负责切页，这里只触发位置提醒。
+  // Dialog 打开期间由弹窗宿主接管搜索跳转，布局跳过避免重复闪烁与状态残留；
+  // key 需在注册表中（防止与树漂移时产生卡死状态）。
+  useEffect(() => {
+    if (activeSection !== "system") return
+    const onSelect = (event: Event) => {
+      if (isDialogOpen()) return
+      const detail = (event as CustomEvent<{ key?: string; cardKey?: string; origin?: string }>).detail
+      if (detail?.origin !== "search" || !detail?.key) return
+      if (!getAllSystemLeafKeys().includes(detail.key)) return
+      const leafKey = detail.key
+      setFlashTarget({ leafKey, cardKey: detail.cardKey })
+      setFlashKey(leafKey)
+      setFlashSeq((seq) => seq + 1)
+      requestFlash({ leafKey, cardKey: detail.cardKey, hostId: "layout" })
+      window.dispatchEvent(
+        new CustomEvent("aichat:settings-flash-card", {
+          detail: { leafKey, cardKey: detail.cardKey, hostId: "layout" },
+        })
+      )
+    }
+    window.addEventListener("aichat:system-settings-select", onSelect as EventListener)
+    return () => {
+      window.removeEventListener("aichat:system-settings-select", onSelect as EventListener)
+    }
+  }, [activeSection])
+
+  // flashKey 与 flashTarget 分离：导航闪烁结束即清 flashKey，banner 自管 3s
+  const handleFlashDone = useCallback(() => {
+    setFlashKey(null)
+  }, [])
 
   useEffect(() => {
     if (activeSection !== "personal") return
@@ -173,7 +214,16 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
         onChangeSub={handleSystemSubChange}
         showNavTitle
         navTop={<SettingsSearch />}
+        flashKey={flashKey}
+        onFlashDone={handleFlashDone}
       >
+        {flashTarget && (
+          <SettingsLocationBanner
+            key={flashSeq}
+            leafKey={flashTarget.leafKey}
+            cardKey={flashTarget.cardKey}
+          />
+        )}
         {children}
       </SettingsShell>
     )
