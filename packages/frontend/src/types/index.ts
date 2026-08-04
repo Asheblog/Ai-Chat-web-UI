@@ -441,6 +441,10 @@ export interface SystemSettings {
   titleSummaryModelSource?: 'current' | 'specified';
   titleSummaryConnectionId?: number | null;
   titleSummaryModelId?: string | null;
+  // 图片转写设置
+  imageTranscriptionEnabled?: boolean;
+  imageTranscriptionConnectionId?: number | null;
+  imageTranscriptionModelId?: string | null;
   // RAG 文档解析设置
   ragEnabled?: boolean;
   ragEmbeddingConnectionId?: number | null;

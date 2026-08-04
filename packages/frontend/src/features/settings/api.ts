@@ -382,6 +382,18 @@ export const getSystemSettings = async () => {
     if (typeof v === 'string' && v.trim().length > 0) return v
     return null
   })()
+  // 图片转写设置
+  const imageTranscriptionEnabled = Boolean(raw.image_transcription_enabled ?? false)
+  const imageTranscriptionConnectionId = (() => {
+    const v = raw.image_transcription_connection_id
+    if (typeof v === 'number' && v > 0) return v
+    return null
+  })()
+  const imageTranscriptionModelId = (() => {
+    const v = raw.image_transcription_model_id
+    if (typeof v === 'string' && v.trim().length > 0) return v
+    return null
+  })()
   return {
     data: {
       allowRegistration,
@@ -465,6 +477,10 @@ export const getSystemSettings = async () => {
       titleSummaryModelSource,
       titleSummaryConnectionId,
       titleSummaryModelId,
+      // 图片转写设置
+      imageTranscriptionEnabled,
+      imageTranscriptionConnectionId,
+      imageTranscriptionModelId,
       // RAG 设置
       ragEnabled: Boolean(raw.rag_enabled ?? false),
       ragEmbeddingConnectionId: (() => {
@@ -659,6 +675,14 @@ export const updateSystemSettings = async (
   }
   if (Object.prototype.hasOwnProperty.call(rest, 'titleSummaryModelId')) {
     patch.titleSummaryModelId = rest.titleSummaryModelId ?? null
+  }
+  // 图片转写设置
+  if (typeof rest.imageTranscriptionEnabled === 'boolean') patch.imageTranscriptionEnabled = rest.imageTranscriptionEnabled
+  if (Object.prototype.hasOwnProperty.call(rest, 'imageTranscriptionConnectionId')) {
+    patch.imageTranscriptionConnectionId = rest.imageTranscriptionConnectionId ?? null
+  }
+  if (Object.prototype.hasOwnProperty.call(rest, 'imageTranscriptionModelId')) {
+    patch.imageTranscriptionModelId = rest.imageTranscriptionModelId ?? null
   }
   // RAG 设置
   if (typeof rest.ragEnabled === 'boolean') patch.ragEnabled = rest.ragEnabled
