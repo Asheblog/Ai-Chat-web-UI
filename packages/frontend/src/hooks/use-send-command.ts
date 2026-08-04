@@ -15,6 +15,8 @@ interface UseSendCommandParams {
   maxConcurrentStreams: number
   clearError: () => void
   isVisionEnabled: boolean
+  /** 图片转写代理就绪（开启且已配置连接与模型），非 vision 模型也可发送图片 */
+  visionProxyEnabled: boolean
   selectedImages: ComposerImage[]
   setSelectedImages: (images: ComposerImage[]) => void
   buildRequestPayload: () => { ok: true; customBody?: Record<string, unknown>; customHeaders?: Array<{ name: string; value: string }> } | { ok: false; reason: string }
@@ -57,6 +59,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     maxConcurrentStreams,
     clearError,
     isVisionEnabled,
+    visionProxyEnabled,
     selectedImages,
     setSelectedImages,
     buildRequestPayload,
@@ -115,7 +118,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     clearError()
     try {
       const imagesPayload =
-        isVisionEnabled && prevSelectedImages.length
+        (isVisionEnabled || visionProxyEnabled) && prevSelectedImages.length
           ? prevSelectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))
           : undefined
       if (prevSelectedImages.length > 0) {
@@ -186,6 +189,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     maxConcurrentStreams,
     clearError,
     isVisionEnabled,
+    visionProxyEnabled,
     selectedImages,
     setSelectedImages,
     buildRequestPayload,

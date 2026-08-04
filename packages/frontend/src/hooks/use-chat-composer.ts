@@ -250,7 +250,13 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
   // 图片转写代理：非 vision 模型通过代理模型转写图片
   const visionProxyEnabled = systemSettings?.imageTranscriptionEnabled === true
+  const visionProxyConnectionId = systemSettings?.imageTranscriptionConnectionId ?? null
   const visionProxyModelId = systemSettings?.imageTranscriptionModelId ?? null
+  // F3: 转写代理就绪 = 开关开启且连接与模型均已配置（与后端 isVisionProxyReady 对齐）
+  const visionProxyReady =
+    visionProxyEnabled && visionProxyConnectionId != null && visionProxyModelId != null
+  // 图片附件门禁：vision 模型或转写代理就绪时才允许加图，避免「开启但未配置」时静默丢图
+  const canAttachImages = isVisionEnabled || visionProxyReady
 
   const {
     selectedImages,
@@ -266,7 +272,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     },
   } = useImageAttachments({
     isVisionEnabled,
-    visionProxyEnabled,
+    // F3: 转写代理「开启但未配置」时同样禁止加图，避免静默丢图
+    visionProxyEnabled: visionProxyReady,
     limits: DEFAULT_CHAT_IMAGE_LIMITS,
     toast,
   })
@@ -321,6 +328,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     dragHandlers,
   } = useDragDrop({
     isVisionEnabled,
+    canAttachImages,
     onAddImageFiles: handleAddImageFiles,
     onUploadWorkspaceFiles: uploadFiles,
     toast,
@@ -338,8 +346,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
 
       const { classifyFiles } = await import('@/features/chat/composer/classify-files')
 
-      // 先按 vision 状态分类
-      const classified = classifyFiles(files, { isVisionEnabled })
+      // 先按图片可附加状态分类（vision 或转写代理就绪）
+      const classified = classifyFiles(files, { isVisionEnabled, canAttachImages })
 
       if (classified.directories.length > 0) {
         toast({
@@ -365,11 +373,11 @@ export function useChatComposer(options?: UseChatComposerOptions) {
         }
       }
 
-      // 分类中的 others 也可能是图片（vision off 时）
+      // 分类中的 others 也可能是图片（图片不可附加时）
       workspaceUploads.push(...classified.others)
 
-      // 有图片但 vision 关闭时给出提示
-      const othersFromImages = files.some((f) => f.type.startsWith('image/')) && !isVisionEnabled
+      // 有图片但不可附加（vision 关闭且转写代理未就绪）时给出提示
+      const othersFromImages = files.some((f) => f.type.startsWith('image/')) && !canAttachImages
 
       if (workspaceUploads.length > 0) {
         if (othersFromImages) {
@@ -385,7 +393,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
         attachmentInputRef.current.value = ''
       }
     },
-    [isVisionEnabled, validateImage, setSelectedImages, uploadFiles, toast],
+    [isVisionEnabled, canAttachImages, validateImage, setSelectedImages, uploadFiles, toast],
   )
 
   const handleAddCustomHeader = useCallback(() => {
@@ -457,6 +465,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     maxConcurrentStreams,
     clearError,
     isVisionEnabled,
+    visionProxyEnabled: visionProxyReady,
     selectedImages,
     setSelectedImages,
     buildRequestPayload,
@@ -536,6 +545,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     isVisionEnabled,
     visionProxyEnabled,
     visionProxyModelId,
+    visionProxyReady,
+    canAttachImages,
     MAX_IMAGE_COUNT,
     MAX_IMAGE_MB,
     MAX_IMAGE_EDGE,

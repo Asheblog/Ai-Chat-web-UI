@@ -21,6 +21,7 @@ const makeBaseParams = () => ({
   maxConcurrentStreams: 1,
   clearError: mockClearError,
   isVisionEnabled: false,
+  visionProxyEnabled: false,
   selectedImages: [],
   setSelectedImages: mockSetSelectedImages,
   buildRequestPayload: mockBuildRequestPayload,
@@ -218,5 +219,53 @@ describe('useSendCommand without workspace files', () => {
     })
 
     expect(mockStreamMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('useSendCommand with vision proxy images', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const mockImages = [
+    { dataUrl: 'data:image/png;base64,aGVsbG8=', mime: 'image/png', size: 10 },
+  ]
+
+  it('sends images when vision proxy is enabled even if vision model is off', async () => {
+    const params = {
+      ...makeBaseParams(),
+      input: '看看这张图',
+      isVisionEnabled: false,
+      visionProxyEnabled: true,
+      selectedImages: mockImages,
+    }
+    const { result } = renderHook(() => useSendCommand(params))
+
+    await act(async () => {
+      await result.current()
+    })
+
+    expect(mockStreamMessage).toHaveBeenCalledOnce()
+    const [, , images] = mockStreamMessage.mock.calls[0]
+    expect(images).toEqual([{ data: 'aGVsbG8=', mime: 'image/png' }])
+  })
+
+  it('does not send images when both vision and vision proxy are disabled', async () => {
+    const params = {
+      ...makeBaseParams(),
+      input: '看看这张图',
+      isVisionEnabled: false,
+      visionProxyEnabled: false,
+      selectedImages: mockImages,
+    }
+    const { result } = renderHook(() => useSendCommand(params))
+
+    await act(async () => {
+      await result.current()
+    })
+
+    expect(mockStreamMessage).toHaveBeenCalledOnce()
+    const [, , images] = mockStreamMessage.mock.calls[0]
+    expect(images).toBeUndefined()
   })
 })
