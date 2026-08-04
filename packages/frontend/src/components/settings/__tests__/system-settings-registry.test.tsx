@@ -17,6 +17,7 @@ const NEW_LEAF_KEYS = [
   "overview",
   "connections",
   "models",
+  "image-transcription",
   "search-knowledge",
   "tools-extensions",
   "mcp",
@@ -76,25 +77,25 @@ describe("system-settings-registry", () => {
       ])
     })
 
-    test("每个分组 children 数量正确（2/3/2/3/1）", () => {
-      expect(childrenOf(systemSettingsTree[1])).toHaveLength(2)
+    test("每个分组 children 数量正确（3/3/2/3/1）", () => {
+      expect(childrenOf(systemSettingsTree[1])).toHaveLength(3)
       expect(childrenOf(systemSettingsTree[2])).toHaveLength(3)
       expect(childrenOf(systemSettingsTree[3])).toHaveLength(2)
       expect(childrenOf(systemSettingsTree[4])).toHaveLength(3)
       expect(childrenOf(systemSettingsTree[5])).toHaveLength(1)
     })
 
-    test("12 个叶子 key 全局唯一", () => {
+    test("13 个叶子 key 全局唯一", () => {
       const all = systemSettingsTree.flatMap((node) =>
         "children" in node ? node.children.map((c) => c.key) : [node.key]
       )
-      expect(all).toHaveLength(12)
-      expect(new Set(all).size).toBe(12)
+      expect(all).toHaveLength(13)
+      expect(new Set(all).size).toBe(13)
     })
 
-    test("getAllSystemLeafKeys() 恰好 12 个", () => {
-      expect(getAllSystemLeafKeys()).toHaveLength(12)
-      expect(new Set(getAllSystemLeafKeys()).size).toBe(12)
+    test("getAllSystemLeafKeys() 恰好 13 个", () => {
+      expect(getAllSystemLeafKeys()).toHaveLength(13)
+      expect(new Set(getAllSystemLeafKeys()).size).toBe(13)
     })
   })
 
@@ -123,7 +124,7 @@ describe("system-settings-registry", () => {
       expect(getWorkspaceForLeaf("overview")).toBe("overview")
     })
 
-    test.each(["connections", "models"])("%s 属于 model-connections", (key) => {
+    test.each(["connections", "models", "image-transcription"])("%s 属于 model-connections", (key) => {
       expect(getWorkspaceForLeaf(key)).toBe("model-connections")
     })
 
