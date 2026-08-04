@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { copyToClipboard, formatDate } from '@/lib/utils'
@@ -16,8 +16,9 @@ import { MessageBodyContent } from './message-body-content'
 import { MessageHeader } from './message-header'
 import { ShareBadge } from './share-badge'
 import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
-import { useCoTTimeline } from '@/features/chat/tool-events/useCoTTimeline'
-import { CoTTimeline } from './cot-timeline'
+import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
+import { ReasoningSection } from './reasoning-section'
+import { ToolCallsSection } from './tool-calls-section'
 
 const STREAMING_MARKDOWN_RENDER_INTERVAL_MS = 280
 
@@ -59,8 +60,7 @@ function MessageBubbleComponent({
   const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
   const activeStreamCount = useChatStore((state) => state.activeStreamCount ?? 0)
   const currentUser = useAuthStore((state) => state.user)
-  const { reasoningDefaultExpand, assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
-    reasoningDefaultExpand: Boolean(state.systemSettings?.reasoningDefaultExpand ?? false),
+  const { assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
     assistantAvatarUrl: state.systemSettings?.assistantAvatarUrl ?? null,
     assistantAvatarReady: state.assistantAvatarReady,
   }))
@@ -76,27 +76,19 @@ function MessageBubbleComponent({
     typeof body.reasoningPlayedLength === 'number'
       ? body.reasoningPlayedLength
       : reasoningRaw.length
-  const reasoningText = reasoningRaw.trim()
   const isUser = meta.role === 'user'
   const content = body.content || ''
   const outsideText = content.replace(/```[\s\S]*?```/g, '').trim()
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
   const hasContent = content.length > 0
-  const hasReasoningState = typeof meta.reasoningStatus === 'string'
   const shouldShowStreamingPlaceholder = Boolean(
     isStreaming && !hasContent && meta.role === 'assistant',
   )
-  const { nodes: timelineNodes } = useCoTTimeline({
+  const { timeline: toolTimeline, summary: toolSummary } = useToolTimeline({
     sessionId: meta.sessionId,
     messageId: meta.id,
     bodyEvents: body.toolEvents,
-    reasoningText: reasoningRaw,
   })
-  const shouldShowTimeline =
-    !isUser &&
-    (timelineNodes.length > 0 ||
-      (hasReasoningState && meta.reasoningStatus !== 'done') ||
-      (isStreaming && meta.role === 'assistant' && hasReasoningState))
 
   // 缓存匹配逻辑：
   // 1. 严格匹配：版本完全相同
@@ -248,18 +240,6 @@ function MessageBubbleComponent({
       } p-2 transition-colors`
     : ''
 
-  const defaultShouldShowReasoning = useMemo(() => {
-    if (meta.role !== 'assistant') return false
-    if (typeof meta.reasoningStatus === 'string') {
-      if (meta.reasoningStatus === 'done') {
-        return reasoningDefaultExpand && reasoningText.length > 0
-      }
-      return true
-    }
-    if (reasoningText.length === 0) return false
-    return reasoningDefaultExpand
-  }, [meta.reasoningStatus, meta.role, reasoningDefaultExpand, reasoningText])
-
   const durationMs = normalizeMetricMs(metrics?.responseTimeMs)
   const speedValue = normalizeMetricNumber(metrics?.tokensPerSecond)
   const speedText =
@@ -320,20 +300,19 @@ function MessageBubbleComponent({
               }}
             />
           )}
-          {!isUser && shouldShowTimeline && (
-            <CoTTimeline
-              meta={meta}
-              nodes={timelineNodes}
-              isStreaming={Boolean(isStreaming)}
-              reasoningStatus={meta.reasoningStatus}
-              reasoningDurationSeconds={meta.reasoningDurationSeconds ?? undefined}
-              reasoningPlayedLength={reasoningPlayedLength}
-              defaultExpanded={defaultShouldShowReasoning}
-              reasoningUnavailableCode={meta.reasoningUnavailableCode ?? undefined}
-              reasoningUnavailableReason={meta.reasoningUnavailableReason ?? undefined}
-              reasoningUnavailableSuggestion={meta.reasoningUnavailableSuggestion ?? undefined}
-            />
-          )}
+          <ReasoningSection
+            meta={meta}
+            reasoningRaw={reasoningRaw}
+            reasoningHtml={renderCache?.reasoningHtml ?? undefined}
+            reasoningPlayedLength={reasoningPlayedLength}
+            defaultExpanded={false}
+          />
+          <ToolCallsSection
+            meta={meta}
+            timeline={toolTimeline}
+            summary={toolSummary}
+            defaultExpanded={false}
+          />
 
           <MessageBodyContent
             isUser={isUser}
