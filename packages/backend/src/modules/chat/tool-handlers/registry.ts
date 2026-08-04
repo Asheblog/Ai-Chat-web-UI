@@ -25,6 +25,8 @@ import {
   KnowledgeBaseToolHandlerAdapter,
   kbToolNames,
 } from './knowledge-base-handler-adapter'
+import { VisionProxyToolHandler } from './vision-proxy-handler'
+import type { VisionProxyService } from '../services/vision-proxy-service'
 import { McpToolAdapter } from '../../../services/mcp/mcp-tool-adapter'
 
 /**
@@ -187,7 +189,8 @@ export class ToolHandlerRegistry {
  * 创建工具处理器注册表
  */
 export function createToolHandlerRegistry(
-  params: ToolHandlerFactoryParams
+  params: ToolHandlerFactoryParams,
+  deps: { visionProxyService?: VisionProxyService } = {}
 ): ToolHandlerRegistry {
   const registry = new ToolHandlerRegistry()
 
@@ -225,6 +228,11 @@ export function createToolHandlerRegistry(
     params.knowledgeBase.knowledgeBaseIds?.length > 0
   ) {
     registry.register(new KnowledgeBaseToolHandlerAdapter(params.knowledgeBase))
+  }
+
+  // 注册视觉分析工具处理器（图片转写代理）
+  if (params.visionProxy?.enabled) {
+    registry.register(new VisionProxyToolHandler(params.visionProxy, deps.visionProxyService))
   }
 
   return registry
