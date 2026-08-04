@@ -29,3 +29,22 @@ describe('MessageHeader metrics', () => {
     expect(screen.getByText('2.2 tokens/s')).toBeInTheDocument()
   })
 })
+
+describe('MessageHeader user branch image description note', () => {
+  it('renders transcription note when imageDescriptions present', () => {
+    render(
+      <MessageHeader
+        {...baseProps}
+        isUser
+        timestamp="2026-08-04"
+        imageDescriptionNote="图片描述由 qwen-vl-max 转写"
+      />,
+    )
+    expect(screen.getByText(/图片描述由 qwen-vl-max 转写/)).toBeInTheDocument()
+  })
+
+  it('renders nothing when note absent', () => {
+    render(<MessageHeader {...baseProps} isUser timestamp="2026-08-04" />)
+    expect(screen.queryByText(/图片描述由/)).not.toBeInTheDocument()
+  })
+})

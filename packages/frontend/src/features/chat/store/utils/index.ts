@@ -179,6 +179,7 @@ export const createMeta = (message: Message, overrides: Partial<MessageMeta> = {
     reasoningUnavailableReason: message.reasoningUnavailableReason ?? null,
     reasoningUnavailableSuggestion: message.reasoningUnavailableSuggestion ?? null,
     images: message.images,
+    imageDescriptions: message.imageDescriptions ?? null,
     generatedImages: message.generatedImages,
     richPayload: message.richPayload ?? null,
     artifacts: message.artifacts,

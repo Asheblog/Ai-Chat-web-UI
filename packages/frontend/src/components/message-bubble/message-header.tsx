@@ -27,6 +27,7 @@ interface MessageHeaderProps {
     durationMs?: number | null
     speedText?: string | null
   } | null
+  imageDescriptionNote?: string | null
 }
 
 export function MessageHeader({
@@ -43,6 +44,7 @@ export function MessageHeader({
   variantInfo,
   isStreaming,
   metrics,
+  imageDescriptionNote,
 }: MessageHeaderProps) {
   if (isUser) {
     return (
@@ -73,6 +75,9 @@ export function MessageHeader({
           </Button>
         )}
         <span>{timestamp}</span>
+        {imageDescriptionNote && (
+          <span title="图片由转写模型识别后供当前模型理解">{imageDescriptionNote}</span>
+        )}
       </div>
     )
   }
