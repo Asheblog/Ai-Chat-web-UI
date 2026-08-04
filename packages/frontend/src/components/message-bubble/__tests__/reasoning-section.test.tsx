@@ -146,6 +146,20 @@ describe('ReasoningSection 展开逻辑', () => {
     expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('完成态无本地记忆时默认折叠', async () => {
+    render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw="reasoning"
+        defaultExpanded={false}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
+    })
+  })
+
   it('长思考耗时使用可读格式', () => {
     render(
       <ReasoningSection
@@ -156,5 +170,51 @@ describe('ReasoningSection 展开逻辑', () => {
     )
 
     expect(screen.getByText('· 18m21s')).toBeInTheDocument()
+  })
+})
+
+describe('ReasoningSection 标题文案', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('完成态且存在耗时时标题为「思考过程 · Ns」', () => {
+    render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done', reasoningDurationSeconds: 3 })}
+        reasoningRaw="reasoning"
+        defaultExpanded={false}
+      />,
+    )
+
+    expect(screen.getByText('思考过程')).toBeInTheDocument()
+    // formatDurationSeconds(3) 实际输出为 '3.00s'
+    expect(screen.getByText('· 3.00s')).toBeInTheDocument()
+  })
+
+  it('完成态无耗时时不显示耗时后缀', () => {
+    render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw="reasoning"
+        defaultExpanded={false}
+      />,
+    )
+
+    expect(screen.getByText('思考过程')).toBeInTheDocument()
+    expect(screen.queryByText(/^·/)).not.toBeInTheDocument()
+  })
+
+  it('流式时不显示耗时后缀', () => {
+    render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'streaming', reasoningDurationSeconds: 3 })}
+        reasoningRaw="thinking..."
+        defaultExpanded={false}
+      />,
+    )
+
+    expect(screen.getByText('正在思考')).toBeInTheDocument()
+    expect(screen.queryByText('· 3.00s')).not.toBeInTheDocument()
   })
 })

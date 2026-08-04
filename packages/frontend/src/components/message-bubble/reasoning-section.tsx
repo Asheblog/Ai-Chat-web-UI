@@ -92,7 +92,7 @@ const expandReducer = (state: ExpandState, action: ExpandAction): ExpandState =>
 const statusTextMap: Record<'idle' | 'streaming' | 'done', string> = {
   idle: '正在思考',
   streaming: '正在思考',
-  done: '思考完成',
+  done: '思考过程',
 }
 
 interface ReasoningSectionProps {
@@ -174,9 +174,11 @@ export function ReasoningSection({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary">
             <Brain className="h-4 w-4" />
-            <span>{statusText === '思考完成' ? '思考过程' : statusText}</span>
+            <span>{statusText}</span>
             {showStreamingIndicator && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-            {durationText && <span className="text-xs text-muted-foreground">· {durationText}</span>}
+            {!showStreamingIndicator && durationText && (
+              <span className="text-xs text-muted-foreground">· {durationText}</span>
+            )}
           </div>
           {meta.reasoningUnavailableReason && (
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta.reasoningUnavailableReason}</p>
