@@ -45,6 +45,7 @@ import { AssistantProgressService } from './modules/chat/services/assistant-prog
 import { StreamUsageService } from './modules/chat/services/stream-usage-service';
 import { StreamTraceService } from './modules/chat/services/stream-trace-service';
 import { StreamSseService } from './modules/chat/services/stream-sse-service';
+import { VisionProxyService } from './modules/chat/services/vision-proxy-service';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -155,6 +156,7 @@ app.route('/api/chat', createChatApi({
     streamTraceService,
     streamSseService,
     conversationCompressionService,
+    visionProxyService: new VisionProxyService({ secretVault }),
   },
   completionRoutes: {
     prisma: appContext.prisma,

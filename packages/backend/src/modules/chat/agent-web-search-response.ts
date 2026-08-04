@@ -54,6 +54,7 @@ import { resolveModelCapabilitiesForSession } from '../../utils/model-capabiliti
 import { createSkillRegistry } from '../skills/skill-registry';
 import type { RequestedSkillsPayload } from '../skills/types';
 import type { McpService } from '../../services/mcp/mcp-service';
+import type { VisionProxyConfig, VisionProxyService } from './services/vision-proxy-service';
 
 // Re-export for backwards compatibility
 export {
@@ -93,9 +94,12 @@ export type AgentResponseParams = {
     document?: boolean;
     knowledgeBase?: boolean;
     workspace?: boolean;
+    visionProxy?: boolean;
   };
   requestedSkills: RequestedSkillsPayload;
   knowledgeBaseIds?: number[];
+  visionProxyConfig?: VisionProxyConfig | null
+  visionProxyService?: VisionProxyService
   provider: string;
   baseUrl: string;
   authHeader: Record<string, string>;
@@ -594,9 +598,11 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           knowledgeBase: ragService && toolFlags.knowledgeBase
             ? { enabled: true, knowledgeBaseIds, ragService }
             : null,
+          visionProxy: toolFlags.visionProxy && params.visionProxyConfig ? params.visionProxyConfig : null,
         },
         allowDynamicRuntime: allowDynamicRuntime === true,
         mcpService: params.mcpService,
+        visionProxyService: params.visionProxyService,
       });
       const toolDefinitions = toolRegistry.getToolDefinitions();
       const allowedToolNames = toolRegistry.getAllowedToolNames();

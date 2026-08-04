@@ -58,6 +58,15 @@ import {
 } from '../chat-common';
 import { createUserMessageWithQuota } from '../services/message-service';
 import { ChatServiceError, type ChatService } from '../../../services/chat';
+import { resolveModelCapabilitiesForSession } from '../../../utils/model-capabilities';
+import {
+  VisionProxyServiceError,
+  isVisionProxyReady,
+  loadHistoryImageDescriptions,
+  parseStoredImageDescriptions,
+  type VisionProxyService,
+} from '../services/vision-proxy-service';
+import { buildAgentVisionProxyConfig, computeAgentToolFlags } from '../agent-tool-config';
 import type { ProviderRequester } from '../services/provider-requester';
 import type { NonStreamFallbackService } from '../services/non-stream-fallback-service';
 import type { AssistantProgressService } from '../services/assistant-progress-service';
@@ -110,6 +119,7 @@ export interface ChatStreamRoutesDeps {
   streamTraceService: StreamTraceService
   streamSseService: StreamSseService
   conversationCompressionService: ConversationCompressionService
+  visionProxyService: VisionProxyService
 }
 
 export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
@@ -125,6 +135,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
     streamTraceService,
     streamSseService,
     conversationCompressionService,
+    visionProxyService,
   } = deps
   const requestValidation = new ChatStreamRequestValidation({ chatService })
   const providerStreamEngine = new ProviderStreamEngine({
@@ -187,8 +198,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         }
         throw error
       }
-      const requestedBuiltinSkillSet = new Set(requestedSkills.builtin)
-
       const now = new Date()
 
       let userMessageRecord: Message | null = null
@@ -421,11 +430,92 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         });
       }
 
+      const agentWebSearchConfig = buildAgentWebSearchConfig(turnContext.systemSettings)
+      const pythonToolConfig = buildAgentPythonToolConfig(turnContext.systemSettings)
+      const urlReaderConfig = buildAgentUrlReaderConfig(turnContext.systemSettings)
+      const workspaceToolConfig = buildAgentWorkspaceToolConfig(turnContext.systemSettings)
+      const agentMaxToolIterations = resolveMaxToolIterations(turnContext.systemSettings)
+      const webSearchSkillOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}
+      Object.assign(
+        agentWebSearchConfig,
+        applyWebSearchSkillOverrides(
+          agentWebSearchConfig,
+          webSearchSkillOverride,
+          { sanitizeScope },
+        ),
+      )
+
+      // ===== 图片转写代理（Vision Transcription Proxy）=====
+      // 主模型无 vision 且有图时：工具流 → 注入视觉分析工具由主模型自主调用；
+      // 标准流（无工具）→ 后端自动转写，描述注入用户消息前缀并持久化（转写一次）
+      const visionProxyConfig = buildAgentVisionProxyConfig(turnContext.systemSettings)
+      const mainModelCapabilities = await resolveModelCapabilitiesForSession(prisma, session)
+      const mainModelVision = mainModelCapabilities.vision !== false
+      const hasImages = Array.isArray(images) && images.length > 0
+      const visionProxyRequested = isVisionProxyReady(visionProxyConfig) && hasImages && !mainModelVision
+      const preAgentToolFlags = visionProxyRequested
+        ? computeAgentToolFlags({
+            sysMap: turnContext.systemSettings,
+            requestedSkills,
+            hasKnowledgeBases,
+            webSearchConfig: agentWebSearchConfig,
+            pythonToolConfig,
+            workspaceToolConfig,
+            urlReaderConfig,
+          })
+        : null
+      const visionProxyToolFlow = visionProxyRequested && Boolean(preAgentToolFlags?.agentToolsActive)
+      const visionProxyAutoTranscribe = visionProxyRequested && !visionProxyToolFlow
+
+      let visionTranscriptionPrefix = ''
+      let payloadImages = images
+      let historyImageDescriptions: Map<number, { description: string; modelRawId: string }[]> | null = null
+      if (visionProxyRequested) {
+        historyImageDescriptions = await loadHistoryImageDescriptions(prisma, sessionId, historyUpperBound)
+      }
+      if (visionProxyAutoTranscribe) {
+        const stored = userMessageRecord ? parseStoredImageDescriptions((userMessageRecord as any).imageDescriptionsJson) : null
+        if (stored && stored.length > 0) {
+          // 已转写过（消息复用/重发）：直接复用，不重复调用视觉模型
+          visionTranscriptionPrefix = stored[0].description
+          payloadImages = []
+        } else {
+          try {
+            const { description, modelRawId } = await visionProxyService.transcribeImages(
+              images!,
+              content,
+              visionProxyConfig,
+            )
+            visionTranscriptionPrefix = description
+            payloadImages = []
+            if (userMessageRecord) {
+              await prisma.message.update({
+                where: { id: userMessageRecord.id },
+                data: {
+                  imageDescriptionsJson: JSON.stringify([{ description, modelRawId }]),
+                },
+              })
+            }
+          } catch (error) {
+            if (error instanceof VisionProxyServiceError) {
+              return c.json<ApiResponse>({
+                success: false,
+                error: `图片转写失败：${error.message}`,
+              }, error.statusCode as any)
+            }
+            throw error
+          }
+        }
+      } else if (visionProxyToolFlow) {
+        // 工具流：图片不发给主模型，由 analyze_visual_media 工具按需读取附件
+        payloadImages = []
+      }
+
       const preparedRequest = await chatRequestBuilder.prepare({
         session,
         payload,
         content,
-        images,
+        images: payloadImages,
         mode: 'stream',
         historyUpperBound,
         personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
@@ -433,6 +523,9 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         ragContext,
         systemSettings: turnContext.systemSettings,
         historySnapshot: turnContext.history,
+        mainModelVision,
+        visionTranscriptionPrefix: visionTranscriptionPrefix || undefined,
+        historyImageDescriptions,
       });
 
       const promptTokens = preparedRequest.promptTokens;
@@ -463,21 +556,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         sysMap,
         env: process.env.NODE_ENV,
       });
-      const agentWebSearchConfig = buildAgentWebSearchConfig(sysMap);
-      const pythonToolConfig = buildAgentPythonToolConfig(sysMap);
-      const urlReaderConfig = buildAgentUrlReaderConfig(sysMap);
-      const workspaceToolConfig = buildAgentWorkspaceToolConfig(sysMap);
-      const agentMaxToolIterations = resolveMaxToolIterations(sysMap);
-      // 统一 scope 白名单（含 scholar），与 utils/web-search.ts METASO_SCOPE_WHITELIST 同源
-      const webSearchSkillOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}
-      Object.assign(
-        agentWebSearchConfig,
-        applyWebSearchSkillOverrides(
-          agentWebSearchConfig,
-          webSearchSkillOverride,
-          { sanitizeScope },
-        ),
-      );
       const assistantReplyHistoryLimit = (() => {
         const raw =
           sysMap.assistant_reply_history_limit ||
@@ -544,37 +622,18 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         'Access-Control-Allow-Headers': 'Cache-Control',
       };
 
-      const webSearchSkillRequested = requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH);
-      const pythonSkillRequested = requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER);
-      const urlReaderSkillRequested =
-        requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchSkillRequested;
-      const knowledgeBaseSkillRequested =
-        requestedBuiltinSkillSet.has(BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH) || hasKnowledgeBases;
-      const webSearchEnginesWithKeys = (agentWebSearchConfig.engines || []).filter((engine) =>
-        Boolean(agentWebSearchConfig.apiKeys?.[engine]),
-      );
-      const agentWebSearchActive =
-        webSearchSkillRequested &&
-        agentWebSearchConfig.enabled &&
-        webSearchEnginesWithKeys.length > 0;
-      const pythonToolActive =
-        pythonSkillRequested && pythonToolConfig.enabled;
-      const workspaceToolsActive = pythonToolActive && workspaceToolConfig.enabled;
-      const urlReaderActive = urlReaderSkillRequested;
-      // 会话文档工具已废弃（改为 workspace 直接文件访问），保留仅用于兼容
-      const documentToolsActive = false;
-      const knowledgeBaseToolsActive = knowledgeBaseSkillRequested && hasKnowledgeBases;
-      const dynamicSkillRequestedRaw = requestedSkills.enabled.length > 0;
-      const dynamicSkillRuntimeEnabled =
-        (sysMap.chat_dynamic_skill_runtime_enabled ||
-          process.env.CHAT_DYNAMIC_SKILL_RUNTIME_ENABLED ||
-          'false')
-          .toString()
-          .toLowerCase() === 'true';
-      const dynamicSkillRequested = dynamicSkillRequestedRaw && dynamicSkillRuntimeEnabled;
+      const agentToolFlags = computeAgentToolFlags({
+        sysMap,
+        requestedSkills,
+        hasKnowledgeBases,
+        webSearchConfig: agentWebSearchConfig,
+        pythonToolConfig,
+        workspaceToolConfig,
+        urlReaderConfig,
+      })
       const dynamicSkillDisabledMessage =
         '聊天侧第三方动态 Skill Runtime 当前关闭，请在系统设置中启用“聊天侧第三方动态 Skill Runtime”后重试。';
-      if (dynamicSkillRequestedRaw && !dynamicSkillRuntimeEnabled) {
+      if (agentToolFlags.dynamicSkillRequestedRaw && !agentToolFlags.dynamicSkillRuntimeEnabled) {
         log.warn('[chat stream] dynamic skill runtime disabled in chat route', {
           sessionId,
           actor: actor.identifier,
@@ -582,28 +641,20 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         });
       }
       if (
-        dynamicSkillRequestedRaw &&
-        !dynamicSkillRuntimeEnabled &&
-        !agentWebSearchActive &&
-        !pythonToolActive &&
-        !workspaceToolsActive &&
-        !urlReaderActive &&
-        !documentToolsActive &&
-        !knowledgeBaseToolsActive
+        agentToolFlags.dynamicSkillRequestedRaw &&
+        !agentToolFlags.dynamicSkillRuntimeEnabled &&
+        !agentToolFlags.agentWebSearchActive &&
+        !agentToolFlags.pythonToolActive &&
+        !agentToolFlags.workspaceToolsActive &&
+        !agentToolFlags.urlReaderActive &&
+        !agentToolFlags.documentToolsActive &&
+        !agentToolFlags.knowledgeBaseToolsActive
       ) {
         return c.json<ApiResponse>({
           success: false,
           error: dynamicSkillDisabledMessage,
         }, 400);
       }
-      const agentToolsActive =
-        agentWebSearchActive ||
-        pythonToolActive ||
-        workspaceToolsActive ||
-        urlReaderActive ||
-        documentToolsActive ||
-        knowledgeBaseToolsActive ||
-        dynamicSkillRequested;
       const resolvedMaxConcurrentStreams = (() => {
         const raw =
           sysMap.chat_max_concurrent_streams ||
@@ -643,8 +694,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           model: session.modelRawId,
           connectionId: session.connectionId,
           skills: requestedSkills,
-          agentWebSearchActive,
-          workspaceToolsActive,
+          agentWebSearchActive: agentToolFlags.agentWebSearchActive,
+          workspaceToolsActive: agentToolFlags.workspaceToolsActive,
           reasoningEnabled: effectiveReasoningEnabled,
           reasoningEffort: effectiveReasoningEffort,
           ollamaThink: effectiveOllamaThink,
@@ -710,7 +761,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         });
       }
 
-      if (agentToolsActive) {
+      if (agentToolFlags.agentToolsActive) {
         return await createAgentWebSearchResponse({
           session,
           sessionId,
@@ -729,14 +780,17 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           agentMaxToolIterations,
           requestedSkills,
           toolFlags: {
-            webSearch: agentWebSearchActive,
-            python: pythonToolActive,
-            workspace: workspaceToolsActive,
-            urlReader: urlReaderActive,
-            document: documentToolsActive,
-            knowledgeBase: knowledgeBaseToolsActive,
+            webSearch: agentToolFlags.agentWebSearchActive,
+            python: agentToolFlags.pythonToolActive,
+            workspace: agentToolFlags.workspaceToolsActive,
+            urlReader: agentToolFlags.urlReaderActive,
+            document: agentToolFlags.documentToolsActive,
+            knowledgeBase: agentToolFlags.knowledgeBaseToolsActive,
+            visionProxy: visionProxyToolFlow,
           },
-          allowDynamicRuntime: dynamicSkillRuntimeEnabled,
+          allowDynamicRuntime: agentToolFlags.dynamicSkillRuntimeEnabled,
+          visionProxyConfig: visionProxyToolFlow ? visionProxyConfig : null,
+          visionProxyService,
           provider,
           baseUrl,
           authHeader,
