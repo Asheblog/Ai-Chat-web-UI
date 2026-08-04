@@ -46,6 +46,9 @@ interface MobileComposerProps {
   onPickAttachments: () => void
   hasAttachments: boolean
   attachmentsCount: number
+  // 图片转写代理
+  visionProxyEnabled?: boolean
+  visionProxyModelId?: string | null
   // 功能开关
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
@@ -105,6 +108,8 @@ export function MobileComposer({
   onPickAttachments,
   hasAttachments,
   attachmentsCount,
+  visionProxyEnabled,
+  visionProxyModelId,
   thinkingEnabled,
   onToggleThinking,
   effort,
@@ -165,6 +170,7 @@ export function MobileComposer({
         onRemoveImage={onRemoveImage}
         workspaceFiles={workspaceFiles}
         onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+        visionProxyHint={!isVisionEnabled && visionProxyEnabled ? visionProxyModelId ?? null : null}
         className="mb-2"
       />
       <div className={composerInnerEditorClass}>

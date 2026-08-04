@@ -43,6 +43,10 @@ interface DesktopComposerProps {
   onPickAttachments: () => void
   hasAttachments: boolean
   attachmentsCount: number
+  // 图片转写代理
+  isVisionEnabled?: boolean
+  visionProxyEnabled?: boolean
+  visionProxyModelId?: string | null
   // 功能开关
   thinkingEnabled: boolean
   onToggleThinking: (value: boolean) => void
@@ -104,6 +108,9 @@ export function DesktopComposer({
   onPickAttachments,
   hasAttachments,
   attachmentsCount,
+  isVisionEnabled,
+  visionProxyEnabled,
+  visionProxyModelId,
   thinkingEnabled,
   onToggleThinking,
   webSearchEnabled,
@@ -161,6 +168,7 @@ export function DesktopComposer({
           onRemoveImage={onRemoveImage}
           workspaceFiles={workspaceFiles}
           onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+          visionProxyHint={!isVisionEnabled && visionProxyEnabled ? visionProxyModelId ?? null : null}
           className="mb-3"
         />
         <ComposerShell>

@@ -248,6 +248,10 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     textareaRef.current.focus()
   }, [isAutoScrollEnabled, isStreaming])
 
+  // 图片转写代理：非 vision 模型通过代理模型转写图片
+  const visionProxyEnabled = systemSettings?.imageTranscriptionEnabled === true
+  const visionProxyModelId = systemSettings?.imageTranscriptionModelId ?? null
+
   const {
     selectedImages,
     setSelectedImages,
@@ -262,6 +266,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     },
   } = useImageAttachments({
     isVisionEnabled,
+    visionProxyEnabled,
     limits: DEFAULT_CHAT_IMAGE_LIMITS,
     toast,
   })
@@ -529,6 +534,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     currentSession,
     error,
     isVisionEnabled,
+    visionProxyEnabled,
+    visionProxyModelId,
     MAX_IMAGE_COUNT,
     MAX_IMAGE_MB,
     MAX_IMAGE_EDGE,

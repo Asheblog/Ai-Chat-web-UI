@@ -69,6 +69,9 @@ export interface ChatComposerPanelProps {
   onToggleMcpBinding?: (connectionId: number, enabled: boolean) => void
   onActivateSkillPanel?: () => void
   isVisionEnabled: boolean
+  // 图片转写代理
+  visionProxyEnabled?: boolean
+  visionProxyModelId?: string | null
   traceEnabled: boolean
   canUseTrace: boolean
   effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
@@ -194,6 +197,8 @@ export function ChatComposerPanel({
   onToggleMcpBinding,
   onActivateSkillPanel,
   isVisionEnabled,
+  visionProxyEnabled,
+  visionProxyModelId,
   traceEnabled,
   canUseTrace,
   effort,
@@ -734,6 +739,8 @@ export function ChatComposerPanel({
         onToggleMcpBinding={onToggleMcpBinding}
         onActivateSkillPanel={onActivateSkillPanel}
         isVisionEnabled={isVisionEnabled}
+        visionProxyEnabled={visionProxyEnabled}
+        visionProxyModelId={visionProxyModelId}
         placeholder={mobilePlaceholder}
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}
@@ -799,6 +806,9 @@ export function ChatComposerPanel({
         onStop={onStop}
         desktopSendDisabled={desktopSendDisabled}
         sendLockedReason={sendLockedReason}
+        isVisionEnabled={isVisionEnabled}
+        visionProxyEnabled={visionProxyEnabled}
+        visionProxyModelId={visionProxyModelId}
         // 知识库
         onOpenKnowledgeBase={openKnowledgeBaseSelector}
         knowledgeBaseEnabled={knowledgeBaseEnabled}

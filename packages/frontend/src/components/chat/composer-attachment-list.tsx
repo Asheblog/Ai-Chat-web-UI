@@ -16,6 +16,8 @@ interface ComposerAttachmentListProps {
   workspaceFiles: WorkspaceFile[]
   onRemoveWorkspaceFile: (localId: string) => void
   className?: string
+  /** 图片转写代理模型 ID（非 vision 模型 + 转写开启时展示提示条） */
+  visionProxyHint?: string | null
 }
 
 function formatFileSize(bytes: number): string {
@@ -41,11 +43,17 @@ export function ComposerAttachmentList({
   workspaceFiles,
   onRemoveWorkspaceFile,
   className,
+  visionProxyHint,
 }: ComposerAttachmentListProps) {
   if (images.length === 0 && workspaceFiles.length === 0) return null
 
   return (
     <div className={cn('mb-2 flex flex-wrap items-start gap-2', className)}>
+      {visionProxyHint && images.length > 0 && (
+        <p className="w-full text-xs text-amber-600">
+          ⚠ 当前模型不支持识图，图片将由 {visionProxyHint} 转写
+        </p>
+      )}
       {images.map((img, idx) => (
         <div
           key={`${img.dataUrl}-${idx}`}
