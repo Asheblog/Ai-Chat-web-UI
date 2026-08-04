@@ -175,10 +175,10 @@ export function ToolCallsSection({
   if (!hasToolCalls) return null
 
   return (
-    <div className="mb-2 overflow-hidden rounded-[8px] border border-border bg-surface shadow-[0_10px_28px_rgba(15,23,42,0.04)]" data-message-panel="interactive">
+    <div className="mb-2 overflow-hidden rounded-[8px] border border-primary/20 bg-primary/5" data-message-panel="interactive">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-accent sm:px-4"
+        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-primary/10 sm:px-4"
         onClick={() => {
           dispatch({ type: 'toggle' })
           const next = !expanded
@@ -187,7 +187,7 @@ export function ToolCallsSection({
         aria-expanded={expanded}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground/80">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-primary">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground">
               <Wrench className="h-4 w-4" />
             </span>
