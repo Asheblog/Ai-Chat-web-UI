@@ -136,6 +136,9 @@ export function ReasoningSection({
   const statusText = meta.reasoningStatus ? statusTextMap[meta.reasoningStatus] : '思考过程'
   const showStreamingIndicator = meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming'
   const durationText = formatDurationSeconds(meta.reasoningDurationSeconds)
+  // 耗时 0 秒（推理极快）不展示后缀，避免「思考过程 · 0ms」的噪音
+  const hasMeaningfulDuration =
+    durationText !== null && (meta.reasoningDurationSeconds ?? 0) > 0
 
   useEffect(() => {
     if (!persistenceKey) return
@@ -178,7 +181,7 @@ export function ReasoningSection({
             <Brain className="h-4 w-4" />
             <span>{statusText}</span>
             {showStreamingIndicator && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-            {!showStreamingIndicator && durationText && (
+            {!showStreamingIndicator && hasMeaningfulDuration && durationText && (
               <span className="text-xs text-muted-foreground">· {durationText}</span>
             )}
           </div>

@@ -226,6 +226,14 @@ const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
           compression: data.compression as ChatStreamChunk['compression'],
         }
       }
+      if (name === 'reasoning_done') {
+        // 推理结束事件：携带推理耗时（秒），供前端推理区块标题展示「· Ns」
+        return {
+          type: 'reasoning',
+          done: true,
+          duration: data.duration as number | undefined,
+        }
+      }
       if (name === 'skill_approval_request' || name === 'skill_approval_result') {
         return {
           ...(data as ChatStreamChunk),

@@ -231,6 +231,19 @@ describe('ReasoningSection 标题文案', () => {
     expect(screen.queryByText(/^·/)).not.toBeInTheDocument()
   })
 
+  it('完成态耗时为 0 秒时不显示耗时后缀', () => {
+    render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done', reasoningDurationSeconds: 0 })}
+        reasoningRaw="reasoning"
+        defaultExpanded={false}
+      />,
+    )
+
+    expect(screen.getByText('思考过程')).toBeInTheDocument()
+    expect(screen.queryByText(/^·/)).not.toBeInTheDocument()
+  })
+
   it('流式时不显示耗时后缀', () => {
     render(
       <ReasoningSection
