@@ -76,6 +76,7 @@ export function BattleCard({ settings, update }: BattleCardProps) {
       icon={Swords}
       title="模型大乱斗"
       description="控制乱斗功能的访问与每日次数"
+      cardKey="tools-extensions:battle"
       footer={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={resetDrafts} disabled={!fieldChanged}>

@@ -68,7 +68,7 @@ export function UsersRegistrationPage() {
       />
 
       {/* 分区二：用户管理（原样内嵌 SystemUsersPage，状态自管） */}
-      <section aria-label="用户管理">
+      <section aria-label="用户管理" data-card-key="users-registration:users">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
             <Users className="h-5 w-5" />

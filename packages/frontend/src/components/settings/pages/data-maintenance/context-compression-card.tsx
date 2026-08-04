@@ -72,6 +72,7 @@ export function ContextCompressionCard({ settings, update }: ContextCompressionC
       icon={Shrink}
       title="上下文压缩"
       description="对话过长时自动压缩，保留最近消息"
+      cardKey="data-maintenance:compression"
       footer={
         <div className="flex justify-end">
           <Button onClick={handleSave} disabled={!fieldChanged}>

@@ -288,6 +288,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
       icon={Globe}
       title="联网搜索"
       description="在回答前自动检索网页，支持多引擎并行"
+      cardKey="search-knowledge:web-search"
       enabled={enabled}
       onEnabledChange={setEnabled}
       more={

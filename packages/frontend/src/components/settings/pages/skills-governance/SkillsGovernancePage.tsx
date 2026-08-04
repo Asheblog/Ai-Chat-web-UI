@@ -520,45 +520,51 @@ export function SkillsGovernancePage() {
         </div>
       </div>
 
-      <SkillApprovalsSection
-        loading={loading}
-        approvals={approvals}
-        approvalActionId={approvalActionId}
-        onRespondApproval={handleRespondApproval}
-      />
+      <div data-card-key="skills-governance:approvals">
+        <SkillApprovalsSection
+          loading={loading}
+          approvals={approvals}
+          approvalActionId={approvalActionId}
+          onRespondApproval={handleRespondApproval}
+        />
+      </div>
 
-      <SkillVersionSection
-        loading={loading}
-        catalog={catalog}
-        versionActionKey={versionActionKey}
-        skillActionKey={skillActionKey}
-        onApproveVersion={handleApproveVersion}
-        onActivateVersion={handleActivateVersion}
-        onUninstallSkill={handleUninstallSkill}
-      />
+      <div data-card-key="skills-governance:versions">
+        <SkillVersionSection
+          loading={loading}
+          catalog={catalog}
+          versionActionKey={versionActionKey}
+          skillActionKey={skillActionKey}
+          onApproveVersion={handleApproveVersion}
+          onActivateVersion={handleActivateVersion}
+          onUninstallSkill={handleUninstallSkill}
+        />
+      </div>
 
-      <SkillBindingsSection
-        catalog={catalog}
-        bindings={bindings}
-        versionOptions={versionOptions}
-        bindingSkillId={bindingSkillId}
-        bindingVersionId={bindingVersionId}
-        bindingScopeType={bindingScopeType}
-        bindingScopeId={bindingScopeId}
-        bindingEnabled={bindingEnabled}
-        bindingPolicyDraft={bindingPolicyDraft}
-        bindingOverridesDraft={bindingOverridesDraft}
-        bindingSubmitting={bindingSubmitting}
-        onBindingSkillIdChange={setBindingSkillId}
-        onBindingVersionIdChange={setBindingVersionId}
-        onBindingScopeTypeChange={handleBindingScopeTypeChange}
-        onBindingScopeIdChange={setBindingScopeId}
-        onBindingEnabledChange={setBindingEnabled}
-        onBindingPolicyDraftChange={setBindingPolicyDraft}
-        onBindingOverridesDraftChange={setBindingOverridesDraft}
-        onUpsertBinding={handleUpsertBinding}
-        onDeleteBinding={handleDeleteBinding}
-      />
+      <div data-card-key="skills-governance:bindings">
+        <SkillBindingsSection
+          catalog={catalog}
+          bindings={bindings}
+          versionOptions={versionOptions}
+          bindingSkillId={bindingSkillId}
+          bindingVersionId={bindingVersionId}
+          bindingScopeType={bindingScopeType}
+          bindingScopeId={bindingScopeId}
+          bindingEnabled={bindingEnabled}
+          bindingPolicyDraft={bindingPolicyDraft}
+          bindingOverridesDraft={bindingOverridesDraft}
+          bindingSubmitting={bindingSubmitting}
+          onBindingSkillIdChange={setBindingSkillId}
+          onBindingVersionIdChange={setBindingVersionId}
+          onBindingScopeTypeChange={handleBindingScopeTypeChange}
+          onBindingScopeIdChange={setBindingScopeId}
+          onBindingEnabledChange={setBindingEnabled}
+          onBindingPolicyDraftChange={setBindingPolicyDraft}
+          onBindingOverridesDraftChange={setBindingOverridesDraft}
+          onUpsertBinding={handleUpsertBinding}
+          onDeleteBinding={handleDeleteBinding}
+        />
+      </div>
 
       <Dialog open={uninstallDialogOpen} onOpenChange={handleUninstallDialogOpenChange}>
         <DialogContent className="max-h-[85vh] overflow-hidden rounded-[10px] border-border/80 p-0 sm:max-w-4xl">

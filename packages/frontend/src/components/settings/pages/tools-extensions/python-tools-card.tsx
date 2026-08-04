@@ -94,6 +94,7 @@ export function PythonToolsCard({ settings, update }: PythonToolsCardProps) {
       icon={Terminal}
       title="Python 工具"
       description="允许 AI 在本地沙箱中执行 Python 代码"
+      cardKey="tools-extensions:python-tools"
       enabled={pythonEnabled}
       onEnabledChange={setPythonEnabled}
       more={

@@ -75,6 +75,7 @@ export function AvatarCard({ settings, update }: AvatarCardProps) {
       icon={Palette}
       title="AI 头像"
       description="设置全局生效的 AI 回复头像"
+      cardKey="branding:avatar"
     >
       <SettingRow
         title="AI 回复头像"

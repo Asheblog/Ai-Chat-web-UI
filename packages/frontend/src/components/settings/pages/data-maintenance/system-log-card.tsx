@@ -104,6 +104,7 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
       icon={FileText}
       title="系统运行日志"
       description="后端日志级别、文件输出与保留"
+      cardKey="data-maintenance:system-log"
     >
       <div className="space-y-3">
         <SettingRow

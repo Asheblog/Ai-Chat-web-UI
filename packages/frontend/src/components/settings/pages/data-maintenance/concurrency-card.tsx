@@ -41,6 +41,7 @@ export function ConcurrencyCard({ settings, update, refresh, isLoading }: Concur
       icon={Thermometer}
       title="并发生成控制"
       description="限制同时进行的流式生成任务数"
+      cardKey="data-maintenance:concurrency"
     >
       <div className="space-y-3">
         <SettingRow

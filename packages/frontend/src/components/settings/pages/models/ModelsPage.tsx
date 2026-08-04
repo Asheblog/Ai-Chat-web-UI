@@ -26,7 +26,7 @@ export function ModelsPage() {
       </div>
 
       {/* 分区一：模型目录与能力 */}
-      <section aria-label="模型目录与能力">
+      <section aria-label="模型目录与能力" data-card-key="models:catalog">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
             <Cpu className="h-5 w-5" />
@@ -45,7 +45,7 @@ export function ModelsPage() {
       <div className="border-t border-border/60" />
 
       {/* 分区二：访问控制 */}
-      <section aria-label="访问控制">
+      <section aria-label="访问控制" data-card-key="models:access">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
             <Shield className="h-5 w-5" />

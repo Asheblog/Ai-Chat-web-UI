@@ -100,6 +100,7 @@ export function TaskTraceCard({ settings, update, refresh, isLoading }: TaskTrac
       icon={ShieldCheck}
       title="任务追踪"
       description="记录后台任务执行，用于性能诊断"
+      cardKey="data-maintenance:task-trace"
     >
       <div className="space-y-3">
         <SettingRow

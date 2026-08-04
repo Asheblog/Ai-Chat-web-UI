@@ -86,6 +86,7 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
       icon={Clock}
       title="数据保留策略"
       description="控制系统数据的自动清理规则"
+      cardKey="data-maintenance:retention"
       footer={
         <div className="flex justify-end">
           <Button onClick={handleSave} disabled={!fieldChanged}>

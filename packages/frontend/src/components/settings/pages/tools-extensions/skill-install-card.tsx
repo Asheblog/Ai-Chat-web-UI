@@ -58,6 +58,7 @@ export function SkillInstallCard() {
       icon={Download}
       title="Skill 安装"
       description="从 GitHub 仓库安装系统级 Skill"
+      cardKey="tools-extensions:skill-install"
     >
       <SkillInstallSection
         installSource={installSource}

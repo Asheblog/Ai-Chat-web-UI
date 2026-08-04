@@ -91,6 +91,7 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
       icon={Type}
       title="品牌定制"
       description="自定义系统的品牌标识和外观"
+      cardKey="branding:branding"
       footer={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Button onClick={handleSave} disabled={!fieldChanged || !isAdmin || saving}>

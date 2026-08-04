@@ -69,6 +69,7 @@ export function TitleSummaryCard({ settings, update }: TitleSummaryCardProps) {
       icon={Type}
       title="标题智能总结"
       description="使用 AI 自动为对话生成简洁标题"
+      cardKey="tools-extensions:title-summary"
       footer={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={resetDrafts} disabled={!fieldChanged}>

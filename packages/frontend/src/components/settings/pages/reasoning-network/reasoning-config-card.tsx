@@ -51,6 +51,7 @@ export function ReasoningConfigCard({
       icon={Brain}
       title="推理链配置"
       description="控制模型思考过程与默认生成参数"
+      cardKey="reasoning-network:reasoning"
     >
       <SettingRow
         title="启用推理链"

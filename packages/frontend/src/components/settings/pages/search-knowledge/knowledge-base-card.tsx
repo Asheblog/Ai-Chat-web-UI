@@ -469,6 +469,7 @@ export function KnowledgeBaseCard({ settings, update }: KnowledgeBaseCardProps) 
         icon={BookOpen}
         title="知识库"
         description="创建和管理持久化知识库，供所有用户使用"
+        cardKey="search-knowledge:knowledge-base"
         enabled={enabled}
         onEnabledChange={setEnabled}
         footer={

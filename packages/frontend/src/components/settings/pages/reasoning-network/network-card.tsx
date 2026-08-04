@@ -69,6 +69,7 @@ export function NetworkCard({
       icon={Network}
       title="网络与超时"
       description="管理 SSE 心跳与上游网络连接超时"
+      cardKey="reasoning-network:network"
       moreLabel="更多参数"
       more={
         <>

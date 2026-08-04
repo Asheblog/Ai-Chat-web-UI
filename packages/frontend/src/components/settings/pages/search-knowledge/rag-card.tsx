@@ -317,6 +317,7 @@ export function RagCard({ settings, update }: RagCardProps) {
         icon={FileText}
         title="RAG 文档解析"
         description="附加文档后，AI 基于文档内容回答"
+        cardKey="search-knowledge:rag"
         enabled={enabled}
         onEnabledChange={setEnabled}
         more={

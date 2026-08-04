@@ -407,7 +407,7 @@ export function SystemConnectionsPage() {
       </div>
 
       {/* 模板卡网格 */}
-      <section aria-label="供应商模板">
+      <section aria-label="供应商模板" data-card-key="connections:quick-connect">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
             <LayoutGrid className="h-5 w-5" />
@@ -440,13 +440,14 @@ export function SystemConnectionsPage() {
       </section>
 
       {/* 高级管理折叠：原页面全部管理面 */}
-      <CollapsibleEditorSection
-        icon={<Settings2 className="h-4 w-4" />}
-        title="高级管理"
-        summary="全部连接列表、导入导出与 API Key 池"
-        open={advancedOpen}
-        onToggle={() => setAdvancedOpen((prev) => !prev)}
-      >
+      <div data-card-key="connections:advanced">
+        <CollapsibleEditorSection
+          icon={<Settings2 className="h-4 w-4" />}
+          title="高级管理"
+          summary="全部连接列表、导入导出与 API Key 池"
+          open={advancedOpen}
+          onToggle={() => setAdvancedOpen((prev) => !prev)}
+        >
         <div className="space-y-4">
           <SystemConnectionsToolbar
             stats={stats}
@@ -526,7 +527,8 @@ export function SystemConnectionsPage() {
             )}
           />
         </div>
-      </CollapsibleEditorSection>
+        </CollapsibleEditorSection>
+      </div>
 
       {/* 配置 Sheet（模板预填） */}
       <Sheet

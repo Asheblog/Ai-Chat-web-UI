@@ -41,6 +41,7 @@ export function StreamPerformanceCard({
       icon={Zap}
       title="流式与性能"
       description="控制流式输出的分片、刷新与 keepalive 节奏"
+      cardKey="reasoning-network:stream"
       moreLabel="更多参数"
       more={
         <>

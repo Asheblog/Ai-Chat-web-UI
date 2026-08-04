@@ -115,6 +115,7 @@ export function RegistrationPolicyCard({ settings, update, refresh }: Registrati
       icon={UserPlus}
       title="用户注册"
       description="控制新用户的注册和访客访问"
+      cardKey="users-registration:policy"
       footer={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Button onClick={handleSave} disabled={!fieldChanged || !isAdmin || saving}>

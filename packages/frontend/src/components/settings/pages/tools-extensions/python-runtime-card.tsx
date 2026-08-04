@@ -463,6 +463,7 @@ export function PythonRuntimeCard() {
       icon={FlaskConical}
       title="Python 运行时管理"
       description="索引源、依赖安装与已安装包"
+      cardKey="tools-extensions:python-runtime"
       more={content}
     >
       <p className="text-xs text-muted-foreground">

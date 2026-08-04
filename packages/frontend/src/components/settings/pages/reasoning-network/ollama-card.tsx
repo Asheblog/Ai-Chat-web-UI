@@ -19,6 +19,7 @@ export function OllamaCard({ ollamaThink, onOllamaThinkChange }: OllamaCardProps
       icon={Bot}
       title="Ollama 专属"
       description="针对 Ollama 上游的专属设置"
+      cardKey="reasoning-network:ollama"
       moreLabel="更多参数"
       more={
         <SettingRow
