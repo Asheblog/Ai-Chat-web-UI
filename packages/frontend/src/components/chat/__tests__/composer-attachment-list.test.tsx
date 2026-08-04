@@ -147,4 +147,20 @@ describe('ComposerAttachmentList', () => {
     // Workspace file name
     expect(screen.getByText('doc.pdf')).toBeInTheDocument()
   })
+
+  it('renders vision proxy hint when images present', async () => {
+    const onRemoveImage = vi.fn()
+    const onRemoveWorkspaceFile = vi.fn()
+    render(
+      <ComposerAttachmentList
+        images={[{ dataUrl: 'data:image/png;base64,abc', mime: 'image/png', size: 1024 }]}
+        onRemoveImage={onRemoveImage}
+        workspaceFiles={[]}
+        onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+        visionProxyHint="qwen-vl-max"
+      />,
+    )
+
+    expect(screen.getByText(/图片将由 qwen-vl-max 转写/)).toBeInTheDocument()
+  })
 })

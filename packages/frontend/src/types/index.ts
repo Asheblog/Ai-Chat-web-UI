@@ -193,6 +193,8 @@ export interface Message {
   streamError?: string | null;
   // 可选图片：可能为 data URL（本地预览）或服务端返回的可访问 URL（用户上传）
   images?: string[];
+  // 图片转写代理生成的图片描述（转写模型 + 描述文本）
+  imageDescriptions?: Array<{ description: string; modelRawId: string }> | null;
   // AI 生成的图片（生图模型输出）
   generatedImages?: GeneratedImage[];
   richPayload?: RichMessagePayload | null;
@@ -222,6 +224,7 @@ export interface MessageMeta {
   reasoningUnavailableReason?: string | null;
   reasoningUnavailableSuggestion?: string | null;
   images?: string[];
+  imageDescriptions?: Array<{ description: string; modelRawId: string }> | null;
   generatedImages?: GeneratedImage[];
   richPayload?: RichMessagePayload | null;
   artifacts?: WorkspaceArtifact[];
@@ -441,6 +444,10 @@ export interface SystemSettings {
   titleSummaryModelSource?: 'current' | 'specified';
   titleSummaryConnectionId?: number | null;
   titleSummaryModelId?: string | null;
+  // 图片转写设置
+  imageTranscriptionEnabled?: boolean;
+  imageTranscriptionConnectionId?: number | null;
+  imageTranscriptionModelId?: string | null;
   // RAG 文档解析设置
   ragEnabled?: boolean;
   ragEmbeddingConnectionId?: number | null;

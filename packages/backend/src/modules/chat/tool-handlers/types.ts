@@ -3,6 +3,7 @@
  */
 
 import type { WebSearchHit } from '../../../utils/web-search'
+import type { VisionProxyConfig } from '../services/vision-proxy-service'
 
 /**
  * 工具调用参数
@@ -103,6 +104,7 @@ export interface ToolHandlerFactoryParams {
   knowledgeBase?: KnowledgeBaseHandlerConfig | null
   urlReader?: UrlReaderHandlerConfig | null
   workspace?: WorkspaceHandlerConfig | null
+  visionProxy?: VisionProxyConfig | null
 }
 
 /**

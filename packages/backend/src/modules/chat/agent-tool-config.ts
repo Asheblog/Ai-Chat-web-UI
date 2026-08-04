@@ -9,6 +9,9 @@ import {
   parseNumberSetting,
   clampNumber,
 } from '../../utils/parsers';
+import { BUILTIN_SKILL_SLUGS } from '../skills/types';
+import type { RequestedSkillsPayload } from '../skills/types';
+import { loadVisionProxyConfig, type VisionProxyConfig } from './services/vision-proxy-service';
 
 /**
  * Web 搜索配置
@@ -440,3 +443,97 @@ export const buildAgentWorkspaceToolConfig = (
     gitCloneTimeoutMs,
   };
 };
+
+/**
+ * 图片转写代理配置（vision 代理模型）
+ */
+export interface AgentVisionProxyConfig extends VisionProxyConfig {}
+
+export function buildAgentVisionProxyConfig(sysMap: Record<string, string>): AgentVisionProxyConfig {
+  return loadVisionProxyConfig(sysMap)
+}
+
+export interface AgentToolFlags {
+  webSearchSkillRequested: boolean
+  pythonSkillRequested: boolean
+  urlReaderSkillRequested: boolean
+  knowledgeBaseSkillRequested: boolean
+  webSearchEnginesWithKeys: string[]
+  agentWebSearchActive: boolean
+  pythonToolActive: boolean
+  workspaceToolsActive: boolean
+  urlReaderActive: boolean
+  documentToolsActive: boolean
+  knowledgeBaseToolsActive: boolean
+  dynamicSkillRequestedRaw: boolean
+  dynamicSkillRuntimeEnabled: boolean
+  dynamicSkillRequested: boolean
+  agentToolsActive: boolean
+}
+
+export interface AgentToolFlagsInput {
+  sysMap: Record<string, string>
+  requestedSkills: RequestedSkillsPayload
+  hasKnowledgeBases: boolean
+  webSearchConfig: AgentWebSearchConfig
+  pythonToolConfig: AgentPythonToolConfig
+  workspaceToolConfig: AgentWorkspaceToolConfig
+  urlReaderConfig: AgentUrlReaderConfig
+}
+
+/**
+ * 计算当前请求的工具流标志（从 chat-stream-use-case 抽取，供决策与请求前预判共用）
+ */
+export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlags {
+  const { sysMap, requestedSkills, hasKnowledgeBases } = input
+  const webSearchSkillRequested = requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
+  const pythonSkillRequested = requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
+  const urlReaderSkillRequested =
+    requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchSkillRequested
+  const knowledgeBaseSkillRequested =
+    requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.KNOWLEDGE_BASE_SEARCH) || hasKnowledgeBases
+  const webSearchEnginesWithKeys = (input.webSearchConfig.engines || []).filter((engine) =>
+    Boolean(input.webSearchConfig.apiKeys?.[engine]),
+  )
+  const agentWebSearchActive =
+    webSearchSkillRequested && input.webSearchConfig.enabled && webSearchEnginesWithKeys.length > 0
+  const pythonToolActive = pythonSkillRequested && input.pythonToolConfig.enabled
+  const workspaceToolsActive = pythonToolActive && input.workspaceToolConfig.enabled
+  const urlReaderActive = urlReaderSkillRequested
+  // 会话文档工具已废弃（改为 workspace 直接文件访问），保留仅用于兼容
+  const documentToolsActive = false
+  const knowledgeBaseToolsActive = knowledgeBaseSkillRequested && hasKnowledgeBases
+  const dynamicSkillRequestedRaw = requestedSkills.enabled.length > 0
+  const dynamicSkillRuntimeEnabled =
+    (sysMap.chat_dynamic_skill_runtime_enabled ||
+      process.env.CHAT_DYNAMIC_SKILL_RUNTIME_ENABLED ||
+      'false')
+      .toString()
+      .toLowerCase() === 'true'
+  const dynamicSkillRequested = dynamicSkillRequestedRaw && dynamicSkillRuntimeEnabled
+  const agentToolsActive =
+    agentWebSearchActive ||
+    pythonToolActive ||
+    workspaceToolsActive ||
+    urlReaderActive ||
+    documentToolsActive ||
+    knowledgeBaseToolsActive ||
+    dynamicSkillRequested
+  return {
+    webSearchSkillRequested,
+    pythonSkillRequested,
+    urlReaderSkillRequested,
+    knowledgeBaseSkillRequested,
+    webSearchEnginesWithKeys,
+    agentWebSearchActive,
+    pythonToolActive,
+    workspaceToolsActive,
+    urlReaderActive,
+    documentToolsActive,
+    knowledgeBaseToolsActive,
+    dynamicSkillRequestedRaw,
+    dynamicSkillRuntimeEnabled,
+    dynamicSkillRequested,
+    agentToolsActive,
+  }
+}

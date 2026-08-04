@@ -7,6 +7,7 @@ import {
   Cable,
   Database,
   HardDrive,
+  Image,
   LayoutDashboard,
   Link2,
   Palette,
@@ -101,6 +102,10 @@ const ModelsPage = dynamic(
   () => import("@/components/settings/pages/models/ModelsPage").then((m) => m.ModelsPage),
   { loading: pageLoading },
 )
+const ImageTranscriptionPage = dynamic(
+  () => import("@/components/settings/pages/model-connections/ImageTranscriptionCard").then((m) => m.ImageTranscriptionPage),
+  { loading: pageLoading },
+)
 const UsersRegistrationPage = dynamic(
   () => import("@/components/settings/pages/users-registration/UsersRegistrationPage").then((m) => m.UsersRegistrationPage),
   { loading: pageLoading },
@@ -135,6 +140,12 @@ export const systemSettingsTree: SystemSettingsEntry[] = [
         keywords: ["provider", "API Key", "openai", "ollama", "azure", "google", "密钥"],
       },
       { key: "models", label: "模型管理", icon: Boxes, keywords: ["模型权限", "能力", "访问控制"] },
+      {
+        key: "image-transcription",
+        label: "图片转写",
+        icon: Image,
+        keywords: ["图片转写", "识图", "vision", "转写代理", "图片描述"],
+      },
     ],
   },
   {
@@ -217,6 +228,8 @@ export const systemSettingsCards: SystemCardMeta[] = [
   // 模型管理
   { leafKey: "models", key: "models:catalog", label: "模型目录与能力", keywords: ["模型列表", "能力", "上下文窗口", "批量开关", "覆写"] },
   { leafKey: "models", key: "models:access", label: "访问控制", keywords: ["默认访问策略", "访问覆写", "匿名", "注册"] },
+  // 图片转写
+  { leafKey: "image-transcription", key: "image-transcription:image-transcription", label: "图片转写代理", keywords: ["识图", "vision", "转写", "图片描述", "连接"] },
   // 搜索与知识库
   { leafKey: "search-knowledge", key: "search-knowledge:web-search", label: "联网搜索", keywords: ["web search", "引擎", "API Key", "并行", "白名单"] },
   { leafKey: "search-knowledge", key: "search-knowledge:rag", label: "RAG 文档解析", keywords: ["Embedding", "分块", "检索", "TopK", "文档管理"] },
@@ -256,6 +269,7 @@ const leafComponentMap: Record<string, ComponentType> = {
   overview: SystemOverviewContent,
   connections: SystemConnectionsPage,
   models: ModelsPage,
+  "image-transcription": ImageTranscriptionPage,
   "search-knowledge": SearchKnowledgePage,
   "tools-extensions": ToolsExtensionsPage,
   mcp: SystemMcpPage,

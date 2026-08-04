@@ -12,11 +12,14 @@ import type { ToastHandler } from '@/features/chat/composer'
  */
 export function useDragDrop(options: {
   isVisionEnabled: boolean
+  /** 图片可附加门禁（vision 或转写代理就绪）；未传入时回退到 isVisionEnabled */
+  canAttachImages?: boolean
   onAddImageFiles?: (files: File[]) => void
   onUploadWorkspaceFiles?: (files: File[]) => void
   toast: ToastHandler
 }) {
-  const { isVisionEnabled, onAddImageFiles, onUploadWorkspaceFiles, toast } = options
+  const { isVisionEnabled, canAttachImages, onAddImageFiles, onUploadWorkspaceFiles, toast } = options
+  const effectiveCanAttachImages = canAttachImages ?? isVisionEnabled
   const [isDragOver, setIsDragOver] = useState(false)
   const dragCounterRef = useRef(0)
 
@@ -37,7 +40,10 @@ export function useDragDrop(options: {
 
   const handleClassifiedFiles = useCallback(
     (fileList: FileList) => {
-      const { directories, images, others } = classifyFiles(fileList, { isVisionEnabled })
+      const { directories, images, others } = classifyFiles(fileList, {
+        isVisionEnabled,
+        canAttachImages: effectiveCanAttachImages,
+      })
 
       if (directories.length > 0) {
         toast({
@@ -52,8 +58,8 @@ export function useDragDrop(options: {
       }
 
       if (others.length > 0) {
-        // vision 关闭时，classifyFiles 已将图片归入 others，需要告知用户
-        if (!isVisionEnabled && Array.from(fileList).some((f) => f.type.startsWith('image/'))) {
+        // 图片不可附加时，classifyFiles 已将图片归入 others，需要告知用户
+        if (!effectiveCanAttachImages && Array.from(fileList).some((f) => f.type.startsWith('image/'))) {
           toast({
             title: '图片作为工作区文件',
             description: '当前模型不支持图片输入，已作为工作区文件上传',
@@ -62,7 +68,7 @@ export function useDragDrop(options: {
         onUploadWorkspaceFiles?.(others)
       }
     },
-    [isVisionEnabled, onAddImageFiles, onUploadWorkspaceFiles, toast],
+    [effectiveCanAttachImages, isVisionEnabled, onAddImageFiles, onUploadWorkspaceFiles, toast],
   )
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {

@@ -10,6 +10,7 @@ import {
 const EXPECTED_CARDS: Record<string, string[]> = {
   connections: ["quick-connect", "advanced"],
   models: ["catalog", "access"],
+  "image-transcription": ["image-transcription"],
   "search-knowledge": ["web-search", "rag", "knowledge-base"],
   "tools-extensions": ["python-tools", "python-runtime", "skill-install", "battle", "title-summary"],
   "users-registration": ["policy", "users"],

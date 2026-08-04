@@ -20,6 +20,20 @@ describe('classifyFiles', () => {
     expect(result.others).toHaveLength(1)
   })
 
+  it('routes images to images when vision is disabled but canAttachImages is true (vision proxy ready)', () => {
+    const files = [new File([''], 'photo.jpg', { type: 'image/jpeg' })]
+    const result = classifyFiles(files, { isVisionEnabled: false, canAttachImages: true })
+    expect(result.images).toHaveLength(1)
+    expect(result.others).toHaveLength(0)
+  })
+
+  it('routes images to others when canAttachImages is false even if vision enabled flag passes', () => {
+    const files = [new File([''], 'photo.jpg', { type: 'image/jpeg' })]
+    const result = classifyFiles(files, { isVisionEnabled: true, canAttachImages: false })
+    expect(result.images).toHaveLength(0)
+    expect(result.others).toHaveLength(1)
+  })
+
   it('detects directories by size 0 and empty type', () => {
     const files = [new File([], 'folder')]
     const result = classifyFiles(files, { isVisionEnabled: false })

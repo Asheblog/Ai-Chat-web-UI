@@ -101,8 +101,36 @@ jest.mock('../../../chat/image-generation-response', () => ({
   checkImageGenerationCapability: jest.fn().mockResolvedValue(false),
 }))
 
+// Mock vision-proxy-service
+jest.mock('../../services/vision-proxy-service', () => ({
+  __esModule: true,
+  VisionProxyServiceError: class VisionProxyServiceError extends Error {
+    statusCode = 500
+  },
+  isVisionProxyReady: jest.fn().mockReturnValue(false),
+  loadHistoryImageDescriptions: jest.fn().mockResolvedValue(new Map()),
+  parseStoredImageDescriptions: jest.fn().mockReturnValue(null),
+  loadVisionProxyConfig: jest.fn(),
+}))
+
+// Mock model-capabilities
+jest.mock('../../../../utils/model-capabilities', () => ({
+  __esModule: true,
+  resolveModelCapabilitiesForSession: jest.fn().mockResolvedValue({ vision: true }),
+}))
+
 import { createChatStreamHandler } from '../chat-stream-use-case'
 import { ConnectionServiceError } from '../../../../services/connections/connection-service'
+import {
+  isVisionProxyReady,
+  loadHistoryImageDescriptions,
+  loadVisionProxyConfig,
+  parseStoredImageDescriptions,
+} from '../../services/vision-proxy-service'
+import { resolveModelCapabilitiesForSession } from '../../../../utils/model-capabilities'
+
+// visionProxyService 实例：deps 构造与用例断言共用同一 mock
+const visionProxyService = { transcribeImages: jest.fn() }
 
 const createMockContext = () => {
   const jsonMock = jest.fn()
@@ -150,7 +178,7 @@ const createMinimalDeps = (overrides: Record<string, unknown> = {}) => {
 
   return {
     prisma: {
-      message: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      message: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn().mockResolvedValue({}) },
       systemSetting: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null) },
       modelCatalog: { findMany: jest.fn().mockResolvedValue([]) },
       messageGroup: { findMany: jest.fn().mockResolvedValue([]) },
@@ -194,6 +222,7 @@ const createMinimalDeps = (overrides: Record<string, unknown> = {}) => {
     conversationCompressionService: {
       compressIfNeeded: jest.fn().mockResolvedValue({ applied: false, payload: null }),
     } as any,
+    visionProxyService: visionProxyService as any,
     ...(overrides.depsOverrides ?? {}),
   }
 }
@@ -227,5 +256,77 @@ describe('createChatStreamHandler error handling', () => {
     const jsonCallArgs = jsonMock.mock.calls[0]
     expect(jsonCallArgs[0]).toMatchObject({ success: false, error: 'Failed to process chat request' })
     expect(jsonCallArgs[1]).toBe(500)
+  })
+
+  it('auto-transcribes images for non-vision main model in standard flow', async () => {
+    ;(isVisionProxyReady as jest.Mock).mockReturnValue(true)
+    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: false })
+    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({ enabled: true, connectionId: 2, modelId: 'gemini-2.5-flash' })
+    ;(visionProxyService.transcribeImages as jest.Mock).mockResolvedValue({ description: '图里有一只猫', modelRawId: 'm' })
+    const mockPrepare = jest.fn().mockResolvedValue({
+      promptTokens: 10,
+      contextLimit: 100,
+      contextRemaining: 90,
+      contextEnabled: true,
+      systemSettings: {},
+      messagesPayload: [],
+      baseRequestBody: {},
+      providerRequest: {
+        providerLabel: 'openai',
+        authHeader: {},
+        extraHeaders: {},
+        providerHost: 'api.example.com',
+        timeoutMs: 60000,
+      },
+      reasoning: { enabled: false, effort: 'medium', ollamaThink: false },
+    })
+    const deps = createMinimalDeps({
+      mockPrepare,
+      depsOverrides: {
+        // 标准流后续走到 provider 请求失败路径：mock 掉进度持久化与非流式兜底，
+        // 避免真实实现抛错导致 start() 挂起/未处理拒绝
+        assistantProgressService: {
+          persistProgress: jest.fn().mockResolvedValue({ recovered: false, messageId: null }),
+        } as any,
+        nonStreamFallbackService: {
+          execute: jest.fn().mockResolvedValue(null),
+        } as any,
+        providerRequester: {
+          requestWithBackoff: jest.fn().mockRejectedValue(new Error('provider error')),
+          executeFallback: jest.fn(),
+        } as any,
+      },
+    })
+    const { c } = createMockContext()
+    c.req.valid = jest.fn(() => ({
+      sessionId: 1,
+      content: 'hello',
+      clientMessageId: 'test-client-id',
+      images: [{ data: 'aW1n', mime: 'image/png' }],
+    }))
+
+    const handler = createChatStreamHandler(deps)
+    await handler(c)
+
+    // 自动转写：图片不随消息发出，转写描述作为前缀注入
+    expect(mockPrepare).toHaveBeenCalledWith(expect.objectContaining({
+      images: [],
+      mainModelVision: false,
+      visionTranscriptionPrefix: '图里有一只猫',
+      historyImageDescriptions: expect.any(Map),
+    }))
+    // 转写调用携带原始图片、用户问题与转写代理配置
+    expect(visionProxyService.transcribeImages).toHaveBeenCalledWith(
+      [{ data: 'aW1n', mime: 'image/png' }],
+      'hello',
+      expect.objectContaining({ enabled: true, connectionId: 2 }),
+    )
+    // 历史图片描述加载：仅主模型无 vision 且转写就绪时触发
+    expect(loadHistoryImageDescriptions).toHaveBeenCalledWith((deps as any).prisma, 1, expect.any(Date))
+    // 转写结果持久化到用户消息
+    expect((deps as any).prisma.message.update).toHaveBeenCalledWith({
+      where: { id: 100 },
+      data: { imageDescriptionsJson: JSON.stringify([{ description: '图里有一只猫', modelRawId: 'm' }]) },
+    })
   })
 })

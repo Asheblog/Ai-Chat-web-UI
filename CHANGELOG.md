@@ -13,6 +13,9 @@
 - 新增 Skill 卸载接口与 dry-run 预览：删除第三方 Skill 时可先预览将删除/保留的 Python 包清单；执行卸载后自动清理安装包目录，并回收未被其他激活 Skill/手动保留依赖占用的 Python 包。
 - BREAKING: Python 运行环境新增“执行时报缺库自动安装”能力（默认开启）；覆盖 `python_runner` 与 `runtime.type=python` Skill，且仅登录用户可触发自动补装。新增来源治理标签 `manual | skill_manifest | skill_auto | python_auto` 并在系统设置页可筛选展示；迁移策略为无迁移、直接替换。
 
+### Added
+- 图片转写代理：主模型不支持识图时自动将图片转交给管理员指定的识图模型（工具流由主模型自主调用 `analyze_visual_media`，标准流自动转写注入描述），转写结果持久化复用；系统设置新增「图片转写代理」卡片（默认关闭）
+
 ## v1.9.0 · 2026-02-19
 
 - BREAKING: 移除 URL Reader 开关配置（`enableUrlReader` 等），聊天与工具调用统一按新编排链路执行；迁移策略为无迁移、直接替换。
