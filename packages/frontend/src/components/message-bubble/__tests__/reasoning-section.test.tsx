@@ -44,6 +44,32 @@ describe('ReasoningSection 展开逻辑', () => {
     })
   })
 
+  it('流式结束后自动折叠回默认状态（无手动记忆时）', async () => {
+    const { rerender } = render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'streaming' })}
+        reasoningRaw="thinking..."
+        defaultExpanded={false}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    rerender(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw="thinking..."
+        defaultExpanded={false}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
+    })
+  })
+
   it('用户手动收起后不再被自动展开覆盖', async () => {
     const { rerender } = render(
       <ReasoningSection

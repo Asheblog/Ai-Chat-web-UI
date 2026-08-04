@@ -153,7 +153,9 @@ export function ReasoningSection({
 
   useEffect(() => {
     if (isActiveReasoning) dispatch({ type: 'auto-expand' })
-  }, [isActiveReasoning])
+    // 流式结束后折叠回默认状态（用户手动记忆 source='user' 时保持）
+    else dispatch({ type: 'set-default', defaultExpanded })
+  }, [isActiveReasoning, defaultExpanded])
 
   if (!hasAnyContent) {
     return null

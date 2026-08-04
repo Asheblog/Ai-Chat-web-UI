@@ -71,6 +71,34 @@ describe('ToolCallsSection 展开逻辑', () => {
     })
   })
 
+  it('运行中结束后自动折叠回默认状态（无手动记忆时）', async () => {
+    const { rerender } = render(
+      <ToolCallsSection
+        meta={createMeta()}
+        timeline={[createEvent({ status: 'running' })]}
+        summary={null}
+        defaultExpanded={false}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    rerender(
+      <ToolCallsSection
+        meta={createMeta()}
+        timeline={[createEvent({ status: 'success' })]}
+        summary={null}
+        defaultExpanded={false}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'false')
+    })
+  })
+
   it('全部完成且无记忆、defaultExpanded=false 时默认折叠', async () => {
     render(
       <ToolCallsSection

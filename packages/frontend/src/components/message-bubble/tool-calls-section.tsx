@@ -169,8 +169,11 @@ export function ToolCallsSection({
   useEffect(() => {
     if (hasActiveCalls) {
       dispatch({ type: 'auto-expand' })
+    } else {
+      // 全部调用结束后折叠回默认状态（用户手动记忆 source='user' 时保持）
+      dispatch({ type: 'set-default', defaultExpanded })
     }
-  }, [hasActiveCalls])
+  }, [hasActiveCalls, defaultExpanded])
 
   if (!hasToolCalls) return null
 
