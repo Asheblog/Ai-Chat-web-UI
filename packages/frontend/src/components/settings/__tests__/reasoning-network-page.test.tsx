@@ -27,16 +27,15 @@ vi.mock("@/components/ui/use-toast", () => ({
   toast: toastSpy,
 }))
 
-/** 推理与网络页所需 21 key 的完整设置（baseSettings 已含 12 个 reasoning key + 8 个 network key，本地补 temperatureDefault） */
+/** 推理与网络页所需 20 key 的完整设置（baseSettings 已含 11 个 reasoning key + 8 个 network key，本地补 temperatureDefault） */
 const reasoningNetworkSettings: SystemSettings = {
   ...baseSettings,
   temperatureDefault: 0.7,
 }
 
-/** 整页保存的 21 个 key（13 reasoning + 8 network） */
+/** 整页保存的 20 个 key（12 reasoning + 8 network） */
 const ALL_KEYS = [
   "reasoningEnabled",
-  "reasoningDefaultExpand",
   "reasoningSaveToDb",
   "reasoningTagsMode",
   "reasoningCustomTags",
@@ -127,7 +126,7 @@ describe("ReasoningNetworkPage", () => {
     expect(within(networkCard).getByText("SSE 心跳间隔")).toBeInTheDocument()
   })
 
-  test("整页保存 payload 精确等于 21 个 key（13 reasoning + 8 network 全量）", async () => {
+  test("整页保存 payload 精确等于 20 个 key（12 reasoning + 8 network 全量）", async () => {
     render(<ReasoningNetworkPage />)
 
     // 修改任一字段使保存可用（切换「启用推理链」开关）
@@ -141,7 +140,6 @@ describe("ReasoningNetworkPage", () => {
     expect(Object.keys(payload).sort()).toEqual(ALL_KEYS.sort())
     expect(payload).toEqual({
       reasoningEnabled: false,
-      reasoningDefaultExpand: false,
       reasoningSaveToDb: true,
       reasoningTagsMode: "default",
       reasoningCustomTags: "",

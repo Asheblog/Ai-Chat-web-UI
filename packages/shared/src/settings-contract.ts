@@ -49,7 +49,6 @@ export const SYSTEM_SETTINGS_FIELD_MAP = {
   ragRetentionDays: 'rag_retention_days',
   ragTopK: 'rag_top_k',
   reasoningCustomTags: 'reasoning_custom_tags',
-  reasoningDefaultExpand: 'reasoning_default_expand',
   reasoningEnabled: 'reasoning_enabled',
   reasoningKeepaliveIntervalMs: 'reasoning_keepalive_interval_ms',
   reasoningMaxOutputTokensDefault: 'reasoning_max_output_tokens_default',

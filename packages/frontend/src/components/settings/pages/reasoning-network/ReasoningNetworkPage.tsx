@@ -15,7 +15,7 @@ import { NetworkCard } from "./network-card"
 
 /**
  * 推理与网络页：页壳（单一 useSystemSettings + 共享骨架/错误重试），
- * 4 张 FeatureCard 分区 + 整页单保存（payload = 13 reasoning + 8 network = 21 key）。
+ * 4 张 FeatureCard 分区 + 整页单保存（payload = 12 reasoning + 8 network = 20 key）。
  * 旧 SystemReasoning / SystemNetwork 两页合并而来。
  */
 export function ReasoningNetworkPage() {
@@ -28,9 +28,8 @@ export function ReasoningNetworkPage() {
   } = useSystemSettings()
   const { toast } = useToast()
 
-  // —— 推理链（13 key）——
+  // —— 推理链（12 key）——
   const [reasoningEnabled, setReasoningEnabled] = useState(true)
-  const [reasoningDefaultExpand, setReasoningDefaultExpand] = useState(false)
   const [reasoningSaveToDb, setReasoningSaveToDb] = useState(true)
   const [reasoningTagsMode, setReasoningTagsMode] = useState<'default' | 'custom' | 'off'>('default')
   const [reasoningCustomTags, setReasoningCustomTags] = useState('')
@@ -60,7 +59,6 @@ export function ReasoningNetworkPage() {
   useEffect(() => {
     if (!settings) return
     setReasoningEnabled(Boolean(settings.reasoningEnabled ?? true))
-    setReasoningDefaultExpand(Boolean(settings.reasoningDefaultExpand ?? false))
     setReasoningSaveToDb(Boolean(settings.reasoningSaveToDb ?? true))
     setReasoningTagsMode((settings.reasoningTagsMode as any) || 'default')
     setReasoningCustomTags(settings.reasoningCustomTags || '')
@@ -121,10 +119,9 @@ export function ReasoningNetworkPage() {
   const networkValid =
     hbValid && idleValid && toutValid && initialValid && reasoningIdleValid && keepaliveValid
 
-  // —— 整页 dirty 跟踪（21 key 任一与 settings 不同即 changed）——
+  // —— 整页 dirty 跟踪（20 key 任一与 settings 不同即 changed）——
   const changed =
     reasoningEnabled !== Boolean(settings.reasoningEnabled ?? true) ||
-    reasoningDefaultExpand !== Boolean(settings.reasoningDefaultExpand ?? false) ||
     reasoningSaveToDb !== Boolean(settings.reasoningSaveToDb ?? true) ||
     reasoningTagsMode !== (settings.reasoningTagsMode || 'default') ||
     reasoningCustomTags !== (settings.reasoningCustomTags || '') ||
@@ -230,7 +227,6 @@ export function ReasoningNetworkPage() {
 
     await updateSystemSettings({
       reasoningEnabled,
-      reasoningDefaultExpand,
       reasoningSaveToDb,
       reasoningTagsMode,
       reasoningCustomTags,
@@ -274,8 +270,6 @@ export function ReasoningNetworkPage() {
       <ReasoningConfigCard
         reasoningEnabled={reasoningEnabled}
         onReasoningEnabledChange={setReasoningEnabled}
-        reasoningDefaultExpand={reasoningDefaultExpand}
-        onReasoningDefaultExpandChange={setReasoningDefaultExpand}
         reasoningSaveToDb={reasoningSaveToDb}
         onReasoningSaveToDbChange={setReasoningSaveToDb}
         reasoningMaxTokens={reasoningMaxTokens}

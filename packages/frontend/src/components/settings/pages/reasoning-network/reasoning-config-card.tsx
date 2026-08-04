@@ -13,8 +13,6 @@ export type ReasoningTagsMode = 'default' | 'custom' | 'off'
 export interface ReasoningConfigCardProps {
   reasoningEnabled: boolean
   onReasoningEnabledChange: (v: boolean) => void
-  reasoningDefaultExpand: boolean
-  onReasoningDefaultExpandChange: (v: boolean) => void
   reasoningSaveToDb: boolean
   onReasoningSaveToDbChange: (v: boolean) => void
   reasoningMaxTokens: string
@@ -33,8 +31,6 @@ export interface ReasoningConfigCardProps {
 export function ReasoningConfigCard({
   reasoningEnabled,
   onReasoningEnabledChange,
-  reasoningDefaultExpand,
-  onReasoningDefaultExpandChange,
   reasoningSaveToDb,
   onReasoningSaveToDbChange,
   reasoningMaxTokens,
@@ -58,13 +54,6 @@ export function ReasoningConfigCard({
         description="识别 reasoning_content 与常见 CoT 标签，并在 UI 折叠显示"
       >
         <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v) => onReasoningEnabledChange(!!v)} />
-      </SettingRow>
-
-      <SettingRow
-        title="默认展开"
-        description="关闭后推理链与工具调用均默认折叠，用户仍可手动展开"
-      >
-        <Switch id="reasoningDefaultExpand" checked={reasoningDefaultExpand} onCheckedChange={(v) => onReasoningDefaultExpandChange(!!v)} />
       </SettingRow>
 
       <SettingRow

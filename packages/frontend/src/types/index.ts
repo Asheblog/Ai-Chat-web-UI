@@ -371,7 +371,6 @@ export interface SystemSettings {
   contextCompressionTailMessages?: number;
   // 推理链相关（可选）
   reasoningEnabled?: boolean;
-  reasoningDefaultExpand?: boolean;
   reasoningSaveToDb?: boolean;
   reasoningTagsMode?: 'default' | 'custom' | 'off';
   reasoningCustomTags?: string;

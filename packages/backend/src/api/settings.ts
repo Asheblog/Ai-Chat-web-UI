@@ -129,7 +129,6 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     context_compression_tail_messages: z.number().int().min(4).max(50).optional(),
     // 推理链（思维链）相关
     reasoning_enabled: z.boolean().optional(),
-    reasoning_default_expand: z.boolean().optional(),
     reasoning_save_to_db: z.boolean().optional(),
     reasoning_tags_mode: z.enum(['default', 'custom', 'off']).optional(),
     // JSON 字符串，如 ["<think>", "</think>"]

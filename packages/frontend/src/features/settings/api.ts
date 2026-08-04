@@ -109,7 +109,6 @@ export const getSystemSettings = async () => {
     return 12
   })()
   const reasoningEnabled = (raw.reasoning_enabled ?? true) as boolean
-  const reasoningDefaultExpand = (raw.reasoning_default_expand ?? false) as boolean
   const reasoningSaveToDb = (raw.reasoning_save_to_db ?? true) as boolean
   const reasoningTagsMode = (raw.reasoning_tags_mode ?? 'default') as any
   const reasoningCustomTags = (raw.reasoning_custom_tags ?? '') as string
@@ -410,7 +409,6 @@ export const getSystemSettings = async () => {
       contextCompressionThresholdRatio,
       contextCompressionTailMessages,
       reasoningEnabled,
-      reasoningDefaultExpand,
       reasoningSaveToDb,
       reasoningTagsMode,
       reasoningCustomTags,
@@ -579,7 +577,6 @@ export const updateSystemSettings = async (
   if (typeof rest.contextCompressionTailMessages === 'number') patch.contextCompressionTailMessages = rest.contextCompressionTailMessages
   if (typeof rest.chatSystemPrompt === 'string') patch.chatSystemPrompt = rest.chatSystemPrompt
   if (typeof rest.reasoningEnabled === 'boolean') patch.reasoningEnabled = !!rest.reasoningEnabled
-  if (typeof rest.reasoningDefaultExpand === 'boolean') patch.reasoningDefaultExpand = !!rest.reasoningDefaultExpand
   if (typeof rest.reasoningSaveToDb === 'boolean') patch.reasoningSaveToDb = !!rest.reasoningSaveToDb
   if (typeof rest.reasoningTagsMode === 'string') patch.reasoningTagsMode = rest.reasoningTagsMode
   if (typeof rest.reasoningCustomTags === 'string') patch.reasoningCustomTags = rest.reasoningCustomTags

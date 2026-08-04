@@ -18,7 +18,6 @@ export const baseSettings: SystemSettings = {
   modelAccessDefaultUser: 'allow',
   assistantAvatarUrl: null,
   reasoningEnabled: true,
-  reasoningDefaultExpand: false,
   reasoningSaveToDb: true,
   reasoningTagsMode: 'default',
   reasoningCustomTags: '',
