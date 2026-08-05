@@ -1143,6 +1143,42 @@ export class WebSearchToolHandler implements IToolHandler {
       const taskFailed = searchResult.tasks.length - taskSucceeded
       const summary = buildSummaryForModel(query, hits, autoReadEvidence)
 
+      const hitImageCandidates = hits.flatMap((hit) => {
+        const urls = [hit.imageUrl, hit.thumbnailUrl].filter(
+          (value): value is string => typeof value === 'string' && value.trim().length > 0,
+        )
+        const unique = Array.from(new Set(urls.map((value) => value.trim())))
+        return unique.map((url) => ({
+          url,
+          sourceUrl: hit.url,
+          title: hit.title,
+        }))
+      })
+      const assessedHitImages =
+        this.visionProxyService &&
+        this.visionProxy &&
+        isVisionProxyReady(this.visionProxy) &&
+        hitImageCandidates.length > 0
+          ? await assessWebImageRelevance({
+              candidates: hitImageCandidates,
+              contextText: [query, ...hits.slice(0, 5).map((hit) => `${hit.title}\n${hit.snippet || ''}`)].join(
+                '\n',
+              ),
+              visionProxy: this.visionProxyService,
+              visionConfig: this.visionProxy,
+              maxCount: 4,
+            })
+          : []
+      const assessedHitImagesForDetails = assessedHitImages.map((item) => ({
+        url: item.url,
+        title: item.title || item.alt,
+        alt: item.alt,
+        sourceUrl: item.sourceUrl,
+        confidence: item.confidence,
+        description: item.description,
+        relevance: item.relevance,
+      }))
+
       context.sendToolEvent({
         id: callId,
         tool: 'web_search',
@@ -1172,6 +1208,7 @@ export class WebSearchToolHandler implements IToolHandler {
           escalationReason: escalationInfo.reason,
           escalationEngine: escalationInfo.engine,
           overlapRatio: escalationInfo.overlapRatio,
+          assessedImages: assessedHitImagesForDetails,
         },
       })
 

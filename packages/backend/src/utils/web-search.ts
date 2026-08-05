@@ -107,10 +107,30 @@ const pickFirstString = (...candidates: unknown[]): string | undefined => {
 }
 
 const pickImageUrl = (item: any): string | undefined => {
+  const fromImagesArray = (() => {
+    const first = item?.images?.[0]
+    if (typeof first === 'string' && first.trim()) return first.trim()
+    if (first && typeof first === 'object') {
+      return pickFirstString(first.url, first.src, first.imageUrl, first.href)
+    }
+    return undefined
+  })()
+
+  const fromExtras = (() => {
+    const links = item?.extras?.imageLinks
+    if (!Array.isArray(links) || links.length === 0) return undefined
+    const first = links[0]
+    if (typeof first === 'string' && first.trim()) return first.trim()
+    if (first && typeof first === 'object') {
+      return pickFirstString(first.url, first.src, first.href)
+    }
+    return undefined
+  })()
+
   const direct = pickFirstString(
     item?.imageUrl,
     item?.image_url,
-    item?.image,
+    typeof item?.image === 'string' ? item.image : undefined,
     item?.imageSrc,
     item?.image_src,
     item?.cover,
@@ -119,9 +139,12 @@ const pickImageUrl = (item: any): string | undefined => {
     item?.pic,
     item?.picUrl,
     item?.pic_url,
+    item?.thumbnail?.original,
+    fromImagesArray,
+    fromExtras,
   )
   if (direct) return direct
-  const nested = pickFirstString(item?.image?.url, item?.images?.[0]?.url)
+  const nested = pickFirstString(item?.image?.url, item?.image?.src)
   if (nested) return nested
   const fallbackUrl = pickFirstString(item?.url)
   return fallbackUrl && looksLikeImageUrl(fallbackUrl) ? fallbackUrl : undefined
@@ -131,12 +154,16 @@ const pickThumbnailUrl = (item: any): string | undefined =>
   pickFirstString(
     item?.thumbnailUrl,
     item?.thumbnail_url,
-    item?.thumbnail,
+    typeof item?.thumbnail === 'string' ? item.thumbnail : undefined,
+    item?.thumbnail?.src,
+    item?.thumbnail?.original,
     item?.thumb,
     item?.previewImage,
     item?.preview_image,
     item?.image?.thumbnail,
+    typeof item?.images?.[0] === 'string' ? item.images[0] : undefined,
     item?.images?.[0]?.thumbnail,
+    item?.images?.[0]?.url,
   )
 
 const normalizeUrlForDedupe = (rawUrl: string): string => {
@@ -218,6 +245,8 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
     query,
     max_results: clampLimit(opts.limit),
     include_answer: false,
+    // 官方默认 false；显式打开后每条 result 可带页面关联图
+    include_images: true,
     search_depth: 'advanced',
   }
   const domains = normalizeDomains(opts.domains)
@@ -362,7 +391,11 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
     query,
     numResults: clampLimit(opts.limit),
     type: 'auto',
-    contents: { highlights: true },
+    contents: {
+      highlights: true,
+      // Exa：代表图 image/favicon 随 contents 返回；再抽若干页内图片链接
+      extras: { imageLinks: 5 },
+    },
   }
   const domains = normalizeDomains(opts.domains)
   if (domains.length > 0) {

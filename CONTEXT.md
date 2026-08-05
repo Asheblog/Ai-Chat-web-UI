@@ -43,10 +43,10 @@
 
 ## 搜索
 
-- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa）检索网页
+- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`），再经识图筛选
 - **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容；会抽取页面候选图，并在图片转写代理就绪时做识图相关性判定
 - **Auto Read（自动读取）**：搜索完成后自动触发网页读取，读取搜索结果中的网页。在 UI 中归入其所属的搜索合并组内部；同样走网页图识图筛选
-- **Web Evidence Image（联网证据图）**：经识图判定为「相关 / 弱相关」后进入助手答案的网页配图；无关图丢弃，不进入答案区与模型主证据
+- **Web Evidence Image（联网证据图）**：经识图判定为「相关 / 弱相关」后进入助手答案的网页配图；无关图丢弃，不进入答案区与模型主证据；来源包括搜索 hit 配图与读页抽取图
 - **Evidence Stack Layout（上文下图）**：含联网证据图时，助手消息采用正文在上、相关图片横排在下的 `stack` 布局（`data-render-mode=evidence-stack`）；AI 生图仍可用侧栏并排
 - **搜索批次**：同一轮搜索任务下发起的搜索调用集合，在工具区块内合并展示
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
