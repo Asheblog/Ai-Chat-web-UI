@@ -90,3 +90,4 @@ plan.md
 
 # --- SDD workspace (scratch) ---
 .superpowers/
+.zcode/
