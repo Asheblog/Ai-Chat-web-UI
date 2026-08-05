@@ -1,7 +1,7 @@
-export const APP_HEAD_COMMIT = 'a283de0'
+export const APP_HEAD_COMMIT = '3e16a58'
 
 /** 最新提交时间（本地时区，分钟精度） */
-export const APP_HEAD_COMMIT_AT = '2026-08-05 14:22'
+export const APP_HEAD_COMMIT_AT = '2026-08-05 14:37'
 
 /**
  * 系统版本标识：提交时间 + 短 commit。
@@ -23,6 +23,10 @@ export const APP_UPDATE_DATE = '2026-08-05'
 export const APP_UPDATE_SCOPE = 'origin/main 最近 8 条推送提交'
 
 export const APP_UPDATE_NOTES = [
+  {
+    commit: '3e16a58',
+    summary: '侧栏改为可点击项目地址，关于页版本改为提交时间与短 hash，并刷新更新日志。',
+  },
   {
     commit: 'a283de0',
     summary: '移除多选消息分享工具栏中的冗余入口。',
@@ -50,9 +54,5 @@ export const APP_UPDATE_NOTES = [
   {
     commit: '17c6e0f',
     summary: '恢复四端共用的交错深度思考与工具步骤时间线。',
-  },
-  {
-    commit: '8118eae',
-    summary: '忽略本地 .zcode 草稿，并将已落地的图片转写方案归档。',
   },
 ] as const
