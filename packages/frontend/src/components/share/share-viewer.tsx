@@ -3,15 +3,10 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import type { ApiResponse, ChatShare, MessageMeta, RichMessagePayload, ShareMessage, ShareMessagesPage, ToolEvent } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { ReasoningSection } from '@/components/message-bubble/reasoning-section'
-import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
+import { CotStepTimeline } from '@/components/message-bubble/cot-step-timeline'
 import { RichMessageRenderer } from '@/components/message-content/rich-message-renderer'
 import { cn, formatDate } from '@/lib/utils'
-import {
-  buildToolSummary,
-  mergeAndSortToolEvents,
-} from '@aichat/shared/tool-events'
-import { stripToolProgressFromReasoning } from '@aichat/shared/strip-tool-progress-from-reasoning'
+import { mergeAndSortToolEvents } from '@aichat/shared/tool-events'
 import { User, Bot, Copy, Loader2 } from 'lucide-react'
 
 interface ShareViewerProps {
@@ -82,31 +77,26 @@ function ShareMessageItem({
   sessionId,
   defaultReasoningExpanded = false,
 }: ShareMessageItemProps) {
-  const displayReasoning = useMemo(
-    () => stripToolProgressFromReasoning(msg.reasoning || ''),
-    [msg.reasoning],
-  )
-  const hasReasoning = displayReasoning.length > 0
+  const reasoningRaw = msg.reasoning || ''
   const toolEvents = (msg as { toolEvents?: ToolEvent[] }).toolEvents
   const normalizedToolEvents = useMemo(() => {
     if (!toolEvents || toolEvents.length === 0) return []
     return mergeAndSortToolEvents(toolEvents)
   }, [toolEvents])
-  const toolSummary = useMemo(() => buildToolSummary(normalizedToolEvents), [normalizedToolEvents])
-  const hasReasoningSection = hasReasoning || normalizedToolEvents.length > 0
+  const hasProcess = Boolean(reasoningRaw.trim()) || normalizedToolEvents.length > 0
   const meta = useMemo<MessageMeta>(() => ({
     id: msg.id,
     sessionId,
     stableKey: `share-${msg.id}-${msg.createdAt}`,
     role: msg.role,
     createdAt: msg.createdAt,
-    reasoningStatus: hasReasoning ? 'done' : undefined,
+    reasoningStatus: reasoningRaw.trim() ? 'done' : undefined,
     reasoningDurationSeconds: null,
     reasoningIdleMs: null,
     reasoningUnavailableCode: null,
     reasoningUnavailableReason: null,
     reasoningUnavailableSuggestion: null,
-  }), [hasReasoning, msg.createdAt, msg.id, msg.role, sessionId])
+  }), [msg.createdAt, msg.id, msg.role, msg.reasoning, sessionId])
 
   const isUser = msg.role === 'user'
   const richPayload =
@@ -132,26 +122,13 @@ function ShareMessageItem({
           <span className="text-muted-foreground/80">{formatDate(msg.createdAt)}</span>
         </div>
 
-        {!isUser && hasReasoningSection && (
-          <>
-            {hasReasoning && (
-              <ReasoningSection
-                meta={meta}
-                reasoningRaw={displayReasoning}
-                reasoningHtml={undefined}
-                reasoningPlayedLength={displayReasoning.length}
-                defaultExpanded={defaultReasoningExpanded}
-              />
-            )}
-            {normalizedToolEvents.length > 0 && (
-              <ToolCallsSection
-                meta={meta}
-                timeline={normalizedToolEvents}
-                summary={toolSummary}
-                defaultExpanded={false}
-              />
-            )}
-          </>
+        {!isUser && hasProcess && (
+          <CotStepTimeline
+            meta={meta}
+            reasoningRaw={reasoningRaw}
+            toolEvents={normalizedToolEvents}
+            defaultExpanded={defaultReasoningExpanded}
+          />
         )}
 
         <div

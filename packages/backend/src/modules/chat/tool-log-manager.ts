@@ -3,6 +3,7 @@
  * 负责工具调用日志的记录、更新和持久化
  */
 
+import { enrichToolEventReasoningOffsets } from '@aichat/shared/tool-events';
 import type { WebSearchHit } from '../../utils/web-search';
 import { serializeToolLogsForPersistence, type ToolLogEntry, type ToolLogDetails, type ToolLogStage } from './tool-logs';
 
@@ -81,43 +82,61 @@ export class ToolLogManager {
     return { ...previous, ...next };
   }
 
+  private resolveToolLogLookupId(payload: Record<string, unknown>): string | null {
+    if (typeof payload.id === 'string' && payload.id.trim()) {
+      return payload.id.trim();
+    }
+    if (typeof payload.callId === 'string' && payload.callId.trim()) {
+      return payload.callId.trim();
+    }
+    return null;
+  }
+
   /**
    * 记录工具日志
    */
-  record(payload: Record<string, unknown>): void {
+  record(payload: Record<string, unknown>, reasoningBufferLength?: number): void {
     const stage = payload.stage as ToolLogStage;
     if (stage !== 'start' && stage !== 'result' && stage !== 'error') return;
 
     const tool = typeof payload.tool === 'string' && payload.tool.trim() ? payload.tool : null;
     if (!tool) return;
 
+    const lookupId = this.resolveToolLogLookupId(payload);
+    const existingIndex = lookupId ? this.logs.findIndex((log) => log.id === lookupId) : -1;
+    const isFirstSight = existingIndex === -1;
+    const toRecord =
+      typeof reasoningBufferLength === 'number'
+        ? enrichToolEventReasoningOffsets(payload, reasoningBufferLength, isFirstSight)
+        : payload;
+
     const entry: ToolLogEntry = {
-      id: this.ensureToolLogId(payload),
+      id: this.ensureToolLogId(toRecord),
       tool,
       stage,
-      query: typeof payload.query === 'string' ? payload.query : undefined,
+      query: typeof toRecord.query === 'string' ? toRecord.query : undefined,
       createdAt: Date.now(),
     };
 
-    if (Array.isArray(payload.hits)) {
-      entry.hits = (payload.hits as WebSearchHit[]).slice(0, 10);
+    if (Array.isArray(toRecord.hits)) {
+      entry.hits = (toRecord.hits as WebSearchHit[]).slice(0, 10);
     }
-    if (typeof payload.summary === 'string' && payload.summary.trim()) {
-      entry.summary = payload.summary.trim();
+    if (typeof toRecord.summary === 'string' && toRecord.summary.trim()) {
+      entry.summary = toRecord.summary.trim();
     }
-    if (typeof payload.error === 'string' && payload.error.trim()) {
-      entry.error = payload.error;
+    if (typeof toRecord.error === 'string' && toRecord.error.trim()) {
+      entry.error = toRecord.error;
     }
-    if (payload.details && typeof payload.details === 'object') {
-      entry.details = payload.details as ToolLogDetails;
+    if (toRecord.details && typeof toRecord.details === 'object') {
+      entry.details = toRecord.details as ToolLogDetails;
     }
 
-    const existingIndex = this.logs.findIndex((log) => log.id === entry.id);
-    if (existingIndex === -1) {
+    const resolvedExistingIndex = this.logs.findIndex((log) => log.id === entry.id);
+    if (resolvedExistingIndex === -1) {
       this.logs.push(entry);
     } else {
-      const existing = this.logs[existingIndex];
-      this.logs[existingIndex] = {
+      const existing = this.logs[resolvedExistingIndex];
+      this.logs[resolvedExistingIndex] = {
         ...existing,
         stage: entry.stage,
         query: entry.query ?? existing.query,

@@ -48,6 +48,9 @@ export interface ToolEvent {
   updatedAt?: number
 }
 
+const isValidReasoningOffset = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+
 export const resolveReasoningOffsetStart = (event: ToolEvent) => {
   const details = event.details
   if (!details || typeof details !== 'object') return null
@@ -58,6 +61,48 @@ export const resolveReasoningOffsetStart = (event: ToolEvent) => {
         ? details.reasoningOffset
         : null
   return candidate != null && Number.isFinite(candidate) && candidate >= 0 ? Math.floor(candidate) : null
+}
+
+/**
+ * 为工具事件 payload 写入 reasoningOffsetStart/End（基于当前推理 buffer 长度）。
+ * - start 或首次见到 callId：缺 Start 时写入
+ * - result/error：写入 End
+ */
+export const enrichToolEventReasoningOffsets = (
+  payload: Record<string, unknown>,
+  reasoningBufferLength: number,
+  isFirstSight = false,
+): Record<string, unknown> => {
+  const stage = payload.stage
+  if (stage !== 'start' && stage !== 'result' && stage !== 'error') {
+    return payload
+  }
+
+  const offset = Math.max(0, Math.floor(reasoningBufferLength))
+  const rawDetails =
+    payload.details && typeof payload.details === 'object' && !Array.isArray(payload.details)
+      ? (payload.details as Record<string, unknown>)
+      : null
+  const details: Record<string, unknown> = rawDetails ? { ...rawDetails } : {}
+  let changed = false
+
+  if (!isValidReasoningOffset(details.reasoningOffsetStart) && (stage === 'start' || isFirstSight)) {
+    details.reasoningOffsetStart = offset
+    changed = true
+  }
+
+  if (stage === 'result' || stage === 'error') {
+    details.reasoningOffsetEnd = offset
+    changed = true
+  }
+
+  if (!isValidReasoningOffset(details.reasoningOffset) && isValidReasoningOffset(details.reasoningOffsetStart)) {
+    details.reasoningOffset = details.reasoningOffsetStart
+    changed = true
+  }
+
+  if (!changed) return payload
+  return { ...payload, details }
 }
 
 export const compareToolEvents = (a: ToolEvent, b: ToolEvent) => {
@@ -164,6 +209,7 @@ export const describeTool = (tool?: string | null) => {
   if (tool === 'web_search') return '联网搜索'
   if (tool === 'python_runner') return 'Python 工具'
   if (tool === 'read_url') return '网页读取'
+  if (tool === 'get_time_info') return '时间信息'
   if (tool === 'document_search') return '文档搜索'
   if (tool === 'document_list') return '文档列表'
   if (tool === 'kb_search') return '知识库搜索'

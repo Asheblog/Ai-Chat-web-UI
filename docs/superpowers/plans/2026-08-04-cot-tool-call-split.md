@@ -1,6 +1,8 @@
 # 拆分 CoT 文字与工具调用（主聊天流分离展示）Implementation Plan
 
-> **Status:** SUPERSEDED / DONE（`bd01927` 及后续提交已落地双独立折叠区块）。后续净化见「工具进度不再写入 reasoning」变更（`stripToolProgressFromReasoning` + 删除 tool `emitReasoning`）。
+> **Status:** SUPERSEDED by [`2026-08-05-cot-interleaved-step-timeline.md`](./2026-08-05-cot-interleaved-step-timeline.md)（改回交错步骤流四端重构）。
+>
+> 历史说明：`bd01927` 曾落地汇总双卡；现已推翻为交错时间线。
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

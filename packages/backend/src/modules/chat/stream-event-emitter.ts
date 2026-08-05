@@ -3,6 +3,7 @@
  * 封装 SSE 事件的编码、发送和追踪
  */
 
+import { enrichToolEventReasoningOffsets } from '@aichat/shared/tool-events';
 import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder } from '../../utils/task-trace';
@@ -28,6 +29,7 @@ export class StreamEventEmitter {
   private toolLogManager?: ToolLogManager;
   private downstreamClosed = false;
   private reasoningBuffer = '';
+  private seenToolCallIds = new Set<string>();
 
   constructor(options: StreamEventEmitterOptions) {
     this.encoder = options.encoder;
@@ -106,7 +108,22 @@ export class StreamEventEmitter {
    * 发送工具事件
    */
   emitToolEvent(payload: Record<string, unknown>): void {
-    const enriched = normalizeToolCallEventPayload(payload);
+    const normalized = normalizeToolCallEventPayload(payload);
+    const callKey =
+      typeof normalized.callId === 'string' && normalized.callId.trim()
+        ? normalized.callId.trim()
+        : typeof normalized.id === 'string' && normalized.id.trim()
+          ? normalized.id.trim()
+          : null;
+    const isFirstSight = callKey ? !this.seenToolCallIds.has(callKey) : true;
+    if (callKey) {
+      this.seenToolCallIds.add(callKey);
+    }
+    const enriched = enrichToolEventReasoningOffsets(
+      normalized,
+      this.reasoningBuffer.length,
+      isFirstSight,
+    );
     this.enqueue(enriched);
 
     // 记录到工具日志管理器

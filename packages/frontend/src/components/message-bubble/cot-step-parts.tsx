@@ -1,0 +1,177 @@
+'use client'
+
+import { useState } from 'react'
+import { BookOpen, ChevronDown, Clock3, Code2, FileText, Globe, Lightbulb, Search, Wrench } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { TypewriterReasoning } from '@/components/typewriter-reasoning'
+import type { CotTimelineNode, ToolDisplayIconKey } from '@aichat/shared/cot-timeline'
+import { buildToolStepTitle, resolveToolDisplay } from '@aichat/shared/cot-timeline'
+import { resolveEventStatus } from '@aichat/shared/tool-events'
+import type { ToolEvent } from '@/types'
+import { cn } from '@/lib/utils'
+
+const ICON_MAP: Record<ToolDisplayIconKey, LucideIcon> = {
+  lightbulb: Lightbulb,
+  search: Search,
+  globe: Globe,
+  clock: Clock3,
+  file: FileText,
+  code: Code2,
+  book: BookOpen,
+  wrench: Wrench,
+}
+
+const stringifyPayload = (value: unknown): string | null => {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  }
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+export function CotReasoningStep({
+  text,
+  isStreamingTail,
+}: {
+  text: string
+  isStreamingTail?: boolean
+  playedLength?: number
+}) {
+  return (
+    <div className="rounded-[8px] border border-border/70 bg-muted/30 px-3 py-2.5">
+      <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Lightbulb className="h-4 w-4 text-amber-500" />
+        <span>深度思考</span>
+      </div>
+      <div className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
+        {isStreamingTail ? (
+          <TypewriterReasoning text={text} isStreaming speed={20} />
+        ) : (
+          text
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ToolResultBody({ event }: { event: ToolEvent }) {
+  const payload =
+    stringifyPayload(event.resultJson) ||
+    stringifyPayload(event.resultText) ||
+    stringifyPayload(event.argumentsText) ||
+    stringifyPayload(event.error) ||
+    stringifyPayload(event.summary)
+  if (!payload) {
+    return <p className="text-xs text-muted-foreground">暂无结果详情</p>
+  }
+  return (
+    <pre className="max-h-64 overflow-auto rounded-md bg-background/80 p-2 text-[11px] leading-4 text-foreground/80">
+      {payload}
+    </pre>
+  )
+}
+
+export function CotToolStep({ event }: { event: ToolEvent }) {
+  const [open, setOpen] = useState(false)
+  const toolId = event.identifier || event.apiName || event.tool
+  const display = resolveToolDisplay(toolId)
+  const Icon = ICON_MAP[display.iconKey] || Wrench
+  const title = buildToolStepTitle(event)
+  const status = resolveEventStatus(event)
+  const statusLabel =
+    status === 'running'
+      ? '执行中'
+      : status === 'pending'
+        ? '待审批'
+        : status === 'error'
+          ? '失败'
+          : status === 'rejected'
+            ? '已拒绝'
+            : status === 'aborted'
+              ? '已中止'
+              : '完成'
+
+  return (
+    <div className="rounded-[8px] border border-border/70 bg-card px-3 py-2.5">
+      <button
+        type="button"
+        className="flex w-full items-start justify-between gap-2 text-left"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Icon className="h-4 w-4 shrink-0 text-primary" />
+            <span className="truncate">{title}</span>
+            <span
+              className={cn(
+                'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                status === 'success' && 'bg-emerald-500/10 text-emerald-700',
+                status === 'running' && 'bg-blue-500/10 text-blue-700',
+                status === 'error' && 'bg-rose-500/10 text-rose-700',
+                status === 'pending' && 'bg-amber-500/10 text-amber-700',
+              )}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          {event.summary && !open && (
+            <p className="mt-1 truncate text-xs text-muted-foreground sm:pl-6">{event.summary}</p>
+          )}
+        </div>
+        <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 border-t border-border/60 pt-2 sm:pl-6">
+          <ToolResultBody event={event} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function CotToolGroupStep({
+  node,
+}: {
+  node: Extract<CotTimelineNode, { type: 'toolGroup' }>
+}) {
+  const [open, setOpen] = useState(false)
+  const display = resolveToolDisplay(node.toolType)
+  const Icon = ICON_MAP[display.iconKey] || Wrench
+
+  return (
+    <div className="rounded-[8px] border border-border/70 bg-card px-3 py-2.5">
+      <button
+        type="button"
+        className="flex w-full items-start justify-between gap-2 text-left"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Icon className="h-4 w-4 shrink-0 text-primary" />
+            <span>{display.label}</span>
+            <span className="text-xs font-normal text-muted-foreground">{node.events.length} 个调用</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground sm:pl-6">{node.summaryText}</p>
+        </div>
+        <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+          {node.events.map((event) => (
+            <CotToolStep
+              key={`${event.callId ?? event.id}-${event.updatedAt ?? event.createdAt}`}
+              event={event}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

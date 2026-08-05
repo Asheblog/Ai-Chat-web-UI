@@ -25,7 +25,7 @@ import {
   deletePendingStreamCancelKey,
 } from './stream-state';
 import type { RAGService } from '../../services/document/rag-service';
-import { ToolLogManager } from './tool-log-manager';
+import { enrichToolEventReasoningOffsets } from '@aichat/shared/tool-events';
 import { normalizeToolCallEventPayload } from './tool-call-event';
 import {
   sendUnsupportedToolError,
@@ -430,6 +430,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         };
       };
 
+      const resolveToolLogLookupId = (payload: Record<string, unknown>) => {
+        if (typeof payload.id === 'string' && payload.id.trim()) {
+          return (payload.id as string).trim();
+        }
+        if (typeof payload.callId === 'string' && payload.callId.trim()) {
+          return (payload.callId as string).trim();
+        }
+        return null;
+      };
+
       const recordToolLog = (payload: Record<string, unknown>) => {
         const stage = payload.stage;
         if (stage !== 'start' && stage !== 'result' && stage !== 'error') return;
@@ -460,15 +470,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
         if (payload.details && typeof payload.details === 'object') {
           entry.details = payload.details as ToolLogEntry['details'];
-        }
-        // 记录工具调用开始时已输出的推理文本长度，仅作排序/溯源（不再用于交错 UI）
-        if (stage === 'start') {
-          const offset = reasoningBuffer.length;
-          if (!entry.details) {
-            entry.details = { reasoningOffsetStart: offset };
-          } else {
-            entry.details.reasoningOffsetStart = offset;
-          }
         }
         const existingIndex = toolLogs.findIndex((log) => log.id === entry.id);
         if (existingIndex === -1) {
@@ -501,7 +502,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       };
 
       const sendToolEvent = (payload: Record<string, unknown>) => {
-        const enriched = normalizeToolCallEventPayload(payload);
+        const normalized = normalizeToolCallEventPayload(payload);
+        const lookupId = resolveToolLogLookupId(normalized);
+        const isFirstSight = lookupId
+          ? toolLogs.findIndex((log) => log.id === lookupId) === -1
+          : true;
+        const enriched = enrichToolEventReasoningOffsets(
+          normalized,
+          reasoningBuffer.length,
+          isFirstSight,
+        );
         safeEnqueue(enriched);
         recordToolLog(enriched);
         traceRecorder.log('tool:event', summarizeSsePayload(enriched));

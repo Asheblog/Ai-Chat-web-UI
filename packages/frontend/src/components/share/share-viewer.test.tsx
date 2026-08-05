@@ -84,7 +84,7 @@ describe("ShareViewer", () => {
       />,
     )
 
-    const reasoningButton = screen.getByRole('button', { name: /思考过程/ })
+    const reasoningButton = screen.getByRole('button', { name: /深度思考过程/ })
     expect(reasoningButton).toBeInTheDocument()
     expect(reasoningButton).toHaveAttribute("aria-expanded", "false")
   })
@@ -130,8 +130,8 @@ describe("ShareViewer", () => {
       />,
     )
 
-    expect(screen.getByText("工具调用 1 个")).toBeInTheDocument()
-    expect(screen.getByText("完成 1 次")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /深度思考过程/ })).toBeInTheDocument()
+    expect(screen.getByText(/1 个工具/)).toBeInTheDocument()
   })
 
   it("uses default brand text when not provided", () => {

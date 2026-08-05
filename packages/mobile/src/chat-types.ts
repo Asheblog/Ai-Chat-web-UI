@@ -1,3 +1,5 @@
+import type { ToolEvent } from "@aichat/shared/tool-events";
+
 export type ChatMessageRole = "user" | "assistant" | "system" | "compressedGroup";
 
 export type ChatMessage = {
@@ -7,6 +9,7 @@ export type ChatMessage = {
   content: string;
   clientMessageId: string | null;
   reasoning?: string | null;
+  toolEvents?: ToolEvent[];
   streamStatus?: string | null;
   streamError?: string | null;
   createdAt: string;

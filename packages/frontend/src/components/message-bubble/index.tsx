@@ -17,8 +17,7 @@ import { MessageHeader } from './message-header'
 import { ShareBadge } from './share-badge'
 import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
-import { ReasoningSection } from './reasoning-section'
-import { ToolCallsSection } from './tool-calls-section'
+import { CotStepTimeline } from './cot-step-timeline'
 
 const STREAMING_MARKDOWN_RENDER_INTERVAL_MS = 280
 
@@ -84,7 +83,7 @@ function MessageBubbleComponent({
   const shouldShowStreamingPlaceholder = Boolean(
     isStreaming && !hasContent && meta.role === 'assistant',
   )
-  const { timeline: toolTimeline, summary: toolSummary } = useToolTimeline({
+  const { timeline: toolTimeline } = useToolTimeline({
     sessionId: meta.sessionId,
     messageId: meta.id,
     bodyEvents: body.toolEvents,
@@ -300,18 +299,13 @@ function MessageBubbleComponent({
               }}
             />
           )}
-          <ReasoningSection
+          <CotStepTimeline
             meta={meta}
             reasoningRaw={reasoningRaw}
-            reasoningHtml={renderCache?.reasoningHtml ?? undefined}
+            toolEvents={toolTimeline}
+            defaultExpanded={false}
+            isStreaming={Boolean(isStreaming)}
             reasoningPlayedLength={reasoningPlayedLength}
-            defaultExpanded={false}
-          />
-          <ToolCallsSection
-            meta={meta}
-            timeline={toolTimeline}
-            summary={toolSummary}
-            defaultExpanded={false}
           />
 
           <MessageBodyContent

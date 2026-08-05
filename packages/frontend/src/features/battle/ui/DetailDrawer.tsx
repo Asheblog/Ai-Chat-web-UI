@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
     Dialog,
@@ -10,11 +10,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { stripToolProgressFromReasoning } from '@aichat/shared/strip-tool-progress-from-reasoning'
-import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
+import { CotStepTimeline } from '@/components/message-bubble/cot-step-timeline'
 import { useToast } from '@/components/ui/use-toast'
-import { Check, X, Clock, AlertCircle, Scale, ChevronDown, ChevronRight, Copy } from 'lucide-react'
-import type { BattleResult, ToolEvent } from '@/types'
+import { Check, X, Clock, AlertCircle, Scale, Copy } from 'lucide-react'
+import type { BattleResult, MessageMeta, ToolEvent } from '@/types'
 import type { NodeStatus } from '../hooks/useBattleFlow'
 
 interface DetailDrawerProps {
@@ -87,33 +86,24 @@ export function DetailDrawer({
     const isLive = detail?.isLive === true
     const title = detail?.modelLabel || detail?.modelId || ''
     const usage = detail?.usage || {}
-    const reasoning = stripToolProgressFromReasoning(detail?.reasoning || '')
+    const reasoningRaw = detail?.reasoning || ''
     const toolEvents = useMemo(
       () => (Array.isArray(detail?.toolEvents) ? detail.toolEvents : []),
       [detail?.toolEvents],
     )
-    const reasoningHeavy = reasoning.length >= 4000
-    const detailSignature = detail ? `${detail.modelId}:${detail.attemptIndex}:${detail.isLive ?'live' : 'static'}` : ''
-    const [renderReasoning, setRenderReasoning] = useState(!reasoningHeavy)
-    const [manualOverride, setManualOverride] = useState(false)
-    const [showReasoning, setShowReasoning] = useState(true)
+    const cotMeta = useMemo<MessageMeta>(
+      () => ({
+        id: `battle:${detail?.modelKey ?? 'unknown'}:${detail?.attemptIndex ?? 0}`,
+        sessionId: 0,
+        stableKey: `battle:${detail?.modelKey ?? 'unknown'}:${detail?.attemptIndex ?? 0}`,
+        role: 'assistant',
+        createdAt: new Date().toISOString(),
+        reasoningStatus: reasoningRaw.trim() ? 'done' : undefined,
+      }),
+      [detail?.attemptIndex, detail?.modelKey, reasoningRaw],
+    )
+    const hasCotProcess = Boolean(reasoningRaw.trim()) || toolEvents.length > 0
     const [copied, setCopied] = useState(false)
-
-    useEffect(() => {
-        if (!detailSignature) return
-        setManualOverride(false)
-        setRenderReasoning(!reasoningHeavy)}, [detailSignature, reasoningHeavy])
-
-    useEffect(() => {
-        if (!manualOverride && reasoningHeavy && renderReasoning) {
-            setRenderReasoning(false)
-        }
-    }, [manualOverride, reasoningHeavy, renderReasoning])
-
-    const toggleReasoningRender = () => {
-        setManualOverride(true)
-        setRenderReasoning((prev) => !prev)
-    }
 
     const handleCopyOutput = async () => {
         const output = detail?.output?.trim()
@@ -140,11 +130,6 @@ export function DetailDrawer({
     const currentRetrying = !isLive && retryingJudgeId != null && (detail as any).id === retryingJudgeId
     const judgeFailed = judgeStatus === 'error'
     const judgeUnknown = !judgeStatus || judgeStatus === 'unknown' || judgeStatus === 'skipped'
-    const metaStub = {
-      id: `battle:${detail.modelKey}:${detail.attemptIndex}`,
-      stableKey: `battle:${detail.modelKey}:${detail.attemptIndex}`,
-      clientMessageId: null,
-    }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -247,49 +232,15 @@ export function DetailDrawer({
                             </div>
                         )}
 
-                        {/* Reasoning -可折叠 */}
-                        {reasoning && (
-                            <div className="min-w-0">
-                                <button
-                                    className="flex items-center gap-2 text-sm font-medium mb-2 hover:text-foreground text-muted-foreground transition-colors"
-                                    onClick={() => setShowReasoning(!showReasoning)}
-                                >
-                                    {showReasoning ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                    推理过程
-                                    {reasoningHeavy && (
-                                        <span className="text-xs text-muted-foreground font-normal">
-                                            ({Math.ceil(reasoning.length / 1000)}k 字符)
-                                        </span>
-                                    )}
-                                </button>
-                                {showReasoning && (
-                                    <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
-                                        {reasoningHeavy && (
-                                            <div className="flex justify-end mb-2">
-                                                <Button variant="ghost" size="sm" className="text-xs h-7" onClick={toggleReasoningRender}>
-                                                    {renderReasoning ? '性能模式' : '渲染公式'}
-                                                </Button>
-                                            </div>
-                                        )}
-                                        {renderReasoning ? (
-                                            <div className="prose prose-sm max-w-none dark:prose-invert overflow-x-auto min-w-0">
-                                                <MarkdownRenderer html={null} fallback={reasoning} />
-                                            </div>
-                                        ) : (
-                                            <pre className="text-sm whitespace-pre-wrap break-words font-mono text-foreground/90">{reasoning}</pre>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {toolEvents.length > 0 && (
-                            <ToolCallsSection
-                                meta={metaStub}
-                                timeline={toolEvents}
-                                summary={null}
-                                defaultExpanded={true}
-                            />
+                        {/* 交错 CoT 步骤流 */}
+                        {hasCotProcess && (
+                          <CotStepTimeline
+                            meta={cotMeta}
+                            reasoningRaw={reasoningRaw}
+                            toolEvents={toolEvents}
+                            defaultExpanded={true}
+                            isStreaming={isLive && isRunning}
+                          />
                         )}
 
                         {/* Model Output */}

@@ -16,7 +16,8 @@
     "./chat-stream-contract": "./dist/chat-stream-contract.js",
     "./chat-stream-parser": "./dist/chat-stream-parser.js",
     "./tool-events": "./dist/tool-events.js",
-    "./strip-tool-progress-from-reasoning": "./dist/strip-tool-progress-from-reasoning.js"
+    "./strip-tool-progress-from-reasoning": "./dist/strip-tool-progress-from-reasoning.js",
+    "./cot-timeline": "./dist/cot-timeline.js"
   },
   "files": [
     "dist"

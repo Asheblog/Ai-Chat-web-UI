@@ -4,6 +4,7 @@ import type { ChatMessage } from "../chat-types";
 import type { AppTheme } from "../theme";
 import { spacing } from "../theme";
 import { contentToText } from "./chat-message-utils";
+import { CotStepTimeline } from "./CotStepTimeline";
 import { MarkdownText } from "./MarkdownText";
 
 type MessageBubbleProps = {
@@ -16,6 +17,8 @@ export function MessageBubble({ message, theme }: MessageBubbleProps) {
   const isAssistant = message.role === "assistant";
   const content = contentToText(message.content);
   const hasReasoning = Boolean(message.reasoning?.trim());
+  const hasToolEvents = (message.toolEvents?.length ?? 0) > 0;
+  const hasCotProcess = hasReasoning || hasToolEvents;
   const isStreaming = message.streamStatus === "streaming";
   const isErrored = message.streamStatus === "error";
   const isCancelled = message.streamStatus === "cancelled";
@@ -35,11 +38,14 @@ export function MessageBubble({ message, theme }: MessageBubbleProps) {
           },
         ]}
       >
-        {hasReasoning ? (
-          <View style={[styles.reasoningBox, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}>
-            <Text style={[styles.reasoningLabel, { color: theme.mutedForeground }]}>思考</Text>
-            <Text style={[styles.reasoningText, { color: theme.mutedForeground }]}>{message.reasoning}</Text>
-          </View>
+        {hasCotProcess ? (
+          <CotStepTimeline
+            defaultExpanded={isStreaming}
+            isStreaming={isStreaming}
+            reasoningRaw={message.reasoning ?? ""}
+            theme={theme}
+            toolEvents={message.toolEvents ?? []}
+          />
         ) : null}
         {content.length > 0 ? (
           <MarkdownText content={content} isUser={isUser} theme={theme} />
@@ -82,21 +88,6 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
     lineHeight: 24,
-  },
-  reasoningBox: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.md,
-    rowGap: 4,
-  },
-  reasoningLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16,
-  },
-  reasoningText: {
-    fontSize: 14,
-    lineHeight: 21,
   },
   streamingRow: {
     alignItems: "center",

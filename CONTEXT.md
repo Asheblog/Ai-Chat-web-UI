@@ -19,19 +19,20 @@
 
 ## 思考与推理
 
-- **Reasoning（推理/思考）**：模型在生成最终回答之前的内部思考过程，以文本形式暴露给用户；推理折叠区块只展示模型原生推理，不含工具进度文案
-- **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。在 UI 中以独立的推理折叠区块展示，与工具调用区块分离
-- **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；旧版交错时间轴曾据此将工具调用与思考段落交错排列，该展示方式已废弃（字段仍保留在消息数据结构中，仅作排序/溯源）
-- **Reasoning Text**：推理的文本内容，流式传输，播放 typewriter 动画；工具 handler 不得再向推理通道写入进度（进度仅走 Tool Event）
+- **Reasoning（推理/思考）**：模型在生成最终回答之前的内部思考过程，以文本形式暴露给用户；推理通道不含工具进度文案
+- **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。在 UI 中按 Reasoning Offset 与工具结果交错为「深度思考 ↔ 工具步骤」时间线展示
+- **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；用于将工具事件插入对应推理段落之间，形成交错步骤流（Start/End 由后端与流式层写入）
+- **Reasoning Text**：推理的文本内容，流式传输；展示前可对历史污染行做剥离，但 offset 切片始终基于原始文本
+- **Cot Step Timeline（交错步骤流）**：主聊天 / 分享 / Battle / Android 共用的过程展示；节点由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建
 
 ## 工具调用
 
 - **Tool Event（工具事件）**：一次工具调用的完整生命周期记录，包含工具名、状态、参数、结果等
 - **Tool Call Source**：工具来源 — builtin（内置）、plugin（插件）、MCP、workspace（工作区）、system
 - **Tool Call Phase**：工具调用阶段 — arguments_streaming → pending_approval → executing → result/error/rejected/aborted
-- **Tool Timeline（工具时间轴）**：消息内工具调用事件按时间顺序形成的展示序列；不再与推理文本交错排列，而是在推理区块下方的独立工具区块内以卡片展示
-- **Tool Node（工具节点）**：工具调用区块中的单个工具调用卡片，展示名称、状态、耗时与可展开的参数/结果
-- **Tool Group（工具合并组）**：将一组相关的工具调用合并展示：同一搜索任务下（web_search/read_url）的同类型调用合并为搜索组，或按 groupId 归并的任务组。展开后显示各子调用的明细卡片
+- **Tool Timeline（工具时间轴）**：消息内工具调用事件按时间/offset 排序后的序列；在交错步骤流中与推理段穿插展示，并可按 web_search/read_url 合并为工具组
+- **Tool Node（工具节点）**：步骤流中的单个工具步骤，展示类型图标、标题、状态与可展开的参数/结果
+- **Tool Group（工具合并组）**：将同一 offset 下相关的搜索/读取调用合并展示，展开后显示各子调用明细
 
 ## 流式协议
 

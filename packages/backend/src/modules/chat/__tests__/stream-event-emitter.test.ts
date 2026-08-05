@@ -58,6 +58,42 @@ describe('stream-event-emitter reasoning deltas', () => {
     expect(chunks.join('')).not.toContain('联网搜索')
   })
 
+  test('emitToolEvent start 写入 reasoningOffsetStart', () => {
+    const { emitter, chunks } = createEmitter()
+
+    emitter.emitReasoning('before tool', { kind: 'model', stage: 'stream' })
+    emitter.emitToolEvent({
+      id: 'call-1',
+      tool: 'web_search',
+      stage: 'start',
+      query: 'test',
+    })
+
+    expect(chunks).toHaveLength(2)
+    expect(chunks[1]).toContain('"reasoningOffsetStart":11')
+    expect(chunks[1]).not.toContain('"reasoningOffsetEnd"')
+  })
+
+  test('emitToolEvent result 写入 reasoningOffsetEnd', () => {
+    const { emitter, chunks } = createEmitter()
+
+    emitter.emitReasoning('start reasoning', { kind: 'model', stage: 'stream' })
+    emitter.emitToolEvent({ id: 'call-1', tool: 'web_search', stage: 'start' })
+    emitter.emitReasoning(' after tool', { kind: 'model', stage: 'stream' })
+    emitter.emitToolEvent({
+      id: 'call-1',
+      tool: 'web_search',
+      stage: 'result',
+      summary: 'done',
+    })
+
+    expect(chunks).toHaveLength(4)
+    expect(chunks[1]).toContain('"reasoningOffsetStart":15')
+    const resultChunk = chunks[3]
+    expect(resultChunk).toContain('"reasoningOffsetEnd":26')
+    expect(resultChunk).not.toContain('"reasoningOffsetStart"')
+  })
+
   test('normalizes legacy tool payload to tool_call event', () => {
     const { emitter, chunks } = createEmitter()
 

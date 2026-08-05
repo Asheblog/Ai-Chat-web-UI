@@ -21,6 +21,7 @@ import { spacing } from "../theme";
 import {
   appendAssistantContent,
   appendAssistantReasoning,
+  appendAssistantToolCall,
   normalizeMessage,
 } from "./chat-message-utils";
 import { MessageBubble } from "./MessageBubble";
@@ -196,7 +197,15 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
         if (chunk.type === "reasoning" && chunk.content) {
           const reasoningContent = chunk.content;
           const targetId = streamRef.current?.assistantId ?? assistantId;
-          setMessages((current) => appendAssistantReasoning(current, targetId, reasoningContent));
+          setMessages((current) =>
+            appendAssistantReasoning(current, targetId, reasoningContent, chunk.meta),
+          );
+          continue;
+        }
+
+        if (chunk.type === "tool_call") {
+          const targetId = streamRef.current?.assistantId ?? assistantId;
+          setMessages((current) => appendAssistantToolCall(current, targetId, chunk, session.id));
           continue;
         }
 

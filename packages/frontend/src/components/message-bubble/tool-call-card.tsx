@@ -20,20 +20,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { describeTool } from '@aichat/shared/tool-events'
 import { cn } from '@/lib/utils'
 import type { ToolEvent } from '@/types'
 
-const formatToolName = (tool: string | undefined) => {
-  if (!tool) return '工具调用'
-  if (tool === 'web_search') return '联网搜索'
-  if (tool === 'python_runner') return 'Python 工具'
-  if (tool === 'read_url') return '网页读取'
-  if (tool === 'document_search') return '文档搜索'
-  if (tool === 'document_list') return '文档列表'
-  if (tool === 'kb_search') return '知识库搜索'
-  if (tool.startsWith('workspace_')) return '工作区工具'
-  return tool
-}
+const formatToolName = (tool: string | undefined) => describeTool(tool)
 
 const statusMeta: Record<
   ToolEvent['status'],

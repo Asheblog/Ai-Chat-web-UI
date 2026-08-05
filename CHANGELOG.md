@@ -2,9 +2,10 @@
 
 ## 未发布
 
-- 净化推理展示：切断工具 handler 经 `emitReasoning(kind=tool)` 写入推理通道的路径（硬闸门 + 删除调用）；「思考过程」仅保留模型原生推理，工具进度只出现在「工具调用」区块；历史污染文案展示时剥离（无 DB 迁移）。
-- 主聊天流推理与工具调用展示分离：推理文字与工具调用从交错时间轴改为两个独立折叠区块（推理区块在上、工具区块在下、最终回答最后）；流式进行中自动展开、完成后自动折叠，用户手动展开/收起按消息本地记忆；工具区块每工具独立卡片展示（名称+状态+耗时+可展开参数/结果），保留 web_search/read_url 合并组与 groupId 任务组分组。
-- BREAKING: 移除「推理默认展开」系统设置项 `reasoning_default_expand`（前端 `reasoningDefaultExpand`）与 `REASONING_DEFAULT_EXPAND` 环境变量；推理展示改为流式自动展开/完成折叠并支持按消息记忆手动状态；其余推理设置（`reasoning_enabled`、`reasoning_save_to_db`、`reasoning_tags_mode` 等）保留。迁移策略为无迁移、直接替换。
+- BREAKING UI: 推理与工具展示改为交错 CoT 步骤流（深度思考 ↔ 工具结果），主聊天 / 分享 / Battle / Android 四端统一；废除「思考过程 + 工具调用 N 个」汇总双卡主路径。迁移策略为无迁移、直接替换。
+- 推理通道净化：切断工具 handler 经 `emitReasoning(kind=tool)` 写入 reasoning 的路径；工具进度仅走 Tool Event / 步骤流；历史污染文案展示时剥离（无 DB 迁移）。
+- 后端工具事件补全 `reasoningOffsetStart`/`End`，供交错步骤流定位；消息级 `reasoningDurationSeconds` 仍用于过程壳总耗时（不伪造分段秒数）。
+- BREAKING: 移除「推理默认展开」系统设置项 `reasoning_default_expand`（前端 `reasoningDefaultExpand`）与 `REASONING_DEFAULT_EXPAND` 环境变量；过程壳改为流式自动展开/完成折叠并支持按消息记忆手动状态；其余推理设置（`reasoning_enabled`、`reasoning_save_to_db`、`reasoning_tags_mode` 等）保留。迁移策略为无迁移、直接替换。
 - 生产默认 Docker 拓扑改为 all-in-one：`ghcr.io/asheblog/aichat` 同容器运行 frontend + backend + rag-worker，并保留独立 `docker-socket-proxy`；旧四容器见 `docker-compose.split.yml`。升级：`docker compose pull && docker compose up -d`。1Panel 示例见 `docs/deploy/1panel-compose.example.yml`。
 - BREAKING: 模型大乱斗改为统一入口下的双模式选择（`多模型大乱斗` / `单模型多问题大乱斗`）；`/battle/stream` 入参改为强制判别联合，必须显式传递 `mode`；迁移策略为无迁移、直接替换。
 - 新增单模型多问题评测能力：支持单模型批量题目、每题独立 `runsPerQuestion/passK`（最多 3）、按题稳定性统计（`stabilityScore`/`questionStats`）、按题维度的 SSE 与结果持久化字段。
