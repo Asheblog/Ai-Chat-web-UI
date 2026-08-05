@@ -99,7 +99,11 @@ function MessageBubbleComponent({
     renderCache.contentVersion === body.version &&
     renderCache.reasoningVersion === body.reasoningVersion &&
     (renderCache.isStreaming == null || renderCache.isStreaming === currentIsStreaming)
+  // 宽松缓存仅用于 live SSE（activeStreamCount>0）先展示；刷新后 progress 续传时
+  // activeStreamCount===0，若仍宽松命中会把旧 HTML 当成正文导致截断。
+  const allowLooseCache = Boolean(isStreaming && activeStreamCount > 0)
   const looseCacheMatches =
+    allowLooseCache &&
     renderCache &&
     renderCache.contentHtml &&
     renderCache.contentHtml.length > 0 &&

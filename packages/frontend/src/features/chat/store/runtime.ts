@@ -291,8 +291,10 @@ export const createChatStoreRuntime = (
                 ? normalizedToolEvents
                 : prevBody.toolEvents,
           }
-          // 流式传输期间保留旧的渲染 HTML，避免 ReactMarkdown 对不完整内容产生错误输出
-          if (meta.streamStatus !== 'streaming') {
+          // 正文增长时必须失效旧 HTML（与 live SSE flushStreamBuffer 对称）。
+          // 刷新后走 progress 轮询时若保留缓存，MessageBubble 宽松匹配会继续展示截断正文。
+          // 仅推理/工具变更且仍在 streaming 时可保留正文 HTML，避免无意义重渲染。
+          if (contentChanged || meta.streamStatus !== 'streaming') {
             const cache = ensureRenderCache()
             delete cache[key]
           }
@@ -538,10 +540,12 @@ export const createChatStoreRuntime = (
           toolEvents: hasToolUpdates ? normalizedToolEvents : prevBody.toolEvents,
           artifacts: hasArtifactUpdates ? normalizedArtifacts : prevBody.artifacts,
         }
-        // 流式传输期间保留旧的渲染 HTML，避免 ReactMarkdown 对不完整内容产生错误输出
+        // 正文增长时必须失效旧 HTML（与 live SSE flushStreamBuffer 对称）。
+        // 刷新后走 progress 轮询时若保留缓存，MessageBubble 宽松匹配会继续展示截断正文。
+        // 仅推理/工具变更且仍在 streaming 时可保留正文 HTML，避免无意义重渲染。
         const currentMetaForStreamCheck = nextMetas.find((m) => messageKey(m.id) === key)
         const effectiveStreamStatus = message.streamStatus ?? currentMetaForStreamCheck?.streamStatus
-        if (effectiveStreamStatus !== 'streaming') {
+        if (contentChanged || effectiveStreamStatus !== 'streaming') {
           const cache = ensureRenderCache()
           delete cache[key]
         }
