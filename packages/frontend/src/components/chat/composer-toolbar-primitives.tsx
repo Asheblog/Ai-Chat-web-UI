@@ -3,13 +3,13 @@ import { BookOpen, Brain, Code2, Globe2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
-  'relative overflow-hidden rounded-lg border border-border bg-card/75 shadow-[0_4px_16px_hsl(var(--foreground)/0.05)] backdrop-blur-md transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
+  'relative overflow-hidden rounded-[var(--radius-composer)] border border-border/80 bg-background transition-colors duration-200 focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
 
 export const composerToolbarScrollClass =
   'flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-visible pr-0 sm:gap-1.5'
 
 export const composerToolbarButtonClass =
-  'relative inline-flex h-11 w-11 shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-[0_1px_2px_hsl(var(--foreground)/0.06)] transition-colors hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-45 md:h-9 md:w-9'
+  'relative inline-flex h-11 w-11 shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-lg border border-border/80 bg-background text-muted-foreground transition-colors duration-200 hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45 md:h-9 md:w-9'
 
 interface ComposerIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean

@@ -12,9 +12,8 @@ interface AuthFormLayoutProps {
 }
 
 /**
- * AuthFormLayout: 统一登录/注册等认证页的卡片骨架。
- * - 提供一致的标题、描述、错误提示与底部链接区域
- * - 避免各页面重复维护 Card 布局与样式
+ * AuthFormLayout: 统一登录/注册等认证页骨架。
+ * Claude 极简居中：无重阴影卡片，字段区直接落在统一暖底上。
  */
 export function AuthFormLayout({
   title,
@@ -26,20 +25,21 @@ export function AuthFormLayout({
 }: AuthFormLayoutProps) {
   return (
     <div className={cn("w-full", className)}>
-      <div className="v2-panel bg-card/95 p-5 shadow-[0_22px_54px_hsl(var(--background)/0.45)] sm:p-6">
-        <div className="mb-7 text-center">
-          <h2 className="text-display font-semibold tracking-tight text-foreground">{title}</h2>
-          {description ? (
-            <p className="mt-3 text-sm text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        {error ? (
-          <div className="mb-5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-            {error}
-          </div>
+      <div className="mb-7 text-center">
+        <h2 className="text-display font-semibold tracking-tight text-foreground">{title}</h2>
+        {description ? (
+          <p className="mt-3 text-sm text-muted-foreground">{description}</p>
         ) : null}
-        {children}
       </div>
+      {error ? (
+        <div
+          role="alert"
+          className="mb-5 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+        >
+          {error}
+        </div>
+      ) : null}
+      {children}
       {footer ? (
         <div className="mt-6 space-y-2 text-center text-sm text-muted-foreground">
           {footer}

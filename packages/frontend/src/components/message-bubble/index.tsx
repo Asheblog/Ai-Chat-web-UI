@@ -193,14 +193,12 @@ function MessageBubbleComponent({
     meta.id,
   ])
 
-  const bubbleClass = `inline-block max-w-full box-border ${
-    isUser ? 'rounded-lg border border-primary/15 bg-primary/10 px-4 py-3 text-foreground ml-auto' : isCodeOnly ? 'p-0' : 'px-0 py-1'
-  } ${
+  const bubbleClass = `max-w-full box-border ${
     isUser
-      ? ''
+      ? 'ml-auto w-fit rounded-2xl bg-muted/70 px-4 py-2.5 text-left text-foreground'
       : isCodeOnly
-      ? 'bg-transparent border-0 text-foreground'
-      : 'bg-transparent text-foreground'
+        ? 'w-full p-0 bg-transparent border-0 text-foreground'
+        : 'w-full px-0 py-0.5 bg-transparent text-foreground'
   }`
 
   const avatarSrc = isUser ? currentUser?.avatarUrl ?? undefined : assistantAvatarUrl ?? undefined
@@ -260,7 +258,9 @@ function MessageBubbleComponent({
   return (
     <div className={`relative ${selectionWrapperClass}`}>
       <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        <Avatar className={`h-8 w-8 flex-shrink-0 ${isUser ? 'bg-muted' : 'bg-muted mt-1.5'}`}>
+        <Avatar
+          className={`hidden h-7 w-7 flex-shrink-0 bg-muted sm:flex ${isUser ? '' : 'mt-1'}`}
+        >
           <AvatarImage
             src={avatarSrc}
             alt={isUser ? '用户头像' : 'AI 头像'}
@@ -268,9 +268,7 @@ function MessageBubbleComponent({
           />
           <AvatarFallback
             delayMs={avatarHasImage && !avatarReady ? 180 : 0}
-            className={`${isUser ? 'text-muted-foreground' : 'text-muted-foreground'} ${
-              avatarFallbackHidden ? 'opacity-0' : ''
-            }`}
+            className={`text-muted-foreground ${avatarFallbackHidden ? 'opacity-0' : ''}`}
             aria-hidden={avatarFallbackHidden ? 'true' : undefined}
           >
             {avatarFallbackText}
@@ -278,10 +276,8 @@ function MessageBubbleComponent({
         </Avatar>
 
         <div
-          className={`min-w-0 max-w-full ${
-            isUser
-              ? 'flex-1 text-right lg:max-w-3xl'
-              : 'v2-panel flex-1 px-4 py-3 text-left'
+          className={`min-w-0 max-w-full flex-1 text-left ${
+            isUser ? 'flex flex-col items-end' : ''
           }`}
         >
           {!isUser && (
@@ -333,7 +329,7 @@ function MessageBubbleComponent({
                 return (
                   <div
                     key={artifact.id}
-                    className="rounded-md border bg-muted/30 px-3 py-2 text-xs flex items-center justify-between gap-3"
+                    className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2 text-xs flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
                       <div className="font-medium truncate">{artifact.fileName}</div>

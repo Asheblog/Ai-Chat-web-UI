@@ -220,15 +220,15 @@ export function ToolCallCard({ event, open, onOpenChange }: ToolCallCardProps) {
   const triggerButton = (
     <button
       type="button"
-      className="group flex w-full items-center gap-3 rounded-md border border-border bg-card px-3 py-2.5 text-left transition-colors duration-200 hover:border-primary/30 hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2"
+      className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border/70 bg-muted/25 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       aria-label={`查看${toolLabel}工具调用详情`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/80 text-muted-foreground transition-colors">
         <StatusIcon className={`h-4 w-4 ${event.status === 'running' ? 'animate-spin' : ''}`} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-semibold text-foreground">{toolLabel}</span>
+          <span className="truncate text-sm font-medium text-foreground">{toolLabel}</span>
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-micro ${meta.className}`}>
             {meta.label}
           </span>

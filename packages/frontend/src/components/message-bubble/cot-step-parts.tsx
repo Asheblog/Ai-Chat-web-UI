@@ -45,9 +45,9 @@ export function CotReasoningStep({
   playedLength?: number
 }) {
   return (
-    <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2.5">
-      <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Lightbulb className="h-4 w-4 text-amber-500" />
+    <div className="rounded-lg bg-background/60 px-3 py-2.5">
+      <div className="mb-1.5 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
         <span>深度思考</span>
       </div>
       <div className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
@@ -104,16 +104,16 @@ export function CotToolStep({ event }: { event: ToolEvent }) {
               : '完成'
 
   return (
-    <div className="rounded-md border border-border/70 bg-card px-3 py-2.5">
+    <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
       <button
         type="button"
-        className="flex w-full items-start justify-between gap-2 text-left"
+        className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Icon className="h-4 w-4 shrink-0 text-primary" />
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="truncate">{title}</span>
             <span
               className={cn(
@@ -152,16 +152,16 @@ export function CotToolGroupStep({
   const Icon = ICON_MAP[display.iconKey] || Wrench
 
   return (
-    <div className="rounded-md border border-border/70 bg-card px-3 py-2.5">
+    <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
       <button
         type="button"
-        className="flex w-full items-start justify-between gap-2 text-left"
+        className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Icon className="h-4 w-4 shrink-0 text-primary" />
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span>{display.label}</span>
             <span className="text-xs font-normal text-muted-foreground">{node.events.length} 个调用</span>
           </div>

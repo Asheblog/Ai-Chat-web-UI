@@ -171,10 +171,10 @@ export function CotStepTimeline({
   const toolHint = totalToolCount > 0 ? ` · ${totalToolCount} 个工具` : ''
 
   return (
-    <div className="mb-3 overflow-hidden rounded-md border border-primary/20 bg-primary/5" data-message-panel="interactive">
+    <div className="mb-3 overflow-hidden rounded-xl border border-border/70 bg-muted/30" data-message-panel="interactive">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition hover:bg-primary/10"
+        className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left transition-colors duration-200 hover:bg-muted/50"
         onClick={() => {
           dispatch({ type: 'toggle' })
           const next = !expanded
@@ -182,8 +182,8 @@ export function CotStepTimeline({
         }}
         aria-expanded={expanded}
       >
-        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-primary">
-          <Brain className="h-4 w-4 shrink-0" />
+        <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Brain className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">
             {expanded ? '收起' : '展开'}
             {` · ${headerLabel}`}
@@ -192,10 +192,10 @@ export function CotStepTimeline({
           </span>
           {isActive && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
         </div>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="space-y-2 border-t border-primary/20 px-3 py-3 sm:px-4">
+        <div className="space-y-2 border-t border-border/60 px-3 py-3 sm:px-3.5">
           {nodes.map((node, index) => (
             <CotStepNode
               key={cotTimelineNodeKey(node, index)}

@@ -4,43 +4,45 @@
 
 @layer base {
   :root {
-    /* Claude-like warm paper light theme */
-    --background: 40 33% 97%;
-    --background-alt: 36 28% 94%;
-    --surface: 40 40% 99%;
-    --surface-hover: 36 30% 94%;
-    --foreground: 25 20% 12%;
-    --card: 40 40% 99%;
-    --card-foreground: 25 20% 12%;
-    --popover: 40 40% 99%;
-    --popover-foreground: 25 20% 12%;
+    /* Claude-like warm flat light theme — unified canvas, no paper lift */
+    --background: 40 22% 96%;
+    --background-alt: 36 18% 94%;
+    --surface: 40 22% 96%;
+    --surface-hover: 36 16% 92%;
+    --foreground: 25 16% 14%;
+    --card: 40 18% 98%;
+    --card-foreground: 25 16% 14%;
+    --popover: 40 18% 98%;
+    --popover-foreground: 25 16% 14%;
     --primary: 18 65% 52%;
     --primary-foreground: 40 40% 98%;
-    --secondary: 36 22% 93%;
-    --secondary-foreground: 25 18% 18%;
-    --muted: 36 20% 93%;
+    --secondary: 36 14% 92%;
+    --secondary-foreground: 25 14% 20%;
+    --muted: 36 12% 92%;
     --muted-foreground: 25 10% 40%;
-    --accent: 18 40% 94%;
-    --accent-foreground: 25 20% 12%;
+    --accent: 18 28% 94%;
+    --accent-foreground: 25 16% 14%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 40 40% 98%;
-    --border: 30 15% 88%;
-    --input: 30 15% 88%;
+    --border: 30 12% 86%;
+    --input: 30 12% 86%;
     --ring: 18 65% 52%;
     --radius: 0.75rem;
+    --radius-composer: 1.25rem;
+    --chat-max-width: 48rem;
 
     --primary-hover: 18 65% 45%;
     --accent-color: 18 65% 52%;
     --success: 142 50% 40%;
     --warning: 38 92% 50%;
-    --sidebar-bg: 40 33% 97%;
-    --sidebar-hover: 36 30% 94%;
+    --sidebar-bg: 40 18% 95%;
+    --sidebar-hover: 36 14% 91%;
     --sidebar-active: 18 65% 52%;
-    --hero-from: 25 20% 12%;
+    --hero-from: 25 16% 14%;
     --hero-to: 18 65% 52%;
-    --code-bg: 36 22% 95%;
-    --code-header: 36 18% 92%;
-    --code-border: 30 12% 84%;
+    --code-bg: 36 14% 94%;
+    --code-header: 36 12% 91%;
+    --code-border: 30 10% 84%;
     --code-text: 25 14% 18%;
 
     /* Structural spacing tokens (not brand-overridable) */
@@ -53,43 +55,45 @@
   }
 
   .dark {
-    /* Warm dark companion theme */
-    --background: 30 12% 9%;
-    --background-alt: 30 10% 11%;
-    --surface: 30 10% 13%;
-    --surface-hover: 30 9% 17%;
-    --foreground: 36 20% 92%;
-    --card: 30 10% 13%;
-    --card-foreground: 36 20% 92%;
-    --popover: 30 10% 13%;
-    --popover-foreground: 36 20% 92%;
+    /* Warm charcoal flat companion — unified canvas */
+    --background: 30 10% 10%;
+    --background-alt: 30 9% 12%;
+    --surface: 30 10% 10%;
+    --surface-hover: 30 8% 15%;
+    --foreground: 36 16% 92%;
+    --card: 30 9% 13%;
+    --card-foreground: 36 16% 92%;
+    --popover: 30 9% 13%;
+    --popover-foreground: 36 16% 92%;
     --primary: 18 70% 58%;
     --primary-foreground: 30 12% 9%;
-    --secondary: 30 9% 17%;
-    --secondary-foreground: 36 18% 90%;
-    --muted: 30 9% 17%;
+    --secondary: 30 8% 16%;
+    --secondary-foreground: 36 14% 90%;
+    --muted: 30 8% 16%;
     --muted-foreground: 30 8% 58%;
-    --accent: 25 14% 18%;
-    --accent-foreground: 36 20% 92%;
+    --accent: 25 12% 16%;
+    --accent-foreground: 36 16% 92%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 40 40% 98%;
     --border: 30 8% 20%;
     --input: 30 8% 20%;
     --ring: 18 70% 58%;
+    --radius-composer: 1.25rem;
+    --chat-max-width: 48rem;
 
     --primary-hover: 18 70% 50%;
     --accent-color: 18 70% 58%;
     --success: 142 50% 45%;
     --warning: 38 92% 50%;
-    --sidebar-bg: 30 10% 11%;
-    --sidebar-hover: 30 9% 17%;
+    --sidebar-bg: 30 9% 11%;
+    --sidebar-hover: 30 8% 15%;
     --sidebar-active: 18 70% 58%;
-    --hero-from: 36 20% 92%;
+    --hero-from: 36 16% 92%;
     --hero-to: 30 8% 58%;
-    --code-bg: 30 14% 8%;
-    --code-header: 30 12% 12%;
-    --code-border: 30 10% 18%;
-    --code-text: 36 16% 82%;
+    --code-bg: 30 12% 8%;
+    --code-header: 30 10% 12%;
+    --code-border: 30 9% 18%;
+    --code-text: 36 14% 82%;
   }
 }
 
@@ -118,45 +122,31 @@
 }
 
 @layer components {
+  /* Flat app canvas — no diagonal stripe, no paper stack */
   .v2-app-surface {
     position: relative;
-    isolation: isolate;
-    background:
-      linear-gradient(180deg, hsl(var(--surface) / 0.92), hsl(var(--background) / 0.96)),
-      radial-gradient(900px 420px at 100% 24%, hsl(var(--accent) / 0.45), transparent 72%),
-      hsl(var(--background));
-  }
-
-  .v2-app-surface::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background:
-      linear-gradient(155deg, transparent 0 52%, hsl(var(--primary) / 0.06) 52% 60%, transparent 60%);
+    background: hsl(var(--background));
   }
 
   .v2-panel {
-    border: 1px solid hsl(var(--border) / 0.9);
+    border: 1px solid hsl(var(--border) / 0.85);
     border-radius: var(--radius);
-    background: hsl(var(--surface) / 0.94);
-    box-shadow: 0 12px 32px hsl(var(--foreground) / 0.05);
+    background: hsl(var(--card));
+    box-shadow: none;
   }
 
   .v2-panel-soft {
-    border: 1px solid hsl(var(--border) / 0.78);
+    border: 1px solid hsl(var(--border) / 0.7);
     border-radius: var(--radius);
-    background: linear-gradient(180deg, hsl(var(--surface) / 0.94), hsl(var(--background) / 0.82));
+    background: hsl(var(--muted) / 0.45);
+    box-shadow: none;
   }
 
   .v2-toolbar {
-    height: 52px;
-    border-bottom: 1px solid hsl(var(--border) / 0.86);
-    background: hsl(var(--surface) / 0.9);
-    box-shadow: 0 8px 20px hsl(var(--foreground) / 0.04);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
+    height: 3rem;
+    border-bottom: 1px solid hsl(var(--border) / 0.75);
+    background: hsl(var(--background));
+    box-shadow: none;
   }
 
   .v2-icon-button {
@@ -166,14 +156,14 @@
     align-items: center;
     justify-content: center;
     border-radius: calc(var(--radius) - 2px);
-    border: 1px solid hsl(var(--border) / 0.86);
-    background: hsl(var(--surface) / 0.78);
+    border: 1px solid transparent;
+    background: transparent;
     color: hsl(var(--muted-foreground));
     transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
   }
 
   .v2-icon-button:hover {
-    border-color: hsl(var(--primary) / 0.28);
+    border-color: hsl(var(--border));
     background: hsl(var(--accent));
     color: hsl(var(--foreground));
   }
@@ -183,10 +173,10 @@
     min-height: 2rem;
     align-items: center;
     gap: 0.42rem;
-    border-radius: calc(var(--radius) - 2px);
-    border: 1px solid hsl(var(--border) / 0.86);
-    background: hsl(var(--surface) / 0.9);
-    padding: 0.35rem 0.72rem;
+    border-radius: 999px;
+    border: 1px solid hsl(var(--border) / 0.85);
+    background: hsl(var(--background));
+    padding: 0.35rem 0.8rem;
     font-size: 0.875rem;
     line-height: 1.1;
     color: hsl(var(--foreground));
@@ -210,8 +200,8 @@
     align-items: center;
     gap: 0.3rem;
     border-radius: 999px;
-    border: 1px solid hsl(var(--border) / 0.78);
-    background: hsl(var(--surface-hover) / 0.72);
+    border: 1px solid hsl(var(--border) / 0.7);
+    background: hsl(var(--muted) / 0.55);
     padding: 0.14rem 0.5rem;
     font-size: 0.75rem;
     line-height: 1;
@@ -240,17 +230,15 @@
   .v2-table-wrap {
     overflow-y: hidden;
     overflow-x: auto;
-    border: 1px solid hsl(var(--border) / 0.78);
+    border: 1px solid hsl(var(--border) / 0.8);
     border-radius: var(--radius);
-    background: hsl(var(--surface) / 0.9);
+    background: hsl(var(--card));
   }
 
   .v2-slide-over {
-    border-left: 1px solid hsl(var(--border) / 0.9);
-    background: hsl(var(--surface) / 0.97);
-    box-shadow: -16px 0 36px hsl(var(--foreground) / 0.08);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
+    border-left: 1px solid hsl(var(--border) / 0.85);
+    background: hsl(var(--background));
+    box-shadow: none;
   }
 
   .v2-section-title {
@@ -653,28 +641,6 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   border: 1px dashed hsl(var(--border));
 }
 
-/* 消息气泡样式 */
-.message-bubble {
-  @apply max-w-3xl;
-}
-
-.message-bubble.user {
-  @apply bg-primary text-primary-foreground ml-auto;
-}
-
-.message-bubble.assistant {
-  @apply bg-muted;
-}
-
-/* 欢迎页面样式 */
-.welcome-container {
-  @apply flex items-center justify-center min-h-full;
-}
-
-.welcome-content {
-  @apply text-center max-w-2xl mx-auto p-8;
-}
-
 /* 修复 Radix ScrollArea 内部 table div 被内容撑开的问题 */
 /* Radix 会在 Viewport 内生成 display:table; min-width:100% 的 div，导致宽内容撑开容器 */
 [data-radix-scroll-area-viewport] > div {
@@ -682,11 +648,9 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   min-width: 0 !important;
 }
 
-/* 玻璃态容器（用于 Dock 输入） */
+/* 轻表面（composer / dock）— 扁平，无重玻璃 */
 .glass {
-  background: hsl(var(--card) / 0.7);
-  -webkit-backdrop-filter: saturate(150%) blur(8px);
-  backdrop-filter: saturate(150%) blur(8px);
+  background: hsl(var(--card));
 }
 
 /* 设置搜索跳转后的位置提醒：导航项/功能卡外发光脉冲（3 次，约 1.5s 一次性） */

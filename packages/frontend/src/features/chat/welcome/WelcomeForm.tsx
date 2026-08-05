@@ -178,7 +178,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
 
   return (
     <div
-      className="relative w-full max-w-[940px]"
+      className="relative w-full max-w-[var(--chat-max-width)]"
       {...(dragHandlers ?? {})}
     >
       {/* 拖拽上传遮罩 */}

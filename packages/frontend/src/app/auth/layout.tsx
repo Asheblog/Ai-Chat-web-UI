@@ -1,5 +1,4 @@
 import { getServerBranding } from '@/lib/server-branding'
-import { Boxes, MessageCircle, Sparkles } from 'lucide-react'
 
 export default async function AuthLayout({
   children,
@@ -8,56 +7,16 @@ export default async function AuthLayout({
 }) {
   const branding = await getServerBranding()
   const brandText = branding.text.trim() || 'AIChat'
-  const aiPrefixed = /^ai/i.test(brandText)
-  const brandRest = aiPrefixed ? brandText.replace(/^ai/i, '') : brandText
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="flex min-h-screen w-full">
-        <aside className="relative hidden w-[410px] shrink-0 overflow-hidden border-r border-border bg-[linear-gradient(180deg,hsl(var(--surface))_0%,hsl(var(--background))_74%,hsl(var(--background))_100%)] lg:flex lg:flex-col lg:justify-center lg:px-16">
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(158deg,transparent_0_32%,hsl(var(--accent)/0.7)_32%_54%,transparent_54%)]" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_14px_30px_hsl(var(--primary)/0.24)]">
-                <Sparkles className="h-7 w-7" />
-              </div>
-              <h1 className="text-display-lg font-semibold leading-none tracking-tight">
-                {aiPrefixed ? <span className="text-primary">AI</span> : null}{brandRest}
-              </h1>
-            </div>
-            <p className="mt-8 max-w-[280px] text-base leading-8 text-muted-foreground">
-              智能对话，高效创作，让 AI 助力每一次思考。
-            </p>
-
-            <div className="mt-14 space-y-7">
-              <div className="flex items-center gap-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                  <MessageCircle className="h-7 w-7" />
-                </div>
-                <div>
-                  <p className="text-base font-semibold text-foreground">流式对话</p>
-                  <p className="mt-1 text-sm text-muted-foreground">实时响应，流畅高效的对话体验</p>
-                </div>
-              </div>
-              <div className="h-px w-80 bg-border" />
-              <div className="flex items-center gap-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                  <Boxes className="h-7 w-7" />
-                </div>
-                <div>
-                  <p className="text-base font-semibold text-foreground">多模型管理</p>
-                  <p className="mt-1 text-sm text-muted-foreground">聚合多种模型，灵活切换与管理</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-        <main className="v2-app-surface flex min-h-screen flex-1 items-center justify-center px-5 py-10">
-          <div className="w-full max-w-[450px]">
-            {children}
-          </div>
-        </main>
+    <div className="v2-app-surface flex min-h-screen flex-col items-center justify-center px-5 py-12 text-foreground">
+      <div className="mb-10 text-center">
+        <h1 className="text-display-lg font-semibold tracking-tight text-foreground">
+          {brandText}
+        </h1>
+        <p className="mt-3 text-sm text-muted-foreground">智能对话，高效创作</p>
       </div>
+      <div className="w-full max-w-[400px]">{children}</div>
     </div>
   )
 }

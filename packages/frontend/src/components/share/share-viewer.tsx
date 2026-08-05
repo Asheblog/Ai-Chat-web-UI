@@ -22,7 +22,7 @@ interface ShareViewerProps {
   brandText?: string
 }
 
-const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[1280px] px-3 sm:px-5 lg:px-6'
+const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[var(--chat-max-width)] px-3 sm:px-5'
 
 /** 格式化相对时间 */
 function formatRelativeTime(dateStr: string): string {
@@ -135,7 +135,7 @@ function ShareMessageItem({
           className={cn(
             'max-w-none text-sm leading-7',
             isUser &&
-              'ml-auto inline-block rounded-lg border border-primary/15 bg-primary/10 px-4 py-2.5'
+              'ml-auto w-fit rounded-2xl bg-muted/70 px-4 py-2.5 text-left'
           )}
         >
           {richPayload ? (
@@ -319,9 +319,9 @@ export function ShareViewer({
   return (
     <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
       <header className={cn(SHARE_CONTAINER_CLASS, 'pt-4')}>
-        <div className="v2-panel flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="flex flex-col gap-3 border-b border-border/70 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3 font-semibold">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
               AI
             </span>
             <span className="truncate">{brandText}</span>
@@ -351,9 +351,9 @@ export function ShareViewer({
       </header>
 
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-2 sm:py-3')}>
-        <section className="v2-panel p-4 sm:p-6">
+        <section className="py-4 sm:py-6">
           <div className="mb-6 text-center">
-            <h1 className="mx-auto max-w-5xl text-title-l font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
+            <h1 className="mx-auto text-title-l font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
               {share.title || share.sessionTitle}
             </h1>
             <p className="mt-3 text-sm text-muted-foreground">公开分享 · {formatDate(share.createdAt)}</p>

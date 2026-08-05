@@ -1,5 +1,5 @@
 export const COMPOSER_SHELL_BASE_CLASS =
-  'overflow-hidden rounded-lg border border-border bg-card/75 shadow-[0_8px_28px_hsl(var(--foreground)/0.06)] backdrop-blur-md transition-colors duration-200 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 focus-within:ring-offset-2 focus-within:ring-offset-background'
+  'overflow-hidden rounded-[var(--radius-composer)] border border-border/80 bg-background transition-colors duration-200 focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-ring/15 focus-within:ring-offset-2 focus-within:ring-offset-background'
 
 export const COMPOSER_TEXTAREA_BASE_CLASS =
   'h-auto resize-none border-0 bg-transparent text-left leading-[1.5] placeholder:text-muted-foreground transition-[height] duration-150 ease-out focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none rounded-none'

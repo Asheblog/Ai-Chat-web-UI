@@ -285,7 +285,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="v2-app-surface flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:w-[96vw] sm:max-w-[1320px] sm:rounded-lg sm:border sm:border-border sm:shadow-[0_28px_80px_hsl(var(--foreground)/0.18)]"
+        className="v2-app-surface flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:w-[96vw] sm:max-w-[1320px] sm:rounded-lg sm:border sm:border-border"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>设置</DialogTitle>

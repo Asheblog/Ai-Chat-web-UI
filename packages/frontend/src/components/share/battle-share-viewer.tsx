@@ -520,17 +520,17 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
 
   return (
     <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
-      <div className="mx-auto flex w-full max-w-[980px] flex-1 flex-col gap-4 px-4 py-4 sm:px-6">
-        <div className="v2-panel flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto flex w-full max-w-[72rem] flex-1 flex-col gap-4 px-4 py-4 sm:px-6">
+        <div className="flex flex-col gap-3 border-b border-border/70 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 text-sm font-semibold">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-xs font-bold text-primary-foreground">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
               AI
             </span>
             {brandText} Battle 分享
           </div>
           <span className="text-xs text-muted-foreground">{formatRelativeTime(shareState.createdAt)}</span>
         </div>
-        <header className="v2-panel p-5">
+        <header className="border-b border-border/60 pb-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0 space-y-3">
               <h1 className="text-title-l sm:text-2xl font-semibold tracking-tight text-foreground">
@@ -577,7 +577,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           </div>
         </header>
 
-        <section className="v2-panel p-4">
+        <section className="border-b border-border/50 py-4 last:border-b-0">
           <button
             type="button"
             className="flex w-full items-center justify-between gap-3 rounded-md px-1 py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -609,7 +609,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
 
         {isLive && (
           <div className="space-y-4">
-            <div className="v2-panel p-4">
+            <div className="border-b border-border/50 py-4 last:border-b-0">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">对战进度</span>
                 <span className="font-medium">
@@ -641,7 +641,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
               ))}
             </div>
 
-            <section className="v2-panel p-4">
+            <section className="border-b border-border/50 py-4 last:border-b-0">
                 <FlowGraph
                   judgeLabel={payload.judge.modelLabel || payload.judge.modelId}
                   nodeStates={mergedNodeStates}
@@ -822,7 +822,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
         )}
       </div>
       <footer className="border-t border-border/80 py-4">
-        <div className="mx-auto w-full max-w-[980px] px-4 text-center text-sm text-muted-foreground md:px-6">
+        <div className="mx-auto w-full max-w-[72rem] px-4 text-center text-sm text-muted-foreground md:px-6">
           由<span className="font-medium text-foreground">{brandText}</span> 生成 · {formatDate(shareState.createdAt)}
         </div>
       </footer>

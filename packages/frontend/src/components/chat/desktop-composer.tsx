@@ -162,7 +162,7 @@ export function DesktopComposer({
 
   return (
     <div className="hidden md:block">
-      <div className="mx-auto max-w-[calc(100vw-320px)] px-5 pb-5 pt-3 md:px-6">
+      <div className="mx-auto w-full max-w-[var(--chat-max-width)] px-4 pb-5 pt-3 sm:px-5 md:px-6">
         <ComposerAttachmentList
           images={selectedImages}
           onRemoveImage={onRemoveImage}

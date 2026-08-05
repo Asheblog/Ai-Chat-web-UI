@@ -125,14 +125,14 @@ export function ChatMessageViewport({
 
   return (
     <ScrollArea ref={scrollAreaRef} className="chat-message-viewport flex-1 px-3 sm:px-4 md:px-6">
-      <div className={cn('mx-auto w-full max-w-[1440px] pt-4 md:pt-6 lg:pt-14', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
+      <div className={cn('mx-auto w-full max-w-[var(--chat-max-width)] pt-4 md:pt-6 lg:pt-10', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
         {hasOlder && (
           <div className="mb-2 text-center text-xs text-muted-foreground">
             {isLoadingOlder ? '正在加载更早消息…' : '上滑可加载更早消息'}
           </div>
         )}
         {shareModeActive ? (
-          <div className="mb-3 rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground shadow-sm">
+          <div className="mb-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm text-foreground">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="font-medium text-primary">分享选择模式已开启</p>
@@ -182,7 +182,7 @@ export function ChatMessageViewport({
                 type="button"
                 size="sm"
                 variant="ghost"
-              className="rounded-md border border-border bg-card/80 hover:bg-accent"
+              className="rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
                 onClick={() => enterShareSelectionMode(sessionId)}
               >
                 <Share2 className="mr-2 h-4 w-4" />

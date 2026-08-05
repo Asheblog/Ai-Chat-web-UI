@@ -178,7 +178,7 @@ describe('WelcomeScreen', () => {
     render(<WelcomeScreen />)
     const textarea = screen.getByRole('textbox', { name: '输入消息' })
     const parent = textarea.parentElement!
-    expect(parent.className).toContain('rounded-lg')
+    expect(parent.className).toContain('rounded-[var(--radius-composer)]')
     expect(parent.className).toContain('relative')
     expect(parent.className).toContain('p-4')
     expect(parent.className).toContain('focus-within:ring-2')

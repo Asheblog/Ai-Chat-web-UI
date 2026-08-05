@@ -63,7 +63,7 @@ export default function MainLayout({
   return (
     <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-background">
       <Sidebar />
-      <MainContent className="v2-app-surface relative border-l border-border">
+      <MainContent className="v2-app-surface relative">
         <SetupWizard />
         <SkillApprovalInbox />
         {!isActorReady ? (
@@ -81,7 +81,7 @@ export default function MainLayout({
                   variant="ghost"
                   size="icon"
                   aria-label={sidebarCollapsed ? '展开侧边栏' : '打开侧边栏'}
-                  className="group/sidebar-toggle h-10 w-10 rounded-lg border border-border bg-surface hover:bg-accent hover:text-primary"
+                  className="group/sidebar-toggle h-10 w-10 rounded-lg hover:bg-accent hover:text-primary"
                   onClick={() => {
                     try {
                       if (sidebarCollapsed) {

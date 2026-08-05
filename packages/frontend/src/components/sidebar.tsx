@@ -281,7 +281,7 @@ export function Sidebar() {
   }, [sessionSearch, sessions])
 
   const sidebarContent = (
-    <div className="flex h-full w-full flex-col border-r border-border bg-surface text-foreground shadow-[10px_0_28px_hsl(var(--foreground)/0.035)] lg:w-[248px]">
+    <div className="flex h-full w-full flex-col border-r border-border/70 bg-[hsl(var(--sidebar-bg))] text-foreground lg:w-[260px]">
       {/* 顶部文字LOGO + 折叠按钮 */}
       <div className="flex h-[78px] items-center justify-between px-4">
         <Link
@@ -330,7 +330,7 @@ export function Sidebar() {
       <div className="space-y-2 px-4 pb-4">
         <Button
           onClick={handleNewChat}
-          className="h-11 w-full justify-center rounded-md bg-primary text-base text-primary-foreground shadow-[0_12px_22px_hsl(var(--primary)/0.18)] hover:bg-[hsl(var(--primary-hover))]"
+          className="h-11 w-full justify-center rounded-lg bg-primary text-base text-primary-foreground hover:bg-[hsl(var(--primary-hover))]"
           disabled={isCreating || quotaExhausted}
           aria-busy={isCreating}
         >
@@ -565,7 +565,7 @@ export function Sidebar() {
   )
 
   const collapsedSidebar = (
-    <div className="flex h-full w-14 flex-col items-center justify-between border-r border-border bg-surface py-4 text-foreground">
+    <div className="flex h-full w-14 flex-col items-center justify-between border-r border-border/70 bg-[hsl(var(--sidebar-bg))] py-4 text-foreground">
       {/* 顶部：展开按钮 + 新建聊天 + 系统设置 */}
       <div className="flex flex-col items-center gap-2">
         <TooltipProvider>
@@ -591,7 +591,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-lg bg-primary text-primary-foreground shadow-[0_10px_22px_hsl(var(--primary)/0.18)] hover:bg-[hsl(var(--primary-hover))]"
+                className="h-10 w-10 rounded-lg bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))]"
                 aria-label="新建聊天"
                 onClick={handleNewChat}
                 disabled={isCreating || quotaExhausted}
@@ -676,7 +676,7 @@ export function Sidebar() {
         <div
           className={cn(
             "relative h-full overflow-hidden bg-surface transition-[width] duration-300 ease-in-out will-change-[width]",
-            sidebarCollapsed ? "w-14" : "w-[248px]"
+            sidebarCollapsed ? "w-14" : "w-[260px]"
           )}
         >
           <div
@@ -708,7 +708,7 @@ export function Sidebar() {
           side="left"
           showCloseButton={false}
           dialogTitle="侧边栏导航"
-          className="w-[248px] border-r border-border bg-surface p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
+          className="w-[260px] border-r border-border/70 bg-[hsl(var(--sidebar-bg))] p-0 data-[state=closed]:duration-300 data-[state=open]:duration-300"
         >
           {sidebarContent}
         </SheetContent>
