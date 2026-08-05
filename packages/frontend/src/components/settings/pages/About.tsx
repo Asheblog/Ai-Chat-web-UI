@@ -3,13 +3,14 @@ import { Info, Package, Code2, GitBranch } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   APP_COMMIT_BASE_URL,
+  APP_HEAD_COMMIT,
   APP_UPDATE_DATE,
   APP_UPDATE_NOTES,
   APP_UPDATE_SCOPE,
   APP_VERSION,
 } from "@/lib/app-meta"
 
-// 关于页面：展示版本信息与更新日志（版本号由 app-meta 统一维护）
+// 关于页面：展示版本信息与更新日志（版本标识由 app-meta 统一维护）
 export function AboutPage() {
   return (
     <div className="space-y-4">
@@ -20,7 +21,7 @@ export function AboutPage() {
           </span>
           <div>
             <h2 className="v2-section-title">系统信息</h2>
-            <p className="v2-muted-line mt-1">当前版本和技术栈。</p>
+            <p className="v2-muted-line mt-1">当前构建提交与技术栈。</p>
           </div>
         </div>
 
@@ -30,7 +31,17 @@ export function AboutPage() {
             <Package className="w-5 h-5 text-muted-foreground" />
             <h3 className="text-sm font-semibold">版本</h3>
           </div>
-          <Badge variant="secondary" className="font-mono">{APP_VERSION}</Badge>
+          <a
+            href={`${APP_COMMIT_BASE_URL}/${APP_HEAD_COMMIT}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex"
+            aria-label={`查看提交 ${APP_HEAD_COMMIT}`}
+          >
+            <Badge variant="secondary" className="font-mono hover:bg-secondary/80">
+              {APP_VERSION}
+            </Badge>
+          </a>
         </div>
 
         <div className="flex flex-col gap-4 rounded-lg border border-border/70 bg-muted/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">

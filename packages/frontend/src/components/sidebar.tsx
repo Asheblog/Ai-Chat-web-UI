@@ -3,10 +3,9 @@
 import { useState, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronRight, Folder, Github, Info, MessageCircle, Pin, PinOff, Plus, Search, Settings, Trash2, Trophy } from 'lucide-react'
+import { ChevronRight, Folder, Github, MessageCircle, Pin, PinOff, Plus, Search, Settings, Trash2, Trophy } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
@@ -25,7 +24,7 @@ import { SettingsDialog } from '@/components/settings/settings-dialog'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
-import { APP_VERSION, PROJECT_URL } from '@/lib/app-meta'
+import { PROJECT_HOST_PATH, PROJECT_NAME, PROJECT_URL } from '@/lib/app-meta'
 
 const formatUsageLine = (usage?: UsageTotals) => {
   if (!usage) return ''
@@ -540,25 +539,21 @@ export function Sidebar() {
       </ScrollArea>
 
       <div className="border-t border-border bg-surface/70 px-4 pb-5 pt-4">
-        <div className="rounded-md border border-border bg-muted/70 px-3 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-muted-foreground/70" />
-              <Badge variant="secondary" className="font-mono text-micro leading-none px-2 py-1">
-                {APP_VERSION}
-              </Badge>
-              <span className="text-xs text-muted-foreground">版本</span>
-            </div>
-            <Link
-              href={PROJECT_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Link>
+        <Link
+          href={PROJECT_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`${PROJECT_NAME} 项目地址`}
+          className="group flex items-center justify-between gap-3 rounded-md border border-border bg-muted/70 px-3 py-3 transition-colors hover:border-primary/30 hover:bg-accent/60"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">{PROJECT_NAME}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground group-hover:text-primary">
+              {PROJECT_HOST_PATH}
+            </p>
           </div>
-        </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+        </Link>
       </div>
 
     </div>

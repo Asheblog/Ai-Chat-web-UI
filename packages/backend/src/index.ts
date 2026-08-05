@@ -249,7 +249,7 @@ app.get('/', (c) => {
   return c.json({
     success: true,
     message: 'AI Chat Platform Backend API',
-    version: 'v2.1.0',
+    version: process.env.APP_VERSION ?? '2026-08-05 14:22 · a283de0',
     docs: '/api/settings/health',
   });
 });
