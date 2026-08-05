@@ -534,6 +534,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         historySnapshot: turnContext.history,
         mainModelVision,
         visionTranscriptionPrefix: visionTranscriptionPrefix || undefined,
+        visionAttachmentImageCount: visionProxyToolFlow ? images!.length : undefined,
         historyImageDescriptions,
       });
 

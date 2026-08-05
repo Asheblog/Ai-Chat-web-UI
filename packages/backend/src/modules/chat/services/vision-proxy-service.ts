@@ -44,6 +44,16 @@ export function isVisionProxyReady(config: VisionProxyConfig): boolean {
   return config.enabled && config.connectionId != null && Boolean(config.modelId)
 }
 
+/**
+ * 工具流下注入给主模型的附件提醒：图已剥离，需调用 analyze_visual_media。
+ * 仅在 count > 0 时返回非空文案。
+ */
+export function buildVisionAttachmentHint(count: number): string {
+  if (!Number.isFinite(count) || count <= 0) return ''
+  const n = Math.floor(count)
+  return `[用户附件] 本消息含 ${n} 张图片。你无法直接看到图片，请先调用 analyze_visual_media 查看后再回答。`
+}
+
 export function parseStoredImageDescriptions(json: string | null | undefined): ImageDescription[] | null {
   if (!json) return null
   try {

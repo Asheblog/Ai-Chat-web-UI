@@ -113,6 +113,15 @@ jest.mock('../../services/vision-proxy-service', () => ({
   loadVisionProxyConfig: jest.fn(),
 }))
 
+jest.mock('../../agent-tool-config', () => {
+  const actual = jest.requireActual('../../agent-tool-config')
+  return {
+    __esModule: true,
+    ...actual,
+    computeAgentToolFlags: jest.fn((...args: unknown[]) => actual.computeAgentToolFlags(...args)),
+  }
+})
+
 // Mock model-capabilities
 jest.mock('../../../../utils/model-capabilities', () => ({
   __esModule: true,
@@ -128,6 +137,7 @@ import {
   parseStoredImageDescriptions,
 } from '../../services/vision-proxy-service'
 import { resolveModelCapabilitiesForSession } from '../../../../utils/model-capabilities'
+import { computeAgentToolFlags } from '../../agent-tool-config'
 
 // visionProxyService 实例：deps 构造与用例断言共用同一 mock
 const visionProxyService = { transcribeImages: jest.fn() }
@@ -228,6 +238,19 @@ const createMinimalDeps = (overrides: Record<string, unknown> = {}) => {
 }
 
 describe('createChatStreamHandler error handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    ;(isVisionProxyReady as jest.Mock).mockReturnValue(false)
+    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: true })
+    ;(loadHistoryImageDescriptions as jest.Mock).mockResolvedValue(new Map())
+    ;(parseStoredImageDescriptions as jest.Mock).mockReturnValue(null)
+    ;(computeAgentToolFlags as jest.Mock).mockImplementation(
+      (...args: unknown[]) =>
+        jest.requireActual('../../agent-tool-config').computeAgentToolFlags(...args),
+    )
+    visionProxyService.transcribeImages.mockReset()
+  })
+
   it('returns 400 JSON when chatRequestBuilder.prepare() throws ConnectionServiceError with statusCode 400', async () => {
     const error = new ConnectionServiceError('连接缺少 secretVaultId，无法获取 API Key', 400)
     const mockPrepare = jest.fn().mockRejectedValue(error)
@@ -328,5 +351,81 @@ describe('createChatStreamHandler error handling', () => {
       where: { id: 100 },
       data: { imageDescriptionsJson: JSON.stringify([{ description: '图里有一只猫', modelRawId: 'm' }]) },
     })
+  })
+
+  it('passes visionAttachmentImageCount in tool flow without auto-transcribing', async () => {
+    ;(isVisionProxyReady as jest.Mock).mockReturnValue(true)
+    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: false })
+    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({
+      enabled: true,
+      connectionId: 2,
+      modelId: 'gemini-2.5-flash',
+    })
+    ;(computeAgentToolFlags as jest.Mock).mockReturnValue({
+      agentToolsActive: true,
+      agentWebSearchActive: true,
+      pythonToolActive: false,
+      workspaceToolsActive: false,
+      urlReaderActive: true,
+      documentToolsActive: false,
+      knowledgeBaseToolsActive: false,
+      dynamicSkillRequested: false,
+    })
+    const mockPrepare = jest.fn().mockResolvedValue({
+      promptTokens: 10,
+      contextLimit: 100,
+      contextRemaining: 90,
+      contextEnabled: true,
+      systemSettings: {},
+      messagesPayload: [],
+      baseRequestBody: {},
+      providerRequest: {
+        providerLabel: 'openai',
+        authHeader: {},
+        extraHeaders: {},
+        providerHost: 'api.example.com',
+        timeoutMs: 60000,
+      },
+      reasoning: { enabled: false, effort: 'medium', ollamaThink: false },
+    })
+    const deps = createMinimalDeps({
+      mockPrepare,
+      depsOverrides: {
+        assistantProgressService: {
+          persistProgress: jest.fn().mockResolvedValue({ recovered: false, messageId: null }),
+        } as any,
+        nonStreamFallbackService: {
+          execute: jest.fn().mockResolvedValue(null),
+        } as any,
+        providerRequester: {
+          requestWithBackoff: jest.fn().mockRejectedValue(new Error('provider error')),
+          executeFallback: jest.fn(),
+        } as any,
+      },
+    })
+    const { c } = createMockContext()
+    c.req.valid = jest.fn(() => ({
+      sessionId: 1,
+      content: '不对啊',
+      clientMessageId: 'test-client-id',
+      images: [
+        { data: 'aW1n', mime: 'image/png' },
+        { data: 'aW1nMg==', mime: 'image/jpeg' },
+      ],
+    }))
+
+    const handler = createChatStreamHandler(deps)
+    await handler(c)
+
+    expect(visionProxyService.transcribeImages).not.toHaveBeenCalled()
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        images: [],
+        mainModelVision: false,
+        visionAttachmentImageCount: 2,
+      }),
+    )
+    const prepareArg = mockPrepare.mock.calls[0][0]
+    expect(prepareArg.visionTranscriptionPrefix).toBeFalsy()
   })
 })

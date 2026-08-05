@@ -5,6 +5,7 @@ import {
   isVisionProxyReady,
   parseStoredImageDescriptions,
   loadHistoryImageDescriptions,
+  buildVisionAttachmentHint,
 } from '../vision-proxy-service'
 
 const prisma = {
@@ -34,6 +35,19 @@ describe('isVisionProxyReady', () => {
     expect(isVisionProxyReady({ enabled: false, connectionId: 1, modelId: 'm' })).toBe(false)
     expect(isVisionProxyReady({ enabled: true, connectionId: null, modelId: 'm' })).toBe(false)
     expect(isVisionProxyReady({ enabled: true, connectionId: 1, modelId: null })).toBe(false)
+  })
+})
+
+describe('buildVisionAttachmentHint', () => {
+  it('formats count and tool name for positive counts', () => {
+    expect(buildVisionAttachmentHint(1)).toContain('本消息含 1 张图片')
+    expect(buildVisionAttachmentHint(1)).toContain('analyze_visual_media')
+    expect(buildVisionAttachmentHint(3)).toContain('本消息含 3 张图片')
+  })
+
+  it('returns empty string for non-positive counts', () => {
+    expect(buildVisionAttachmentHint(0)).toBe('')
+    expect(buildVisionAttachmentHint(-1)).toBe('')
   })
 })
 

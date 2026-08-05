@@ -73,7 +73,7 @@
 - **Feature Card（功能卡）**：设置页内的白话化配置卡片（图标 + 标题 + 白话描述 + 主开关 + 常用项 + 「更多参数」折叠），默认折叠高级参数；来自 `components/settings/components/feature-card.tsx`
 - **Vision Transcription Proxy（图片转写代理）**：主模型不支持识图（vision）时，将用户消息中的图片自动交给管理员指定的识图模型转写为文字描述的系统能力；由系统设置「图片转写代理」开关（默认关闭）+ 连接 + 模型配置，作用于所有用户
 - **Image Transcription（图片转写）**：指定识图模型将图片附件转换为文字描述的过程；结果持久化到用户消息的 imageDescriptions 字段，后续轮次直接复用（转写一次）
-- **Visual Analysis Tool（视觉分析工具）**：内置工具 `analyze_visual_media`，仅在主聊天流处于工具流且主模型无 vision 时注入；主模型可自主多次调用，描述以工具结果回传并随工具事件持久化
+- **Visual Analysis Tool（视觉分析工具）**：内置工具 `analyze_visual_media`，仅在主聊天流处于工具流且主模型无 vision 时注入；主模型可自主多次调用，描述以工具结果回传并随工具事件持久化；工具流下会向前缀注入「用户附件」提醒（含张数），引导主模型先调用该工具再回答
 
 ## 移动客户端
 

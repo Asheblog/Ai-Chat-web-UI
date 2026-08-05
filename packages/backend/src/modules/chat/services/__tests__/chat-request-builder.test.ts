@@ -398,6 +398,56 @@ describe('ChatRequestBuilder.prepare vision proxy', () => {
     expect(JSON.stringify(last.content)).toContain('看看这张图')
   })
 
+  it('injects vision attachment hint with image count for tool-flow non-vision models', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    passthroughTokenizer(tokenizer)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: '不对啊' } as any,
+      content: '不对啊',
+      images: [],
+      mode: 'stream',
+      mainModelVision: false,
+      visionAttachmentImageCount: 2,
+    })
+    const messages: any[] = prepared.baseRequestBody.messages
+    const last = messages[messages.length - 1]
+    const serialized = JSON.stringify(last.content)
+    expect(serialized).toContain('[用户附件]')
+    expect(serialized).toContain('本消息含 2 张图片')
+    expect(serialized).toContain('analyze_visual_media')
+    expect(serialized).toContain('不对啊')
+  })
+
+  it('does not inject vision attachment hint when count is absent or zero', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    passthroughTokenizer(tokenizer)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: '纯文字' } as any,
+      content: '纯文字',
+      mode: 'stream',
+      mainModelVision: false,
+      visionAttachmentImageCount: 0,
+    })
+    const messages: any[] = prepared.baseRequestBody.messages
+    const last = messages[messages.length - 1]
+    expect(JSON.stringify(last.content)).not.toContain('[用户附件]')
+    expect(JSON.stringify(last.content)).not.toContain('analyze_visual_media')
+  })
+
   it('keeps images for vision main model', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([])

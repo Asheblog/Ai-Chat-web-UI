@@ -18,7 +18,7 @@ import {
 import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { sendMessageSchema } from '../chat-common'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../skills/types'
-import type { ImageDescription } from './vision-proxy-service'
+import { buildVisionAttachmentHint, type ImageDescription } from './vision-proxy-service'
 import { buildTaskPlanningPrompt } from '../task-planning'
 import {
   loadSystemSettingsMap,
@@ -84,6 +84,11 @@ export interface PrepareChatRequestParams {
   mainModelVision?: boolean
   /** 当前轮次图片转写描述前缀（自动转写注入） */
   visionTranscriptionPrefix?: string
+  /**
+   * 工具流下本轮附件图片张数；>0 时注入「请先调用 analyze_visual_media」提醒。
+   * 仅编排层在 visionProxyToolFlow 时传入。
+   */
+  visionAttachmentImageCount?: number
   /** 历史用户消息 id → 图片描述（仅主模型无 vision 时注入） */
   historyImageDescriptions?: Map<number, ImageDescription[]> | null
 }
@@ -134,6 +139,7 @@ export class ChatRequestBuilder {
     const contextEnabled = params.payload?.contextEnabled !== false
     const mainModelVision = params.mainModelVision !== false
     const visionTranscriptionPrefix = params.visionTranscriptionPrefix || ''
+    const visionAttachmentHint = buildVisionAttachmentHint(params.visionAttachmentImageCount ?? 0)
     const systemSettings = params.systemSettings ?? (await loadSystemSettingsMap(this.prisma))
     this.scheduleImageCleanup(systemSettings)
 
@@ -241,6 +247,7 @@ export class ChatRequestBuilder {
       (visionTranscriptionPrefix
         ? `[图片转写描述]\n${visionTranscriptionPrefix}\n\n`
         : '') +
+      (visionAttachmentHint ? `${visionAttachmentHint}\n\n` : '') +
       `[当前时间: ${dateString}]`
     if (messagesPayload.length > 0) {
       this.prependUserContent(messagesPayload, cacheSafePrefix)
