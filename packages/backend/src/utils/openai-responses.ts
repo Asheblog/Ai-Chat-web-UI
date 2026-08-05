@@ -134,6 +134,38 @@ export function convertChatCompletionsMessagesToResponsesInput(messages: any[]):
   return input
 }
 
+function convertChatCompletionsToolsToResponses(tools: unknown): unknown {
+  if (!Array.isArray(tools)) return tools
+  return tools.map((tool) => {
+    if (!tool || typeof tool !== 'object') return tool
+    const t = tool as Record<string, unknown>
+    // Responses function tools are internally tagged: { type, name, description, parameters, strict? }
+    // Chat Completions uses external tagging: { type, function: { name, ... } }
+    if (t.type === 'function' && t.function && typeof t.function === 'object' && !('name' in t)) {
+      const fn = t.function as Record<string, unknown>
+      const next: Record<string, unknown> = {
+        type: 'function',
+        name: fn.name,
+        description: fn.description,
+        parameters: fn.parameters,
+      }
+      if ('strict' in fn) next.strict = fn.strict
+      return next
+    }
+    return tool
+  })
+}
+
+function convertChatCompletionsToolChoiceToResponses(toolChoice: unknown): unknown {
+  if (!toolChoice || typeof toolChoice !== 'object') return toolChoice
+  const tc = toolChoice as Record<string, unknown>
+  if (tc.type === 'function' && tc.function && typeof tc.function === 'object' && !('name' in tc)) {
+    const fn = tc.function as Record<string, unknown>
+    return { type: 'function', name: fn.name }
+  }
+  return toolChoice
+}
+
 export function convertChatCompletionsRequestToResponses(requestBody: any): any {
   const body = requestBody && typeof requestBody === 'object' ? { ...requestBody } : {}
   const messages = Array.isArray(body.messages) ? body.messages : []
@@ -153,8 +185,8 @@ export function convertChatCompletionsRequestToResponses(requestBody: any): any 
     temperature: body.temperature,
     top_p: body.top_p,
     metadata: body.metadata,
-    tools: body.tools,
-    tool_choice: body.tool_choice,
+    tools: convertChatCompletionsToolsToResponses(body.tools),
+    tool_choice: convertChatCompletionsToolChoiceToResponses(body.tool_choice),
     parallel_tool_calls: body.parallel_tool_calls,
   }
 
