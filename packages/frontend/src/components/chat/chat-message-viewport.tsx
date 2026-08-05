@@ -8,7 +8,6 @@ import { MessageList } from '@/components/message-list'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { ChatErrorBanner } from '@/components/chat/chat-error-banner'
 import { Button } from '@/components/ui/button'
-import { Share2 } from 'lucide-react'
 import { useChatMessages, useChatStore } from '@/store/chat-store'
 import { ShareDialog } from '@/components/chat/share-dialog'
 import { messageKey } from '@/features/chat/store/utils'
@@ -75,8 +74,6 @@ export function ChatMessageViewport({
     const key = messageKey(highlightedShareMessageId)
     return messageBodiesMap[key]?.toolEvents ?? null
   }, [highlightedShareMessageId, messageBodiesMap])
-  const showShareEntry = metas.length > 0 && !shareModeActive
-
   useEffect(() => {
     if (!shareModeActive && isShareDialogOpen) {
       setIsShareDialogOpen(false)
@@ -131,7 +128,7 @@ export function ChatMessageViewport({
             {isLoadingOlder ? '正在加载更早消息…' : '上滑可加载更早消息'}
           </div>
         )}
-        {shareModeActive ? (
+        {shareModeActive && (
           <div className="mb-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm text-foreground">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
@@ -175,21 +172,6 @@ export function ChatMessageViewport({
               </div>
             </div>
           </div>
-        ) : (
-          showShareEntry && (
-            <div className="mb-3 flex justify-end">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-              className="rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
-                onClick={() => enterShareSelectionMode(sessionId)}
-              >
-                <Share2 className="mr-2 h-4 w-4" />
-                分享多条消息
-              </Button>
-            </div>
-          )
         )}
         <ChatErrorBanner error={error} />
         <MessageList
