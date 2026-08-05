@@ -59,7 +59,7 @@
 
 - **Design Tokens（设计令牌）**：Web 端统一的结构与语义视觉变量，包括字号阶梯、控件高度、间距、圆角与默认 Claude 气质色板；由 `globals.css` / Tailwind 持有，页面不得再使用随意 `px` 字号或随意覆盖按钮高度
 - **Flat App Canvas（扁平应用画布）**：主聊天、登录/注册、Settings、Battle、分享页共用同一暖色 `--background` 作为整页底；禁止对角斜纹装饰、多层纸感渐变，以及「白卡套在灰底上」的套娃表面；`--surface` 与画布同色，`--card` 仅用于可交互分组（设置卡、表格等）的轻量边框面
-- **Chat Column（对话栏）**：主聊天与分享正文居中，最大宽度由 `--chat-max-width`（默认 48rem / 768px）约束；composer 为大圆角（`--radius-composer`）底部固定输入壳
+- **Chat Column（对话栏）**：主聊天与分享正文居中，最大宽度由 `--chat-max-width`（默认 90rem / 1440px，沿用改造前消息区宽度）约束；桌面 composer 取 `min(对话栏, 视口减去侧栏余量)`；Welcome 首屏输入区保持更窄的 940px；移动端仍为满宽加边距，不受该上限影响
 - **Conversation Stream（对话流排版）**：助手消息通栏正文、无重面板；用户消息为轻量圆角淡底块（非气泡卡片）；工具/深度思考为低调折叠区，不以重阴影卡片抢阅读焦点
 - **Brand Theme（品牌主题）**：管理员可覆盖的品牌视觉变量子集（主色、主色前景、画布背景、表面、前景、次要前景）；未配置时使用 Claude 默认暖色主题；不可覆盖字号、间距、圆角等结构 Token；布局气质跟 Claude，色板仍服从 Brand Theme
 - **Brand Theme Injection（品牌主题注入）**：客户端将 Brand Theme 写入根节点 CSS 变量的过程；与 light/dark 类切换正交，暗色模式仍使用暖暗配套默认值，仅在管理员提供覆盖值时改写对应变量

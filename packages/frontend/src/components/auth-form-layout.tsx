@@ -25,10 +25,10 @@ export function AuthFormLayout({
 }: AuthFormLayoutProps) {
   return (
     <div className={cn("w-full", className)}>
-      <div className="mb-7 text-center">
-        <h2 className="text-display font-semibold tracking-tight text-foreground">{title}</h2>
+      <div className="mb-6 text-center">
+        <h2 className="text-title-l font-semibold tracking-tight text-foreground">{title}</h2>
         {description ? (
-          <p className="mt-3 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {error ? (

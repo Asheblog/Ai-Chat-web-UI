@@ -25,13 +25,10 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
   const router = useRouter()
   const redirectedRef = useRef(false)
   const { register, user, error, clearError } = useAuthStore()
-  const { systemSettings, publicBrandText, bootstrapBrandText } = useSettingsStore((state) => ({
-    systemSettings: state.systemSettings,
-    publicBrandText: state.publicBrandText,
+  const { bootstrapBrandText } = useSettingsStore((state) => ({
     bootstrapBrandText: state.bootstrapBrandText,
   }))
   const errorMessage = error ? extractErrorMessage(error) : null
-  const brandText = (systemSettings?.brandText ?? publicBrandText ?? initialBrandText ?? '').trim() || 'AIChat'
 
   useEffect(() => {
     if (initialBrandText) {
@@ -94,7 +91,7 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
 
   return (
     <AuthFormLayout
-      title={`${brandText} 注册`}
+      title="注册"
       description="创建账号后即可进入模型对话与设置管理。"
       error={errorMessage}
       footer={

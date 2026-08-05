@@ -28,13 +28,10 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
   const searchParams = useSearchParams()
   const redirectedRef = useRef<string | null>(null)
   const { login, user, error, clearError } = useAuthStore()
-  const { systemSettings, publicBrandText, bootstrapBrandText } = useSettingsStore((state) => ({
-    systemSettings: state.systemSettings,
-    publicBrandText: state.publicBrandText,
+  const { bootstrapBrandText } = useSettingsStore((state) => ({
     bootstrapBrandText: state.bootstrapBrandText,
   }))
   const errorMessage = error ? extractErrorMessage(error) : null
-  const brandText = (systemSettings?.brandText ?? publicBrandText ?? initialBrandText ?? '').trim() || 'AIChat'
 
   const nextPath = (() => {
     const raw = searchParams?.get('next')
@@ -112,7 +109,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
 
   return (
     <AuthFormLayout
-      title={`欢迎登录 ${brandText}`}
+      title="登录"
       description="登录账号以继续使用"
       error={
         errorMessage ? (

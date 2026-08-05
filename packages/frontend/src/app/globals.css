@@ -29,7 +29,7 @@
     --ring: 18 65% 52%;
     --radius: 0.75rem;
     --radius-composer: 1.25rem;
-    --chat-max-width: 48rem;
+    --chat-max-width: 90rem;
 
     --primary-hover: 18 65% 45%;
     --accent-color: 18 65% 52%;
@@ -79,7 +79,7 @@
     --input: 30 8% 20%;
     --ring: 18 70% 58%;
     --radius-composer: 1.25rem;
-    --chat-max-width: 48rem;
+    --chat-max-width: 90rem;
 
     --primary-hover: 18 70% 50%;
     --accent-color: 18 70% 58%;
