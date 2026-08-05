@@ -20,7 +20,7 @@ export function ModelSelectorQuickGrid({
 
   return (
     <div className="border-b border-border/60 px-3 py-2.5">
-      <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
+      <div className="mb-2 flex items-center justify-between text-micro text-muted-foreground">
         <span className="font-medium">常用</span>
         <span>最近 / 收藏</span>
       </div>
@@ -35,7 +35,7 @@ export function ModelSelectorQuickGrid({
               type="button"
               onClick={() => onSelectModel(model)}
               className={cn(
-                "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-[8px] border px-3 text-left text-xs transition-colors",
+                "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-md border px-3 text-left text-xs transition-colors",
                 isActive
                   ? "border-primary/45 bg-primary/8 text-primary"
                   : "border-border/60 bg-background text-foreground hover:border-primary/35 hover:bg-primary/5"

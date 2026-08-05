@@ -77,6 +77,14 @@ export const getSystemSettings = async () => {
   const raw: any = settingsRes.data.data || {}
   const allowRegistration = !!raw.registration_enabled
   const brandText = raw.brand_text || 'AIChat'
+  const brandPrimary = typeof raw.brand_primary === 'string' ? raw.brand_primary : ''
+  const brandPrimaryForeground =
+    typeof raw.brand_primary_foreground === 'string' ? raw.brand_primary_foreground : ''
+  const brandBackground = typeof raw.brand_background === 'string' ? raw.brand_background : ''
+  const brandSurface = typeof raw.brand_surface === 'string' ? raw.brand_surface : ''
+  const brandForeground = typeof raw.brand_foreground === 'string' ? raw.brand_foreground : ''
+  const brandMutedForeground =
+    typeof raw.brand_muted_foreground === 'string' ? raw.brand_muted_foreground : ''
   const sseHeartbeatIntervalMs = Number(raw.sse_heartbeat_interval_ms ?? 15000)
   const providerMaxIdleMs = Number(raw.provider_max_idle_ms ?? 60000)
   const providerTimeoutMs = Number(raw.provider_timeout_ms ?? 300000)
@@ -397,6 +405,12 @@ export const getSystemSettings = async () => {
     data: {
       allowRegistration,
       brandText,
+      brandPrimary,
+      brandPrimaryForeground,
+      brandBackground,
+      brandSurface,
+      brandForeground,
+      brandMutedForeground,
       sseHeartbeatIntervalMs,
       providerMaxIdleMs,
       providerTimeoutMs,
@@ -549,8 +563,18 @@ export const getSystemSettings = async () => {
   }
 }
 
+export type PublicBrandingResponse = {
+  brand_text?: string
+  brand_primary?: string
+  brand_primary_foreground?: string
+  brand_background?: string
+  brand_surface?: string
+  brand_foreground?: string
+  brand_muted_foreground?: string
+}
+
 export const getPublicBranding = async () => {
-  const response = await client.get<ApiResponse<{ brand_text?: string }>>('/settings/branding')
+  const response = await client.get<ApiResponse<PublicBrandingResponse>>('/settings/branding')
   return response.data
 }
 
@@ -564,6 +588,29 @@ export const updateSystemSettings = async (
   const patch: Record<string, unknown> = {}
   if (typeof rest.allowRegistration === 'boolean') patch.allowRegistration = !!rest.allowRegistration
   if (typeof rest.brandText === 'string') patch.brandText = rest.brandText
+  const assignBrandColor = (
+    field:
+      | 'brandPrimary'
+      | 'brandPrimaryForeground'
+      | 'brandBackground'
+      | 'brandSurface'
+      | 'brandForeground'
+      | 'brandMutedForeground',
+  ) => {
+    if (!Object.prototype.hasOwnProperty.call(rest, field)) return
+    const value = rest[field]
+    if (typeof value === 'string') {
+      patch[field] = value.trim()
+    } else if (value === null || value === undefined) {
+      patch[field] = ''
+    }
+  }
+  assignBrandColor('brandPrimary')
+  assignBrandColor('brandPrimaryForeground')
+  assignBrandColor('brandBackground')
+  assignBrandColor('brandSurface')
+  assignBrandColor('brandForeground')
+  assignBrandColor('brandMutedForeground')
   if (typeof rest.sseHeartbeatIntervalMs === 'number') patch.sseHeartbeatIntervalMs = rest.sseHeartbeatIntervalMs
   if (typeof rest.providerMaxIdleMs === 'number') patch.providerMaxIdleMs = rest.providerMaxIdleMs
   if (typeof rest.providerTimeoutMs === 'number') patch.providerTimeoutMs = rest.providerTimeoutMs

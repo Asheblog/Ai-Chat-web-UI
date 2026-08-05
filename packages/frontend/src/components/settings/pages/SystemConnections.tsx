@@ -384,13 +384,13 @@ export function SystemConnectionsPage() {
       />
 
       {displayError ? (
-        <div role="alert" className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
           {displayError}
         </div>
       ) : null}
 
       {successMessage ? (
-        <div role="status" className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div role="status" className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {successMessage}
         </div>
       ) : null}
@@ -399,7 +399,7 @@ export function SystemConnectionsPage() {
       <div className="flex items-center gap-3 border-b border-border/60 pb-3">
         <PlugZap className="h-5 w-5 flex-shrink-0 text-primary" />
         <div className="space-y-1">
-          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">供应商与连接</CardTitle>
+          <CardTitle>供应商与连接</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             按供应商快速接入模型，高级管理在下方
           </CardDescription>
@@ -409,7 +409,7 @@ export function SystemConnectionsPage() {
       {/* 模板卡网格 */}
       <section aria-label="供应商模板" data-card-key="connections:quick-connect">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <LayoutGrid className="h-5 w-5" />
           </span>
           <div>
@@ -583,7 +583,7 @@ function SheetTemplateContent({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 border-b border-border/70 px-5 py-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0">

@@ -125,8 +125,8 @@ export function SecretsTab() {
                 <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="py-2 pr-3 font-mono">{s.id}</td>
                   <td className="py-2 pr-3">{s.label}</td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{s.scope}</Badge></td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{s.kind}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{s.scope}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{s.kind}</Badge></td>
                   <td className="py-2 pr-3">{s.hasValue ? '是' : '否'}</td>
                   <td className="py-2 pr-3">
                     <div className="flex items-center gap-1">

@@ -228,8 +228,8 @@ export function DocManageDialog({
                     <TableCell>
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        size="icon-xs"
+                        className="text-destructive hover:text-destructive"
                         onClick={() => onDeleteSingle(doc.id)}
                       >
                         <Trash2 className="h-4 w-4" />

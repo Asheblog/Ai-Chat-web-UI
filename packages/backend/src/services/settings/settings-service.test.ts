@@ -66,18 +66,50 @@ const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
 }
 
 describe('SettingsService', () => {
-  it('caches brand text until invalidated', async () => {
+  it('caches public branding until invalidated', async () => {
     const { prisma, service } = buildService()
-    prisma.systemSetting.findUnique.mockResolvedValueOnce({ value: 'TestBrand' })
+    prisma.systemSetting.findMany.mockResolvedValueOnce([{ key: 'brand_text', value: 'TestBrand' }])
     const first = await service.getBrandingText()
     const second = await service.getBrandingText()
     expect(first).toBe('TestBrand')
     expect(second).toBe('TestBrand')
-    expect(prisma.systemSetting.findUnique).toHaveBeenCalledTimes(1)
+    expect(prisma.systemSetting.findMany).toHaveBeenCalledTimes(1)
     service.invalidateBrandingCache()
-    prisma.systemSetting.findUnique.mockResolvedValueOnce({ value: 'Another' })
-    const third = await service.getBrandingText()
-    expect(third).toBe('Another')
+    prisma.systemSetting.findMany.mockResolvedValueOnce([
+      { key: 'brand_text', value: 'Another' },
+      { key: 'brand_primary', value: '#AABBCC' },
+    ])
+    const third = await service.getPublicBranding()
+    expect(third.brand_text).toBe('Another')
+    expect(third.brand_primary).toBe('#AABBCC')
+    expect(third.brand_background).toBe('')
+  })
+
+  it('persists brand theme colors and clears empty values', async () => {
+    const { service, prisma } = buildService()
+    await service.updateSystemSettings({
+      brand_primary: '#aabbcc',
+      brand_background: '',
+      brand_surface: null,
+    })
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'brand_primary' },
+        update: { value: '#AABBCC' },
+      }),
+    )
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'brand_background' },
+        update: { value: '' },
+      }),
+    )
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'brand_surface' },
+        update: { value: '' },
+      }),
+    )
   })
 
   it('updates quotas and invalidates caches', async () => {

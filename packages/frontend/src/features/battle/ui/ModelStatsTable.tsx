@@ -239,7 +239,7 @@ export function ModelStatsTable({ groupedResults, statsMap, className }: ModelSt
                             <span className="text-xs text-muted-foreground">--</span>
                           )}
                           {/* 耗时 */}
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-micro text-muted-foreground">
                             {attempt.durationMs ? `${(attempt.durationMs / 1000).toFixed(1)}s` : '--'}
                           </span>
                         </div>

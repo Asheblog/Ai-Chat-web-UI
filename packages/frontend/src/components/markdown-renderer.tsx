@@ -230,7 +230,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
             <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
             {!isPlain && (
-              <span className="ml-2 text-[11px] text-muted-foreground">
+              <span className="ml-2 text-micro text-muted-foreground">
                 {normalized}
               </span>
             )}
@@ -292,7 +292,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           <span className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
           <span className="w-3 h-3 rounded-full bg-[#27c93f]" />
           {!isPlain && (
-            <span className="ml-2 text-[11px] text-muted-foreground">
+            <span className="ml-2 text-micro text-muted-foreground">
               {normalized}
             </span>
           )}

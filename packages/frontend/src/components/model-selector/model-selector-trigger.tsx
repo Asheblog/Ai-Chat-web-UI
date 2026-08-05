@@ -52,7 +52,7 @@ export const ModelSelectorTrigger = React.forwardRef<
               {selected ? selected.name : "选择模型"}
             </span>
             {selected && (
-              <span className="block truncate text-[11px] text-muted-foreground">
+              <span className="block truncate text-micro text-muted-foreground">
                 {selectedSource}
               </span>
             )}

@@ -345,7 +345,7 @@ export function ResultStep({
 
             {/* Share Link */}
             {shareLink && (
-                <div className="rounded-[8px] border border-border bg-card/80 px-4 py-3 text-sm">
+                <div className="rounded-md border border-border bg-card/80 px-4 py-3 text-sm">
                     分享链接：<a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
                         {shareLink}</a>
                 </div>
@@ -418,14 +418,14 @@ export function ResultStep({
                         <div
                             key={group.key}
                             className={cn(
-                                "rounded-[8px] border transition-all",
+                                "rounded-md border transition-all",
                                 rank.bg,
                                 isExpanded && "shadow-sm"
                             )}
                         >
                             {/* 模型主行*/}
                             <button
-                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-accent rounded-[8px] transition-colors"
+                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-accent rounded-md transition-colors"
                                 onClick={() => toggleExpand(group.key)}
                             >
                                 {/* 排名 */}
@@ -476,7 +476,7 @@ export function ResultStep({
                                     {group.attempts.map((attempt) => (
                                         <div
                                             key={`${group.key}-${attempt.attemptIndex}`}
-                                            className="flex cursor-pointer items-center justify-between gap-4 rounded-[8px] bg-card/70 px-4 py-2 transition-colors hover:bg-accent"
+                                            className="flex cursor-pointer items-center justify-between gap-4 rounded-md bg-card/70 px-4 py-2 transition-colors hover:bg-accent"
                                             onClick={() => onSelectResult(attempt)}
                                         >
                                             <div className="flex items-center gap-3">

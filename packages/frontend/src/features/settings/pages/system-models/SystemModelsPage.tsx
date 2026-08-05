@@ -170,7 +170,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
           <div className="flex items-center gap-3 pb-3 border-b">
             <Cpu className="w-5 h-5 text-primary" />
             <div>
-              <CardTitle className="text-lg">模型管理</CardTitle>
+              <CardTitle>模型管理</CardTitle>
               <CardDescription>为模型开启/关闭能力标签:图片理解、图像生成</CardDescription>
             </div>
           </div>
@@ -363,7 +363,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
       {/* 模型列表区块 */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">模型列表 ({list.length})</CardTitle>
+          <CardTitle>模型列表 ({list.length})</CardTitle>
         </div>
 
         <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
@@ -446,16 +446,16 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                         <TableCell className="py-3 px-3">
                           <div className="font-medium whitespace-normal break-words">{m.name || m.id}</div>
                           <div className="mt-1 flex items-center gap-2 flex-wrap text-xs">
-                            <Badge variant="outline" className="text-[11px] font-normal">
+                            <Badge variant="outline" className="text-micro font-normal">
                               {recommendTag(m)}
                             </Badge>
                             {m.provider && (
-                              <Badge variant="secondary" className="text-[10px] font-normal">
+                              <Badge variant="secondary" className="text-micro font-normal">
                                 {m.provider}
                               </Badge>
                             )}
                             {m.capabilitySource && (
-                              <Badge variant="secondary" className="text-[10px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                              <Badge variant="secondary" className="text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
                                 {MODEL_CAP_SOURCE_LABELS[m.capabilitySource] || `来源:${m.capabilitySource}`}
                               </Badge>
                             )}
@@ -491,8 +491,8 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                             <DropdownMenuTrigger asChild>
                               <Button
                                 variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 rounded-full"
+                                size="icon-xs"
+                                className="rounded-full"
                               >
                                 <MoreVertical className="w-4 h-4" />
                                 <span className="sr-only">更多操作</span>

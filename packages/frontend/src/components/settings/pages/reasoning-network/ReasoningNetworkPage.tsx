@@ -255,7 +255,7 @@ export function ReasoningNetworkPage() {
       <div className="flex items-center gap-3 pb-3 border-b border-border/60">
         <BrainCircuit className="w-5 h-5 text-primary flex-shrink-0" />
         <div className="space-y-1">
-          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">推理与网络</CardTitle>
+          <CardTitle>推理与网络</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             控制推理链、流式输出与网络连接参数
           </CardDescription>

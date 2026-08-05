@@ -524,7 +524,7 @@ export function KnowledgeBaseCard({ settings, update }: KnowledgeBaseCardProps) 
                   <Skeleton className="h-12 w-full" />
                 </div>
               ) : knowledgeBases.length === 0 ? (
-                <div className="rounded-[8px] border border-dashed border-border py-8 text-center text-muted-foreground">
+                <div className="rounded-md border border-dashed border-border py-8 text-center text-muted-foreground">
                   <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>暂无知识库</p>
                   <p className="text-sm">点击上方按钮创建第一个知识库</p>
@@ -577,7 +577,7 @@ export function KnowledgeBaseCard({ settings, update }: KnowledgeBaseCardProps) 
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button variant="ghost" size="icon-xs">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>

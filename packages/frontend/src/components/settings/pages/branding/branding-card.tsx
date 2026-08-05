@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Type } from "lucide-react"
+import { isValidBrandHex } from "@aichat/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -17,11 +18,66 @@ export interface BrandingCardProps {
   update: (payload: Partial<SystemSettings>) => Promise<void>
 }
 
+type BrandColorField =
+  | "brandPrimary"
+  | "brandPrimaryForeground"
+  | "brandBackground"
+  | "brandSurface"
+  | "brandForeground"
+  | "brandMutedForeground"
+
+const BRAND_COLOR_FIELDS: Array<{
+  key: BrandColorField
+  title: string
+  description: string
+  previewFallback: string
+}> = [
+  {
+    key: "brandPrimary",
+    title: "主色",
+    description: "按钮、链接与强调色；留空使用 Claude 默认暖橙",
+    previewFallback: "#C96A3A",
+  },
+  {
+    key: "brandPrimaryForeground",
+    title: "主色前景",
+    description: "主色按钮上的文字/图标色",
+    previewFallback: "#FFFFFF",
+  },
+  {
+    key: "brandBackground",
+    title: "背景色",
+    description: "页面纸感背景",
+    previewFallback: "#F7F3EE",
+  },
+  {
+    key: "brandSurface",
+    title: "表面色",
+    description: "卡片、弹层等表面容器",
+    previewFallback: "#FCFAF7",
+  },
+  {
+    key: "brandForeground",
+    title: "前景色",
+    description: "主要正文文字色",
+    previewFallback: "#241C16",
+  },
+  {
+    key: "brandMutedForeground",
+    title: "次要前景",
+    description: "辅助说明与弱化文字",
+    previewFallback: "#6B5E54",
+  },
+]
+
+const normalizeHexDraft = (value: string) => value.trim().toUpperCase()
+
+const readBrandColor = (settings: SystemSettings, key: BrandColorField) =>
+  (settings[key] || "").trim().toUpperCase()
+
 /**
- * 品牌定制卡：3 个 key（brandText/chatSystemPrompt/siteBaseUrl），
- * draft/fieldChanged 模式 + 图片访问域名刷新按钮，
- * 适配自 SystemGeneralPage 品牌定制区块（533-551/553-570/627-661）。
- * 上下文压缩行不在此卡（属数据与维护页），未移植。
+ * 品牌定制卡：文字 LOGO / 系统提示词 / 图片域名 + Brand Theme 六色覆盖，
+ * draft/fieldChanged 模式；空字符串表示恢复默认主题色。
  */
 export function BrandingCard({ settings, update }: BrandingCardProps) {
   const { toast } = useToast()
@@ -34,12 +90,28 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
   const [, setIsIMEComposing] = useState(false)
   const [chatSystemPromptDraft, setChatSystemPromptDraft] = useState('')
   const [siteBaseDraft, setSiteBaseDraft] = useState('')
+  const [colorDrafts, setColorDrafts] = useState<Record<BrandColorField, string>>({
+    brandPrimary: "",
+    brandPrimaryForeground: "",
+    brandBackground: "",
+    brandSurface: "",
+    brandForeground: "",
+    brandMutedForeground: "",
+  })
   const [saving, setSaving] = useState(false)
 
   const resetDrafts = useCallback(() => {
     setBrandTextDraft(settings.brandText || '')
     setChatSystemPromptDraft(settings.chatSystemPrompt || '')
     setSiteBaseDraft(settings.siteBaseUrl || '')
+    setColorDrafts({
+      brandPrimary: readBrandColor(settings, "brandPrimary"),
+      brandPrimaryForeground: readBrandColor(settings, "brandPrimaryForeground"),
+      brandBackground: readBrandColor(settings, "brandBackground"),
+      brandSurface: readBrandColor(settings, "brandSurface"),
+      brandForeground: readBrandColor(settings, "brandForeground"),
+      brandMutedForeground: readBrandColor(settings, "brandMutedForeground"),
+    })
   }, [settings])
 
   useEffect(() => {
@@ -50,22 +122,55 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
     brandText: settings.brandText || '',
     chatSystemPrompt: settings.chatSystemPrompt || '',
     siteBaseUrl: (settings.siteBaseUrl || '').trim(),
+    colors: {
+      brandPrimary: readBrandColor(settings, "brandPrimary"),
+      brandPrimaryForeground: readBrandColor(settings, "brandPrimaryForeground"),
+      brandBackground: readBrandColor(settings, "brandBackground"),
+      brandSurface: readBrandColor(settings, "brandSurface"),
+      brandForeground: readBrandColor(settings, "brandForeground"),
+      brandMutedForeground: readBrandColor(settings, "brandMutedForeground"),
+    },
   }
+
+  const colorsChanged = BRAND_COLOR_FIELDS.some(
+    ({ key }) => normalizeHexDraft(colorDrafts[key]) !== normalizedInitials.colors[key],
+  )
 
   const fieldChanged =
     brandTextDraft !== normalizedInitials.brandText ||
     chatSystemPromptDraft !== normalizedInitials.chatSystemPrompt ||
-    siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl
+    siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
+    colorsChanged
+
+  const setColorDraft = (key: BrandColorField, value: string) => {
+    setColorDrafts((prev) => ({ ...prev, [key]: value }))
+  }
 
   const handleSave = async () => {
     if (!isAdmin || saving) return
+    for (const { key, title } of BRAND_COLOR_FIELDS) {
+      const draft = normalizeHexDraft(colorDrafts[key])
+      if (draft && !isValidBrandHex(draft)) {
+        toast({
+          title: "颜色格式无效",
+          description: `${title} 需为 #RRGGBB，或留空恢复默认`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
     setSaving(true)
     try {
-      await update({
+      const payload: Partial<SystemSettings> = {
         brandText: brandTextDraft,
         chatSystemPrompt: chatSystemPromptDraft,
         siteBaseUrl: siteBaseDraft.trim(),
-      })
+      }
+      for (const { key } of BRAND_COLOR_FIELDS) {
+        const draft = normalizeHexDraft(colorDrafts[key])
+        payload[key] = draft && isValidBrandHex(draft) ? draft : ""
+      }
+      await update(payload)
       toast({ title: '已保存品牌设置' })
     } finally {
       setSaving(false)
@@ -163,6 +268,46 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
             >刷新</Button>
           </div>
         </SettingRow>
+
+        {BRAND_COLOR_FIELDS.map(({ key, title, description, previewFallback }) => {
+          const draft = colorDrafts[key]
+          const normalized = normalizeHexDraft(draft)
+          const pickerValue = isValidBrandHex(normalized) ? normalized : previewFallback
+          return (
+            <SettingRow key={key} title={title} description={description} align="start">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                <Input
+                  id={`${key}-picker`}
+                  type="color"
+                  aria-label={`${title}色板`}
+                  value={pickerValue}
+                  onChange={(e) => setColorDraft(key, e.target.value.toUpperCase())}
+                  className="h-10 w-14 cursor-pointer p-1"
+                  disabled={!isAdmin}
+                />
+                <Input
+                  id={key}
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setColorDraft(key, e.target.value)}
+                  placeholder="#RRGGBB"
+                  spellCheck={false}
+                  className="w-full font-mono sm:w-[140px]"
+                  disabled={!isAdmin}
+                  aria-label={`${title}十六进制`}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setColorDraft(key, "")}
+                  disabled={!isAdmin || !draft}
+                >
+                  恢复默认
+                </Button>
+              </div>
+            </SettingRow>
+          )
+        })}
       </div>
     </FeatureCard>
   )

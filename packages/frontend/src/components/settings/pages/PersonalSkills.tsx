@@ -173,7 +173,7 @@ export function PersonalSkillsPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="grid h-9 grid-cols-2 overflow-hidden rounded-[8px] border border-border bg-muted sm:w-[210px]">
+            <div className="grid h-9 grid-cols-2 overflow-hidden rounded-md border border-border bg-muted sm:w-[210px]">
               {(["store", "installed"] as ViewMode[]).map((item) => (
                 <button
                   key={item}

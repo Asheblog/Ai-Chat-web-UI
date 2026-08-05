@@ -35,7 +35,7 @@ export function ShareBadge({
   }
 
   return (
-    <span className={`absolute ${positionClass} top-3 text-[11px] text-muted-foreground`}>
+    <span className={`absolute ${positionClass} top-3 text-micro text-muted-foreground`}>
       待同步
     </span>
   )

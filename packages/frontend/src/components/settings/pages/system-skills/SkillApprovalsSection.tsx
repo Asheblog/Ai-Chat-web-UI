@@ -22,7 +22,7 @@ export function SkillApprovalsSection({
   return (
     <section className="v2-panel p-4 shadow-none sm:p-5">
       <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
           <ShieldCheck className="h-5 w-5" />
         </span>
         <div>
@@ -36,7 +36,7 @@ export function SkillApprovalsSection({
         {loading ? (
           <div className="text-sm text-muted-foreground">加载中...</div>
         ) : approvals.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/40 p-5 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/40 p-5 text-sm text-muted-foreground">
             当前没有待审批请求。
           </div>
         ) : (

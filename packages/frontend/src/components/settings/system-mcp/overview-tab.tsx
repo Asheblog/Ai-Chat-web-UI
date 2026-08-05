@@ -28,7 +28,7 @@ export function OverviewTab() {
               <Icon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               <div className="min-w-0">
                 <p className="text-xs font-medium text-foreground/80">{tab.label}</p>
-                <p className="text-[10px] text-muted-foreground/70 mt-0.5 leading-relaxed">
+                <p className="text-micro text-muted-foreground/70 mt-0.5 leading-relaxed">
                   {step?.description ?? tab.description}
                 </p>
               </div>
@@ -48,7 +48,7 @@ export function OverviewTab() {
             return (
               <div key={step.key} className="flex items-start gap-3">
                 <div className="flex flex-col items-center">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-micro font-semibold">
                     {idx + 1}
                   </div>
                   {idx < STEPS.length - 1 && (
@@ -59,7 +59,7 @@ export function OverviewTab() {
                   <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <div className="min-w-0">
                     <span className="text-xs font-medium text-foreground/80">{tab.label}</span>
-                    <span className="text-[11px] text-muted-foreground/60 ml-2">{step.description}</span>
+                    <span className="text-micro text-muted-foreground/60 ml-2">{step.description}</span>
                   </div>
                 </div>
               </div>

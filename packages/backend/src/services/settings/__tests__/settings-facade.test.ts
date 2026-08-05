@@ -3,6 +3,7 @@ import { SettingsFacade } from '../settings-facade'
 const createMocks = () => {
   const settingsService = {
     getBrandingText: jest.fn(),
+    getPublicBranding: jest.fn(),
     getSystemSettings: jest.fn(),
     updateSystemSettings: jest.fn(),
   }
@@ -58,6 +59,25 @@ describe('SettingsFacade', () => {
 
     expect(result).toBe('AIChat')
     expect(mocks.settingsService.getBrandingText).toHaveBeenCalled()
+  })
+
+  test('delegates public branding loading', async () => {
+    const mocks = createMocks()
+    const branding = {
+      brand_text: 'AIChat',
+      brand_primary: '#AABBCC',
+      brand_primary_foreground: '',
+      brand_background: '',
+      brand_surface: '',
+      brand_foreground: '',
+      brand_muted_foreground: '',
+    }
+    mocks.settingsService.getPublicBranding.mockResolvedValue(branding)
+
+    const result = await mocks.facade.getPublicBranding()
+
+    expect(result).toEqual(branding)
+    expect(mocks.settingsService.getPublicBranding).toHaveBeenCalled()
   })
 
   test('gets and updates system settings via services', async () => {

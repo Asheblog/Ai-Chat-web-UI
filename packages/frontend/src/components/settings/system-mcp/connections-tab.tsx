@@ -227,9 +227,9 @@ export function ConnectionsTab() {
               {items.map((conn) => (
                 <tr key={conn.id} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="py-2 pr-3">{conn.name}</td>
-                  <td className="py-2 pr-3 font-mono text-[10px]">{instMap.get(conn.installationId)?.namespaceKey ?? conn.installationId}</td>
+                  <td className="py-2 pr-3 font-mono text-micro">{instMap.get(conn.installationId)?.namespaceKey ?? conn.installationId}</td>
                   <td className="py-2 pr-3"><Switch checked={conn.enabled} onCheckedChange={(v) => handleToggle(conn.id, v)} /></td>
-                  <td className="py-2 pr-3"><Badge variant={conn.status === 'active' ? 'default' : conn.status === 'error' ? 'destructive' : 'secondary'} className="text-[10px]">{conn.status || 'unknown'}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant={conn.status === 'active' ? 'default' : conn.status === 'error' ? 'destructive' : 'secondary'} className="text-micro">{conn.status || 'unknown'}</Badge></td>
                   <td className="py-2 pr-3">
                     <div className="flex items-center gap-1">
                       <button type="button" onClick={() => openEdit(conn)} title="编辑" className="inline-flex p-1 rounded hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>

@@ -434,7 +434,7 @@ export function PythonRuntimeCard() {
                       <div className="flex flex-wrap items-center gap-1">
                         {sources.length > 0 ? (
                           sources.map((source) => (
-                            <Badge key={`${pkg.name}-${source}`} variant="outline" className="text-[10px]">
+                            <Badge key={`${pkg.name}-${source}`} variant="outline" className="text-micro">
                               {SOURCE_LABELS[source]}
                             </Badge>
                           ))

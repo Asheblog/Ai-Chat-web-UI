@@ -144,7 +144,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
               onChange={(e) => setUsername(e.target.value)}
               required
               disabled={isLoading}
-              className="h-12 rounded-[8px] bg-card pl-12"
+              className="h-12 rounded-md bg-card pl-12"
             />
           </div>
         </div>
@@ -160,7 +160,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={isLoading}
-              className="h-12 rounded-[8px] bg-card pl-12 pr-12"
+              className="h-12 rounded-md bg-card pl-12 pr-12"
             />
             <button
               type="button"
@@ -185,7 +185,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         </div>
         <Button
           type="submit"
-          className="h-12 w-full rounded-[8px] text-base shadow-[0_12px_24px_rgba(37,99,235,0.22)]"
+          className="h-12 w-full rounded-md text-base shadow-[0_12px_24px_hsl(var(--primary)/0.22)]"
           disabled={isLoading || !username || !password}
         >
           {isLoading ? (

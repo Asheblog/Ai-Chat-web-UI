@@ -98,12 +98,12 @@ export function ComposerAttachmentList({
             {file.originalName}
           </span>
 
-          <span className="shrink-0 text-[11px] text-muted-foreground">
+          <span className="shrink-0 text-micro text-muted-foreground">
             {formatFileSize(file.fileSize)}
           </span>
 
           {file.status === 'error' && file.errorMessage && (
-            <span className="shrink-0 text-[11px] text-destructive/80" title={file.errorMessage}>
+            <span className="shrink-0 text-micro text-destructive/80" title={file.errorMessage}>
               {file.errorMessage}
             </span>
           )}

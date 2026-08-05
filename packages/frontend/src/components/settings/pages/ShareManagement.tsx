@@ -187,7 +187,7 @@ export function ShareManagementPanel() {
 
       <div>
         {error && shares.length > 0 ? (
-          <div className="mb-3 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
             {error}
           </div>
         ) : null}
@@ -239,23 +239,23 @@ export function ShareManagementPanel() {
                       <div className="flex items-center justify-end gap-1.5">
                         <Button
                           variant="outline"
-                          size="icon"
+                          size="icon-xs"
                           onClick={() => handleCopy(share)}
                           disabled={Boolean(share.revokedAt)}
                           aria-label="复制分享链接"
                           title="复制分享链接"
-                          className="h-8 w-8 bg-background"
+                          className="bg-background"
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="outline"
-                          size="icon"
+                          size="icon-xs"
                           asChild
                           aria-label="打开分享"
                           title="打开分享"
                           className={cn(
-                            "h-8 w-8 bg-background",
+                            "bg-background",
                             share.revokedAt ? "pointer-events-none opacity-45" : ""
                           )}
                         >
@@ -267,11 +267,11 @@ export function ShareManagementPanel() {
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="outline"
-                              size="icon"
+                              size="icon-xs"
                               disabled={Boolean(share.revokedAt) || updatingId === share.id}
                               aria-label="调整有效期"
                               title={share.expiresAt ? `有效期：${formatDate(share.expiresAt)}` : '不自动失效'}
-                              className="h-8 w-8 bg-background"
+                              className="bg-background"
                             >
                               {updatingId === share.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -293,12 +293,11 @@ export function ShareManagementPanel() {
                         </DropdownMenu>
                         <Button
                           variant="destructive"
-                          size="icon"
+                          size="icon-xs"
                           onClick={() => handleRevoke(share.id)}
                           disabled={Boolean(share.revokedAt) || updatingId === share.id}
                           aria-label="撤销分享"
                           title="撤销分享"
-                          className="h-8 w-8"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

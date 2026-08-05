@@ -149,7 +149,7 @@ export function PersonalPreferencesPage(){
   }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">个人设置</h1>
+      <h1 className="text-title-l sm:text-2xl font-semibold tracking-tight text-foreground">个人设置</h1>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <section className="v2-panel p-5 md:p-6">
@@ -193,7 +193,7 @@ export function PersonalPreferencesPage(){
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground/80">主题</label>
-                <div className="grid grid-cols-3 overflow-hidden rounded-[8px] border border-border bg-muted">
+                <div className="grid grid-cols-3 overflow-hidden rounded-md border border-border bg-muted">
                   {[
                     { value: 'light', label: '浅色', icon: Sun },
                     { value: 'system', label: '跟随系统', icon: Monitor },

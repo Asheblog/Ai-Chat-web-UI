@@ -50,7 +50,7 @@ export function ModelSelectorSearchControls({
           value={searchTerm}
           onChange={(event) => onSearchTermChange(event.target.value)}
           placeholder="搜索模型 / 厂商 / 能力"
-          className="h-10 rounded-[8px] border-border/80 bg-background pl-9 pr-8 text-sm shadow-none"
+          className="h-10 rounded-md border-border/80 bg-background pl-9 pr-8 text-sm shadow-none"
         />
         {searchTerm && (
           <button
@@ -69,7 +69,7 @@ export function ModelSelectorSearchControls({
           type="button"
           size="sm"
           variant={allActive ? "default" : "outline"}
-          className="h-8 shrink-0 rounded-[8px] px-3 text-xs"
+          className="h-8 shrink-0 rounded-md px-3 text-xs"
           onClick={activateAll}
         >
           全部
@@ -80,7 +80,7 @@ export function ModelSelectorSearchControls({
             type="button"
             size="sm"
             variant={selectorView === option.id ? "default" : "outline"}
-            className="h-8 shrink-0 rounded-[8px] px-3 text-xs"
+            className="h-8 shrink-0 rounded-md px-3 text-xs"
             onClick={() => activateView(option.id)}
           >
             {option.label}
@@ -94,7 +94,7 @@ export function ModelSelectorSearchControls({
               type="button"
               size="sm"
               variant={capabilityFilter === option.id ? "default" : "outline"}
-              className="h-8 shrink-0 rounded-[8px] px-3 text-xs"
+              className="h-8 shrink-0 rounded-md px-3 text-xs"
               onClick={() => activateCapability(option.id)}
             >
               {Icon && <Icon className="mr-1 h-3 w-3" />}

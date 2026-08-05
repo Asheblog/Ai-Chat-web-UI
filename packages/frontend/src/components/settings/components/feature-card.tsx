@@ -54,7 +54,7 @@ export function FeatureCard({
     <section className="v2-panel flex flex-col overflow-hidden" data-card-key={cardKey}>
       <div className="flex items-center justify-between gap-4 px-4 pt-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Icon className="h-5 w-5" />
           </span>
           <span className="min-w-0">

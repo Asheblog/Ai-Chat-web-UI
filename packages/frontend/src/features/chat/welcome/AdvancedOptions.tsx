@@ -103,7 +103,7 @@ export function AdvancedOptions({
               variant="ghost"
               size="icon"
               className={cn(
-                'h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                'h-9 w-9 rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
                 triggerClassName,
               )}
               disabled={disabled}
@@ -150,7 +150,7 @@ export function AdvancedOptions({
               variant="ghost"
               size="icon"
               className={cn(
-                'h-9 w-9 rounded-[8px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                'h-9 w-9 rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
                 triggerClassName,
               )}
               disabled={disabled}

@@ -18,6 +18,37 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: [
+          "var(--font-ui)",
+          "var(--font-noto-sc)",
+          "Noto Sans SC",
+          "PingFang SC",
+          "Microsoft YaHei",
+          "HarmonyOS Sans",
+          "Segoe UI",
+          "Helvetica Neue",
+          "system-ui",
+          "sans-serif",
+        ],
+      },
+      fontSize: {
+        micro: ["0.75rem", { lineHeight: "1.25" }],
+        caption: ["0.75rem", { lineHeight: "1.35" }],
+        "title-s": ["1rem", { lineHeight: "1.35", fontWeight: "650" }],
+        "title-m": ["1.125rem", { lineHeight: "1.35", fontWeight: "600" }],
+        "title-l": ["1.25rem", { lineHeight: "1.3", fontWeight: "600" }],
+        display: ["1.75rem", { lineHeight: "1.15", fontWeight: "600" }],
+        "display-lg": ["2rem", { lineHeight: "1.1", fontWeight: "600" }],
+      },
+      spacing: {
+        "space-1": "var(--space-1)",
+        "space-2": "var(--space-2)",
+        "space-3": "var(--space-3)",
+        "space-4": "var(--space-4)",
+        "space-5": "var(--space-5)",
+        "space-6": "var(--space-6)",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

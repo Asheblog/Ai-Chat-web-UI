@@ -3,13 +3,13 @@ import { BookOpen, Brain, Code2, Globe2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
-  'relative overflow-hidden rounded-[10px] border border-border bg-card/75 shadow-[0_4px_16px_hsl(var(--background)/0.3)] backdrop-blur-md transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
+  'relative overflow-hidden rounded-lg border border-border bg-card/75 shadow-[0_4px_16px_hsl(var(--foreground)/0.05)] backdrop-blur-md transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
 
 export const composerToolbarScrollClass =
   'flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-visible pr-0 sm:gap-1.5'
 
 export const composerToolbarButtonClass =
-  'relative inline-flex h-11 w-11 shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-[8px] border border-border bg-card text-muted-foreground shadow-[0_1px_2px_hsl(var(--background)/0.25)] transition-colors hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-45 md:h-9 md:w-9'
+  'relative inline-flex h-11 w-11 shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-[0_1px_2px_hsl(var(--foreground)/0.06)] transition-colors hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-45 md:h-9 md:w-9'
 
 interface ComposerIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
@@ -69,7 +69,7 @@ export function ComposerFeatureChip({
       {icon}
       {showDot && active && (
         <span
-          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_0_3px_rgba(37,99,235,0.10)]"
+          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.10)]"
           aria-hidden="true"
         />
       )}
@@ -128,7 +128,7 @@ export function ComposerFeatureControls({
         >
           <BookOpen className="h-4 w-4" />
           {Boolean(knowledgeBaseCount && knowledgeBaseCount > 0) && (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-micro font-semibold text-primary-foreground">
               {knowledgeBaseCount! > 9 ? '9+' : knowledgeBaseCount}
             </span>
           )}

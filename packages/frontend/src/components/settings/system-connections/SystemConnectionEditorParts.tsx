@@ -85,7 +85,7 @@ export function AdvancedFields({
             <label
               key={key}
               className={cn(
-                "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-[8px] border px-3 py-1.5 text-sm transition-colors",
+                "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors",
                 capabilities[key]
                   ? "border-primary/35 bg-primary/10 text-foreground"
                   : "border-border/70 bg-background/90 hover:bg-[hsl(var(--surface-hover))]",
@@ -117,7 +117,7 @@ export function CollapsibleEditorSection({
   children: ReactNode
 }) {
   return (
-    <section className="overflow-hidden rounded-[8px] border border-border bg-card">
+    <section className="overflow-hidden rounded-md border border-border bg-card">
       <button
         type="button"
         onClick={onToggle}
@@ -125,7 +125,7 @@ export function CollapsibleEditorSection({
         className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/55"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">{icon}</span>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">{icon}</span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-foreground">{title}</span>
             <span className="mt-0.5 block truncate text-xs text-muted-foreground">{summary}</span>

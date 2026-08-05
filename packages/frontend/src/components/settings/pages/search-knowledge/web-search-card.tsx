@@ -478,8 +478,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
                   <Button
                     type="button"
                     variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
+                    size="icon-xs"
                     onClick={() => moveEngine(engine, "up")}
                     disabled={index === 0}
                   >
@@ -488,8 +487,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
                   <Button
                     type="button"
                     variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
+                    size="icon-xs"
                     onClick={() => moveEngine(engine, "down")}
                     disabled={index === normalizedEngineOrder.length - 1}
                   >

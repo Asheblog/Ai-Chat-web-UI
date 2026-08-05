@@ -11,7 +11,7 @@ export default function SystemLogsRoutePage() {
               <TerminalSquare className="h-5 w-5" />
             </span>
             <div className="space-y-1">
-              <h1 className="text-xl font-semibold tracking-tight">系统运行日志</h1>
+              <h1 className="text-title-l font-semibold tracking-tight">系统运行日志</h1>
               <p className="text-sm text-muted-foreground">
                 查看后端服务运行日志，用于监控和排障
               </p>

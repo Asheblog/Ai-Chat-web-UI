@@ -1,5 +1,9 @@
 'use server'
 
+import {
+  BRAND_THEME_STORAGE_KEYS,
+  type BrandThemeColors,
+} from '@aichat/shared'
 import type { ApiResponse } from '@/types'
 
 const DEFAULT_BRAND = 'AIChat'
@@ -26,14 +30,31 @@ const buildBrandingEndpoint = () => {
   return `http://${backendHost}:${backendPort}/api/settings/branding`
 }
 
+type PublicBrandingPayload = {
+  brand_text?: string
+} & Partial<Record<(typeof BRAND_THEME_STORAGE_KEYS)[number], string | null | undefined>>
+
+const mapBrandTheme = (data?: PublicBrandingPayload | null): BrandThemeColors => {
+  const theme: BrandThemeColors = {}
+  if (!data) return theme
+  for (const key of BRAND_THEME_STORAGE_KEYS) {
+    const value = data[key]
+    if (typeof value === 'string' && value.trim()) {
+      theme[key] = value.trim()
+    }
+  }
+  return theme
+}
+
 export interface ServerBrandingResult {
   text: string
+  theme: BrandThemeColors
   isFallback: boolean
 }
 
 export const getServerBranding = async (): Promise<ServerBrandingResult> => {
   if (BRANDING_FETCH_DISABLED) {
-    return { text: DEFAULT_BRAND, isFallback: true }
+    return { text: DEFAULT_BRAND, theme: {}, isFallback: true }
   }
 
   const endpoint = buildBrandingEndpoint()
@@ -51,15 +72,16 @@ export const getServerBranding = async (): Promise<ServerBrandingResult> => {
     if (!response.ok) {
       throw new Error(`Branding request failed with status ${response.status}`)
     }
-    const payload = (await response.json()) as ApiResponse<{ brand_text?: string }>
+    const payload = (await response.json()) as ApiResponse<PublicBrandingPayload>
+    const theme = mapBrandTheme(payload.data)
     const resolved = (payload.data?.brand_text || '').trim()
     if (resolved) {
-      return { text: resolved, isFallback: false }
+      return { text: resolved, theme, isFallback: false }
     }
-    return { text: DEFAULT_BRAND, isFallback: true }
+    return { text: DEFAULT_BRAND, theme, isFallback: true }
   } catch (error) {
     console.warn('[branding] fallback to default due to error:', error)
-    return { text: DEFAULT_BRAND, isFallback: true }
+    return { text: DEFAULT_BRAND, theme: {}, isFallback: true }
   }
 }
 

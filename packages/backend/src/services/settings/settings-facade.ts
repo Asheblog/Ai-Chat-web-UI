@@ -42,6 +42,10 @@ export class SettingsFacade {
     return this.settingsService.getBrandingText()
   }
 
+  async getPublicBranding() {
+    return this.settingsService.getPublicBranding()
+  }
+
   async getSystemSettings(actor: Actor) {
     return this.settingsService.getSystemSettings(actor)
   }

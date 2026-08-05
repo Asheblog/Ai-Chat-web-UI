@@ -50,8 +50,8 @@ export function DestructiveConfirmDialogContent({
             <AlertTriangle className="h-5 w-5" />
           </div>
           <AlertDialogHeader className="space-y-2 text-left">
-            <AlertDialogTitle className="text-xl">{title}</AlertDialogTitle>
-            <AlertDialogDescription className="text-[15px] leading-6 text-muted-foreground">
+            <AlertDialogTitle className="text-title-l">{title}</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-6 text-muted-foreground">
               {description}
             </AlertDialogDescription>
           </AlertDialogHeader>

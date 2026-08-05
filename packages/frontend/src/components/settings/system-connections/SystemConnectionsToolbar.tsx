@@ -74,7 +74,7 @@ export function SystemConnectionsToolbar({
       <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">连接管理</h2>
+            <h2 className="text-title-m font-semibold tracking-tight text-foreground">连接管理</h2>
             <span className="v2-status">{stats.totalGroups} 个端点组</span>
           </div>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -205,7 +205,7 @@ function ConnectionStat({
 
   return (
     <div className="flex min-h-[76px] items-center gap-3 border-b border-border/70 px-4 py-3 last:border-b-0 sm:odd:border-r xl:border-b-0 xl:border-r xl:last:border-r-0 xl:px-5">
-      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px]", toneClass)}>{icon}</span>
+      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", toneClass)}>{icon}</span>
       <div className="min-w-0">
         <div className="text-xs text-muted-foreground">{label}</div>
         <div className="mt-0.5 text-lg font-semibold text-foreground">{value}</div>
@@ -230,7 +230,7 @@ function ProviderChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-[8px] border px-3 text-sm transition-colors",
+        "inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm transition-colors",
         active
           ? "border-primary/40 bg-primary/10 text-primary"
           : "border-border bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground",

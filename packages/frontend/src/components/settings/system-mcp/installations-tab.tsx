@@ -155,9 +155,9 @@ export function InstallationsTab() {
                 <tr key={item.id} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="py-2 pr-3 font-mono max-w-[140px] truncate" title={item.namespaceKey}>{item.namespaceKey}</td>
                   <td className="py-2 pr-3">{item.name}</td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{item.sourceType}</Badge></td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[10px]">{item.transport}</Badge></td>
-                  <td className="py-2 pr-3"><Badge variant={item.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">{item.status || 'unknown'}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{item.sourceType}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{item.transport}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant={item.status === 'active' ? 'default' : 'secondary'} className="text-micro">{item.status || 'unknown'}</Badge></td>
                   <td className="py-2 pr-3">
                     <button type="button" onClick={() => openEdit(item)} title="编辑" className="inline-flex p-1 rounded hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
                   </td>

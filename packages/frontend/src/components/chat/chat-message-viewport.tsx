@@ -132,7 +132,7 @@ export function ChatMessageViewport({
           </div>
         )}
         {shareModeActive ? (
-          <div className="mb-3 rounded-[8px] border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground shadow-sm">
+          <div className="mb-3 rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground shadow-sm">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="font-medium text-primary">分享选择模式已开启</p>
@@ -182,7 +182,7 @@ export function ChatMessageViewport({
                 type="button"
                 size="sm"
                 variant="ghost"
-              className="rounded-[8px] border border-border bg-card/80 hover:bg-accent"
+              className="rounded-md border border-border bg-card/80 hover:bg-accent"
                 onClick={() => enterShareSelectionMode(sessionId)}
               >
                 <Share2 className="mr-2 h-4 w-4" />

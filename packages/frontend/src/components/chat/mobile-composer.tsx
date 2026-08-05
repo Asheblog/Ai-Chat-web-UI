@@ -254,7 +254,7 @@ export function MobileComposer({
         <div className="shrink-0">
           <Button
             type="button"
-            className={`h-9 w-9 rounded-[10px] p-0 shadow-[0_10px_22px_rgba(37,99,235,0.18)] ${
+            className={`h-9 w-9 rounded-lg p-0 shadow-[0_10px_22px_hsl(var(--primary)/0.18)] ${
               isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
             }`}
             onClick={() => {

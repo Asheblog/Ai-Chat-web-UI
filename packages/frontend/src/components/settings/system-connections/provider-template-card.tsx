@@ -26,7 +26,7 @@ export function ProviderTemplateCard({
       onClick={() => onConfigure(template)}
       className="v2-panel group flex w-full cursor-pointer flex-col items-start gap-3 p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/50"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
         <Icon className="h-5 w-5" />
       </span>
       <span className="min-w-0">

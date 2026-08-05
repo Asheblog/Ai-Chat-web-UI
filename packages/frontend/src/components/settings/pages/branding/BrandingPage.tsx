@@ -51,7 +51,7 @@ export function BrandingPage() {
       <div className="flex items-center gap-3 pb-3 border-b border-border/60">
         <Palette className="w-5 h-5 text-primary flex-shrink-0" />
         <div className="space-y-1">
-          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">品牌与界面</CardTitle>
+          <CardTitle>品牌与界面</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             AI 头像、品牌标识与站点信息
           </CardDescription>

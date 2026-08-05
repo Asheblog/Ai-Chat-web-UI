@@ -39,8 +39,8 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
 
   settings.get('/branding', async (c) => {
     try {
-      const brandText = await facade.getBrandingText();
-      return c.json<ApiResponse>({ success: true, data: { brand_text: brandText } });
+      const branding = await facade.getPublicBranding();
+      return c.json<ApiResponse>({ success: true, data: branding });
     } catch (error) {
       return handleServiceError(c, error, 'Failed to fetch branding info', 'Get branding error:');
     }
@@ -107,10 +107,21 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     mime: z.string().min(1),
   })
 
+  const brandHexSchema = z
+    .union([z.literal(''), z.string().regex(/^#[0-9A-Fa-f]{6}$/)])
+    .nullable()
+    .optional()
+
   const systemSettingSchema = z.object({
     registration_enabled: z.boolean().optional(),
     // 文字LOGO，最多40字符
     brand_text: z.string().min(1).max(40).optional(),
+    brand_primary: brandHexSchema,
+    brand_primary_foreground: brandHexSchema,
+    brand_background: brandHexSchema,
+    brand_surface: brandHexSchema,
+    brand_foreground: brandHexSchema,
+    brand_muted_foreground: brandHexSchema,
     // 流式/稳定性相关配置
     sse_heartbeat_interval_ms: z.number().int().min(1000).max(600000).optional(),
     provider_max_idle_ms: z.number().int().min(0).max(3600000).optional(),

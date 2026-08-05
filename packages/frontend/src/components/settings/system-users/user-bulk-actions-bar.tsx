@@ -22,7 +22,7 @@ export function UserBulkActionsBar({
   if (selectedCount === 0) return null
 
   return (
-    <div className="rounded-[10px] border border-primary/20 bg-primary/5 px-4 py-3 sm:px-5 sm:py-3">
+    <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 sm:px-5 sm:py-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-medium">
           已选择 {selectedCount} 个用户

@@ -18,10 +18,10 @@ export default async function AuthLayout({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(158deg,transparent_0_32%,hsl(var(--accent)/0.7)_32%_54%,transparent_54%)]" />
           <div className="relative z-10">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_14px_30px_rgba(37,99,235,0.24)]">
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_14px_30px_hsl(var(--primary)/0.24)]">
                 <Sparkles className="h-7 w-7" />
               </div>
-              <h1 className="text-[40px] font-semibold leading-none tracking-tight">
+              <h1 className="text-display-lg font-semibold leading-none tracking-tight">
                 {aiPrefixed ? <span className="text-primary">AI</span> : null}{brandRest}
               </h1>
             </div>
@@ -31,7 +31,7 @@ export default async function AuthLayout({
 
             <div className="mt-14 space-y-7">
               <div className="flex items-center gap-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-accent text-accent-foreground">
+                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                   <MessageCircle className="h-7 w-7" />
                 </div>
                 <div>
@@ -41,7 +41,7 @@ export default async function AuthLayout({
               </div>
               <div className="h-px w-80 bg-border" />
               <div className="flex items-center gap-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-accent text-accent-foreground">
+                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                   <Boxes className="h-7 w-7" />
                 </div>
                 <div>

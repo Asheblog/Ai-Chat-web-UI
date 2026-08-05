@@ -15,7 +15,7 @@ export function AboutPage() {
     <div className="space-y-4">
       <section className="v2-panel p-4 shadow-none sm:p-5">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Info className="h-5 w-5" />
           </span>
           <div>
@@ -25,7 +25,7 @@ export function AboutPage() {
         </div>
 
         <div className="space-y-3">
-        <div className="flex flex-col gap-4 rounded-[10px] border border-border/70 bg-muted/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="flex flex-col gap-4 rounded-lg border border-border/70 bg-muted/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div className="flex items-center gap-3">
             <Package className="w-5 h-5 text-muted-foreground" />
             <h3 className="text-sm font-semibold">版本</h3>
@@ -33,7 +33,7 @@ export function AboutPage() {
           <Badge variant="secondary" className="font-mono">{APP_VERSION}</Badge>
         </div>
 
-        <div className="flex flex-col gap-4 rounded-[10px] border border-border/70 bg-muted/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="flex flex-col gap-4 rounded-lg border border-border/70 bg-muted/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div className="flex items-center gap-3">
             <Code2 className="w-5 h-5 text-muted-foreground" />
             <h3 className="text-sm font-semibold">技术栈</h3>
@@ -49,7 +49,7 @@ export function AboutPage() {
 
       <section className="v2-panel p-4 shadow-none sm:p-5">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <GitBranch className="h-5 w-5" />
           </span>
           <div>

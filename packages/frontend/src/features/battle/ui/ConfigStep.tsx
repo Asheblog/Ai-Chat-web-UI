@@ -107,7 +107,7 @@ export function ConfigStep({
                     />
 
                     {selectedModels.length === 0 ? (
-                        <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/30 p-8 text-center">
+                        <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 p-8 text-center">
                             <p className="text-sm text-muted-foreground">点击上方选择器添加参赛模型</p>
                         </div>
                     ) : (
@@ -117,7 +117,7 @@ export function ConfigStep({
                                 return (
                                     <div
                                         key={item.key}
-                                        className="space-y-3 rounded-[10px] border border-border/70 bg-muted/30 p-4 transition-colors hover:border-primary/50"
+                                        className="space-y-3 rounded-lg border border-border/70 bg-muted/30 p-4 transition-colors hover:border-primary/50"
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
@@ -149,7 +149,7 @@ export function ConfigStep({
                                                 />
                                             </div>
                                             {availability.webSearchDisabledNote && (
-                                                <p className="text-[11px] text-muted-foreground">{availability.webSearchDisabledNote}</p>
+                                                <p className="text-micro text-muted-foreground">{availability.webSearchDisabledNote}</p>
                                             )}
 
                                             <div className="flex items-center justify-between">
@@ -166,7 +166,7 @@ export function ConfigStep({
                                                 />
                                             </div>
                                             {availability.pythonDisabledNote && (
-                                                <p className="text-[11px] text-muted-foreground">{availability.pythonDisabledNote}</p>
+                                                <p className="text-micro text-muted-foreground">{availability.pythonDisabledNote}</p>
                                             )}
 
                                             <Separator className="my-2" />
@@ -198,7 +198,7 @@ export function ConfigStep({
                                                             }))
                                                         }
                                                     >
-                                                        <SelectTrigger className="w-24 h-7 text-xs">
+                                                        <SelectTrigger className="w-24 h-8 text-xs">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -244,7 +244,7 @@ export function ConfigStep({
 
                                         {item.advancedOpen && (
                                             <div className="space-y-3">
-                                                <div className="space-y-2 rounded-[10px] border border-border/70 bg-card/80 p-3">
+                                                <div className="space-y-2 rounded-lg border border-border/70 bg-card/80 p-3">
                                                     <div>
                                                         <p className="text-sm font-medium">额外提示词</p>
                                                         <p className="text-xs text-muted-foreground">仅当前模型生效，会追加为系统提示。</p>

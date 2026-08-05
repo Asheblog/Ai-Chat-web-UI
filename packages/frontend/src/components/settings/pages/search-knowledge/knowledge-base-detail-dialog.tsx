@@ -309,8 +309,8 @@ export function KnowledgeBaseDetailDialog({
                         <TableCell>
                           <Button
                             variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
+                            size="icon-xs"
+                            className="text-destructive"
                             onClick={() => onRemoveDocument(doc.id)}
                           >
                             <Trash2 className="h-4 w-4" />

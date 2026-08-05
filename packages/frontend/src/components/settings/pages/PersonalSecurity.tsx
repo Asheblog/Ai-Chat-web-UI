@@ -52,7 +52,7 @@ export function PersonalSecurityPage() {
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-accent sm:px-6"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-foreground/80 ring-1 ring-primary/20">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-foreground/80 ring-1 ring-primary/20">
             <Lock className="h-4 w-4" />
           </span>
           <span className="min-w-0">
@@ -128,7 +128,7 @@ export function PersonalSecurityPage() {
             </SettingRow>
 
             {error && (
-              <div className="flex items-start gap-2 rounded-[10px] border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 {error}
               </div>

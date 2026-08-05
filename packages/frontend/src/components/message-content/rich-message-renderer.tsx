@@ -95,7 +95,7 @@ function EvidenceImageCard({ image, index }: EvidenceImageCardProps) {
           loading="lazy"
         />
       </a>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-micro text-muted-foreground">
         <span className="rounded-full border border-border/70 px-2 py-0.5">{toEvidenceKindLabel(image.sourceKind)}</span>
         {confidenceLabel && (
           <span className="rounded-full border border-border/70 px-2 py-0.5">{confidenceLabel}</span>
@@ -173,7 +173,7 @@ export function RichMessageRenderer({
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-5')}>
           <button
             type="button"
-            className="mt-3 flex w-full items-center justify-between gap-3 rounded-[8px] border border-border bg-surface px-4 py-2.5 text-left text-sm transition hover:bg-accent"
+            className="mt-3 flex w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-2.5 text-left text-sm transition hover:bg-accent"
             onClick={() => setImagesExpanded((value) => !value)}
             aria-expanded={imagesExpanded}
           >

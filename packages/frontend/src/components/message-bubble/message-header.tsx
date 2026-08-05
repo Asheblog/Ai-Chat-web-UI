@@ -84,14 +84,14 @@ export function MessageHeader({
 
   const actions = (
     <>
-      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" onClick={onCopy} title="复制消息">
+      <Button variant="ghost" size="icon-xs" className="rounded-md" onClick={onCopy} title="复制消息">
         {isCopied ? <div className="h-3 w-3 bg-green-500 rounded" /> : <Copy className="h-3 w-3" />}
       </Button>
       {shareEntryAvailable && (
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 rounded-[8px]"
+          size="icon-xs"
+          className="rounded-md"
           title="进入分享选择模式"
           onClick={() => onShareStart?.()}
         >
@@ -101,8 +101,8 @@ export function MessageHeader({
       {showVariantControls && (
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 rounded-[8px]"
+          size="icon-xs"
+          className="rounded-md"
           title="重新生成回答"
           onClick={() => variantInfo?.onRegenerate()}
           disabled={Boolean(isStreaming)}
@@ -114,8 +114,8 @@ export function MessageHeader({
         <div className="ml-1 flex items-center gap-1">
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-[8px]"
+            size="icon-xs"
+            className="rounded-md"
             onClick={() => variantInfo?.onPrev()}
             title="查看更早的回答"
             disabled={Boolean(isStreaming)}
@@ -127,8 +127,8 @@ export function MessageHeader({
           </span>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-[8px]"
+            size="icon-xs"
+            className="rounded-md"
             onClick={() => variantInfo?.onNext()}
             title="查看最新回答"
             disabled={Boolean(isStreaming)}
@@ -137,10 +137,10 @@ export function MessageHeader({
           </Button>
         </div>
       )}
-      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="有帮助">
+      <Button variant="ghost" size="icon-xs" className="rounded-md" title="有帮助">
         <ThumbsUp className="h-3.5 w-3.5" />
       </Button>
-      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-[8px]" title="无帮助">
+      <Button variant="ghost" size="icon-xs" className="rounded-md" title="无帮助">
         <ThumbsDown className="h-3.5 w-3.5" />
       </Button>
     </>

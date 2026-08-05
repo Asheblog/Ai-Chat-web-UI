@@ -120,13 +120,15 @@ describe("BrandingPage", () => {
     expect(screen.getByText("设置全局生效的 AI 回复头像")).toBeInTheDocument()
     expect(screen.getByText("品牌定制")).toBeInTheDocument()
     expect(screen.getByText("自定义系统的品牌标识和外观")).toBeInTheDocument()
-    // 三行设置项
+    // 三行设置项 + Brand Theme 色板
     expect(screen.getByText("文字 LOGO")).toBeInTheDocument()
     expect(screen.getByText("全局系统提示词")).toBeInTheDocument()
     expect(screen.getByText("图片访问域名")).toBeInTheDocument()
+    expect(screen.getByText("主色")).toBeInTheDocument()
+    expect(screen.getByText("次要前景")).toBeInTheDocument()
   })
 
-  test("品牌卡保存 payload 精确等于 3 个 key，siteBaseUrl 被 trim", async () => {
+  test("品牌卡保存 payload 含文字与 Brand Theme 字段，siteBaseUrl 被 trim", async () => {
     render(<BrandingPage />)
     const card = getCard("品牌定制")
 
@@ -140,11 +142,29 @@ describe("BrandingPage", () => {
       expect(updateSpy).toHaveBeenCalledTimes(1)
     })
     const payload = updateSpy.mock.calls[0][0] as Record<string, unknown>
-    expect(Object.keys(payload).sort()).toEqual(["brandText", "chatSystemPrompt", "siteBaseUrl"].sort())
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        "brandText",
+        "chatSystemPrompt",
+        "siteBaseUrl",
+        "brandPrimary",
+        "brandPrimaryForeground",
+        "brandBackground",
+        "brandSurface",
+        "brandForeground",
+        "brandMutedForeground",
+      ].sort(),
+    )
     expect(payload).toEqual({
       brandText: "MyBrand",
       chatSystemPrompt: "",
       siteBaseUrl: "https://chat.example.com",
+      brandPrimary: "",
+      brandPrimaryForeground: "",
+      brandBackground: "",
+      brandSurface: "",
+      brandForeground: "",
+      brandMutedForeground: "",
     })
   })
 

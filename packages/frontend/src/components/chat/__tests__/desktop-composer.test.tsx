@@ -61,7 +61,7 @@ describe('DesktopComposer', () => {
     const textarea = container.querySelector('textarea')
     expect(textarea).toBeInTheDocument()
     const parent = textarea!.parentElement!
-    expect(parent.className).toContain('rounded-[12px]')
+    expect(parent.className).toContain('rounded-lg')
     expect(parent.className).toContain('relative')
     expect(parent.className).toContain('p-4')
     expect(parent.className).toContain('focus-within:ring-2')

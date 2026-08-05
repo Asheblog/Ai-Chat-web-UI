@@ -40,7 +40,7 @@ export function ModelSelectorGroupList({
     return (
       <div className="space-y-2 p-3">
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="rounded-[8px] border border-border/50 p-3">
+          <div key={index} className="rounded-md border border-border/50 p-3">
             <Skeleton className="h-4 w-44" />
             <Skeleton className="mt-2 h-3 w-28" />
           </div>
@@ -66,7 +66,7 @@ export function ModelSelectorGroupList({
               key={group}
               type="button"
               className={cn(
-                "h-9 shrink-0 rounded-[8px] px-3 text-sm font-medium transition-colors",
+                "h-9 shrink-0 rounded-md px-3 text-sm font-medium transition-colors",
                 resolvedActiveGroup === group
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
@@ -99,7 +99,7 @@ export function ModelSelectorGroupList({
               key={group}
               type="button"
               className={cn(
-                "flex h-9 w-full items-center justify-between rounded-[8px] px-2.5 text-left text-sm transition-colors",
+                "flex h-9 w-full items-center justify-between rounded-md px-2.5 text-left text-sm transition-colors",
                 resolvedActiveGroup === group
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-background hover:text-foreground"
@@ -184,7 +184,7 @@ function ModelRows({
             role="option"
             aria-selected={isActive}
             className={cn(
-              "group/model-row mb-1 flex items-center rounded-[8px] border transition-colors",
+              "group/model-row mb-1 flex items-center rounded-md border transition-colors",
               compact ? "min-h-[58px] px-2.5 py-2" : "min-h-[58px] px-2.5 py-2",
               isActive
                 ? "border-primary/45 bg-primary/8"
@@ -203,7 +203,7 @@ function ModelRows({
                 </span>
                 {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
               </div>
-              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro leading-4 text-muted-foreground">
                 <span className="truncate">{model.provider} · {channel}</span>
               </div>
             </button>
@@ -215,7 +215,7 @@ function ModelRows({
                 type="button"
                 onClick={(event) => onToggleFavorite(key, event)}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-[8px] transition-colors hover:bg-muted",
+                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted",
                   isFavorite ? "text-amber-500" : "text-muted-foreground"
                 )}
                 aria-label={isFavorite ? "取消收藏" : "收藏"}

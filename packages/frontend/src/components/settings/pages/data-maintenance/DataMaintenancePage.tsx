@@ -54,7 +54,7 @@ export function DataMaintenancePage() {
       <div className="flex items-center gap-3 pb-3 border-b border-border/60">
         <HardDrive className="w-5 h-5 text-primary flex-shrink-0" />
         <div className="space-y-1">
-          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">数据与维护</CardTitle>
+          <CardTitle>数据与维护</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             数据保留、压缩、并发与日志维护
           </CardDescription>

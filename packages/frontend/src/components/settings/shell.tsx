@@ -87,7 +87,7 @@ function SettingsShellLayout({
           )}
         >
           {showNavTitle ? (
-            <div className="mb-6 px-2 text-xl font-semibold tracking-tight text-foreground">
+            <div className="mb-6 px-2 text-title-l font-semibold tracking-tight text-foreground">
               {title}
             </div>
           ) : null}
@@ -117,7 +117,7 @@ function SettingsShellFlatImpl({
           type="button"
           onClick={() => onChange(s.key)}
           className={cn(
-            "flex w-full items-center gap-3 rounded-[8px] px-3 py-3 text-left text-sm transition-all",
+            "flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-sm transition-all",
             active === s.key
               ? "bg-accent text-foreground font-medium shadow-sm"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -250,7 +250,7 @@ function SettingsShellNestedImpl({
                   }
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-[8px] px-3 py-3 text-left text-sm font-medium transition-all",
+                  "flex w-full items-center gap-2 rounded-md px-3 py-3 text-left text-sm font-medium transition-all",
                   isActiveMain
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -277,7 +277,7 @@ function SettingsShellNestedImpl({
               type="button"
               onClick={() => toggleExpand(item.key)}
               className={cn(
-                "flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-sm transition-all",
+                "flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm transition-all",
                 "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
@@ -311,7 +311,7 @@ function SettingsShellNestedImpl({
             onChangeSub(item.key)
           }}
           className={cn(
-            "flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm transition-all",
+            "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-all",
             isActiveLeaf
               ? "bg-primary text-primary-foreground font-medium shadow-sm"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",

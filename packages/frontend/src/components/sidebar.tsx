@@ -281,7 +281,7 @@ export function Sidebar() {
   }, [sessionSearch, sessions])
 
   const sidebarContent = (
-    <div className="flex h-full w-full flex-col border-r border-border bg-surface text-foreground shadow-[10px_0_28px_rgba(15,23,42,0.035)] lg:w-[248px]">
+    <div className="flex h-full w-full flex-col border-r border-border bg-surface text-foreground shadow-[10px_0_28px_hsl(var(--foreground)/0.035)] lg:w-[248px]">
       {/* 顶部文字LOGO + 折叠按钮 */}
       <div className="flex h-[78px] items-center justify-between px-4">
         <Link
@@ -289,11 +289,11 @@ export function Sidebar() {
           onClick={handleLogoClick}
           className="flex min-w-0 flex-1 select-none items-center gap-2.5"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.22)]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_10px_22px_hsl(var(--primary)/0.22)]">
             <MessageCircle className="h-[18px] w-[18px]" />
           </span>
           <span
-            className="truncate text-[15px] font-semibold leading-tight tracking-normal text-foreground"
+            className="truncate text-sm font-semibold leading-tight tracking-normal text-foreground"
             title={(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
           >
             {(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
@@ -318,7 +318,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="收起侧边栏"
-            className="group/sidebar-toggle hidden h-10 w-10 rounded-[10px] bg-surface text-muted-foreground hover:bg-accent hover:text-primary lg:inline-flex"
+            className="group/sidebar-toggle hidden h-10 w-10 rounded-lg bg-surface text-muted-foreground hover:bg-accent hover:text-primary lg:inline-flex"
             onClick={() => setSidebarCollapsed(true)}
           >
             <SidebarCollapseIcon className="h-5 w-5" />
@@ -330,7 +330,7 @@ export function Sidebar() {
       <div className="space-y-2 px-4 pb-4">
         <Button
           onClick={handleNewChat}
-          className="h-11 w-full justify-center rounded-[8px] bg-primary text-base text-primary-foreground shadow-[0_12px_22px_rgba(37,99,235,0.18)] hover:bg-[hsl(var(--primary-hover))]"
+          className="h-11 w-full justify-center rounded-md bg-primary text-base text-primary-foreground shadow-[0_12px_22px_hsl(var(--primary)/0.18)] hover:bg-[hsl(var(--primary-hover))]"
           disabled={isCreating || quotaExhausted}
           aria-busy={isCreating}
         >
@@ -347,7 +347,7 @@ export function Sidebar() {
             router.push('/main/battle')
             setIsMobileMenuOpen(false)
           }}
-          className="h-10 w-full justify-center rounded-[8px] border border-border bg-surface text-foreground/80 shadow-none hover:bg-accent hover:text-primary"
+          className="h-10 w-full justify-center rounded-md border border-border bg-surface text-foreground/80 shadow-none hover:bg-accent hover:text-primary"
           variant="outline"
         >
           <Trophy className="mr-2 h-4 w-4" />
@@ -355,7 +355,7 @@ export function Sidebar() {
         </Button>
         <Button
           onClick={() => setIsSettingsOpen(true)}
-          className="h-10 w-full justify-center rounded-[8px] border border-border bg-surface text-foreground/80 shadow-none hover:bg-accent hover:text-primary"
+          className="h-10 w-full justify-center rounded-md border border-border bg-surface text-foreground/80 shadow-none hover:bg-accent hover:text-primary"
           variant="outline"
         >
           <Settings className="mr-2 h-4 w-4" />
@@ -390,7 +390,7 @@ export function Sidebar() {
               value={sessionSearch}
               onChange={(e) => setSessionSearch(e.target.value)}
               placeholder="搜索对话"
-              className="h-9 w-full rounded-[8px] border border-border bg-surface px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
+              className="h-9 w-full rounded-md border border-border bg-surface px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
               aria-label="搜索会话"
             />
           </div>
@@ -402,7 +402,7 @@ export function Sidebar() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 shrink-0 rounded-[8px] text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                    className="h-9 w-9 shrink-0 rounded-md text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
                     aria-label="清空聊天记录"
                     onClick={() => {
                       setIncludePinned(false)
@@ -462,7 +462,7 @@ export function Sidebar() {
                 <div
                   key={session.id}
                   className={cn(
-                    "group relative flex min-h-[46px] items-center justify-between rounded-[8px] border border-transparent px-2.5 py-2 transition-colors hover:bg-accent",
+                    "group relative flex min-h-[46px] items-center justify-between rounded-md border border-transparent px-2.5 py-2 transition-colors hover:bg-accent",
                     currentSession?.id === session.id && "border-primary/25 bg-primary/5 text-primary"
                   )}
                 >
@@ -495,9 +495,9 @@ export function Sidebar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
-                            size="icon"
+                            size="icon-xs"
                             variant="ghost"
-                            className="h-7 w-7 text-amber-500/80 opacity-70 transition hover:bg-amber-500/10 hover:text-amber-500 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                            className="text-amber-500/80 opacity-70 transition hover:bg-amber-500/10 hover:text-amber-500 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
                             onClick={(e) => {
                               e.stopPropagation()
                               toggleSessionPin(session.id, !session.pinnedAt)
@@ -519,9 +519,9 @@ export function Sidebar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
-                            size="icon"
+                            size="icon-xs"
                             variant="ghost"
-                            className="h-7 w-7 text-destructive/80 opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                            className="text-destructive/80 opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
                             onClick={(e) => requestDeleteSession(session.id, e)}
                             aria-label="删除会话"
                           >
@@ -540,11 +540,11 @@ export function Sidebar() {
       </ScrollArea>
 
       <div className="border-t border-border bg-surface/70 px-4 pb-5 pt-4">
-        <div className="rounded-[8px] border border-border bg-muted/70 px-3 py-3">
+        <div className="rounded-md border border-border bg-muted/70 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Info className="h-4 w-4 text-muted-foreground/70" />
-              <Badge variant="secondary" className="font-mono text-[11px] leading-none px-2 py-1">
+              <Badge variant="secondary" className="font-mono text-micro leading-none px-2 py-1">
                 {APP_VERSION}
               </Badge>
               <span className="text-xs text-muted-foreground">版本</span>
@@ -574,7 +574,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="group/sidebar-toggle h-10 w-10 rounded-[10px] border border-transparent text-muted-foreground hover:border-primary/20 hover:bg-accent hover:text-primary"
+                className="group/sidebar-toggle h-10 w-10 rounded-lg border border-transparent text-muted-foreground hover:border-primary/20 hover:bg-accent hover:text-primary"
                 aria-label="展开侧边栏"
                 onClick={() => setSidebarCollapsed(false)}
               >
@@ -591,7 +591,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-[10px] bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.18)] hover:bg-[hsl(var(--primary-hover))]"
+                className="h-10 w-10 rounded-lg bg-primary text-primary-foreground shadow-[0_10px_22px_hsl(var(--primary)/0.18)] hover:bg-[hsl(var(--primary-hover))]"
                 aria-label="新建聊天"
                 onClick={handleNewChat}
                 disabled={isCreating || quotaExhausted}
@@ -613,7 +613,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-[10px] text-muted-foreground hover:bg-accent hover:text-primary"
+                className="h-10 w-10 rounded-lg text-muted-foreground hover:bg-accent hover:text-primary"
                 aria-label="模型大乱斗"
                 onClick={() => router.push('/main/battle')}
               >
@@ -630,7 +630,7 @@ export function Sidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-[10px] text-muted-foreground hover:bg-accent hover:text-primary"
+                className="h-10 w-10 rounded-lg text-muted-foreground hover:bg-accent hover:text-primary"
                 aria-label="系统设置"
                 onClick={() => setIsSettingsOpen(true)}
               >
@@ -651,7 +651,7 @@ export function Sidebar() {
                 href={PROJECT_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
                 aria-label="项目地址"
               >
                 <Github className="h-5 w-5" />
@@ -828,7 +828,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="展开侧边栏"
-            className="group/sidebar-toggle h-12 w-12 rounded-[12px] border border-border bg-surface text-muted-foreground shadow-lg hover:border-primary/30 hover:bg-accent hover:text-primary"
+            className="group/sidebar-toggle h-12 w-12 rounded-lg border border-border bg-surface text-muted-foreground shadow-lg hover:border-primary/30 hover:bg-accent hover:text-primary"
             onClick={() => {
               setSidebarCollapsed(false)
               setIsMobileMenuOpen(true)

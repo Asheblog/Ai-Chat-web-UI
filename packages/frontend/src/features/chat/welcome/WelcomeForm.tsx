@@ -186,7 +186,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/[0.04] backdrop-blur-[1px]">
           <div className="rounded-xl bg-background/80 px-5 py-3 text-center shadow-sm backdrop-blur-sm">
             <p className="text-sm font-medium text-foreground">松开以上传文件</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
+            <p className="mt-0.5 text-micro text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
           </div>
         </div>
       )}
@@ -219,7 +219,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
 
         {showExpand && (
           <ComposerIconButton
-            className="absolute right-4 top-4 h-8 w-8 rounded-[7px]"
+            className="absolute right-4 top-4 h-8 w-8 md:h-8 md:w-8 rounded-md"
             onClick={onOpenExpand}
             disabled={creationDisabled}
             aria-label="全屏编辑"
@@ -263,7 +263,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             type="button"
             onClick={onSubmit}
             disabled={creationDisabled}
-            className="h-10 w-10 shrink-0 rounded-[10px] p-0 shadow-[0_10px_22px_rgba(37,99,235,0.18)] disabled:shadow-none"
+            className="h-10 w-10 shrink-0 rounded-lg p-0 shadow-[0_10px_22px_hsl(var(--primary)/0.18)] disabled:shadow-none"
             aria-label={isCreating ? '正在创建会话' : '发送'}
           >
             {isCreating ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}

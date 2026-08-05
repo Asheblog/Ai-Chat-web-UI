@@ -90,7 +90,7 @@ export function StatisticsCard({
                                 style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
                             />
                         </div>
-                        <div className="text-[10px] text-muted-foreground text-right mt-1">
+                        <div className="text-micro text-muted-foreground text-right mt-1">
                             {progress.toFixed(0)}%
                         </div>
                     </div>

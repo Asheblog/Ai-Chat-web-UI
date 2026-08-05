@@ -26,7 +26,7 @@ export function CustomRequestEditor({
 }: CustomRequestEditorProps) {
   return (
     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-      <div className="space-y-2 rounded-[10px] border border-border/60 bg-muted/40 p-3">
+      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 p-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">自定义请求头</p>
@@ -81,7 +81,7 @@ export function CustomRequestEditor({
         )}
       </div>
 
-      <div className="space-y-2 rounded-[10px] border border-border/60 bg-muted/40 p-3">
+      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 p-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">自定义请求体</p>
@@ -98,7 +98,7 @@ export function CustomRequestEditor({
         {customBodyError ? (
           <p className="text-xs text-destructive">{customBodyError}</p>
         ) : (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-micro text-muted-foreground">
             核心字段（model/messages/stream）已被保护，敏感头会被忽略。
           </p>
         )}

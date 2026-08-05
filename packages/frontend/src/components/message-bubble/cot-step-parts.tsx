@@ -45,7 +45,7 @@ export function CotReasoningStep({
   playedLength?: number
 }) {
   return (
-    <div className="rounded-[8px] border border-border/70 bg-muted/30 px-3 py-2.5">
+    <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2.5">
       <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-foreground">
         <Lightbulb className="h-4 w-4 text-amber-500" />
         <span>深度思考</span>
@@ -77,7 +77,7 @@ function ToolResultBody({ event }: { event: ToolEvent }) {
     return <p className="text-xs text-muted-foreground">暂无结果详情</p>
   }
   return (
-    <pre className="max-h-64 overflow-auto rounded-md bg-background/80 p-2 text-[11px] leading-4 text-foreground/80">
+    <pre className="max-h-64 overflow-auto rounded-md bg-background/80 p-2 text-micro leading-4 text-foreground/80">
       {payload}
     </pre>
   )
@@ -104,7 +104,7 @@ export function CotToolStep({ event }: { event: ToolEvent }) {
               : '完成'
 
   return (
-    <div className="rounded-[8px] border border-border/70 bg-card px-3 py-2.5">
+    <div className="rounded-md border border-border/70 bg-card px-3 py-2.5">
       <button
         type="button"
         className="flex w-full items-start justify-between gap-2 text-left"
@@ -117,7 +117,7 @@ export function CotToolStep({ event }: { event: ToolEvent }) {
             <span className="truncate">{title}</span>
             <span
               className={cn(
-                'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                'rounded-full px-1.5 py-0.5 text-micro font-medium',
                 status === 'success' && 'bg-emerald-500/10 text-emerald-700',
                 status === 'running' && 'bg-blue-500/10 text-blue-700',
                 status === 'error' && 'bg-rose-500/10 text-rose-700',
@@ -152,7 +152,7 @@ export function CotToolGroupStep({
   const Icon = ICON_MAP[display.iconKey] || Wrench
 
   return (
-    <div className="rounded-[8px] border border-border/70 bg-card px-3 py-2.5">
+    <div className="rounded-md border border-border/70 bg-card px-3 py-2.5">
       <button
         type="button"
         className="flex w-full items-start justify-between gap-2 text-left"

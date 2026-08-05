@@ -37,7 +37,7 @@ export function SettingsTabs({ tabs, defaultTab, titleOf, renderContent }: Setti
     <>
       <section className="v2-panel p-4 shadow-none sm:p-5">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <ActiveIcon className="h-5 w-5" />
           </span>
           <div className="flex-1">
@@ -57,9 +57,9 @@ export function SettingsTabs({ tabs, defaultTab, titleOf, renderContent }: Setti
                 aria-pressed={active}
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  "inline-flex min-h-9 items-center gap-2 rounded-[8px] border px-4 text-sm font-medium transition-colors",
+                  "inline-flex min-h-9 items-center gap-2 rounded-md border px-4 text-sm font-medium transition-colors",
                   active
-                    ? "border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.18)]"
+                    ? "border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_hsl(var(--primary)/0.18)]"
                     : "border-border bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >

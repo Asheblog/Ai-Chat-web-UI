@@ -26,7 +26,7 @@ export function SettingsLocationBanner({ leafKey, cardKey }: { leafKey: string; 
   return (
     <div
       role="status"
-      className="mb-4 flex items-center gap-2 rounded-[8px] border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm text-foreground"
+      className="mb-4 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm text-foreground"
     >
       <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
       <span className="min-w-0 truncate">

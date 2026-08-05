@@ -42,7 +42,7 @@ export function SystemConnectionVerifyPanel({
           <p className="mt-1 text-xs leading-5 text-muted-foreground">失败项会自动展开，成功项可按需查看模型明细。</p>
         </div>
         {!verifyResult ? (
-          <div className="rounded-[10px] border border-dashed border-border/70 bg-muted/40 px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/40 px-4 py-4 text-sm text-muted-foreground">
             还没有验证结果。
           </div>
         ) : (
@@ -63,7 +63,7 @@ export function SystemConnectionVerifyPanel({
               {resultKeys.map(({ item, key: resultKey }, index) => {
                 const expanded = expandedVerifyKey === resultKey
                 return (
-                  <div key={resultKey} className="rounded-[10px] border border-border/70 bg-[hsl(var(--surface))/0.32]">
+                  <div key={resultKey} className="rounded-lg border border-border/70 bg-[hsl(var(--surface))/0.32]">
                     <button
                       type="button"
                       className="flex w-full cursor-pointer items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-[hsl(var(--surface-hover))/0.45]"
@@ -96,12 +96,12 @@ export function SystemConnectionVerifyPanel({
                       <div className="overflow-hidden border-t border-border/70">
                         {!item.success ? (
                           <div className="space-y-3 px-4 py-4">
-                            <div className="rounded-[10px] border border-destructive/20 bg-destructive/5 p-4">
+                            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
                               <div className="text-xs font-medium text-destructive">错误详情</div>
                               <div className="mt-2 break-words text-sm text-foreground">{item.error || "验证失败"}</div>
                             </div>
                             {item.warning ? (
-                              <div className="rounded-[10px] border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
+                              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
                                 {item.warning}
                               </div>
                             ) : null}

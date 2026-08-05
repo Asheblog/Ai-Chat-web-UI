@@ -10,14 +10,14 @@ export default function BattlePage() {
     <div className="flex flex-1 flex-col overflow-y-auto bg-[hsl(var(--background-alt))/0.32]">
       <div className="mx-auto w-full max-w-[1100px] space-y-6 px-4 py-6 md:px-6">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">模型大乱斗</h1>
+          <h1 className="text-title-l sm:text-2xl font-semibold tracking-tight">模型大乱斗</h1>
           <p className="text-sm text-muted-foreground">选择评测模式</p>
         </div>
 
         <div className="grid gap-4">
           <Card className="border-border/70 bg-[hsl(var(--surface))/0.7]">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
+              <CardTitle className="flex items-center gap-2">
                 <Trophy className="h-5 w-5 text-yellow-500" />
                 多模型大乱斗
               </CardTitle>

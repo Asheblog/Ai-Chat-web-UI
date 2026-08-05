@@ -1,17 +1,18 @@
 import type { Metadata } from 'next'
-import { Inter, Noto_Sans_SC } from 'next/font/google'
+import { Source_Sans_3, Noto_Sans_SC } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import ConsoleSilencer from '@/components/console-silencer'
 import { TitleSync } from '@/components/title-sync'
+import { BrandThemeInjector } from '@/components/brand-theme-injector'
 import { getServerBranding } from '@/lib/server-branding'
 
-const inter = Inter({
+const sourceSans = Source_Sans_3({
   subsets: ['latin'],
   display: 'swap',
   preload: false,
-  variable: '--font-inter',
+  variable: '--font-source-sans',
 })
 
 const notoSansSC = Noto_Sans_SC({
@@ -58,8 +59,7 @@ export default async function RootLayout({
   const branding = await getServerBranding()
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className={`${inter.variable} ${notoSansSC.variable} antialiased`}>
-        {/* 生产环境禁用前端控制台输出 */}
+      <body className={`${sourceSans.variable} ${notoSansSC.variable} antialiased`}>
         <ConsoleSilencer />
         <ThemeProvider
           attribute="class"
@@ -67,6 +67,7 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <BrandThemeInjector initialTheme={branding.theme} />
           <TitleSync initialBrandText={branding.text} initialBrandFallback={branding.isFallback} />
           {children}
           <Toaster />

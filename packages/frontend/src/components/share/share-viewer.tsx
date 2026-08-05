@@ -135,7 +135,7 @@ function ShareMessageItem({
           className={cn(
             'max-w-none text-sm leading-7',
             isUser &&
-              'ml-auto inline-block rounded-[10px] border border-primary/15 bg-primary/10 px-4 py-2.5'
+              'ml-auto inline-block rounded-lg border border-primary/15 bg-primary/10 px-4 py-2.5'
           )}
         >
           {richPayload ? (
@@ -337,7 +337,7 @@ export function ShareViewer({
             <span>{formatRelativeTime(share.createdAt)}</span>
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-[8px] border border-primary/30 bg-background px-3 py-1.5 text-primary transition hover:bg-accent"
+              className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-background px-3 py-1.5 text-primary transition hover:bg-accent"
               onClick={() => {
                 if (typeof window === 'undefined') return
                 void navigator.clipboard?.writeText(window.location.href)
@@ -353,7 +353,7 @@ export function ShareViewer({
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-2 sm:py-3')}>
         <section className="v2-panel p-4 sm:p-6">
           <div className="mb-6 text-center">
-            <h1 className="mx-auto max-w-5xl text-xl font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
+            <h1 className="mx-auto max-w-5xl text-title-l font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
               {share.title || share.sessionTitle}
             </h1>
             <p className="mt-3 text-sm text-muted-foreground">公开分享 · {formatDate(share.createdAt)}</p>

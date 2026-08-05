@@ -75,7 +75,7 @@ export function ModelNode({
             onClick={onClick}
             className={cn(
                 'relative flex min-h-[38px] w-full items-center justify-between gap-3',
-                'rounded-[8px] border px-3 py-2',
+                'rounded-md border px-3 py-2',
                 'transition-all duration-300 hover:border-primary/50 hover:bg-accent',
                 config.borderClass,
                 config.bgClass,
@@ -95,7 +95,7 @@ export function ModelNode({
             </div>
 
             {/* Duration / Attempt */}
-            <div className="shrink-0 text-[10px] text-muted-foreground">
+            <div className="shrink-0 text-micro text-muted-foreground">
                 {attemptIndex && `#${attemptIndex}`}
                 {durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
             </div>
@@ -148,7 +148,7 @@ export function FlowGraph({
             {/* Judge Node */}
             <div className="flex flex-col items-center gap-2">
                 <div className={cn(
-                    'flex items-center justify-center gap-2 rounded-[8px] px-4 py-2',
+                    'flex items-center justify-center gap-2 rounded-md px-4 py-2',
                     'border border-primary/30 bg-primary/10'
                 )}>
                     <Scale className="h-4 w-4 text-primary" />

@@ -24,7 +24,7 @@ export function WelcomeScreen() {
       <div className="relative flex flex-1 flex-col items-center justify-center px-4 pb-6 sm:px-6 lg:px-8">
         <WelcomeHero {...hero} />
         <WelcomeForm form={form} />
-        <p className="mt-8 text-xs sm:text-[13px] text-muted-foreground text-center px-4">{footerNote}</p>
+        <p className="mt-8 text-xs sm:text-caption text-muted-foreground text-center px-4">{footerNote}</p>
       </div>
     </div>
   )

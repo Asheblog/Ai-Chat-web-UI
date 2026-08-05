@@ -18,7 +18,7 @@ export function ModelsPage() {
       <div className="flex items-center gap-3 pb-3 border-b border-border/60">
         <Boxes className="w-5 h-5 text-primary flex-shrink-0" />
         <div className="space-y-1">
-          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">模型管理</CardTitle>
+          <CardTitle>模型管理</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             管理模型目录、能力开关与访问控制
           </CardDescription>
@@ -28,7 +28,7 @@ export function ModelsPage() {
       {/* 分区一：模型目录与能力 */}
       <section aria-label="模型目录与能力" data-card-key="models:catalog">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Cpu className="h-5 w-5" />
           </span>
           <div>
@@ -47,7 +47,7 @@ export function ModelsPage() {
       {/* 分区二：访问控制 */}
       <section aria-label="访问控制" data-card-key="models:access">
         <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Shield className="h-5 w-5" />
           </span>
           <div>

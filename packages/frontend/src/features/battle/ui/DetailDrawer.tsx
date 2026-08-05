@@ -249,8 +249,8 @@ export function DetailDrawer({
                                 <h4 className="text-sm font-medium">模型输出</h4>
                                 <Button
                                     variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs gap-1"
+                                    size="xs"
+                                    className="gap-1"
                                     onClick={handleCopyOutput}
                                     disabled={!detail.output?.trim()}
                                 >

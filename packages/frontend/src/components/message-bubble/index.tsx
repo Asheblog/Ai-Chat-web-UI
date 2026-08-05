@@ -190,7 +190,7 @@ function MessageBubbleComponent({
   ])
 
   const bubbleClass = `inline-block max-w-full box-border ${
-    isUser ? 'rounded-[10px] border border-primary/15 bg-primary/10 px-4 py-3 text-foreground ml-auto' : isCodeOnly ? 'p-0' : 'px-0 py-1'
+    isUser ? 'rounded-lg border border-primary/15 bg-primary/10 px-4 py-3 text-foreground ml-auto' : isCodeOnly ? 'p-0' : 'px-0 py-1'
   } ${
     isUser
       ? ''

@@ -142,7 +142,7 @@ export function SkillPanelSheet({
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {hasBuiltinDetails ? (
               <section className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
-                <p className="text-[11px] tracking-wide text-muted-foreground">内置工具细项</p>
+                <p className="text-micro tracking-wide text-muted-foreground">内置工具细项</p>
                 {shouldShowWebSearchScope && onWebSearchScopeChange ? (
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">搜索范围（联网搜索）</p>
@@ -167,10 +167,10 @@ export function SkillPanelSheet({
                 ) : null}
 
                 {webSearchDisabledNote ? (
-                  <p className="text-[11px] text-muted-foreground">{webSearchDisabledNote}</p>
+                  <p className="text-micro text-muted-foreground">{webSearchDisabledNote}</p>
                 ) : null}
                 {pythonToolDisabledNote ? (
-                  <p className="text-[11px] text-muted-foreground">{pythonToolDisabledNote}</p>
+                  <p className="text-micro text-muted-foreground">{pythonToolDisabledNote}</p>
                 ) : null}
               </section>
             ) : null}
@@ -178,14 +178,14 @@ export function SkillPanelSheet({
             {/* MCP 连接区域 */}
             {mcpDisabled ? (
               <section className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-3 opacity-50">
-                <p className="text-[11px] tracking-wide text-muted-foreground">MCP 连接</p>
+                <p className="text-micro tracking-wide text-muted-foreground">MCP 连接</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   管理员已关闭 MCP 全局开关，当前不可用。
                 </p>
               </section>
             ) : mcpLoading ? (
               <section className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-                <p className="text-[11px] tracking-wide text-muted-foreground">MCP 连接</p>
+                <p className="text-micro tracking-wide text-muted-foreground">MCP 连接</p>
                 <div className="mt-2 space-y-2">
                   <Skeleton className="h-8 w-full" />
                   <Skeleton className="h-8 w-full" />
@@ -193,15 +193,15 @@ export function SkillPanelSheet({
               </section>
             ) : mcpError ? (
               <section className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-                <p className="text-[11px] tracking-wide text-muted-foreground">MCP 连接</p>
+                <p className="text-micro tracking-wide text-muted-foreground">MCP 连接</p>
                 <p className="text-xs text-destructive mt-1">{mcpError}</p>
               </section>
             ) : mcpConnectionOptions.length > 0 ? (
               <section className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] tracking-wide text-muted-foreground">MCP 连接</p>
+                  <p className="text-micro tracking-wide text-muted-foreground">MCP 连接</p>
                   {pinnedToolCount > 0 && (
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-micro text-muted-foreground">
                       {pinnedToolCount} 个工具可用
                     </span>
                   )}
@@ -210,7 +210,7 @@ export function SkillPanelSheet({
                   <div key={conn.connectionId} className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{conn.connectionName}</p>
-                      <p className="text-[10px] text-muted-foreground/80 truncate">
+                      <p className="text-micro text-muted-foreground/80 truncate">
                         {conn.installationLabel}
                       </p>
                     </div>
@@ -224,7 +224,7 @@ export function SkillPanelSheet({
               </section>
             ) : (
               <section className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-3">
-                <p className="text-[11px] tracking-wide text-muted-foreground">MCP 连接</p>
+                <p className="text-micro tracking-wide text-muted-foreground">MCP 连接</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   暂无可用 MCP 连接。请在系统设置的工具与运行时中配置。
                 </p>
@@ -233,13 +233,13 @@ export function SkillPanelSheet({
 
             {skillOptions.length > 0 ? (
               <section className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
-                <p className="text-[11px] tracking-wide text-muted-foreground">第三方安装</p>
+                <p className="text-micro tracking-wide text-muted-foreground">第三方安装</p>
                 {skillOptions.map((skill) => (
                   <div key={skill.skillId} className="space-y-1 border-b border-border/50 pb-2 last:border-b-0 last:pb-0">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">{skill.label}</p>
-                        <p className="text-[10px] text-muted-foreground/80">
+                        <p className="text-micro text-muted-foreground/80">
                           {skill.sourceLabel || 'github'} / {skill.slug}
                           {skill.licenseName ? ` · ${skill.licenseName}` : ''}
                         </p>
@@ -251,7 +251,7 @@ export function SkillPanelSheet({
                       />
                     </div>
                     {skill.description ? (
-                      <p className="text-[11px] text-muted-foreground line-clamp-3">
+                      <p className="text-micro text-muted-foreground line-clamp-3">
                         {skill.description}
                       </p>
                     ) : null}

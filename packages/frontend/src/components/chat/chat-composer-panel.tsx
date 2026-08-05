@@ -476,7 +476,7 @@ export function ChatComposerPanel({
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/[0.04] backdrop-blur-[1px]">
           <div className="rounded-xl bg-background/80 px-5 py-3 text-center shadow-sm backdrop-blur-sm">
             <p className="text-sm font-medium text-foreground">松开以上传文件</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
+            <p className="mt-0.5 text-micro text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
           </div>
         </div>
       )}
@@ -591,7 +591,7 @@ export function ChatComposerPanel({
                               <div className="flex items-center justify-between gap-2">
                                 <p className="truncate text-sm font-medium">{template.title}</p>
                                 {template.pinnedAt ? (
-                                  <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">置顶</span>
+                                  <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-micro text-primary">置顶</span>
                                 ) : null}
                               </div>
                               <p className="mt-1 max-h-10 overflow-hidden text-xs leading-5 text-muted-foreground">
@@ -602,8 +602,7 @@ export function ChatComposerPanel({
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs"
+                                size="xs"
                                 onClick={() => void handleToggleTemplatePin(template)}
                                 disabled={promptTemplateBusyId === template.id}
                               >
@@ -612,8 +611,8 @@ export function ChatComposerPanel({
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                size="xs"
+                                className="text-destructive hover:text-destructive"
                                 onClick={() => void handleDeleteTemplate(template)}
                                 disabled={promptTemplateBusyId === template.id}
                               >

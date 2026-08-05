@@ -193,7 +193,7 @@ export function DesktopComposer({
 
           {showExpand && (
             <ComposerIconButton
-              className="absolute right-4 top-4 h-8 w-8 rounded-[7px]"
+              className="absolute right-4 top-4 h-8 w-8 md:h-8 md:w-8 rounded-md"
               onClick={onExpandOpen}
               aria-label="全屏编辑"
               title="全屏编辑"
@@ -272,7 +272,7 @@ export function DesktopComposer({
                     onClick={isStreaming ? onStop : onSend}
                     disabled={isStreaming ? false : desktopSendDisabled}
                     aria-label={isStreaming ? '停止生成' : '发送'}
-                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] shadow-[0_10px_22px_rgba(37,99,235,0.18)] transition-colors disabled:shadow-none disabled:opacity-45 ${
+                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg shadow-[0_10px_22px_hsl(var(--primary)/0.18)] transition-colors disabled:shadow-none disabled:opacity-45 ${
                       isStreaming
                         ? 'bg-destructive text-destructive-foreground hover:opacity-90'
                         : 'bg-primary text-primary-foreground hover:bg-primary/90'

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { BrandThemeColors } from '@aichat/shared'
 import { SettingsState, SystemSettings } from '@/types'
 import {
   getPublicBranding as getPublicBrandingApi,
@@ -48,6 +49,42 @@ const mergeSystemSettings = (current: SystemSettings | null, incoming: SystemSet
 const normalizeBrandText = (value?: string | null) => {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   return trimmed || null
+}
+
+const themeFromSystemSettings = (settings?: SystemSettings | null): BrandThemeColors => {
+  if (!settings) return {}
+  return {
+    brand_primary: settings.brandPrimary || undefined,
+    brand_primary_foreground: settings.brandPrimaryForeground || undefined,
+    brand_background: settings.brandBackground || undefined,
+    brand_surface: settings.brandSurface || undefined,
+    brand_foreground: settings.brandForeground || undefined,
+    brand_muted_foreground: settings.brandMutedForeground || undefined,
+  }
+}
+
+const themeFromPublicBranding = (data?: {
+  brand_primary?: string | null
+  brand_primary_foreground?: string | null
+  brand_background?: string | null
+  brand_surface?: string | null
+  brand_foreground?: string | null
+  brand_muted_foreground?: string | null
+} | null): BrandThemeColors => {
+  if (!data) return {}
+  const theme: BrandThemeColors = {}
+  const assign = (key: keyof BrandThemeColors, value?: string | null) => {
+    if (typeof value === 'string' && value.trim()) {
+      theme[key] = value.trim()
+    }
+  }
+  assign('brand_primary', data.brand_primary)
+  assign('brand_primary_foreground', data.brand_primary_foreground)
+  assign('brand_background', data.brand_background)
+  assign('brand_surface', data.brand_surface)
+  assign('brand_foreground', data.brand_foreground)
+  assign('brand_muted_foreground', data.brand_muted_foreground)
+  return theme
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -101,6 +138,7 @@ export const useSettingsStore = create<SettingsStore>()(
         isLoading: false,
         error: null,
         publicBrandText: null,
+        publicBrandTheme: null,
         assistantAvatarReady: false,
         assistantAvatarReadyFor: null,
 
@@ -116,6 +154,7 @@ export const useSettingsStore = create<SettingsStore>()(
               set((state) => ({
                 systemSettings: merged,
                 publicBrandText: normalizedBrand ?? state.publicBrandText,
+                publicBrandTheme: themeFromSystemSettings(merged),
                 isLoading: false,
               }))
               ensureAssistantAvatarReady(merged.assistantAvatarUrl)
@@ -142,6 +181,7 @@ export const useSettingsStore = create<SettingsStore>()(
           set((state) => ({
             systemSettings: updatedSettings,
             publicBrandText: normalizedBrand ?? state.publicBrandText,
+            publicBrandTheme: themeFromSystemSettings(updatedSettings),
             isLoading: false,
           }))
             ensureAssistantAvatarReady(updatedSettings.assistantAvatarUrl)
@@ -158,12 +198,26 @@ export const useSettingsStore = create<SettingsStore>()(
         publicBrandingInFlight = (async () => {
           try {
             const response = await getPublicBrandingApi()
-            const normalized = normalizeBrandText(response.data?.brand_text)
-            if (!normalized) return false
+            const data = response.data
+            const normalized = normalizeBrandText(data?.brand_text)
+            const theme = themeFromPublicBranding(data)
+            if (!normalized && Object.keys(theme).length === 0) return false
             set((state) => ({
-              publicBrandText: normalized,
+              publicBrandText: normalized ?? state.publicBrandText,
+              publicBrandTheme: theme,
               systemSettings: state.systemSettings
-                ? { ...state.systemSettings, brandText: normalized }
+                ? {
+                    ...state.systemSettings,
+                    ...(normalized ? { brandText: normalized } : {}),
+                    brandPrimary: data?.brand_primary ?? state.systemSettings.brandPrimary,
+                    brandPrimaryForeground:
+                      data?.brand_primary_foreground ?? state.systemSettings.brandPrimaryForeground,
+                    brandBackground: data?.brand_background ?? state.systemSettings.brandBackground,
+                    brandSurface: data?.brand_surface ?? state.systemSettings.brandSurface,
+                    brandForeground: data?.brand_foreground ?? state.systemSettings.brandForeground,
+                    brandMutedForeground:
+                      data?.brand_muted_foreground ?? state.systemSettings.brandMutedForeground,
+                  }
                 : state.systemSettings,
             }))
             return true

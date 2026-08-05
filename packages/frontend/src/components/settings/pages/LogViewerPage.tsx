@@ -38,7 +38,7 @@ export function LogViewerPage() {
             <ActiveIcon className="h-5 w-5" />
           </span>
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight">{activeTabDef.label}日志</h1>
+            <h1 className="text-title-l font-semibold tracking-tight">{activeTabDef.label}日志</h1>
             <p className="text-sm text-muted-foreground">{activeTabDef.description}</p>
           </div>
         </div>
@@ -55,9 +55,9 @@ export function LogViewerPage() {
               type="button"
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "inline-flex min-h-9 items-center gap-2 rounded-[8px] border px-4 text-sm font-medium transition-colors",
+                "inline-flex min-h-9 items-center gap-2 rounded-md border px-4 text-sm font-medium transition-colors",
                 active
-                  ? "border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(37,99,235,0.18)]"
+                  ? "border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_hsl(var(--primary)/0.18)]"
                   : "border-border bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >

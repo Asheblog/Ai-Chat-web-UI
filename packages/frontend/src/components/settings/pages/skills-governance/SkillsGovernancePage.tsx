@@ -139,7 +139,7 @@ const PackageBucket = (props: {
 }) => {
   const { title, hint, items, emptyText, className } = props
   return (
-    <div className={`rounded-[10px] border p-3 ${className}`}>
+    <div className={`rounded-lg border p-3 ${className}`}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{title}</span>
         <Badge variant="outline">{items.length}</Badge>
@@ -171,7 +171,7 @@ const ActiveSkillSourcesBucket = (props: {
   ).sort((a, b) => a.localeCompare(b))
 
   return (
-    <div className="rounded-[10px] border border-emerald-500/35 bg-emerald-500/5 p-3">
+    <div className="rounded-lg border border-emerald-500/35 bg-emerald-500/5 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-sm font-medium">保留（激活 Skill 占用）</span>
         <Badge variant="outline">{displayPackages.length}</Badge>
@@ -184,10 +184,10 @@ const ActiveSkillSourcesBucket = (props: {
           {displayPackages.map((packageName) => {
             const consumers = sourceMap.get(packageName) || []
             return (
-              <details key={packageName} className="rounded-[8px] border border-emerald-500/25 bg-background/70 px-3 py-2">
+              <details key={packageName} className="rounded-md border border-emerald-500/25 bg-background/70 px-3 py-2">
                 <summary className="flex cursor-pointer items-center justify-between gap-2">
                   <span className="font-mono text-xs">{packageName}</span>
-                  <Badge variant="outline" className="text-[11px]">
+                  <Badge variant="outline" className="text-micro">
                     {consumers.length} 条来源
                   </Badge>
                 </summary>
@@ -196,19 +196,19 @@ const ActiveSkillSourcesBucket = (props: {
                     <p className="text-xs text-muted-foreground">暂无来源明细（请刷新后重试）。</p>
                   ) : (
                     consumers.map((consumer) => (
-                      <div key={`${consumer.skillId}:${consumer.versionId}:${consumer.requirement}`} className="rounded-[8px] border border-border/60 bg-muted/20 p-2">
+                      <div key={`${consumer.skillId}:${consumer.versionId}:${consumer.requirement}`} className="rounded-md border border-border/60 bg-muted/20 p-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary" className="text-[11px]">
+                          <Badge variant="secondary" className="text-micro">
                             {consumer.skillDisplayName}
                           </Badge>
-                          <Badge variant="outline" className="text-[11px]">
+                          <Badge variant="outline" className="text-micro">
                             {consumer.skillSlug}
                           </Badge>
-                          <Badge variant="outline" className="text-[11px]">
+                          <Badge variant="outline" className="text-micro">
                             v{consumer.version}
                           </Badge>
                         </div>
-                        <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{consumer.requirement}</p>
+                        <p className="mt-1 break-all font-mono text-micro text-muted-foreground">{consumer.requirement}</p>
                       </div>
                     ))
                   )}
@@ -509,11 +509,11 @@ export function SkillsGovernancePage() {
     <div className="min-w-0 space-y-4">
       {/* 页头 */}
       <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
           <ClipboardList className="h-5 w-5" />
         </span>
         <div className="space-y-1">
-          <CardTitle className="text-lg font-semibold tracking-tight leading-tight">Skill 治理</CardTitle>
+          <CardTitle>Skill 治理</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             审批调用、版本管理与绑定策略
           </CardDescription>
@@ -567,7 +567,7 @@ export function SkillsGovernancePage() {
       </div>
 
       <Dialog open={uninstallDialogOpen} onOpenChange={handleUninstallDialogOpenChange}>
-        <DialogContent className="max-h-[85vh] overflow-hidden rounded-[10px] border-border/80 p-0 sm:max-w-4xl">
+        <DialogContent className="max-h-[85vh] overflow-hidden rounded-lg border-border/80 p-0 sm:max-w-4xl">
           <DialogHeader className="border-b border-border/60 px-6 py-5">
             <DialogTitle>卸载 Skill 前预览回收计划</DialogTitle>
             <DialogDescription>
@@ -578,7 +578,7 @@ export function SkillsGovernancePage() {
           </DialogHeader>
 
           <div className="max-h-[60vh] space-y-4 overflow-y-auto px-6 py-4">
-            <div className="rounded-[10px] border border-border/70 bg-background/85 p-3">
+            <div className="rounded-lg border border-border/70 bg-background/85 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-sm font-medium">Skill 声明依赖</span>
                 <Badge variant="outline">{uninstallPreview?.removedRequirements.length || 0}</Badge>

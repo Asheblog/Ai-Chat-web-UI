@@ -17,7 +17,16 @@ import {
 import type { Actor } from '../../types'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../config/storage'
 import { invalidateModelAccessDefaultsCache as defaultInvalidateModelAccessDefaultsCache } from '../../utils/model-access-policy'
-import { SYSTEM_SETTINGS_FIELD_MAP } from '@aichat/shared'
+import {
+  BRAND_THEME_STORAGE_KEYS,
+  normalizeBrandHex,
+  SYSTEM_SETTINGS_FIELD_MAP,
+  type BrandThemeStorageKey,
+} from '@aichat/shared'
+
+export type PublicBranding = {
+  brand_text: string
+} & Record<BrandThemeStorageKey, string>
 
 export type SetupState = 'required' | 'skipped' | 'completed'
 
@@ -58,9 +67,15 @@ export interface SettingsServiceDeps {
   now?: () => Date
 }
 
-const BRAND_TEXT_CACHE_TTL_MS = 30_000
+const BRANDING_CACHE_TTL_MS = 30_000
 const WEB_SEARCH_ENGINES = ['tavily', 'brave', 'metaso', 'exa'] as const
 type WebSearchEngine = (typeof WEB_SEARCH_ENGINES)[number]
+
+const emptyBrandTheme = (): Record<BrandThemeStorageKey, string> =>
+  Object.fromEntries(BRAND_THEME_STORAGE_KEYS.map((key) => [key, ''])) as Record<
+    BrandThemeStorageKey,
+    string
+  >
 
 export class SettingsService {
   private prisma: PrismaClient
@@ -74,7 +89,7 @@ export class SettingsService {
   private replaceProfileImage: typeof defaultReplaceProfileImage
   private invalidateModelAccessDefaultsCache: typeof defaultInvalidateModelAccessDefaultsCache
   private now: () => Date
-  private cachedBrandText: { value: string; expiresAt: number } | null = null
+  private cachedPublicBranding: { value: PublicBranding; expiresAt: number } | null = null
 
   constructor(deps: SettingsServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
@@ -91,22 +106,34 @@ export class SettingsService {
     this.now = deps.now ?? (() => new Date())
   }
 
-  async getBrandingText() {
+  async getPublicBranding(): Promise<PublicBranding> {
     const now = Date.now()
-    if (this.cachedBrandText && this.cachedBrandText.expiresAt > now) {
-      return this.cachedBrandText.value
+    if (this.cachedPublicBranding && this.cachedPublicBranding.expiresAt > now) {
+      return this.cachedPublicBranding.value
     }
-    const record = await this.prisma.systemSetting.findUnique({
-      where: { key: 'brand_text' },
-      select: { value: true },
+    const keys = ['brand_text', ...BRAND_THEME_STORAGE_KEYS]
+    const rows = await this.prisma.systemSetting.findMany({
+      where: { key: { in: [...keys] } },
+      select: { key: true, value: true },
     })
-    const value = (record?.value || '').trim() || 'AIChat'
-    this.cachedBrandText = { value, expiresAt: now + BRAND_TEXT_CACHE_TTL_MS }
+    const map = new Map(rows.map((row) => [row.key, row.value]))
+    const brand_text = (map.get('brand_text') || '').trim() || 'AIChat'
+    const theme = emptyBrandTheme()
+    for (const key of BRAND_THEME_STORAGE_KEYS) {
+      theme[key] = (map.get(key) || '').trim()
+    }
+    const value: PublicBranding = { brand_text, ...theme }
+    this.cachedPublicBranding = { value, expiresAt: now + BRANDING_CACHE_TTL_MS }
     return value
   }
 
+  async getBrandingText() {
+    const branding = await this.getPublicBranding()
+    return branding.brand_text
+  }
+
   invalidateBrandingCache() {
-    this.cachedBrandText = null
+    this.cachedPublicBranding = null
   }
 
   private parseSetupState(value: unknown): SetupState | null {
@@ -272,6 +299,12 @@ export class SettingsService {
 
     const formatted = {
       brand_text: read('brand_text', process.env.BRAND_TEXT || 'AIChat'),
+      brand_primary: read('brand_primary', ''),
+      brand_primary_foreground: read('brand_primary_foreground', ''),
+      brand_background: read('brand_background', ''),
+      brand_surface: read('brand_surface', ''),
+      brand_foreground: read('brand_foreground', ''),
+      brand_muted_foreground: read('brand_muted_foreground', ''),
       registration_enabled: (read('registration_enabled', process.env.REGISTRATION_ENABLED || 'true') || 'true') === 'true',
       sse_heartbeat_interval_ms: Number(read('sse_heartbeat_interval_ms', process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000')),
       provider_max_idle_ms: Number(read('provider_max_idle_ms', process.env.PROVIDER_MAX_IDLE_MS || '30000')),
@@ -466,6 +499,12 @@ export class SettingsService {
     if (!isAdmin) {
       return {
         brand_text: formatted.brand_text,
+        brand_primary: formatted.brand_primary,
+        brand_primary_foreground: formatted.brand_primary_foreground,
+        brand_background: formatted.brand_background,
+        brand_surface: formatted.brand_surface,
+        brand_foreground: formatted.brand_foreground,
+        brand_muted_foreground: formatted.brand_muted_foreground,
         registration_enabled: formatted.registration_enabled,
         anonymous_retention_days: formatted.anonymous_retention_days,
         anonymous_daily_quota: formatted.anonymous_daily_quota,
@@ -547,6 +586,23 @@ export class SettingsService {
     if (typeof payload[SYSTEM_SETTINGS_FIELD_MAP.brandText] === 'string') {
       updates.push(upsert(SYSTEM_SETTINGS_FIELD_MAP.brandText, payload[SYSTEM_SETTINGS_FIELD_MAP.brandText]))
       this.invalidateBrandingCache()
+    }
+
+    for (const key of BRAND_THEME_STORAGE_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(payload, key)) continue
+      const raw = payload[key]
+      if (raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+        updates.push(upsert(key, ''))
+        this.invalidateBrandingCache()
+        continue
+      }
+      if (typeof raw === 'string') {
+        const normalized = normalizeBrandHex(raw)
+        if (normalized) {
+          updates.push(upsert(key, normalized))
+          this.invalidateBrandingCache()
+        }
+      }
     }
 
     assignIfNumber('sse_heartbeat_interval_ms', payload.sse_heartbeat_interval_ms)

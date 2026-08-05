@@ -1,4 +1,6 @@
 // 用户相关类型
+import type { BrandThemeColors } from '@aichat/shared'
+
 export interface User {
   id: number;
   username: string;
@@ -355,6 +357,12 @@ export type WebSearchMergeStrategy = 'hybrid_score_v1';
 export interface SystemSettings {
   allowRegistration: boolean;
   brandText?: string;
+  brandPrimary?: string;
+  brandPrimaryForeground?: string;
+  brandBackground?: string;
+  brandSurface?: string;
+  brandForeground?: string;
+  brandMutedForeground?: string;
   assistantAvatarUpload?: { data: string; mime: string } | null;
   assistantAvatarRemove?: boolean;
   // 流式/稳定性相关（系统级）
@@ -933,6 +941,7 @@ export interface SettingsState {
   isLoading: boolean;
   error: string | null;
   publicBrandText: string | null;
+  publicBrandTheme: BrandThemeColors | null;
   assistantAvatarReady: boolean;
   assistantAvatarReadyFor: string | null;
 }

@@ -250,7 +250,7 @@ export function ModelSelector({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-9 w-9 rounded-[8px] text-muted-foreground hover:text-foreground"
+          className="h-9 w-9 rounded-md text-muted-foreground hover:text-foreground"
           onClick={handleRefresh}
           aria-label="刷新模型目录"
         >

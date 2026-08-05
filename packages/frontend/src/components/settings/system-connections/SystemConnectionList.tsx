@@ -37,7 +37,7 @@ export function SystemConnectionList({
       <section className="v2-panel overflow-hidden shadow-none">
         <div className="space-y-3 p-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-20 rounded-[8px] bg-muted" />
+            <div key={index} className="h-20 rounded-md bg-muted" />
           ))}
         </div>
       </section>
@@ -47,7 +47,7 @@ export function SystemConnectionList({
   if (connections.length === 0) {
     return (
       <section className="v2-panel p-4 shadow-none">
-        <div className="rounded-[8px] border border-dashed border-border bg-muted/40 px-4 py-12 text-center text-sm leading-6 text-muted-foreground">
+        <div className="rounded-md border border-dashed border-border bg-muted/40 px-4 py-12 text-center text-sm leading-6 text-muted-foreground">
           暂无匹配连接。可以调整筛选条件，或新增一个 Provider 端点和 API Key。
         </div>
       </section>
@@ -108,7 +108,7 @@ function ConnectionRow({
         <button type="button" onClick={onToggle} className="flex min-w-0 cursor-pointer items-start gap-3 text-left">
           <span
             className={cn(
-              "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border",
+              "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border",
               health === "healthy"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                 : health === "warning"
@@ -131,7 +131,7 @@ function ConnectionRow({
             {tags.length > 0 ? (
               <span className="mt-2 flex flex-wrap gap-1.5">
                 {tags.map((tag) => (
-                  <span key={tag} className="rounded-[7px] bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <span key={tag} className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                     {tag}
                   </span>
                 ))}
@@ -170,8 +170,8 @@ function ConnectionRow({
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="min-w-[4.5rem] rounded-[8px] bg-muted px-3 py-2">
-      <div className="text-[11px] text-muted-foreground/70">{label}</div>
+    <div className="min-w-[4.5rem] rounded-md bg-muted px-3 py-2">
+      <div className="text-micro text-muted-foreground/70">{label}</div>
       <div className="mt-0.5 truncate text-sm font-medium text-foreground/80">{value}</div>
     </div>
   )

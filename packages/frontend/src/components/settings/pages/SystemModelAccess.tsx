@@ -114,24 +114,24 @@ export function SystemModelAccessPage() {
         <div className="space-y-1">
           <div className="font-semibold text-base leading-tight">{model.name || model.id}</div>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <Badge variant="outline" className="text-[11px] font-normal">
+            <Badge variant="outline" className="text-micro font-normal">
               {recommendTag(model)}
             </Badge>
             {model.provider && (
-              <Badge variant="secondary" className="text-[10px] font-normal">
+              <Badge variant="secondary" className="text-micro font-normal">
                 {model.provider}
               </Badge>
             )}
             {model.capabilitySource && (
               <Badge
                 variant="secondary"
-                className="text-[10px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                className="text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
               >
                 覆写:{model.capabilitySource}
               </Badge>
             )}
             {model.accessDecision === "deny" && (
-              <Badge variant="destructive" className="text-[10px] font-normal">
+              <Badge variant="destructive" className="text-micro font-normal">
                 当前拒绝
               </Badge>
             )}

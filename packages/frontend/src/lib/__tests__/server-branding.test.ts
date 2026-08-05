@@ -86,5 +86,32 @@ describe('server-branding 缓存策略', () => {
 
     expect(result.text).toBe('AIChat')
     expect(result.isFallback).toBe(true)
+    expect(result.theme).toEqual({})
+  })
+
+  it('映射后端返回的 Brand Theme 字段', async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            brand_text: '新站点名',
+            brand_primary: '#AABBCC',
+            brand_background: '',
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    )
+    delete process.env[REVALIDATE_KEY]
+    const { getServerBranding } = await loadModule()
+
+    const result = await getServerBranding()
+
+    expect(result.text).toBe('新站点名')
+    expect(result.theme).toEqual({ brand_primary: '#AABBCC' })
+    expect(result.isFallback).toBe(false)
   })
 })
