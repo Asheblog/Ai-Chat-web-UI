@@ -37,9 +37,11 @@ const stringifyPayload = (value: unknown): string | null => {
 export function CotReasoningStep({
   text,
   isStreamingTail,
+  playedLength = 0,
 }: {
   text: string
   isStreamingTail?: boolean
+  /** 相对本推理段文本的已播放长度 */
   playedLength?: number
 }) {
   return (
@@ -50,7 +52,12 @@ export function CotReasoningStep({
       </div>
       <div className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
         {isStreamingTail ? (
-          <TypewriterReasoning text={text} isStreaming speed={20} />
+          <TypewriterReasoning
+            text={text}
+            isStreaming
+            speed={20}
+            initialPlayedLength={playedLength}
+          />
         ) : (
           text
         )}

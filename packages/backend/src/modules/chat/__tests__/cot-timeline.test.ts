@@ -1,7 +1,9 @@
 import {
   buildInterleavedCotNodes,
   buildToolStepTitle,
+  cotTimelineNodeKey,
   countCotTimelineTools,
+  resolveSegmentPlayedLength,
   resolveToolDisplay,
 } from '@aichat/shared/cot-timeline'
 import type { ToolEvent } from '@aichat/shared/tool-events'
@@ -100,5 +102,40 @@ describe('resolveToolDisplay / buildToolStepTitle', () => {
 
   test('get_time_info 映射时间信息', () => {
     expect(resolveToolDisplay('get_time_info')).toEqual({ label: '时间信息', iconKey: 'clock' })
+  })
+})
+
+describe('cotTimelineNodeKey / resolveSegmentPlayedLength', () => {
+  test('推理段 key 不随 charEnd 增长而变化', () => {
+    const short = { type: 'reasoning' as const, text: '你', charStart: 0, charEnd: 1 }
+    const longer = { type: 'reasoning' as const, text: '你好世界', charStart: 0, charEnd: 4 }
+    expect(cotTimelineNodeKey(short, 0)).toBe('r:0')
+    expect(cotTimelineNodeKey(longer, 0)).toBe(cotTimelineNodeKey(short, 0))
+  })
+
+  test('新推理段（工具切开后）使用新的 charStart key', () => {
+    const head = { type: 'reasoning' as const, text: '前', charStart: 0, charEnd: 1 }
+    const tail = { type: 'reasoning' as const, text: '后', charStart: 5, charEnd: 6 }
+    expect(cotTimelineNodeKey(head, 0)).toBe('r:0')
+    expect(cotTimelineNodeKey(tail, 2)).toBe('r:5')
+  })
+
+  test('工具 key 不依赖 updatedAt，避免结果回填 remount', () => {
+    const a = {
+      type: 'tool' as const,
+      event: baseEvent({ id: 't1', tool: 'get_time_info', callId: 'c1', updatedAt: 1 }),
+    }
+    const b = {
+      type: 'tool' as const,
+      event: baseEvent({ id: 't1', tool: 'get_time_info', callId: 'c1', updatedAt: 99 }),
+    }
+    expect(cotTimelineNodeKey(a, 1)).toBe(cotTimelineNodeKey(b, 1))
+  })
+
+  test('段内播放游标由全文游标减去 charStart 并夹紧', () => {
+    expect(resolveSegmentPlayedLength(12, 5, 10)).toBe(7)
+    expect(resolveSegmentPlayedLength(3, 5, 10)).toBe(0)
+    expect(resolveSegmentPlayedLength(100, 5, 4)).toBe(4)
+    expect(resolveSegmentPlayedLength(undefined, 0, 8)).toBe(0)
   })
 })

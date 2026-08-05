@@ -12,6 +12,7 @@ import {
 import {
   buildInterleavedCotNodes,
   buildToolStepTitle,
+  cotTimelineNodeKey,
   countCotTimelineTools,
   resolveToolDisplay,
   type CotTimelineNode,
@@ -87,7 +88,7 @@ export function CotStepTimeline({
       {expanded ? (
         <View style={[styles.body, { borderTopColor: theme.border }]}>
           {nodes.map((node, index) => (
-            <CotStepNode key={nodeKey(node, index)} node={node} theme={theme} />
+            <CotStepNode key={cotTimelineNodeKey(node, index)} node={node} theme={theme} />
           ))}
         </View>
       ) : null}
@@ -232,16 +233,6 @@ function ToolResultBody({ event, theme }: { event: ToolEvent; theme: AppTheme })
       </Text>
     </ScrollView>
   );
-}
-
-function nodeKey(node: CotTimelineNode, index: number) {
-  if (node.type === "reasoning") {
-    return `r:${node.charStart}-${node.charEnd}`;
-  }
-  if (node.type === "tool") {
-    return `t:${node.event.callId ?? node.event.id}:${node.event.updatedAt ?? node.event.createdAt}`;
-  }
-  return `g:${node.toolType}:${index}:${node.events.map((event) => event.callId ?? event.id).join(",")}`;
 }
 
 function stringifyPayload(value: unknown): string | null {

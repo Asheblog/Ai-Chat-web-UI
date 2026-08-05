@@ -23,7 +23,7 @@
 - **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。在 UI 中按 Reasoning Offset 与工具结果交错为「深度思考 ↔ 工具步骤」时间线展示
 - **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；用于将工具事件插入对应推理段落之间，形成交错步骤流（Start/End 由后端与流式层写入）
 - **Reasoning Text**：推理的文本内容，流式传输；展示前可对历史污染行做剥离，但 offset 切片始终基于原始文本
-- **Cot Step Timeline（交错步骤流）**：主聊天 / 分享 / Battle / Android 共用的过程展示；节点由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建
+- **Cot Step Timeline（交错步骤流）**：主聊天 / 分享 / Battle / Android 共用的过程展示；节点由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建；列表 key 由 `cotTimelineNodeKey` 生成（推理段仅按 `charStart` 稳定，避免流式增长 remount 打字机）
 
 ## 工具调用
 

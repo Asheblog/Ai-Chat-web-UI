@@ -258,3 +258,24 @@ export const buildToolStepTitle = (event: ToolEvent): string => {
   }
   return label
 }
+
+/**
+ * React/RN 列表 key：推理段只按 charStart 稳定，避免流式 charEnd 增长导致打字机 remount 回退。
+ */
+export const cotTimelineNodeKey = (node: CotTimelineNode, index: number): string => {
+  if (node.type === 'reasoning') return `r:${node.charStart}`
+  if (node.type === 'tool') {
+    return `t:${node.event.callId ?? node.event.id}`
+  }
+  return `g:${node.toolType}:${index}:${node.events.map((event) => event.callId ?? event.id).join(',')}`
+}
+
+/** 全文已播放长度 → 某推理段内的初始播放游标（用于 hydrate / 恢复） */
+export const resolveSegmentPlayedLength = (
+  fullPlayedLength: number | undefined | null,
+  charStart: number,
+  segmentTextLength: number,
+): number => {
+  if (typeof fullPlayedLength !== 'number' || !Number.isFinite(fullPlayedLength)) return 0
+  return Math.max(0, Math.min(segmentTextLength, Math.floor(fullPlayedLength) - charStart))
+}

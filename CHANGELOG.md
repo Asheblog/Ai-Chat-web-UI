@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- fix: 交错步骤流流式打字机开头「前进又后退」——推理节点 key 按 charStart 稳定、追加文本不重置游标，并正确映射段内 playedLength。
 - BREAKING UI: 推理与工具展示改为交错 CoT 步骤流（深度思考 ↔ 工具结果），主聊天 / 分享 / Battle / Android 四端统一；废除「思考过程 + 工具调用 N 个」汇总双卡主路径。迁移策略为无迁移、直接替换。
 - 推理通道净化：切断工具 handler 经 `emitReasoning(kind=tool)` 写入 reasoning 的路径；工具进度仅走 Tool Event / 步骤流；历史污染文案展示时剥离（无 DB 迁移）。
 - 后端工具事件补全 `reasoningOffsetStart`/`End`，供交错步骤流定位；消息级 `reasoningDurationSeconds` 仍用于过程壳总耗时（不伪造分段秒数）。

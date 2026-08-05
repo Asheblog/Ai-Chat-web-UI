@@ -3,11 +3,13 @@
  *
  * 实现思维链内容的逐字打字机效果显示
  * - 支持流式内容实时渲染
- * - 性能优化：使用requestAnimationFrame
+ * - 追加不重置游标（避免开头前进又后退）
+ * - 性能优化：使用 requestAnimationFrame
  * - 自适应降级：长文本自动批量显示
  */
 
 import { useEffect, useState, useRef, useMemo } from 'react'
+import { resolveTypewriterAdvanceIndex } from '@/components/typewriter-advance'
 
 interface TypewriterReasoningProps {
   /** 完整的思维链文本内容 */
@@ -40,74 +42,79 @@ export function TypewriterReasoning({
   const rafRef = useRef<number>()
   const lastTimeRef = useRef(0)
   const indexRef = useRef(clampedInitial)
-  const initialSyncRef = useRef(clampedInitial)
+  const prevTextRef = useRef(text)
+  const targetTextRef = useRef(text)
+  targetTextRef.current = text
 
-  // 判断是否为长文本，启用批量模式
   const isLongText = useMemo(() => text.length > longTextThreshold, [text.length, longTextThreshold])
   const charsPerFrame = isLongText ? batchSize : 1
 
+  // hydrate / 恢复：只允许游标前进
   useEffect(() => {
-    // 刷新/Hydrate 后同步已播放长度，避免重复动画
-    if (clampedInitial > initialSyncRef.current || indexRef.current < clampedInitial) {
+    if (clampedInitial > indexRef.current) {
       indexRef.current = clampedInitial
-      initialSyncRef.current = clampedInitial
       setDisplayText(text.slice(0, clampedInitial))
     }
   }, [clampedInitial, text])
 
+  // 文本变更：追加保游标；缩短/分叉按公共前缀夹紧
   useEffect(() => {
-    // 如果不在流式传输中，或文本已完全显示，直接显示全部内容
-    if (!isStreaming || displayText === text) {
-      if (displayText !== text) {
-        setDisplayText(text)
+    const previous = prevTextRef.current
+    if (previous === text) return
+    const nextIndex = resolveTypewriterAdvanceIndex(previous, text, indexRef.current)
+    prevTextRef.current = text
+    indexRef.current = nextIndex
+    setDisplayText((current) => {
+      const next = text.slice(0, nextIndex)
+      return current === next ? current : next
+    })
+  }, [text])
+
+  useEffect(() => {
+    if (!isStreaming) {
+      if (indexRef.current !== text.length || displayText !== text) {
         indexRef.current = text.length
+        setDisplayText(text)
       }
       return
     }
 
-    // 如果文本长度减少（如重新开始），重置状态
-    if (text.length < indexRef.current) {
-      indexRef.current = 0
-      setDisplayText('')
-      lastTimeRef.current = 0
+    if (indexRef.current >= text.length) {
+      if (displayText !== text) setDisplayText(text)
+      return
     }
 
-    // 打字机动画逻辑
     const animate = (timestamp: number) => {
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp
       }
-      // 控制显示速度
       const elapsed = timestamp - lastTimeRef.current
+      const target = targetTextRef.current
       if (elapsed >= speed) {
         const currentIndex = indexRef.current
-        if (currentIndex < text.length) {
+        if (currentIndex < target.length) {
           const steps = Math.max(1, Math.floor(elapsed / speed))
-          const nextIndex = Math.min(currentIndex + charsPerFrame * steps, text.length)
+          const nextIndex = Math.min(currentIndex + charsPerFrame * steps, target.length)
           indexRef.current = nextIndex
-          setDisplayText(text.slice(0, nextIndex))
+          setDisplayText(target.slice(0, nextIndex))
         }
         lastTimeRef.current = timestamp
       }
 
-      // 继续动画直到显示完毕
-      if (indexRef.current < text.length) {
+      if (indexRef.current < targetTextRef.current.length) {
         rafRef.current = requestAnimationFrame(animate)
       }
     }
 
-    // 启动动画
-    lastTimeRef.current = 0
     rafRef.current = requestAnimationFrame(animate)
 
-    // 清理函数
     return () => {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, isStreaming, speed, charsPerFrame]) // displayText intentionally omitted to prevent infinite loop
+  }, [text, isStreaming, speed, charsPerFrame])
 
   return (
     <span className="block w-full break-words whitespace-pre-wrap">

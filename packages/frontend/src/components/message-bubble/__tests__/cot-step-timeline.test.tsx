@@ -74,4 +74,49 @@ describe('CotStepTimeline', () => {
     })
     expect(screen.queryByText(/联网搜索：污染行/)).not.toBeInTheDocument()
   })
+
+  it('流式末段打字机在文本增长时保持已显示前缀不回退', async () => {
+    const { rerender } = render(
+      <CotStepTimeline
+        meta={createMeta({ reasoningStatus: 'streaming' })}
+        reasoningRaw="你"
+        toolEvents={[]}
+        defaultExpanded
+        isStreaming
+        reasoningPlayedLength={0}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('深度思考')).toBeInTheDocument()
+    })
+
+    // 推进到至少打出首字
+    await waitFor(
+      () => {
+        expect(screen.getByText(/你/)).toBeInTheDocument()
+      },
+      { timeout: 2000 },
+    )
+
+    rerender(
+      <CotStepTimeline
+        meta={createMeta({ reasoningStatus: 'streaming' })}
+        reasoningRaw="你好世界"
+        toolEvents={[]}
+        defaultExpanded
+        isStreaming
+        reasoningPlayedLength={1}
+      />,
+    )
+
+    // 关键后不应出现空白回退：仍至少可见已出现过的「你」
+    expect(screen.getByText(/你/)).toBeInTheDocument()
+    await waitFor(
+      () => {
+        expect(screen.getByText(/你好/)).toBeInTheDocument()
+      },
+      { timeout: 2000 },
+    )
+  })
 })

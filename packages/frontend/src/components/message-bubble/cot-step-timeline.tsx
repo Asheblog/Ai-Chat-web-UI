@@ -4,7 +4,9 @@ import { useEffect, useMemo, useReducer } from 'react'
 import { Brain, ChevronDown, Loader2 } from 'lucide-react'
 import {
   buildInterleavedCotNodes,
+  cotTimelineNodeKey,
   countCotTimelineTools,
+  resolveSegmentPlayedLength,
   type CotTimelineNode,
 } from '@aichat/shared/cot-timeline'
 import type { MessageMeta, ToolEvent } from '@/types'
@@ -196,10 +198,10 @@ export function CotStepTimeline({
         <div className="space-y-2 border-t border-primary/20 px-3 py-3 sm:px-4">
           {nodes.map((node, index) => (
             <CotStepNode
-              key={nodeKey(node, index)}
+              key={cotTimelineNodeKey(node, index)}
               node={node}
               isStreamingTail={Boolean(isStreaming) && index === lastReasoningIndex && node.type === 'reasoning'}
-              playedLength={reasoningPlayedLength}
+              fullPlayedLength={reasoningPlayedLength}
             />
           ))}
         </div>
@@ -208,26 +210,27 @@ export function CotStepTimeline({
   )
 }
 
-function nodeKey(node: CotTimelineNode, index: number) {
-  if (node.type === 'reasoning') return `r:${node.charStart}-${node.charEnd}`
-  if (node.type === 'tool') {
-    return `t:${node.event.callId ?? node.event.id}:${node.event.updatedAt ?? node.event.createdAt}`
-  }
-  return `g:${node.toolType}:${index}:${node.events.map((event) => event.callId ?? event.id).join(',')}`
-}
-
 function CotStepNode({
   node,
   isStreamingTail,
-  playedLength,
+  fullPlayedLength,
 }: {
   node: CotTimelineNode
   isStreamingTail?: boolean
-  playedLength?: number
+  fullPlayedLength?: number
 }) {
   if (node.type === 'reasoning') {
+    const segmentPlayed = resolveSegmentPlayedLength(
+      fullPlayedLength,
+      node.charStart,
+      node.text.length,
+    )
     return (
-      <CotReasoningStep text={node.text} isStreamingTail={isStreamingTail} playedLength={playedLength} />
+      <CotReasoningStep
+        text={node.text}
+        isStreamingTail={isStreamingTail}
+        playedLength={segmentPlayed}
+      />
     )
   }
   if (node.type === 'toolGroup') {
