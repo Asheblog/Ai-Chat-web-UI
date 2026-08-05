@@ -338,6 +338,8 @@ describe('createChatStreamHandler error handling', () => {
       visionTranscriptionPrefix: '图里有一只猫',
       historyImageDescriptions: expect.any(Map),
     }))
+    const autoPrepareArg = mockPrepare.mock.calls[0][0]
+    expect(autoPrepareArg.visionAttachmentImageCount).toBeUndefined()
     // 转写调用携带原始图片、用户问题与转写代理配置
     expect(visionProxyService.transcribeImages).toHaveBeenCalledWith(
       [{ data: 'aW1n', mime: 'image/png' }],
@@ -427,5 +429,66 @@ describe('createChatStreamHandler error handling', () => {
     )
     const prepareArg = mockPrepare.mock.calls[0][0]
     expect(prepareArg.visionTranscriptionPrefix).toBeFalsy()
+  })
+
+  it('does not pass visionAttachmentImageCount when main model has vision', async () => {
+    ;(isVisionProxyReady as jest.Mock).mockReturnValue(true)
+    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: true })
+    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({
+      enabled: true,
+      connectionId: 2,
+      modelId: 'gemini-2.5-flash',
+    })
+    const mockPrepare = jest.fn().mockResolvedValue({
+      promptTokens: 10,
+      contextLimit: 100,
+      contextRemaining: 90,
+      contextEnabled: true,
+      systemSettings: {},
+      messagesPayload: [],
+      baseRequestBody: {},
+      providerRequest: {
+        providerLabel: 'openai',
+        authHeader: {},
+        extraHeaders: {},
+        providerHost: 'api.example.com',
+        timeoutMs: 60000,
+      },
+      reasoning: { enabled: false, effort: 'medium', ollamaThink: false },
+    })
+    const deps = createMinimalDeps({
+      mockPrepare,
+      depsOverrides: {
+        assistantProgressService: {
+          persistProgress: jest.fn().mockResolvedValue({ recovered: false, messageId: null }),
+        } as any,
+        nonStreamFallbackService: {
+          execute: jest.fn().mockResolvedValue(null),
+        } as any,
+        providerRequester: {
+          requestWithBackoff: jest.fn().mockRejectedValue(new Error('provider error')),
+          executeFallback: jest.fn(),
+        } as any,
+      },
+    })
+    const { c } = createMockContext()
+    c.req.valid = jest.fn(() => ({
+      sessionId: 1,
+      content: '看看图',
+      clientMessageId: 'test-client-id',
+      images: [{ data: 'aW1n', mime: 'image/png' }],
+    }))
+
+    const handler = createChatStreamHandler(deps)
+    await handler(c)
+
+    expect(visionProxyService.transcribeImages).not.toHaveBeenCalled()
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mainModelVision: true,
+        images: [{ data: 'aW1n', mime: 'image/png' }],
+      }),
+    )
+    expect(mockPrepare.mock.calls[0][0].visionAttachmentImageCount).toBeUndefined()
   })
 })
