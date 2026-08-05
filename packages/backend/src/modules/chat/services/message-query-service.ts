@@ -456,10 +456,12 @@ export class ChatMessageQueryService {
     }
     const usage = Array.isArray(usageMetrics) && usageMetrics.length > 0 ? usageMetrics[0] : null
     const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
+    const toolEvents = this.parseToolLogsJson(toolLogsJson)
     const richPayload = buildRichMessagePayload({
       content: raw.content,
       attachmentRelativePaths: rel,
       generatedImages: Array.isArray(raw.generatedImages) ? raw.generatedImages : [],
+      toolEvents,
       baseUrl,
       resolveChatImageUrls: this.resolveChatImageUrls,
     })
@@ -490,7 +492,7 @@ export class ChatMessageQueryService {
         }
       })(),
       richPayload,
-      toolEvents: this.parseToolLogsJson(toolLogsJson),
+      toolEvents,
       metrics: usage
         ? {
             promptTokens: usage.promptTokens,

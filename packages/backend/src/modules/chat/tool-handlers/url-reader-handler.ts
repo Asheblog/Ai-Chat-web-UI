@@ -10,6 +10,7 @@ import {
   checkIfLikelySPA,
 } from '../../../utils/url-reader'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
+import { assessWebImageRelevance } from '../../../utils/web-image-evidence'
 import type {
   IToolHandler,
   ToolCall,
@@ -17,6 +18,11 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
 } from './types'
+import {
+  isVisionProxyReady,
+  type VisionProxyConfig,
+  type VisionProxyService,
+} from '../services/vision-proxy-service'
 
 export interface UrlReaderHandlerConfig {
   enabled: boolean
@@ -28,12 +34,21 @@ export interface UrlReaderHandlerConfig {
   renderWaitMs?: number
 }
 
+export interface UrlReaderHandlerDeps {
+  visionProxy?: VisionProxyConfig | null
+  visionProxyService?: VisionProxyService
+}
+
 export class UrlReaderToolHandler implements IToolHandler {
   readonly toolName = 'read_url'
   private config: UrlReaderHandlerConfig
+  private visionProxy: VisionProxyConfig | null
+  private visionProxyService?: VisionProxyService
 
-  constructor(config: UrlReaderHandlerConfig) {
+  constructor(config: UrlReaderHandlerConfig, deps: UrlReaderHandlerDeps = {}) {
     this.config = config
+    this.visionProxy = deps.visionProxy ?? null
+    this.visionProxyService = deps.visionProxyService
   }
 
   get toolDefinition(): ToolDefinition {
@@ -59,6 +74,36 @@ export class UrlReaderToolHandler implements IToolHandler {
 
   canHandle(toolName: string): boolean {
     return toolName === this.toolName
+  }
+
+  private async assessPageImages(
+    result: Awaited<ReturnType<typeof readUrlContent>>,
+  ) {
+    if (!this.visionProxyService || !this.visionProxy || !isVisionProxyReady(this.visionProxy)) {
+      return []
+    }
+    const candidates = [
+      ...(result.leadImageUrl
+        ? [{ url: result.leadImageUrl, sourceUrl: result.url, title: result.title || undefined }]
+        : []),
+      ...((result.images || []).map((image) => ({
+        url: image.url,
+        alt: image.alt,
+        width: image.width,
+        height: image.height,
+        source: image.source,
+        sourceUrl: result.url,
+        title: result.title || undefined,
+      })) || []),
+    ]
+    return assessWebImageRelevance({
+      candidates,
+      contextText: [result.title, result.excerpt, result.textContent?.slice(0, 800)]
+        .filter(Boolean)
+        .join('\n'),
+      visionProxy: this.visionProxyService,
+      visionConfig: this.visionProxy,
+    })
   }
 
   private canAttachVisionImages(context: ToolCallContext): boolean {
@@ -216,6 +261,30 @@ export class UrlReaderToolHandler implements IToolHandler {
       }
 
       const followupMessages = await this.buildVisionFollowupMessages(result, context)
+      const visionReady = Boolean(
+        this.visionProxyService && this.visionProxy && isVisionProxyReady(this.visionProxy),
+      )
+      const assessedImages = visionReady ? await this.assessPageImages(result) : []
+      const assessedForDetails = assessedImages.map((item) => ({
+        url: item.url,
+        title: item.title || item.alt,
+        alt: item.alt,
+        sourceUrl: item.sourceUrl || result.url,
+        confidence: item.confidence,
+        description: item.description,
+        relevance: item.relevance,
+      }))
+      const imageEvidenceText =
+        assessedForDetails.length > 0
+          ? [
+              '',
+              '【图片证据（已识图筛选）】',
+              ...assessedForDetails.map(
+                (item, index) =>
+                  `[图${index + 1}] ${item.description || item.title || item.url}（${item.relevance}） ${item.url}`,
+              ),
+            ].join('\n')
+          : ''
       context.sendToolEvent({
         id: callId,
         tool: 'read_url',
@@ -254,11 +323,15 @@ export class UrlReaderToolHandler implements IToolHandler {
           contentLength: result.contentLength,
           leadImageUrl: result.leadImageUrl,
           images: result.images,
+          assessedImages: assessedForDetails,
           visionFollowupAttached: Boolean(followupMessages?.length),
         },
       })
 
-      const formatted = formatUrlContentForModel(result)
+      const formatted = `${formatUrlContentForModel(result, {
+        // 识图已跑过：只保留相关图描述；未配置识图时仍回退原始图片 URL 证据
+        includeRawImageEvidence: !visionReady,
+      })}${imageEvidenceText}`
       return {
         toolCallId: callId,
         toolName: this.toolName,

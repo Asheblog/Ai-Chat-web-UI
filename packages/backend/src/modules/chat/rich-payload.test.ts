@@ -1,55 +1,83 @@
-import { buildRichMessagePayload } from './rich-payload'
+import { buildRichMessagePayload, extractExternalImageParts } from './rich-payload'
 
-describe('buildRichMessagePayload external evidence disabled', () => {
+describe('buildRichMessagePayload web evidence images', () => {
   const baseUrl = 'https://chat.example.com'
   const resolveChatImageUrls = (relativePaths: string[], host: string) =>
     relativePaths.map((path) => `${host}${path}`)
 
-  test('ignores external image fields from web tool logs', () => {
+  test('includes assessed web evidence images and uses stack layout', () => {
     const payload = buildRichMessagePayload({
       content: 'news',
-      toolLogsJson: JSON.stringify([
+      toolEvents: [
         {
-          id: 'tool-1',
           tool: 'web_search',
-          stage: 'result',
-          summary: 'web results',
-          createdAt: Date.now(),
-          hits: [
-            {
-              title: 'Result A',
-              url: 'https://example.com/article-a',
-              imageUrl: 'https://cdn.example.com/a.jpg',
-              rank: 3,
-            },
-          ],
-        },
-        {
-          id: 'tool-2',
-          tool: 'read_url',
-          stage: 'result',
+          summary: 'auto-read',
           url: 'https://news.example.com/article',
-          createdAt: Date.now(),
           details: {
-            leadImageUrl: 'https://img.example.com/lead.jpg',
-            images: [
-              { url: 'https://img.example.com/noise-1.jpg' },
-              { url: 'https://img.example.com/noise-2.jpg' },
+            assessedImages: [
+              {
+                url: 'https://img.example.com/lead.jpg',
+                title: '桥面航拍',
+                confidence: 'high',
+                description: '跨海大桥实景',
+                sourceUrl: 'https://news.example.com/article',
+              },
+              {
+                url: 'https://img.example.com/ad.jpg',
+                confidence: 'low',
+                description: '广告',
+              },
             ],
           },
         },
-      ]),
+      ],
       baseUrl,
       resolveChatImageUrls,
-    } as any)
+    })
 
+    expect(payload?.layout).toBe('stack')
     const externalImageParts =
       payload?.parts.filter((part) => part.type === 'image' && part.source === 'external') || []
-
-    expect(externalImageParts).toEqual([])
+    expect(externalImageParts).toEqual([
+      expect.objectContaining({
+        type: 'image',
+        source: 'external',
+        sourceKind: 'web',
+        url: 'https://img.example.com/lead.jpg',
+        title: '桥面航拍',
+        confidence: 'high',
+        sourceUrl: 'https://news.example.com/article',
+      }),
+    ])
   })
 
-  test('keeps attachment and generated images', () => {
+  test('extractExternalImageParts prefers assessedImages over raw hits', () => {
+    const parts = extractExternalImageParts([
+      {
+        tool: 'web_search',
+        hits: [
+          {
+            title: 'Result A',
+            url: 'https://example.com/article-a',
+            imageUrl: 'https://cdn.example.com/a.jpg',
+          },
+        ],
+        details: {
+          assessedImages: [
+            {
+              url: 'https://cdn.example.com/kept.jpg',
+              title: 'Kept',
+              confidence: 'high',
+            },
+          ],
+        },
+      },
+    ])
+
+    expect(parts.map((part) => part.url)).toEqual(['https://cdn.example.com/kept.jpg'])
+  })
+
+  test('keeps attachment and generated images side-by-side without web evidence', () => {
     const payload = buildRichMessagePayload({
       content: 'mixed',
       attachmentRelativePaths: ['/img/upload-a.png'],
@@ -80,9 +108,5 @@ describe('buildRichMessagePayload external evidence disabled', () => {
         }),
       ]),
     )
-
-    const externalImageParts =
-      payload?.parts.filter((part) => part.type === 'image' && part.source === 'external') || []
-    expect(externalImageParts).toEqual([])
   })
 })

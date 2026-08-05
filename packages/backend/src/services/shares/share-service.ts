@@ -7,7 +7,10 @@ import {
   resolveChatImageUrls,
 } from '../../utils/chat-images'
 import { CHAT_IMAGE_PUBLIC_PATH } from '../../config/storage'
-import { buildRichMessagePayload, type GeneratedImageRecord } from '../../modules/chat/rich-payload'
+import {
+  buildRichMessagePayload,
+  type GeneratedImageRecord,
+} from '../../modules/chat/rich-payload'
 
 export class ShareServiceError extends Error {
   statusCode: number
@@ -539,10 +542,10 @@ export class ShareService {
         generatedImages: (Array.isArray(msg.generatedImages)
           ? msg.generatedImages
           : []) as GeneratedImageRecord[],
+        toolEvents,
         baseUrl,
         resolveChatImageUrls,
       })
-      const hydratedRichPayload = this.appendExternalImagesToRichPayload(richPayload, toolEvents)
       return {
         id: msg.id,
         role: msg.role === 'user' ? 'user' : 'assistant',
@@ -550,104 +553,10 @@ export class ShareService {
         reasoning: msg.reasoning,
         createdAt: msg.createdAt.toISOString(),
         images: images.length > 0 ? images : undefined,
-        richPayload: hydratedRichPayload,
+        richPayload,
         toolEvents: toolEvents.length > 0 ? toolEvents : undefined,
       }
     })
-  }
-
-  private appendExternalImagesToRichPayload(
-    richPayload: RichMessagePayload | null,
-    toolEvents: ShareToolEvent[],
-  ): RichMessagePayload | null {
-    const externalImages = this.extractExternalImageParts(toolEvents)
-    if (externalImages.length === 0) {
-      return richPayload
-    }
-
-    const baseParts = Array.isArray(richPayload?.parts) ? richPayload.parts : []
-    const dedupedUrls = new Set(
-      baseParts
-        .filter((part): part is RichMessageImagePart => part.type === 'image')
-        .map((part) => part.url),
-    )
-    const mergedParts = [...baseParts]
-    for (const image of externalImages) {
-      if (!image.url || dedupedUrls.has(image.url)) continue
-      dedupedUrls.add(image.url)
-      mergedParts.push(image)
-    }
-
-    if (mergedParts.length === 0) return null
-    const hasText = mergedParts.some((part) => part.type === 'text' && part.text.trim().length > 0)
-    const hasImages = mergedParts.some((part) => part.type === 'image')
-
-    return {
-      layout: hasText && hasImages ? 'side-by-side' : hasImages ? 'stack' : 'auto',
-      parts: mergedParts.map((part, index) =>
-        part.type === 'image' ? { ...part, refId: part.refId ?? `img-${index + 1}` } : part,
-      ),
-    }
-  }
-
-  private extractExternalImageParts(toolEvents: ShareToolEvent[]): RichMessageImagePart[] {
-    const images: RichMessageImagePart[] = []
-    const pushExternalImage = (
-      url: unknown,
-      options: {
-        sourceUrl?: unknown
-        title?: unknown
-        sourceLabel?: unknown
-        sourceKind?: RichMessageImagePart['sourceKind']
-        meta?: Record<string, unknown>
-      } = {},
-    ) => {
-      const normalizedUrl = typeof url === 'string' ? url.trim() : ''
-      if (!normalizedUrl) return
-      const normalizedSourceUrl =
-        typeof options.sourceUrl === 'string' && options.sourceUrl.trim().length > 0
-          ? options.sourceUrl.trim()
-          : undefined
-      const normalizedTitle =
-        typeof options.title === 'string' && options.title.trim().length > 0
-          ? options.title.trim()
-          : undefined
-      const normalizedSourceLabel =
-        typeof options.sourceLabel === 'string' && options.sourceLabel.trim().length > 0
-          ? options.sourceLabel.trim()
-          : undefined
-      images.push({
-        type: 'image',
-        source: 'external',
-        sourceKind: options.sourceKind ?? 'web',
-        url: normalizedUrl,
-        sourceUrl: normalizedSourceUrl,
-        alt: normalizedTitle,
-        title: normalizedTitle,
-        sourceLabel: normalizedSourceLabel,
-        meta: options.meta,
-      })
-    }
-
-    for (const event of toolEvents) {
-      for (const hit of event.hits || []) {
-        pushExternalImage(hit.imageUrl || hit.thumbnailUrl, {
-          sourceUrl: hit.url,
-          title: hit.title,
-          sourceKind: 'web',
-        })
-      }
-
-      const leadImageUrl =
-        typeof event.details?.leadImageUrl === 'string' ? event.details.leadImageUrl : undefined
-      pushExternalImage(leadImageUrl, {
-        sourceUrl: event.url,
-        title: event.summary,
-        sourceKind: event.tool === 'read_url' ? 'document' : 'web',
-      })
-    }
-
-    return images
   }
 
   private parseToolLogs(json: string | null | undefined): ShareToolEvent[] {

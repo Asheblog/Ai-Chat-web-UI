@@ -15,6 +15,7 @@ import {
 } from '../../../utils/web-search'
 import { truncateText } from '../../../utils/parsers'
 import { readUrlContent, type UrlReadErrorCode } from '../../../utils/url-reader'
+import { assessWebImageRelevance } from '../../../utils/web-image-evidence'
 import type {
   IToolHandler,
   ToolCall,
@@ -24,6 +25,11 @@ import type {
   ToolLogDetails,
   WebSearchHandlerConfig,
 } from './types'
+import {
+  isVisionProxyReady,
+  type VisionProxyConfig,
+  type VisionProxyService,
+} from '../services/vision-proxy-service'
 
 interface AutoReadEvidenceItem {
   url: string
@@ -615,9 +621,16 @@ async function mapWithConcurrency<TItem, TResult>(
 export class WebSearchToolHandler implements IToolHandler {
   readonly toolName = 'web_search'
   private config: WebSearchHandlerConfig
+  private visionProxy: VisionProxyConfig | null
+  private visionProxyService?: VisionProxyService
 
-  constructor(config: WebSearchHandlerConfig) {
+  constructor(
+    config: WebSearchHandlerConfig,
+    deps: { visionProxy?: VisionProxyConfig | null; visionProxyService?: VisionProxyService } = {},
+  ) {
     this.config = config
+    this.visionProxy = deps.visionProxy ?? null
+    this.visionProxyService = deps.visionProxyService
   }
 
   get toolDefinition(): ToolDefinition {
@@ -788,7 +801,7 @@ export class WebSearchToolHandler implements IToolHandler {
           tool: 'web_search',
           stage: 'result',
           query: taskResult.task.query,
-          hits: taskResult.hits.map(({ imageUrl: _imageUrl, thumbnailUrl: _thumbnailUrl, ...hit }) => hit),
+          hits: taskResult.hits,
           summary: `并行搜索完成：${taskResult.task.engine} 命中 ${taskResult.hits.length} 条`,
           details: {
             groupId: callId,
@@ -894,7 +907,7 @@ export class WebSearchToolHandler implements IToolHandler {
         }
       }
 
-      const hits = searchResult.hits.map(({ imageUrl: _imageUrl, thumbnailUrl: _thumbnailUrl, ...hit }) => hit)
+      const hits = searchResult.hits
       const autoReadEnabled = this.config.autoReadAfterSearch !== false
       const autoReadTopK = clampAutoReadTopK(this.config.autoReadTopK)
       const autoReadParallelism = clampPositiveInt(
@@ -995,6 +1008,59 @@ export class WebSearchToolHandler implements IToolHandler {
             return evidenceItem
           }
 
+          const assessedImages =
+            this.visionProxyService && this.visionProxy && isVisionProxyReady(this.visionProxy)
+              ? await assessWebImageRelevance({
+                  candidates: [
+                    ...(readResult.leadImageUrl
+                      ? [
+                          {
+                            url: readResult.leadImageUrl,
+                            sourceUrl: targetUrl,
+                            title: readResult.title || undefined,
+                          },
+                        ]
+                      : []),
+                    ...((readResult.images || []).map((image) => ({
+                      url: image.url,
+                      alt: image.alt,
+                      width: image.width,
+                      height: image.height,
+                      source: image.source,
+                      sourceUrl: targetUrl,
+                      title: readResult.title || undefined,
+                    })) || []),
+                    ...(hits.find((hit) => hit.url === targetUrl)?.imageUrl
+                      ? [
+                          {
+                            url: hits.find((hit) => hit.url === targetUrl)!.imageUrl!,
+                            sourceUrl: targetUrl,
+                            title: hits.find((hit) => hit.url === targetUrl)?.title,
+                          },
+                        ]
+                      : []),
+                  ],
+                  contextText: [
+                    query,
+                    readResult.title,
+                    readResult.excerpt,
+                    readResult.textContent?.slice(0, 800),
+                  ]
+                    .filter(Boolean)
+                    .join('\n'),
+                  visionProxy: this.visionProxyService,
+                  visionConfig: this.visionProxy,
+                })
+              : []
+          const assessedForDetails = assessedImages.map((item) => ({
+            url: item.url,
+            title: item.title || item.alt,
+            alt: item.alt,
+            sourceUrl: item.sourceUrl || targetUrl,
+            confidence: item.confidence,
+            description: item.description,
+            relevance: item.relevance,
+          }))
           const evidenceItem: AutoReadEvidenceItem = {
             url: targetUrl,
             title: readResult.title || undefined,
@@ -1002,7 +1068,22 @@ export class WebSearchToolHandler implements IToolHandler {
             siteName: readResult.siteName || undefined,
             byline: readResult.byline || undefined,
             wordCount: readResult.wordCount,
-            content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
+            content: truncateText(
+              [
+                readResult.textContent || '',
+                assessedForDetails.length > 0
+                  ? [
+                      '',
+                      '【图片证据（已识图筛选）】',
+                      ...assessedForDetails.map(
+                        (item, index) =>
+                          `[图${index + 1}] ${item.description || item.title || item.url}（${item.relevance}）`,
+                      ),
+                    ].join('\n')
+                  : '',
+              ].join('\n'),
+              DEFAULT_MODEL_EVIDENCE_CHARS,
+            ),
             fallbackUsed:
               readResult.fallbackUsed === 'crawler' ||
               readResult.fallbackUsed === 'browser' ||
@@ -1027,6 +1108,7 @@ export class WebSearchToolHandler implements IToolHandler {
             wordCount: readResult.wordCount,
             siteName: readResult.siteName,
             byline: readResult.byline,
+            leadImageUrl: readResult.leadImageUrl,
             details: {
               groupId: callId,
               url: targetUrl,
@@ -1046,6 +1128,9 @@ export class WebSearchToolHandler implements IToolHandler {
               finalUrl: readResult.finalUrl,
               rendered: readResult.rendered,
               contentFormat: readResult.contentFormat,
+              leadImageUrl: readResult.leadImageUrl,
+              images: readResult.images,
+              assessedImages: assessedForDetails,
             },
           })
           return evidenceItem

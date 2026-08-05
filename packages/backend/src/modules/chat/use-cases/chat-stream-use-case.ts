@@ -799,7 +799,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             visionProxy: visionProxyToolFlow,
           },
           allowDynamicRuntime: agentToolFlags.dynamicSkillRuntimeEnabled,
-          visionProxyConfig: visionProxyToolFlow ? visionProxyConfig : null,
+          visionProxyConfig: isVisionProxyReady(visionProxyConfig) ? visionProxyConfig : null,
           visionProxyService,
           provider,
           baseUrl,

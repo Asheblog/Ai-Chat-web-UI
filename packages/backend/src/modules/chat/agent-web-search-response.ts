@@ -605,7 +605,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           knowledgeBase: ragService && toolFlags.knowledgeBase
             ? { enabled: true, knowledgeBaseIds, ragService }
             : null,
-          visionProxy: toolFlags.visionProxy && params.visionProxyConfig ? params.visionProxyConfig : null,
+          visionProxy: params.visionProxyConfig ?? null,
         },
         allowDynamicRuntime: allowDynamicRuntime === true,
         mcpService: params.mcpService,

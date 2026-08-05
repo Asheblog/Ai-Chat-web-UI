@@ -16,11 +16,11 @@ describe('RichMessageRenderer', () => {
     expect(screen.getByText('纯文本回答')).toBeInTheDocument()
   })
 
-  it('ignores external web evidence images', () => {
+  it('renders external web evidence as text-above images-below stack', () => {
     render(
       <RichMessageRenderer
         payload={{
-          layout: 'side-by-side',
+          layout: 'stack',
           parts: [
             { type: 'text', text: '今日要闻：\n1. 新闻 A', format: 'markdown' },
             {
@@ -30,6 +30,8 @@ describe('RichMessageRenderer', () => {
               sourceKind: 'web',
               title: '证据图 1',
               sourceUrl: 'https://example.com/article-1',
+              confidence: 'high',
+              refId: 'img-1',
             },
           ],
         }}
@@ -37,12 +39,14 @@ describe('RichMessageRenderer', () => {
     )
 
     const root = screen.getByTestId('rich-message-renderer')
-    expect(root).toHaveAttribute('data-render-mode', 'default')
-    expect(root).toHaveAttribute('data-layout', 'auto')
+    expect(root).toHaveAttribute('data-layout', 'stack')
+    expect(root).toHaveAttribute('data-render-mode', 'evidence-stack')
+    expect(root).not.toHaveClass('lg:grid')
     expect(screen.getByText('今日要闻：')).toBeInTheDocument()
-    expect(screen.queryByText('证据图 1')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '查看原图' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '查看原文' })).not.toBeInTheDocument()
+    expect(screen.getByText('证据图 1')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看原图' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看原文' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /查看图片/ })).not.toBeInTheDocument()
   })
 
   it('keeps side-by-side layout for non-web mixed payload', () => {
@@ -90,11 +94,9 @@ describe('RichMessageRenderer', () => {
     const root = screen.getByTestId('rich-message-renderer')
     expect(root).toHaveAttribute('data-layout', 'stack')
 
-    // Images are initially collapsed — only the toggle button is visible
     const expandButton = screen.getByRole('button', { name: '查看图片（1 张）' })
     expect(expandButton).toBeInTheDocument()
 
-    // Click to expand images, then the EvidenceImageCard with meaningful alt appears
     await user.click(expandButton)
     expect(screen.getByAltText('证据图片 1')).toBeInTheDocument()
   })
