@@ -46,6 +46,18 @@ describe('stream-event-emitter reasoning deltas', () => {
     expect(emitter.getReasoningBuffer()).toBe('  step-1')
   })
 
+  test('kind=tool 的 emitReasoning 不入 buffer 也不发 SSE', () => {
+    const { emitter, chunks } = createEmitter()
+
+    emitter.emitReasoning('model thought', { kind: 'model', stage: 'stream' })
+    emitter.emitReasoning('联网搜索：今日新闻', { kind: 'tool', tool: 'web_search' })
+    emitter.emitReasoning('more model', { kind: 'model' })
+
+    expect(emitter.getReasoningBuffer()).toBe('model thoughtmore model')
+    expect(chunks).toHaveLength(2)
+    expect(chunks.join('')).not.toContain('联网搜索')
+  })
+
   test('normalizes legacy tool payload to tool_call event', () => {
     const { emitter, chunks } = createEmitter()
 

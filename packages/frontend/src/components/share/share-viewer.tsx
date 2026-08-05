@@ -11,6 +11,7 @@ import {
   buildToolSummary,
   mergeAndSortToolEvents,
 } from '@aichat/shared/tool-events'
+import { stripToolProgressFromReasoning } from '@aichat/shared/strip-tool-progress-from-reasoning'
 import { User, Bot, Copy, Loader2 } from 'lucide-react'
 
 interface ShareViewerProps {
@@ -81,7 +82,11 @@ function ShareMessageItem({
   sessionId,
   defaultReasoningExpanded = false,
 }: ShareMessageItemProps) {
-  const hasReasoning = msg.reasoning && msg.reasoning.trim().length > 0
+  const displayReasoning = useMemo(
+    () => stripToolProgressFromReasoning(msg.reasoning || ''),
+    [msg.reasoning],
+  )
+  const hasReasoning = displayReasoning.length > 0
   const toolEvents = (msg as { toolEvents?: ToolEvent[] }).toolEvents
   const normalizedToolEvents = useMemo(() => {
     if (!toolEvents || toolEvents.length === 0) return []
@@ -132,9 +137,9 @@ function ShareMessageItem({
             {hasReasoning && (
               <ReasoningSection
                 meta={meta}
-                reasoningRaw={msg.reasoning || ''}
+                reasoningRaw={displayReasoning}
                 reasoningHtml={undefined}
-                reasoningPlayedLength={msg.reasoning?.length || 0}
+                reasoningPlayedLength={displayReasoning.length}
                 defaultExpanded={defaultReasoningExpanded}
               />
             )}

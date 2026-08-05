@@ -131,13 +131,8 @@ export class UrlReaderToolHandler implements IToolHandler {
   ): Promise<ToolHandlerResult> {
     const url = ((args.url as string) || '').trim()
     const callId = toolCall.id || randomUUID()
-    const reasoningMetaBase = { kind: 'tool', tool: 'read_url', url, callId }
 
     if (!url) {
-      context.emitReasoning('模型请求读取 URL 但未提供地址，已忽略。', {
-        ...reasoningMetaBase,
-        stage: 'error',
-      })
       context.sendToolEvent({
         id: callId,
         tool: 'read_url',
@@ -158,14 +153,6 @@ export class UrlReaderToolHandler implements IToolHandler {
     }
 
     const likelySPA = checkIfLikelySPA(url)
-    if (likelySPA) {
-      context.emitReasoning(
-        `注意：该网址可能是动态页面，内容提取可能不完整。正在尝试读取：${url}`,
-        { ...reasoningMetaBase, stage: 'start', warning: 'possible_spa' }
-      )
-    } else {
-      context.emitReasoning(`正在读取网页：${url}`, { ...reasoningMetaBase, stage: 'start' })
-    }
 
     context.sendToolEvent({
       id: callId,
@@ -192,15 +179,6 @@ export class UrlReaderToolHandler implements IToolHandler {
       })
 
       if (result.error) {
-        const errorLabel = result.errorCode
-          ? `${result.error}（${result.errorCode}${typeof result.httpStatus === 'number' ? ` / HTTP ${result.httpStatus}` : ''}）`
-          : result.error
-        context.emitReasoning(`读取网页失败：${errorLabel}`, {
-          ...reasoningMetaBase,
-          stage: 'error',
-          errorCode: result.errorCode,
-          httpStatus: result.httpStatus,
-        })
         context.sendToolEvent({
           id: callId,
           tool: 'read_url',
@@ -237,27 +215,7 @@ export class UrlReaderToolHandler implements IToolHandler {
         }
       }
 
-      const extractionMode = (() => {
-        if (result.resourceType === 'image') return 'direct-image'
-        if (result.fallbackUsed === 'browser') return 'browser'
-        if (result.fallbackUsed === 'document') return result.engine || 'document'
-        if (result.fallbackUsed === 'crawler') return 'crawler'
-        return 'readability'
-      })()
       const followupMessages = await this.buildVisionFollowupMessages(result, context)
-      context.emitReasoning(
-        result.resourceType === 'image'
-          ? `成功读取图片资源：${url}。`
-          : `成功读取网页「${result.title || url}」，共约 ${result.wordCount || 0} 词（${extractionMode}）。`,
-        {
-          ...reasoningMetaBase,
-          stage: 'result',
-          title: result.title,
-          wordCount: result.wordCount,
-          fallbackUsed: result.fallbackUsed || 'none',
-          resourceType: result.resourceType || 'page',
-        }
-      )
       context.sendToolEvent({
         id: callId,
         tool: 'read_url',
@@ -314,10 +272,6 @@ export class UrlReaderToolHandler implements IToolHandler {
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'URL read failed'
-      context.emitReasoning(`读取网页失败：${message}`, {
-        ...reasoningMetaBase,
-        stage: 'error',
-      })
       context.sendToolEvent({
         id: callId,
         tool: 'read_url',

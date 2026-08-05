@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- 净化推理展示：切断工具 handler 经 `emitReasoning(kind=tool)` 写入推理通道的路径（硬闸门 + 删除调用）；「思考过程」仅保留模型原生推理，工具进度只出现在「工具调用」区块；历史污染文案展示时剥离（无 DB 迁移）。
 - 主聊天流推理与工具调用展示分离：推理文字与工具调用从交错时间轴改为两个独立折叠区块（推理区块在上、工具区块在下、最终回答最后）；流式进行中自动展开、完成后自动折叠，用户手动展开/收起按消息本地记忆；工具区块每工具独立卡片展示（名称+状态+耗时+可展开参数/结果），保留 web_search/read_url 合并组与 groupId 任务组分组。
 - BREAKING: 移除「推理默认展开」系统设置项 `reasoning_default_expand`（前端 `reasoningDefaultExpand`）与 `REASONING_DEFAULT_EXPAND` 环境变量；推理展示改为流式自动展开/完成折叠并支持按消息记忆手动状态；其余推理设置（`reasoning_enabled`、`reasoning_save_to_db`、`reasoning_tags_mode` 等）保留。迁移策略为无迁移、直接替换。
 - 生产默认 Docker 拓扑改为 all-in-one：`ghcr.io/asheblog/aichat` 同容器运行 frontend + backend + rag-worker，并保留独立 `docker-socket-proxy`；旧四容器见 `docker-compose.split.yml`。升级：`docker compose pull && docker compose up -d`。1Panel 示例见 `docs/deploy/1panel-compose.example.yml`。

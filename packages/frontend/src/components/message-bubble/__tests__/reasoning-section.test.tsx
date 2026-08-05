@@ -199,6 +199,47 @@ describe('ReasoningSection 展开逻辑', () => {
   })
 })
 
+describe('ReasoningSection 工具进度剥离', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('仅含工具进度文案时不渲染', () => {
+    const { container } = render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw={[
+          '联网搜索：今日新闻（引擎 2，查询 1，目标 10 条，最少来源 2）',
+          '网页读取成功：标题（约 100 词）',
+        ].join('\n')}
+        defaultExpanded={true}
+      />,
+    )
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('混杂文本展开后不展示工具进度行', async () => {
+    render(
+      <ReasoningSection
+        meta={createMeta({ reasoningStatus: 'done' })}
+        reasoningRaw={[
+          'The user wants news.',
+          '联网搜索：今日新闻',
+          'I should summarize.',
+        ].join('\n')}
+        defaultExpanded={true}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getToggleButton()).toHaveAttribute('aria-expanded', 'true')
+    })
+    expect(screen.getByText(/The user wants news/)).toBeInTheDocument()
+    expect(screen.getByText(/I should summarize/)).toBeInTheDocument()
+    expect(screen.queryByText(/联网搜索/)).not.toBeInTheDocument()
+  })
+})
+
 describe('ReasoningSection 标题文案', () => {
   beforeEach(() => {
     localStorage.clear()

@@ -652,13 +652,8 @@ export class WebSearchToolHandler implements IToolHandler {
   ): Promise<ToolHandlerResult> {
     const query = ((args.query as string) || '').trim()
     const callId = toolCall.id || randomUUID()
-    const reasoningMetaBase = { kind: 'tool', tool: 'web_search', query, callId }
 
     if (!query) {
-      context.emitReasoning('模型请求了空的联网搜索参数，已忽略。', {
-        ...reasoningMetaBase,
-        stage: 'error',
-      })
       context.sendToolEvent({
         id: callId,
         tool: 'web_search',
@@ -692,13 +687,6 @@ export class WebSearchToolHandler implements IToolHandler {
       localeRouting: this.config.localeRouting,
     })
 
-    context.emitReasoning(
-      `联网搜索：${query}（引擎 ${activeEngines.length}，查询 ${expandedQueries.length}，目标 ${appliedLimit} 条，最少来源 ${routingPlan.requiredSources}）`,
-      {
-        ...reasoningMetaBase,
-        stage: 'start',
-      },
-    )
     context.sendToolEvent({
       id: callId,
       tool: 'web_search',
@@ -870,17 +858,6 @@ export class WebSearchToolHandler implements IToolHandler {
         const escalationEngine = routingPlan.fallbackEngines[0]
         const escalationPlans = buildEscalationQueryPlans(routingPlan, escalationEngine)
         if (escalationEngine && escalationPlans.length > 0) {
-          context.emitReasoning(
-            `搜索结果出现${escalationDecision.reason === 'low_overlap' ? '低重叠冲突' : '来源不足'}，追加 ${escalationEngine} 复核。`,
-            {
-              ...reasoningMetaBase,
-              stage: 'start',
-              escalationReason: escalationDecision.reason,
-              escalationEngine,
-              overlapRatio: escalationDecision.overlapRatio,
-              successfulEngineCount: escalationDecision.successfulEngineCount,
-            },
-          )
           emitSearchTaskStartEvents(escalationPlans, 'escalation')
           const escalationResult = await runWebSearchParallel({
             engines: activeEngines,
@@ -946,14 +923,6 @@ export class WebSearchToolHandler implements IToolHandler {
         async (targetUrl, index): Promise<AutoReadEvidenceItem> => {
           const rank = index + 1
           const readCallId = `${callId}:read:${rank}`
-          context.emitReasoning(`搜索后自动读取网页（${rank}/${autoReadTargets.length}）：${targetUrl}`, {
-            ...reasoningMetaBase,
-            stage: 'start',
-            subTool: 'read_url',
-            subCallId: readCallId,
-            url: targetUrl,
-            rank,
-          })
           context.sendToolEvent({
             id: readCallId,
             tool: 'read_url',
@@ -1010,20 +979,6 @@ export class WebSearchToolHandler implements IToolHandler {
               details.resultText = fallbackText
             }
 
-            context.emitReasoning(
-              `网页读取失败：${targetUrl}（${readResult.errorCode || 'UNKNOWN'}${typeof readResult.httpStatus === 'number' ? ` / HTTP ${readResult.httpStatus}` : ''}）`,
-              {
-                ...reasoningMetaBase,
-                stage: 'error',
-                subTool: 'read_url',
-                subCallId: readCallId,
-                url: targetUrl,
-                rank,
-                errorCode: readResult.errorCode,
-                httpStatus: readResult.httpStatus,
-                fallbackUsed: evidenceItem.fallbackUsed,
-              },
-            )
             context.sendToolEvent({
               id: readCallId,
               tool: 'read_url',
@@ -1056,20 +1011,6 @@ export class WebSearchToolHandler implements IToolHandler {
                 : 'none',
             rank,
           }
-          context.emitReasoning(
-            `网页读取成功：${readResult.title || targetUrl}（约 ${readResult.wordCount || 0} 词${evidenceItem.fallbackUsed === 'crawler' ? '，爬虫回退' : ''}）`,
-            {
-              ...reasoningMetaBase,
-              stage: 'result',
-              subTool: 'read_url',
-              subCallId: readCallId,
-              url: targetUrl,
-              rank,
-              title: readResult.title,
-              wordCount: readResult.wordCount,
-              fallbackUsed: evidenceItem.fallbackUsed,
-            },
-          )
           context.sendToolEvent({
             id: readCallId,
             tool: 'read_url',
@@ -1117,21 +1058,6 @@ export class WebSearchToolHandler implements IToolHandler {
       const taskFailed = searchResult.tasks.length - taskSucceeded
       const summary = buildSummaryForModel(query, hits, autoReadEvidence)
 
-      context.emitReasoning(`获得 ${hits.length} 条结果，自动读取正文成功 ${autoReadSucceeded} 条。`, {
-        ...reasoningMetaBase,
-        stage: 'result',
-        hits: hits.length,
-        searchTaskTotal: searchResult.tasks.length,
-        searchTaskSucceeded: taskSucceeded,
-        searchTaskFailed: taskFailed,
-        autoReadRequested: autoReadTargets.length,
-        autoReadSucceeded,
-        autoReadFailed,
-        escalationTriggered: escalationInfo.triggered,
-        escalationReason: escalationInfo.reason,
-        escalationEngine: escalationInfo.engine,
-        overlapRatio: escalationInfo.overlapRatio,
-      })
       context.sendToolEvent({
         id: callId,
         tool: 'web_search',
@@ -1207,11 +1133,6 @@ export class WebSearchToolHandler implements IToolHandler {
     } catch (searchError: unknown) {
       const message = searchError instanceof Error ? searchError.message : 'Web search failed'
       const errorCode = classifyWebSearchErrorCode(message)
-      context.emitReasoning(`联网搜索失败：${message}`, {
-        ...reasoningMetaBase,
-        stage: 'error',
-        errorCode,
-      })
       context.sendToolEvent({
         id: callId,
         tool: 'web_search',

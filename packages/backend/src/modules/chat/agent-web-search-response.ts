@@ -1,4 +1,5 @@
 import { Prisma, type ChatSession, type Connection } from '@prisma/client';
+import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning';
 import { prisma } from '../../db';
 import { BackendLogger as log } from '../../utils/logger';
 import { buildChatProviderRequest } from '../../utils/chat-provider';
@@ -460,7 +461,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (payload.details && typeof payload.details === 'object') {
           entry.details = payload.details as ToolLogEntry['details'];
         }
-        // 记录工具调用开始时已输出的推理文本长度，用于前端交错展示 CoT 与工具调用
+        // 记录工具调用开始时已输出的推理文本长度，仅作排序/溯源（不再用于交错 UI）
         if (stage === 'start') {
           const offset = reasoningBuffer.length;
           if (!entry.details) {
@@ -525,16 +526,12 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       startIdleWatch();
 
       const appendReasoningChunk = (text: string, meta?: Record<string, unknown>) => {
-        if (!text) return;
-        const metaKind =
-          meta && typeof (meta as any).kind === 'string' ? ((meta as any).kind as string) : null;
-        if (metaKind && metaKind !== 'model' && reasoningBuffer && !reasoningBuffer.endsWith('\n')) {
-          reasoningBuffer += '\n';
-        }
+        if (!text || shouldIgnoreReasoningMeta(meta)) return;
         reasoningBuffer += text;
       };
 
       const emitReasoning = (content: string, meta?: Record<string, unknown>) => {
+        if (shouldIgnoreReasoningMeta(meta)) return;
         const text = typeof content === 'string' ? content : '';
         // Preserve provider delta exactly (including newlines/leading spaces)
         // to keep streaming CoT layout consistent with persisted rendering.

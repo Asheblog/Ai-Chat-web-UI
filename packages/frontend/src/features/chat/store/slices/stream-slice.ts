@@ -1,3 +1,4 @@
+import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning'
 import {
   cancelAgentStream,
   cancelStream,
@@ -921,6 +922,8 @@ export const createStreamSlice: ChatSliceCreator<
 
         if (evt?.type === 'reasoning') {
           if (!active.reasoningDesired) continue
+          // 工具进度不得进入推理通道（与后端硬闸门双保险）
+          if (shouldIgnoreReasoningMeta(evt.meta)) continue
 
           const chunkHasContent = typeof evt.content === 'string' && evt.content.length > 0
           if (!active.reasoningActivated && !chunkHasContent && !evt.keepalive) {

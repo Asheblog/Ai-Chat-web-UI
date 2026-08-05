@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useReducer } from 'react'
 import { AlertTriangle, Brain, ChevronDown, Loader2 } from 'lucide-react'
+import { stripToolProgressFromReasoning } from '@aichat/shared/strip-tool-progress-from-reasoning'
 import type { MessageMeta } from '@/types'
 import { TypewriterReasoning } from '@/components/typewriter-reasoning'
 import { formatDurationSeconds } from './message-metrics'
@@ -117,7 +118,12 @@ export function ReasoningSection({
     return ''
   }, [meta.clientMessageId, meta.id, meta.stableKey])
 
-  const reasoningTextLength = useMemo(() => reasoningRaw.trim().length, [reasoningRaw])
+  // 历史消息可能混入工具进度文案；展示前剥离，避免与 ToolCallsSection 重复
+  const displayReasoning = useMemo(
+    () => stripToolProgressFromReasoning(reasoningRaw),
+    [reasoningRaw],
+  )
+  const reasoningTextLength = displayReasoning.length
   const hasReasoningState = typeof meta.reasoningStatus === 'string'
   const hasUnavailableReason =
     Boolean(meta.reasoningUnavailableCode) ||
@@ -129,7 +135,12 @@ export function ReasoningSection({
     () => expandReducer({ expanded: false, source: 'default' }, { type: 'init', defaultExpanded }),
   )
 
-  const hasAnyContent = hasReasoningState || reasoningTextLength > 0 || hasUnavailableReason
+  // 仅工具进度污染且无 unavailable 时：不渲染空「思考过程」壳
+  const hasAnyContent =
+    reasoningTextLength > 0 ||
+    hasUnavailableReason ||
+    (hasReasoningState &&
+      (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming'))
   const isAssistant = meta.role === 'assistant'
   const isActiveReasoning =
     isAssistant && (meta.reasoningStatus === 'idle' || meta.reasoningStatus === 'streaming')
@@ -139,6 +150,12 @@ export function ReasoningSection({
   // 耗时 0 秒（推理极快）不展示后缀，避免「思考过程 · 0ms」的噪音
   const hasMeaningfulDuration =
     durationText !== null && (meta.reasoningDurationSeconds ?? 0) > 0
+  const displayPlayedLength = useMemo(() => {
+    if (typeof reasoningPlayedLength !== 'number') return displayReasoning.length
+    if (displayReasoning.length === 0) return 0
+    // 剥离后长度可能变短，避免打字机越界
+    return Math.min(reasoningPlayedLength, displayReasoning.length)
+  }, [displayReasoning, reasoningPlayedLength])
 
   useEffect(() => {
     if (!persistenceKey) return
@@ -206,7 +223,10 @@ export function ReasoningSection({
             </div>
           )}
           {reasoningTextLength > 0 ? (
-            !showStreamingIndicator && reasoningHtml ? (
+            // 历史污染被剥离后，reasoningHtml 可能仍含工具进度行，改走纯文本打字机
+            !showStreamingIndicator &&
+            reasoningHtml &&
+            displayReasoning === reasoningRaw.trim() ? (
               <div
                 className="markdown-body markdown-body--reasoning text-sm text-foreground/80"
                 dangerouslySetInnerHTML={{ __html: reasoningHtml }}
@@ -214,9 +234,9 @@ export function ReasoningSection({
             ) : (
               <div className="text-sm leading-7 text-muted-foreground">
                 <TypewriterReasoning
-                  text={reasoningRaw}
+                  text={displayReasoning}
                   isStreaming={showStreamingIndicator}
-                  initialPlayedLength={reasoningPlayedLength}
+                  initialPlayedLength={displayPlayedLength}
                   speed={20}
                 />
               </div>

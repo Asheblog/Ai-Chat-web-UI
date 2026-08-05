@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
+import { stripToolProgressFromReasoning } from '@aichat/shared/strip-tool-progress-from-reasoning'
 import { ToolCallsSection } from '@/components/message-bubble/tool-calls-section'
 import { useToast } from '@/components/ui/use-toast'
 import { Check, X, Clock, AlertCircle, Scale, ChevronDown, ChevronRight, Copy } from 'lucide-react'
@@ -86,7 +87,7 @@ export function DetailDrawer({
     const isLive = detail?.isLive === true
     const title = detail?.modelLabel || detail?.modelId || ''
     const usage = detail?.usage || {}
-    const reasoning = (detail?.reasoning || '').trim()
+    const reasoning = stripToolProgressFromReasoning(detail?.reasoning || '')
     const toolEvents = useMemo(
       () => (Array.isArray(detail?.toolEvents) ? detail.toolEvents : []),
       [detail?.toolEvents],

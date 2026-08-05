@@ -11,7 +11,6 @@ import {
   KBToolHandler as LegacyKBToolHandler,
   kbToolDefinitions,
   kbToolNames,
-  formatKBToolReasoning,
 } from '../kb-tools'
 import type { RAGService } from '../../../services/document/rag-service'
 import type { EnhancedRAGService } from '../../../services/document/enhanced-rag-service'
@@ -73,16 +72,11 @@ export class KnowledgeBaseToolHandlerAdapter implements IToolHandler {
   ): Promise<ToolHandlerResult> {
     const toolName = this.resolveToolName(toolCall)
     const callId = toolCall.id || randomUUID()
-    const reasoningMeta = { kind: 'tool', tool: toolName, callId }
 
     if (!this.legacyHandler) {
       return this.createErrorResult(callId, toolName, toolCall, 'Knowledge base tool not configured')
     }
 
-    context.emitReasoning(formatKBToolReasoning(toolName, args, 'start'), {
-      ...reasoningMeta,
-      stage: 'start',
-    })
     context.sendToolEvent({
       id: callId,
       tool: toolName,
@@ -93,10 +87,6 @@ export class KnowledgeBaseToolHandlerAdapter implements IToolHandler {
     const result = await this.legacyHandler.handleToolCall(toolName, args)
 
     if (result.success) {
-      context.emitReasoning(formatKBToolReasoning(toolName, args, 'result'), {
-        ...reasoningMeta,
-        stage: 'result',
-      })
       context.sendToolEvent({
         id: callId,
         tool: toolName,
@@ -116,10 +106,6 @@ export class KnowledgeBaseToolHandlerAdapter implements IToolHandler {
     }
 
     const errorMessage = result.error || 'Knowledge base tool failed'
-    context.emitReasoning(`知识库工具失败：${errorMessage}`, {
-      ...reasoningMeta,
-      stage: 'error',
-    })
     context.sendToolEvent({
       id: callId,
       tool: toolName,

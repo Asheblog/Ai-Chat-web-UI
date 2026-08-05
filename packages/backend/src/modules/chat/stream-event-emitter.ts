@@ -3,6 +3,7 @@
  * 封装 SSE 事件的编码、发送和追踪
  */
 
+import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder } from '../../utils/task-trace';
 import type { ToolLogManager } from './tool-log-manager';
@@ -84,9 +85,11 @@ export class StreamEventEmitter {
   }
 
   /**
-   * 发送推理事件
+   * 发送推理事件（工具进度 kind=tool 硬闸门：不入 buffer、不发 SSE）
    */
   emitReasoning(content: string, meta?: Record<string, unknown>): void {
+    if (shouldIgnoreReasoningMeta(meta)) return;
+
     const text = typeof content === 'string' ? content : '';
     if (text.length === 0) return;
 
@@ -168,19 +171,10 @@ export class StreamEventEmitter {
   }
 
   /**
-   * 追加推理内容到缓冲区
+   * 追加推理内容到缓冲区（仅模型推理；工具进度不得写入）
    */
   private appendReasoningChunk(text: string, meta?: Record<string, unknown>): void {
-    if (!text) return;
-
-    const metaKind =
-      meta && typeof (meta as Record<string, unknown>).kind === 'string'
-        ? ((meta as Record<string, unknown>).kind as string)
-        : null;
-
-    if (metaKind && metaKind !== 'model' && this.reasoningBuffer && !this.reasoningBuffer.endsWith('\n')) {
-      this.reasoningBuffer += '\n';
-    }
+    if (!text || shouldIgnoreReasoningMeta(meta)) return;
     this.reasoningBuffer += text;
   }
 

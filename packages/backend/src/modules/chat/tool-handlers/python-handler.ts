@@ -72,11 +72,9 @@ export class PythonToolHandler implements IToolHandler {
       ? args.downloadable_files.filter((item): item is string => typeof item === 'string')
       : undefined
     const callId = toolCall.id || randomUUID()
-    const reasoningMetaBase = { kind: 'tool', tool: 'python_runner', callId }
 
     if (!source.trim()) {
       const error = '模型未提供 Python code'
-      context.emitReasoning(error, { ...reasoningMetaBase, stage: 'error' })
       context.sendToolEvent({
         id: callId,
         tool: 'python_runner',
@@ -104,11 +102,6 @@ export class PythonToolHandler implements IToolHandler {
       baseDetails.downloadableFiles = downloadableFiles
     }
 
-    context.emitReasoning('在会话 workspace 中执行 Python 代码', {
-      ...reasoningMetaBase,
-      stage: 'start',
-      summary: preview,
-    })
     context.sendToolEvent({
       id: callId,
       tool: 'python_runner',
@@ -136,12 +129,6 @@ export class PythonToolHandler implements IToolHandler {
           (result.stderr ? `stderr: ${result.stderr.trim()}` : 'Python 运行完成'),
         220,
       )
-
-      context.emitReasoning('Python 执行完成，准备综合结果。', {
-        ...reasoningMetaBase,
-        stage: 'result',
-        summary: resultPreview,
-      })
 
       const resultDetails: Record<string, unknown> = {
         ...baseDetails,
@@ -208,10 +195,6 @@ export class PythonToolHandler implements IToolHandler {
         pythonError instanceof WorkspaceServiceError && pythonError.details
           ? pythonError.details
           : undefined
-      context.emitReasoning(`Python 执行失败：${message}`, {
-        ...reasoningMetaBase,
-        stage: 'error',
-      })
       context.sendToolEvent({
         id: callId,
         tool: 'python_runner',

@@ -8,7 +8,6 @@ import {
   DocumentToolHandler as LegacyDocumentToolHandler,
   documentToolDefinitions,
   documentToolNames,
-  formatDocumentToolReasoning,
 } from '../document-tools'
 import { getDocumentServices } from '../../../services/document-services-factory'
 import type { RAGService } from '../../../services/document/rag-service'
@@ -67,16 +66,11 @@ export class DocumentToolHandlerAdapter implements IToolHandler {
   ): Promise<ToolHandlerResult> {
     const toolName = this.resolveToolName(toolCall)
     const callId = toolCall.id || randomUUID()
-    const reasoningMeta = { kind: 'tool', tool: toolName, callId }
 
     if (!this.legacyHandler) {
       return this.createErrorResult(callId, toolName, toolCall, 'Document tool not configured')
     }
 
-    context.emitReasoning(formatDocumentToolReasoning(toolName, args, 'start'), {
-      ...reasoningMeta,
-      stage: 'start',
-    })
     context.sendToolEvent({
       id: callId,
       tool: toolName,
@@ -89,10 +83,6 @@ export class DocumentToolHandlerAdapter implements IToolHandler {
     const result = await this.legacyHandler.handleToolCall(toolName, args)
 
     if (result.success) {
-      context.emitReasoning(formatDocumentToolReasoning(toolName, args, 'result'), {
-        ...reasoningMeta,
-        stage: 'result',
-      })
       context.sendToolEvent({
         id: callId,
         tool: toolName,
@@ -111,10 +101,6 @@ export class DocumentToolHandlerAdapter implements IToolHandler {
       }
     } else {
       const errorMessage = result.error || 'Document tool failed'
-      context.emitReasoning(`文档工具失败：${errorMessage}`, {
-        ...reasoningMeta,
-        stage: 'error',
-      })
       context.sendToolEvent({
         id: callId,
         tool: toolName,
