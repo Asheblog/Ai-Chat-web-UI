@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -82,11 +82,14 @@ export function SkillPanelSheet({
     return window.matchMedia('(min-width: 768px)').matches
   })
 
+  const onActivateRef = useRef(onActivate)
+  onActivateRef.current = onActivate
+
   useEffect(() => {
     if (open) {
-      onActivate?.()
+      onActivateRef.current?.()
     }
-  }, [open, onActivate])
+  }, [open])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

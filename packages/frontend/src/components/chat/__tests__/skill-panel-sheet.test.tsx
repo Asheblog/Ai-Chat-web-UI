@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { SkillPanelSheet } from '@/components/chat/skill-panel-sheet'
+import { useState } from 'react'
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
@@ -113,5 +114,35 @@ describe('SkillPanelSheet MCP 区域', () => {
     expect(switches.length).toBeGreaterThanOrEqual(1)
     fireEvent.click(switches[0])
     expect(onToggle).toHaveBeenCalledWith(1, true)
+  })
+
+  it('面板打开时调用 onActivate，且 onActivate 引用变化不会重复触发', () => {
+    // 回归：欢迎页传入内联 onActivate（每次渲染新引用），
+    // 若 effect 依赖 onActivate 会导致 setState→重渲染→再触发 的无限循环。
+    const onActivate = vi.fn()
+    let renderCount = 0
+
+    function Harness() {
+      const [, force] = useState(0)
+      renderCount += 1
+      return (
+        <SkillPanelSheet
+          open={true}
+          onOpenChange={vi.fn()}
+          skillOptions={[]}
+          onActivate={() => {
+            onActivate()
+            // 模拟 load 完成后的 setState，触发一次重渲染
+            force((n) => n + 1)
+          }}
+        />
+      )
+    }
+
+    render(<Harness />)
+    // 初始渲染触发一次 onActivate，随后的重渲染（force）不得再次触发
+    expect(onActivate).toHaveBeenCalledTimes(1)
+    // 组件在重渲染后保持稳定，不再进入 effect 循环
+    expect(renderCount).toBeLessThan(5)
   })
 })
