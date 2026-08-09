@@ -21,7 +21,7 @@ const resolveSeccompProfilePath = () => {
 }
 const SECCOMP_PROFILE_PATH = resolveSeccompProfilePath()
 const SECCOMP_AVAILABLE = fs.existsSync(SECCOMP_PROFILE_PATH)
-const log = createLogger('WorkspaceDocker')
+export const log = createLogger('WorkspaceDocker')
 const runtimeContainerUser = resolveRuntimeContainerUser()
 
 const MOUNTINFO_ESCAPE_RE = /\\([0-7]{3})/g
@@ -69,7 +69,13 @@ export const parseMountInfo = (content: string): DockerMountPoint[] => {
 const readMountInfo = (mountInfoPath: string): string => {
   try {
     return fs.readFileSync(mountInfoPath, 'utf8')
-  } catch {
+  } catch (error) {
+    // 读取 mountinfo 失败（文件不存在 / 权限不足等）时记录警告，便于诊断挂载解析异常；
+    // 仍返回 ''，触发上层回退到 docker inspect 容器自检。
+    log.warn('Failed to read mountinfo; falling back to docker inspect', {
+      mountInfoPath,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return ''
   }
 }

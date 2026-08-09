@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { DockerExecutor, parseMountInfo, WORKSPACE_CONTAINER_NAME_PREFIX } from './docker-executor'
+import { DockerExecutor, parseMountInfo, WORKSPACE_CONTAINER_NAME_PREFIX, log } from './docker-executor'
 import { WorkspaceServiceError } from './workspace-errors'
 import type { WorkspaceConfig } from '../../config/app-config'
 
@@ -445,5 +445,40 @@ describe('workspace mount translation via /proc/self/mountinfo', () => {
       'workspaces/chat/23',
     )
     expect(volume).toBe(`${expectedSource}:/workspace`)
+  })
+
+  it('logs a warning when mountinfo cannot be read', async () => {
+    // 注入不存在的 mountinfo 路径，readFileSync 将抛 ENOENT
+    const mountInfoPath = path.join(mountInfoDir, 'does-not-exist')
+    delete process.env.HOSTNAME
+    const spawnCalls: string[][] = []
+    const executor = new DockerExecutor({
+      workspaceConfig: baseConfig(),
+      spawnFn: createSpawnRecorder(spawnCalls) as any,
+      mountInfoPath,
+    })
+
+    const warnSpy = jest.spyOn(log, 'warn')
+    try {
+      const result = await executor.run({
+        workspaceRoot: '/app/data/workspaces/chat/23',
+        command: ['python', '-c', 'print(1)'],
+        timeoutMs: 5_000,
+        maxOutputChars: 1024,
+        networkMode: 'none',
+      })
+
+      expect(result.exitCode).toBe(0)
+      // 读取失败且 HOSTNAME 为空，直接短路回退，不应触发 docker inspect 自检
+      expect(spawnCalls.some((args) => args[0] === 'inspect')).toBe(false)
+      // 警告日志应包含失败的 mountinfo 路径，便于诊断
+      expect(
+        warnSpy.mock.calls.some(
+          (call) => (call[1] as Record<string, unknown> | undefined)?.mountInfoPath === mountInfoPath,
+        ),
+      ).toBe(true)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })
