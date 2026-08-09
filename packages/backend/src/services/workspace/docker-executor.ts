@@ -74,6 +74,14 @@ const readMountInfo = (mountInfoPath: string): string => {
   }
 }
 
+/**
+ * 归一化挂载点：source / destination 统一解析为绝对路径（DockerMountPoint 形状）。
+ */
+const normalizeMountPoint = (item: { source: string; destination: string }): DockerMountPoint => ({
+  source: path.resolve(item.source),
+  destination: path.resolve(item.destination),
+})
+
 const buildOutputCollector = (limit: number) => {
   const chunks: Buffer[] = []
   let size = 0
@@ -423,10 +431,7 @@ export class DockerExecutor {
 
     // 优先直接解析 /proc/self/mountinfo：不经过 Docker API，无需容器自检，
     // 避免 HOSTNAME 与守护进程容器 ID 不一致（docker-socket-proxy 下自检 404）导致挂载解析失败。
-    const mounts = parseMountInfo(readMountInfo(this.mountInfoPath)).map((item) => ({
-      source: path.resolve(item.source),
-      destination: path.resolve(item.destination),
-    }))
+    const mounts = parseMountInfo(readMountInfo(this.mountInfoPath)).map(normalizeMountPoint)
     if (mounts.length > 0) {
       this.mountCache = { at: now, mounts }
       return mounts
@@ -463,11 +468,10 @@ export class DockerExecutor {
       const inspectMounts = Array.isArray(parsed)
         ? parsed
             .map((item) => {
-              const source = typeof item?.Source === 'string' ? path.resolve(item.Source) : null
-              const destination =
-                typeof item?.Destination === 'string' ? path.resolve(item.Destination) : null
+              const source = typeof item?.Source === 'string' ? item.Source : null
+              const destination = typeof item?.Destination === 'string' ? item.Destination : null
               if (!source || !destination) return null
-              return { source, destination }
+              return normalizeMountPoint({ source, destination })
             })
             .filter((item): item is DockerMountPoint => item !== null)
         : []
