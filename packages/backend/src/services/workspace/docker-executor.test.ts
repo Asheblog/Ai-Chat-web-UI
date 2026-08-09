@@ -248,14 +248,16 @@ describe('parseMountInfo', () => {
   })
 
   it('parses bind/named-volume mounts and drops root/pseudo filesystems', () => {
+    // 真实 mountinfo 格式：bind mount 的宿主源路径在第 4 字段（root），
+    // 分隔符后第 2 字段是底层设备（如 /dev/vda2），不能作为宿主路径使用。
     const content = [
       '37 35 0:22 / / rw,relatime - overlay overlay rw',
       '38 37 0:24 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw',
       '39 37 0:25 / /sys rw,relatime - sysfs sysfs rw',
       '40 37 0:26 / /tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw',
-      '563 37 0:38 / /app/data rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_db_data/_data rw',
-      '564 37 0:39 / /app/logs rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_logs/_data rw',
-      '565 37 0:40 / /app/storage/chat-images rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_images/_data rw',
+      '563 37 253:2 /var/lib/docker/volumes/ai_chat_web_ui_db_data/_data /app/data rw,relatime - ext4 /dev/vda2 rw',
+      '564 37 253:2 /var/lib/docker/volumes/ai_chat_web_ui_logs/_data /app/logs rw,relatime - ext4 /dev/vda2 rw',
+      '565 37 253:2 /var/lib/docker/volumes/ai_chat_web_ui_images/_data /app/storage/chat-images rw,relatime - ext4 /dev/vda2 rw',
     ].join('\n')
     expect(parseMountInfo(content)).toEqual([
       { source: '/var/lib/docker/volumes/ai_chat_web_ui_db_data/_data', destination: '/app/data' },
@@ -269,8 +271,8 @@ describe('parseMountInfo', () => {
 
   it('decodes octal-escaped paths', () => {
     const content = [
-      '101 37 0:50 / /data/my\\040dir rw,relatime - ext4 /host/my\\040dir rw',
-      '102 37 0:51 / /opt/code\\134foo rw,relatime - ext4 /srv/code\\134foo rw',
+      '101 37 253:2 /host/my\\040dir /data/my\\040dir rw,relatime - ext4 /dev/vda2 rw',
+      '102 37 253:2 /srv/code\\134foo /opt/code\\134foo rw,relatime - ext4 /dev/vda2 rw',
     ].join('\n')
     expect(parseMountInfo(content)).toEqual([
       { source: '/host/my dir', destination: '/data/my dir' },
@@ -323,8 +325,8 @@ describe('workspace mount translation via /proc/self/mountinfo', () => {
       '37 35 0:22 / / rw,relatime - overlay overlay rw',
       '38 37 0:24 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw',
       '39 37 0:25 / /sys rw,relatime - sysfs sysfs rw',
-      '563 37 0:38 / /app/data rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_db_data/_data rw',
-      '564 37 0:39 / /app/logs rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_logs/_data rw',
+      '563 37 253:2 /var/lib/docker/volumes/ai_chat_web_ui_db_data/_data /app/data rw,relatime - ext4 /dev/vda2 rw',
+      '564 37 253:2 /var/lib/docker/volumes/ai_chat_web_ui_logs/_data /app/logs rw,relatime - ext4 /dev/vda2 rw',
     ])
     // HOSTNAME 与守护进程容器 ID 不一致（生产 docker-socket-proxy 场景），自检必然 404
     process.env.HOSTNAME = 'fd7a7f16bd65'
