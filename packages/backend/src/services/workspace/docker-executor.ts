@@ -49,14 +49,15 @@ export const parseMountInfo = (content: string): DockerMountPoint[] => {
     if (separatorIndex < 0) continue
 
     const fieldsBefore = line.slice(0, separatorIndex).split(' ')
-    const fieldsAfter = line.slice(separatorIndex + 3).split(' ')
-    // mount point 为分隔符前第 5 个字段，source 为分隔符后第 2 个字段
+    // mount point 为分隔符前第 5 个字段；bind mount 的宿主源路径在第 4 字段（root），
+    // 分隔符后第 2 字段是底层设备路径（如 /dev/vda2），不能作为宿主路径使用。
     const destination = decodeMountInfoOctalEscapes(fieldsBefore[4] || '')
-    const source = decodeMountInfoOctalEscapes(fieldsAfter[1] || '')
+    const source = decodeMountInfoOctalEscapes(fieldsBefore[3] || '')
     if (!destination || !source) continue
-    // 仅保留真实 bind/命名卷挂载；根挂载（destination=/ 或 source=overlay/设备等）一律排除
-    if (!source.startsWith('/') || !destination.startsWith('/')) continue
-    if (destination === '/') continue
+    // 仅保留真实 bind/命名卷挂载：root 字段以 / 开头且不是 /（普通文件系统挂载的
+    // root 恒为 /），根挂载与伪文件系统（proc/sys/tmpfs/overlay）一律排除
+    if (!source.startsWith('/') || source === '/') continue
+    if (!destination.startsWith('/') || destination === '/') continue
     if (!seen.has(destination)) {
       seen.add(destination)
       mounts.push({ source, destination })
