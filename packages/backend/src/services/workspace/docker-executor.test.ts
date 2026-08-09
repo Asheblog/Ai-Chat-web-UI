@@ -1,6 +1,9 @@
 import { EventEmitter } from 'node:events'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { DockerExecutor, WORKSPACE_CONTAINER_NAME_PREFIX } from './docker-executor'
+import { DockerExecutor, parseMountInfo, WORKSPACE_CONTAINER_NAME_PREFIX, log } from './docker-executor'
 import { WorkspaceServiceError } from './workspace-errors'
 import type { WorkspaceConfig } from '../../config/app-config'
 
@@ -234,5 +237,248 @@ describe('DockerExecutor', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(spawnCalls.some((args) => args[0] === 'kill')).toBe(true)
     expect(spawnCalls.some((args) => args[0] === 'rm')).toBe(true)
+  })
+})
+
+describe('parseMountInfo', () => {
+  it('returns [] for empty or invalid content', () => {
+    expect(parseMountInfo('')).toEqual([])
+    expect(parseMountInfo('not a mountinfo line')).toEqual([])
+    expect(parseMountInfo('   ')).toEqual([])
+  })
+
+  it('parses bind/named-volume mounts and drops root/pseudo filesystems', () => {
+    const content = [
+      '37 35 0:22 / / rw,relatime - overlay overlay rw',
+      '38 37 0:24 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw',
+      '39 37 0:25 / /sys rw,relatime - sysfs sysfs rw',
+      '40 37 0:26 / /tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw',
+      '563 37 0:38 / /app/data rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_db_data/_data rw',
+      '564 37 0:39 / /app/logs rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_logs/_data rw',
+      '565 37 0:40 / /app/storage/chat-images rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_images/_data rw',
+    ].join('\n')
+    expect(parseMountInfo(content)).toEqual([
+      { source: '/var/lib/docker/volumes/ai_chat_web_ui_db_data/_data', destination: '/app/data' },
+      { source: '/var/lib/docker/volumes/ai_chat_web_ui_logs/_data', destination: '/app/logs' },
+      {
+        source: '/var/lib/docker/volumes/ai_chat_web_ui_images/_data',
+        destination: '/app/storage/chat-images',
+      },
+    ])
+  })
+
+  it('decodes octal-escaped paths', () => {
+    const content = [
+      '101 37 0:50 / /data/my\\040dir rw,relatime - ext4 /host/my\\040dir rw',
+      '102 37 0:51 / /opt/code\\134foo rw,relatime - ext4 /srv/code\\134foo rw',
+    ].join('\n')
+    expect(parseMountInfo(content)).toEqual([
+      { source: '/host/my dir', destination: '/data/my dir' },
+      { source: '/srv/code\\foo', destination: '/opt/code\\foo' },
+    ])
+  })
+})
+
+describe('workspace mount translation via /proc/self/mountinfo', () => {
+  const originalHostname = process.env.HOSTNAME
+  let mountInfoDir: string
+
+  afterEach(() => {
+    if (originalHostname === undefined) {
+      delete process.env.HOSTNAME
+    } else {
+      process.env.HOSTNAME = originalHostname
+    }
+  })
+
+  beforeAll(() => {
+    mountInfoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aichat-mountinfo-'))
+  })
+
+  afterAll(() => {
+    fs.rmSync(mountInfoDir, { recursive: true, force: true })
+  })
+
+  const writeMountInfo = (lines: string[]): string => {
+    const filePath = path.join(mountInfoDir, `mountinfo-${Math.random().toString(36).slice(2)}`)
+    fs.writeFileSync(filePath, lines.join('\n'), 'utf8')
+    return filePath
+  }
+
+  const createSpawnRecorder = (spawnCalls: string[][]) =>
+    jest.fn((_cmd: string, args: string[]) => {
+      spawnCalls.push(args)
+      const child = createMockChild()
+      queueMicrotask(() => {
+        if (args[0] === 'version') {
+          child.stdout.emit('data', Buffer.from('24.0.0'))
+        }
+        child.emit('close', 0)
+      })
+      return child as unknown as ChildProcessWithoutNullStreams
+    })
+
+  it('translates workspace root from mountinfo without docker self-inspect', async () => {
+    const mountInfoPath = writeMountInfo([
+      '37 35 0:22 / / rw,relatime - overlay overlay rw',
+      '38 37 0:24 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw',
+      '39 37 0:25 / /sys rw,relatime - sysfs sysfs rw',
+      '563 37 0:38 / /app/data rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_db_data/_data rw',
+      '564 37 0:39 / /app/logs rw,relatime - ext4 /var/lib/docker/volumes/ai_chat_web_ui_logs/_data rw',
+    ])
+    // HOSTNAME 与守护进程容器 ID 不一致（生产 docker-socket-proxy 场景），自检必然 404
+    process.env.HOSTNAME = 'fd7a7f16bd65'
+    const spawnCalls: string[][] = []
+    const executor = new DockerExecutor({
+      workspaceConfig: baseConfig(),
+      spawnFn: createSpawnRecorder(spawnCalls) as any,
+      mountInfoPath,
+    })
+
+    const result = await executor.run({
+      workspaceRoot: '/app/data/workspaces/chat/23',
+      command: ['python', '-c', 'print(1)'],
+      timeoutMs: 5_000,
+      maxOutputChars: 1024,
+      networkMode: 'none',
+    })
+
+    expect(result.exitCode).toBe(0)
+    const runArgs = spawnCalls.find((args) => args[0] === 'run')
+    expect(runArgs).toBeTruthy()
+    const volumeIndex = runArgs!.indexOf('--volume')
+    expect(volumeIndex).toBeGreaterThan(-1)
+    const volume = runArgs![volumeIndex + 1]
+    const expectedSource = path.resolve(
+      '/var/lib/docker/volumes/ai_chat_web_ui_db_data/_data',
+      'workspaces/chat/23',
+    )
+    expect(volume).toBe(`${expectedSource}:/workspace`)
+    // 不再依赖 docker inspect 容器自检
+    expect(spawnCalls.some((args) => args[0] === 'inspect')).toBe(false)
+  })
+
+  it('skips translation when mountinfo only exposes the root mount (bare host)', async () => {
+    const mountInfoPath = writeMountInfo(['20 0 8:2 / / rw,relatime - ext4 /dev/sda1 rw'])
+    delete process.env.HOSTNAME
+    const spawnCalls: string[][] = []
+    const executor = new DockerExecutor({
+      workspaceConfig: baseConfig(),
+      spawnFn: createSpawnRecorder(spawnCalls) as any,
+      mountInfoPath,
+    })
+
+    const result = await executor.run({
+      workspaceRoot: '/app/data/workspaces/chat/23',
+      command: ['python', '-c', 'print(1)'],
+      timeoutMs: 5_000,
+      maxOutputChars: 1024,
+      networkMode: 'none',
+    })
+
+    expect(result.exitCode).toBe(0)
+    const runArgs = spawnCalls.find((args) => args[0] === 'run')
+    expect(runArgs).toBeTruthy()
+    const volumeIndex = runArgs!.indexOf('--volume')
+    expect(volumeIndex).toBeGreaterThan(-1)
+    const volume = runArgs![volumeIndex + 1]
+    expect(volume).toBe(`${path.resolve('/app/data/workspaces/chat/23')}:/workspace`)
+    expect(spawnCalls.some((args) => args[0] === 'inspect')).toBe(false)
+  })
+
+  it('falls back to docker inspect when mountinfo resolves no mounts', async () => {
+    const mountInfoPath = writeMountInfo([''])
+    const hostname = 'fd7a7f16bd65'
+    process.env.HOSTNAME = hostname
+    const spawnCalls: string[][] = []
+    const spawnFn = jest.fn((_cmd: string, args: string[]) => {
+      spawnCalls.push(args)
+      const child = createMockChild()
+      queueMicrotask(() => {
+        if (args[0] === 'version') {
+          child.stdout.emit('data', Buffer.from('24.0.0'))
+        } else if (args[0] === 'inspect') {
+          child.stdout.emit(
+            'data',
+            Buffer.from(
+              JSON.stringify([
+                {
+                  Source: '/var/lib/docker/volumes/ai_chat_web_ui_db_data/_data',
+                  Destination: '/app/data',
+                },
+              ]),
+            ),
+          )
+        }
+        child.emit('close', 0)
+      })
+      return child as unknown as ChildProcessWithoutNullStreams
+    })
+
+    const executor = new DockerExecutor({
+      workspaceConfig: baseConfig(),
+      spawnFn: spawnFn as any,
+      mountInfoPath,
+    })
+
+    const result = await executor.run({
+      workspaceRoot: '/app/data/workspaces/chat/23',
+      command: ['python', '-c', 'print(1)'],
+      timeoutMs: 5_000,
+      maxOutputChars: 1024,
+      networkMode: 'none',
+    })
+
+    expect(result.exitCode).toBe(0)
+    // 回退路径确实调用了 docker inspect 容器自检
+    const inspectArgs = spawnCalls.find((args) => args[0] === 'inspect')
+    expect(inspectArgs).toBeTruthy()
+    expect(inspectArgs).toContain(hostname)
+
+    const runArgs = spawnCalls.find((args) => args[0] === 'run')
+    expect(runArgs).toBeTruthy()
+    const volumeIndex = runArgs!.indexOf('--volume')
+    expect(volumeIndex).toBeGreaterThan(-1)
+    const volume = runArgs![volumeIndex + 1]
+    const expectedSource = path.resolve(
+      '/var/lib/docker/volumes/ai_chat_web_ui_db_data/_data',
+      'workspaces/chat/23',
+    )
+    expect(volume).toBe(`${expectedSource}:/workspace`)
+  })
+
+  it('logs a warning when mountinfo cannot be read', async () => {
+    // 注入不存在的 mountinfo 路径，readFileSync 将抛 ENOENT
+    const mountInfoPath = path.join(mountInfoDir, 'does-not-exist')
+    delete process.env.HOSTNAME
+    const spawnCalls: string[][] = []
+    const executor = new DockerExecutor({
+      workspaceConfig: baseConfig(),
+      spawnFn: createSpawnRecorder(spawnCalls) as any,
+      mountInfoPath,
+    })
+
+    const warnSpy = jest.spyOn(log, 'warn')
+    try {
+      const result = await executor.run({
+        workspaceRoot: '/app/data/workspaces/chat/23',
+        command: ['python', '-c', 'print(1)'],
+        timeoutMs: 5_000,
+        maxOutputChars: 1024,
+        networkMode: 'none',
+      })
+
+      expect(result.exitCode).toBe(0)
+      // 读取失败且 HOSTNAME 为空，直接短路回退，不应触发 docker inspect 自检
+      expect(spawnCalls.some((args) => args[0] === 'inspect')).toBe(false)
+      // 警告日志应包含失败的 mountinfo 路径，便于诊断
+      expect(
+        warnSpy.mock.calls.some(
+          (call) => (call[1] as Record<string, unknown> | undefined)?.mountInfoPath === mountInfoPath,
+        ),
+      ).toBe(true)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })

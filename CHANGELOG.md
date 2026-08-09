@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- fix: 修复工作区 Python 工具在 docker-socket-proxy 部署下「初始化 Python 虚拟环境失败（Permission denied）」——挂载路径翻译改为优先解析 `/proc/self/mountinfo`，不再依赖 `docker inspect <HOSTNAME>` 容器自检（HOSTNAME 与守护进程容器 ID 不一致时自检 404 会静默跳过翻译，导致沙箱挂载到 root 属主空目录而无法写 `.venv`）；venv 初始化报错附带 workspace 路径与挂载排查提示。无迁移、直接替换。
 - fix: 交错步骤流流式打字机开头「前进又后退」——推理节点 key 按 charStart 稳定、追加文本不重置游标，并正确映射段内 playedLength。
 - BREAKING UI: 推理与工具展示改为交错 CoT 步骤流（深度思考 ↔ 工具结果），主聊天 / 分享 / Battle / Android 四端统一；废除「思考过程 + 工具调用 N 个」汇总双卡主路径。迁移策略为无迁移、直接替换。
 - 推理通道净化：切断工具 handler 经 `emitReasoning(kind=tool)` 写入 reasoning 的路径；工具进度仅走 Tool Event / 步骤流；历史污染文案展示时剥离（无 DB 迁移）。
