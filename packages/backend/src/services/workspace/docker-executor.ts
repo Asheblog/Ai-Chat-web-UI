@@ -24,6 +24,56 @@ const SECCOMP_AVAILABLE = fs.existsSync(SECCOMP_PROFILE_PATH)
 const log = createLogger('WorkspaceDocker')
 const runtimeContainerUser = resolveRuntimeContainerUser()
 
+const MOUNTINFO_ESCAPE_RE = /\\([0-7]{3})/g
+
+const decodeMountInfoOctalEscapes = (value: string): string =>
+  value.replace(MOUNTINFO_ESCAPE_RE, (_match, octal: string) =>
+    String.fromCharCode(Number.parseInt(octal, 8)),
+  )
+
+/**
+ * 解析 /proc/self/mountinfo 文本，返回 bind/命名卷挂载（source 为宿主真实路径）。
+ *
+ * mountinfo 不经过 Docker API，无需容器自检，因此天然兼容 docker-socket-proxy /
+ * HOSTNAME 与守护进程容器 ID 不一致的场景（容器自检会返回 404 导致挂载解析失败）。
+ */
+export const parseMountInfo = (content: string): DockerMountPoint[] => {
+  if (!content || typeof content !== 'string') return []
+  const mounts: DockerMountPoint[] = []
+  const seen = new Set<string>()
+
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const separatorIndex = line.indexOf(' - ')
+    if (separatorIndex < 0) continue
+
+    const fieldsBefore = line.slice(0, separatorIndex).split(' ')
+    const fieldsAfter = line.slice(separatorIndex + 3).split(' ')
+    // mount point 为分隔符前第 5 个字段，source 为分隔符后第 2 个字段
+    const destination = decodeMountInfoOctalEscapes(fieldsBefore[4] || '')
+    const source = decodeMountInfoOctalEscapes(fieldsAfter[1] || '')
+    if (!destination || !source) continue
+    // 仅保留真实 bind/命名卷挂载；根挂载（destination=/ 或 source=overlay/设备等）一律排除
+    if (!source.startsWith('/') || !destination.startsWith('/')) continue
+    if (destination === '/') continue
+    if (!seen.has(destination)) {
+      seen.add(destination)
+      mounts.push({ source, destination })
+    }
+  }
+
+  return mounts
+}
+
+const readMountInfo = (mountInfoPath: string): string => {
+  try {
+    return fs.readFileSync(mountInfoPath, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
 const buildOutputCollector = (limit: number) => {
   const chunks: Buffer[] = []
   let size = 0
@@ -79,6 +129,8 @@ export interface DockerRunResult {
 export interface DockerExecutorDeps {
   workspaceConfig?: WorkspaceConfig
   spawnFn?: typeof spawn
+  /** /proc/self/mountinfo 路径，测试可注入 fixture */
+  mountInfoPath?: string
 }
 
 type QueueWaiter = {
@@ -91,6 +143,7 @@ type QueueWaiter = {
 export class DockerExecutor {
   private readonly config: WorkspaceConfig
   private readonly spawnFn: typeof spawn
+  private readonly mountInfoPath: string
   private dockerAvailableCache: { at: number; ok: boolean } | null = null
   private mountCache: { at: number; mounts: DockerMountPoint[] } | null = null
   private activeRuns = 0
@@ -99,6 +152,7 @@ export class DockerExecutor {
   constructor(deps: DockerExecutorDeps = {}) {
     this.config = deps.workspaceConfig ?? getAppConfig().workspace
     this.spawnFn = deps.spawnFn ?? spawn
+    this.mountInfoPath = deps.mountInfoPath ?? '/proc/self/mountinfo'
   }
 
   async assertDockerAvailable(): Promise<void> {
@@ -327,6 +381,7 @@ export class DockerExecutor {
   private async resolveDockerWorkspaceRoot(workspaceRoot: string): Promise<string> {
     const mounts = await this.loadCurrentContainerMounts()
     if (mounts.length === 0) {
+      log.debug('No docker mounts resolved; using workspace root as-is', { workspaceRoot })
       return workspaceRoot
     }
 
@@ -334,6 +389,10 @@ export class DockerExecutor {
       .filter((item) => isPathWithin(workspaceRoot, item.destination))
       .sort((a, b) => b.destination.length - a.destination.length)[0]
     if (!matched) {
+      log.debug('Workspace root not under any known docker mount; using as-is', {
+        workspaceRoot,
+        destinations: mounts.map((item) => item.destination),
+      })
       return workspaceRoot
     }
 
@@ -362,6 +421,18 @@ export class DockerExecutor {
       return this.mountCache.mounts
     }
 
+    // 优先直接解析 /proc/self/mountinfo：不经过 Docker API，无需容器自检，
+    // 避免 HOSTNAME 与守护进程容器 ID 不一致（docker-socket-proxy 下自检 404）导致挂载解析失败。
+    const mounts = parseMountInfo(readMountInfo(this.mountInfoPath)).map((item) => ({
+      source: path.resolve(item.source),
+      destination: path.resolve(item.destination),
+    }))
+    if (mounts.length > 0) {
+      this.mountCache = { at: now, mounts }
+      return mounts
+    }
+
+    // 回退：mountinfo 不可用（非 Linux 容器 / proc 只读等极端环境）时走 docker inspect 自检
     const containerRef = (process.env.HOSTNAME || '').trim()
     if (!containerRef) {
       this.mountCache = { at: now, mounts: [] }
@@ -389,7 +460,7 @@ export class DockerExecutor {
 
     try {
       const parsed = JSON.parse(raw)
-      const mounts = Array.isArray(parsed)
+      const inspectMounts = Array.isArray(parsed)
         ? parsed
             .map((item) => {
               const source = typeof item?.Source === 'string' ? path.resolve(item.Source) : null
@@ -400,8 +471,8 @@ export class DockerExecutor {
             })
             .filter((item): item is DockerMountPoint => item !== null)
         : []
-      this.mountCache = { at: now, mounts }
-      return mounts
+      this.mountCache = { at: now, mounts: inspectMounts }
+      return inspectMounts
     } catch {
       this.mountCache = { at: now, mounts: [] }
       return []

@@ -358,7 +358,9 @@ export class WorkspacePythonRuntime {
 
     if ((createResult.exitCode ?? 1) !== 0) {
       throw new WorkspaceServiceError(
-        `初始化 Python 虚拟环境失败：${createResult.stderr || createResult.stdout || 'unknown error'}`,
+        `初始化 Python 虚拟环境失败：${
+          createResult.stderr || createResult.stdout || 'unknown error'
+        }（workspace=${workspaceRoot}，请检查工作区 Docker 挂载与目录权限）`,
         500,
         'WORKSPACE_PYTHON_VENV_INIT_FAILED',
       )
