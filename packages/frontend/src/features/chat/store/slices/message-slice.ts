@@ -773,14 +773,22 @@ export const createMessageSlice: ChatSliceCreator<
       enabledSkills.push('python-runner')
     }
 
-    await get().streamMessage(sessionId, '', undefined, {
-      replyToMessageId: resolvedMessageId,
-      replyToClientMessageId: meta.clientMessageId ?? undefined,
-      skills:
-        enabledSkills.length > 0
-          ? { builtin: Array.from(new Set(enabledSkills)) }
-          : undefined,
-    })
+    // 不阻塞等待整条回复流结束：回复在后台异步进行，streamMessage 内部自行处理错误。
+    // 若此处 await 完整流，调用方（编辑弹框）只能在流结束后才关闭弹框，
+    // 导致整个回复期间 editOpen 保持 true；当流结束 isStreaming 变回 false、
+    // canEdit 重新成立时，弹框会以 open=true 重新挂载，造成"回复完成后弹框闪现"。
+    get()
+      .streamMessage(sessionId, '', undefined, {
+        replyToMessageId: resolvedMessageId,
+        replyToClientMessageId: meta.clientMessageId ?? undefined,
+        skills:
+          enabledSkills.length > 0
+            ? { builtin: Array.from(new Set(enabledSkills)) }
+            : undefined,
+      })
+      .catch(() => {
+        // 流式回复错误已由 streamMessage 内部处理，此处仅兜底避免未处理的 Promise rejection。
+      })
 
     return true
   },
