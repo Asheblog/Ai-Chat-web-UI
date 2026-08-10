@@ -301,4 +301,50 @@ describe('message slice pagination', () => {
 
     resolveStream()
   })
+
+  it('editLastUserMessage should swallow a rejected reply stream', async () => {
+    const store = createChatStoreInstance()
+    const session = buildSession(8)
+    const userId = 100
+    const createdAt = new Date(Date.UTC(2026, 1, 20, 0, 0, 8)).toISOString()
+    const resend = vi.fn().mockRejectedValue(new Error('stream start failed'))
+    store.setState({
+      sessions: [session],
+      currentSession: session,
+      streamMessage: resend,
+      messageMetas: [
+        {
+          id: userId,
+          sessionId: session.id,
+          role: 'user',
+          createdAt,
+          stableKey: `user-${userId}`,
+        },
+      ],
+      messageBodies: {
+        [messageKey(userId)]: {
+          id: userId,
+          stableKey: `user-${userId}`,
+          content: 'old question',
+          reasoning: '',
+          version: 1,
+          reasoningVersion: 0,
+        },
+      },
+    } as any)
+
+    vi.mocked(chatApi.updateUserMessage).mockResolvedValue({ success: true } as any)
+
+    // 即使回复流在启动阶段就失败（streamMessage reject），编辑仍应成功返回，
+    // 且被 .catch 兜底消化，不产生未处理的 Promise rejection。
+    await expect(
+      store.getState().editLastUserMessage(session.id, userId, 'updated question'),
+    ).resolves.toBe(true)
+    expect(resend).toHaveBeenCalledWith(
+      session.id,
+      '',
+      undefined,
+      expect.objectContaining({ replyToMessageId: userId }),
+    )
+  })
 })
