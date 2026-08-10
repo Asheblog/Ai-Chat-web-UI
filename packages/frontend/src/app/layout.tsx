@@ -10,16 +10,16 @@ import { getServerBranding } from '@/lib/server-branding'
 
 const sourceSans = Source_Sans_3({
   subsets: ['latin'],
-  display: 'swap',
-  preload: false,
+  display: 'optional',
+  preload: true,
   variable: '--font-source-sans',
 })
 
 const notoSansSC = Noto_Sans_SC({
   weight: ['400', '500', '600', '700'],
   subsets: ['latin'],
-  display: 'swap',
-  preload: false,
+  display: 'optional',
+  preload: true,
   variable: '--font-noto-sc',
   fallback: [
     'PingFang SC',
