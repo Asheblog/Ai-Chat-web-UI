@@ -5,6 +5,7 @@ import { Tokenizer } from '../../../utils/tokenizer';
 import { resolveContextLimit } from '../../../utils/context-window';
 import type { Actor, ApiResponse } from '../../../types';
 import type { ChatService } from '../../../services/chat';
+import { aggregateUsageMetricTotals } from '../usage-metrics';
 
 export interface ChatUsageRoutesDeps {
   prisma: PrismaClient
@@ -17,6 +18,7 @@ export const registerChatUsageRoutes = (router: Hono, deps: ChatUsageRoutesDeps)
     try {
       const actor = c.get('actor') as Actor | undefined;
       const sessionId = parseInt(c.req.query('sessionId') || '0');
+      const includeContext = c.req.query('includeContext') === '1'
       if (!sessionId || Number.isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid sessionId' }, 400);
       }
@@ -37,44 +39,52 @@ export const registerChatUsageRoutes = (router: Hono, deps: ChatUsageRoutesDeps)
         });
       }
 
-      const [metrics, last] = await Promise.all([
-        (prisma as any).usageMetric.findMany({ where: { sessionId } }),
+      const [totalsAgg, last] = await Promise.all([
+        (prisma as any).usageMetric.aggregate({
+          where: { sessionId },
+          _sum: {
+            promptTokens: true,
+            completionTokens: true,
+            totalTokens: true,
+          },
+        }),
         (prisma as any).usageMetric.findFirst({ where: { sessionId }, orderBy: { createdAt: 'desc' } }),
       ]);
 
-      const totals = metrics.reduce(
-        (
-          acc: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
-          m: any,
-        ) => {
-          acc.prompt_tokens += Number(m.promptTokens || 0);
-          acc.completion_tokens += Number(m.completionTokens || 0);
-          acc.total_tokens += Number(m.totalTokens || 0);
-          return acc;
-        },
-        { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      );
+      const totals = aggregateUsageMetricTotals(totalsAgg?._sum);
 
-      const contextLimit = await resolveContextLimit({
-        connectionId: session.connectionId,
-        rawModelId: session.modelRawId,
-        provider: session.connection?.provider,
-      });
-      const recentMessages = await prisma.message.findMany({
-        where: { sessionId },
-        select: { role: true, content: true },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      });
-      const conversation = [...recentMessages].reverse();
-      const used = await Tokenizer.countConversationTokens(
-        conversation as Array<{ role: string; content: string }>,
-      );
-      const current = {
-        prompt_tokens: used,
-        context_limit: contextLimit,
-        context_remaining: Math.max(0, contextLimit - used),
-      };
+      let current: {
+        prompt_tokens: number
+        context_limit: number | null
+        context_remaining: number | null
+      } = {
+        prompt_tokens: 0,
+        context_limit: null,
+        context_remaining: null,
+      }
+
+      if (includeContext) {
+        const contextLimit = await resolveContextLimit({
+          connectionId: session.connectionId,
+          rawModelId: session.modelRawId,
+          provider: session.connection?.provider,
+        });
+        const recentMessages = await prisma.message.findMany({
+          where: { sessionId },
+          select: { role: true, content: true },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        });
+        const conversation = [...recentMessages].reverse();
+        const used = await Tokenizer.countConversationTokens(
+          conversation as Array<{ role: string; content: string }>,
+        );
+        current = {
+          prompt_tokens: used,
+          context_limit: contextLimit,
+          context_remaining: Math.max(0, contextLimit - used),
+        };
+      }
 
       return c.json<ApiResponse>({
         success: true,

@@ -345,3 +345,43 @@ describe('projectToolEventsForHistoryList', () => {
   })
 })
 
+describe('parseToolLogsJson history-list mode', () => {
+  test('does not materialize hits arrays and keeps assessedImages for richPayload', () => {
+    const raw = JSON.stringify([
+      {
+        id: 'call_1',
+        tool: 'web_search',
+        stage: 'result',
+        createdAt: 100,
+        query: 'q',
+        summary: 'ok',
+        hits: Array.from({ length: 12 }, (_, i) => ({
+          title: `T${i}`,
+          url: `https://ex.com/${i}`,
+          snippet: 's'.repeat(400),
+          content: 'c'.repeat(2000),
+        })),
+        details: {
+          engine: 'tavily',
+          reasoningOffsetStart: 10,
+          excerpt: 'huge'.repeat(1000),
+          assessedImages: [{ url: 'https://cdn.example.com/e.png', confidence: 'high' }],
+          stdout: 'noise',
+        },
+      },
+    ])
+
+    const events = parseToolLogsJson(raw, { mode: 'history-list' })
+    expect(events).toHaveLength(1)
+    expect(events[0].hits).toBeUndefined()
+    expect(events[0].details?.hitsCount).toBe(12)
+    expect(events[0].details?.engine).toBe('tavily')
+    expect(events[0].details?.reasoningOffsetStart).toBe(10)
+    expect(events[0].details?.assessedImages).toEqual([
+      expect.objectContaining({ url: 'https://cdn.example.com/e.png' }),
+    ])
+    expect(events[0].details).not.toHaveProperty('excerpt')
+    expect(events[0].details).not.toHaveProperty('stdout')
+  })
+})
+

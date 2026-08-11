@@ -13,6 +13,15 @@ import {
 import { buildRichMessagePayload, type GeneratedImageRecord } from '../rich-payload'
 import { sessionOwnershipClause } from '../chat-common'
 
+const generatedImageSelectFields = {
+  url: true,
+  storagePath: true,
+  mime: true,
+  width: true,
+  height: true,
+  revisedPrompt: true,
+} as const
+
 const messageSelectFields = {
   id: true,
   sessionId: true,
@@ -28,13 +37,8 @@ const messageSelectFields = {
   },
   generatedImages: {
     select: {
-      url: true,
-      storagePath: true,
+      ...generatedImageSelectFields,
       base64: true,
-      mime: true,
-      width: true,
-      height: true,
-      revisedPrompt: true,
     },
   },
   clientMessageId: true,
@@ -62,6 +66,23 @@ const messageSelectFields = {
     take: 1,
   },
 } as const
+
+/** 历史列表不选 base64，避免 legacy 大字段进入分页响应。 */
+const messageListSelectFields = {
+  ...messageSelectFields,
+  generatedImages: {
+    select: {
+      ...generatedImageSelectFields,
+    },
+  },
+} as const
+
+const SITE_BASE_URL_CACHE_TTL_MS = 60_000
+let siteBaseUrlCache: { value: string | null; expiresAt: number } | null = null
+
+export const invalidateSiteBaseUrlCache = () => {
+  siteBaseUrlCache = null
+}
 
 type RawMessage = {
   id: number
@@ -325,7 +346,7 @@ export class ChatMessageQueryService {
         sessionId: params.sessionId,
         messageGroupId: null,
       },
-      select: messageSelectFields,
+      select: messageListSelectFields,
       orderBy: useFromEnd
         ? [{ createdAt: 'desc' }, { id: 'desc' }]
         : [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -341,7 +362,9 @@ export class ChatMessageQueryService {
       .filter((item): item is NormalizedMessage => item != null)
 
     const messageItems = ungroupedMessages.map((message) =>
-      this.projectMessageForHistoryList(this.normalizeMessage(message, params.baseUrl)),
+      this.projectMessageForHistoryList(
+        this.normalizeMessage(message, params.baseUrl, { toolLogsMode: 'history-list' }),
+      ),
     )
 
     const merged = [...messageItems, ...groupItems].sort((a, b) => {
@@ -433,17 +456,28 @@ export class ChatMessageQueryService {
   }
 
   private async resolveImageBaseUrl(request: Request): Promise<string> {
-    const siteBaseSetting = await this.prisma.systemSetting.findUnique({
-      where: { key: 'site_base_url' },
-      select: { value: true },
-    })
+    const now = Date.now()
+    let siteBaseUrl: string | null
+    if (siteBaseUrlCache && siteBaseUrlCache.expiresAt > now) {
+      siteBaseUrl = siteBaseUrlCache.value
+    } else {
+      const siteBaseSetting = await this.prisma.systemSetting.findUnique({
+        where: { key: 'site_base_url' },
+        select: { value: true },
+      })
+      siteBaseUrl = siteBaseSetting?.value ?? null
+      siteBaseUrlCache = {
+        value: siteBaseUrl,
+        expiresAt: now + SITE_BASE_URL_CACHE_TTL_MS,
+      }
+    }
     return this.determineChatImageBaseUrl({
       request,
-      siteBaseUrl: siteBaseSetting?.value ?? null,
+      siteBaseUrl,
     })
   }
 
-  /** 列表页投影：richPayload 已由完整 toolEvents 构建，再瘦身 toolEvents。 */
+  /** 列表页投影：richPayload 已由完整/半完整 toolEvents 构建，再瘦身 toolEvents。 */
   private projectMessageForHistoryList(message: NormalizedMessage): NormalizedMessage {
     if (!Array.isArray(message.toolEvents) || message.toolEvents.length === 0) {
       return message
@@ -454,7 +488,11 @@ export class ChatMessageQueryService {
     }
   }
 
-  private normalizeMessage(raw: RawMessage, baseUrl: string): NormalizedMessage {
+  private normalizeMessage(
+    raw: RawMessage,
+    baseUrl: string,
+    options?: { toolLogsMode?: 'full' | 'history-list' },
+  ): NormalizedMessage {
     const { attachments, toolLogsJson, usageMetrics, imageDescriptionsJson } = raw as RawMessage & {
       attachments?: Array<{ relativePath: string }>
       generatedImages?: GeneratedImageRecord[]
@@ -471,7 +509,9 @@ export class ChatMessageQueryService {
     }
     const usage = Array.isArray(usageMetrics) && usageMetrics.length > 0 ? usageMetrics[0] : null
     const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
-    const toolEvents = this.parseToolLogsJson(toolLogsJson)
+    const toolEvents = this.parseToolLogsJson(toolLogsJson, {
+      mode: options?.toolLogsMode === 'history-list' ? 'history-list' : 'full',
+    })
     const richPayload = buildRichMessagePayload({
       content: raw.content,
       attachmentRelativePaths: rel,
@@ -523,4 +563,4 @@ export class ChatMessageQueryService {
   }
 }
 
-export { messageSelectFields }
+export { messageSelectFields, messageListSelectFields }

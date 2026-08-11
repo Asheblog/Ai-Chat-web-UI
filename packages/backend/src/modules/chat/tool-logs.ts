@@ -262,6 +262,24 @@ const HISTORY_LIST_DETAIL_KEYS = [
   'truncated',
 ] as const
 
+/** richPayload 证据图所需；投影前保留，响应前由 projectToolEventsForHistoryList 去掉。 */
+const HISTORY_LIST_RICH_IMAGE_DETAIL_KEYS = ['assessedImages', 'images', 'leadImageUrl'] as const
+
+export type ParseToolLogsOptions = {
+  mode?: 'full' | 'history-list'
+}
+
+const countValidHits = (hits: unknown): number => {
+  if (!Array.isArray(hits)) return 0
+  let count = 0
+  for (const hit of hits) {
+    if (!hit || typeof hit !== 'object') continue
+    const record = hit as Record<string, unknown>
+    if (typeof record.title === 'string' || typeof record.url === 'string') count += 1
+  }
+  return count
+}
+
 /**
  * 历史消息列表投影：去掉 hits[] 与大体量 details，保留 CoT 时间线必需字段。
  * richPayload 应在投影前用完整 toolEvents 构建。
@@ -296,7 +314,7 @@ export const projectToolEventsForHistoryList = (entries: ToolLogEntry[]): ToolLo
       typeof (source as Record<string, unknown>).hitsCount === 'number'
         ? ((source as Record<string, unknown>).hitsCount as number)
         : null
-    const hitsLen = Array.isArray(entry.hits) ? entry.hits.length : 0
+    const hitsLen = countValidHits(entry.hits)
     if (explicitHitsCount != null) {
       details.hitsCount = explicitHitsCount
     } else if (hitsLen > 0) {
@@ -310,8 +328,12 @@ export const projectToolEventsForHistoryList = (entries: ToolLogEntry[]): ToolLo
   })
 }
 
-export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
+export const parseToolLogsJson = (
+  raw?: string | null,
+  options?: ParseToolLogsOptions,
+): ToolLogEntry[] => {
   if (!raw) return [];
+  const mode = options?.mode === 'history-list' ? 'history-list' : 'full'
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -386,7 +408,9 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
         if (typeof entry.callId === 'string' && entry.callId.trim()) {
           log.callId = entry.callId;
         }
-        if (Array.isArray(entry.hits)) {
+
+        const hitsCountFromArray = countValidHits(entry.hits)
+        if (mode === 'full' && Array.isArray(entry.hits)) {
           log.hits = entry.hits
             .map((hit: any) => {
               if (!hit || typeof hit !== 'object') return null;
@@ -414,6 +438,7 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
             })
             .filter((hit: WebSearchHit | null): hit is WebSearchHit => Boolean(hit));
         }
+
         if (typeof entry.error === 'string' && entry.error.trim()) {
           log.error = entry.error;
         }
@@ -423,36 +448,56 @@ export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
         if (entry.details && typeof entry.details === 'object') {
           const candidate = entry.details as Record<string, unknown>;
           const normalized: ToolLogDetails = {};
-          if (typeof candidate.code === 'string') normalized.code = candidate.code;
-          if (typeof candidate.input === 'string') normalized.input = candidate.input;
-          if (typeof candidate.stdout === 'string') normalized.stdout = candidate.stdout;
-          if (typeof candidate.stderr === 'string') normalized.stderr = candidate.stderr;
-          if (typeof candidate.exitCode === 'number' && Number.isFinite(candidate.exitCode)) {
-            normalized.exitCode = candidate.exitCode;
-          }
-          if (typeof candidate.durationMs === 'number' && Number.isFinite(candidate.durationMs)) {
-            normalized.durationMs = candidate.durationMs;
-          }
-          if (typeof candidate.truncated === 'boolean') normalized.truncated = candidate.truncated;
-          for (const [key, value] of Object.entries(candidate)) {
-            if (
-              key === 'code' ||
-              key === 'input' ||
-              key === 'stdout' ||
-              key === 'stderr' ||
-              key === 'exitCode' ||
-              key === 'durationMs' ||
-              key === 'truncated'
-            ) {
-              continue;
+          if (mode === 'history-list') {
+            for (const key of HISTORY_LIST_DETAIL_KEYS) {
+              const value = candidate[key]
+              if (value != null) normalized[key] = value
             }
-            if (value !== undefined) {
-              normalized[key] = value;
+            for (const key of HISTORY_LIST_RICH_IMAGE_DETAIL_KEYS) {
+              const value = candidate[key]
+              if (value != null) normalized[key] = value
+            }
+            const explicitHitsCount =
+              typeof candidate.hitsCount === 'number' ? candidate.hitsCount : null
+            if (explicitHitsCount != null) {
+              normalized.hitsCount = explicitHitsCount
+            } else if (hitsCountFromArray > 0) {
+              normalized.hitsCount = hitsCountFromArray
+            }
+          } else {
+            if (typeof candidate.code === 'string') normalized.code = candidate.code;
+            if (typeof candidate.input === 'string') normalized.input = candidate.input;
+            if (typeof candidate.stdout === 'string') normalized.stdout = candidate.stdout;
+            if (typeof candidate.stderr === 'string') normalized.stderr = candidate.stderr;
+            if (typeof candidate.exitCode === 'number' && Number.isFinite(candidate.exitCode)) {
+              normalized.exitCode = candidate.exitCode;
+            }
+            if (typeof candidate.durationMs === 'number' && Number.isFinite(candidate.durationMs)) {
+              normalized.durationMs = candidate.durationMs;
+            }
+            if (typeof candidate.truncated === 'boolean') normalized.truncated = candidate.truncated;
+            for (const [key, value] of Object.entries(candidate)) {
+              if (
+                key === 'code' ||
+                key === 'input' ||
+                key === 'stdout' ||
+                key === 'stderr' ||
+                key === 'exitCode' ||
+                key === 'durationMs' ||
+                key === 'truncated'
+              ) {
+                continue;
+              }
+              if (value !== undefined) {
+                normalized[key] = value;
+              }
             }
           }
           if (Object.keys(normalized).length > 0) {
             log.details = normalized;
           }
+        } else if (mode === 'history-list' && hitsCountFromArray > 0) {
+          log.details = { hitsCount: hitsCountFromArray }
         }
         return log;
       })

@@ -128,14 +128,15 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
     const alreadyCurrent = snapshot.currentSession?.id === sessionId
     const alreadyHydrated = messagesHydrated[sessionId] === true
     const hasSessionMessages = snapshot.messageMetas.some((meta) => meta.sessionId === sessionId)
+    const cachedTotals = snapshot.sessionUsageTotalsMap[sessionId] ?? null
 
     if (alreadyCurrent && alreadyHydrated) {
       set(() => ({
         currentSession: session,
         isStreaming: snapshot.activeStreamSessionId === session.id,
+        usageTotals: cachedTotals ?? snapshot.usageTotals,
       }))
       resumeStreamingMessagesForSession(sessionId)
-      get().fetchUsage(sessionId)
       return
     }
 
@@ -145,7 +146,7 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
       currentSession: session,
       usageCurrent: null,
       usageLastRound: null,
-      usageTotals: null,
+      usageTotals: cachedTotals,
       isMessagesLoading: shouldFetchMessages,
       isStreaming: state.activeStreamSessionId === session.id,
       shareSelection: createInitialShareSelection(),
@@ -156,7 +157,6 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
     } else {
       resumeStreamingMessagesForSession(sessionId)
     }
-    get().fetchUsage(sessionId)
   },
 
   deleteSession: async (sessionId: number) => {

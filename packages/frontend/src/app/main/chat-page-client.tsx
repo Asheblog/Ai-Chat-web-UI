@@ -76,7 +76,6 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
           } else if (!hasMatchedMessages) {
             state.fetchMessages(matched.id)
           }
-          state.fetchUsage(matched.id)
         }
         return
       }

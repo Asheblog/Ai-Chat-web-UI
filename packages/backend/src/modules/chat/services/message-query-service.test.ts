@@ -1,7 +1,8 @@
 import type { Request } from 'undici'
-import { ChatMessageQueryService } from './message-query-service'
+import { ChatMessageQueryService, invalidateSiteBaseUrlCache } from './message-query-service'
 
 const buildService = () => {
+  invalidateSiteBaseUrlCache()
   const prisma = {
     message: {
       findMany: jest.fn(),
@@ -146,6 +147,11 @@ describe('ChatMessageQueryService', () => {
       expect.objectContaining({
         where: { sessionId: 5, messageGroupId: null },
         take: 1,
+        select: expect.objectContaining({
+          generatedImages: {
+            select: expect.not.objectContaining({ base64: true }),
+          },
+        }),
       }),
     )
     expect(determineChatImageBaseUrl).toHaveBeenCalledWith({
@@ -153,7 +159,7 @@ describe('ChatMessageQueryService', () => {
       siteBaseUrl: 'https://cdn.example.com',
     })
     expect(resolveChatImageUrls).toHaveBeenCalledWith(['/img/a.png'], 'https://cdn.example.com')
-    expect(parseToolLogsJson).toHaveBeenCalled()
+    expect(parseToolLogsJson).toHaveBeenCalledWith(expect.any(String), { mode: 'history-list' })
     expect(result.messages[0].images).toEqual(['https://cdn.example.com/img/a.png'])
     expect(result.messages[0].toolEvents).toEqual([
       expect.objectContaining({

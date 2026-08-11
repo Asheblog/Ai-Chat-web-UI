@@ -6,6 +6,9 @@ import * as chatApi from '@/features/chat/api'
 vi.mock('@/features/chat/api', () => ({
   getSessions: vi.fn(),
   getSessionsUsage: vi.fn(),
+  getUsage: vi.fn(),
+  getMessages: vi.fn(),
+  getSessionArtifacts: vi.fn(),
   updateSession: vi.fn(),
 }))
 
@@ -65,6 +68,39 @@ describe('session slice', () => {
     expect(state.shareSelection.selectedMessageIds).toEqual([])
     // sessions list must be preserved
     expect(state.sessions).toEqual(sessions)
+  })
+
+  it('selectSession does not call fetchUsage and hydrates totals from sessionUsageTotalsMap', async () => {
+    const store = createChatStoreInstance()
+    const sessions = mockSessions(2)
+    store.setState({
+      sessions,
+      sessionUsageTotalsMap: {
+        [sessions[0].id]: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+      },
+      messagesHydrated: { [sessions[0].id]: true },
+      messageMetas: [
+        {
+          id: 1,
+          sessionId: sessions[0].id,
+          role: 'user',
+          createdAt: new Date().toISOString(),
+          stableKey: 'k1',
+        } as any,
+      ],
+    })
+    vi.mocked(chatApi.getUsage).mockResolvedValue({ success: true, data: {} } as any)
+
+    store.getState().selectSession(sessions[0].id)
+
+    await Promise.resolve()
+    expect(chatApi.getUsage).not.toHaveBeenCalled()
+    expect(store.getState().currentSession?.id).toBe(sessions[0].id)
+    expect(store.getState().usageTotals).toEqual({
+      prompt_tokens: 1,
+      completion_tokens: 2,
+      total_tokens: 3,
+    })
   })
 
   it('updateSessionPrefs should persist and sync state', async () => {
