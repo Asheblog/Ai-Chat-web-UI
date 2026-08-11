@@ -33,6 +33,7 @@
 - **Tool Timeline（工具时间轴）**：消息内工具调用事件按时间/offset 排序后的序列；在交错步骤流中与推理段穿插展示，并可按 web_search/read_url 合并为工具组
 - **Tool Node（工具节点）**：步骤流中的单个工具步骤，展示类型图标、标题、状态与可展开的参数/结果
 - **Tool Group（工具合并组）**：将同一 offset 下相关的搜索/读取调用合并展示，展开后显示各子调用明细
+- **History List Tool Event Projection（历史列表工具事件投影）**：`GET .../messages` 分页列表对 Tool Event 的只读投影——去掉 `hits[]` 与大体量 `details`，保留 CoT 折叠/分组所需字段（含 `hitsCount`）；`richPayload` 仍用完整事件构建后再投影；单条 progress/by-client 读路径保持完整事件
 
 ## 流式协议
 

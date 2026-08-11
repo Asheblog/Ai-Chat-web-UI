@@ -1,4 +1,9 @@
-import { parseToolLogsJson, sanitizeToolLogEntryForPersistence, serializeToolLogsForPersistence } from './tool-logs'
+import {
+  parseToolLogsJson,
+  projectToolEventsForHistoryList,
+  sanitizeToolLogEntryForPersistence,
+  serializeToolLogsForPersistence,
+} from './tool-logs'
 
 describe('sanitizeToolLogEntryForPersistence', () => {
   test('truncates large content/snippet in web_search hits while preserving metadata', () => {
@@ -213,6 +218,130 @@ describe('parseToolLogsJson', () => {
         thumbnailUrl: 'https://cdn.example.com/a-thumb.jpg',
       }),
     ])
+  })
+})
+
+describe('projectToolEventsForHistoryList', () => {
+  test('drops hits and bulky details while preserving timeline fields and hitsCount', () => {
+    const entry = {
+      id: 'call_1',
+      tool: 'web_search',
+      stage: 'result' as const,
+      status: 'success' as const,
+      phase: 'result',
+      callId: 'call_1',
+      query: 'Safety Engineer ANZSCO',
+      summary: '找到 8 条结果',
+      createdAt: 1_700_000_000_000,
+      hits: Array.from({ length: 8 }, (_, i) => ({
+        title: `Hit ${i}`,
+        url: `https://example.com/${i}`,
+        snippet: 'x'.repeat(400),
+        imageUrl: `https://cdn.example.com/${i}.png`,
+      })),
+      details: {
+        taskType: 'search',
+        engine: 'tavily',
+        originalQuery: 'Safety Engineer',
+        expandedQuery: 'Safety Engineer ANZSCO Australia',
+        reasoningOffsetStart: 120,
+        groupId: 'g1',
+        parentCallId: 'parent-1',
+        excerpt: 'y'.repeat(5000),
+        attempts: [{ ok: false }, { ok: true }],
+        images: [{ url: 'https://cdn.example.com/extra.png' }],
+        assessedImages: [{ url: 'https://cdn.example.com/a.png', confidence: 'high' }],
+        stdout: 'z'.repeat(2000),
+      },
+    }
+
+    const [slim] = projectToolEventsForHistoryList([entry])
+
+    expect(slim.hits).toBeUndefined()
+    expect(slim).toMatchObject({
+      id: 'call_1',
+      tool: 'web_search',
+      stage: 'result',
+      status: 'success',
+      phase: 'result',
+      callId: 'call_1',
+      query: 'Safety Engineer ANZSCO',
+      summary: '找到 8 条结果',
+      createdAt: 1_700_000_000_000,
+      details: {
+        taskType: 'search',
+        engine: 'tavily',
+        originalQuery: 'Safety Engineer',
+        expandedQuery: 'Safety Engineer ANZSCO Australia',
+        reasoningOffsetStart: 120,
+        groupId: 'g1',
+        parentCallId: 'parent-1',
+        hitsCount: 8,
+      },
+    })
+    expect(slim.details).not.toHaveProperty('excerpt')
+    expect(slim.details).not.toHaveProperty('attempts')
+    expect(slim.details).not.toHaveProperty('images')
+    expect(slim.details).not.toHaveProperty('assessedImages')
+    expect(slim.details).not.toHaveProperty('stdout')
+  })
+
+  test('keeps legacy reasoningOffset for CoT interleaving', () => {
+    const [slim] = projectToolEventsForHistoryList([
+      {
+        id: 'call_legacy',
+        tool: 'web_search',
+        stage: 'result',
+        createdAt: 1,
+        details: { reasoningOffset: 42, hitsCount: 2 },
+      },
+    ])
+    expect(slim.details).toEqual({ reasoningOffset: 42, hitsCount: 2 })
+  })
+
+  test('keeps explicit hitsCount when hits are absent', () => {
+    const [slim] = projectToolEventsForHistoryList([
+      {
+        id: 'call_2',
+        tool: 'web_search',
+        stage: 'result',
+        createdAt: 1,
+        details: { hitsCount: 3, taskType: 'search' },
+      },
+    ])
+    expect(slim.hits).toBeUndefined()
+    expect(slim.details).toEqual({ hitsCount: 3, taskType: 'search' })
+  })
+
+  test('shrinks tool-heavy assistant history payload under 200KB for 80 search events', () => {
+    const fat = Array.from({ length: 80 }, (_, i) => ({
+      id: `call_${i}`,
+      tool: 'web_search',
+      stage: 'result' as const,
+      status: 'success' as const,
+      createdAt: 1_700_000_000_000 + i,
+      query: `query-${i} Safety Engineer ANZSCO`,
+      summary: '找到若干结果',
+      hits: Array.from({ length: 8 }, (_, h) => ({
+        title: `Hit ${h}`,
+        url: `https://example.com/${i}/${h}`,
+        snippet: 's'.repeat(300),
+        imageUrl: `https://cdn.example.com/${i}-${h}.png`,
+      })),
+      details: {
+        taskType: 'search' as const,
+        engine: 'tavily',
+        hitsCount: 8,
+        assessedImages: [{ url: `https://cdn.example.com/a-${i}.png`, confidence: 'high' }],
+        excerpt: 'e'.repeat(2000),
+      },
+    }))
+    const fatBytes = Buffer.byteLength(JSON.stringify(fat), 'utf8')
+    const slim = projectToolEventsForHistoryList(fat)
+    const slimBytes = Buffer.byteLength(JSON.stringify(slim), 'utf8')
+    expect(fatBytes).toBeGreaterThan(300_000)
+    expect(slimBytes).toBeLessThan(200_000)
+    expect(slim.every((e) => e.hits === undefined)).toBe(true)
   })
 })
 

@@ -245,6 +245,71 @@ export const serializeToolLogsForPersistence = (
   return json;
 };
 
+/** 历史会话列表 API 保留的 details 字段（CoT 折叠/分组所需）。hitsCount 单独派生。 */
+const HISTORY_LIST_DETAIL_KEYS = [
+  'reasoningOffset',
+  'reasoningOffsetStart',
+  'reasoningOffsetEnd',
+  'taskType',
+  'engine',
+  'queryLanguage',
+  'originalQuery',
+  'expandedQuery',
+  'groupId',
+  'parentCallId',
+  'url',
+  'title',
+  'truncated',
+] as const
+
+/**
+ * 历史消息列表投影：去掉 hits[] 与大体量 details，保留 CoT 时间线必需字段。
+ * richPayload 应在投影前用完整 toolEvents 构建。
+ */
+export const projectToolEventsForHistoryList = (entries: ToolLogEntry[]): ToolLogEntry[] => {
+  if (!Array.isArray(entries) || entries.length === 0) return []
+
+  return entries.map((entry) => {
+    const slim: ToolLogEntry = {
+      id: entry.id,
+      tool: entry.tool,
+      stage: entry.stage,
+      createdAt: entry.createdAt,
+    }
+    if (entry.status) slim.status = entry.status
+    if (entry.phase) slim.phase = entry.phase
+    if (entry.callId) slim.callId = entry.callId
+    if (entry.query) slim.query = entry.query
+    if (entry.error) slim.error = entry.error
+    if (entry.summary) slim.summary = entry.summary
+
+    const details: ToolLogDetails = {}
+    const source = entry.details || {}
+    for (const key of HISTORY_LIST_DETAIL_KEYS) {
+      const value = (source as Record<string, unknown>)[key]
+      if (value != null) {
+        ;(details as Record<string, unknown>)[key] = value
+      }
+    }
+
+    const explicitHitsCount =
+      typeof (source as Record<string, unknown>).hitsCount === 'number'
+        ? ((source as Record<string, unknown>).hitsCount as number)
+        : null
+    const hitsLen = Array.isArray(entry.hits) ? entry.hits.length : 0
+    if (explicitHitsCount != null) {
+      details.hitsCount = explicitHitsCount
+    } else if (hitsLen > 0) {
+      details.hitsCount = hitsLen
+    }
+
+    if (Object.keys(details).length > 0) {
+      slim.details = details
+    }
+    return slim
+  })
+}
+
 export const parseToolLogsJson = (raw?: string | null): ToolLogEntry[] => {
   if (!raw) return [];
   try {

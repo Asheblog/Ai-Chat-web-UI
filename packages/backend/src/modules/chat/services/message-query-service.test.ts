@@ -63,6 +63,15 @@ describe('ChatMessageQueryService', () => {
             imageUrl: 'https://example.com/a.png',
           },
         ],
+        details: {
+          assessedImages: [
+            {
+              url: 'https://cdn.example.com/evidence.png',
+              confidence: 'high',
+              title: 'Evidence',
+            },
+          ],
+        },
       },
     ])
 
@@ -150,11 +159,14 @@ describe('ChatMessageQueryService', () => {
       expect.objectContaining({
         id: 'tool-1',
         tool: 'web_search',
+        details: expect.objectContaining({ hitsCount: 1 }),
       }),
     ])
+    expect(result.messages[0].toolEvents?.[0]?.hits).toBeUndefined()
+    expect(result.messages[0].toolEvents?.[0]?.details).not.toHaveProperty('assessedImages')
     const richPayload = (result.messages[0] as any).richPayload
     expect(richPayload).toBeTruthy()
-    expect(richPayload).toMatchObject({ layout: 'side-by-side' })
+    expect(richPayload).toMatchObject({ layout: 'stack' })
     expect(richPayload.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'hi' })]),
     )
@@ -170,9 +182,63 @@ describe('ChatMessageQueryService', () => {
           source: 'generated',
           url: 'https://cdn.example.com/generated/a.png',
         }),
+        expect.objectContaining({
+          type: 'image',
+          source: 'external',
+          url: 'https://cdn.example.com/evidence.png',
+        }),
       ]),
     )
     expect(result.pagination).toEqual({ page: 1, limit: 2, total: 1, totalPages: 1 })
+  })
+
+  it('keeps full tool hits on getMessageById while listMessages projects them away', async () => {
+    const { prisma, service, actor, request, parseToolLogsJson } = buildService()
+    const fullEvents = [
+      {
+        id: 'tool-full',
+        tool: 'web_search',
+        stage: 'result' as const,
+        createdAt: Date.now(),
+        hits: [{ title: 'Full Hit', url: 'https://example.com/full' }],
+        details: { engine: 'tavily' },
+      },
+    ]
+    parseToolLogsJson.mockReturnValue(fullEvents)
+
+    prisma.message.findFirst.mockResolvedValue({
+      id: 30,
+      sessionId: 5,
+      messageGroupId: null,
+      role: 'assistant',
+      content: 'detail',
+      parentMessageId: null,
+      variantIndex: null,
+      attachments: [],
+      clientMessageId: 'c-full',
+      reasoning: null,
+      reasoningDurationSeconds: null,
+      toolLogsJson: '[]',
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      updatedAt: new Date('2024-01-01T00:00:00Z'),
+      streamStatus: null,
+      streamCursor: null,
+      streamReasoning: null,
+      streamError: null,
+      usageMetrics: [],
+      generatedImages: [],
+    })
+    prisma.systemSetting.findUnique.mockResolvedValue({ value: null })
+
+    const detail = await service.getMessageById({
+      actor,
+      sessionId: 5,
+      messageId: 30,
+      request,
+    })
+    expect(detail?.toolEvents?.[0]?.hits).toEqual([
+      expect.objectContaining({ title: 'Full Hit', url: 'https://example.com/full' }),
+    ])
   })
 
   it('gets message by id respecting ownership', async () => {

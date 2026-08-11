@@ -5,7 +5,11 @@ import {
   determineChatImageBaseUrl as defaultDetermineChatImageBaseUrl,
   resolveChatImageUrls as defaultResolveChatImageUrls,
 } from '../../../utils/chat-images'
-import { parseToolLogsJson as defaultParseToolLogsJson, type ToolLogEntry } from '../tool-logs'
+import {
+  parseToolLogsJson as defaultParseToolLogsJson,
+  projectToolEventsForHistoryList,
+  type ToolLogEntry,
+} from '../tool-logs'
 import { buildRichMessagePayload, type GeneratedImageRecord } from '../rich-payload'
 import { sessionOwnershipClause } from '../chat-common'
 
@@ -337,7 +341,7 @@ export class ChatMessageQueryService {
       .filter((item): item is NormalizedMessage => item != null)
 
     const messageItems = ungroupedMessages.map((message) =>
-      this.normalizeMessage(message, params.baseUrl),
+      this.projectMessageForHistoryList(this.normalizeMessage(message, params.baseUrl)),
     )
 
     const merged = [...messageItems, ...groupItems].sort((a, b) => {
@@ -437,6 +441,17 @@ export class ChatMessageQueryService {
       request,
       siteBaseUrl: siteBaseSetting?.value ?? null,
     })
+  }
+
+  /** 列表页投影：richPayload 已由完整 toolEvents 构建，再瘦身 toolEvents。 */
+  private projectMessageForHistoryList(message: NormalizedMessage): NormalizedMessage {
+    if (!Array.isArray(message.toolEvents) || message.toolEvents.length === 0) {
+      return message
+    }
+    return {
+      ...message,
+      toolEvents: projectToolEventsForHistoryList(message.toolEvents),
+    }
   }
 
   private normalizeMessage(raw: RawMessage, baseUrl: string): NormalizedMessage {
