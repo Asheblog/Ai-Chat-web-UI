@@ -17,8 +17,8 @@ describe('truncateTurnLabel', () => {
   })
 
   it('超长文本截断并加省略号', () => {
-    expect(truncateTurnLabel('精简优化这段话不超20个字然后继续补充说明', 18)).toBe(
-      '精简优化这段话不超20个字然后继续补…',
+    expect(truncateTurnLabel('精简优化这段话不超20个字然后继续补充说明')).toBe(
+      '精简优化这段话不超20个字然后继续补充说…',
     )
   })
 
@@ -45,7 +45,7 @@ describe('buildTurnTocEntries', () => {
     )
 
     expect(entries).toEqual<TurnTocEntry[]>([
-      { key: 'u1', messageId: 1, label: '精简优化这段话不超20个字然后继续补…' },
+      { key: 'u1', messageId: 1, label: '精简优化这段话不超20个字然后继续补充说…' },
       { key: 'u2', messageId: 3, label: '可以30个字' },
     ])
   })

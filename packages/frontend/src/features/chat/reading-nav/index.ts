@@ -21,7 +21,7 @@ export type TurnBodyLike = {
   content?: string | null
 }
 
-export const TURN_LABEL_MAX_CHARS = 18
+export const TURN_LABEL_MAX_CHARS = 20
 
 export const truncateTurnLabel = (text: string, maxChars: number = TURN_LABEL_MAX_CHARS): string => {
   const normalized = text.replace(/\s+/g, ' ').trim()

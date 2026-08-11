@@ -17,16 +17,26 @@ export function ChatTurnToc({ entries, activeKey, onJump, className }: ChatTurnT
     <nav
       aria-label="对话轮次目录"
       className={cn(
-        'pointer-events-none absolute inset-y-0 right-0 z-20 hidden w-8 md:block',
+        'pointer-events-none absolute inset-y-0 right-0 z-20 hidden overflow-visible md:block',
         className,
       )}
     >
-      <div className="pointer-events-auto absolute right-1.5 top-1/2 flex max-h-[min(70vh,28rem)] -translate-y-1/2 flex-col justify-center">
-        <ul className="group/toc flex flex-col items-end gap-2 py-1">
+      {/*
+        DeepSeek 式悬浮面板：常显标签 + 右侧刻度，约可舒适容纳 20 个汉字。
+        右对齐，避免挤占对话栏；纵向滚动放在面板自身。
+      */}
+      <div className="pointer-events-auto absolute right-3 top-1/2 flex max-h-[min(72vh,32rem)] -translate-y-1/2 justify-end overflow-visible">
+        <ul
+          className={cn(
+            'flex w-[22rem] max-h-[min(72vh,32rem)] flex-col gap-2.5 overflow-y-auto rounded-2xl',
+            'bg-[hsl(var(--background))] py-3 pl-4 pr-3',
+            'shadow-[0_8px_28px_rgba(15,23,42,0.12)] ring-1 ring-border/50',
+          )}
+        >
           {entries.map((entry) => {
             const active = entry.key === activeKey
             return (
-              <li key={entry.key} className="relative flex justify-end">
+              <li key={entry.key} className="flex w-full min-w-0 justify-end">
                 <button
                   type="button"
                   title={entry.label}
@@ -34,15 +44,14 @@ export function ChatTurnToc({ entries, activeKey, onJump, className }: ChatTurnT
                   aria-label={`跳转到：${entry.label}`}
                   onClick={() => onJump(entry.key)}
                   className={cn(
-                    'flex items-center justify-end gap-2 rounded-md py-0.5 text-left transition-colors',
+                    'flex w-full min-w-0 items-center justify-end gap-3 rounded-md py-0.5 text-left',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   <span
                     className={cn(
-                      'pointer-events-none absolute right-5 top-1/2 max-w-[12rem] -translate-y-1/2 truncate whitespace-nowrap rounded-md bg-[hsl(var(--background))]/95 px-2 py-0.5 text-xs leading-5 opacity-0 shadow-none',
-                      'transition-opacity group-hover/toc:opacity-100 group-focus-within/toc:opacity-100',
+                      'min-w-0 flex-1 truncate text-sm leading-6',
                       active && 'font-medium',
                     )}
                   >
@@ -51,8 +60,8 @@ export function ChatTurnToc({ entries, activeKey, onJump, className }: ChatTurnT
                   <span
                     aria-hidden
                     className={cn(
-                      'relative z-10 h-0.5 shrink-0 rounded-full transition-all',
-                      active ? 'w-3.5 bg-primary' : 'w-2.5 bg-border group-hover/toc:bg-muted-foreground/45',
+                      'h-0.5 shrink-0 rounded-full',
+                      active ? 'w-4 bg-primary' : 'w-2.5 bg-border',
                     )}
                   />
                 </button>
