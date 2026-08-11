@@ -21,7 +21,9 @@ import {
   ComposerFeatureControls,
   ComposerIconButton,
   composerToolbarButtonClass,
+  composerToolbarIconClass,
   composerToolbarScrollClass,
+  composerToolbarSendSlotClass,
 } from './composer-toolbar-primitives'
 
 interface DesktopComposerProps {
@@ -203,14 +205,14 @@ export function DesktopComposer({
           )}
 
           <div className="mt-2 flex items-center justify-between gap-2">
-            <div className={composerToolbarScrollClass}>
+            <div className={cn(composerToolbarScrollClass, 'min-w-0 flex-1')}>
               <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
                 <DropdownMenuTrigger asChild>
                   <button
                     className={composerToolbarButtonClass}
                     aria-label="更多操作"
                   >
-                    <Plus className="h-[18px] w-[18px]" />
+                    <Plus className={composerToolbarIconClass} />
                   </button>
                 </DropdownMenuTrigger>
                 <PlusMenuContent
@@ -264,26 +266,28 @@ export function DesktopComposer({
               />
             </div>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={isStreaming ? onStop : onSend}
-                    disabled={isStreaming ? false : desktopSendDisabled}
-                    aria-label={isStreaming ? '停止生成' : '发送'}
-                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg shadow-[0_10px_22px_hsl(var(--primary)/0.18)] transition-colors disabled:shadow-none disabled:opacity-45 ${
-                      isStreaming
-                        ? 'bg-destructive text-destructive-foreground hover:opacity-90'
-                        : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                    }`}
-                  >
-                    {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{sendTooltip}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div className={composerToolbarSendSlotClass}>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={isStreaming ? onStop : onSend}
+                      disabled={isStreaming ? false : desktopSendDisabled}
+                      aria-label={isStreaming ? '停止生成' : '发送'}
+                      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg shadow-[0_10px_22px_hsl(var(--primary)/0.18)] transition-colors disabled:shadow-none disabled:opacity-45 ${
+                        isStreaming
+                          ? 'bg-destructive text-destructive-foreground hover:opacity-90'
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      }`}
+                    >
+                      {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{sendTooltip}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
         </ComposerShell>
 

@@ -22,7 +22,9 @@ import {
   ComposerIconButton,
   composerInnerEditorClass,
   composerToolbarButtonClass,
+  composerToolbarIconClass,
   composerToolbarScrollClass,
+  composerToolbarSendSlotClass,
 } from './composer-toolbar-primitives'
 
 interface MobileComposerProps {
@@ -195,7 +197,7 @@ export function MobileComposer({
           <Popover open={plusOpen} onOpenChange={setPlusOpen}>
             <PopoverTrigger asChild>
               <ComposerIconButton active={plusOpen} aria-label="更多操作">
-                <Plus className="h-4 w-4" />
+                <Plus className={composerToolbarIconClass} />
               </ComposerIconButton>
             </PopoverTrigger>
             <PopoverContent
@@ -251,7 +253,7 @@ export function MobileComposer({
           />
         </div>
 
-        <div className="shrink-0">
+        <div className={composerToolbarSendSlotClass}>
           <Button
             type="button"
             className={`h-9 w-9 rounded-lg p-0 ${

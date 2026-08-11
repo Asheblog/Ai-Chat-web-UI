@@ -100,7 +100,7 @@ describe('MobileComposer', () => {
 
     const plusButton = screen.getByRole('button', { name: '更多操作' })
 
-    expect(plusButton).toHaveClass('h-11', 'w-11', 'touch-manipulation')
+    expect(plusButton).toHaveClass('composer-toolbar-btn', 'touch-manipulation')
   })
 
   it('opens the mobile plus menu when tapping the plus button', async () => {

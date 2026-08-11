@@ -186,6 +186,20 @@ describe('WelcomeScreen', () => {
     expect(parent.className).toContain('overflow-hidden')
   })
 
+  it('keeps send isolated from adaptive toolbar so Python cannot cover it', () => {
+    render(<WelcomeScreen />)
+
+    const python = screen.getByRole('button', { name: 'Python' })
+    const send = screen.getByRole('button', { name: '发送' })
+    const toolbar = python.closest('.composer-toolbar')
+
+    expect(toolbar).not.toBeNull()
+    expect(toolbar!.className).toContain('overflow-x-auto')
+    expect(send.parentElement?.className ?? '').toMatch(/shrink-0/)
+    expect(send.parentElement?.className ?? '').toMatch(/relative/)
+    expect(send.parentElement?.className ?? '').toMatch(/z-10/)
+  })
+
   it('shows quota below input on mobile instead of placeholder text', async () => {
     setViewport(true)
     mockViewModel.form.basePlaceholder = '本日消息发送额度剩余 195'

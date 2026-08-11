@@ -7,6 +7,7 @@ import { PlusMenuContent } from '@/components/plus-menu-content'
 import { SkillPanelSheet } from '@/components/chat/skill-panel-sheet'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { composerToolbarIconClass } from '@/components/chat/composer-toolbar-primitives'
 
 interface AdvancedOptionsProps {
   disabled: boolean
@@ -103,13 +104,13 @@ export function AdvancedOptions({
               variant="ghost"
               size="icon"
               className={cn(
-                'h-9 w-9 rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                'rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
                 triggerClassName,
               )}
               disabled={disabled}
               aria-label="更多操作"
             >
-              <Plus className="h-[18px] w-[18px]" />
+              <Plus className={composerToolbarIconClass} />
             </Button>
           </PopoverTrigger>
           <PopoverContent
@@ -150,13 +151,13 @@ export function AdvancedOptions({
               variant="ghost"
               size="icon"
               className={cn(
-                'h-9 w-9 rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                'rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
                 triggerClassName,
               )}
               disabled={disabled}
               aria-label="更多操作"
             >
-              <Plus className="h-[18px] w-[18px]" />
+              <Plus className={composerToolbarIconClass} />
             </Button>
           </DropdownMenuTrigger>
           <PlusMenuContent

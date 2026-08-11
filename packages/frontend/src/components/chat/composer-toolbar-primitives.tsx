@@ -5,11 +5,17 @@ import { cn } from '@/lib/utils'
 export const composerInnerEditorClass =
   'relative overflow-hidden rounded-[var(--radius-composer)] border border-border/80 bg-background transition-colors duration-200 focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
 
+/** Named container + scroll fallback; sizes come from `.composer-toolbar*` in globals.css */
 export const composerToolbarScrollClass =
-  'flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-visible pr-0 sm:gap-1.5'
+  'composer-toolbar flex min-w-0 max-w-full flex-nowrap items-center overflow-x-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
 
 export const composerToolbarButtonClass =
-  'relative inline-flex h-11 w-11 shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-lg border border-border/80 bg-background text-muted-foreground transition-colors duration-200 hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45 md:h-9 md:w-9'
+  'composer-toolbar-btn relative inline-flex shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-lg border border-border/80 bg-background text-muted-foreground transition-colors duration-200 hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45'
+
+export const composerToolbarIconClass = 'composer-toolbar-icon'
+
+/** Isolates send/stop from toolbar overflow / paint */
+export const composerToolbarSendSlotClass = 'relative z-10 shrink-0'
 
 interface ComposerIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
@@ -126,7 +132,7 @@ export function ComposerFeatureControls({
           title={knowledgeBaseEnabled ? '知识库' : '知识库未启用'}
           disabled={disabled || !knowledgeBaseEnabled}
         >
-          <BookOpen className="h-4 w-4" />
+          <BookOpen className={composerToolbarIconClass} />
           {Boolean(knowledgeBaseCount && knowledgeBaseCount > 0) && (
             <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-micro font-semibold text-primary-foreground">
               {knowledgeBaseCount! > 9 ? '9+' : knowledgeBaseCount}
@@ -138,14 +144,14 @@ export function ComposerFeatureControls({
       <ComposerFeatureChip
         active={thinkingEnabled}
         disabled={disabled}
-        icon={<Brain className="h-4 w-4" />}
+        icon={<Brain className={composerToolbarIconClass} />}
         label="思考"
         onClick={() => onToggleThinking(!thinkingEnabled)}
       />
       <ComposerFeatureChip
         active={webSearchEnabled}
         disabled={disabled || !canUseWebSearch}
-        icon={<Globe2 className="h-4 w-4" />}
+        icon={<Globe2 className={composerToolbarIconClass} />}
         label="联网"
         title={!canUseWebSearch ? webSearchDisabledNote : undefined}
         onClick={() => onToggleWebSearch(!webSearchEnabled)}
@@ -153,7 +159,7 @@ export function ComposerFeatureControls({
       <ComposerFeatureChip
         active={pythonToolEnabled}
         disabled={disabled || !canUsePythonTool}
-        icon={<Code2 className="h-4 w-4" />}
+        icon={<Code2 className={composerToolbarIconClass} />}
         label="Python"
         title={!canUsePythonTool ? pythonToolDisabledNote : undefined}
         onClick={() => onTogglePythonTool(!pythonToolEnabled)}

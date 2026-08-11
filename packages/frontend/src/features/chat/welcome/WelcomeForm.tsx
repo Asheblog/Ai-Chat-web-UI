@@ -17,6 +17,7 @@ import {
   ComposerIconButton,
   composerToolbarButtonClass,
   composerToolbarScrollClass,
+  composerToolbarSendSlotClass,
 } from '@/components/chat/composer-toolbar-primitives'
 
 type Effort = 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh'
@@ -259,15 +260,17 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             />
           </div>
 
-          <Button
-            type="button"
-            onClick={onSubmit}
-            disabled={creationDisabled}
-            className="h-10 w-10 shrink-0 rounded-lg p-0 shadow-[0_10px_22px_hsl(var(--primary)/0.18)] disabled:shadow-none"
-            aria-label={isCreating ? '正在创建会话' : '发送'}
-          >
-            {isCreating ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
-          </Button>
+          <div className={composerToolbarSendSlotClass}>
+            <Button
+              type="button"
+              onClick={onSubmit}
+              disabled={creationDisabled}
+              className="h-10 w-10 rounded-lg p-0 shadow-[0_10px_22px_hsl(var(--primary)/0.18)] disabled:shadow-none"
+              aria-label={isCreating ? '正在创建会话' : '发送'}
+            >
+              {isCreating ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
+            </Button>
+          </div>
         </div>
       </ComposerShell>
 

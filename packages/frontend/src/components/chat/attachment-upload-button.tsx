@@ -3,7 +3,7 @@
 import { Paperclip } from 'lucide-react'
 import { RECOMMENDED_FILE_TYPES, FILE_SIZE_LIMIT_LABEL } from '@aichat/shared/workspace-files'
 import { cn } from '@/lib/utils'
-import { composerToolbarButtonClass } from './composer-toolbar-primitives'
+import { composerToolbarButtonClass, composerToolbarIconClass } from './composer-toolbar-primitives'
 
 const TOOLTIP_TEXT = `附件上传：图片、${RECOMMENDED_FILE_TYPES.slice(0, 4).join('、')}、文本/代码 · ${FILE_SIZE_LIMIT_LABEL}`
 
@@ -42,7 +42,7 @@ export function AttachmentUploadButton({
       aria-label={ariaLabel}
       title={TOOLTIP_TEXT}
     >
-      <Paperclip className="h-4 w-4" />
+      <Paperclip className={composerToolbarIconClass} />
       {typeof count === 'number' && count > 0 && (
         <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-micro font-semibold text-primary-foreground">
           {count > 99 ? '99+' : count}

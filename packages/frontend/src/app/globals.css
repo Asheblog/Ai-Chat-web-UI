@@ -653,6 +653,81 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   background: hsl(var(--card));
 }
 
+/*
+ * Composer 底栏工具：容器变窄时同比缩小按钮/图标；
+ * 到下限仍放不下时由 overflow-x-auto 横向轻滚，避免盖住发送按钮。
+ * 移动端触控下限 36px；桌面下限 28px。
+ */
+.composer-toolbar {
+  container-type: inline-size;
+  container-name: composer-toolbar;
+  gap: 0.25rem;
+  --composer-toolbar-btn-size: 2.75rem; /* 44px */
+  --composer-toolbar-icon-size: 1rem;
+}
+
+@media (min-width: 640px) {
+  .composer-toolbar {
+    gap: 0.375rem;
+  }
+}
+
+.composer-toolbar-btn {
+  height: var(--composer-toolbar-btn-size) !important; /* beat shadcn size=icon utilities */
+  width: var(--composer-toolbar-btn-size) !important;
+}
+
+.composer-toolbar-icon {
+  height: var(--composer-toolbar-icon-size);
+  width: var(--composer-toolbar-icon-size);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .composer-toolbar {
+    --composer-toolbar-btn-size: 2.25rem; /* 36px */
+  }
+}
+
+/* @container 只能改容器子孙，不能改容器自身变量 */
+@container composer-toolbar (max-width: 22rem) {
+  .composer-toolbar-btn {
+    height: 2rem !important; /* 32px */
+    width: 2rem !important;
+  }
+
+  .composer-toolbar-icon {
+    height: 0.875rem;
+    width: 0.875rem;
+  }
+}
+
+@container composer-toolbar (max-width: 18rem) {
+  .composer-toolbar-btn {
+    height: 1.75rem !important; /* 28px desktop floor */
+    width: 1.75rem !important;
+  }
+
+  .composer-toolbar-icon {
+    height: 0.75rem;
+    width: 0.75rem;
+  }
+}
+
+@media (max-width: 767px) {
+  @container composer-toolbar (max-width: 22rem) {
+    .composer-toolbar-btn {
+      height: 2.25rem !important; /* 36px mobile floor */
+      width: 2.25rem !important;
+    }
+
+    .composer-toolbar-icon {
+      height: 0.875rem;
+      width: 0.875rem;
+    }
+  }
+}
+
 /* 设置搜索跳转后的位置提醒：导航项/功能卡外发光脉冲（3 次，约 1.5s 一次性） */
 @keyframes settings-flash-pulse {
   0%, 100% {
