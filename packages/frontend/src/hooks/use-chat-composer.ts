@@ -228,7 +228,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setSessionPromptDraft,
   ])
 
-  const { scrollAreaRef, isAutoScrollEnabled } = useScrollPersistence({
+  const { scrollAreaRef, isAutoScrollEnabled, setAutoScrollEnabled } = useScrollPersistence({
     currentSessionId: currentSession?.id ?? null,
     sessionMessageMetas,
     currentSessionPagination,
@@ -535,6 +535,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     sessionPromptSourceLabel,
     sessionPromptPlaceholder,
     isAutoScrollEnabled,
+    setAutoScrollEnabled,
     hasOlderMessages,
     isLoadingOlderMessages,
     assistantVariantSelections,

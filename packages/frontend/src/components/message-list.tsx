@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
@@ -8,6 +8,10 @@ import { TypingIndicator } from './typing-indicator'
 import { useChatMessages } from '@/store/chat-store'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
+
+export type MessageListHandle = {
+  scrollToStableKey: (key: string, options?: { behavior?: 'auto' | 'smooth' }) => boolean
+}
 
 const parseTimestamp = (value: string | number | Date | undefined) => {
   if (value instanceof Date) return value.getTime()
@@ -59,20 +63,23 @@ interface VirtualizerResizeInstance {
   getScrollOffset: () => number
 }
 
-function MessageListComponent({
-  metas,
-  bodies,
-  renderCache,
-  isStreaming,
-  isLoading,
-  autoScrollEnabled = true,
-  scrollRootRef,
-  variantSelections,
-  metrics,
-  shareSelection,
-  onShareToggle,
-  onShareStart,
-}: MessageListProps) {
+const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(function MessageListComponent(
+  {
+    metas,
+    bodies,
+    renderCache,
+    isStreaming,
+    isLoading,
+    autoScrollEnabled = true,
+    scrollRootRef,
+    variantSelections,
+    metrics,
+    shareSelection,
+    onShareToggle,
+    onShareStart,
+  },
+  ref,
+) {
   const { regenerateAssistantMessage, cycleAssistantVariant } = useChatMessages((state) => ({
     regenerateAssistantMessage: state.regenerateAssistantMessage,
     cycleAssistantVariant: state.cycleAssistantVariant,
@@ -189,6 +196,25 @@ function MessageListComponent({
   })
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldAdjustScrollPositionOnItemSizeChange as any
 
+  const SCROLL_TOP_OFFSET_PX = 72
+
+  const scrollToStableKey = useCallback(
+    (key: string, options?: { behavior?: 'auto' | 'smooth' }) => {
+      const index = displayMetas.findIndex((meta) => (meta.stableKey || messageKey(meta.id)) === key)
+      if (index < 0 || !scrollElement) return false
+      const behavior = options?.behavior ?? 'smooth'
+      // virtualizer 的 scrollToIndex 不应用 CSS scroll-margin，需手动留出顶栏余量
+      const offsetPair = virtualizer.getOffsetForIndex(index, 'start')
+      if (!offsetPair) return false
+      const offset = Math.max(0, offsetPair[0] - SCROLL_TOP_OFFSET_PX)
+      scrollElement.scrollTo({ top: offset, behavior })
+      return true
+    },
+    [displayMetas, scrollElement, virtualizer],
+  )
+
+  useImperativeHandle(ref, () => ({ scrollToStableKey }), [scrollToStableKey])
+
   const lastMeta = displayMetas[displayMetas.length - 1]
   const lastUserMeta = useMemo(() => {
     for (let i = displayMetas.length - 1; i >= 0; i -= 1) {
@@ -280,6 +306,7 @@ function MessageListComponent({
             key={reactKey}
             ref={virtualizer.measureElement}
             data-index={virtualRow.index}
+            data-reading-key={reactKey}
             style={{
               position: 'absolute',
               top: 0,
@@ -342,7 +369,7 @@ function MessageListComponent({
       )}
     </div>
   )
-}
+})
 
 export const MessageList = memo(
   MessageListComponent,
@@ -357,5 +384,5 @@ export const MessageList = memo(
     prev.variantSelections === next.variantSelections &&
     prev.shareSelection === next.shareSelection &&
     prev.onShareToggle === next.onShareToggle &&
-    prev.onShareStart === next.onShareStart
+    prev.onShareStart === next.onShareStart,
 )

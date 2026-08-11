@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { shallow } from 'zustand/shallow'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { MessageList } from '@/components/message-list'
+import { MessageList, type MessageListHandle } from '@/components/message-list'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
 import { ChatErrorBanner } from '@/components/chat/chat-error-banner'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,8 @@ import { useChatMessages, useChatStore } from '@/store/chat-store'
 import { ShareDialog } from '@/components/chat/share-dialog'
 import { messageKey } from '@/features/chat/store/utils'
 import { ShareSelectionToolSummary } from '@/components/chat/share-selection-tool-summary'
+import { ChatTurnToc } from '@/components/chat/chat-turn-toc'
+import { useReadingNav } from '@/hooks/use-reading-nav'
 import { cn } from '@/lib/utils'
 
 export interface ChatMessageViewportProps {
@@ -25,6 +27,7 @@ export interface ChatMessageViewportProps {
   hasOlder?: boolean
   isLoadingOlder?: boolean
   isAutoScrollEnabled: boolean
+  setAutoScrollEnabled?: (enabled: boolean) => void
   variantSelections: Record<string, number | string>
   sessionId: number
   sessionTitle: string
@@ -41,11 +44,13 @@ export function ChatMessageViewport({
   hasOlder = false,
   isLoadingOlder = false,
   isAutoScrollEnabled,
+  setAutoScrollEnabled,
   variantSelections,
   sessionId,
   sessionTitle,
 }: ChatMessageViewportProps) {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
+  const messageListApiRef = useRef<MessageListHandle | null>(null)
   const {
     shareSelection,
     enterShareSelectionMode,
@@ -74,6 +79,16 @@ export function ChatMessageViewport({
     const key = messageKey(highlightedShareMessageId)
     return messageBodiesMap[key]?.toolEvents ?? null
   }, [highlightedShareMessageId, messageBodiesMap])
+
+  const { entries, activeKey, visible, jumpToKey } = useReadingNav({
+    sessionId,
+    metas,
+    bodies,
+    scrollAreaRef,
+    messageListApiRef,
+    isMessagesLoading: isLoading,
+  })
+
   useEffect(() => {
     if (!shareModeActive && isShareDialogOpen) {
       setIsShareDialogOpen(false)
@@ -120,31 +135,94 @@ export function ChatMessageViewport({
     setShareSelection(sessionId, shareSelectableMessageIds)
   }
 
+  const handleJump = (key: string) => {
+    setAutoScrollEnabled?.(false)
+    jumpToKey(key)
+  }
+
   return (
-    <ScrollArea ref={scrollAreaRef} className="chat-message-viewport flex-1 px-3 sm:px-4 md:px-6">
-      <div className={cn('mx-auto w-full max-w-[var(--chat-max-width)] pt-4 md:pt-6 lg:pt-20', shareModeActive ? 'pb-32 md:pb-10' : 'pb-6')}>
-        {hasOlder && (
-          <div className="mb-2 text-center text-xs text-muted-foreground">
-            {isLoadingOlder ? '正在加载更早消息…' : '上滑可加载更早消息'}
-          </div>
-        )}
-        {shareModeActive && (
-          <div className="mb-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm text-foreground">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="font-medium text-primary">分享选择模式已开启</p>
-                <p className="text-xs text-primary/80 mt-1">
-                  已选 {selectedCount} 条消息 · 仅当前会话可分享，切换会话将自动清空选择
-                </p>
-                <ShareSelectionToolSummary
-                  sessionId={sessionId}
-                  messageId={highlightedShareMessageId}
-                  bodyEvents={highlightedBodyEvents ?? undefined}
-                  title="首条选中消息的工具调用"
-                  className="mt-2 max-w-md"
-                />
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <ScrollArea ref={scrollAreaRef} className="chat-message-viewport flex-1 px-3 sm:px-4 md:px-6">
+        <div
+          className={cn(
+            'mx-auto w-full max-w-[var(--chat-max-width)] pt-4 md:pt-6 lg:pt-20',
+            shareModeActive ? 'pb-32 md:pb-10' : 'pb-6',
+          )}
+        >
+          {hasOlder && (
+            <div className="mb-2 text-center text-xs text-muted-foreground">
+              {isLoadingOlder ? '正在加载更早消息…' : '上滑可加载更早消息'}
+            </div>
+          )}
+          {shareModeActive && (
+            <div className="mb-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm text-foreground">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-medium text-primary">分享选择模式已开启</p>
+                  <p className="text-xs text-primary/80 mt-1">
+                    已选 {selectedCount} 条消息 · 仅当前会话可分享，切换会话将自动清空选择
+                  </p>
+                  <ShareSelectionToolSummary
+                    sessionId={sessionId}
+                    messageId={highlightedShareMessageId}
+                    bodyEvents={highlightedBodyEvents ?? undefined}
+                    title="首条选中消息的工具调用"
+                    className="mt-2 max-w-md"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleToggleSelectAll}
+                    disabled={selectableCount === 0}
+                  >
+                    {isAllSelectableChosen ? '反选' : '全选'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => clearShareSelection()}
+                    disabled={selectedCount === 0}
+                  >
+                    清空选中
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={handleExitShareMode}>
+                    返回聊天
+                  </Button>
+                  <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
+                    下一步
+                  </Button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+            </div>
+          )}
+          <ChatErrorBanner error={error} />
+          <MessageList
+            ref={messageListApiRef}
+            metas={metas}
+            bodies={bodies}
+            renderCache={renderCache}
+            isStreaming={isStreaming}
+            isLoading={isLoading}
+            autoScrollEnabled={isAutoScrollEnabled}
+            scrollRootRef={scrollAreaRef}
+            variantSelections={variantSelections}
+            metrics={messageMetrics}
+            shareSelection={shareSelection}
+            onShareToggle={(messageId) => toggleShareSelection(sessionId, messageId)}
+            onShareStart={(messageId) => enterShareSelectionMode(sessionId, messageId)}
+          />
+        </div>
+        {shareModeActive && (
+          <div className="lg:hidden fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
+            <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-full border border-primary/30 bg-[hsl(var(--surface))/0.95] px-4 py-3 shadow-lg backdrop-blur">
+              <span className="text-sm text-foreground">
+                已选 <span className="font-semibold text-primary">{selectedCount}</span> 条消息
+              </span>
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
@@ -154,18 +232,6 @@ export function ChatMessageViewport({
                 >
                   {isAllSelectableChosen ? '反选' : '全选'}
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => clearShareSelection()}
-                  disabled={selectedCount === 0}
-                >
-                  清空选中
-                </Button>
-                <Button type="button" size="sm" variant="outline" onClick={handleExitShareMode}>
-                  返回聊天
-                </Button>
                 <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
                   下一步
                 </Button>
@@ -173,53 +239,18 @@ export function ChatMessageViewport({
             </div>
           </div>
         )}
-        <ChatErrorBanner error={error} />
-        <MessageList
-          metas={metas}
-          bodies={bodies}
-          renderCache={renderCache}
-          isStreaming={isStreaming}
-          isLoading={isLoading}
-          autoScrollEnabled={isAutoScrollEnabled}
-          scrollRootRef={scrollAreaRef}
-          variantSelections={variantSelections}
-          metrics={messageMetrics}
-          shareSelection={shareSelection}
-          onShareToggle={(messageId) => toggleShareSelection(sessionId, messageId)}
-          onShareStart={(messageId) => enterShareSelectionMode(sessionId, messageId)}
+        <ShareDialog
+          sessionId={sessionId}
+          sessionTitle={sessionTitle}
+          selectedMessageIds={selectedMessageIds}
+          open={isShareDialogOpen}
+          onOpenChange={setIsShareDialogOpen}
+          onShareCompleted={handleExitShareMode}
         />
-      </div>
-      {shareModeActive && (
-        <div className="lg:hidden fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
-          <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-full border border-primary/30 bg-[hsl(var(--surface))/0.95] px-4 py-3 shadow-lg backdrop-blur">
-            <span className="text-sm text-foreground">
-              已选 <span className="font-semibold text-primary">{selectedCount}</span> 条消息
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={handleToggleSelectAll}
-                disabled={selectableCount === 0}
-              >
-                {isAllSelectableChosen ? '反选' : '全选'}
-              </Button>
-              <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
-                下一步
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-      <ShareDialog
-        sessionId={sessionId}
-        sessionTitle={sessionTitle}
-        selectedMessageIds={selectedMessageIds}
-        open={isShareDialogOpen}
-        onOpenChange={setIsShareDialogOpen}
-        onShareCompleted={handleExitShareMode}
-      />
-    </ScrollArea>
+      </ScrollArea>
+      {visible && !shareModeActive ? (
+        <ChatTurnToc entries={entries} activeKey={activeKey} onJump={handleJump} />
+      ) : null}
+    </div>
   )
 }
