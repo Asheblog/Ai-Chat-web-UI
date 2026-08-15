@@ -8,14 +8,17 @@ export interface RuntimePaths {
 }
 
 export class PythonRuntimePlatformAdapter {
-  constructor(
-    private readonly env: NodeJS.ProcessEnv,
-    private readonly platform: NodeJS.Platform,
-  ) {}
+  private readonly env: NodeJS.ProcessEnv
+  private readonly platform: NodeJS.Platform
+  private readonly pathImpl: path.PlatformPath
 
-  // 路径解析跟随目标运行平台而非宿主（Linux 容器 POSIX / Windows 宿主 win32），
-  // 保证 Windows 宿主上运行测试/模拟时仍按目标平台生成路径
-  private readonly pathImpl = this.platform === 'win32' ? path.win32 : path.posix
+  constructor(env: NodeJS.ProcessEnv, platform: NodeJS.Platform) {
+    this.env = env
+    this.platform = platform
+    // 路径解析跟随目标运行平台而非宿主（Linux 容器 POSIX / Windows 宿主 win32），
+    // 保证 Windows 宿主上运行测试/模拟时仍按目标平台生成路径
+    this.pathImpl = platform === 'win32' ? path.win32 : path.posix
+  }
 
   resolvePaths(): RuntimePaths {
     const rawDataRoot =

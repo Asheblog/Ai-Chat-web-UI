@@ -250,7 +250,7 @@ export const normalizeConfigQuestions = (raw: unknown): BattleRunQuestionConfig[
 export const parseRunConfigPayload = (raw: string | null | undefined) =>
   safeParseJson<Record<string, any>>(raw || '{}', {})
 
-type LabelConnection = {
+export type LabelConnection = {
   id: number
   prefixId: string | null
 }

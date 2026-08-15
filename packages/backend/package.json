@@ -21,7 +21,8 @@
     "db:studio": "prisma studio",
     "python-runtime:reconcile": "tsx scripts/reconcile-python-runtime.ts",
     "check:broken-connections": "tsx scripts/check-broken-connections.ts",
-    "test": "jest"
+    "test": "jest",
+    "type-check": "tsc --noEmit"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

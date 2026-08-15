@@ -76,7 +76,7 @@ export interface ConnectionServiceDeps {
 /** 前端 API 输入：apiKey 作为写入/验证输入 */
 export interface ConnectionApiKeyPayload {
   id?: number
-  apiKeyLabel?: string
+  apiKeyLabel?: string | null
   apiKey?: string
   modelIds?: string[]
   enable?: boolean

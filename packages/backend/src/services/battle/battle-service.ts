@@ -145,6 +145,7 @@ import {
   clamp,
   compareToolEvents,
   composeModelLabel,
+  type LabelConnection,
   isBattleContentEmpty,
   isFiniteNumber,
   mergeToolEvent,

@@ -65,6 +65,9 @@ jobs:
       - name: Mobile tests
         run: pnpm --filter @aichat/mobile test
 
+      - name: Backend type-check
+        run: pnpm --filter @aichat/backend type-check
+
       - name: Frontend type-check
         run: pnpm --filter @aichat/frontend type-check
 

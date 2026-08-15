@@ -181,8 +181,8 @@ export const serializeToolLogsForPersistence = (
 
   // Step 1: sanitize all entries
   let working = logs.map(sanitizeToolLogEntryForPersistence);
-  let json: string;
-  let byteLength: number;
+  let json = '';
+  let byteLength = 0;
 
   const stringifyAndCheck = (arr: ToolLogEntry[]): boolean => {
     json = JSON.stringify(arr);
@@ -451,11 +451,11 @@ export const parseToolLogsJson = (
           if (mode === 'history-list') {
             for (const key of HISTORY_LIST_DETAIL_KEYS) {
               const value = candidate[key]
-              if (value != null) normalized[key] = value
+              if (value != null) (normalized as Record<string, unknown>)[key] = value
             }
             for (const key of HISTORY_LIST_RICH_IMAGE_DETAIL_KEYS) {
               const value = candidate[key]
-              if (value != null) normalized[key] = value
+              if (value != null) (normalized as Record<string, unknown>)[key] = value
             }
             const explicitHitsCount =
               typeof candidate.hitsCount === 'number' ? candidate.hitsCount : null

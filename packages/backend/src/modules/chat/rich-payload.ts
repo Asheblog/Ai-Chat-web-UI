@@ -44,6 +44,7 @@ export interface ToolEventImageSource {
       description?: string
       relevance?: string
     }>
+    [key: string]: unknown
   }
 }
 

@@ -1,4 +1,4 @@
-import type { RichMessageEvidenceConfidence } from '../../types'
+import type { RichMessageEvidenceConfidence } from '../types'
 import type { VisionProxyConfig, VisionProxyService } from '../modules/chat/services/vision-proxy-service'
 import { isVisionProxyReady } from '../modules/chat/services/vision-proxy-service'
 import { readRemoteImages, type RemoteImageCandidate } from './remote-image-reader'
