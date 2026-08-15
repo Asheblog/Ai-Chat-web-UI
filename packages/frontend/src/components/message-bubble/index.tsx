@@ -17,7 +17,7 @@ import { MessageHeader } from './message-header'
 import { ShareBadge } from './share-badge'
 import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
-import { CotStepTimeline } from './cot-step-timeline'
+import { CotTimeline } from './cot-timeline'
 
 const STREAMING_MARKDOWN_RENDER_INTERVAL_MS = 280
 
@@ -299,11 +299,10 @@ function MessageBubbleComponent({
               }}
             />
           )}
-          <CotStepTimeline
+          <CotTimeline
             meta={meta}
             reasoningRaw={reasoningRaw}
             toolEvents={toolTimeline}
-            defaultExpanded={false}
             isStreaming={Boolean(isStreaming)}
             reasoningPlayedLength={reasoningPlayedLength}
           />

@@ -83,8 +83,22 @@ function ToolResultBody({ event }: { event: ToolEvent }) {
   )
 }
 
-export function CotToolStep({ event }: { event: ToolEvent }) {
-  const [open, setOpen] = useState(false)
+export function CotToolStep({
+  event,
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  event: ToolEvent
+  /** 受控展开态：由外层时间轴/持久化 hook 接管 */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next)
+    else setInternalOpen(next)
+  }
   const toolId = event.identifier || event.apiName || event.tool
   const display = resolveToolDisplay(toolId)
   const Icon = ICON_MAP[display.iconKey] || Wrench
@@ -108,7 +122,7 @@ export function CotToolStep({ event }: { event: ToolEvent }) {
       <button
         type="button"
         className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
         <div className="min-w-0 flex-1">
@@ -144,10 +158,19 @@ export function CotToolStep({ event }: { event: ToolEvent }) {
 
 export function CotToolGroupStep({
   node,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   node: Extract<CotTimelineNode, { type: 'toolGroup' }>
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next)
+    else setInternalOpen(next)
+  }
   const display = resolveToolDisplay(node.toolType)
   const Icon = ICON_MAP[display.iconKey] || Wrench
 
@@ -156,7 +179,7 @@ export function CotToolGroupStep({
       <button
         type="button"
         className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
         <div className="min-w-0 flex-1">

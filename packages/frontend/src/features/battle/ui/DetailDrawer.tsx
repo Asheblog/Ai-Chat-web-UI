@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { CotStepTimeline } from '@/components/message-bubble/cot-step-timeline'
+import { CotTimeline } from '@/components/message-bubble/cot-timeline'
 import { useToast } from '@/components/ui/use-toast'
 import { Check, X, Clock, AlertCircle, Scale, Copy } from 'lucide-react'
 import type { BattleResult, MessageMeta, ToolEvent } from '@/types'
@@ -232,9 +232,9 @@ export function DetailDrawer({
                             </div>
                         )}
 
-                        {/* 交错 CoT 步骤流 */}
+                        {/* 平铺 CoT 时间轴 */}
                         {hasCotProcess && (
-                          <CotStepTimeline
+                          <CotTimeline
                             meta={cotMeta}
                             reasoningRaw={reasoningRaw}
                             toolEvents={toolEvents}

@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import type { ApiResponse, ChatShare, MessageMeta, RichMessagePayload, ShareMessage, ShareMessagesPage, ToolEvent } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
-import { CotStepTimeline } from '@/components/message-bubble/cot-step-timeline'
+import { CotTimeline } from '@/components/message-bubble/cot-timeline'
 import { RichMessageRenderer } from '@/components/message-content/rich-message-renderer'
 import { cn, formatDate } from '@/lib/utils'
 import { mergeAndSortToolEvents } from '@aichat/shared/tool-events'
@@ -123,7 +123,7 @@ function ShareMessageItem({
         </div>
 
         {!isUser && hasProcess && (
-          <CotStepTimeline
+          <CotTimeline
             meta={meta}
             reasoningRaw={reasoningRaw}
             toolEvents={normalizedToolEvents}

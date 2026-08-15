@@ -4,7 +4,7 @@ import type { ChatMessage } from "../chat-types";
 import type { AppTheme } from "../theme";
 import { spacing } from "../theme";
 import { contentToText } from "./chat-message-utils";
-import { CotStepTimeline } from "./CotStepTimeline";
+import { CotTimeline } from "./CotTimeline";
 import { MarkdownText } from "./MarkdownText";
 
 type MessageBubbleProps = {
@@ -39,8 +39,7 @@ export function MessageBubble({ message, theme }: MessageBubbleProps) {
         ]}
       >
         {hasCotProcess ? (
-          <CotStepTimeline
-            defaultExpanded={isStreaming}
+          <CotTimeline
             isStreaming={isStreaming}
             reasoningRaw={message.reasoning ?? ""}
             theme={theme}

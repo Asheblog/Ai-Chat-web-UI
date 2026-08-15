@@ -171,11 +171,15 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
         return Math.max(140, Math.min(360, 140 + Math.ceil(contentLen / 120) * 20))
       }
       const reasoningLen = body.reasoning?.length ?? 0
+      const toolEventCount = body.toolEvents?.length ?? 0
       const imageCount = meta.images?.length ?? 0
       const artifactCount = (body.artifacts ?? meta.artifacts ?? []).length
       let estimated = 110
       estimated += Math.min(600, Math.ceil(contentLen / 90) * 22)
       estimated += Math.min(240, Math.ceil(reasoningLen / 180) * 18)
+      // 平铺时间轴：折叠态工具卡/推理卡各按一行估高，避免工具密集消息滚动跳动
+      estimated += Math.min(320, toolEventCount * 48)
+      if (toolEventCount > 0 || reasoningLen > 0) estimated += 44
       estimated += imageCount * 70
       estimated += artifactCount * 44
       if (meta.role === 'user') estimated -= 14

@@ -20,18 +20,18 @@
 ## 思考与推理
 
 - **Reasoning（推理/思考）**：模型在生成最终回答之前的内部思考过程，以文本形式暴露给用户；推理通道不含工具进度文案
-- **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。在 UI 中按 Reasoning Offset 与工具结果交错为「深度思考 ↔ 工具步骤」时间线展示
-- **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；用于将工具事件插入对应推理段落之间，形成交错步骤流（Start/End 由后端与流式层写入）
+- **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。主聊天 / 分享 / Battle / Android 均按 Reasoning Offset 将推理与工具拆为平铺步骤流（每个节点独立卡片）
+- **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；用于将工具事件插入对应推理段落之间，形成步骤流（Start/End 由后端与流式层写入）
 - **Reasoning Text**：推理的文本内容，流式传输；展示前可对历史污染行做剥离，但 offset 切片始终基于原始文本
-- **Cot Step Timeline（交错步骤流）**：主聊天 / 分享 / Battle / Android 共用的过程展示；节点由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建；列表 key 由 `cotTimelineNodeKey` 生成（推理段仅按 `charStart` 稳定，避免流式增长 remount 打字机）
+- **Cot Timeline（平铺 CoT 时间轴）**：四端统一的过程展示；Web `CotTimeline` 与 Android RN `CotTimeline` 均由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建节点，并直接渲染为消息体的一级兄弟卡片；每张卡片独立折叠，Web 侧按消息/工具实例持久化（`aichat.cot_reasoning_visibility` / `aichat.cot_tool_visibility`），不再共享「深度思考过程」总壳；列表 key 由 `cotTimelineNodeKey` 生成（推理段仅按 `charStart` 稳定，避免流式增长 remount 打字机）
 
 ## 工具调用
 
 - **Tool Event（工具事件）**：一次工具调用的完整生命周期记录，包含工具名、状态、参数、结果等
 - **Tool Call Source**：工具来源 — builtin（内置）、plugin（插件）、MCP、workspace（工作区）、system
 - **Tool Call Phase**：工具调用阶段 — arguments_streaming → pending_approval → executing → result/error/rejected/aborted
-- **Tool Timeline（工具时间轴）**：消息内工具调用事件按时间/offset 排序后的序列；在交错步骤流中与推理段穿插展示，并可按 web_search/read_url 合并为工具组
-- **Tool Node（工具节点）**：步骤流中的单个工具步骤，展示类型图标、标题、状态与可展开的参数/结果
+- **Tool Timeline（工具时间轴）**：消息内工具调用事件按时间/offset 排序后的序列；在步骤流中与推理段穿插排列，并可按 web_search/read_url 合并为工具组
+- **Tool Node（工具节点）**：步骤流中的单个工具步骤，展示类型图标、标题、状态与可展开的参数/结果；四端均为独立平铺卡片
 - **Tool Group（工具合并组）**：将同一 offset 下相关的搜索/读取调用合并展示，展开后显示各子调用明细
 - **History List Tool Event Projection（历史列表工具事件投影）**：`GET .../messages` 分页列表对 Tool Event 的只读投影——去掉 `hits[]` 与大体量 `details`，保留 CoT 折叠/分组所需字段（含 `hitsCount`）；列表路径以 `history-list` 模式解析 `toolLogsJson`（不物化 hits）；`richPayload` 仍用含证据图字段的事件构建后再投影；单条 progress/by-client 读路径保持完整事件
 - **Session Usage Lightweight Read（会话用量轻读）**：切会话不再请求重型 `/usage`（含 Tokenizer）；侧栏用量来自 `/sessions/usage` 缓存；`/usage` 默认仅 SQL aggregate totals + last_round，`includeContext=1` 才计算 context token
