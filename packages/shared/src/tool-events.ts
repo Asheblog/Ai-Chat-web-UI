@@ -51,6 +51,45 @@ export interface ToolEvent {
 const isValidReasoningOffset = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0
 
+/**
+ * 基于当前推理 buffer 长度回填 ToolEventDetails 的 reasoningOffsetStart/End/offset。
+ * - start 或首次见到 callId：缺 Start 时写入
+ * - result/error：写入 End
+ * 未发生变更时返回原对象引用，调用方可用于判断是否需要复制 payload。
+ */
+export const applyReasoningOffsetsToDetails = (
+  details: ToolEventDetails | undefined,
+  reasoningBufferLength: number,
+  stage: ToolEventStage,
+  isFirstSight = false,
+): ToolEventDetails | undefined => {
+  if (stage !== 'start' && stage !== 'result' && stage !== 'error') {
+    return details
+  }
+
+  const offset = Math.max(0, Math.floor(reasoningBufferLength))
+  const next: ToolEventDetails = { ...(details ?? {}) }
+  let changed = false
+
+  if (!isValidReasoningOffset(next.reasoningOffsetStart) && (stage === 'start' || isFirstSight)) {
+    next.reasoningOffsetStart = offset
+    changed = true
+  }
+
+  if (stage === 'result' || stage === 'error') {
+    next.reasoningOffsetEnd = offset
+    changed = true
+  }
+
+  if (!isValidReasoningOffset(next.reasoningOffset) && isValidReasoningOffset(next.reasoningOffsetStart)) {
+    next.reasoningOffset = next.reasoningOffsetStart
+    changed = true
+  }
+
+  if (!changed) return details
+  return next
+}
+
 export const resolveReasoningOffsetStart = (event: ToolEvent) => {
   const details = event.details
   if (!details || typeof details !== 'object') return null
@@ -78,30 +117,18 @@ export const enrichToolEventReasoningOffsets = (
     return payload
   }
 
-  const offset = Math.max(0, Math.floor(reasoningBufferLength))
   const rawDetails =
     payload.details && typeof payload.details === 'object' && !Array.isArray(payload.details)
-      ? (payload.details as Record<string, unknown>)
-      : null
-  const details: Record<string, unknown> = rawDetails ? { ...rawDetails } : {}
-  let changed = false
+      ? (payload.details as ToolEventDetails)
+      : undefined
+  const details = applyReasoningOffsetsToDetails(
+    rawDetails,
+    reasoningBufferLength,
+    stage,
+    isFirstSight,
+  )
 
-  if (!isValidReasoningOffset(details.reasoningOffsetStart) && (stage === 'start' || isFirstSight)) {
-    details.reasoningOffsetStart = offset
-    changed = true
-  }
-
-  if (stage === 'result' || stage === 'error') {
-    details.reasoningOffsetEnd = offset
-    changed = true
-  }
-
-  if (!isValidReasoningOffset(details.reasoningOffset) && isValidReasoningOffset(details.reasoningOffsetStart)) {
-    details.reasoningOffset = details.reasoningOffsetStart
-    changed = true
-  }
-
-  if (!changed) return payload
+  if (details === rawDetails) return payload
   return { ...payload, details }
 }
 

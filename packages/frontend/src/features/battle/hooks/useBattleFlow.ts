@@ -24,6 +24,12 @@ import {
   compareToolEvents as compareToolEvent,
   mergeToolEvents as mergeToolEvent,
 } from '@aichat/shared/tool-events'
+import {
+  normalizeLegacyStage as normalizeToolCallStage,
+  normalizeToolCallPhase,
+  normalizeToolCallSource,
+  normalizeToolCallStatus,
+} from '@aichat/shared/chat-stream-parser'
 
 // ==================== Types ====================
 
@@ -351,22 +357,6 @@ const normalizeBattleContent = (raw: unknown): BattleContent => {
   return { text, images }
 }
 
-const TOOL_CALL_PHASES = [
-  'arguments_streaming',
-  'pending_approval',
-  'executing',
-  'result',
-  'error',
-  'rejected',
-  'aborted',
-] as const
-
-const TOOL_CALL_STATUSES = ['running', 'success', 'error', 'pending', 'rejected', 'aborted'] as const
-
-const TOOL_CALL_SOURCES = ['builtin', 'plugin', 'mcp', 'workspace', 'system'] as const
-
-const TOOL_CALL_STAGES = ['start', 'result', 'error'] as const
-
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -393,63 +383,6 @@ const asTimestamp = (value: unknown, fallback: number) => {
   return fallback
 }
 
-const normalizeToolCallSource = (value: unknown): ToolEvent['source'] => {
-  if (typeof value === 'string' && TOOL_CALL_SOURCES.includes(value as (typeof TOOL_CALL_SOURCES)[number])) {
-    return value as ToolEvent['source']
-  }
-  return undefined
-}
-
-const normalizeToolCallPhase = (
-  phase: unknown,
-  status: unknown,
-  stage: unknown,
-): ToolEvent['phase'] => {
-  if (typeof phase === 'string' && TOOL_CALL_PHASES.includes(phase as (typeof TOOL_CALL_PHASES)[number])) {
-    return phase as ToolEvent['phase']
-  }
-  if (status === 'pending') return 'pending_approval'
-  if (status === 'success') return 'result'
-  if (status === 'rejected') return 'rejected'
-  if (status === 'aborted') return 'aborted'
-  if (status === 'error') return 'error'
-  if (status === 'running') return 'executing'
-  if (stage === 'result') return 'result'
-  if (stage === 'error') return 'error'
-  if (stage === 'start') return 'executing'
-  return undefined
-}
-
-const normalizeToolCallStatus = (
-  status: unknown,
-  phase: ToolEvent['phase'],
-  stage: unknown,
-): ToolEvent['status'] => {
-  if (typeof status === 'string' && TOOL_CALL_STATUSES.includes(status as (typeof TOOL_CALL_STATUSES)[number])) {
-    return status as ToolEvent['status']
-  }
-  if (phase === 'pending_approval') return 'pending'
-  if (phase === 'result') return 'success'
-  if (phase === 'rejected') return 'rejected'
-  if (phase === 'aborted') return 'aborted'
-  if (phase === 'error') return 'error'
-  if (stage === 'result') return 'success'
-  if (stage === 'error') return 'error'
-  return 'running'
-}
-
-const normalizeToolCallStage = (
-  stage: unknown,
-  phase: ToolEvent['phase'],
-): ToolEvent['stage'] => {
-  if (typeof stage === 'string' && TOOL_CALL_STAGES.includes(stage as (typeof TOOL_CALL_STAGES)[number])) {
-    return stage as ToolEvent['stage']
-  }
-  if (phase === 'result') return 'result'
-  if (phase === 'error' || phase === 'rejected' || phase === 'aborted') return 'error'
-  return 'start'
-}
-
 export const normalizeBattleToolEvent = (raw: unknown): ToolEvent | null => {
   const event = asRecord(raw)
   if (!event) return null
@@ -459,7 +392,7 @@ export const normalizeBattleToolEvent = (raw: unknown): ToolEvent | null => {
   const createdAt = asTimestamp(event.createdAt, now)
   const updatedAt = asTimestamp(event.updatedAt, createdAt)
   const phase = normalizeToolCallPhase(event.phase, event.status, event.stage)
-  const status = normalizeToolCallStatus(event.status, phase, event.stage)
+  const status = normalizeToolCallStatus(event.status, phase, event.stage) ?? 'running'
   const stage = normalizeToolCallStage(event.stage, phase)
   const id = pickString(event.id, event.callId) || `tool-${createdAt}`
   const callId = pickString(event.callId, event.id) || undefined

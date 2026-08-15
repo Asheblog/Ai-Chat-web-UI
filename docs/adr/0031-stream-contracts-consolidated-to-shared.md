@@ -11,7 +11,8 @@ web 前端（`features/chat/api/stream-reader.ts`）、battle（`features/battle
 收敛点：
 - `@aichat/shared/chat-stream-parser`：SSE 帧解析 + execution/legacy 事件归一化（mobile 子集缺口一并补齐）
 - `@aichat/shared/tool-events`：resolveEventStatus / mergeToolEvents / compareToolEvents / buildToolSummary
-- battle 的 `BattleStreamEvent` 协议与 ChatStreamChunk 不同，`battle/api.ts` 私有 SSE 循环保留，不强制合并
+- `@aichat/shared/stream-message-reducer`：ChatStreamChunk → 消息 content / reasoning / ToolEvent 的增量归约（upsertToolEventFromChunk 等）
+- battle 的 `BattleStreamEvent` 协议与 ChatStreamChunk 不同，`battle/api.ts` 私有 SSE 循环保留，不强制合并；battle 的 phase/status/stage/source 归一化复用 chat-stream-parser
 
 行为说明：
 - legacy `payload.error`（无 `type` 字段）由旧实现的抛异常改为返回 `{ type: 'error' }` chunk；`parseStreamLines` 据此将错误事件视为终止

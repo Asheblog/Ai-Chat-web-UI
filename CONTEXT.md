@@ -41,6 +41,7 @@
 - **Stream Chunk（流式块）**：服务端 execution SSE 与 legacy 事件经统一归一化后的客户端产物，web / mobile 共用 `@aichat/shared/chat-stream-contract` 类型定义
 - **Stream Normalizer（流式归一化器）**：`@aichat/shared/chat-stream-parser`，将 SSE 帧与事件归一化为 Stream Chunk 的单一实现，web 与 mobile 不得各自维护解析副本
 - **Tool Event Normalizer（工具事件归一化器）**：`@aichat/shared/tool-events`，ToolEvent 状态推断、合并、排序与中文摘要的单一实现，battle 与 chat 共用
+- **Stream Message Reducer（流式消息归约器）**：`@aichat/shared/stream-message-reducer`，将 Stream Chunk 增量合并为消息 content / reasoning / ToolEvent 的单一实现，web 与 mobile 的流式状态更新只允许在此处维护归约规则
 - **Battle Stream Event（乱斗流事件）**：Battle 专有的 `BattleStreamEvent` 协议，与 ChatStreamChunk 不同，battle 私有 SSE 循环不并入 chat 解析器
 
 ## 搜索
