@@ -4,7 +4,7 @@
  * 统一解析系统设置和环境变量，提供类型安全的流式配置。
  */
 
-import { parseBooleanSetting, parseNumberSetting, clampNumber } from '../../../utils/parsers'
+import { parseBooleanSetting, parseNumberSetting, clampNumber } from '../../utils/parsers'
 
 export interface StreamConfig {
   // Usage 配置

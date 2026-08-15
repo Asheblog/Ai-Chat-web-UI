@@ -9,11 +9,13 @@
 
 import { BackendLogger as log } from '../../utils/logger'
 import { prisma } from '../../db'
-import { imageGenerationService, ImageGenerationError, GeneratedImageStorage, type ImageGenerationResult, type GeneratedImage } from '../../services/image-generation'
+import { ImageGenerationError, GeneratedImageStorage, type ImageGenerationResult, type GeneratedImage, type ImageGenerationService } from '../../services/image-generation'
 import type { UsageQuotaSnapshot, Message } from '../../types'
 import { serializeQuotaSnapshot } from '../../utils/quota'
 import { parseCapabilityEnvelope } from '../../utils/capabilities'
 import { determineChatImageBaseUrl } from '../../utils/chat-images'
+import { getRegistry } from '../../container/service-registry'
+import { SERVICE_KEYS } from '../../container/service-keys'
 
 export interface ImageGenerationResponseParams {
   sessionId: number
@@ -91,7 +93,10 @@ export async function createImageGenerationResponse(
         })
 
         // 调用生图服务
-        const result: ImageGenerationResult = await imageGenerationService.generate(
+        const imageGeneration = getRegistry().resolve<ImageGenerationService>(
+          SERVICE_KEYS.imageGenerationService,
+        )
+        const result: ImageGenerationResult = await imageGeneration.generate(
           {
             id: connection.id,
             baseUrl: connection.baseUrl,

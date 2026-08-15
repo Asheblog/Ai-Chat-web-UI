@@ -4,7 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { LatexTraceEventRecord, TaskTraceEventRecord } from '@/types'
 import { statusLabels, formatDateTime, formatDuration } from './TaskTraceConsole.utils'
-import type { TaskTraceDetailDialogProps } from './TaskTraceDetailDialog'
+import type { TaskTraceDetailDialogProps } from './TaskTraceDetail.types'
 import type { FC } from 'react'
 
 export const TraceMetaSection: FC<{

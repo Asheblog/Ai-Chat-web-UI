@@ -87,6 +87,29 @@ describe('McpService', () => {
     })
   })
 
+  describe('session ownership', () => {
+    it('checks user-owned sessions through the injected prisma client', async () => {
+      const { svc } = buildService()
+      const prisma = {
+        chatSession: {
+          findFirst: jest.fn().mockResolvedValue({ id: 7 }),
+        },
+      }
+      const sessionService = new McpService({ prisma: prisma as any })
+
+      await expect(
+        sessionService.isSessionOwnedByActor(
+          { type: 'user', id: 1, role: 'USER', status: 'ACTIVE', username: 'u', identifier: 'user:1' },
+          7,
+        ),
+      ).resolves.toBe(true)
+      expect(prisma.chatSession.findFirst).toHaveBeenCalledWith({
+        where: { id: 7, userId: 1 },
+        select: { id: true },
+      })
+    })
+  })
+
   describe('installations', () => {
     it('admin can create remote installation', async () => {
       const { svc, repository } = buildService()

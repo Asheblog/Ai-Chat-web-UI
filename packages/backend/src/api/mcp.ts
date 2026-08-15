@@ -4,7 +4,6 @@ import { z } from 'zod'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import { McpService, McpServiceError } from '../services/mcp'
-import { prisma } from '../db'
 
 const handleServiceError = (c: any, error: unknown, fallback: string, label: string) => {
   if (error instanceof McpServiceError) {
@@ -36,16 +35,14 @@ async function getActorVisibleConnectionIds(svc: McpService, actor: Actor): Prom
  * Validate that a session belongs to the actor (user by userId, anonymous by anonymousKey).
  * Returns true if the actor owns (or is admin and can see) the session.
  */
-async function assertSessionOwnership(actor: Actor, sessionId: number, allowAdmin = false): Promise<boolean> {
+async function assertSessionOwnership(
+  svc: McpService,
+  actor: Actor,
+  sessionId: number,
+  allowAdmin = false,
+): Promise<boolean> {
   if (allowAdmin && isAdmin(actor)) return true
-  const where: Record<string, unknown> = { id: sessionId }
-  if (actor.type === 'user') {
-    where.userId = actor.id
-  } else {
-    where.anonymousKey = actor.key
-  }
-  const session = await (prisma as any).chatSession.findFirst({ where, select: { id: true } })
-  return Boolean(session)
+  return svc.isSessionOwnedByActor(actor, sessionId)
 }
 
 /**
@@ -325,7 +322,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
           if (!Number.isFinite(sid) || sid <= 0) {
             return c.json({ success: false, error: '无效的 scopeId' }, 400)
           }
-          if (!(await assertSessionOwnership(actor, sid, false))) {
+          if (!(await assertSessionOwnership(svc, actor, sid, false))) {
             return c.json({ success: false, error: '无权访问此会话' }, 404)
           }
         }
@@ -383,7 +380,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
         if (b.scopeType === 'session') {
           const sid = Number(b.scopeId)
           if (!Number.isFinite(sid) || sid <= 0) continue
-          if (!(await assertSessionOwnership(actor, sid, false))) continue
+          if (!(await assertSessionOwnership(svc, actor, sid, false))) continue
           // Connection must be visible
           if (!visibleIds.has(b.connectionId)) continue
           filtered.push(b)
@@ -424,7 +421,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
             if (!Number.isFinite(sid) || sid <= 0) {
               return c.json({ success: false, error: '绑定数据异常' }, 400)
             }
-            if (!(await assertSessionOwnership(actor, sid, false))) {
+            if (!(await assertSessionOwnership(svc, actor, sid, false))) {
               return c.json({ success: false, error: '无权访问此会话' }, 404)
             }
           }
@@ -465,7 +462,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
           if (!Number.isFinite(sid) || sid <= 0) {
             return c.json({ success: false, error: '绑定数据异常' }, 400)
           }
-          if (!(await assertSessionOwnership(actor, sid, false))) {
+          if (!(await assertSessionOwnership(svc, actor, sid, false))) {
             return c.json({ success: false, error: '无权访问此会话' }, 404)
           }
         }
@@ -623,7 +620,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
       const actor = c.get('actor') as Actor
 
       // Validate session ownership (admin also must own or have access)
-      if (!(await assertSessionOwnership(actor, sessionId, true))) {
+      if (!(await assertSessionOwnership(svc, actor, sessionId, true))) {
         return c.json({ success: false, error: '会话不存在或无权访问' }, 404)
       }
 

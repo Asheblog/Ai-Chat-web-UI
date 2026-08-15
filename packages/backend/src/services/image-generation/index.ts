@@ -1,7 +1,5 @@
 export {
   ImageGenerationService,
-  imageGenerationService,
-  setImageGenerationService,
   ImageGenerationError,
   GeminiImageGenerationError,
   type ImageGenerationApiType,

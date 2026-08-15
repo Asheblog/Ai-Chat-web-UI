@@ -4,7 +4,6 @@ import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { CHAT_IMAGE_PUBLIC_PATH, CHAT_IMAGE_STORAGE_ROOT } from './config/storage';
-import { ImageGenerationService, setImageGenerationService } from './services/image-generation';
 import { createAppContainer } from './container/app-container';
 
 // 导入路由
@@ -29,23 +28,8 @@ import { createSystemLogsApi } from './api/system-logs';
 import { createSkillsApi } from './api/skills';
 import { createMcpApi } from './api/mcp';
 import { createSecretVaultApi } from './api/secret-vault';
-import { McpService } from './services/mcp';
 import { createArtifactsApi } from './api/artifacts';
 import { createPromptTemplatesApi } from './api/prompt-templates';
-import { SkillInstaller } from './modules/skills/skill-installer';
-import { SkillApprovalService } from './modules/skills/skill-approval-service';
-import { ChatMessageQueryService } from './modules/chat/services/message-query-service';
-import { ConversationCompressionService } from './modules/chat/services/conversation-compression-service';
-import { NonStreamChatService } from './modules/chat/services/non-stream-chat-service';
-import { TitleSummaryService } from './modules/chat/services/title-summary-service';
-import { ReasoningCompatibilityService } from './modules/chat/services/reasoning-compatibility-service';
-import { ProviderRequester } from './modules/chat/services/provider-requester';
-import { NonStreamFallbackService } from './modules/chat/services/non-stream-fallback-service';
-import { AssistantProgressService } from './modules/chat/services/assistant-progress-service';
-import { StreamUsageService } from './modules/chat/services/stream-usage-service';
-import { StreamTraceService } from './modules/chat/services/stream-trace-service';
-import { StreamSseService } from './modules/chat/services/stream-sse-service';
-import { VisionProxyService } from './modules/chat/services/vision-proxy-service';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -61,25 +45,6 @@ const chatRequestBuilder = container.chatRequestBuilder;
 // 设置 RAG 初始化器依赖并启动
 setRAGInitializerDeps({ prisma: appContext.prisma, secretVault });
 reloadRAGServices();
-
-const skillInstaller = new SkillInstaller({ prisma: appContext.prisma });
-const skillApprovalService = new SkillApprovalService({ prisma: appContext.prisma });
-const providerRequester = new ProviderRequester();
-setImageGenerationService(new ImageGenerationService({ secretVault }));
-const nonStreamFallbackService = new NonStreamFallbackService();
-const assistantProgressService = new AssistantProgressService({ prisma: appContext.prisma });
-const streamUsageService = new StreamUsageService();
-const streamTraceService = new StreamTraceService();
-const streamSseService = new StreamSseService();
-const reasoningCompatibilityService = new ReasoningCompatibilityService({ prisma: appContext.prisma });
-const conversationCompressionService = new ConversationCompressionService({ prisma: appContext.prisma, secretVault });
-const chatMessageQueryService = new ChatMessageQueryService({ prisma: appContext.prisma });
-const nonStreamChatService = new NonStreamChatService({
-  prisma: appContext.prisma,
-  requestBuilder: chatRequestBuilder,
-  requester: providerRequester,
-});
-const titleSummaryService = new TitleSummaryService({ prisma: appContext.prisma, secretVault });
 
 const app = new Hono();
 
@@ -135,11 +100,11 @@ app.route('/api/chat', createChatApi({
   messageRoutes: {
     prisma: appContext.prisma,
     chatService: container.chatService,
-    chatMessageQueryService,
+    chatMessageQueryService: container.chatMessageQueryService,
   },
   compressionRoutes: {
     chatService: container.chatService,
-    conversationCompressionService,
+    conversationCompressionService: container.conversationCompressionService,
   },
   attachmentRoutes: {
     prisma: appContext.prisma,
@@ -148,20 +113,20 @@ app.route('/api/chat', createChatApi({
     prisma: appContext.prisma,
     chatService: container.chatService,
     chatRequestBuilder,
-    reasoningCompatibilityService,
-    providerRequester,
-    nonStreamFallbackService,
-    assistantProgressService,
-    streamUsageService,
-    streamTraceService,
-    streamSseService,
-    conversationCompressionService,
-    visionProxyService: new VisionProxyService({ secretVault }),
+    reasoningCompatibilityService: container.reasoningCompatibilityService,
+    providerRequester: container.providerRequester,
+    nonStreamFallbackService: container.nonStreamFallbackService,
+    assistantProgressService: container.assistantProgressService,
+    streamUsageService: container.streamUsageService,
+    streamTraceService: container.streamTraceService,
+    streamSseService: container.streamSseService,
+    conversationCompressionService: container.conversationCompressionService,
+    visionProxyService: container.visionProxyService,
   },
   completionRoutes: {
     prisma: appContext.prisma,
-    nonStreamService: nonStreamChatService,
-    conversationCompressionService,
+    nonStreamService: container.nonStreamChatService,
+    conversationCompressionService: container.conversationCompressionService,
   },
   controlRoutes: {
     prisma: appContext.prisma,
@@ -173,7 +138,7 @@ app.route('/api/chat', createChatApi({
   },
   titleSummaryRoutes: {
     prisma: appContext.prisma,
-    service: titleSummaryService,
+    service: container.titleSummaryService,
     settingsService: container.settingsService,
   },
   workspaceRoutes: {
@@ -191,8 +156,14 @@ app.route('/api/task-trace', createTaskTraceApi({
   taskTraceService: container.taskTraceService,
   taskTraceFileService: container.taskTraceFileService,
 }));
-app.route('/api/shares', createSharesApi({ shareService: container.shareService }));
-app.route('/api/battle', createBattleApi({ battleService: container.battleService }));
+app.route('/api/shares', createSharesApi({
+  shareService: container.shareService,
+  streamSettingsService: container.streamSettingsService,
+}));
+app.route('/api/battle', createBattleApi({
+  battleService: container.battleService,
+  streamSettingsService: container.streamSettingsService,
+}));
 
 // 文档路由（RAG 服务状态在请求时动态检查）
 app.route('/api/documents', createDocumentsApi({
@@ -213,23 +184,12 @@ app.route('/api/knowledge-bases', createKnowledgeBasesApi(appContext.prisma));
 app.route('/api/system-logs', createSystemLogsApi({ systemLogService: container.systemLogService }));
 app.route('/api/skills', createSkillsApi({
   prisma: appContext.prisma,
-  skillInstaller,
-  skillApprovalService,
+  skillInstaller: container.skillInstaller,
+  skillApprovalService: container.skillApprovalService,
   pythonRuntimeService: container.pythonRuntimeService,
 }));
 
-const mcpService = new McpService({
-  prisma: appContext.prisma,
-  getSystemSetting: async (key: string) => {
-    try {
-      const setting = await appContext.prisma.systemSetting.findUnique({ where: { key } })
-      return setting?.value ?? null
-    } catch {
-      return null
-    }
-  },
-});
-app.route('/api/mcp', createMcpApi({ mcpService }));
+app.route('/api/mcp', createMcpApi({ mcpService: container.mcpService }));
 app.route('/api/secrets', createSecretVaultApi(secretVault));
 
 app.route('/api/artifacts', createArtifactsApi({ artifactService: container.artifactService }));

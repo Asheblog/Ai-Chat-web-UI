@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ComposerAttachmentList } from './composer-attachment-list'
 import { AttachmentUploadButton } from './attachment-upload-button'
 import { PlusMenuContent } from '@/components/plus-menu-content'
-import type { ComposerSkillOption } from './chat-composer-panel'
+import type { ComposerSkillOption } from './composer-types'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
 import { cn } from '@/lib/utils'

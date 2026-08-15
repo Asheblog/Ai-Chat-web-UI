@@ -27,7 +27,8 @@
     "mobile:android": "pnpm --filter @aichat/mobile android",
     "mobile:type-check": "pnpm --filter @aichat/mobile type-check",
     "e2e:provider": "node -r tsx/register scripts/e2e-provider.ts",
-    "e2e:provider:img": "node -r tsx/register scripts/e2e-provider-image.ts"
+    "e2e:provider:img": "node -r tsx/register scripts/e2e-provider-image.ts",
+    "architecture:check": "node scripts/check-architecture.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

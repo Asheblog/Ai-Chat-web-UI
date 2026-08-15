@@ -45,6 +45,23 @@ import { SystemSettingsService } from '../services/settings/system-settings-serv
 import { AnonymousCleanupService } from '../services/cleanup/anonymous-cleanup-service'
 import { ChatImageService } from '../services/attachment/chat-image-service'
 import { TaskTraceConfigService } from '../services/task-trace/task-trace-config-service'
+import { StreamSettingsService } from '../services/stream'
+import { ImageGenerationService } from '../services/image-generation'
+import { McpService } from '../services/mcp'
+import { SkillInstaller } from '../modules/skills/skill-installer'
+import { SkillApprovalService } from '../modules/skills/skill-approval-service'
+import { ProviderRequester } from '../modules/chat/services/provider-requester'
+import { NonStreamFallbackService } from '../modules/chat/services/non-stream-fallback-service'
+import { AssistantProgressService } from '../modules/chat/services/assistant-progress-service'
+import { StreamUsageService } from '../modules/chat/services/stream-usage-service'
+import { StreamTraceService } from '../modules/chat/services/stream-trace-service'
+import { StreamSseService } from '../modules/chat/services/stream-sse-service'
+import { ReasoningCompatibilityService } from '../modules/chat/services/reasoning-compatibility-service'
+import { ConversationCompressionService } from '../modules/chat/services/conversation-compression-service'
+import { ChatMessageQueryService } from '../modules/chat/services/message-query-service'
+import { NonStreamChatService } from '../modules/chat/services/non-stream-chat-service'
+import { TitleSummaryService } from '../modules/chat/services/title-summary-service'
+import { VisionProxyService } from '../modules/chat/services/vision-proxy-service'
 
 import { AuthUtils } from '../utils/auth'
 import {
@@ -115,6 +132,23 @@ export interface AppContainerDeps {
   anonymousCleanupService?: AnonymousCleanupService
   chatImageService?: ChatImageService
   taskTraceConfigService?: TaskTraceConfigService
+  streamSettingsService?: StreamSettingsService
+  imageGenerationService?: ImageGenerationService
+  mcpService?: McpService
+  skillInstaller?: SkillInstaller
+  skillApprovalService?: SkillApprovalService
+  providerRequester?: ProviderRequester
+  nonStreamFallbackService?: NonStreamFallbackService
+  assistantProgressService?: AssistantProgressService
+  streamUsageService?: StreamUsageService
+  streamTraceService?: StreamTraceService
+  streamSseService?: StreamSseService
+  reasoningCompatibilityService?: ReasoningCompatibilityService
+  conversationCompressionService?: ConversationCompressionService
+  chatMessageQueryService?: ChatMessageQueryService
+  nonStreamChatService?: NonStreamChatService
+  titleSummaryService?: TitleSummaryService
+  visionProxyService?: VisionProxyService
 }
 
 export class AppContainer {
@@ -150,6 +184,23 @@ export class AppContainer {
   readonly workspaceCleanupService: WorkspaceCleanupService
   readonly pythonRuntimeService: PythonRuntimeService
   readonly systemLogService: SystemLogService
+  readonly streamSettingsService: StreamSettingsService
+  readonly imageGenerationService: ImageGenerationService
+  readonly mcpService: McpService
+  readonly skillInstaller: SkillInstaller
+  readonly skillApprovalService: SkillApprovalService
+  readonly providerRequester: ProviderRequester
+  readonly nonStreamFallbackService: NonStreamFallbackService
+  readonly assistantProgressService: AssistantProgressService
+  readonly streamUsageService: StreamUsageService
+  readonly streamTraceService: StreamTraceService
+  readonly streamSseService: StreamSseService
+  readonly reasoningCompatibilityService: ReasoningCompatibilityService
+  readonly conversationCompressionService: ConversationCompressionService
+  readonly chatMessageQueryService: ChatMessageQueryService
+  readonly nonStreamChatService: NonStreamChatService
+  readonly titleSummaryService: TitleSummaryService
+  readonly visionProxyService: VisionProxyService
 
   // Phase 3: New Utils-layer Services
   readonly systemSettingsService: SystemSettingsService
@@ -191,6 +242,100 @@ export class AppContainer {
       prisma: this.context.prisma,
       secretVault: this.secretVault,
     })
+
+    // Chat / stream collaborators are wired here instead of being constructed ad-hoc
+    // in index.ts. This keeps every singleton behind one composition root.
+    this.streamSettingsService =
+      deps.streamSettingsService ??
+      new StreamSettingsService({ prisma: this.context.prisma })
+    registry.register(SERVICE_KEYS.streamSettingsService, this.streamSettingsService)
+
+    this.providerRequester = deps.providerRequester ?? new ProviderRequester()
+    registry.register(SERVICE_KEYS.providerRequester, this.providerRequester)
+
+    this.imageGenerationService =
+      deps.imageGenerationService ??
+      new ImageGenerationService({ secretVault: this.secretVault })
+    registry.register(SERVICE_KEYS.imageGenerationService, this.imageGenerationService)
+
+    this.nonStreamFallbackService =
+      deps.nonStreamFallbackService ?? new NonStreamFallbackService()
+    registry.register(SERVICE_KEYS.nonStreamFallbackService, this.nonStreamFallbackService)
+
+    this.assistantProgressService =
+      deps.assistantProgressService ??
+      new AssistantProgressService({ prisma: this.context.prisma })
+    registry.register(SERVICE_KEYS.assistantProgressService, this.assistantProgressService)
+
+    this.streamUsageService = deps.streamUsageService ?? new StreamUsageService()
+    registry.register(SERVICE_KEYS.streamUsageService, this.streamUsageService)
+
+    this.streamTraceService = deps.streamTraceService ?? new StreamTraceService()
+    registry.register(SERVICE_KEYS.streamTraceService, this.streamTraceService)
+
+    this.streamSseService = deps.streamSseService ?? new StreamSseService()
+    registry.register(SERVICE_KEYS.streamSseService, this.streamSseService)
+
+    this.reasoningCompatibilityService =
+      deps.reasoningCompatibilityService ??
+      new ReasoningCompatibilityService({ prisma: this.context.prisma })
+    registry.register(SERVICE_KEYS.reasoningCompatibilityService, this.reasoningCompatibilityService)
+
+    this.conversationCompressionService =
+      deps.conversationCompressionService ??
+      new ConversationCompressionService({
+        prisma: this.context.prisma,
+        secretVault: this.secretVault,
+      })
+    registry.register(SERVICE_KEYS.conversationCompressionService, this.conversationCompressionService)
+
+    this.chatMessageQueryService =
+      deps.chatMessageQueryService ??
+      new ChatMessageQueryService({ prisma: this.context.prisma })
+    registry.register(SERVICE_KEYS.chatMessageQueryService, this.chatMessageQueryService)
+
+    this.nonStreamChatService =
+      deps.nonStreamChatService ??
+      new NonStreamChatService({
+        prisma: this.context.prisma,
+        requestBuilder: this.chatRequestBuilder,
+        requester: this.providerRequester,
+      })
+    registry.register(SERVICE_KEYS.nonStreamChatService, this.nonStreamChatService)
+
+    this.titleSummaryService =
+      deps.titleSummaryService ??
+      new TitleSummaryService({ prisma: this.context.prisma, secretVault: this.secretVault })
+    registry.register(SERVICE_KEYS.titleSummaryService, this.titleSummaryService)
+
+    this.visionProxyService =
+      deps.visionProxyService ??
+      new VisionProxyService({ secretVault: this.secretVault })
+    registry.register(SERVICE_KEYS.visionProxyService, this.visionProxyService)
+
+    this.skillInstaller =
+      deps.skillInstaller ?? new SkillInstaller({ prisma: this.context.prisma })
+    registry.register(SERVICE_KEYS.skillInstaller, this.skillInstaller)
+
+    this.skillApprovalService =
+      deps.skillApprovalService ??
+      new SkillApprovalService({ prisma: this.context.prisma })
+    registry.register(SERVICE_KEYS.skillApprovalService, this.skillApprovalService)
+
+    this.mcpService =
+      deps.mcpService ??
+      new McpService({
+        prisma: this.context.prisma,
+        getSystemSetting: async (key: string) => {
+          try {
+            const setting = await this.context.prisma.systemSetting.findUnique({ where: { key } })
+            return setting?.value ?? null
+          } catch {
+            return null
+          }
+        },
+      })
+    registry.register(SERVICE_KEYS.mcpService, this.mcpService)
 
     this.connectionService =
       deps.connectionService ??

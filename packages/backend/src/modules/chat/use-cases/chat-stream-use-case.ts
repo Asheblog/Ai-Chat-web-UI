@@ -58,6 +58,11 @@ import {
 } from '../chat-common';
 import { createUserMessageWithQuota } from '../services/message-service';
 import { ChatServiceError, type ChatService } from '../../../services/chat';
+import { resolveStreamConfig } from '../../../services/stream';
+import {
+  detectChatReasoningSignal,
+  isResponsesUnsupportedFallback,
+} from '../services/reasoning-protocol-utils';
 import { resolveModelCapabilitiesForSession } from '../../../utils/model-capabilities';
 import {
   VisionProxyServiceError,
@@ -907,69 +912,27 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         }
         return streamCancelled;
       };
-      // 读取系统设置（若存在则覆盖环境变量），用于网络稳定性与 usage 行为
+      // 读取系统设置（若存在则覆盖环境变量），用于网络稳定性与 usage 行为。
+      // 所有流式配置收敛到 StreamConfigResolver，避免 chat/battle/share 各自解析。
+      const normalizedSysMap = Object.fromEntries(
+        Object.entries(sysMap).map(([key, value]) => [key, value === '' ? undefined : value]),
+      )
+      const streamConfig = resolveStreamConfig({ sysMap: normalizedSysMap })
 
       // usage 透出与透传
-      let USAGE_EMIT = (sysMap.usage_emit ?? (process.env.USAGE_EMIT ?? 'true')).toString().toLowerCase() !== 'false';
-      let USAGE_PROVIDER_ONLY = (sysMap.usage_provider_only ?? (process.env.USAGE_PROVIDER_ONLY ?? 'false')).toString().toLowerCase() === 'true';
+      let USAGE_EMIT = streamConfig.usageEmit;
+      let USAGE_PROVIDER_ONLY = streamConfig.usageProviderOnly;
       // 心跳与超时参数
-      const heartbeatIntervalMs = parseInt(sysMap.sse_heartbeat_interval_ms || process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000');
-      const providerMaxIdleMs = parseInt(sysMap.provider_max_idle_ms || process.env.PROVIDER_MAX_IDLE_MS || '60000');
+      const heartbeatIntervalMs = streamConfig.heartbeatIntervalMs;
+      const providerMaxIdleMs = streamConfig.providerMaxIdleMs;
       const providerTimeoutMs = providerRequest.timeoutMs;
 
       // 推理链（CoT）配置
-      const REASONING_ENABLED = (sysMap.reasoning_enabled ?? (process.env.REASONING_ENABLED ?? 'true')).toString().toLowerCase() !== 'false';
+      const REASONING_ENABLED = streamConfig.reasoningEnabled;
       const REASONING_SAVE_TO_DB = effectiveReasoningSaveToDb;
-      const REASONING_TAGS_MODE = (sysMap.reasoning_tags_mode ?? (process.env.REASONING_TAGS_MODE ?? 'default')).toString();
-      const REASONING_CUSTOM_TAGS = (() => {
-        try {
-          const raw = sysMap.reasoning_custom_tags || process.env.REASONING_CUSTOM_TAGS || '';
-          const arr = raw ? JSON.parse(raw) : null;
-          if (Array.isArray(arr) && arr.length === 2 && typeof arr[0] === 'string' && typeof arr[1] === 'string') return [[arr[0], arr[1]] as [string, string]];
-        } catch { }
-        return null;
-      })();
+      const REASONING_TAGS_MODE = streamConfig.reasoningTagsMode;
+      const REASONING_CUSTOM_TAGS = streamConfig.reasoningCustomTags;
       const reasoningCompatibilityEnabled = REASONING_ENABLED && effectiveReasoningEnabled;
-      const detectChatReasoningSignal = (
-        payload: any,
-      ):
-        | 'delta.reasoning_content'
-        | 'delta.reasoning'
-        | 'delta.thinking'
-        | 'delta.analysis'
-        | null => {
-        if (typeof payload?.choices?.[0]?.delta?.reasoning_content === 'string') {
-          return 'delta.reasoning_content';
-        }
-        if (typeof payload?.choices?.[0]?.delta?.reasoning === 'string') {
-          return 'delta.reasoning';
-        }
-        if (typeof payload?.choices?.[0]?.delta?.thinking === 'string') {
-          return 'delta.thinking';
-        }
-        if (typeof payload?.choices?.[0]?.delta?.analysis === 'string') {
-          return 'delta.analysis';
-        }
-        if (typeof payload?.delta?.reasoning_content === 'string') {
-          return 'delta.reasoning_content';
-        }
-        if (typeof payload?.delta?.reasoning === 'string') {
-          return 'delta.reasoning';
-        }
-        if (typeof payload?.message?.reasoning_content === 'string') {
-          return 'delta.reasoning_content';
-        }
-        if (typeof payload?.message?.reasoning === 'string') {
-          return 'delta.reasoning';
-        }
-        if (typeof payload?.reasoning === 'string') {
-          return 'delta.reasoning';
-        }
-        if (typeof payload?.analysis === 'string') {
-          return 'delta.analysis';
-        }
-        return null;
-      };
       const buildProtocolRequest = (protocol: ReasoningProtocol) => {
         if (protocol === 'responses' && provider === 'openai') {
           const next = buildChatProviderRequest({
@@ -1005,17 +968,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         (sysMap.reasoning_responses_fallback_enabled ?? (process.env.REASONING_RESPONSES_FALLBACK_ENABLED ?? 'true'))
           .toString()
           .toLowerCase() !== 'false';
-      const isResponsesUnsupportedFallback = (statusCode: number, bodyText: string) => {
-        if (statusCode === 404 || statusCode === 405 || statusCode === 501) return true;
-        if (statusCode !== 400) return false;
-        const message = bodyText.toLowerCase();
-        return (
-          message.includes('/responses') ||
-          message.includes('responses') ||
-          message.includes('unknown endpoint') ||
-          message.includes('not found')
-        );
-      };
       const createReasoningAttempt = (
         protocol: ReasoningProtocol,
         decisionReason: string,
@@ -1034,26 +986,13 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         activeReasoningProtocol,
         reasoningProtocolDecisionReason,
       );
-      const STREAM_DELTA_CHUNK_SIZE = Math.max(1, parseInt(sysMap.stream_delta_chunk_size || process.env.STREAM_DELTA_CHUNK_SIZE || '1'));
-      const streamDeltaFlushIntervalMs = Math.max(
-        0,
-        parseInt(sysMap.stream_delta_flush_interval_ms || process.env.STREAM_DELTA_FLUSH_INTERVAL_MS || '0'),
-      );
-      const streamReasoningFlushIntervalMs = Math.max(
-        0,
-        parseInt(
-          sysMap.stream_reasoning_flush_interval_ms ||
-          process.env.STREAM_REASONING_FLUSH_INTERVAL_MS ||
-          `${streamDeltaFlushIntervalMs}`,
-        ),
-      );
-      const streamKeepaliveIntervalMs = Math.max(
-        0,
-        parseInt(sysMap.stream_keepalive_interval_ms || process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'),
-      );
-      const providerInitialGraceMs = Math.max(0, parseInt(sysMap.provider_initial_grace_ms || process.env.PROVIDER_INITIAL_GRACE_MS || '120000'));
-      const providerReasoningIdleMs = Math.max(0, parseInt(sysMap.provider_reasoning_idle_ms || process.env.PROVIDER_REASONING_IDLE_MS || '300000'));
-      const reasoningKeepaliveIntervalMs = Math.max(0, parseInt(sysMap.reasoning_keepalive_interval_ms || process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0'));
+      const STREAM_DELTA_CHUNK_SIZE = streamConfig.streamDeltaChunkSize;
+      const streamDeltaFlushIntervalMs = streamConfig.streamDeltaFlushIntervalMs;
+      const streamReasoningFlushIntervalMs = streamConfig.streamReasoningFlushIntervalMs;
+      const streamKeepaliveIntervalMs = streamConfig.streamKeepaliveIntervalMs;
+      const providerInitialGraceMs = streamConfig.providerInitialGraceMs;
+      const providerReasoningIdleMs = streamConfig.providerReasoningIdleMs;
+      const reasoningKeepaliveIntervalMs = streamConfig.reasoningKeepaliveIntervalMs;
       // 提前记录是否已收到厂商 usage（优先使用）
       let providerUsageSeen = false as boolean;
       let providerUsageSnapshot: any = null;

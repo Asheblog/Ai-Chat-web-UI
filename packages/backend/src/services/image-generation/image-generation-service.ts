@@ -109,13 +109,5 @@ export class ImageGenerationService {
   }
 }
 
-// 默认实例
-let imageGenerationService = new ImageGenerationService()
-
-export const setImageGenerationService = (service: ImageGenerationService) => {
-  imageGenerationService = service
-}
-
-export { imageGenerationService }
 export { ImageGenerationError, GeminiImageGenerationError }
 export type { ImageGenerationResult, ImageGenerationOptions }

@@ -5,11 +5,12 @@ import type { ApiResponse, Actor } from '../types'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import { BattleService } from '../services/battle/battle-service'
 import type { BattleRunCreateInput } from '../services/battle/battle-types'
-import { prisma } from '../db'
+import { StreamSettingsService } from '../services/stream'
 import { createBattleExecutionEventBridge } from '../modules/execution/battle-execution-event-bridge'
 
 export interface BattleApiDeps {
   battleService: BattleService
+  streamSettingsService?: StreamSettingsService
 }
 
 const headerSchema = z.object({
@@ -159,6 +160,8 @@ const parsePagination = (value: string | null | undefined, fallback: number) => 
 
 export const createBattleApi = (deps: BattleApiDeps) => {
   const svc = deps.battleService
+  const streamSettings =
+    deps.streamSettingsService ?? { resolveKeepaliveIntervalMs: async () => 0 }
   const router = new Hono()
 
   router.use('*', async (_c, next) => {
@@ -166,23 +169,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
     await next()
   })
 
-  const resolveStreamKeepaliveIntervalMs = async () => {
-    let raw = process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'
-    try {
-      const record = await prisma.systemSetting.findUnique({
-        where: { key: 'stream_keepalive_interval_ms' },
-        select: { value: true },
-      })
-      if (record?.value != null && String(record.value).trim() !== '') {
-        raw = String(record.value)
-      }
-    } catch {}
-    const parsed = Number.parseInt(raw, 10)
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed
-    }
-    return 0
-  }
+  const resolveStreamKeepaliveIntervalMs = () => streamSettings.resolveKeepaliveIntervalMs()
 
   router.post('/stream', actorMiddleware, zValidator('json', battleStreamSchema), async (c) => {
     const actor = c.get('actor') as Actor

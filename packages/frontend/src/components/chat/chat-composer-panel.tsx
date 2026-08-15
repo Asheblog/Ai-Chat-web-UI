@@ -27,19 +27,9 @@ import {
 } from '@/features/prompt-templates/api'
 import { KnowledgeBaseSelector, type KnowledgeBaseItem } from './knowledge-base-selector'
 import type { PromptTemplate } from '@/types'
+import type { ComposerSkillOption } from './composer-types'
 
-export interface ComposerSkillOption {
-  skillId: number
-  versionId: number | null
-  slug: string
-  label: string
-  description?: string
-  enabled: boolean
-  updating?: boolean
-  sourceLabel?: string
-  licenseName?: string | null
-}
-
+export type { ComposerSkillOption } from './composer-types'
 export interface ChatComposerPanelProps {
   input: string
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>

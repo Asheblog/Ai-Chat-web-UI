@@ -161,6 +161,15 @@ export class ShareService {
       deps.determineChatImageBaseUrl ?? defaultDetermineChatImageBaseUrl
   }
 
+  async getMessageStreamStatuses(
+    messageIds: number[],
+  ): Promise<Array<{ id: number; streamStatus: string }>> {
+    return this.prisma.message.findMany({
+      where: { id: { in: messageIds } },
+      select: { id: true, streamStatus: true },
+    })
+  }
+
   async createShare(
     actor: Actor,
     params: {

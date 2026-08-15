@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import {
   PrismaMcpRepository,
@@ -68,15 +69,31 @@ export interface McpToolView {
 // --- Service ---
 
 export class McpService {
+  private prisma: PrismaClient
   private repository: McpRepository
   private runtimeClient?: McpRuntimeClient
   private getSystemSetting: (key: string) => Promise<string | null>
 
   constructor(deps: McpServiceDeps = {}) {
     const prisma = deps.prisma ?? defaultPrisma
+    this.prisma = prisma
     this.repository = deps.repository ?? new PrismaMcpRepository(prisma)
     this.runtimeClient = deps.runtimeClient
     this.getSystemSetting = deps.getSystemSetting ?? (async () => null)
+  }
+
+  async isSessionOwnedByActor(actor: Actor, sessionId: number): Promise<boolean> {
+    const where: Record<string, unknown> = { id: sessionId }
+    if (actor.type === 'user') {
+      where.userId = actor.id
+    } else {
+      where.anonymousKey = actor.key
+    }
+    const session = await (this.prisma as any).chatSession.findFirst({
+      where,
+      select: { id: true },
+    })
+    return Boolean(session)
   }
 
   // --- Global Gate ---

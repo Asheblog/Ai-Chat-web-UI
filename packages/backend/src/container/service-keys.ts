@@ -44,6 +44,12 @@ export const SERVICE_KEYS = {
   chatImageService: 'chatImageService',
   taskTraceConfigService: 'taskTraceConfigService',
 
+  streamSettingsService: 'streamSettingsService',
+  imageGenerationService: 'imageGenerationService',
+  mcpService: 'mcpService',
+  skillInstaller: 'skillInstaller',
+  skillApprovalService: 'skillApprovalService',
+
   // Chat Module Services
   streamSseService: 'streamSseService',
   streamUsageService: 'streamUsageService',
@@ -53,6 +59,10 @@ export const SERVICE_KEYS = {
   nonStreamChatService: 'nonStreamChatService',
   chatMessageQueryService: 'chatMessageQueryService',
   providerRequester: 'providerRequester',
+  reasoningCompatibilityService: 'reasoningCompatibilityService',
+  conversationCompressionService: 'conversationCompressionService',
+  titleSummaryService: 'titleSummaryService',
+  visionProxyService: 'visionProxyService',
 
   // Stream Module
   streamMetaStore: 'streamMetaStore',

@@ -7,7 +7,7 @@ import { ShareService, ShareServiceError } from '../services/shares'
 import { extendAnonymousSession } from '../modules/chat/chat-common'
 import { chatSessionEventBus } from '../modules/chat/services/chat-session-event-bus'
 import type { ChatStreamEvent } from '../modules/chat/services/chat-session-event-bus'
-import { prisma } from '../db'
+import { StreamSettingsService } from '../services/stream'
 
 const createShareSchema = z.object({
   sessionId: z.number().int().positive(),
@@ -23,6 +23,7 @@ const updateShareSchema = z.object({
 
 export interface SharesApiDeps {
   shareService: ShareService
+  streamSettingsService?: StreamSettingsService
 }
 
 const handleError = (c: any, error: unknown, fallback: string) => {
@@ -61,6 +62,8 @@ const parsePagination = (value: string | null | undefined, fallback: number) => 
 
 export const createSharesApi = (deps: SharesApiDeps) => {
   const svc = deps.shareService
+  const streamSettings =
+    deps.streamSettingsService ?? { resolveKeepaliveIntervalMs: async () => 0 }
   const router = new Hono()
 
   router.get('/', actorMiddleware, async (c) => {
@@ -156,23 +159,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
     }
   })
 
-  const resolveStreamKeepaliveIntervalMs = async () => {
-    let raw = process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0'
-    try {
-      const record = await prisma.systemSetting.findUnique({
-        where: { key: 'stream_keepalive_interval_ms' },
-        select: { value: true },
-      })
-      if (record?.value != null && String(record.value).trim() !== '') {
-        raw = String(record.value)
-      }
-    } catch {}
-    const parsed = Number.parseInt(raw, 10)
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed
-    }
-    return 0
-  }
+  const resolveStreamKeepaliveIntervalMs = () => streamSettings.resolveKeepaliveIntervalMs()
 
   router.get('/:token/stream', async (c) => {
     const token = (c.req.param('token') || '').trim()
@@ -332,10 +319,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
         })
 
         // Query DB for actual message status to correctly pre-count
-        const messageStatuses = await prisma.message.findMany({
-          where: { id: { in: streamingMessageIds } },
-          select: { id: true, streamStatus: true },
-        })
+        const messageStatuses = await svc.getMessageStreamStatuses(streamingMessageIds)
         for (const m of messageStatuses) {
           if (m.streamStatus !== 'streaming' && m.streamStatus !== 'pending') {
             completedMessageIds.add(m.id)

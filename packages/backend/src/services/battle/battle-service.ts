@@ -27,6 +27,7 @@ import { BattleRetentionCleanupService } from './battle-retention-cleanup-servic
 import { BattleSummaryProjector } from './battle-summary-projector'
 import { BattleShareProjector } from './battle-share-projector'
 import { createLogger } from '../../utils/logger'
+import { computeExpiry, normalizeConcurrency, normalizeJudgeThreshold, normalizePagination } from './battle-utils'
 import type {
   BattleQuestionInput,
   BattleModelSkills,
@@ -133,7 +134,6 @@ export interface BattleServiceDeps {
   retentionCleanupService?: BattleRetentionCleanupService
 }
 
-const DEFAULT_JUDGE_THRESHOLD = 0.8
 const log = createLogger('BattleService')
 
 // 纯函数归一化层已提取至 battle-normalizers.ts（配置载荷/ToolEvent 归一化等）
@@ -3351,13 +3351,11 @@ export class BattleService {
   }
 
   private normalizeJudgeThreshold(value?: number) {
-    if (typeof value !== 'number' || Number.isNaN(value)) return DEFAULT_JUDGE_THRESHOLD
-    return clamp(value, 0, 1)
+    return normalizeJudgeThreshold(value)
   }
 
   private normalizeConcurrency(value?: number) {
-    if (typeof value !== 'number' || Number.isNaN(value)) return 3
-    return Math.min(6, Math.max(1, Math.floor(value)))
+    return normalizeConcurrency(value)
   }
 
   private async resolveModel(actor: Actor, input: { modelId: string; connectionId?: number; rawId?: string }) {
@@ -3511,10 +3509,7 @@ export class BattleService {
   }
 
   private normalizePagination(params?: { page?: number; limit?: number }) {
-    const page = typeof params?.page === 'number' && params.page > 0 ? Math.trunc(params.page) : 1
-    const limit =
-      typeof params?.limit === 'number' && params.limit > 0 ? Math.min(Math.trunc(params.limit), 100) : 20
-    return { page, limit }
+    return normalizePagination(params)
   }
 
   private async loadSystemSettings(): Promise<Record<string, string>> {
@@ -3528,11 +3523,7 @@ export class BattleService {
   }
 
   private computeExpiry(expiresInHours?: number | null) {
-    if (!expiresInHours || !Number.isFinite(expiresInHours) || expiresInHours <= 0) {
-      return null
-    }
-    const now = new Date()
-    return new Date(now.getTime() + Math.floor(expiresInHours * 3600_000))
+    return computeExpiry(expiresInHours)
   }
 
   private async generateToken(): Promise<string> {
