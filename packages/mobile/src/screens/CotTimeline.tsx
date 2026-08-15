@@ -31,7 +31,11 @@ type CotTimelineProps = {
 
 type ExpandSource = "user" | "auto" | "default";
 
-function useLocalExpand(defaultExpanded: boolean, autoExpand: boolean) {
+function useLocalExpand(
+  defaultExpanded: boolean,
+  autoExpand: boolean,
+  overrideExpanded: boolean | null,
+) {
   const [state, setState] = useState<{ expanded: boolean; source: ExpandSource }>({
     expanded: defaultExpanded || autoExpand,
     source: autoExpand ? "auto" : "default",
@@ -49,14 +53,15 @@ function useLocalExpand(defaultExpanded: boolean, autoExpand: boolean) {
   }, [autoExpand, defaultExpanded]);
 
   const setExpanded = (next: boolean) => setState({ expanded: next, source: "user" });
-  const toggle = () => setState((prev) => ({ expanded: !prev.expanded, source: "user" }));
+  const expanded = overrideExpanded ?? state.expanded;
+  const toggle = () => setExpanded(!expanded);
 
-  return { expanded: state.expanded, setExpanded, toggle };
+  return { expanded, setExpanded, toggle };
 }
 
 /**
  * 统一 CoT 时间轴：每个 reasoning / tool / toolGroup 节点都是平铺兄弟卡片，
- * 各自独立折叠；与 Web `CotTimeline` 使用同一 shared 节点构建器。
+ * 左侧有时间轴轨道，顶部有统一展开/折叠开关；与 Web `CotTimeline` 使用同一 shared 节点构建器。
  */
 export function CotTimeline({
   reasoningRaw,
@@ -69,6 +74,7 @@ export function CotTimeline({
     () => buildInterleavedCotNodes(reasoningRaw, toolEvents),
     [reasoningRaw, toolEvents],
   );
+  const [masterExpanded, setMasterExpanded] = useState<boolean | null>(null);
 
   const lastReasoningIndex = useMemo(() => {
     for (let index = nodes.length - 1; index >= 0; index -= 1) {
@@ -81,42 +87,117 @@ export function CotTimeline({
     return null;
   }
 
+  const clearMasterOverride = () => setMasterExpanded(null);
+
   return (
-    <View style={styles.timeline}>
-      {nodes.map((node, index) => {
-        const key = cotTimelineNodeKey(node, index);
-        if (node.type === "reasoning") {
+    <View style={styles.section}>
+      <View style={styles.masterHeader}>
+        <Text style={[styles.masterTitle, { color: theme.mutedForeground }]}>
+          过程时间轴 · {nodes.length} 步
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ selected: masterExpanded === true }}
+          onPress={() => setMasterExpanded((current) => current !== true)}
+          style={[styles.masterButton, { borderColor: theme.border }]}
+        >
+          <MaterialCommunityIcons
+            color={theme.mutedForeground}
+            name="unfold-more-horizontal"
+            size={16}
+          />
+          <Text style={[styles.masterButtonText, { color: theme.mutedForeground }]}>
+            {masterExpanded === true ? "全部折叠" : "全部展开"}
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.timelineBody}>
+        <View pointerEvents="none" style={[styles.railLine, { backgroundColor: theme.border }]} />
+        {nodes.map((node, index) => {
+          const key = cotTimelineNodeKey(node, index);
+          const dotColor = resolveDotColor(node);
+          if (node.type === "reasoning") {
+            return (
+              <View key={key} style={styles.nodeRow}>
+                <View style={styles.railColumn}>
+                  <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.border }]} />
+                </View>
+                <View style={styles.nodeCard}>
+                  <CotReasoningCard
+                    defaultExpanded={defaultExpanded}
+                    isStreamingTail={isStreaming && index === lastReasoningIndex}
+                    onInteract={clearMasterOverride}
+                    overrideExpanded={masterExpanded}
+                    text={node.text}
+                    theme={theme}
+                  />
+                </View>
+              </View>
+            );
+          }
+          if (node.type === "toolGroup") {
+            return (
+              <View key={key} style={styles.nodeRow}>
+                <View style={styles.railColumn}>
+                  <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.border }]} />
+                </View>
+                <View style={styles.nodeCard}>
+                  <CotToolGroupCard
+                    node={node}
+                    onInteract={clearMasterOverride}
+                    overrideExpanded={masterExpanded}
+                    theme={theme}
+                  />
+                </View>
+              </View>
+            );
+          }
           return (
-            <CotReasoningCard
-              key={key}
-              defaultExpanded={defaultExpanded}
-              isStreamingTail={isStreaming && index === lastReasoningIndex}
-              text={node.text}
-              theme={theme}
-            />
+            <View key={key} style={styles.nodeRow}>
+              <View style={styles.railColumn}>
+                <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.border }]} />
+              </View>
+              <View style={styles.nodeCard}>
+                <CotToolCard
+                  event={node.event}
+                  onInteract={clearMasterOverride}
+                  overrideExpanded={masterExpanded}
+                  theme={theme}
+                />
+              </View>
+            </View>
           );
-        }
-        if (node.type === "toolGroup") {
-          return <CotToolGroupCard key={key} node={node} theme={theme} />;
-        }
-        return <CotToolCard key={key} event={node.event} theme={theme} />;
-      })}
+        })}
+      </View>
     </View>
   );
+}
+
+function resolveDotColor(node: CotTimelineNode) {
+  if (node.type === "reasoning") return "#F59E0B";
+  const status = node.type === "toolGroup" ? node.status : resolveEventStatus(node.event);
+  if (status === "running" || status === "pending") return "#3B82F6";
+  if (status === "error" || status === "rejected" || status === "aborted") return "#FB7185";
+  return "#34D399";
 }
 
 function CotReasoningCard({
   text,
   defaultExpanded,
   isStreamingTail,
+  overrideExpanded,
+  onInteract,
   theme,
 }: {
   text: string;
   defaultExpanded: boolean;
   isStreamingTail: boolean;
+  overrideExpanded: boolean | null;
+  onInteract: () => void;
   theme: AppTheme;
 }) {
-  const { expanded, toggle } = useLocalExpand(defaultExpanded, isStreamingTail);
+  const { expanded, toggle } = useLocalExpand(defaultExpanded, isStreamingTail, overrideExpanded);
 
   if (!text) return null;
 
@@ -125,7 +206,10 @@ function CotReasoningCard({
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        onPress={toggle}
+        onPress={() => {
+          toggle();
+          onInteract();
+        }}
         style={styles.cardHeaderPress}
       >
         <View style={styles.cardHeader}>
@@ -154,10 +238,20 @@ function CotReasoningCard({
   );
 }
 
-function CotToolCard({ event, theme }: { event: ToolEvent; theme: AppTheme }) {
+function CotToolCard({
+  event,
+  overrideExpanded,
+  onInteract,
+  theme,
+}: {
+  event: ToolEvent;
+  overrideExpanded: boolean | null;
+  onInteract: () => void;
+  theme: AppTheme;
+}) {
   const status = resolveEventStatus(event);
   const isActive = status === "running" || status === "pending";
-  const { expanded, toggle } = useLocalExpand(false, isActive);
+  const { expanded, toggle } = useLocalExpand(false, isActive, overrideExpanded);
   const toolId = event.identifier || event.apiName || event.tool;
   const display = resolveToolDisplay(toolId);
   const title = buildToolStepTitle(event);
@@ -168,7 +262,10 @@ function CotToolCard({ event, theme }: { event: ToolEvent; theme: AppTheme }) {
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        onPress={toggle}
+        onPress={() => {
+          toggle();
+          onInteract();
+        }}
         style={styles.cardHeaderPress}
       >
         <View style={styles.cardHeader}>
@@ -208,12 +305,16 @@ function CotToolCard({ event, theme }: { event: ToolEvent; theme: AppTheme }) {
 
 function CotToolGroupCard({
   node,
+  overrideExpanded,
+  onInteract,
   theme,
 }: {
   node: Extract<CotTimelineNode, { type: "toolGroup" }>;
+  overrideExpanded: boolean | null;
+  onInteract: () => void;
   theme: AppTheme;
 }) {
-  const { expanded, toggle } = useLocalExpand(false, node.status === "running");
+  const { expanded, toggle } = useLocalExpand(false, node.status === "running", overrideExpanded);
   const display = resolveToolDisplay(node.toolType);
 
   return (
@@ -221,7 +322,10 @@ function CotToolGroupCard({
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        onPress={toggle}
+        onPress={() => {
+          toggle();
+          onInteract();
+        }}
         style={styles.cardHeaderPress}
       >
         <View style={styles.cardHeader}>
@@ -248,6 +352,8 @@ function CotToolGroupCard({
             <CotToolCard
               key={`${event.callId ?? event.id}-${event.updatedAt ?? event.createdAt}`}
               event={event}
+              onInteract={onInteract}
+              overrideExpanded={overrideExpanded}
               theme={theme}
             />
           ))}
@@ -353,8 +459,62 @@ function resolveStatusTextStyle(status: ToolEvent["status"], theme: AppTheme) {
 }
 
 const styles = StyleSheet.create({
-  timeline: {
+  section: {
     rowGap: spacing.sm,
+  },
+  masterHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  masterTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  masterButton: {
+    alignItems: "center",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    columnGap: 4,
+    flexDirection: "row",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  masterButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  timelineBody: {
+    position: "relative",
+    rowGap: spacing.sm,
+  },
+  railLine: {
+    bottom: 18,
+    left: 7,
+    position: "absolute",
+    top: 18,
+    width: 1,
+  },
+  nodeRow: {
+    alignItems: "stretch",
+    columnGap: spacing.sm,
+    flexDirection: "row",
+  },
+  railColumn: {
+    alignItems: "center",
+    paddingTop: 18,
+    width: 16,
+  },
+  nodeDot: {
+    borderWidth: 2,
+    borderRadius: 4,
+    height: 8,
+    width: 8,
+  },
+  nodeCard: {
+    flex: 1,
   },
   card: {
     borderRadius: 8,

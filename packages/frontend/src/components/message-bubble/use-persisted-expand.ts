@@ -99,6 +99,8 @@ interface UsePersistedExpandOptions {
   autoExpand?: boolean
   /** 无数据时自动折叠回默认态 */
   hasData?: boolean
+  /** 统一开关覆盖值：true=全部展开，false=全部折叠，null=不覆盖 */
+  overrideExpanded?: boolean | null
 }
 
 export function usePersistedExpand({
@@ -107,6 +109,7 @@ export function usePersistedExpand({
   defaultExpanded = false,
   autoExpand = false,
   hasData = true,
+  overrideExpanded = null,
 }: UsePersistedExpandOptions) {
   const [state, dispatch] = useReducer(
     expandReducer,
@@ -146,12 +149,14 @@ export function usePersistedExpand({
     [itemKey, storageKey],
   )
 
+  const expanded = overrideExpanded ?? state.expanded
+
   const toggle = useCallback(() => {
-    setExpanded(!state.expanded)
-  }, [setExpanded, state.expanded])
+    setExpanded(!expanded)
+  }, [setExpanded, expanded])
 
   return {
-    expanded: state.expanded,
+    expanded,
     source: state.source,
     setExpanded,
     toggle,

@@ -2,7 +2,7 @@
 
 ## 未发布
 
-- UI: CoT 与工具展示统一为平铺时间轴——推理卡与每个工具卡均为消息体一级兄弟元素，各自独立折叠/持久化，不再共享「深度思考过程」总壳；主聊天 / 分享 / Battle / Android 四端统一组件语义与节点构建器。无后端协议变更、无迁移。
+- UI: CoT 与工具展示统一为平铺时间轴——推理卡与每个工具卡均为消息体一级兄弟元素，左侧带状态色时间轴轨道，顶部提供统一「全部展开/全部折叠」开关；各卡片仍独立折叠/持久化，不再共享「深度思考过程」总壳；主聊天 / 分享 / Battle / Android 四端统一组件语义与节点构建器。无后端协议变更、无迁移。
 - 重构：将 web / mobile 的 `ChatStreamChunk → ToolEvent` 增量归约逻辑收敛至 `@aichat/shared/stream-message-reducer`（单一 `upsertToolEventFromChunk`），并删除 chat `stream-slice` 与 battle `useBattleFlow` 的 phase/status/stage/source 本地归一化副本；无行为变更、无迁移。
 - fix: 修复工作区 Python 工具在 docker-socket-proxy 部署下「初始化 Python 虚拟环境失败（Permission denied）」——挂载路径翻译改为优先解析 `/proc/self/mountinfo`，不再依赖 `docker inspect <HOSTNAME>` 容器自检（HOSTNAME 与守护进程容器 ID 不一致时自检 404 会静默跳过翻译，导致沙箱挂载到 root 属主空目录而无法写 `.venv`）；venv 初始化报错附带 workspace 路径与挂载排查提示。无迁移、直接替换。
 - fix: 交错步骤流流式打字机开头「前进又后退」——推理节点 key 按 charStart 稳定、追加文本不重置游标，并正确映射段内 playedLength。

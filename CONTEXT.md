@@ -23,7 +23,7 @@
 - **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。主聊天 / 分享 / Battle / Android 均按 Reasoning Offset 将推理与工具拆为平铺步骤流（每个节点独立卡片）
 - **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；用于将工具事件插入对应推理段落之间，形成步骤流（Start/End 由后端与流式层写入）
 - **Reasoning Text**：推理的文本内容，流式传输；展示前可对历史污染行做剥离，但 offset 切片始终基于原始文本
-- **Cot Timeline（平铺 CoT 时间轴）**：四端统一的过程展示；Web `CotTimeline` 与 Android RN `CotTimeline` 均由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建节点，并直接渲染为消息体的一级兄弟卡片；每张卡片独立折叠，Web 侧按消息/工具实例持久化（`aichat.cot_reasoning_visibility` / `aichat.cot_tool_visibility`），不再共享「深度思考过程」总壳；列表 key 由 `cotTimelineNodeKey` 生成（推理段仅按 `charStart` 稳定，避免流式增长 remount 打字机）
+- **Cot Timeline（平铺 CoT 时间轴）**：四端统一的过程展示；Web `CotTimeline` 与 Android RN `CotTimeline` 均由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建节点，并直接渲染为消息体的一级兄弟卡片；左侧带状态色时间轴轨道，顶部提供统一「全部展开/全部折叠」开关（覆盖全部卡片，个体交互后退出统一态）；每张卡片独立折叠，Web 侧按消息/工具实例持久化（`aichat.cot_reasoning_visibility` / `aichat.cot_tool_visibility`），不再共享「深度思考过程」总壳；列表 key 由 `cotTimelineNodeKey` 生成（推理段仅按 `charStart` 稳定，避免流式增长 remount 打字机）
 
 ## 工具调用
 

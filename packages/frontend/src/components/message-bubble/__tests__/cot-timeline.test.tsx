@@ -246,4 +246,65 @@ describe('CotTimeline', () => {
     expect(screen.getByRole('button', { name: /联网搜索/ })).toBeInTheDocument()
     expect(screen.getByText('2 个调用')).toBeInTheDocument()
   })
+
+  it('顶部展示统一开关与步骤总数', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw="想法"
+        toolEvents={[
+          tool({
+            id: 't7',
+            tool: 'web_search',
+            callId: 'c7',
+            details: { reasoningOffsetStart: 0 },
+          }),
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('过程时间轴 · 2 步')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /全部展开/ })).toBeInTheDocument()
+  })
+
+  it('统一开关可全部展开/全部折叠，个体交互后退出统一态', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw="想法"
+        toolEvents={[
+          tool({
+            id: 't8',
+            tool: 'web_search',
+            callId: 'c8',
+            query: '今日新闻',
+            details: { reasoningOffsetStart: 0 },
+          }),
+        ]}
+      />,
+    )
+
+    const reasoningButton = reasoningButtons()[0]
+    const toolHeader = toolButton()
+    const masterButton = () => screen.getByRole('button', { name: /全部展开|全部折叠/ })
+
+    fireEvent.click(masterButton())
+    expect(reasoningButton).toHaveAttribute('aria-expanded', 'true')
+    expect(toolHeader).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /全部折叠/ })).toBeInTheDocument()
+
+    fireEvent.click(masterButton())
+    expect(reasoningButton).toHaveAttribute('aria-expanded', 'false')
+    expect(toolHeader).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(masterButton())
+    expect(reasoningButton).toHaveAttribute('aria-expanded', 'true')
+    expect(toolHeader).toHaveAttribute('aria-expanded', 'true')
+
+    // 个体操作优先：点击任一张卡即退出统一覆盖态
+    fireEvent.click(toolHeader)
+    expect(masterButton()).toHaveAttribute('aria-pressed', 'false')
+    expect(toolHeader).toHaveAttribute('aria-expanded', 'false')
+    expect(reasoningButton).toHaveAttribute('aria-expanded', 'false')
+  })
 })
