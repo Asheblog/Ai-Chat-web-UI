@@ -13,14 +13,17 @@ const resolveDurationSeconds = (textLength: number) => {
 interface SingleLineScrollerProps {
   text: string
   className?: string
+  /** 仅当对应步骤仍在进行中（流式 CoT / 执行中的工具）时才允许滚动 */
+  active?: boolean
 }
 
 /**
- * Single-line scrolling display for collapsed CoT / tool cards.
- * Static when it fits; horizontal marquee when it overflows.
- * Pauses on hover and fades both horizontal edges while scrolling.
+ * 单行滚动展示器：内容只占一行。
+ * - active 且文本超宽时自动向左匀速滚动（跑马灯式）；已结束的步骤保持静态。
+ * - hover 时暂停，方便阅读。
+ * - 左右边缘做渐隐，营造“滚进滚出”的虚化感。
  */
-export function SingleLineScroller({ text, className }: SingleLineScrollerProps) {
+export function SingleLineScroller({ text, className, active = false }: SingleLineScrollerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLSpanElement>(null)
   const normalized = normalizeSingleLine(text)
@@ -49,12 +52,13 @@ export function SingleLineScroller({ text, className }: SingleLineScrollerProps)
 
     window.addEventListener('resize', updateOverflow)
     return () => window.removeEventListener('resize', updateOverflow)
-  }, [normalized, updateOverflow])
+  }, [normalized, active, updateOverflow])
 
   if (!normalized) {
     return <div ref={containerRef} className={cn('min-w-0', className)} />
   }
 
+  const scrolling = active && overflowing
   const edgeFade =
     'linear-gradient(to right, transparent 0, black 12px, black calc(100% - 12px), transparent 100%)'
 
@@ -64,7 +68,7 @@ export function SingleLineScroller({ text, className }: SingleLineScrollerProps)
       className={cn('cot-single-line-scroller relative min-w-0 overflow-hidden', className)}
       title={normalized}
       style={
-        overflowing
+        scrolling
           ? {
               maskImage: edgeFade,
               WebkitMaskImage: edgeFade,
@@ -72,31 +76,32 @@ export function SingleLineScroller({ text, className }: SingleLineScrollerProps)
           : undefined
       }
     >
-      <div
-        className={cn('flex w-max', overflowing && 'cot-single-line-track')}
-        style={
-          overflowing
-            ? {
-                animationDuration: `${resolveDurationSeconds(normalized.length)}s`,
-              }
-            : undefined
-        }
-      >
-        <span
-          ref={contentRef}
-          className={overflowing ? 'whitespace-pre pr-8' : 'whitespace-pre'}
+      {active ? (
+        <div
+          className={cn('flex w-max', scrolling && 'cot-single-line-track')}
+          style={
+            scrolling
+              ? {
+                  animationDuration: `${resolveDurationSeconds(normalized.length)}s`,
+                }
+              : undefined
+          }
         >
-          {normalized}
-        </span>
-        {overflowing && (
           <span
-            aria-hidden="true"
-            className={overflowing ? 'whitespace-pre pr-8' : 'whitespace-pre'}
+            ref={contentRef}
+            className={scrolling ? 'whitespace-pre pr-8' : 'whitespace-pre'}
           >
             {normalized}
           </span>
-        )}
-      </div>
+          {scrolling && (
+            <span aria-hidden="true" className="whitespace-pre pr-8">
+              {normalized}
+            </span>
+          )}
+        </div>
+      ) : (
+        <span className="block truncate">{normalized}</span>
+      )}
     </div>
   )
 }

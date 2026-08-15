@@ -165,6 +165,7 @@ export function CotToolStep({
             <SingleLineScroller
               text={collapsedText}
               className="min-w-0 flex-1 text-xs font-normal text-muted-foreground"
+              active={status === 'running' || status === 'pending'}
             />
           </div>
         )}
@@ -224,6 +225,7 @@ export function CotToolGroupStep({
             <SingleLineScroller
               text={node.summaryText}
               className="min-w-0 flex-1 text-xs font-normal text-muted-foreground"
+              active={node.status === 'running'}
             />
           </div>
         )}

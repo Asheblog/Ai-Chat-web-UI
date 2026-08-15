@@ -80,6 +80,10 @@ export function CotTimeline({
     return -1
   }, [nodes])
 
+  // 只有 reasoningStatus 仍为 streaming 时，末段推理才算“未结束”，
+  // 才会启用单行滚动 / 打字机；已经 done 的推理段即使消息仍在跑工具也保持静态。
+  const activeReasoningIndex = meta.reasoningStatus === 'streaming' ? lastReasoningIndex : -1
+
   const durationText = formatDurationSeconds(meta.reasoningDurationSeconds)
   const hasMeaningfulDuration =
     durationText !== null && (meta.reasoningDurationSeconds ?? 0) > 0
@@ -124,7 +128,7 @@ export function CotTimeline({
                   text={node.text}
                   charStart={node.charStart}
                   defaultExpanded={defaultExpanded}
-                  isStreamingTail={Boolean(isStreaming) && index === lastReasoningIndex}
+                  isStreamingTail={Boolean(isStreaming) && index === activeReasoningIndex}
                   playedLength={resolveSegmentPlayedLength(
                     reasoningPlayedLength,
                     node.charStart,
@@ -233,6 +237,7 @@ function CotReasoningCard({
             <SingleLineScroller
               text={text}
               className="min-w-0 flex-1 text-xs text-muted-foreground"
+              active={Boolean(isStreamingTail)}
             />
           )}
           <ChevronDown
