@@ -14,6 +14,8 @@ import { TypewriterReasoning } from '@/components/typewriter-reasoning'
 import { formatDurationSeconds } from './message-metrics'
 import { CotToolGroupStep, CotToolStep } from './cot-step-parts'
 import { usePersistedExpand } from './use-persisted-expand'
+import { FadeScrollContainer } from './fade-scroll-container'
+import { SingleLineScroller } from './single-line-scroller'
 
 const REASONING_VISIBILITY_STORAGE_KEY = 'aichat.cot_reasoning_visibility'
 const TOOL_VISIBILITY_STORAGE_KEY = 'aichat.cot_tool_visibility'
@@ -24,7 +26,7 @@ export interface CotTimelineProps {
   toolEvents: ToolEvent[]
   /** 完成态下推理卡是否默认展开（Battle 详情传 true） */
   defaultExpanded?: boolean
-  /** 流式中：末段推理卡片使用打字机并自动展开 */
+  /** 流式中：末段推理卡片展开后使用打字机播放 */
   isStreaming?: boolean
   reasoningPlayedLength?: number
 }
@@ -196,7 +198,7 @@ function CotReasoningCard({
     storageKey: REASONING_VISIBILITY_STORAGE_KEY,
     itemKey,
     defaultExpanded,
-    autoExpand: Boolean(isStreamingTail),
+    autoExpand: false,
     hasData: text.length > 0,
     overrideExpanded,
   })
@@ -219,7 +221,7 @@ function CotReasoningCard({
           }}
           aria-expanded={expanded}
         >
-          <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-2 text-sm font-medium text-muted-foreground">
             <Lightbulb className="h-3.5 w-3.5 shrink-0 text-amber-500" />
             <span>深度思考</span>
             {isStreamingTail && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
@@ -227,6 +229,12 @@ function CotReasoningCard({
               <span className="text-xs text-muted-foreground">· {durationText}</span>
             )}
           </div>
+          {!expanded && (
+            <SingleLineScroller
+              text={text}
+              className="min-w-0 flex-1 text-xs text-muted-foreground"
+            />
+          )}
           <ChevronDown
             className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
               expanded ? 'rotate-180' : ''
@@ -235,18 +243,23 @@ function CotReasoningCard({
         </button>
         {expanded && (
           <div className="border-t border-border/60 px-3 py-2.5">
-            {isStreamingTail ? (
-              <TypewriterReasoning
-                text={text}
-                isStreaming
-                speed={20}
-                initialPlayedLength={playedLength}
-              />
-            ) : (
-              <div className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
-                {text}
-              </div>
-            )}
+            <FadeScrollContainer
+              maxHeightClassName="max-h-72"
+              stickToBottomKey={isStreamingTail ? text.length : null}
+            >
+              {isStreamingTail ? (
+                <TypewriterReasoning
+                  text={text}
+                  isStreaming
+                  speed={20}
+                  initialPlayedLength={playedLength}
+                />
+              ) : (
+                <div className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
+                  {text}
+                </div>
+              )}
+            </FadeScrollContainer>
           </div>
         )}
       </div>
@@ -267,15 +280,13 @@ function CotToolCard({
   overrideExpanded?: boolean | null
   onInteract?: () => void
 }) {
-  const status = resolveEventStatus(event)
-  const isActive = status === 'running' || status === 'pending'
   const eventKey = event.callId || event.id || 'tool'
   const itemKey = baseKey ? `${baseKey}:tool:${eventKey}` : ''
   const { expanded, setExpanded } = usePersistedExpand({
     storageKey: TOOL_VISIBILITY_STORAGE_KEY,
     itemKey,
     defaultExpanded: false,
-    autoExpand: isActive,
+    autoExpand: false,
     hasData: true,
     overrideExpanded,
   })
@@ -318,7 +329,7 @@ function CotToolGroupCard({
     storageKey: TOOL_VISIBILITY_STORAGE_KEY,
     itemKey,
     defaultExpanded: false,
-    autoExpand: node.status === 'running',
+    autoExpand: false,
     hasData: true,
     overrideExpanded,
   })

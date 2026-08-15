@@ -356,6 +356,25 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   animation: blink 1s step-end infinite;
 }
 
+/* 思维链 / 工具调用折叠态：单行滚屏 */
+@keyframes cot-single-line-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.cot-single-line-track {
+  will-change: transform;
+  animation: cot-single-line-scroll 18s linear infinite;
+}
+
+.cot-single-line-scroller:hover .cot-single-line-track {
+  animation-play-state: paused;
+}
+
 .chat-message-viewport [data-radix-scroll-area-viewport] {
   overflow-anchor: none;
 }

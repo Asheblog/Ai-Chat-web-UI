@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { BookOpen, ChevronDown, Clock3, Code2, FileText, Globe, Lightbulb, Search, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { TypewriterReasoning } from '@/components/typewriter-reasoning'
+import { FadeScrollContainer } from './fade-scroll-container'
+import { SingleLineScroller } from './single-line-scroller'
 import type { CotTimelineNode, ToolDisplayIconKey } from '@aichat/shared/cot-timeline'
 import { buildToolStepTitle, resolveToolDisplay } from '@aichat/shared/cot-timeline'
 import { resolveEventStatus } from '@aichat/shared/tool-events'
@@ -77,9 +79,13 @@ function ToolResultBody({ event }: { event: ToolEvent }) {
     return <p className="text-xs text-muted-foreground">暂无结果详情</p>
   }
   return (
-    <pre className="max-h-64 overflow-auto rounded-md bg-background/80 p-2 text-micro leading-4 text-foreground/80">
-      {payload}
-    </pre>
+    <FadeScrollContainer
+      className="overflow-hidden rounded-md bg-background/80"
+      viewportClassName="overflow-auto"
+      maxHeightClassName="max-h-64"
+    >
+      <pre className="p-2 text-micro leading-4 text-foreground/80">{payload}</pre>
+    </FadeScrollContainer>
   )
 }
 
@@ -116,6 +122,25 @@ export function CotToolStep({
             : status === 'aborted'
               ? '已中止'
               : '完成'
+  const statusBadgeClass = cn(
+    'shrink-0 rounded-full px-1.5 py-0.5 text-micro font-medium',
+    status === 'success' && 'bg-emerald-500/10 text-emerald-700',
+    status === 'running' && 'bg-blue-500/10 text-blue-700',
+    status === 'error' && 'bg-rose-500/10 text-rose-700',
+    status === 'pending' && 'bg-amber-500/10 text-amber-700',
+  )
+  const previewDetail = [event.summary, event.resultText, event.error].find(
+    (value) => typeof value === 'string' && value.trim().length > 0,
+  )
+  const statusFallback =
+    status === 'running'
+      ? '工具执行中'
+      : status === 'pending'
+        ? '等待工具审批后执行'
+        : status === 'error'
+          ? '工具执行失败'
+          : ''
+  const collapsedText = [title, previewDetail || statusFallback].filter(Boolean).join(' · ')
 
   return (
     <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
@@ -125,26 +150,24 @@ export function CotToolStep({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate">{title}</span>
-            <span
-              className={cn(
-                'rounded-full px-1.5 py-0.5 text-micro font-medium',
-                status === 'success' && 'bg-emerald-500/10 text-emerald-700',
-                status === 'running' && 'bg-blue-500/10 text-blue-700',
-                status === 'error' && 'bg-rose-500/10 text-rose-700',
-                status === 'pending' && 'bg-amber-500/10 text-amber-700',
-              )}
-            >
-              {statusLabel}
-            </span>
+        {open ? (
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">{title}</span>
+              <span className={statusBadgeClass}>{statusLabel}</span>
+            </div>
           </div>
-          {event.summary && !open && (
-            <p className="mt-1 truncate text-xs text-muted-foreground sm:pl-6">{event.summary}</p>
-          )}
-        </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-foreground">
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className={statusBadgeClass}>{statusLabel}</span>
+            <SingleLineScroller
+              text={collapsedText}
+              className="min-w-0 flex-1 text-xs font-normal text-muted-foreground"
+            />
+          </div>
+        )}
         <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
@@ -182,14 +205,28 @@ export function CotToolGroupStep({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span>{display.label}</span>
-            <span className="text-xs font-normal text-muted-foreground">{node.events.length} 个调用</span>
+        {open ? (
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span>{display.label}</span>
+              <span className="text-xs font-normal text-muted-foreground">{node.events.length} 个调用</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground sm:pl-6">{node.summaryText}</p>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground sm:pl-6">{node.summaryText}</p>
-        </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-foreground">
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="shrink-0">{display.label}</span>
+            <span className="shrink-0 text-xs font-normal text-muted-foreground">
+              {node.events.length} 个调用
+            </span>
+            <SingleLineScroller
+              text={node.summaryText}
+              className="min-w-0 flex-1 text-xs font-normal text-muted-foreground"
+            />
+          </div>
+        )}
         <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (

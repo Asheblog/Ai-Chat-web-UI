@@ -106,9 +106,10 @@ describe('CotTimeline', () => {
       />,
     )
 
-    await waitFor(() => {
-      expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    })
+    // 新默认态：流式时也折叠为单行滚屏，点击后才展开播放打字机
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(reasoningButtons()[0])
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
     await waitFor(
       () => {
         expect(screen.getByText(/你/)).toBeInTheDocument()
@@ -168,7 +169,7 @@ describe('CotTimeline', () => {
     expect(screen.getByText('展开的思考内容')).toBeInTheDocument()
   })
 
-  it('流式末段推理自动展开', async () => {
+  it('流式末段推理默认折叠为单行滚屏，点击后展开', () => {
     render(
       <CotTimeline
         meta={createMeta({ reasoningStatus: 'streaming' })}
@@ -179,12 +180,12 @@ describe('CotTimeline', () => {
       />,
     )
 
-    await waitFor(() => {
-      expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    })
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(reasoningButtons()[0])
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('执行中的工具卡自动展开', async () => {
+  it('执行中的工具卡默认折叠为单行滚屏，点击后展开', () => {
     render(
       <CotTimeline
         meta={createMeta()}
@@ -202,9 +203,9 @@ describe('CotTimeline', () => {
       />,
     )
 
-    await waitFor(() => {
-      expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
-    })
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toolButton())
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('已完成的工具卡默认折叠，点击后展示结果', () => {
