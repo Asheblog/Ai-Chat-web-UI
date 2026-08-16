@@ -1,6 +1,27 @@
 import { createChatExecutionEventBridge } from '../chat-execution-event-bridge'
 
 describe('chat execution event bridge', () => {
+  it('propagates cancelled terminal content through run_complete', () => {
+    const bridge = createChatExecutionEventBridge({
+      runKey: 'run-cancel',
+      sessionId: 7,
+      clock: () => 123,
+    })
+    const events = bridge.consume({
+      type: 'complete',
+      content: '深度研究已取消',
+      streamStatus: 'cancelled',
+    })
+
+    const runComplete = events.find((event) => event.type === 'run_complete')
+    expect(runComplete?.status).toBe('cancelled')
+    expect(runComplete?.payload).toEqual({
+      summary: { streamStatus: 'cancelled' },
+      output: { content: '深度研究已取消' },
+    })
+  })
+
+
   it('maps legacy chat stream events into unified execution events', () => {
     const bridge = createChatExecutionEventBridge({
       runKey: 'chat-run-test',

@@ -613,6 +613,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           const entry = registerResearchPlanApproval({
             sessionId,
             actorId: actorIdentifier,
+            kind: 'plan',
             toolCallId,
             messageId: activeAssistantMessageId,
             clientMessageId: streamMeta?.clientMessageId ?? null,
@@ -814,6 +815,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const entry = registerResearchPlanApproval({
           sessionId,
           actorId: actorIdentifier,
+          kind: 'search_unavailable',
           toolCallId: callId,
           messageId: activeAssistantMessageId,
           clientMessageId: streamMeta?.clientMessageId ?? null,

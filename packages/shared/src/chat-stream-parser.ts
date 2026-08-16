@@ -251,7 +251,20 @@ const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
   }
 
   if (eventType === 'run_complete') {
-    return { type: 'complete' }
+    const output = isRecord(eventPayload.output) ? eventPayload.output : {}
+    const summary = isRecord(eventPayload.summary) ? eventPayload.summary : {}
+    const content = asString(output.content)
+    const streamStatus =
+      summary.streamStatus === 'done' ||
+      summary.streamStatus === 'cancelled' ||
+      summary.streamStatus === 'error'
+        ? summary.streamStatus
+        : undefined
+    return {
+      type: 'complete',
+      ...(content ? { content } : {}),
+      ...(streamStatus ? { streamStatus } : {}),
+    }
   }
 
   if (eventType === 'complete') {

@@ -119,7 +119,13 @@ export const parseResearchPlanArgs = (args: Record<string, unknown>): ParseResea
   if (!Array.isArray(args.sub_questions)) {
     return { ok: false, error: '研究计划必须包含 sub_questions 数组' }
   }
-  const rawQuestions = args.sub_questions.slice(0, MAX_RESEARCH_SUB_QUESTIONS)
+  if (args.sub_questions.length > MAX_RESEARCH_SUB_QUESTIONS) {
+    return {
+      ok: false,
+      error: `研究计划最多包含 ${MAX_RESEARCH_SUB_QUESTIONS} 个子问题`,
+    }
+  }
+  const rawQuestions = args.sub_questions
   if (rawQuestions.length < MIN_RESEARCH_SUB_QUESTIONS) {
     return {
       ok: false,
@@ -139,8 +145,11 @@ export const parseResearchPlanArgs = (args: Record<string, unknown>): ParseResea
     if (!Array.isArray(record.keywords)) {
       return { ok: false, error: `子问题「${question}」缺少 keywords` }
     }
+    if (record.keywords.length > MAX_KEYWORDS_PER_SUB_QUESTION) {
+      return { ok: false, error: `子问题「${question}」最多包含 ${MAX_KEYWORDS_PER_SUB_QUESTION} 个关键词` }
+    }
     const keywords: string[] = []
-    for (const rawKeyword of record.keywords.slice(0, MAX_KEYWORDS_PER_SUB_QUESTION)) {
+    for (const rawKeyword of record.keywords) {
       const keyword = asTrimmedString(rawKeyword, MAX_RESEARCH_KEYWORD_CHARS)
       if (!keyword) {
         return { ok: false, error: `子问题「${question}」包含无效关键词` }
@@ -155,10 +164,13 @@ export const parseResearchPlanArgs = (args: Record<string, unknown>): ParseResea
     sub_questions.push({ question, keywords })
   }
 
-  const rawRounds =
-    args.estimated_tool_rounds && typeof args.estimated_tool_rounds === 'object'
-      ? (args.estimated_tool_rounds as Record<string, unknown>)
-      : {}
+  if (!args.estimated_tool_rounds || typeof args.estimated_tool_rounds !== 'object') {
+    return { ok: false, error: '研究计划必须包含 estimated_tool_rounds' }
+  }
+  const rawRounds = args.estimated_tool_rounds as Record<string, unknown>
+  if (rawRounds.min == null || rawRounds.max == null) {
+    return { ok: false, error: 'estimated_tool_rounds 必须包含 min 和 max' }
+  }
   const min = asRound(rawRounds.min, 1)
   const max = asRound(rawRounds.max, Math.max(min, 3))
   const estimated_tool_rounds = {

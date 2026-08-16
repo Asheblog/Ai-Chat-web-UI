@@ -105,6 +105,26 @@ describe('stream-reader unified execution events', () => {
     })
   })
 
+  it('maps cancelled run_complete payload into complete chunk', () => {
+    const chunk = normalizeChunk({
+      type: 'run_complete',
+      runId: 'chat-run-cancel',
+      eventId: 'evt-cancel',
+      ts: Date.now(),
+      status: 'cancelled',
+      payload: {
+        summary: { streamStatus: 'cancelled' },
+        output: { content: '深度研究已取消' },
+      },
+    })
+
+    expect(chunk).toEqual({
+      type: 'complete',
+      content: '深度研究已取消',
+      streamStatus: 'cancelled',
+    })
+  })
+
   it('maps run_complete into complete chunk', () => {
     const chunk = normalizeChunk({
       type: 'run_complete',

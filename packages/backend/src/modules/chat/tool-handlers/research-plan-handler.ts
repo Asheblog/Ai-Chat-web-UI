@@ -7,7 +7,11 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { parseResearchPlanArgs, type ResearchPlanPayload } from '../research-plan-tool'
+import {
+  parseResearchPlanArgs,
+  RESEARCH_PLAN_TOOL_DEFINITION,
+  type ResearchPlanPayload,
+} from '../research-plan-tool'
 import type {
   DeepResearchPlanHandlerConfig,
   IToolHandler,
@@ -26,57 +30,7 @@ export class ResearchPlanToolHandler implements IToolHandler {
   }
 
   get toolDefinition(): ToolDefinition {
-    return {
-      type: 'function',
-      function: {
-        name: this.toolName,
-        description:
-          '向用户提交深度研究计划并等待确认。必须在深度研究模式下执行任何搜索或网页读取之前调用；用户批准后才能继续。',
-        parameters: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: '研究标题' },
-            objective: { type: 'string', description: '一句话研究目标' },
-            sub_questions: {
-              type: 'array',
-              minItems: 3,
-              maxItems: 6,
-              description: '3-6 个关键子问题，每个子问题包含 question 和 1-3 个搜索关键词',
-              items: {
-                type: 'object',
-                properties: {
-                  question: { type: 'string', description: '子问题' },
-                  keywords: {
-                    type: 'array',
-                    minItems: 1,
-                    maxItems: 3,
-                    description: '搜索关键词',
-                    items: { type: 'string' },
-                  },
-                },
-                required: ['question', 'keywords'],
-              },
-            },
-            estimated_tool_rounds: {
-              type: 'object',
-              description: '预计工具调用轮数范围',
-              properties: {
-                min: { type: 'number', minimum: 1 },
-                max: { type: 'number', maximum: 20 },
-              },
-              required: ['min', 'max'],
-            },
-            deliverable: {
-              type: 'string',
-              description: '固定交付物标识',
-              const: 'markdown_report_with_citations_pdf',
-            },
-            notes: { type: 'string', description: '可选：假设、边界、无法回答的部分' },
-          },
-          required: ['title', 'objective', 'sub_questions', 'estimated_tool_rounds'],
-        },
-      },
-    }
+    return RESEARCH_PLAN_TOOL_DEFINITION
   }
 
   canHandle(toolName: string): boolean {

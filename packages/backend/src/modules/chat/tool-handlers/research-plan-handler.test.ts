@@ -74,6 +74,26 @@ describe('parseResearchPlanArgs', () => {
     expect(result).toMatchObject({ ok: false })
   })
 
+  it('rejects too many subquestions instead of silently truncating', () => {
+    const result = parseResearchPlanArgs({
+      ...validArgs,
+      sub_questions: [
+        ...validArgs.sub_questions,
+        { question: 'q4', keywords: ['k4'] },
+        { question: 'q5', keywords: ['k5'] },
+        { question: 'q6', keywords: ['k6'] },
+        { question: 'q7', keywords: ['k7'] },
+      ],
+    })
+    expect(result).toMatchObject({ ok: false })
+  })
+
+  it('rejects missing estimated_tool_rounds', () => {
+    const { estimated_tool_rounds, ...withoutRounds } = validArgs as any
+    const result = parseResearchPlanArgs(withoutRounds)
+    expect(result).toMatchObject({ ok: false })
+  })
+
   it('rejects empty keywords', () => {
     const result = parseResearchPlanArgs({
       ...validArgs,

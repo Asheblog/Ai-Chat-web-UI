@@ -147,6 +147,48 @@ describe('research-plan-approval', () => {
     await expect(waiting).resolves.toMatchObject({ decision: 'cancel' })
   })
 
+  it('rejects adjust after the two-revision limit', async () => {
+    const entry = registerResearchPlanApproval({
+      sessionId: 1,
+      actorId: 'actor:1',
+      toolCallId: 'call-limit',
+      revision: 2,
+    })
+    const waiting = waitForResearchPlanApproval(entry, { timeoutMs: 5000 })
+    expect(() =>
+      respondResearchPlanApproval({
+        sessionId: 1,
+        toolCallId: 'call-limit',
+        actorIdentifier: 'actor:1',
+        decision: 'adjust',
+        feedback: '再来一次',
+      }),
+    ).toThrow(ResearchPlanApprovalError)
+    cancelResearchPlanApprovalsForSession(1)
+    await expect(waiting).resolves.toMatchObject({ decision: 'cancel' })
+  })
+
+  it('rejects adjust for no-search choice cards', async () => {
+    const entry = registerResearchPlanApproval({
+      sessionId: 1,
+      actorId: 'actor:1',
+      toolCallId: 'call-no-search',
+      kind: 'search_unavailable',
+    })
+    const waiting = waitForResearchPlanApproval(entry, { timeoutMs: 5000 })
+    expect(() =>
+      respondResearchPlanApproval({
+        sessionId: 1,
+        toolCallId: 'call-no-search',
+        actorIdentifier: 'actor:1',
+        decision: 'adjust',
+        feedback: '调整',
+      }),
+    ).toThrow(ResearchPlanApprovalError)
+    cancelResearchPlanApprovalsForSession(1)
+    await expect(waiting).resolves.toMatchObject({ decision: 'cancel' })
+  })
+
   it('expires a pending approval after the timeout', async () => {
     jest.useFakeTimers()
     const entry = registerResearchPlanApproval({

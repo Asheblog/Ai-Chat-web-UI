@@ -21,6 +21,7 @@ export interface ResearchPlanApprovalOutcome {
 export interface PendingResearchPlanApproval {
   sessionId: number
   actorId: string
+  kind: 'plan' | 'search_unavailable'
   toolCallId: string
   messageId: number | string | null
   clientMessageId: string | null
@@ -63,6 +64,7 @@ export const registerResearchPlanApproval = (input: {
   sessionId: number
   actorId: string
   toolCallId: string
+  kind?: 'plan' | 'search_unavailable'
   messageId?: number | string | null
   clientMessageId?: string | null
   assistantClientMessageId?: string | null
@@ -88,6 +90,7 @@ export const registerResearchPlanApproval = (input: {
   const entry: PendingResearchPlanApproval = {
     sessionId,
     actorId: input.actorId,
+    kind: input.kind === 'search_unavailable' ? 'search_unavailable' : 'plan',
     toolCallId,
     messageId: input.messageId ?? null,
     clientMessageId: input.clientMessageId ?? null,
@@ -125,6 +128,20 @@ export const respondResearchPlanApproval = (input: {
     )
   }
   const feedback = typeof input.feedback === 'string' ? input.feedback.trim() : ''
+  if (input.decision === 'adjust' && entry.kind !== 'plan') {
+    throw new ResearchPlanApprovalError(
+      '无搜索降级选择卡不支持调整计划',
+      400,
+      'RESEARCH_PLAN_APPROVAL_DECISION_INVALID',
+    )
+  }
+  if (input.decision === 'adjust' && entry.revision >= 2) {
+    throw new ResearchPlanApprovalError(
+      '研究计划调整次数已达上限，只能开始或取消',
+      400,
+      'RESEARCH_PLAN_APPROVAL_REVISION_LIMIT',
+    )
+  }
   if (input.decision === 'adjust' && !feedback) {
     throw new ResearchPlanApprovalError(
       'feedback is required when adjusting a research plan',
