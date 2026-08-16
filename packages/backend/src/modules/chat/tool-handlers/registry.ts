@@ -27,6 +27,7 @@ import {
 } from './knowledge-base-handler-adapter'
 import { VisionProxyToolHandler } from './vision-proxy-handler'
 import { ExportPdfToolHandler } from './export-pdf-handler'
+import { ResearchPlanToolHandler } from './research-plan-handler'
 import type { VisionProxyService } from '../services/vision-proxy-service'
 import { McpToolAdapter } from '../../../services/mcp/mcp-tool-adapter'
 
@@ -249,6 +250,11 @@ export function createToolHandlerRegistry(
   // 注册深度研究报告 PDF 导出处理器
   if (params.pdfExport?.enabled) {
     registry.register(new ExportPdfToolHandler(params.pdfExport))
+  }
+
+  // 注册深度研究计划确认工具（仅深度研究且联网搜索可用时）
+  if (params.deepResearchPlan?.enabled) {
+    registry.register(new ResearchPlanToolHandler(params.deepResearchPlan))
   }
 
   return registry

@@ -33,6 +33,7 @@ export { WorkspaceGitCloneToolHandler } from './workspace-git-clone-handler'
 export { WorkspaceListFilesToolHandler } from './workspace-list-files-handler'
 export { WorkspaceReadTextToolHandler } from './workspace-read-text-handler'
 export { ExportPdfToolHandler } from './export-pdf-handler'
+export { ResearchPlanToolHandler } from './research-plan-handler'
 export {
   DocumentToolHandlerAdapter,
   documentToolNames,

@@ -52,6 +52,11 @@ export interface ToolCallContext {
 /**
  * 工具处理结果
  */
+export interface ToolHandlerTermination {
+  code: 'research_plan_cancelled' | 'research_plan_expired' | 'research_plan_required'
+  message: string
+}
+
 export interface ToolHandlerResult {
   toolCallId: string
   toolName: string
@@ -62,6 +67,11 @@ export interface ToolHandlerResult {
     content: string
   }
   followupMessages?: any[]
+  /**
+   * 非空时工具编排器立即结束当前回复，不再请求下一轮。
+   * 用于深度研究计划审批的取消/过期/计划缺失终态。
+   */
+  termination?: ToolHandlerTermination
 }
 
 /**
@@ -97,6 +107,31 @@ export interface ToolDefinition {
 /**
  * 工具处理器工厂参数
  */
+export interface ResearchPlanApprovalGateInput {
+  plan: Record<string, unknown>
+  toolCallId: string
+  revision: number
+  context: ToolCallContext
+}
+
+export interface ResearchPlanApprovalGateResult {
+  decision: 'approve' | 'adjust' | 'cancel' | 'expired'
+  feedback?: string
+  revision: number
+}
+
+export interface ResearchPlanApprovalGate {
+  waitForDecision(input: ResearchPlanApprovalGateInput): Promise<ResearchPlanApprovalGateResult>
+}
+
+export interface DeepResearchPlanHandlerConfig {
+  enabled: boolean
+  approvalGate: ResearchPlanApprovalGate
+  approvalTimeoutMs: number
+  /** 当前修订轮数（0 为初版；调整一次后为 1） */
+  resolveRevision?: () => number
+}
+
 export interface ToolHandlerFactoryParams {
   webSearch?: WebSearchHandlerConfig | null
   python?: PythonHandlerConfig | null
@@ -106,6 +141,7 @@ export interface ToolHandlerFactoryParams {
   workspace?: WorkspaceHandlerConfig | null
   visionProxy?: VisionProxyConfig | null
   pdfExport?: PdfExportHandlerConfig | null
+  deepResearchPlan?: DeepResearchPlanHandlerConfig | null
 }
 
 /**
