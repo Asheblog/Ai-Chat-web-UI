@@ -14,6 +14,17 @@ describe('pdf-report-service', () => {
     expect(html).toContain('report-image-placeholder')
   })
 
+  it('embeds allowlisted markdown images as inline figures', () => {
+    const html = renderMarkdownToHtml(
+      '![新闻配图](https://example.com/news.png)\n\n正文',
+      { 'https://example.com/news.png': 'data:image/png;base64,abc' },
+    )
+    expect(html).toContain('<figure class="report-figure">')
+    expect(html).toContain('src="data:image/png;base64,abc"')
+    expect(html).toContain('<figcaption>新闻配图</figcaption>')
+    expect(html).toContain('<img')
+  })
+
   it('builds a CJK print template with escaped metadata', () => {
     const html = buildReportHtml({
       title: '深度研究 <报告>',

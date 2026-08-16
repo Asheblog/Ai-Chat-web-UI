@@ -29,6 +29,7 @@ export interface RemoteImageReadResult {
 
 const DEFAULT_TIMEOUT_MS = 12_000
 const DEFAULT_MAX_COUNT = 3
+const MAX_ALLOWED_COUNT = 12
 const DEFAULT_LIMITS: ChatImageLimitConfig = {
   maxCount: Math.min(DEFAULT_CHAT_IMAGE_LIMITS.maxCount, DEFAULT_MAX_COUNT),
   maxMb: Math.min(DEFAULT_CHAT_IMAGE_LIMITS.maxMb, 6),
@@ -45,7 +46,7 @@ const sanitizeMime = (value: string | null | undefined): string | null => {
 
 const clampCount = (value?: number): number => {
   if (!Number.isFinite(value) || (value as number) <= 0) return DEFAULT_MAX_COUNT
-  return Math.max(1, Math.min(DEFAULT_MAX_COUNT, Math.floor(value as number)))
+  return Math.max(1, Math.min(MAX_ALLOWED_COUNT, Math.floor(value as number)))
 }
 
 export async function readRemoteImages(

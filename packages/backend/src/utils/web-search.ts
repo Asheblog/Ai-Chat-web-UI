@@ -230,7 +230,9 @@ export const formatHitsForModel = (query: string, hits: WebSearchHit[]): string 
         ? `Engine: ${hit.engine}`
         : 'Engine: unknown'
     const languageText = `QueryLang: ${hit.queryLanguage || 'unknown'}`
-    return `${idx + 1}. ${hit.title || 'Untitled'}\nURL: ${hit.url}\n${engineText} | ${languageText}\nSummary: ${snippet}`.trim()
+    const imageText = (hit.imageUrl || hit.thumbnailUrl) ? `Image: ${hit.imageUrl || hit.thumbnailUrl}` : ''
+    const top = `${idx + 1}. ${hit.title || 'Untitled'}\nURL: ${hit.url}\n${engineText} | ${languageText}\nSummary: ${snippet}`
+    return imageText ? `${top}\n${imageText}`.trim() : top.trim()
   })
   return `Web search results for "${query}":\n\n${lines.join('\n\n')}`
 }

@@ -155,9 +155,9 @@ export interface PdfExportHandlerConfig {
   renderPdf?: (
     markdown: string,
     outputPath: string,
-    options?: { title?: string; browserExecutablePath?: string },
+    options?: { title?: string; browserExecutablePath?: string; imageSources?: Record<string, string> },
   ) => Promise<{ sizeBytes: number }>
-  renderMarkdown?: (markdown: string) => string
+  renderMarkdown?: (markdown: string, imageSources?: Record<string, string>) => string
   buildHtml?: (input: {
     title: string
     markdownHtml: string

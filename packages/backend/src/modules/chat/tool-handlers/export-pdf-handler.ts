@@ -16,6 +16,7 @@ import {
   renderMarkdownToHtml,
   renderMarkdownToPdfFile,
 } from '../../../services/reports/pdf-report-service'
+import { readRemoteImages } from '../../../utils/remote-image-reader'
 import type {
   IToolHandler,
   PdfExportHandlerConfig,
@@ -28,6 +29,8 @@ import type {
 const DEFAULT_MAX_MARKDOWN_CHARS = 200_000
 const DEFAULT_MAX_TITLE_CHARS = 200
 const DEFAULT_MAX_FILENAME_CHARS = 80
+const DEFAULT_MAX_REPORT_IMAGES = 6
+const DEFAULT_MAX_IMAGE_CAPTION_CHARS = 200
 
 const normalizeTimestamp = (date: Date): string => {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -56,6 +59,33 @@ const normalizeFileStem = (value: unknown): string => {
     .replace(/^[.\-]+|[.\-]+$/g, '')
     .slice(0, DEFAULT_MAX_FILENAME_CHARS)
   return stem || 'deep-research-report'
+}
+
+interface ReportImageInput {
+  url?: unknown
+  caption?: unknown
+}
+
+interface NormalizedReportImage {
+  url: string
+  caption?: string
+}
+
+const normalizeReportImages = (value: unknown): NormalizedReportImage[] => {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const result: NormalizedReportImage[] = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const item = raw as ReportImageInput
+    const url = typeof item.url === 'string' ? item.url.trim() : ''
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue
+    seen.add(url)
+    const caption = typeof item.caption === 'string' ? item.caption.trim().slice(0, DEFAULT_MAX_IMAGE_CAPTION_CHARS) : ''
+    result.push({ url, ...(caption ? { caption } : {}) })
+    if (result.length >= DEFAULT_MAX_REPORT_IMAGES) break
+  }
+  return result
 }
 
 interface ArtifactEventPayload {
@@ -97,6 +127,18 @@ export class ExportPdfToolHandler implements IToolHandler {
               type: 'string',
               description: 'Optional file stem without extension. Defaults to deep-research-report-<timestamp>.',
             },
+            images: {
+              type: 'array',
+              description: 'Optional evidence images already filtered by the vision transcription proxy in this research. The backend only embeds images listed here, and the image URLs must match those returned by web_search/read_url. Do not invent URLs.',
+              items: {
+                type: 'object',
+                properties: {
+                  url: { type: 'string', description: 'The exact public image URL returned by web_search/read_url.' },
+                  caption: { type: 'string', description: 'Optional figure caption shown below the image.' },
+                },
+                required: ['url'],
+              },
+            },
           },
           required: ['title', 'markdown'],
         },
@@ -123,6 +165,7 @@ export class ExportPdfToolHandler implements IToolHandler {
       ? `${requestedStem}-${timestamp}`
       : `${requestedStem}`
     const fileNameBase = `${stem}-${timestamp}`
+    const reportImages = normalizeReportImages(args.images)
 
     const buildErrorResult = (message: string): ToolHandlerResult => {
       context.sendToolEvent({
@@ -162,6 +205,7 @@ export class ExportPdfToolHandler implements IToolHandler {
         title,
         markdownChars: markdown.length,
         fileNameBase,
+        imageCount: reportImages.length,
       },
     })
 
@@ -170,6 +214,35 @@ export class ExportPdfToolHandler implements IToolHandler {
       workspace = await workspaceService.ensureWorkspace(context.sessionId)
     } catch (error) {
       return buildErrorResult(error instanceof Error ? error.message : '创建 workspace 失败')
+    }
+
+    const imageSources: Record<string, string> = {}
+    if (reportImages.length > 0) {
+      const downloaded = await readRemoteImages(
+        reportImages.map((image) => ({ url: image.url, alt: image.caption })),
+        {
+          maxCount: reportImages.length,
+          timeoutMs: 15_000,
+          limits: {
+            maxCount: DEFAULT_MAX_REPORT_IMAGES,
+            maxMb: 8,
+            maxEdge: 8192,
+            maxTotalMb: 24,
+          },
+        },
+      )
+      for (const image of downloaded) {
+        imageSources[image.url] = `data:${image.mime};base64,${image.data}`
+      }
+      // 模型 Markdown 里通常使用原始 URL；若下载器返回了规范化 URL，也把原始 URL 指向同一份内嵌数据。
+      for (const requested of reportImages) {
+        if (!imageSources[requested.url]) {
+          const matched = downloaded.find((image) => image.url === requested.url)
+          if (matched) {
+            imageSources[requested.url] = `data:${matched.mime};base64,${matched.data}`
+          }
+        }
+      }
     }
 
     const markdownPath = path.resolve(workspace.artifactsPath, `${fileNameBase}.md`)
@@ -183,7 +256,7 @@ export class ExportPdfToolHandler implements IToolHandler {
     const generatedAt = new Date().toISOString().slice(0, 16).replace('T', ' ')
     const html = buildHtml({
       title,
-      markdownHtml: renderMarkdown(markdown),
+      markdownHtml: renderMarkdown(markdown, imageSources),
       generatedAt,
     })
 
@@ -201,6 +274,7 @@ export class ExportPdfToolHandler implements IToolHandler {
       const result = await renderPdf(markdown, pdfPath, {
         title,
         browserExecutablePath: this.config.browserExecutablePath,
+        imageSources,
       })
       pdfGenerated = result.sizeBytes > 0
     } catch (error) {

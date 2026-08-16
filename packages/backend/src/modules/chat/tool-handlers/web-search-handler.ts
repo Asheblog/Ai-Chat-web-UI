@@ -39,6 +39,11 @@ interface AutoReadEvidenceItem {
   byline?: string
   wordCount?: number
   content?: string
+  images?: Array<{
+    url: string
+    description?: string
+    relevance?: string
+  }>
   error?: string
   errorCode?: UrlReadErrorCode
   httpStatus?: number
@@ -554,16 +559,25 @@ const buildSummaryForModel = (
     if (item.content) {
       lines.push(`   正文摘录: ${truncateText(item.content, DEFAULT_MODEL_EVIDENCE_CHARS)}`)
     }
+    if (item.images?.length) {
+      lines.push(
+        `   图片证据: ${item.images
+          .map((img) => `${img.description || '相关图片'} ${img.url}`)
+          .join(' | ')}`,
+      )
+    }
   }
 
   return `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
 }
 
-const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
+const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; imageUrl?: string; thumbnailUrl?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
   hits.slice(0, DEFAULT_MODEL_RESULT_HITS).map((hit) => ({
     title: hit.title,
     url: hit.url,
     snippet: truncateText(hit.snippet || hit.content || '', DEFAULT_MODEL_SNIPPET_CHARS),
+    imageUrl: hit.imageUrl,
+    thumbnailUrl: hit.thumbnailUrl,
     engine: hit.engine,
     rank: hit.rank,
     sourceEngines: Array.isArray(hit.sourceEngines) ? hit.sourceEngines.slice(0, 3) : undefined,
@@ -585,6 +599,7 @@ const slimEvidenceForModel = (items: AutoReadEvidenceItem[]) =>
     title: item.title,
     excerpt: item.excerpt ? truncateText(item.excerpt, DEFAULT_MODEL_SNIPPET_CHARS) : undefined,
     content: item.content ? truncateText(item.content, DEFAULT_MODEL_EVIDENCE_ITEM_CHARS) : undefined,
+    images: Array.isArray(item.images) ? item.images.slice(0, 4) : undefined,
     siteName: item.siteName,
     byline: item.byline,
     wordCount: item.wordCount,
@@ -1077,13 +1092,18 @@ export class WebSearchToolHandler implements IToolHandler {
                       '【图片证据（已识图筛选）】',
                       ...assessedForDetails.map(
                         (item, index) =>
-                          `[图${index + 1}] ${item.description || item.title || item.url}（${item.relevance}）`,
+                          `[图${index + 1}] ${item.description || item.title || item.url}（${item.relevance}） ${item.url}`,
                       ),
                     ].join('\n')
                   : '',
               ].join('\n'),
               DEFAULT_MODEL_EVIDENCE_CHARS,
             ),
+            images: assessedForDetails.map((item) => ({
+              url: item.url,
+              description: item.description || item.title || undefined,
+              relevance: item.relevance,
+            })),
             fallbackUsed:
               readResult.fallbackUsed === 'crawler' ||
               readResult.fallbackUsed === 'browser' ||

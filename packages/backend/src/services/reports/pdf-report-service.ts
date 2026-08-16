@@ -22,12 +22,25 @@ const md = new MarkdownIt({
 // Do not let Chromium fetch remote images while rendering the report. This
 // keeps the PDF render offline and prevents the generated HTML from being able
 // to trigger requests to arbitrary hosts (SSRF/leak vector).
-md.renderer.rules.image = (tokens, idx) => {
+export type ReportImageSources = Record<string, string>
+
+// When the caller supplies a safe allowlist (`imageSources`), the original
+// remote URL is replaced with an embedded `data:` URL so Chromium never needs
+// to fetch remote images while rendering the PDF.
+md.renderer.rules.image = (tokens, idx, options, env: any) => {
   const token = tokens[idx]
   const rawSrc = token?.attrGet('src')
   const src: string = typeof rawSrc === 'string' ? rawSrc : ''
   const rawAlt = token?.content
   const alt: string = typeof rawAlt === 'string' ? rawAlt : ''
+  const safeSource = env?.imageSources?.[src]
+
+  if (safeSource) {
+    const figure = `<figure class="report-figure"><img src="${escapeHtml(safeSource)}" alt="${escapeHtml(alt)}" loading="lazy" />`
+    const caption = alt.trim() ? `<figcaption>${escapeHtml(alt.trim())}</figcaption>` : ''
+    return `${figure}${caption}</figure>`
+  }
+
   const label = alt.trim() || src.trim() || 'image'
   return `<span class="report-image-placeholder">[${escapeHtml(label)}]</span>`
 }
@@ -42,6 +55,7 @@ export interface ReportPdfOptions {
   title?: string
   generatedAt?: string
   executablePath?: string
+  imageSources?: ReportImageSources
 }
 
 export interface ReportPdfResult {
@@ -89,8 +103,8 @@ const normalizeGeneratedAt = (value: string | undefined): string => {
   return trimmed || new Date().toISOString().slice(0, 16).replace('T', ' ')
 }
 
-export const renderMarkdownToHtml = (markdown: string): string =>
-  md.render((markdown || '').trim())
+export const renderMarkdownToHtml = (markdown: string, imageSources?: ReportImageSources): string =>
+  md.render((markdown || '').trim(), { imageSources })
 
 export const buildReportHtml = (input: ReportHtmlInput): string => {
   const title = normalizeTitle(input.title)
@@ -184,6 +198,24 @@ export const buildReportHtml = (input: ReportHtmlInput): string => {
   th { background: #f9fafb; font-weight: 600; }
   img, .report-image-placeholder { max-width: 100%; }
   .report-image-placeholder { color: var(--muted); font-style: italic; }
+  .report-figure {
+    margin: 4mm 0;
+    text-align: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .report-figure img {
+    max-width: 100%;
+    max-height: 140mm;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+  }
+  .report-figure figcaption {
+    color: var(--muted);
+    font-size: 9pt;
+    margin-top: 1.5mm;
+  }
   hr {
     border: 0;
     border-top: 1px solid var(--line);
@@ -270,7 +302,7 @@ export const renderMarkdownToPdfBuffer = async (
   const html = buildReportHtml({
     title,
     generatedAt: options.generatedAt,
-    markdownHtml: renderMarkdownToHtml(markdown),
+    markdownHtml: renderMarkdownToHtml(markdown, options.imageSources),
   })
   const bytes = await renderHtmlToPdfBuffer(html, options)
   return { bytes, sizeBytes: bytes.length }
