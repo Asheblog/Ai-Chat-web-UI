@@ -260,6 +260,8 @@ const HISTORY_LIST_DETAIL_KEYS = [
   'url',
   'title',
   'truncated',
+  'plan',
+  'approval',
 ] as const
 
 /** richPayload 证据图所需；投影前保留，响应前由 projectToolEventsForHistoryList 去掉。 */

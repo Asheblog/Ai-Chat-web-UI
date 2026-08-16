@@ -798,6 +798,9 @@ export const createChatStoreRuntime = (
         applyMetaField('isPlaceholder', false)
       }
 
+      if (Object.prototype.hasOwnProperty.call(metaPatch, 'streamStatus')) {
+        applyMetaField('streamStatus', metaPatch.streamStatus ?? 'done')
+      }
       if (Object.prototype.hasOwnProperty.call(metaPatch, 'reasoningStatus')) {
         applyMetaField('reasoningStatus', metaPatch.reasoningStatus ?? undefined)
       }

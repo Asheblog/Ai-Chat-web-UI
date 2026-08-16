@@ -15,7 +15,7 @@ import {
   resolveAssistantClientIdFromRequest,
 } from '../../chat/stream-state'
 import type { AgentStreamMeta } from '../../chat/stream-state'
-import { cancelStreamSchema, sendMessageSchema } from '../chat-common'
+import { cancelStreamSchema, researchPlanRespondSchema, sendMessageSchema } from '../chat-common'
 import {
   createChatStreamHandler,
   type ChatStreamRoutesDeps,
@@ -23,6 +23,11 @@ import {
 import { proxyChatStreamToExecution } from '../../execution/chat-stream-proxy'
 import { chatSessionEventBus } from '../services/chat-session-event-bus'
 import { normalizeToolCallEventPayload } from '../tool-call-event'
+import {
+  cancelResearchPlanApprovalByMessage,
+  respondResearchPlanApproval,
+  ResearchPlanApprovalError,
+} from '../research-plan-approval'
 import type { ExecutionSseEvent } from '@aichat/shared/execution-contract'
 
 export type { ChatStreamRoutesDeps }
@@ -132,6 +137,36 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
     })
   })
 
+  router.post(
+    '/stream/research-plan/respond',
+    actorMiddleware,
+    zValidator('json', researchPlanRespondSchema),
+    async (c) => {
+      const actor = c.get('actor') as Actor
+      const payload = c.req.valid('json')
+      try {
+        const result = respondResearchPlanApproval({
+          sessionId: payload.sessionId,
+          toolCallId: payload.toolCallId,
+          actorIdentifier: actor.identifier,
+          decision: payload.decision,
+          feedback: payload.feedback,
+        })
+        return c.json<ApiResponse>({ success: true, data: result })
+      } catch (error) {
+        if (error instanceof ResearchPlanApprovalError) {
+          return c.json<ApiResponse>({ success: false, error: error.message }, error.statusCode as any)
+        }
+        log.warn('Research plan approval response failed', {
+          sessionId: payload.sessionId,
+          toolCallId: payload.toolCallId,
+          error: error instanceof Error ? error.message : error,
+        })
+        return c.json<ApiResponse>({ success: false, error: 'Failed to respond to research plan approval' }, 500)
+      }
+    },
+  )
+
   router.post('/stream/cancel', actorMiddleware, zValidator('json', cancelStreamSchema), async (c) => {
     const actor = c.get('actor') as Actor
     const payload = c.req.valid('json')
@@ -185,6 +220,12 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
 
     if (matchedMeta) {
       matchedMeta.cancelled = true
+      cancelResearchPlanApprovalByMessage({
+        sessionId,
+        messageId: matchedMeta.assistantMessageId,
+        clientMessageId: matchedMeta.clientMessageId,
+        assistantClientMessageId: matchedMeta.assistantClientMessageId,
+      })
       try {
         matchedMeta.controller?.abort()
       } catch {}

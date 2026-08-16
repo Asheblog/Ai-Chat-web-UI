@@ -476,3 +476,87 @@ describe('tool-orchestrator', () => {
     )
   })
 })
+
+describe('tool-orchestrator research plan termination', () => {
+  const buildTerminatingHandler = (iterations: number[]) =>
+    jest.fn(async (_toolName: string, toolCall: any, _args: Record<string, unknown>, iteration?: number) => {
+      if (typeof iteration === 'number') iterations.push(iteration)
+      return {
+        toolCallId: toolCall.id || 'call_term',
+        toolName: 'research_plan',
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id || 'call_term',
+          name: 'research_plan',
+          content: JSON.stringify({ status: 'cancelled' }),
+        },
+        termination: {
+          code: 'research_plan_cancelled',
+          message: '深度研究已取消',
+        },
+      } as any
+    })
+
+  it('terminates the tools schema without a second model turn', async () => {
+    const iterations: number[] = []
+    let requestCount = 0
+    const handleToolCall = buildTerminatingHandler(iterations)
+
+    const result = await runToolOrchestration({
+      provider: 'openai',
+      requestData: {},
+      initialMessages: [{ role: 'user', content: 'research' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set<string>(['research_plan']),
+      maxIterations: 4,
+      stream: false,
+      requestTurn: async () => {
+        requestCount += 1
+        return buildToolCallTurnResponse('research_plan', { title: 't' }, 'call_term')
+      },
+      handleToolCall,
+    })
+
+    expect(result.status).toBe('terminated')
+    expect((result as any).termination.code).toBe('research_plan_cancelled')
+    expect(requestCount).toBe(1)
+    expect(handleToolCall).toHaveBeenCalledTimes(1)
+    expect(iterations).toEqual([0])
+  })
+
+  it('terminates the functions schema and passes iteration', async () => {
+    const iterations: number[] = []
+    const result = await runToolOrchestration({
+      provider: 'openai',
+      requestData: { tool_schema: 'functions' },
+      initialMessages: [{ role: 'user', content: 'research' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set<string>(['research_plan']),
+      maxIterations: 4,
+      stream: false,
+      requestTurn: async () => buildToolCallTurnResponse('research_plan', { title: 't' }, 'call_fn_term'),
+      handleToolCall: buildTerminatingHandler(iterations),
+    })
+
+    expect(result.status).toBe('terminated')
+    expect(iterations).toEqual([0])
+  })
+
+  it('terminates the text schema after a tool-call turn', async () => {
+    const iterations: number[] = []
+    const result = await runToolOrchestration({
+      provider: 'anthropic',
+      requestData: { tool_schema: 'text' },
+      initialMessages: [{ role: 'user', content: 'research' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set<string>(['research_plan']),
+      maxIterations: 4,
+      stream: false,
+      requestTurn: async () => buildToolCallTurnResponse('research_plan', { title: 't' }, 'call_text_term'),
+      handleToolCall: buildTerminatingHandler(iterations),
+    })
+
+    expect(result.status).toBe('terminated')
+    expect(iterations).toEqual([0])
+  })
+})

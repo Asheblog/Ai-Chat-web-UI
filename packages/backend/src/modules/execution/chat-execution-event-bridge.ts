@@ -285,11 +285,17 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
     }
 
     if (type === 'complete' || type === 'end') {
+      const streamStatus =
+        legacyEvent.streamStatus === 'cancelled' || legacyEvent.streamStatus === 'error'
+          ? legacyEvent.streamStatus
+          : null
+      const status: ExecutionStatus = streamStatus ?? 'completed'
+      const content = asString(legacyEvent.content)
       events.push(...ensureBootEvents())
       events.push(
         nextEvent(
           'step_complete',
-          'completed',
+          status,
           {
             result: {},
             error: null,
@@ -299,12 +305,12 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
         ),
       )
       events.push(
-        nextEvent('run_complete', 'completed', {
-          summary: {},
-          output: {},
+        nextEvent('run_complete', status, {
+          summary: streamStatus ? { streamStatus } : {},
+          output: content ? { content } : {},
         }),
       )
-      events.push(nextEvent('complete', 'completed', {}))
+      events.push(nextEvent('complete', status, {}))
       return events
     }
 

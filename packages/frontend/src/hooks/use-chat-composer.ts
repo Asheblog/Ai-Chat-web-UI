@@ -38,6 +38,17 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const [input, setInput] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    const onPrefill = (event: Event) => {
+      const detail = (event as CustomEvent<{ content?: string }>).detail
+      if (!detail || typeof detail.content !== 'string' || !detail.content.trim()) return
+      setInput(detail.content.trim())
+      window.requestAnimationFrame(() => textareaRef.current?.focus())
+    }
+    window.addEventListener('aichat:composer-prefill', onPrefill)
+    return () => window.removeEventListener('aichat:composer-prefill', onPrefill)
+  }, [])
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
   const {
     currentSession,

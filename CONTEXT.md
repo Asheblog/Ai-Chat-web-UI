@@ -83,6 +83,14 @@
 - **Visual Analysis Tool（视觉分析工具）**：内置工具 `analyze_visual_media`，仅在主聊天流处于工具流且主模型无 vision 时注入；主模型可自主多次调用，描述以工具结果回传并随工具事件持久化；工具流下会向前缀注入「用户附件」提醒（含张数），引导主模型先调用该工具再回答
 - **Web Image Relevance Filter（网页图相关性筛选）**：爬虫/搜索抽到候选图后，先启发式去掉 logo/过小图，再调用识图模型判定与页面/查询上下文是否相关；仅相关与弱相关写入 `assessedImages` 并进入 Rich Payload / 答案区
 
+## 深度研究计划确认
+
+- **Research Plan Approval（研究计划确认）**：深度研究模式执行搜索前必须先提交 `research_plan` 工具调用并等待用户确认的交互流程；用户可开始研究、调整计划（最多 2 次重审）或取消
+- **Research Plan Card（研究计划卡）**：Web 端 CoT 时间轴顶部的特殊只读/可交互卡片，展示研究标题、目标、子问题与关键词、预计工具轮数和交付物；等待审批时提供操作按钮，历史/分享场景只读
+- **Research Plan Approval Registry（研究计划审批注册表）**：与当前 SSE 流同生命周期的内存审批注册表，按 `sessionId + toolCallId` 登记待审批计划，由 `/chat/stream/research-plan/respond` 消费；不落库、不跨断线恢复
+- **Research Plan Revision（研究计划修订轮次）**：用户提出调整后模型重新生成计划的次数；0 为初版，最多 2 轮调整，第 2 轮后只允许开始或取消
+- **No-search Deep Research Fallback（无搜索深度研究降级）**：深度研究被启用但无可用搜索引擎时，先由后端合成 `research_plan` 选择卡让用户选择“基于已有知识继续 / 取消”；继续后直接生成标注未联网的报告，不进入计划确认
+
 ## 移动客户端
 
 - **Android Client（Android 客户端）**：AIChat 的可安装 Android 应用，以移动端原生交互访问既有 AIChat 服务端；它不是 Web 客户端的简单网页壳

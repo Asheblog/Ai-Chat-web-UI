@@ -75,6 +75,7 @@ export interface StreamAccumulator {
   pendingMeta: Partial<
     Pick<
       MessageMeta,
+      | 'streamStatus'
       | 'reasoningStatus'
       | 'reasoningIdleMs'
       | 'reasoningDurationSeconds'
@@ -83,6 +84,7 @@ export interface StreamAccumulator {
       | 'reasoningUnavailableSuggestion'
     >
   >
+  terminalStreamStatus?: 'done' | 'cancelled' | 'error'
   flushTimer: ReturnType<typeof setTimeout> | null
   reasoningDesired: boolean
   reasoningActivated: boolean

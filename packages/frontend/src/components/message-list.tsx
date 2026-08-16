@@ -50,6 +50,7 @@ interface MessageListProps {
     sessionId: number | null
     selectedMessageIds: number[]
   }
+  unshareableMessageIds?: Set<number>
   onShareToggle?: (messageId: number) => void
   onShareStart?: (messageId: number) => void
 }
@@ -75,6 +76,7 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
     variantSelections,
     metrics,
     shareSelection,
+    unshareableMessageIds,
     onShareToggle,
     onShareStart,
   },
@@ -295,7 +297,8 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
           meta.role !== 'compressedGroup' &&
           typeof meta.id === 'number' &&
           !meta.pendingSync &&
-          !meta.isPlaceholder
+          !meta.isPlaceholder &&
+          !unshareableMessageIds?.has(meta.id)
         const shareSelected =
           shareModeActive && shareSelectable && shareSelectedKeys.has(messageKey(meta.id))
         const canEditUserMessage =

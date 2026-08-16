@@ -86,6 +86,31 @@ export interface WorkspaceArtifact {
   expired?: boolean
 }
 
+export interface ResearchPlanSubQuestion {
+  question: string
+  keywords: string[]
+}
+
+export interface ResearchPlanPayload {
+  title: string
+  objective: string
+  sub_questions: ResearchPlanSubQuestion[]
+  estimated_tool_rounds: {
+    min: number
+    max: number
+  }
+  deliverable?: string
+  notes?: string
+}
+
+export interface ResearchPlanApprovalState {
+  kind: 'plan' | 'search_unavailable'
+  decision?: 'approve' | 'adjust' | 'cancel' | 'continue' | 'expired'
+  feedback?: string
+  revision?: number
+  expiresAt?: string | number
+}
+
 export interface ToolEventDetails {
   // 通用工具调用字段（ToolCall V2）
   argumentsText?: string
@@ -143,6 +168,8 @@ export interface ToolEventDetails {
   reasoningOffset?: number
   reasoningOffsetStart?: number
   reasoningOffsetEnd?: number
+  plan?: ResearchPlanPayload
+  approval?: ResearchPlanApprovalState
   [key: string]: unknown
 }
 
@@ -167,6 +194,11 @@ export type ChatStreamChunkType =
 export interface ChatStreamChunk {
   type?: ChatStreamChunkType
   content?: string
+  /** complete 事件的最终消息状态；plan cancel/expiry 时下发 cancelled */
+  streamStatus?: 'done' | 'cancelled' | 'error'
+  /** research_plan 审批负载（tool_call 事件 details 内使用） */
+  plan?: ResearchPlanPayload
+  approval?: ResearchPlanApprovalState
   messageId?: number | null
   assistantMessageId?: number | null
   assistantClientMessageId?: string | null

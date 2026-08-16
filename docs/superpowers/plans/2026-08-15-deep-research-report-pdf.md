@@ -43,3 +43,9 @@ PDF artifact.
    - Run architecture guard, backend/frontend tests, and type-checks.
    - Run code-review per task and a final review.
    - Merge to `main`, push to `origin`, and watch CI until green.
+
+
+## Follow-up
+
+Plan approval follow-up: see `docs/plans/2026-08-16-deep-research-plan-approval.md`
+and `docs/superpowers/specs/2026-08-16-deep-research-plan-approval.md`.

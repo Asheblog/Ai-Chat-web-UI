@@ -827,6 +827,14 @@ export const createStreamSlice: ChatSliceCreator<
             active.pendingContent = ''
             active.content = (evt as any).content
           }
+          if (
+            (evt as any).streamStatus === 'cancelled' ||
+            (evt as any).streamStatus === 'error' ||
+            (evt as any).streamStatus === 'done'
+          ) {
+            active.pendingMeta.streamStatus = (evt as any).streamStatus
+            active.terminalStreamStatus = (evt as any).streamStatus
+          }
           if (activeBuffer) {
             activeBuffer.pendingMeta.reasoningStatus = 'done'
             activeBuffer.completedAt = Date.now()
@@ -904,6 +912,7 @@ export const createStreamSlice: ChatSliceCreator<
               totalTokens: fallbackMetrics?.totalTokens ?? null,
             }
           : fallbackMetrics
+      const terminalStreamStatus = finalStream?.terminalStreamStatus ?? 'done'
       const completedSnapshot = finalStream
         ? {
             assistantId: finalStream.assistantId,
@@ -937,7 +946,7 @@ export const createStreamSlice: ChatSliceCreator<
           reasoningPlayedLength: completedSnapshot.reasoning.length,
           usage: completedSnapshot.usage,
           toolEvents: completedSnapshot.toolEvents,
-          streamStatus: 'done',
+          streamStatus: terminalStreamStatus,
           reasoningStatus: 'done',
           completedAt: completedAtMs,
           metrics: computedMetrics,
@@ -950,7 +959,7 @@ export const createStreamSlice: ChatSliceCreator<
         }
       }
       if (typeof completedAssistantId !== 'undefined' && completedAssistantId !== null) {
-        runtime.updateMetaStreamStatus(completedAssistantId, 'done')
+        runtime.updateMetaStreamStatus(completedAssistantId, terminalStreamStatus)
       }
       runtime.clearActiveStream(finalStream)
       runtime.recomputeStreamingState()

@@ -240,6 +240,8 @@ export const describeTool = (tool?: string | null) => {
   if (tool === 'document_search') return '文档搜索'
   if (tool === 'document_list') return '文档列表'
   if (tool === 'kb_search') return '知识库搜索'
+  if (tool === 'research_plan') return '研究计划'
+  if (tool === 'export_pdf') return 'PDF 导出'
   if (tool.startsWith('workspace_')) return '工作区工具'
   return tool
 }

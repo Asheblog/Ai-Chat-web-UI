@@ -39,6 +39,45 @@ const userActor: Actor = {
 }
 
 describe('ShareService', () => {
+  it('rejects cancelled/expired deep-research messages from shares', async () => {
+    const { service, prisma } = createService()
+    prisma.chatSession.findFirst.mockResolvedValue({ id: 11, title: 'Chat A' })
+    prisma.message.findMany.mockResolvedValue([
+      {
+        id: 21,
+        sessionId: 11,
+        role: 'assistant',
+        content: '深度研究已取消',
+        reasoning: null,
+        streamStatus: 'cancelled',
+        toolLogsJson: JSON.stringify([
+          {
+            id: 'plan-1',
+            tool: 'research_plan',
+            stage: 'error',
+            status: 'rejected',
+            phase: 'rejected',
+            summary: '深度研究已取消',
+            createdAt: Date.now(),
+          },
+        ]),
+        createdAt: baseDate,
+        attachments: [],
+        generatedImages: [],
+      },
+    ])
+    prisma.systemSetting.findUnique.mockResolvedValue(null)
+
+    await expect(
+      service.createShare(
+        userActor,
+        { sessionId: 11, messageIds: [21], expiresInHours: 24 },
+        {},
+      ),
+    ).rejects.toMatchObject({ message: '已取消或已过期的深度研究消息不能分享' })
+    expect(prisma.chatShare.create).not.toHaveBeenCalled()
+  })
+
   it('creates share with provided title and expiry', async () => {
     const { service, prisma } = createService()
     prisma.chatSession.findFirst.mockResolvedValue({ id: 11, title: 'Chat A' })

@@ -190,6 +190,23 @@ export const cancelAgentStream = async (
   }
 }
 
+export const respondResearchPlanApproval = async (
+  sessionId: number,
+  toolCallId: string,
+  decision: 'approve' | 'adjust' | 'cancel' | 'continue',
+  feedback?: string,
+) => {
+  return client.post<ApiResponse<{ sessionId: number; toolCallId: string; revision: number }>>(
+    '/chat/stream/research-plan/respond',
+    {
+      sessionId,
+      toolCallId,
+      decision,
+      ...(feedback ? { feedback } : {}),
+    },
+  )
+}
+
 export const chatCompletion = async (
   sessionId: number,
   content: string,

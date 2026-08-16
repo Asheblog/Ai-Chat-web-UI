@@ -254,6 +254,46 @@ describe('stream slice', () => {
     expect(state.error).toBeNull()
   })
 
+  it('marks assistant message cancelled when complete carries streamStatus cancelled', async () => {
+    const store = createChatStoreInstance()
+    const session = createSession()
+    store.setState({
+      sessions: [session],
+      currentSession: session,
+    })
+
+    vi.mocked(chatApi.streamChat).mockImplementation(async function* mockStream() {
+      yield {
+        type: 'start',
+        messageId: session.id + 300,
+        assistantMessageId: session.id + 400,
+        assistantClientMessageId: 'assistant-client-cancelled',
+      }
+      yield {
+        type: 'tool_call',
+        id: 'plan-call-1',
+        tool: 'research_plan',
+        stage: 'error',
+        status: 'rejected',
+        phase: 'rejected',
+        summary: '深度研究已取消',
+      }
+      yield {
+        type: 'complete',
+        content: '深度研究已取消',
+        streamStatus: 'cancelled',
+      }
+    })
+
+    await store.getState().streamMessage(session.id, '深度研究一下')
+    await flushMicrotasks()
+
+    const state = store.getState()
+    const assistantMeta = state.messageMetas.find((meta) => meta.role === 'assistant')
+    expect(assistantMeta?.streamStatus).toBe('cancelled')
+    expect(state.isStreaming).toBe(false)
+  })
+
   it('normalizes completed assistant content to match persisted final response', async () => {
     const store = createChatStoreInstance()
     const session = createSession({ id: 77 })

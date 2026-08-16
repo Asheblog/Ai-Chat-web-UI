@@ -6,6 +6,7 @@ import type {
   ToolCall,
   ToolDefinition,
   ToolHandlerResult,
+  ToolHandlerTermination,
 } from './tool-handlers/types'
 import {
   type LegacyFunctionCall,
@@ -64,6 +65,14 @@ export type ToolOrchestrationResult =
       reasoningChunks: string[]
       toolSchema: ToolSchema
     }
+  | {
+      status: 'terminated'
+      termination: ToolHandlerTermination
+      usage: Record<string, any> | null
+      messages: any[]
+      reasoningChunks: string[]
+      toolSchema: ToolSchema
+    }
 
 export interface ToolOrchestratorParams {
   provider?: string
@@ -78,6 +87,7 @@ export interface ToolOrchestratorParams {
     toolName: string,
     toolCall: ToolCall,
     args: Record<string, unknown>,
+    iteration?: number,
   ) => Promise<ToolHandlerResult | null>
   checkAbort?: () => void
   onSchemaFallback?: (schema: ToolSchema) => MaybePromise<void>
@@ -95,6 +105,17 @@ export interface ToolOrchestratorParams {
   }) => MaybePromise<boolean>
   includeReasoningInToolMessage?: boolean
   emptyContentErrorMessage?: string
+}
+
+const findToolTermination = (
+  settled: PromiseSettledResult<ToolHandlerResult>[],
+): ToolHandlerTermination | null => {
+  for (const result of settled) {
+    if (result.status === 'fulfilled' && result.value?.termination) {
+      return result.value.termination
+    }
+  }
+  return null
 }
 
 export async function runToolOrchestration(
@@ -197,6 +218,7 @@ export async function runToolOrchestration(
             handleToolCall: params.handleToolCall,
             allowedToolNames: params.allowedToolNames,
             onUnsupportedTool: params.onUnsupportedTool,
+            iteration,
           })
         }),
       )
@@ -224,6 +246,18 @@ export async function runToolOrchestration(
           })
         }
       }
+
+      const termination = findToolTermination(settled)
+      if (termination) {
+        return {
+          status: 'terminated',
+          termination,
+          usage: lastUsage,
+          messages: workingMessages,
+          reasoningChunks,
+          toolSchema,
+        }
+      }
       toolRoundsUsed += 1
       continue
     }
@@ -244,6 +278,7 @@ export async function runToolOrchestration(
             handleToolCall: params.handleToolCall,
             allowedToolNames: params.allowedToolNames,
             onUnsupportedTool: params.onUnsupportedTool,
+            iteration,
           })
         }),
       )
@@ -271,6 +306,18 @@ export async function runToolOrchestration(
               content: JSON.stringify({ error: errorMsg }),
             }),
           )
+        }
+      }
+
+      const termination = findToolTermination(settled)
+      if (termination) {
+        return {
+          status: 'terminated',
+          termination,
+          usage: lastUsage,
+          messages: workingMessages,
+          reasoningChunks,
+          toolSchema,
         }
       }
       toolRoundsUsed += 1
@@ -301,6 +348,7 @@ export async function runToolOrchestration(
           handleToolCall: params.handleToolCall,
           allowedToolNames: params.allowedToolNames,
           onUnsupportedTool: params.onUnsupportedTool,
+          iteration,
         })
       }),
     )
@@ -323,6 +371,18 @@ export async function runToolOrchestration(
           tool_call_id: toolCallId,
           content: JSON.stringify({ error: errorMsg }),
         })
+      }
+    }
+
+    const termination = findToolTermination(settled)
+    if (termination) {
+      return {
+        status: 'terminated',
+        termination,
+        usage: lastUsage,
+        messages: workingMessages,
+        reasoningChunks,
+        toolSchema,
       }
     }
     toolRoundsUsed += 1
@@ -861,14 +921,16 @@ async function executeToolCall(params: {
     toolName: string,
     toolCall: ToolCall,
     args: Record<string, unknown>,
+    iteration?: number,
   ) => Promise<ToolHandlerResult | null>
   allowedToolNames: Set<string>
   onUnsupportedTool?: (toolName: string, toolCallId: string | undefined) => MaybePromise<void>
+  iteration?: number
 }): Promise<ToolHandlerResult> {
   const args = safeParseToolArgs(params.toolCall)
   let result: ToolHandlerResult | null = null
   if (params.toolName && params.allowedToolNames.has(params.toolName)) {
-    result = await params.handleToolCall(params.toolName, params.toolCall, args)
+    result = await params.handleToolCall(params.toolName, params.toolCall, args, params.iteration)
   }
   if (!result) {
     if (params.onUnsupportedTool) {
